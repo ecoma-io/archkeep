@@ -170,8 +170,8 @@ afterAll(() => {
  * arrive as notifications whenever the server is ready, not as replies, so a
  * test that only counted messages would race the server rather than observe it.
  */
-function connect() {
-  const child = spawn(process.execPath, [SERVER], { stdio: ["pipe", "pipe", "pipe"] });
+function connect(server = SERVER) {
+  const child = spawn(process.execPath, [server], { stdio: ["pipe", "pipe", "pipe"] });
   const received = [];
   const watchers = new Set();
   let stderr = "";
@@ -248,8 +248,8 @@ function connect() {
 }
 
 /** A connected, initialized client rooted at the fixture. */
-async function connected() {
-  const client = connect();
+async function connected(server = SERVER) {
+  const client = connect(server);
   client.send({
     jsonrpc: "2.0",
     id: 1,
@@ -581,6 +581,38 @@ describe("a real editor session against a real workspace", () => {
     client.send({ jsonrpc: "2.0", method: "exit" });
 
     expect(await client.closed).toBe(1);
+  }, 30_000);
+
+  it("serves a session when launched through a symlink, the way an installed copy is", async () => {
+    // How a consumer actually reaches this file. pnpm's `node_modules/@scope/pkg`
+    // is a symlink into `node_modules/.pnpm/…`, and the Claude Code plugin
+    // manifest launches `${CLAUDE_PLUGIN_ROOT}/lsp.mjs` by path with no bin shim
+    // in between to resolve it.
+    //
+    // Measured before `src/entry-point.mjs` existed: this exact spelling made
+    // the server define everything, run nothing, and exit 0 with no bytes on
+    // either stream — a language server that publishes nothing reads to a
+    // developer as "checked, clean", which is the one outcome this project is
+    // built to refuse. Every other test here spawns the real path, so none of
+    // them could go red; this one is the direction that can.
+    const linked = join(root, "lsp-through-a-link.mjs");
+    symlinkSync(SERVER, linked);
+
+    const { client, initialized } = await connected(linked);
+
+    expect(initialized.result.serverInfo.name).toBe("nx-polyglot-graph");
+
+    const uri = uriOf("libs/inner/main.go");
+    client.send({
+      jsonrpc: "2.0",
+      method: "textDocument/didOpen",
+      params: { textDocument: { uri, languageId: "go", version: 1, text: GO_WITH_VIOLATION } },
+    });
+    const diagnostics = await client.diagnosticsFor(uri);
+
+    expect(diagnostics.map((d) => d.code)).toContain("onlyTagsConstraintViolation");
+
+    client.kill();
   }, 30_000);
 
   it("keeps stdout free of everything that is not protocol", async () => {
