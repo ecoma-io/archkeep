@@ -42,7 +42,7 @@
   },
   "peerDependencies": {
     "nx": ">=21",
-    "typescript": ">=5",
+    "typescript": ">=5 <7",
     "vue": ">=3"
   },
   "peerDependenciesMeta": {

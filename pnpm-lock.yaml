@@ -73,7 +73,7 @@ importers:
         specifier: 1.7.1
         version: 1.7.1
       typescript:
-        specifier: '>=5'
+        specifier: '>=5 <7'
         version: 5.9.3
       vue:
         specifier: '>=3'

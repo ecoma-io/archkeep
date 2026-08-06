@@ -1,3 +1,8 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { analyzeTypeScript, packageNameOf, specifierSpelling } from "./typescript.mjs";
@@ -144,6 +149,45 @@ describe("analyzeTypeScript — resolution through TypeScript's own resolver", (
       external: true,
       packageName: "@acme-vendor/api",
     });
+  });
+
+  it("marks a package installed inside a project's own directory external, not a self-import", () => {
+    // The shape every publishable package in a workspace has: declaring its own
+    // `dependencies` gives it its own `node_modules/`, which sits UNDER the
+    // project root, so attribution by longest-root-prefix hands a vendored file
+    // to the project and the import reads as the project importing itself.
+    //
+    // Measured, not hypothetical: the day this repository's own package
+    // declared `smol-toml`, its self-check reported three
+    // `noSelfCircularDependencies` violations advising that `import
+    // "typescript"` be rewritten as a relative path. That rule fires before the
+    // `depConstraints` table is read, so a consumer hitting it could not
+    // configure their way out of a false verdict.
+    const { imports, failures } = analyze('import { parse } from "vendored-dep";', {
+      files: {
+        "apps/web/node_modules/vendored-dep/package.json": JSON.stringify({
+          name: "vendored-dep",
+          main: "index.js",
+        }),
+        "apps/web/node_modules/vendored-dep/index.js": "module.exports = 1;",
+      },
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toEqual({
+      target: null,
+      file: "apps/web/node_modules/vendored-dep/index.js",
+      external: true,
+      packageName: "vendored-dep",
+    });
+  });
+
+  it("still names the owning project for a resolution that is not an installed package", () => {
+    // The other side of the branch above, and the reason it is a narrow
+    // pre-empt rather than "trust isExternalLibraryImport for everything": a
+    // real cross-project resolution must still be attributed, or every edge the
+    // boundary rules exist to judge would vanish into `external`.
+    const { imports } = analyze('import { button } from "@acme/ui";');
+    expect(imports[0].resolved).toMatchObject({ target: "ui", external: false });
   });
 
   it("marks a Node built-in external instead of calling it unresolvable", () => {
@@ -464,5 +508,38 @@ describe("analyzeTypeScript — a bad file must not blank a run", () => {
     expect(
       failures.some((failure) => /tsconfig\.base\.json is malformed/.test(failure.reason)),
     ).toBe(true);
+  });
+});
+
+describe("the TypeScript API this analyzer delegates to", () => {
+  // The manifest's `typescript` peer range and the guard at the top of
+  // `typescript.mjs` are one fact in two files, and the failure mode of letting
+  // them drift is the one that produced this suite: `>=5` admitted TypeScript 7,
+  // whose entry point exports `version` and nothing else, and every consumer
+  // installing `latest` got `Cannot read properties of undefined (reading 'TS')`
+  // from a frozen object literal. These two hold the range to what the code
+  // actually needs, in both directions.
+
+  it("resolves every name the guard requires against the installed compiler", () => {
+    // The guard throws at module load, so reaching this line at all proves the
+    // installed TypeScript satisfies it. Naming the list again would just copy
+    // the guard; what earns a test is that the analyzer WORKS here, which the
+    // rest of this file already drives — this case pins the version that does.
+    const [major] = ts.version.split(".").map(Number);
+    expect(major, `typescript ${ts.version} is outside the declared peer range`).toBeLessThan(7);
+    expect(major).toBeGreaterThanOrEqual(5);
+  });
+
+  it("declares a peer range that excludes the majors missing that API", () => {
+    const manifest = JSON.parse(
+      readFileSync(
+        join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json"),
+        "utf8",
+      ),
+    );
+    // Not a string comparison: the point is the bound EXISTS and is 7, because
+    // an open `>=5` is what shipped the crash. A future 8 that restored the API
+    // would move this deliberately, in the same edit as the guard.
+    expect(manifest.peerDependencies.typescript).toBe(">=5 <7");
   });
 });

@@ -91,6 +91,47 @@ const tsConfigOf = (workspace) => workspace.tsConfig ?? DEFAULT_OPTIONS.tsConfig
  */
 const NO_INPUTS_FOUND = 18003;
 
+/**
+ * The TypeScript API this module delegates to, and the reason the manifest's
+ * peer range has an upper bound rather than the open `>=5` it carried first.
+ *
+ * TypeScript 7 is the native port, and its entry point exports `version` and
+ * `versionMajorMinor` and nothing else — `createSourceFile`, `resolveModuleName`
+ * and `sys` all moved behind `typescript/unstable/*` subpaths with a different
+ * shape. `>=5` was therefore a promise this package could not keep, and npm's
+ * `latest` tag now points at 7, so a consumer running `pnpm add typescript`
+ * today gets the version that breaks it. `<7` is measured: every name below
+ * resolves on 6.0.3 and none of them on 7.0.2.
+ *
+ * The check runs at module load because the alternative is what it replaces —
+ * a `TypeError: Cannot read properties of undefined (reading 'TS')` pointing at
+ * a frozen object literal, which names a property rather than a cause and sends
+ * the reader into this file instead of into their own manifest. A peer range is
+ * only advisory (npm warns, pnpm warns, neither refuses), so the range alone
+ * would let an unusable install reach exactly this crash.
+ */
+const REQUIRED_TS_API = Object.freeze([
+  "createSourceFile",
+  "resolveModuleName",
+  "createModuleResolutionCache",
+  "parseJsonConfigFileContent",
+  "forEachChild",
+  "ScriptKind",
+  "ScriptTarget",
+  "SyntaxKind",
+]);
+
+const missingTsApi = REQUIRED_TS_API.filter((name) => ts[name] === undefined);
+if (missingTsApi.length > 0) {
+  throw new Error(
+    `nx-polyglot-graph needs the TypeScript compiler API, and the installed ` +
+      `typescript@${ts.version ?? "unknown"} does not expose ${missingTsApi.join(", ")}. ` +
+      `TypeScript 7 is the native port and moved that API behind typescript/unstable/*, ` +
+      `so this package declares typescript ">=5 <7". Install a 5.x or 6.x in the workspace ` +
+      `this plugin runs in.`,
+  );
+}
+
 /** Which TypeScript dialect a file extension is written in. */
 const SCRIPT_KIND_BY_EXTENSION = Object.freeze({
   ".ts": ts.ScriptKind.TS,
@@ -429,13 +470,14 @@ function parseFailures(sourceFile, workspaceRelativePath) {
 /**
  * Where a specifier points, through `ts.resolveModuleName`.
  *
- * `external` is decided by **project ownership of the resolved file**, which
- * is `contract.md`'s definition ("resolves outside every project"), rather
- * than by `isExternalLibraryImport` alone. The two agree on every node_modules
- * resolution; ownership additionally gets a workspace file that belongs to no
- * project right — an alias pointed at a loose root-level file is external, and
- * `packageName` stays `null` because a relative or aliased path names no
- * package.
+ * `external` is decided by `isExternalLibraryImport` first and **project
+ * ownership of the resolved file** second, rather than by ownership alone.
+ * Ownership is `contract.md`'s definition ("resolves outside every project")
+ * and gets a workspace file belonging to no project right — an alias pointed at
+ * a loose root-level file is external, and `packageName` stays `null` because a
+ * relative or aliased path names no package. But ownership alone is wrong for a
+ * nested `node_modules/`, which every package that declares its own
+ * `dependencies` has; the branch below says why, with the measurement.
  *
  * @returns {{ resolved: object|null, reason: string|null }}
  */
@@ -514,6 +556,32 @@ function resolveSpecifier(specifier, sourceFile, workspace) {
   const file = resolved.resolvedFileName.startsWith(prefix)
     ? resolved.resolvedFileName.slice(prefix.length)
     : null;
+  // An installed package resolving INSIDE a project's own directory is still an
+  // installed package. `isExternalLibraryImport` is checked before ownership
+  // because the two disagree in exactly one shape, and it is the shape every
+  // publishable package in a workspace has: a package that declares its own
+  // `dependencies` gets its own `node_modules/` — pnpm puts
+  // `packages/<pkg>/node_modules/smol-toml` there — which sits under the
+  // project root, so ownership by longest-root-prefix attributes a vendored
+  // file to the project and the import reads as the project importing itself.
+  //
+  // Measured on this repository the day its own package declared `smol-toml`:
+  // three `noSelfCircularDependencies` violations telling the tool to rewrite
+  // `import "typescript"` as a relative path. The verdict was false, and worse
+  // than false — the rule that fired is the one that cannot be switched off by
+  // a `depConstraints` row, so a consumer hitting it would have no way to
+  // configure their way out.
+  //
+  // Ownership still decides everything else, which is why this is a narrow
+  // pre-empt rather than a replacement: an alias pointed at a loose root-level
+  // file has no `isExternalLibraryImport` flag and must still read as external,
+  // and a resolution into a sibling project must still name that project.
+  if (resolved.isExternalLibraryImport) {
+    return {
+      resolved: { target: null, file, external: true, packageName: packageNameOf(specifier) },
+      reason: null,
+    };
+  }
   const owner = file === null ? null : projectOwning(workspace.projects, file);
   if (owner) {
     return {
