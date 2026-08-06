@@ -1,0 +1,199 @@
+import { describe, expect, it } from "vitest";
+
+import { formatConstraint, formatFailures, formatReport, formatViolation } from "./text.mjs";
+
+/**
+ * What a developer must be able to do from the report alone: jump to the site,
+ * name the rule, and know which line of the boundary config to argue with. Each
+ * test below pins one of those, because a report that is merely non-empty is
+ * indistinguishable from one that is useful.
+ */
+
+const violation = (overrides = {}) => ({
+  sourceFile: "platform/libs/engine-domain/doc.go",
+  line: 12,
+  column: 23,
+  specifier: "github.com/ecoma-io/ecoma/platform/libs/engine-adapters",
+  kind: "static",
+  messageId: "onlyTagsConstraintViolation",
+  message: 'A project tagged with "layer:domain" can only depend on libs tagged with layer:domain',
+  sourceProject: "engine-domain",
+  targetProject: "engine-adapters",
+  constraint: {
+    sourceTag: "layer:domain",
+    onlyDependOnLibsWithTags: ["layer:domain", "layer:util"],
+  },
+  data: {},
+  ...overrides,
+});
+
+describe("a violation entry", () => {
+  it("opens with an unindented file:line:column so a terminal and an editor can jump to it", () => {
+    const [first] = formatViolation(violation()).split("\n");
+    expect(first).toBe("platform/libs/engine-domain/doc.go:12:23  onlyTagsConstraintViolation");
+  });
+
+  it("names the upstream messageId, which is what makes the verdict comparable to ESLint's", () => {
+    // Two tools that both say "error" agree on nothing until they name the same
+    // rule — the id is the contract, and a report that dropped it would leave a
+    // differential comparison with nothing to compare (../rules/messages.mjs).
+    expect(formatViolation(violation())).toContain("onlyTagsConstraintViolation");
+  });
+
+  it("carries the import as written, its form, and the project pair it crosses", () => {
+    expect(formatViolation(violation())).toContain(
+      'import      "github.com/ecoma-io/ecoma/platform/libs/engine-adapters" (static)  engine-domain → engine-adapters',
+    );
+  });
+
+  it("names the constraint row that fired, which is the line a fix has to agree with", () => {
+    expect(formatViolation(violation())).toContain(
+      "constraint  sourceTag layer:domain → onlyDependOnLibsWithTags [layer:domain, layer:util]",
+    );
+  });
+
+  it("indents every line of a multi-line message, so a wrapped one is not read as a second site", () => {
+    const text = formatViolation(
+      violation({
+        messageId: "noCircularDependencies",
+        message:
+          'Circular dependency between "a" and "b" detected: a -> b\n\nCircular file chain:\na.ts',
+      }),
+    );
+    const lines = text.split("\n");
+    // Only the position line may start at column 0; anything else reads as a
+    // new entry to both a human scanning the margin and a `grep '^[^ ]'`.
+    expect(lines.filter((line) => line !== "" && !line.startsWith(" "))).toEqual([lines[0]]);
+  });
+
+  it("says so plainly when an import resolved to no project, instead of printing an empty pair", () => {
+    expect(
+      formatViolation(
+        violation({ targetProject: null, messageId: "noRelativeOrAbsoluteExternals" }),
+      ),
+    ).toContain("engine-domain → (unresolved)");
+  });
+});
+
+describe("the constraint line", () => {
+  it("renders whatever fields the row carries, so a new upstream field cannot go missing", () => {
+    // Enumerating today's four constraint keys would silently drop the fifth
+    // the day @nx/enforce-module-boundaries adds one (Rule 14).
+    expect(
+      formatConstraint({
+        sourceTag: "layer:view",
+        bannedExternalImports: ["@tauri-apps/*"],
+        someFieldUpstreamAddsLater: ["x"],
+      }),
+    ).toBe(
+      "sourceTag layer:view → bannedExternalImports [@tauri-apps/*] → someFieldUpstreamAddsLater [x]",
+    );
+  });
+
+  it("spells out a combo row's whole tag set, since it matches only projects carrying all of them", () => {
+    expect(
+      formatConstraint({
+        allSourceTags: ["type:lib", "layer:domain"],
+        onlyDependOnLibsWithTags: [],
+      }),
+    ).toBe("allSourceTags [type:lib, layer:domain] → onlyDependOnLibsWithTags []");
+  });
+
+  it("explains an absent row rather than printing nothing, which would read as a missing field", () => {
+    expect(formatConstraint(null)).toContain("not driven by a depConstraints row");
+  });
+});
+
+describe("analysis failures", () => {
+  it("marks them blind spots rather than verdicts, so a reader cannot mistake one for a violation", () => {
+    const text = formatFailures([
+      { sourceFile: "a/b.ts", line: 3, column: 8, reason: "TypeScript cannot resolve 'x'" },
+    ]);
+    expect(text).toContain("not verdicts");
+    expect(text).toContain("the run does not fail on them");
+    expect(text).toContain("a/b.ts:3:8  TypeScript cannot resolve 'x'");
+  });
+
+  it("prints a whole-file failure without a position, rather than inventing line 1", () => {
+    const text = formatFailures([
+      { sourceFile: "a/b.rs", line: null, column: null, reason: "unreadable" },
+    ]);
+    expect(text).toContain("a/b.rs  unreadable");
+    expect(text).not.toContain("a/b.rs:");
+  });
+
+  it("separates a file with no verdict from an import with none, because only one fails the run", () => {
+    // One heading for both is what let a file nobody analyzed sit in a list
+    // headed "the run does not fail on them" while the summary above counted
+    // it as inspected. A reader must be able to tell coverage that is missing
+    // from a position that has no static answer.
+    const text = formatFailures([
+      {
+        sourceFile: "a/b.ts",
+        line: 3,
+        column: 8,
+        reason: "import(url) is not statically knowable",
+      },
+      { sourceFile: "a/c.vue", line: null, column: null, reason: "Vue analysis failed" },
+    ]);
+    expect(text).toContain("1 file could not be analyzed at all");
+    expect(text).toContain("the run fails");
+    expect(text).toContain("a/c.vue  Vue analysis failed");
+    expect(text).toContain("blind spots inside files that were analyzed");
+    expect(text).toContain("a/b.ts:3:8");
+    // The blind-spot count must not absorb the unanalyzed file, or the two
+    // sections would disagree about how much the run actually covered.
+    expect(text).toContain("1 import could not be resolved");
+  });
+
+  it("counts unanalyzed files rather than their failures, so one bad file cannot look like many", () => {
+    const text = formatFailures([
+      { sourceFile: "a/b.vue", line: null, column: null, reason: "first" },
+      { sourceFile: "a/b.vue", line: null, column: null, reason: "second" },
+    ]);
+    expect(text).toContain("1 file could not be analyzed at all");
+  });
+
+  it("says nothing at all when there were none", () => {
+    expect(formatFailures([])).toBe("");
+  });
+});
+
+describe("the report as a whole", () => {
+  const run = (overrides) => ({
+    violations: [],
+    failures: [],
+    analyzed: 405,
+    projects: 19,
+    imports: 1246,
+    ...overrides,
+  });
+
+  it("states what it inspected when clean, because 'no violations' is a claim about coverage too", () => {
+    // A run that analyzed nothing and a clean tree would otherwise print the
+    // same sentence — the exact indistinguishability this tool exists to end.
+    expect(formatReport(run())).toBe(
+      "✔ no boundary violations (1246 imports in 405 files across 19 projects)",
+    );
+  });
+
+  it("counts the offending files as well as the violations, so one bad file cannot look like many", () => {
+    const twice = [violation(), violation({ line: 40 })];
+    expect(formatReport(run({ violations: twice }))).toContain("✖ 2 boundary violations in 1 file");
+  });
+
+  it("keeps the failure list on a red run too, so a blind spot is not hidden behind a finding", () => {
+    const text = formatReport(
+      run({
+        violations: [violation()],
+        failures: [
+          { sourceFile: "a/b.ts", line: 9, column: 1, reason: "not statically knowable" },
+          { sourceFile: "a/c.ts", line: null, column: null, reason: "unreadable" },
+        ],
+      }),
+    );
+    expect(text).toContain("✖ 1 boundary violation");
+    expect(text).toContain("blind spots inside files that were analyzed");
+    expect(text).toContain("could not be analyzed at all");
+  });
+});

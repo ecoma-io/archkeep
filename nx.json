@@ -3,9 +3,22 @@
   "defaultBase": "main",
   "namedInputs": {
     "default": ["{projectRoot}/**/*", "sharedGlobals"],
-    "sharedGlobals": []
+    "sharedGlobals": [],
+    "lintTooling": ["{workspaceRoot}/eslint.config.mjs"]
   },
+  "plugins": [
+    {
+      "plugin": "./packages/nx-polyglot-graph/index.mjs",
+      "options": {
+        "boundaryConfig": "module-boundaries.config.mjs"
+      }
+    }
+  ],
   "targetDefaults": {
+    "lint": {
+      "cache": true,
+      "inputs": ["default", "lintTooling"]
+    },
     "test": {
       "cache": true,
       "inputs": ["default"]
