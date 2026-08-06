@@ -97,6 +97,25 @@ And the tool on the tree that ships it, which is the last thing CI does:
 node packages/nx-polyglot-graph/cli.mjs check
 ```
 
+And, last of all, the packed artifact driven from somewhere that is not this
+workspace. It takes a few minutes — it runs a real `pnpm install` — so it is the
+one command worth skipping locally unless you touched the package's manifest,
+its entry points, or anything it imports:
+
+```bash
+node scripts/verify-package.mjs packages/nx-polyglot-graph
+```
+
+Everything above runs where the tool's dependencies already exist, so none of it
+can see the failure this catches: a package that installs cleanly and throws at
+the first `import`. That was this package's real state once — manifest declaring
+no dependencies, suite fully green, working only because pnpm hoisted the root's
+copies and Node walked up to find them. The script packs the tarball, installs it
+into a throwaway workspace with a tag vocabulary nothing in `src/` knows about,
+and checks that Nx draws a Go edge, that the checker exits 0 on a clean tree
+**and 1 on a violating one**, and that the language server answers when launched
+through a symlinked path. A gate only proves it runs when it can go red.
+
 Run all of them before you push. A shorter local run just moves the red to the
 pull request.
 
