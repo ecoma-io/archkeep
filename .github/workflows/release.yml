@@ -1,0 +1,147 @@
+name: Release
+
+# Releasing is two things, and only the first happens on most pushes.
+#
+# release-please watches `main` and keeps one pull request open holding the next
+# version and the changelog it derived from the conventional commits since the
+# last tag. That pull request *is* the release proposal: merging it is what
+# tags, and the tag is what publishes.
+#
+# What ships is the npm package and nothing else. litmus, the sibling this
+# workflow is modelled on, also builds a reproducible tarball and has SLSA sign
+# it — because a skills package is consumed by `curl` as often as by `npm i`.
+# Here the package IS the artifact: an Nx plugin reaches a workspace through its
+# `node_modules` or it does not reach it at all. So there is no archive, no
+# release asset, and one publish job.
+#
+# The cost of that is exact and worth naming rather than discovering later:
+# OpenSSF Scorecard's Signed-Releases check looks for a signature file among a
+# release's assets, so a release carrying no assets scores nothing there. npm
+# provenance — the `--provenance` flag below — is a real attestation, published
+# to Sigstore's transparency log and shown on the package page, but it lives at
+# the registry rather than on the GitHub release, and that check does not look
+# there. The trade is deliberate: a tarball built only to hold a signature would
+# be an asset nobody installs, existing to move a score.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # An escape hatch, off by default. GitHub documents that events raised
+      # with `GITHUB_TOKEN` do not start new workflow runs — which would leave
+      # the release pull request with no `ci-gate` and no `Semgrep`, the checks
+      # required to merge it, and therefore unmergeable forever.
+      #
+      # Measured on litmus, which runs the same arrangement: that is not what
+      # happened. CI and Analysis both ran against its release pull requests on
+      # the `pull_request` event with no App configured and nothing dispatched
+      # by hand. So the workflow token is expected to be enough, and this step
+      # stays skipped — but the observed behaviour and the documented behaviour
+      # disagree, and only one of them is a promise.
+      #
+      # If a release pull request ever arrives here with no checks, set a
+      # `RELEASE_APP_ID` variable and a `RELEASE_APP_PRIVATE_KEY` secret: an App
+      # token is an ordinary actor, so its pull request triggers CI the way a
+      # contributor's does. No workflow change is needed to switch over.
+      - name: Mint a GitHub App token
+        id: app-token
+        if: vars.RELEASE_APP_ID != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    name: Publish to npm
+    needs: prepare
+    if: needs.prepare.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Mints the OIDC token npm exchanges for a provenance attestation: npm
+      # records which workflow, at which commit, built the package, and shows it
+      # on the package page.
+      id-token: write
+    steps:
+      # The tag, not the branch: `main` has already moved on by the time this
+      # runs if anything merged behind the release pull request, and publishing
+      # a version whose contents are not the tagged ones is the one mistake npm
+      # will not let you take back.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      # `registry-url` is what writes the .npmrc that reads NODE_AUTH_TOKEN
+      # below. Without it the token is set and silently unused, and the publish
+      # fails as unauthenticated.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+
+      # The package must work for someone who is not this workspace, and the
+      # only place that is checkable is here, against the exact bytes about to
+      # ship. `pnpm pack` writes the tarball the registry would receive; the
+      # step installs it into a throwaway workspace with its own tag vocabulary
+      # and drives the three things a consumer buys — the plugin loads inside a
+      # real `nx graph`, the checker exits 0 on a clean tree, and it exits 1 on
+      # a violating one. The last is the one that matters: a gate only proves it
+      # runs when it can go red.
+      #
+      # It runs before publish, not after, because a package that resolves
+      # nothing at install time cannot be unpublished away.
+      - name: Prove the packed artifact works outside this workspace
+        run: node scripts/verify-package.mjs packages/nx-polyglot-graph
+
+      # `npm publish`, not `pnpm publish`: provenance is an npm CLI feature and
+      # this is the client that implements it. That choice has a consequence the
+      # package carries — npm does not copy the repository-root LICENSE into a
+      # tarball the way `pnpm pack` does, which is why the package holds its own
+      # copy. Without it an Apache-2.0 package would publish with no licence.
+      #
+      # `--access public` is required because the package is scoped: a scoped
+      # package defaults to restricted, and the first publish would otherwise
+      # create a private package on a plan that may not allow one.
+      #
+      # `NODE_AUTH_TOKEN` rather than OIDC trusted publishing, and only because
+      # of an ordering rule: trusted publishing cannot create a package that
+      # does not exist yet, so the first version of a name has to go through a
+      # token. Once `@ecoma-io/nx-polyglot-graph` exists on the registry, bind
+      # this workflow as a trusted publisher there and delete the `env:` block —
+      # the `id-token: write` above is already what that mode needs.
+      - name: Publish
+        working-directory: packages/nx-polyglot-graph
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
+        run: npm publish --provenance --access public

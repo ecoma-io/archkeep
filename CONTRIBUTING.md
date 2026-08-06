@@ -319,6 +319,36 @@ will see in CI:
   also why rebase merging is off rather than merely unfashionable: GitHub cannot
   sign a rebase, so a rebase merge into `main` is refused outright.)
 
+## How a release happens
+
+Nothing you need to do — but worth knowing, because it explains a pull request
+you will see open on `main` that nobody wrote.
+
+[release-please](https://github.com/googleapis/release-please) reads the
+Conventional Commit subjects since the last tag and keeps one pull request open
+holding the next version and the changelog it derived. **That pull request is the
+release proposal**: merging it tags, and the tag publishes
+`@ecoma-io/nx-polyglot-graph` to npm. So the subject line you write is what
+decides the next version number — `feat:` moves the minor, `fix:` the patch, and
+a `!` or a `BREAKING CHANGE:` footer the major.
+
+Two details that are easy to trip over:
+
+- **Do not hand-edit `CHANGELOG.md` or the version in `package.json`.**
+  release-please owns both and rewrites them on the next run. `CHANGELOG.md` is
+  in `.prettierignore` for the same reason: its generated layout and Prettier's
+  preferred one disagree, and neither yields.
+- **The release pull request's title is `chore(workspace): release <version>`**,
+  not release-please's default. The default names the target branch as the scope
+  (`chore(main): …`), and `main` is not in `commitlint.config.mjs`'s `scope-enum`
+  — the release pull request would fail a required check and could never merge.
+
+Before anything is published, CI packs the real tarball and installs it into a
+throwaway workspace (`scripts/verify-package.mjs`, described in the commands
+above). That step runs on every pull request too, so a change that breaks the
+package for someone who is not this workspace fails the change rather than the
+release.
+
 ## Reporting problems
 
 - **A missed violation** — its own form. Higher severity than a wrong message,
