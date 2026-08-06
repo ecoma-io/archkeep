@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "$comment": "What a release means here, and what it deliberately leaves alone.\n\nThe releasable unit is the package, not the repository. `packages/nx-polyglot-graph` is what a consumer installs; the root manifest is `private: true` and has no version anyone can depend on. So the entry below is the package path — release-please bumps that manifest, writes that changelog, and tags from the commits that touched it.\n\n`pull-request-title-pattern` overrides a default that this repository would reject. release-please titles its release pull request `chore${scope}: release${component} ${version}`, where `${scope}` is the target branch — `chore(main): release 0.1.0`. CI runs commitlint on every pull request title (the squash subject is the one commit message the `commit-msg` hook never sees), and `main` is not in `commitlint.config.mjs`'s `scope-enum`: the release pull request would fail a required check and could never merge. `workspace` is in that enum and is the honest scope — cutting a release is an act of the repository, not a change inside the package. Fixing it here rather than by adding `main` to the enum keeps the enum meaning what it says it means: one entry per package, plus the three that name a change owning no package.\n\nNo `extra-files` entry for `.claude-plugin/plugin.json`, and that is not an oversight. That version keys Claude Code's plugin cache and moves when the manifest moves; this one is the tool's own and is what the language server announces as `serverInfo`. Tying them would force a plugin-cache bump on every release of code the manifest does not contain, and `src/conformance/plugin-catalogue.integration.test.mjs` already holds the manifest version to the marketplace entry that must match it. Two facts wearing one word.",
+  "packages": {
+    "packages/nx-polyglot-graph": {
+      "release-type": "node",
+      "initial-version": "0.1.0",
+      "include-component-in-tag": false,
+      "pull-request-title-pattern": "chore(workspace): release ${version}",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "changelog-sections": [
+        { "type": "feat", "section": "Features" },
+        { "type": "fix", "section": "Bug Fixes" },
+        { "type": "docs", "section": "Documentation" },
+        { "type": "refactor", "section": "Internal", "hidden": true },
+        { "type": "perf", "section": "Internal", "hidden": true },
+        { "type": "test", "section": "Internal", "hidden": true },
+        { "type": "build", "section": "Internal", "hidden": true },
+        { "type": "ci", "section": "Internal", "hidden": true },
+        { "type": "chore", "section": "Internal", "hidden": true },
+        { "type": "style", "section": "Internal", "hidden": true }
+      ]
+    }
+  }
+}
