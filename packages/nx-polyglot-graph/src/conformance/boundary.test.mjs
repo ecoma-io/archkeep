@@ -329,4 +329,61 @@ describe("what the shipped tool is allowed to depend on", () => {
     }
     expect(unused).toEqual([]);
   });
+
+  it("declares in its manifest every package a shipped module imports", () => {
+    // The check above proves nothing the tool imports is undeclared HERE; this
+    // one proves it is declared where a consumer's installer reads. They are
+    // the same fact in two files, and the failure mode of the second is the one
+    // a local run cannot see: the package installs clean and throws at the
+    // first `import ts from "typescript"`, because nothing told the installer
+    // to supply it. That is exactly how this manifest stood before — zero
+    // dependencies, green locally, because pnpm hoisted the workspace root's
+    // copy and Node walked up to it.
+    //
+    // Both fields count as declared. Which one a package belongs in is a
+    // judgement the manifest makes (a peer is the consumer's copy, shared with
+    // Nx; a dependency is ours), and re-deciding it here would make this test
+    // an opinion instead of a comparison.
+    const manifest = JSON.parse(readFileSync(join(PROJECT_ROOT, "package.json"), "utf8"));
+    const declared = new Set([
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(manifest.peerDependencies ?? {}),
+    ]);
+
+    // A subpath is supplied by its package: `vue/compiler-sfc` by `vue`,
+    // `nx/package.json` by `nx`. Scoped names keep their first two segments.
+    const packageOf = (specifier) =>
+      specifier.startsWith("@")
+        ? specifier.split("/").slice(0, 2).join("/")
+        : specifier.split("/")[0];
+
+    const undeclared = [...SHIPPED_PACKAGES.keys()]
+      .map(packageOf)
+      .filter((name) => !declared.has(name));
+
+    expect(
+      [...new Set(undeclared)],
+      "imported by a shipped module, absent from package.json",
+    ).toEqual([]);
+  });
+
+  it("declares nothing in its manifest that no shipped module imports", () => {
+    // The other direction, and the one that rots quietly: a dependency left
+    // behind by code that was deleted makes every consumer install a package
+    // for nothing, and — for a peer — warns them about a version they have no
+    // reason to hold.
+    const manifest = JSON.parse(readFileSync(join(PROJECT_ROOT, "package.json"), "utf8"));
+    const packageOf = (specifier) =>
+      specifier.startsWith("@")
+        ? specifier.split("/").slice(0, 2).join("/")
+        : specifier.split("/")[0];
+    const imported = new Set([...SHIPPED_PACKAGES.keys()].map(packageOf));
+
+    const unused = [
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(manifest.peerDependencies ?? {}),
+    ].filter((name) => !imported.has(name));
+
+    expect(unused, "declared in package.json, imported by nothing shipped").toEqual([]);
+  });
 });
