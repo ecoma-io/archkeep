@@ -1,0 +1,26 @@
+# This IS a workspace: `packages/` will hold the Nx plugin and, later, the editor
+# extension that consumes it. The directory is empty at this commit and the glob
+# below is what makes the first package resolvable the moment it lands — pnpm
+# matches nothing today rather than needing an edit tomorrow.
+#
+# An empty `packages/` is also why `scripts/check-packages.mjs` exists: with no
+# project in the graph, `nx run-many` exits 0 having run nothing, and so does a
+# run where a package was added without a manifest or without the targets CI
+# names. That script is what tells those three states apart. See AGENTS.md.
+packages:
+  - "packages/*"
+
+# Every dependency install script is blocked until it is decided on here, and
+# pnpm fails the install while any decision is missing — so an unreviewed
+# postinstall cannot run in CI just because it shipped in a new release.
+#
+# lefthook: false — its postinstall only runs `lefthook install`, which this
+# package's `prepare` script already does, and which lefthook itself skips
+# whenever `CI` is set. The binary comes from optionalDependencies and needs no
+# build step, so nothing is lost by never running it.
+# nx: false — its postinstall compiles the optional native watcher and warms the
+# daemon. CI runs with the daemon off (a single-shot runner has nothing to reuse
+# it for) and no target here watches files, so the build buys nothing.
+allowBuilds:
+  lefthook: false
+  nx: false

@@ -1,0 +1,11 @@
+This directory is empty on purpose, and the emptiness is checked rather than
+assumed.
+
+`pnpm check-packages` (scripts/check-packages.mjs) prints "0 packages — declared
+empty" here, because `nx run-many` cannot tell that state apart from two others
+that also exit 0: a package that declares none of the targets CI runs, and a
+directory with sources but no manifest, which Nx does not see at all. This file
+exists so Git tracks the directory; the script exists so a green build means
+something once the first package arrives.
+
+The Nx plugin lands here, in its own pull request.

@@ -1,0 +1,39 @@
+# Git hooks — installed by `pnpm install` (the `prepare` script runs
+# `lefthook install`). Rationale and the full contributor flow: CONTRIBUTING.md.
+
+pre-commit:
+  parallel: false
+  commands:
+    format:
+      # Format only what is staged, then re-stage whatever Prettier rewrote, so
+      # the commit contains the formatted bytes rather than a follow-up fixup.
+      glob: "*.{mjs,cjs,js,json,jsonc,json5,md,yml,yaml}"
+      run: pnpm exec prettier --write --ignore-unknown {staged_files}
+      stage_fixed: true
+    lint:
+      glob: "*.{mjs,cjs,js}"
+      run: pnpm exec eslint --no-warn-ignored --max-warnings 0 {staged_files}
+    packages:
+      # Cheap, and it guards a state no other check can see: a package directory
+      # added without a manifest is invisible to Nx, so `nx run-many` reports
+      # success having never looked at it. Runs on every commit rather than on a
+      # glob, because the failure is a missing file — there is no staged path to
+      # match on.
+      run: pnpm check-packages
+
+pre-push:
+  parallel: false
+  commands:
+    test:
+      run: pnpm test
+    graph:
+      # Proves the workspace graph still computes. An Nx plugin that throws
+      # while the graph is being built breaks every `nx` command at once,
+      # including the ones that would report the error — so it is worth one
+      # second here.
+      run: pnpm exec nx show projects
+
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm exec commitlint --edit {1}

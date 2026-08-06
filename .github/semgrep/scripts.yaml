@@ -1,0 +1,74 @@
+# `scripts/` is this repository's only place real code executes — check-packages.mjs
+# runs in the pre-commit hook and in CI, and what it walks is a tree of package
+# directories somebody else contributed: directory names, manifest fields, and the
+# project names Nx derives from them. Every one of those is attacker-supplied the
+# moment a pull request adds a directory, and the script hands them to a child
+# process. Both rules below are about that one boundary.
+#
+# The same rules bind the Nx plugin once it lands in `packages/`, for the same
+# reason: it reads a consumer's workspace and shells out over what it finds.
+#
+# Fixtures live in scripts.mjs, exercised by `semgrep --test --config
+# .github/semgrep .github/semgrep`. `.mjs` is valid input for
+# `languages: [javascript]` — semgrep's target selection maps it to the same
+# parser as `.js`, confirmed by running it against 1.172.0 rather than inferred
+# from the extension list.
+rules:
+  - id: script-spawn-with-shell-true
+    languages: [javascript, typescript]
+    severity: ERROR
+    paths:
+      include:
+        - "/scripts/**"
+        - "/packages/**"
+    message: >-
+      This child_process call sets `shell: true`. The command then runs through
+      `/bin/sh -c`, so a value assembled from a package directory name or a
+      manifest field is interpreted as shell syntax rather than passed as a
+      literal argument — a directory named `a;rm -rf .` stops being a name and
+      becomes two commands. Drop `shell: true` and pass the command and its
+      arguments as a separate array; the same result with no shell in between to
+      inject into.
+    metadata:
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: "$X.exec($CMD, { ..., shell: true, ... })"
+      - pattern: "$X.exec($CMD, $ARGS, { ..., shell: true, ... })"
+      - pattern: "$X.execFile($CMD, $ARGS, { ..., shell: true, ... })"
+      - pattern: "$X.execFileSync($CMD, $ARGS, { ..., shell: true, ... })"
+      - pattern: "$X.spawn($CMD, $ARGS, { ..., shell: true, ... })"
+      - pattern: "$X.spawnSync($CMD, $ARGS, { ..., shell: true, ... })"
+      - pattern: "exec($CMD, { ..., shell: true, ... })"
+      - pattern: "execFile($CMD, $ARGS, { ..., shell: true, ... })"
+      - pattern: "execFileSync($CMD, $ARGS, { ..., shell: true, ... })"
+      - pattern: "spawn($CMD, $ARGS, { ..., shell: true, ... })"
+      - pattern: "spawnSync($CMD, $ARGS, { ..., shell: true, ... })"
+
+  - id: script-exec-command-built-from-a-value
+    languages: [javascript, typescript]
+    severity: ERROR
+    paths:
+      include:
+        - "/scripts/**"
+        - "/packages/**"
+    message: >-
+      `exec` and `execSync` take one command STRING and always run it through a
+      shell — there is no `shell: false` for them, so the rule above does not
+      reach this case and the absence of `shell: true` here means nothing. A
+      command built by template literal or concatenation therefore embeds
+      whatever it interpolated as shell source. Use `execFileSync`/`spawnSync`
+      with the command and an argument array instead, which spawns the binary
+      directly.
+    metadata:
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: "$X.exec(`...`, ...)"
+      - pattern: "$X.execSync(`...`, ...)"
+      - pattern: "exec(`...`, ...)"
+      - pattern: "execSync(`...`, ...)"
+      - pattern: "$X.exec($A + $B, ...)"
+      - pattern: "$X.execSync($A + $B, ...)"
+      - pattern: "exec($A + $B, ...)"
+      - pattern: "execSync($A + $B, ...)"

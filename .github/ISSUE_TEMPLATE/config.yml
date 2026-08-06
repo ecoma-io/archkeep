@@ -1,0 +1,10 @@
+# A blank issue skips every question the forms ask, and the answers to those
+# questions are what make a report actionable.
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/ecoma-io/lattice/security/advisories/new
+    about: Never open a public issue for a vulnerability — use a private security advisory.
+  - name: The Ecoma platform
+    url: https://ecoma.io
+    about: This repository holds only the Nx tooling. Anything about the product itself belongs there.

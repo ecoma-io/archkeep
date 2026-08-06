@@ -1,0 +1,13 @@
+# Normalise line endings in the repository; check out LF everywhere.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending normalised.
+*.png binary
+*.jpg binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ico binary
+
+# The lockfile is generated — collapse it in diffs and reviews.
+pnpm-lock.yaml linguist-generated=true -diff

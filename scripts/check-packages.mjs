@@ -1,0 +1,223 @@
+#!/usr/bin/env node
+// Asserts that every directory under `packages/` is a project Nx can actually
+// see, and that each one declares at least one of the targets CI runs.
+//
+// WHY this script exists, measured against nx 23.1.1 rather than assumed. Three
+// states produce an identical green `nx run-many` and an identical exit code 0:
+//
+//   1. There is no project at all — `nx run-many -t test build` prints
+//      "No tasks were run" and exits 0.
+//   2. A project exists but declares none of those targets — it is skipped in
+//      silence. No warning, no mention in the summary, exit 0.
+//   3. A directory exists with sources but no `package.json` or `project.json` —
+//      it is invisible to `nx show projects`, so nothing is skipped, because as
+//      far as Nx is concerned nothing is there.
+//
+// `packages/` is empty at this commit, so state 1 is the truth today. What makes
+// that a problem is not today: it is that the gate stays green on the day
+// someone adds the first package in shape 2 or 3. A check that cannot tell
+// "nothing exists yet" from "something exists and fell out of the graph" is not
+// reporting a verdict, it is reporting silence — and silence reads as success.
+//
+// So this script turns each of the three into a distinct, stated outcome: 3
+// fails, 2 fails, and 1 prints that the directory is empty *on purpose*. The
+// empty state becomes something the repository declares rather than something a
+// reader infers from a command that found nothing to do.
+//
+// The list of targets is READ OUT OF `.github/workflows/ci.yml` — out of the
+// `nx run-many -t …` line itself — never written here a second time. CI is where
+// "green" is defined; a copy of that list in this file would be a second
+// definition, and the two would agree only until someone edited one of them.
+// That is the failure this script is meant to catch, so it must not contain an
+// instance of it.
+
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+export const PACKAGES_DIR = "packages";
+export const CI_WORKFLOW = ".github/workflows/ci.yml";
+
+/**
+ * The targets CI runs, taken from the `nx run-many -t …` invocation in the
+ * workflow. Matches the flag in either spelling (`-t`, `--targets`) and stops at
+ * the first thing that is not a bare target name, so a trailing flag or a YAML
+ * line continuation does not become a target called `--parallel`.
+ *
+ * @param {string} workflowText contents of `.github/workflows/ci.yml`
+ * @returns {string[]} target names, in the order the workflow names them
+ */
+export function parseCiTargets(workflowText) {
+  const match = /nx\s+run-many\s+(?:-t|--targets(?:=|\s+))([^\n]*)/.exec(workflowText);
+  if (!match) return [];
+  const targets = [];
+  for (const word of match[1].trim().split(/[\s,]+/)) {
+    if (!/^[a-z][a-z0-9:-]*$/i.test(word)) break;
+    targets.push(word);
+  }
+  return targets;
+}
+
+/**
+ * Compares the directories on disk against the projects Nx reports, and against
+ * the targets CI runs.
+ *
+ * Kept free of IO so it can be tested without a workspace: every fact it needs
+ * arrives as an argument. `nxProjects` maps a project name to the root it
+ * declares and the target names it declares.
+ *
+ * @param {object} input
+ * @param {string[]} input.packageDirs directory names directly under `packages/`
+ * @param {{name: string, root: string, targets: string[]}[]} input.nxProjects what Nx reports
+ * @param {string[]} input.ciTargets targets the CI workflow runs
+ * @returns {{lines: string[], failures: string[]}}
+ */
+export function evaluate({ packageDirs, nxProjects, ciTargets }) {
+  const lines = [];
+  const failures = [];
+
+  if (packageDirs.length === 0) {
+    lines.push(`0 packages — declared empty`);
+    lines.push(
+      `${PACKAGES_DIR}/ holds no package yet, so a green run of ` +
+        `\`nx run-many -t ${ciTargets.join(" ")}\` runs nothing. That is stated here ` +
+        `rather than left to be inferred from a command that found no work.`,
+    );
+    return { lines, failures };
+  }
+
+  const byRoot = new Map(nxProjects.map((p) => [p.root, p]));
+
+  for (const dir of packageDirs) {
+    const expectedRoot = `${PACKAGES_DIR}/${dir}`;
+    const project = byRoot.get(expectedRoot);
+
+    if (!project) {
+      failures.push(
+        `${expectedRoot} is not a project Nx can see. It has no \`package.json\` or ` +
+          `\`project.json\`, so \`nx show projects\` does not list it and every target ` +
+          `runs over it zero times — while still exiting 0. Add a manifest.`,
+      );
+      lines.push(`FAIL ${expectedRoot} — invisible to the graph`);
+      continue;
+    }
+
+    const declared = ciTargets.filter((t) => project.targets.includes(t));
+    const missing = ciTargets.filter((t) => !project.targets.includes(t));
+
+    if (declared.length === 0) {
+      failures.push(
+        `${project.name} (${expectedRoot}) declares none of the targets CI runs ` +
+          `(${ciTargets.join(", ")}). Nx skips a project with no matching target in ` +
+          `silence, so nothing checks this package and the run still exits 0.`,
+      );
+      lines.push(`FAIL ${project.name} — declares no CI target`);
+      continue;
+    }
+
+    // Not every package legitimately has every target — a buildless package has
+    // nothing to build, and inventing an empty `build` to satisfy a gate is the
+    // placeholder-shaped green this script exists to prevent. So a partial set
+    // is reported rather than failed: the log says which checks reach this
+    // package, and a reviewer decides whether the gap is the intended one.
+    const note = missing.length > 0 ? ` (no ${missing.join(", ")})` : "";
+    lines.push(`ok   ${project.name} — ${declared.join(", ")}${note}`);
+  }
+
+  return { lines, failures };
+}
+
+/** Directory names directly under `packages/`, or `[]` when it does not exist. */
+function readPackageDirs(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
+
+/**
+ * Asks Nx what projects exist, through its own CLI — the point of the check is
+ * what the graph contains, which only Nx can answer. Reading the manifests here
+ * instead would re-implement project inference and agree with Nx right up until
+ * it did not.
+ */
+function readNxProjects() {
+  const nx = join(root, "node_modules", "nx", "dist", "bin", "nx.js");
+  if (!existsSync(nx)) {
+    console.error(
+      "nx is not installed (node_modules/nx is missing), so the project graph " +
+        "cannot be read. Run `pnpm install` first.",
+    );
+    process.exit(1);
+  }
+
+  const run = (args) =>
+    spawnSync(process.execPath, [nx, ...args], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, NX_DAEMON: "false" },
+    });
+
+  const listed = run(["show", "projects", "--json"]);
+  if (listed.status !== 0) {
+    console.error(listed.stdout ?? "");
+    console.error(listed.stderr ?? "");
+    console.error("`nx show projects` failed, so the graph could not be read.");
+    process.exit(1);
+  }
+
+  const names = JSON.parse(listed.stdout);
+  return names.map((name) => {
+    const shown = run(["show", "project", name, "--json"]);
+    if (shown.status !== 0) {
+      console.error(shown.stderr ?? "");
+      console.error(`\`nx show project ${name}\` failed.`);
+      process.exit(1);
+    }
+    const project = JSON.parse(shown.stdout);
+    return {
+      name,
+      root: project.root,
+      targets: Object.keys(project.targets ?? {}),
+    };
+  });
+}
+
+function main() {
+  const workflowPath = join(root, CI_WORKFLOW);
+  if (!existsSync(workflowPath)) {
+    console.error(
+      `${CI_WORKFLOW} is missing, and it is where the list of targets this check ` +
+        `enforces comes from. Without it there is nothing to check against.`,
+    );
+    process.exit(1);
+  }
+
+  const ciTargets = parseCiTargets(readFileSync(workflowPath, "utf8"));
+  if (ciTargets.length === 0) {
+    console.error(
+      `No \`nx run-many -t …\` invocation was found in ${CI_WORKFLOW}. Either CI ` +
+        `stopped running the workspace's targets, or the line moved — both mean this ` +
+        `check no longer knows what green is supposed to mean.`,
+    );
+    process.exit(1);
+  }
+
+  const packageDirs = readPackageDirs(join(root, PACKAGES_DIR));
+  const nxProjects = packageDirs.length > 0 ? readNxProjects() : [];
+  const { lines, failures } = evaluate({ packageDirs, nxProjects, ciTargets });
+
+  for (const line of lines) console.log(line);
+
+  if (failures.length > 0) {
+    console.error("");
+    for (const failure of failures) console.error(`✗ ${failure}`);
+    process.exit(1);
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

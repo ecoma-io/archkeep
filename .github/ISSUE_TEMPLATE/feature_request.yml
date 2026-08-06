@@ -1,0 +1,84 @@
+name: Feature request
+description: Propose a capability — a language, a rule, an editor integration.
+title: "feat: "
+labels: ["enhancement", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Lattice holds what makes a **polyglot** workspace's graph and boundaries
+        real. What decides most questions about scope: does this work for a
+        language Nx cannot already see by itself?
+
+        Deliberately out of scope: replacing `@nx/eslint-plugin` for TypeScript
+        (it already does that job well), generating projects, running tasks, and
+        anything that needs a language's own toolchain installed to answer a
+        question about imports.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Before filing
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+        - label: I checked that Nx does not already do this natively.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the workspace you are in, not the solution you have in mind. What drifts today, and what are you doing instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you are proposing
+      description: A rough sketch is fine — the configuration shape, the message a developer would read, the manifest field it would parse.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of addition is this?
+      options:
+        - A new language's manifests read into the graph
+        - A new boundary rule
+        - Editor / language-server behaviour
+        - Reporting or output format
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: false-negatives
+    attributes:
+      label: How would this fail silently?
+      description: >-
+        The question this project is judged on. Every capability here can report
+        nothing and look identical to a clean workspace, so say what "it stopped
+        working" would look like, and how a test could tell that apart from "there
+        was nothing to report".
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including doing nothing, and configuration you already have.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a pull request for this.
+          required: false

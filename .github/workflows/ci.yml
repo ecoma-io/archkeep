@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  # Deliberately NOT filtered to `branches: [main]`. A filter there skips CI
+  # entirely on a stacked pull request — one targeting another feature branch —
+  # so the branch merges having never been checked, and the failure only appears
+  # later against someone else's change.
+  pull_request:
+  # The merge queue re-runs these checks against `main + every pull request
+  # ahead in the queue + this one`, which is the only place a semantic conflict
+  # between two independently-green pull requests can surface. GitHub reports
+  # the result against the required check name below, so `ci-gate` must exist on
+  # this event or the queue waits forever.
+  merge_group:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # A merge-queue run must never be cancelled: the queue is blocked on exactly
+  # this run, and cancelling it ejects the batch. `github.ref` is already unique
+  # per queued batch, and `cancel-in-progress` is true only for pull requests.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Reads the pnpm version from `packageManager` in package.json, so the
+      # runner uses the same pnpm a contributor's Corepack fetches.
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Every pull request lands as a squash, and the squash commit's subject is
+      # the pull request title — so the title is the one commit message that
+      # never reaches the `commit-msg` hook: no commit carrying that text exists
+      # until GitHub writes it at merge time. Same commitlint configuration as
+      # the hook, so a valid message has one definition rather than two.
+      #
+      # The title arrives through the environment, never through `${{ }}`
+      # interpolation into the script: interpolation pastes it into the shell
+      # source, where a title containing `$(...)` or a backtick would run.
+      - name: Check the pull request title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | pnpm exec commitlint
+
+      # Skipped in the merge queue, and it is the only check that is. Prettier's
+      # verdict is a pure function of each file's own bytes: merging other pull
+      # requests into this one cannot unformat a file that was formatted, so
+      # re-running it would re-prove what the pull-request run already proved.
+      # Everything below can change under a merge, which is the entire reason
+      # the queue exists.
+      - name: Check formatting
+        if: github.event_name != 'merge_group'
+        run: pnpm format:check
+
+      - run: pnpm lint
+
+      # The tests for the gate below. They run first because a broken gate
+      # reports nothing rather than reporting a failure, and this is the step
+      # that would say so.
+      - run: pnpm test
+
+      # Reads the target list out of THIS FILE — out of the `nx run-many` line
+      # below — and asserts every directory under `packages/` is a project the
+      # graph can see which declares at least one of those targets. Without it
+      # the next step exits 0 on three different states, only one of which is
+      # good: nothing exists, something exists with no matching target (skipped
+      # in silence), or something exists with no manifest (invisible entirely).
+      # Runs BEFORE that step, so an unreachable package fails as an error
+      # rather than passing as an absence.
+      - run: pnpm check-packages
+
+      # The daemon is a long-lived process that caches the graph between
+      # invocations. A single-shot runner has no second invocation to reuse it
+      # for, and it outlives the step that started it.
+      - name: Run every project's targets
+        env:
+          NX_DAEMON: "false"
+        run: pnpm exec nx run-many -t lint test build typecheck
+
+  ci-gate:
+    name: ci-gate
+    # The single check name a branch ruleset requires, on pull requests and in
+    # the merge queue alike. It exists so the required-check name is stable
+    # while the job list is not: add a job to `needs` and the gate tightens
+    # without anyone editing repository settings — and forgetting to add it is
+    # the only way to widen what green means, which is visible in this file.
+    needs: [verify]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # `needs` alone would let a skipped or cancelled job pass as green, since
+      # only `failure` blocks a dependent job by default.
+      - name: Fail unless every job succeeded
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1

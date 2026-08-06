@@ -1,0 +1,106 @@
+name: Bug report
+description: The tooling behaves differently from what it documents.
+title: "bug: "
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file this.
+
+        **If the tooling reported no violation where one exists**, use the
+        *Missed boundary violation* form instead — a false negative is a
+        different defect from a crash or a wrong message, and it is judged
+        against a different bar.
+
+        **Do not report a security vulnerability through this form** — follow
+        [SECURITY.md](../blob/main/SECURITY.md) instead.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Before filing
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+        - label: I reproduced this on the latest `main`.
+          required: false
+
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens
+      description: The behaviour you observed, without interpretation. Paste the actual output.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-should-happen
+    attributes:
+      label: What should happen instead
+      description: And where that expectation comes from — a document, an Nx behaviour, another language behaving differently.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: A minimal workspace is best — the smallest project graph that still shows it. A report nobody can reproduce cannot be fixed.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does this happen?
+      options:
+        - Project graph — a dependency edge is wrong or missing
+        - Boundary rules — the verdict is wrong
+        - Command line output
+        - Editor / language server
+        - Installation or packaging
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: Which language's files are involved?
+      multiple: true
+      options:
+        - TypeScript / JavaScript
+        - Go
+        - Rust
+        - Python
+        - None — this is not language-specific
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Read these from commands rather than memory.
+      value: |
+        - `@ecoma-io/lattice` version:
+        - Nx (`nx --version`):
+        - Node (`node --version`):
+        - pnpm (`pnpm --version`):
+        - OS:
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Terminal output, the relevant `project.json` or manifest. Paste text as text rather than as an image where you can.
+    validations:
+      required: false

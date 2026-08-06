@@ -1,0 +1,23 @@
+node_modules/
+dist/
+coverage/
+
+# Nx's local cache and daemon state. Never committed: the cache is keyed on a
+# machine's own inputs, and a stale entry replaying as green is the one failure
+# mode a cache must not have.
+.nx/
+
+# Editors / OS
+.DS_Store
+*.local
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Claude Code local overrides — the shared settings.json IS tracked.
+.claude/settings.local.json

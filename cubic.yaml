@@ -1,0 +1,102 @@
+# yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
+#
+# cubic reviews every pull request here, and its scope is defined by what the
+# deterministic gates cannot see:
+#
+#   1. Prettier, ESLint, `node --test`, `semgrep`, and `check-packages` own
+#      everything mechanically decidable. They are the source of truth.
+#   2. cubic owns what none of them reach: defects where a gate script or plugin
+#      REPORTS NOTHING rather than reporting an error — the silent failure
+#      direction that is indistinguishable from a clean workspace.
+#
+# The reasoning lives in this file rather than in CONTRIBUTING.md because a
+# config file is read by whoever is editing it, and nothing else loads with it.
+
+version: 1
+
+reviews:
+  enabled: true
+
+  incremental_commits: true
+  check_drafts: false
+
+  # `medium` because the value cubic adds is a defect no gate can find, and
+  # `low` risks trading exactly that away.
+  sensitivity: medium
+
+  resolve_threads_when_addressed: true
+  auto_approve: disabled
+  architecture_diagrams: false
+
+  custom_instructions: |
+    You are the correctness reviewer on an Nx plugin for polyglot workspaces.
+    Its central invariant: an empty diagnostic list means "no violation", and
+    nothing else. The dangerous direction in every change is the false negative
+    — a violation that exists but produces no output. A wrong error is loud; a
+    missed one is invisible.
+
+    Report defects in the changed code: wrong logic, unhandled null/undefined,
+    swallowed or misclassified errors, await and promise mistakes, race
+    conditions, off-by-one and boundary errors, incorrect use of a library or
+    platform API, and untrusted input reaching a dangerous sink unvalidated.
+
+    Pay special attention to: child_process calls built from values the package
+    tree supplies (paths, manifest fields, project names), gate scripts that can
+    return early without printing a failure, and any code path that lets `nx
+    run-many` exit 0 having silently skipped a package that exists.
+
+    For any new graph reader or rule: name whether the change can produce an
+    empty result when a violation exists, and point to the test that would catch
+    it. A test that only pins the loud direction is not a test of the invariant.
+
+    Do NOT report formatting or style: Prettier and ESLint decide those.
+
+  ignore:
+    files:
+      - "**/*.md"
+      - pnpm-lock.yaml
+      - "**/dist/**"
+      - "**/coverage/**"
+      - cubic.yaml
+
+  custom_rules:
+    - name: A gate that returns early must do so loudly
+      description: >
+        Flag any path in scripts/ or packages/ where a gate script exits or
+        returns without printing a failure message when it encountered something
+        wrong. The two failures that are easy to miss: an early-exit on a
+        condition that should have been reported, and a loop that accumulates
+        failures into an array but exits 0 if the accumulation is never checked.
+        Both look like success to CI.
+      include:
+        - scripts/**
+        - packages/**
+
+    - name: Child process calls must not interpolate package-tree values
+      description: >
+        Flag any `exec`, `execSync`, `spawn`, or `spawnSync` where the command
+        string or any of the argument strings is built from a value that came
+        from the filesystem — a directory name, a manifest field, a project name
+        from `nx show projects`. Those values are attacker-supplied the moment a
+        pull request adds a directory. The fix is always the same: pass the
+        command and an argument array, never a built string.
+      include:
+        - scripts/**
+        - packages/**
+
+    - name: pull_request_target never executes head code
+      description: >
+        In any workflow triggered by `pull_request_target`, flag a `ref:` naming
+        the pull request head, a `run:` step consuming head-controlled input, an
+        install or build step after head files are restored, and any action
+        referenced by tag or branch rather than a full commit SHA.
+      include:
+        - .github/workflows/**
+
+pr_descriptions:
+  generate: false
+
+issues:
+  fix_with_cubic_buttons: false
+  pr_comment_fixes: false
+  fix_commits_to_pr: false

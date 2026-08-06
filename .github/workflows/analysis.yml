@@ -1,0 +1,192 @@
+name: Analysis
+
+# Static analysis, not "security" — the name matters because what runs here is
+# wider than vulnerabilities, and a workflow called Security makes the next
+# reader either mis-file a correctness finding or leave it out.
+#
+# Three analysers share one workflow because they answer three parts of the same
+# question — what this code does (CodeQL), what this code does that we have
+# specifically decided it must not (Semgrep), and how this repository is run
+# (Scorecard) — and a reader chasing "what analysis is in place?" should find
+# all of it in one file.
+#
+# Merging them is only safe because Scorecard's publish restrictions are scoped
+# the way they are. Publishing results forbids top-level `env`/`defaults` and any
+# WORKFLOW-level write permission, and allows `id-token: write` on the Scorecard
+# job alone; the approved-actions list applies to the steps of that job, not to
+# the workflow. So: nothing is declared above the jobs except read permissions,
+# and CodeQL's `security-events: write` stays at its own job level.
+# https://github.com/ossf/scorecard-action#workflow-restrictions
+
+on:
+  push:
+    branches: [main]
+  # Unfiltered, for the same reason `ci.yml` is: `Semgrep` is a required status
+  # check, and a `branches: [main]` filter here would skip this workflow entirely
+  # on a stacked pull request — leaving that check pending forever rather than
+  # failing, which is a block with nothing to fix.
+  pull_request:
+  # And present on `merge_group` for the same reason `ci-gate` is: the queue
+  # waits for every required check to report against the queued ref, so a
+  # required check whose workflow does not trigger there never arrives.
+  merge_group:
+  # One weekly cron now covers both analyses, which is a consequence of the
+  # merge rather than a coincidence: a workflow's schedule triggers every job in
+  # it, so two crons would mean each analysis running twice a week under the
+  # other's name.
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+
+# A push to main gets a run of its own per commit; a new push to a pull request
+# supersedes the in-flight run for it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: read-all
+
+jobs:
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Only this job uploads SARIF, so the write stays here rather than at the
+    # top level — where Scorecard would reject it outright, and where any job
+    # added later would silently inherit it.
+    # A job-level `permissions` block REPLACES the workflow-level one rather
+    # than merging with it, so read access has to be restated: omit it and
+    # checkout loses read access to the repository.
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      # `actions` needs a leg of its own even though the workflow files are
+      # already IN the javascript-typescript database — that invocation extracts
+      # them and then interprets `js/*` queries and nothing else. Without this
+      # leg every workflow-security query runs zero times: expression injection
+      # of `github.event.*` into a `run:` block, untrusted checkout under
+      # `pull_request_target`, artifact poisoning, a job with no `permissions:`.
+      matrix:
+        include:
+          # Covers the `.mjs` sources here: the gate scripts today, the Nx
+          # plugin once it lands. `javascript-typescript` is one language to
+          # CodeQL, and it extracts `.mjs` as JavaScript.
+          - language: javascript-typescript
+            build-mode: none
+          # `none` is the only mode `actions` has: workflow files are read as
+          # data, never built.
+          - language: actions
+            build-mode: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@d1ba80a13dd99fba24a470575428917156a28b43 # v4.37.5
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@d1ba80a13dd99fba24a470575428917156a28b43 # v4.37.5
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    # A container is allowed here because Scorecard's "no containers" rule binds
+    # its own job, not the workflow. Written as `tag@digest` so the version stays
+    # readable while the digest is what actually resolves — the analyser cannot
+    # change under a rerun, and Renovate bumps both halves together.
+    container:
+      image: semgrep/semgrep:1.172.0@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # `.github/semgrep/` holds the rules AND their fixtures — files whose
+      # entire job is to be reported — so it is excluded from every scan of the
+      # repository and checked by `semgrep --test` instead. This runs first: a
+      # rule that has quietly stopped matching passes every scan below by
+      # finding nothing.
+      - name: Test the rules against their fixtures
+        run: semgrep --test --config .github/semgrep .github/semgrep
+
+      # Reporting pass. `p/javascript` is the one registry pack carried, and it
+      # is carried for the half of this repository that executes: the gate
+      # scripts walk a tree of directories somebody else contributed and shell
+      # out over what they find.
+      - name: Scan
+        run: >-
+          semgrep scan --config .github/semgrep --config p/javascript
+          --exclude .github/semgrep --sarif --output semgrep.sarif
+
+      - name: Upload to code-scanning
+        uses: github/codeql-action/upload-sarif@d1ba80a13dd99fba24a470575428917156a28b43 # v4.37.5
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+      # Blocking pass, and deliberately the repository's own rules only: a
+      # registry pack can gain a rule overnight and turn main red for a change
+      # nobody made, whereas everything under `.github/semgrep/` is reviewed here
+      # and pinned by a test. Runs after the upload so findings reach the
+      # Security tab even when this step fails the job.
+      - name: Enforce the repository's own rules
+        run: >-
+          semgrep scan --config .github/semgrep --exclude .github/semgrep
+          --error --quiet
+
+  scorecard:
+    name: OpenSSF Scorecard
+    # Scorecard measures repository-wide posture, not a diff, and publishing is
+    # only supported from the default branch — so a pull-request run would have
+    # nothing to say and no right to publish it. `workflow_dispatch` is excluded
+    # for the same reason: the action documents publishing from it as
+    # experimental.
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # Needed to upload results to the code-scanning dashboard.
+      security-events: write
+      # Needed for the GitHub OIDC token that `publish_results` uses to prove
+      # authorship of the published score. Scorecard's restrictions allow this
+      # on exactly one job per workflow, and this is it.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # This repository is public and Apache-2.0, so publishing to the public
+      # OpenSSF Scorecard API is appropriate: it feeds the public score badge
+      # and the deps.dev / OSV consumers that read it, exposing nothing the
+      # repository does not already show.
+      - name: Run analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code-scanning
+        uses: github/codeql-action/upload-sarif@d1ba80a13dd99fba24a470575428917156a28b43 # v4.37.5
+        with:
+          sarif_file: results.sarif

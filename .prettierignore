@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.nx/
+pnpm-lock.yaml
+
+# Verbatim third-party legal text — reflowing it would alter a document that is
+# only valid unmodified.
+LICENSE
+
+# Semgrep rule fixtures. `semgrep --test` binds a `ruleid:`/`ok:` annotation to
+# the line immediately below it, and the blank line Prettier inserts after each
+# one detaches every annotation from its case — turning a passing fixture run
+# into a failing one. Measured against semgrep 1.172.0, not assumed.
+.github/semgrep/

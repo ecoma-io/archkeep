@@ -1,0 +1,81 @@
+# This repository's own workflows sit in scope for the credential-boundary half
+# of SECURITY.md: a `pull_request_target` run or an unpinned action gives a
+# fork-submitted pull request a path to this repository's secrets and write
+# access. CodeQL's `actions` language already runs these same three checks as
+# part of its own query suite; these rules stay because they run in seconds
+# inside the same job that tests the repository's rules, and because losing
+# renovate.json5's action-pinning preset (say, a workflow hand-edited to add a
+# tag instead of a SHA) should fail loud in the same pull request rather than
+# wait for CodeQL's separate, slower job.
+#
+# `languages: [yaml]` — GitHub Actions workflows are plain YAML, so no
+# `generic`/pattern-regex indirection is needed for the structural rules here.
+#
+# Fixtures live in workflows.test.yaml, exercised by `semgrep --test --config
+# .github/semgrep .github/semgrep`. That file carries a top-level `rules: []`
+# key even though it is not itself a rule config: `--config` recursively treats
+# every `.yml`/`.yaml` file under `.github/semgrep` as a candidate rule file
+# regardless of the fixture-naming convention, and one with no top-level `rules:`
+# key aborts the whole run with exit 7. The `.test.` infix in its name is
+# load-bearing too — a `.yml`/`.yaml`-suffixed file needs it to be recognised as
+# a test target rather than only as a config candidate. Neither requirement is
+# documented; both were confirmed against semgrep 1.172.0 by running it, and both
+# apply only to `languages: [yaml]` fixtures — scripts.mjs needs neither.
+rules:
+  - id: workflow-action-not-pinned-to-sha
+    languages: [yaml]
+    severity: ERROR
+    paths:
+      include:
+        - "/.github/workflows/**"
+    message: >-
+      This `uses:` is not pinned to a full commit SHA. A tag or branch is a
+      pointer the upstream owner can repoint at any commit, including one that
+      runs on a later pull request without this repository ever changing a byte
+      — the exact drift renovate.json5's action-pinning preset exists to close.
+      Pin to the SHA and keep the `# vX.Y.Z` comment for a human to read.
+    metadata:
+      category: security
+      confidence: HIGH
+    pattern-regex: 'uses:\s*[^\s''"#]+/[^\s''"#@]+@(?!(?:[0-9a-fA-F]{40})(?:\s|$|#))\S+'
+
+  - id: workflow-expression-interpolated-into-run
+    languages: [yaml]
+    severity: ERROR
+    paths:
+      include:
+        - "/.github/workflows/**"
+    message: >-
+      A `${{ github.event.* }}` or `${{ github.head_ref }}` expression is
+      interpolated directly into a `run:` step. GitHub substitutes the raw string
+      before the shell ever sees it, so a pull request title or branch name
+      containing shell metacharacters runs as a command with this workflow's
+      permissions. Pass the value through an `env:` variable and reference `$VAR`
+      in the script instead; the shell then sees it as inert data.
+    metadata:
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern: "run: $RUN"
+      - metavariable-pattern:
+          metavariable: $RUN
+          patterns:
+            - pattern-regex: '\$\{\{\s*(github\.event\.[\w.]+|github\.head_ref)\s*\}\}'
+
+  - id: workflow-pull-request-target
+    languages: [yaml]
+    severity: WARNING
+    paths:
+      include:
+        - "/.github/workflows/**"
+    message: >-
+      `pull_request_target` runs with the base repository's secrets and write
+      access against a fork's code — the trigger CodeQL's `actions` query treats
+      as inherently risky. This repository's workflows trigger on
+      `pull_request` deliberately, which runs read-only against the fork;
+      confirm that tradeoff is intentional before merging a workflow that uses
+      the other trigger.
+    metadata:
+      category: security
+      confidence: MEDIUM
+    pattern-regex: '^\s*pull_request_target\s*:'

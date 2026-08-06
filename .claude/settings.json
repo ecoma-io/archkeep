@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "extraKnownMarketplaces": {
+    "litmus": {
+      "source": {
+        "source": "github",
+        "repo": "ecoma-io/litmus"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "litmus@litmus": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/format-edited-file.mjs",
+            "statusMessage": "Formatting edited file"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/lint-edited-file.mjs",
+            "statusMessage": "Linting edited file"
+          }
+        ]
+      }
+    ]
+  }
+}

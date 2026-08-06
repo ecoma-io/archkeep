@@ -1,0 +1,36 @@
+# This file is a semgrep --test fixture for workflows.yaml, not a real workflow —
+# it never runs as one; nothing under .github/semgrep is a workflow trigger. The
+# top-level `rules: []` key exists only so that `semgrep --config
+# .github/semgrep`, which loads every .yml/.yaml file in that directory as a
+# candidate rule config, sees a valid (empty) config here instead of erroring out
+# with "missing keys ... 'rules'" — see the WHY in workflows.yaml's own header
+# comment. The `on2:`/fake job content below it is ordinary fixture data;
+# `rules: []` does not change how pattern-regex or metavariable-pattern read the
+# rest of the file.
+rules: []
+
+name: fake workflow, fixture only
+on:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # ruleid: workflow-action-not-pinned-to-sha
+      - uses: actions/checkout@v4
+      # ok: workflow-action-not-pinned-to-sha
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # ruleid: workflow-expression-interpolated-into-run
+      - run: echo "${{ github.event.pull_request.title }}"
+      # ok: workflow-expression-interpolated-into-run
+      - run: echo "${{ github.sha }}"
+      # ok: workflow-expression-interpolated-into-run
+      - run: echo "$TITLE"
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+on2:
+  # ruleid: workflow-pull-request-target
+  pull_request_target:
+    branches: [main]

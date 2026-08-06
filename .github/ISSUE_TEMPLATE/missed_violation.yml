@@ -1,0 +1,103 @@
+name: Missed boundary violation
+description: An import crosses a boundary it should not, and the tooling reported nothing.
+title: "bug: missed violation — "
+labels: ["bug", "false negative", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form exists because a **false negative is the dangerous
+        direction**. A wrong error is loud: someone sees it, argues with it,
+        files it. Silence where a violation exists is indistinguishable from a
+        clean workspace, so the rule looks like it is working right up until an
+        architecture has already drifted through it.
+
+        A report here is therefore treated as higher severity than an incorrect
+        message, and it earns a regression fixture in the suite rather than only
+        a fix.
+
+        The mirror case — an error reported where the import is legitimate —
+        belongs on this form too. Say which direction you are reporting below.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Before filing
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+        - label: The projects involved really do carry the tags the rule matches on (checked with `nx show project <name>`, not from memory).
+          required: true
+
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Which direction is wrong?
+      options:
+        - Missed — the import violates a boundary and nothing was reported
+        - Wrong — the import is legitimate and a violation was reported anyway
+    validations:
+      required: true
+
+  - type: textarea
+    id: the-import
+    attributes:
+      label: The import
+      description: The exact line, and the file it is in.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: the-projects
+    attributes:
+      label: The two projects and their tags
+      description: Source and target, with the tags each declares. Paste from `nx show project <name>` rather than from the manifest.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: the-rule
+    attributes:
+      label: The rule it should have matched
+      description: The relevant entry from your boundary configuration.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: The importing file's language
+      options:
+        - TypeScript / JavaScript
+        - Go
+        - Rust
+        - Python
+    validations:
+      required: true
+
+  - type: textarea
+    id: graph
+    attributes:
+      label: Does the project graph show the edge?
+      description: >-
+        Run `nx graph --file=graph.json` and say whether an edge exists between the
+        two projects. This separates two very different defects: an edge that was
+        never inferred (the graph layer), and an edge that exists but was not
+        judged (the rules layer).
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - `@ecoma-io/lattice` version:
+        - Nx (`nx --version`):
+        - Node (`node --version`):
+        - OS:
+    validations:
+      required: true
