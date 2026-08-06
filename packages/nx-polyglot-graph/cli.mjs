@@ -41,10 +41,10 @@
  */
 import { writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 
 import { isWholeFileFailure } from "./src/analysis/source-util.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile } from "./src/config.mjs";
+import { isProgramEntry } from "./src/entry-point.mjs";
 import { DEFAULT_OPTIONS, readPluginOptions } from "./src/options.mjs";
 import { formatSarif } from "./src/report/sarif.mjs";
 import { formatReport } from "./src/report/text.mjs";
@@ -322,8 +322,9 @@ export async function runCli(argv, env) {
 }
 
 // Run only when invoked as a program, so importing this module for its exit
-// codes or `runCli` does not execute a command as a side effect.
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// codes or `runCli` does not execute a command as a side effect. `src/entry-point.mjs`
+// says why that question is asked on real paths rather than on URLs.
+if (isProgramEntry(import.meta.url)) {
   process.exit(
     await runCli(process.argv.slice(2), {
       out: (text) => process.stdout.write(`${text}\n`),
