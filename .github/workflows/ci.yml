@@ -114,6 +114,28 @@ jobs:
           NX_DAEMON: "false"
         run: node packages/nx-polyglot-graph/cli.mjs check
 
+      # Everything above runs the tool where its dependencies already exist, so
+      # none of it can see the failure this step is for: the manifest declared
+      # zero dependencies once, and the suite stayed green because `typescript`
+      # and `smol-toml` sit in the root manifest, pnpm hoists them, and Node
+      # walks up. Published as-is it would have installed cleanly and thrown at
+      # the first `import ts from "typescript"`.
+      #
+      # So this packs the real tarball, installs it into a throwaway workspace
+      # with a tag vocabulary nothing in `src/` knows about, and drives what a
+      # consumer buys — the plugin loading inside a real `nx graph`, the checker
+      # exiting 0 on a clean tree AND 1 on a violating one, and the language
+      # server answering through the symlinked path an installed plugin is
+      # launched by. The release lane runs the same script before `npm publish`;
+      # here it fails the change that broke resolution rather than the release
+      # weeks later.
+      #
+      # Last because it is the slowest step by a wide margin — it runs a full
+      # `pnpm install` against the registry — and everything above narrows the
+      # cause before this reports.
+      - name: Prove the packed artifact works outside this workspace
+        run: node scripts/verify-package.mjs packages/nx-polyglot-graph
+
   ci-gate:
     name: ci-gate
     # The single check name a branch ruleset requires, on pull requests and in

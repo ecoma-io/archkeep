@@ -32,7 +32,7 @@
 // instance of it.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -220,4 +220,35 @@ function main() {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+/**
+ * Whether this file was RUN rather than imported, compared on real paths.
+ *
+ * The obvious spelling — `process.argv[1] === fileURLToPath(import.meta.url)` —
+ * is false whenever the invoking path contains a symlink anywhere in it: Node
+ * resolves symlinks before recording a module's URL, and records `argv[1]`
+ * exactly as the caller spelled it. Measured: a checkout reached through a
+ * symlinked parent directory makes the two differ, `main()` never runs, and the
+ * gate exits 0 having checked nothing — the silent green this script exists to
+ * refuse, arriving by way of its own entry guard.
+ *
+ * Not imported from `packages/nx-polyglot-graph/src/entry-point.mjs`, which
+ * holds the same function for the same reason: that package's conformance suite
+ * requires it to be self-contained and reachable only from its own tree, and a
+ * repo-root script importing into it would make this file part of what the
+ * package ships. Two callers, one small function, and a boundary between them
+ * that is the point rather than an accident — so it is stated twice, each with
+ * the reason, rather than shared across a line neither side should cross.
+ */
+function isProgramEntry(moduleUrl, argv1 = process.argv[1]) {
+  if (!argv1) return false;
+  const real = (path) => {
+    try {
+      return realpathSync(path);
+    } catch {
+      return path;
+    }
+  };
+  return real(argv1) === real(fileURLToPath(moduleUrl));
+}
+
+if (isProgramEntry(import.meta.url)) main();
