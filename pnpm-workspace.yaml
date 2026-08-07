@@ -24,3 +24,13 @@ packages:
 allowBuilds:
   lefthook: false
   nx: false
+
+# brace-expansion < 5.0.9 is vulnerable to GHSA-rgw5-rvv9-x895 (DoS via
+# unbounded intermediate arrays). nx@23.1.1 pulls brace-expansion@5.0.8 through
+# minimatch@10.2.5; nx is already at its latest release and cannot be bumped to
+# pick up the fix transitively, so this override pins all 5.x instances to the
+# patched floor. Convergence syntax ("brace-expansion@") would only help
+# consumers that were already compatible; the ranged selector below is explicit
+# about the affected band.
+overrides:
+  "brace-expansion@>=5.0.0 <5.0.9": "5.0.9"
