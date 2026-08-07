@@ -1,6 +1,6 @@
 {
   "name": "@ecoma-io/nx-polyglot-graph",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Polyglot module-boundary enforcement for an Nx workspace: cross-project graph edges for Go, Rust and Python, and boundary checking across every language its analyzers read",
   "keywords": [
     "nx",
