@@ -41,8 +41,30 @@ jobs:
       pull-requests: write
       issues: write
     outputs:
-      released: ${{ steps.release.outputs.release_created }}
-      tag: ${{ steps.release.outputs.tag_name }}
+      # Namespaced by package path, and that prefix is the whole reason this
+      # exists as a comment. release-please emits the un-prefixed
+      # `release_created` and `tag_name` only for a component at the repository
+      # ROOT; every path in a manifest gets `<path>--<name>` instead. This
+      # workflow read the un-prefixed pair, which in a manifest configuration
+      # names nothing — so it evaluated to the empty string, `released == 'true'`
+      # was false, and `publish` skipped.
+      #
+      # Measured on the first real release rather than reasoned: `Release`
+      # reported success, the tag and the GitHub release both existed, the log
+      # said `✔ Creating 1 releases for pull #4` — and npm still answered 404.
+      # A green lane that published nothing is exactly the silence this
+      # repository refuses, and the second output is why a partial fix would
+      # have kept it: correcting only `released` would have run `publish` with an
+      # empty `tag`, and `actions/checkout` treats an empty `ref` as the default
+      # branch. That publishes whatever `main` holds under the tagged version's
+      # number — the one mistake npm does not let you take back.
+      #
+      # The path is stated here because `release-please-config.json` is the file
+      # that decides it; the two must be read together, and a rename there that
+      # is not made here fails loudly by publishing nothing rather than quietly
+      # by publishing the wrong tree.
+      released: ${{ steps.release.outputs['packages/nx-polyglot-graph--release_created'] }}
+      tag: ${{ steps.release.outputs['packages/nx-polyglot-graph--tag_name'] }}
     steps:
       # An escape hatch, off by default. GitHub documents that events raised
       # with `GITHUB_TOKEN` do not start new workflow runs — which would leave
@@ -74,6 +96,31 @@ jobs:
           token: ${{ steps.app-token.outputs.token || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # The tripwire for the defect above coming back by another spelling.
+      # `releases_created` is the top-level output, true when release-please cut
+      # ANY release, and it carries no path prefix to get wrong. So it and the
+      # per-path output must agree: a run that created a release while the
+      # output this workflow steers on reads empty is precisely the state that
+      # published nothing and reported success, and it fails here instead —
+      # naming both values rather than leaving a reader to infer which one lied.
+      #
+      # The reverse can be benign: a release-less run is the ordinary case for
+      # every commit that merely updates the release pull request, so this only
+      # fires when a release WAS created and the steering output disagrees.
+      - name: Fail if a release was cut that publish cannot see
+        if: steps.release.outputs.releases_created == 'true' && steps.release.outputs['packages/nx-polyglot-graph--release_created'] != 'true'
+        run: |
+          echo "release-please created a release, but the per-path output this"
+          echo "workflow steers on did not report it."
+          echo "  releases_created                             = '${{ steps.release.outputs.releases_created }}'"
+          echo "  packages/nx-polyglot-graph--release_created  = '${{ steps.release.outputs['packages/nx-polyglot-graph--release_created'] }}'"
+          echo "  paths_released                               = ${{ toJSON(steps.release.outputs.paths_released) }}"
+          echo ""
+          echo "The package path in this workflow and the one in"
+          echo "release-please-config.json have drifted. Publish would skip and"
+          echo "this lane would report success having shipped nothing."
+          exit 1
 
   publish:
     name: Publish to npm
