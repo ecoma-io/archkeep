@@ -97,6 +97,25 @@ And the tool on the tree that ships it, which is the last thing CI does:
 node packages/nx-polyglot-graph/cli.mjs check
 ```
 
+And, last of all, the packed artifact driven from somewhere that is not this
+workspace. It takes a few minutes — it runs a real `pnpm install` — so it is the
+one command worth skipping locally unless you touched the package's manifest,
+its entry points, or anything it imports:
+
+```bash
+node scripts/verify-package.mjs packages/nx-polyglot-graph
+```
+
+Everything above runs where the tool's dependencies already exist, so none of it
+can see the failure this catches: a package that installs cleanly and throws at
+the first `import`. That was this package's real state once — manifest declaring
+no dependencies, suite fully green, working only because pnpm hoisted the root's
+copies and Node walked up to find them. The script packs the tarball, installs it
+into a throwaway workspace with a tag vocabulary nothing in `src/` knows about,
+and checks that Nx draws a Go edge, that the checker exits 0 on a clean tree
+**and 1 on a violating one**, and that the language server answers when launched
+through a symlinked path. A gate only proves it runs when it can go red.
+
 Run all of them before you push. A shorter local run just moves the red to the
 pull request.
 
@@ -299,6 +318,36 @@ will see in CI:
   never the ones that land, so no key, no setup, nothing to configure. (This is
   also why rebase merging is off rather than merely unfashionable: GitHub cannot
   sign a rebase, so a rebase merge into `main` is refused outright.)
+
+## How a release happens
+
+Nothing you need to do — but worth knowing, because it explains a pull request
+you will see open on `main` that nobody wrote.
+
+[release-please](https://github.com/googleapis/release-please) reads the
+Conventional Commit subjects since the last tag and keeps one pull request open
+holding the next version and the changelog it derived. **That pull request is the
+release proposal**: merging it tags, and the tag publishes
+`@ecoma-io/nx-polyglot-graph` to npm. So the subject line you write is what
+decides the next version number — `feat:` moves the minor, `fix:` the patch, and
+a `!` or a `BREAKING CHANGE:` footer the major.
+
+Two details that are easy to trip over:
+
+- **Do not hand-edit `CHANGELOG.md` or the version in `package.json`.**
+  release-please owns both and rewrites them on the next run. `CHANGELOG.md` is
+  in `.prettierignore` for the same reason: its generated layout and Prettier's
+  preferred one disagree, and neither yields.
+- **The release pull request's title is `chore(workspace): release <version>`**,
+  not release-please's default. The default names the target branch as the scope
+  (`chore(main): …`), and `main` is not in `commitlint.config.mjs`'s `scope-enum`
+  — the release pull request would fail a required check and could never merge.
+
+Before anything is published, CI packs the real tarball and installs it into a
+throwaway workspace (`scripts/verify-package.mjs`, described in the commands
+above). That step runs on every pull request too, so a change that breaks the
+package for someone who is not this workspace fails the change rather than the
+release.
 
 ## Reporting problems
 

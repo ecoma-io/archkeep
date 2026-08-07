@@ -125,11 +125,12 @@ rather than a drive-by.
 
 ## What scans this repository
 
-Five things, and they own different halves of "correct". None substitutes for
+Six things, and they own different halves of "correct". None substitutes for
 another.
 
 - **CI (`ci.yml`)** — Prettier, ESLint, `node --test`, `check-packages`, then
-  `nx run-many`, and last the tool itself run on this tree. `ci-gate` is the only
+  `nx run-many`, the tool itself run on this tree, and last the packed artifact
+  driven from outside the workspace. `ci-gate` is the only
   check name the branch ruleset requires, so a job added later tightens the gate
   without touching repository settings. It fails on any needed job that is
   `skipped` or `cancelled`, because `needs` alone only blocks on `failure`.
@@ -140,6 +141,20 @@ another.
   tag vocabulary (`type:package`, `scope:nx`) that nothing in `src/` knows about.
   A repository shipping an enforcer it did not run on itself would be answering a
   consumer's first question with a promise.
+- **The packed artifact, installed somewhere else** —
+  `scripts/verify-package.mjs` runs `pnpm pack`, installs the tarball into a
+  throwaway workspace, and drives four things a consumer's first hour asks: Nx
+  loads the plugin and draws a Go edge, the checker exits 0 on a clean tree and
+  **1** on a violating one, and the language server answers `initialize` through
+  the symlinked path an installed plugin is launched by. Every other gate runs
+  where the tool's dependencies already exist, which is why none of them can see
+  a manifest that resolves nothing — the state this package was actually in, and
+  green, until this script existed. It runs in CI and again in the release lane
+  before `npm publish`, because a version that fails to resolve at install time
+  cannot be unpublished away. Its fixture resolves `typescript` and `nx` from the
+  package's own declared peer ranges rather than pinning them, so the range is
+  exercised as written: that is what caught `>=5` admitting TypeScript 7, whose
+  entry point exports none of the compiler API this tool delegates to.
 - **The PR title runs through commitlint.** Squash is the only merge button, so
   the title becomes the subject of the commit on `main` — the one commit message
   that never passes through the `commit-msg` hook. The title reaches the step via

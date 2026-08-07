@@ -13,3 +13,11 @@ LICENSE
 # one detaches every annotation from its case — turning a passing fixture run
 # into a failing one. Measured against semgrep 1.172.0, not assumed.
 .github/semgrep/
+
+# release-please owns every byte of the changelog, and its layout is not
+# Prettier's: it writes `*` list markers where Prettier wants `-`, and omits the
+# blank line after a heading that Prettier inserts. Neither tool yields — so
+# without this line the release pull request fails `format:check` on the one
+# file in the repository no human wrote, and the only way to make it pass would
+# be to hand-edit a generated document that regenerates on the next release.
+CHANGELOG.md

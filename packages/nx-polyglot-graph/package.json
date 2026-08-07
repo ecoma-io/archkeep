@@ -18,10 +18,37 @@
   ],
   "type": "module",
   "license": "Apache-2.0",
-  "private": true,
   "bin": {
     "nx-polyglot-graph": "cli.mjs",
     "nx-polyglot-graph-lsp": "lsp.mjs"
+  },
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "cli.mjs",
+    "lsp.mjs",
+    "src/",
+    "!src/**/*.test.mjs",
+    "!src/conformance/",
+    "LICENSE",
+    "README.md"
+  ],
+  "dependencies": {
+    "smol-toml": "1.7.1"
+  },
+  "peerDependencies": {
+    "nx": ">=21",
+    "typescript": ">=5 <7",
+    "vue": ">=3"
+  },
+  "peerDependenciesMeta": {
+    "vue": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=22"

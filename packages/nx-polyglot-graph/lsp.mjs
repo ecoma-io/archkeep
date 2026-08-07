@@ -18,8 +18,7 @@
  * stderr: one stray `console.log` here would be read by the client as a
  * malformed frame and desynchronise the stream for the rest of the session.
  */
-import { pathToFileURL } from "node:url";
-
+import { isProgramEntry } from "./src/entry-point.mjs";
 import { encodeMessage, frameMessages } from "./src/lsp/protocol.mjs";
 import { createServer } from "./src/lsp/server.mjs";
 
@@ -58,6 +57,6 @@ export function serve(input = process.stdin, output = process.stdout, onExit = n
   return server;
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (isProgramEntry(import.meta.url)) {
   serve();
 }
