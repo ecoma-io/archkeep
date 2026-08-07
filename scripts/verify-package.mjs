@@ -93,15 +93,27 @@ export const boundarySuppressions = [];
  *
  * @param {string} packageName the name to depend on, read from the manifest
  * @param {Record<string, string>} peers the package's declared peer ranges
+ * @param {string} packageManager this repository's own pnpm pin, so the fixture
+ *   installs under the version CI installs under rather than whatever is ambient
  * @returns {Record<string, string>} relative path to contents
  */
-function fixtureFiles(packageName, peers) {
+function fixtureFiles(packageName, peers, packageManager) {
   return {
     "package.json": `${JSON.stringify(
       {
         name: "consumer",
         private: true,
         type: "module",
+        // Not decoration, and measured: without this the fixture installs under
+        // whatever pnpm is on PATH, because it lives in a temp directory where
+        // this repository's own pin cannot reach it. This machine had 10.34.5
+        // ambient and CI runs 11.20.0, and the two DISAGREE about undecided
+        // build scripts — 10 warns and installs, 11 fails the install. So the
+        // `allowBuilds` omission below was green here and red there, and worse,
+        // so was its absence: reverting the fix locally still passed 6/6.
+        // Deriving the pin from the root manifest is what makes a local run and
+        // a CI run able to reach the same verdict at all.
+        packageManager,
         devDependencies: {
           [packageName]: "*",
           nx: peers.nx,
@@ -218,13 +230,34 @@ try {
     process.exit(1);
   }
 
-  const files = fixtureFiles(packageName, manifest.peerDependencies ?? {});
+  const files = fixtureFiles(
+    packageName,
+    manifest.peerDependencies ?? {},
+    JSON.parse(readFileSync(join(root, "package.json"), "utf8")).packageManager,
+  );
   files["package.json"] = files["package.json"].replace(
     '"*"',
     JSON.stringify(`file:${join(packDir, tarball)}`),
   );
   write(consumer, files);
-  writeFileSync(join(consumer, "pnpm-workspace.yaml"), "packages: []\n", "utf8");
+  // `allowBuilds` is not decoration here. pnpm 11 blocks every dependency
+  // install script until the workspace decides on it, and FAILS the install
+  // while any decision is missing — `ERR_PNPM_IGNORED_BUILDS`, exit 1, after
+  // the tree is already correctly on disk. So without these two lines the
+  // fixture install aborts and this script reports that the tarball "could not
+  // be installed", which is a true sentence about a workspace that is fine.
+  //
+  // Measured, and the measurement is why the fixture pins `packageManager`
+  // above: this ran green locally and red in CI because the two ran different
+  // pnpm majors, and pnpm 10 only warns where 11 fails. The values match the
+  // repository's own `pnpm-workspace.yaml` and the reasoning lives there — nx's
+  // postinstall builds a native watcher and warms a daemon this fixture runs
+  // with disabled, and lefthook's installs git hooks into a throwaway tree.
+  writeFileSync(
+    join(consumer, "pnpm-workspace.yaml"),
+    "packages: []\nallowBuilds:\n  lefthook: false\n  nx: false\n",
+    "utf8",
+  );
 
   // The fixture is a COMMITTED git tree because the tool reads its file list
   // from `git ls-files` — never a directory walk, which would need ignore rules
