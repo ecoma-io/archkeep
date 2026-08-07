@@ -1,11 +1,3 @@
----
-name: nx-polyglot-graph
-lang: en
-description: Nx plugin that adds Go/Rust/Python cross-project graph edges and enforces module boundaries in the languages ESLint cannot read.
----
-
-> 🌐 **English** · [Tiếng Việt](./README.vi.md) · [中文](./README.zh.md)
-
 # nx-polyglot-graph
 
 ## Why it exists
