@@ -1,7 +1,12 @@
 # yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
 #
-# cubic reviews every pull request here, and its scope is defined by what the
-# deterministic gates cannot see:
+# cubic is configured to review every pull request here, but is currently not
+# running: the free tier's review budget was exhausted before this repository
+# existed, and `gh pr checks` shows `skipping` (conclusion=neutral, title "AI
+# review line limit reached") on every PR. No review has ever been posted. The
+# configuration stays because it is correct for the day the limit lifts.
+#
+# When it does run, its scope is defined by what the deterministic gates cannot see:
 #
 #   1. Prettier, ESLint, `node --test`, `semgrep`, and `check-packages` own
 #      everything mechanically decidable. They are the source of truth.

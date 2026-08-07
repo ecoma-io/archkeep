@@ -99,7 +99,9 @@ when the work happens inside that directory, which is why none of it is here.
   fields, project names from `nx show projects` — and all of those are
   attacker-supplied the moment a pull request adds a directory. A directory named
   `a;rm -rf .` stops being a name and becomes two commands. Semgrep enforces
-  this (`.github/semgrep/scripts.yaml`) and cubic has a custom rule for it.
+  this (`.github/semgrep/scripts.yaml`); `cubic.yaml` carries a custom rule for
+  it as well, which is not currently reviewing anything — see the cubic bullet
+  under "What scans this repository". Semgrep is the half that actually runs.
 - **A gate that returns early must do so loudly.** An early `return` on a
   condition that should have been reported, and a loop that accumulates failures
   into an array nobody checks, both look like success to CI.
@@ -178,9 +180,22 @@ another.
   holding any workflow-level write permission. Job-level `permissions` _replaces_
   the workflow-level block rather than extending it, so `contents: read` is
   restated in each job that narrows it.
-- **cubic** — reviews for the defect class no gate can decide: a path that
-  reports nothing. Its scope and reasoning live in `cubic.yaml`, in that file
-  rather than here, because a config file is read by whoever is editing it.
+- **cubic — configured, and currently not running.** It is meant to review the
+  defect class no gate can decide: a path that reports nothing. Its scope and
+  reasoning live in `cubic.yaml`, in that file rather than here, because a config
+  file is read by whoever is editing it. What it actually does on this repository
+  today is return `conclusion=neutral` with the title `AI review line limit
+reached` — the free tier's review budget was spent elsewhere before this
+  repository existed, and cubic has never posted a review on any pull request
+  here. `gh pr checks` renders that as `skipping`, which reads identically to a
+  job that is still running and to one gated off by `if:`; the three are only
+  distinguishable through `gh api repos/OWNER/REPO/commits/SHA/check-runs`.
+  Nothing blocks on it — it is not in `ci-gate`'s `needs` — so the effect is not
+  a red build but a silent hole exactly where this list claims coverage. **Until
+  that budget is paid for, the defect class in this bullet has no owner: it falls
+  to the maintainer reading the diff.** The configuration stays because it is
+  correct for the day the limit lifts, and because `.github/semgrep/scripts.yaml`
+  and the child-process rule above both cite it.
 
 **litmus is not on that list, and the distinction is the point.** It is a skill
 package about test craft, enabled in `.claude/settings.json` and installed from
