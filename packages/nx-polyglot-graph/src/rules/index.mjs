@@ -168,7 +168,7 @@ function spellingOf(site) {
  * node lookup refuses exactly what the `!targetProject` branch reports as
  * `noRelativeOrAbsoluteExternals`. Two spellings of one test could drift apart,
  * and the gap between them would be a site that is given no target and then
- * reported by nothing (Rule 14). Making the answer language-aware moved where
+ * reported by nothing. Making the answer language-aware moved where
  * it is computed, not how many places compute it.
  */
 const isPathSpecifier = (site) => spellingOf(site).path;
@@ -242,7 +242,7 @@ function createContext(importSites, graph, config) {
  * Upstream looks the package up in `projectGraph.externalNodes` and BAILS when
  * it is not there — no target, no check. This engine synthesises one instead,
  * and that difference is deliberate: `src/graph/` does not register crates,
- * PyPI distributions or Go modules as external nodes (project CLAUDE.md — only
+ * PyPI distributions or Go modules as external nodes (`../../CLAUDE.md` — only
  * project↔project edges matter to `nx affected`), so bailing would mean
  * `bannedExternalImports` silently never fires for any language but JavaScript.
  * A ban that cannot fire is the false negative this tool exists to remove, so
@@ -350,8 +350,8 @@ function evaluateConstraints(site, sourceProject, targetProject, ctx) {
 
   // TRAP 2 — every matching constraint must be satisfied. `findConstraintsFor`
   // returns an ARRAY and this loop is an AND: a project tagged `type:lib
-  // scope:shared layer:domain license:sul` is held to all four rows of this
-  // workspace's table. An OR here passes imports ESLint blocks.
+  // scope:shared layer:domain license:internal` is held to all four rows of a
+  // table carrying one row per axis. An OR here passes imports ESLint blocks.
   for (const constraint of constraints) {
     const tagVerdict =
       onlyTagsViolation(constraint, targetProject) ??

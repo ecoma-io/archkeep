@@ -3,7 +3,7 @@
  * protocol fixes, and the `file:` URI conversion every other module here needs.
  *
  * Implemented directly rather than pulled from `vscode-languageserver`, for the
- * reason the project CLAUDE.md gives for the whole directory: this tool reaches
+ * reason the project `../../CLAUDE.md` gives for the whole directory: this tool reaches
  * outside Node's built-ins only where something it must AGREE with already
  * lives there — TypeScript's own resolver, Vue's own SFC parser, Nx's own JSON
  * reader (`./workspace-index.mjs`). The base protocol is nothing of the kind:
@@ -12,8 +12,8 @@
  * decision in this project that the root manifest owns.
  *
  * Every constant below is a value the SPECIFICATION fixes, not a workspace
- * choice — the one class of literal Rule 14 allows to be written inline, and it
- * is written in exactly one place so no consumer restates it.
+ * choice — the one class of literal that is allowed inline, and it is written in
+ * exactly one place so no consumer restates it.
  */
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -21,7 +21,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 /**
  * Name and version, read from the manifest rather than repeated here. A server
  * whose `serverInfo` disagrees with its own package is a debugging trap the
- * first time two versions are installed side by side (Rule 14 rung 1).
+ * first time two versions are installed side by side.
  *
  * The npm scope is stripped, and that is a derivation rather than a second
  * name: `serverInfo.name` is what an editor prints in its LSP output channel

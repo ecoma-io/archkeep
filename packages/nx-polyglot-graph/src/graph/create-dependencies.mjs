@@ -2,7 +2,7 @@
  * The graph layer: cross-project EDGES for Go, Rust, and Python, in the shape
  * Nx's `createDependencies` hook returns. Nothing else — nodes still come from
  * each project's hand-written `project.json`, and targets are never inferred
- * (root CLAUDE.md → Workspace Execution: project.json is the source of truth).
+ * (`packages/nx-polyglot-graph/CLAUDE.md`).
  *
  * This is the plugin half of the tool, and it is deliberately separate from
  * `../analysis/`. The two answer different questions over the same tree: the

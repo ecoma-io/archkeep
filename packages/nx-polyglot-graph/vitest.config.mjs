@@ -5,7 +5,7 @@
 import { defineConfig } from "vitest/config";
 
 // The coverage floor is stated here rather than read from a workspace-level
-// file, and that is Rule 14 rung 3 passing its rubric for exactly as long as
+// file, and that is sound for exactly as long as
 // this is the only package with tests: there is no second consumer to drift
 // from. When a second package earns a test target, these four numbers hoist to
 // a root `coverage.config.json` that both configs read — a value copied across

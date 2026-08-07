@@ -12,7 +12,7 @@
  * The fixture invents its own project names and its own tag vocabulary. That is
  * deliberate: this tool is installed into workspaces it knows nothing about, so
  * a test that leaned on this repository's names would pass here and prove
- * nothing about the tree a consumer points it at (project CLAUDE.md).
+ * nothing about the tree a consumer points it at (`../CLAUDE.md`).
  */
 import { spawn } from "node:child_process";
 import { execFileSync } from "node:child_process";
@@ -280,7 +280,7 @@ describe("a real editor session against a real workspace", () => {
   it("publishes the boundary violation a Go file crosses, at the import that crosses it", async () => {
     // Go is the reason this is a language server and not an ESLint plugin: no
     // ESLint-based server can read this file at all, and `nx lint` exits 0 over
-    // it today (project CLAUDE.md).
+    // it today (`../CLAUDE.md`).
     const { client, initialized } = await connected();
     const uri = uriOf("libs/inner/main.go");
 

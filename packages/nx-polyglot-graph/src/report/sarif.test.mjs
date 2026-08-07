@@ -17,10 +17,10 @@ vi.mock("./text.mjs", () => ({ formatConstraint: () => "THE CONSTRAINT" }));
 import { buildSarifLog, formatSarif, sarifRules, toUriReference } from "./sarif.mjs";
 
 const violation = () => ({
-  sourceFile: "platform/libs/engine-domain/doc.go",
+  sourceFile: "acme/libs/engine-domain/doc.go",
   line: 12,
   column: 23,
-  specifier: "github.com/ecoma-io/ecoma/platform/libs/engine-adapters",
+  specifier: "example.com/acme/engine-adapters",
   kind: "static",
   messageId: "secondRule",
   message: "Second rule says no",
@@ -81,16 +81,14 @@ describe("a result", () => {
   it("locates the finding at the workspace-relative path with 1-based line and column", () => {
     const [result] = log({ violations: [violation()] }).results;
     const { artifactLocation, region } = result.locations[0].physicalLocation;
-    expect(artifactLocation.uri).toBe("platform/libs/engine-domain/doc.go");
+    expect(artifactLocation.uri).toBe("acme/libs/engine-domain/doc.go");
     expect(region).toEqual({ startLine: 12, startColumn: 23 });
   });
 
   it("adds the import and the constraint to the message, the only text GitHub renders", () => {
     const [result] = log({ violations: [violation()] }).results;
     expect(result.message.text).toContain("Second rule says no");
-    expect(result.message.text).toContain(
-      'Import "github.com/ecoma-io/ecoma/platform/libs/engine-adapters"',
-    );
+    expect(result.message.text).toContain('Import "example.com/acme/engine-adapters"');
     expect(result.message.text).toContain("Constraint: THE CONSTRAINT");
   });
 
@@ -126,9 +124,7 @@ describe("analysis failures", () => {
 
 describe("path encoding", () => {
   it("leaves an ordinary path byte-identical, so the common case is unchanged", () => {
-    expect(toUriReference("shared/libs/core-ui/src/index.ts")).toBe(
-      "shared/libs/core-ui/src/index.ts",
-    );
+    expect(toUriReference("acme/libs/ui/src/index.ts")).toBe("acme/libs/ui/src/index.ts");
   });
 
   it("escapes what would otherwise break the URI, and never escapes the separators", () => {

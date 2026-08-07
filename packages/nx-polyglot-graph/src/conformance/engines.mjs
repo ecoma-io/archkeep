@@ -74,7 +74,7 @@ export async function createUpstreamRunner(root) {
 
   /**
    * The eight option values and the fifteen message ids, read off the INSTALLED
-   * rule rather than restated. Rung 1 of Rule 14: a case states only what it
+   * rule rather than restated— a case states only what it
    * overrides, and an Nx upgrade that changes a default changes both engines'
    * input at once instead of leaving a copy behind.
    */

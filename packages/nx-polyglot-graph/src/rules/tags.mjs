@@ -16,10 +16,10 @@
  *
  * **Several matching constraints are AND, not OR.** `findConstraintsFor`
  * returns an ARRAY and upstream loops over all of it. A project tagged
- * `type:lib scope:shared layer:domain license:sul` matches four rows of this
- * workspace's table and the dependency must satisfy every one. Implement OR and
- * this engine passes imports ESLint blocks — the direction that turns a boundary
- * check into decoration.
+ * `type:lib scope:shared layer:domain license:internal` matches four rows of a
+ * table carrying one row per axis, and the dependency must satisfy every one.
+ * Implement OR and this engine passes imports ESLint blocks — the direction
+ * that turns a boundary check into decoration.
  *
  * The third semantic worth stating: `notDependOnLibsWithTags` is TRANSITIVE.
  * It does not ask whether the imported project carries a forbidden tag, it asks

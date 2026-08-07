@@ -9,7 +9,7 @@
  *
  * So the numbers are derived here and compared, rather than remembered. A count
  * that stops matching fails this test instead of misleading someone, which is
- * the arrangement Rule 14 asks for when a value cannot live in exactly one
+ * the arrangement that keeps a value honest when it cannot live in exactly one
  * place: the prose keeps its number, and a gate keeps the prose honest.
  *
  * `statedNumber` throws when the sentence it reads has moved, rather than

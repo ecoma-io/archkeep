@@ -503,8 +503,7 @@ function resolveSpecifier(specifier, sourceFile, workspace) {
     //
     // The list comes from `node:module`'s own `isBuiltin`, never from a copy
     // of it here: the set changes with the Node version this runs on, and a
-    // hand-kept list would be wrong the release after it was written (Rule 14
-    // rung 1 — derive from the source of truth at read time).
+    // hand-kept list would be wrong the release after it was written.
     //
     // It is checked AFTER TypeScript, not before, so a workspace that really
     // does contain a package named `fs` still resolves to it.

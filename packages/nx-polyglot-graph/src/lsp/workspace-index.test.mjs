@@ -123,7 +123,7 @@ describe("the node type a project gets", () => {
   it("reproduces Nx's rule, including the -e2e suffix that outranks 'application'", () => {
     // Reproducing Nx's convention is what keeps this safe over an unfamiliar
     // tree: it assumes a suffix Nx defines, never a tag vocabulary or a name
-    // this workspace happens to use (project CLAUDE.md).
+    // this workspace happens to use (`../../CLAUDE.md`).
     expect(nodeTypeOf("thing", "library")).toBe("lib");
     expect(nodeTypeOf("thing", "application")).toBe("app");
     expect(nodeTypeOf("thing-e2e", "application")).toBe("e2e");

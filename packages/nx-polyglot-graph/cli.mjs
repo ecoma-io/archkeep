@@ -182,7 +182,8 @@ export async function check(
     throw new Error(
       `nx-polyglot-graph: no Nx workspace above ${cwd} — looked for an nx.json in every parent. ` +
         `The tree to judge is found from the working directory, never from this tool's own ` +
-        `location, because under a pinned harness clone the two are different trees.`,
+        `location: installed from the registry, this tool lives under the consumer's ` +
+        `node_modules and the two are always different trees.`,
     );
   }
 

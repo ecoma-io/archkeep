@@ -10,7 +10,8 @@
  * this pair and the manifests next door: `go.mod`, `Cargo.toml`,
  * `pyproject.toml`, `nx.json` and `project.json` are named by their own
  * toolchains and cannot be renamed by a workspace decision, so they stay
- * hardcoded at their single use site (Rule 14's rubric, all three criteria).
+ * hardcoded at their single use site: a literal belongs inline only where it is
+ * intrinsic to a fixed external contract and appears in exactly one place.
  *
  * ## Where the options come from, and why there is no config file for them
  *
@@ -18,9 +19,9 @@
  * threads it into every hook (`CreateDependencies<T> = (options, context) =>`).
  * A workspace that registers this plugin has already written the entry; adding
  * two keys to it costs nothing and adds no file. Inventing an
- * `nx-polyglot-graph.config.mjs` instead would be rung 3 of Rule 14 with rung 1
- * standing right there — and it would need its own filename option to find
- * itself, which is the joke that gives the game away.
+ * `nx-polyglot-graph.config.mjs` instead would add a file when the workspace
+ * already carries the same options in `nx.json` — and it would need its own
+ * filename option to find itself, which is the joke that gives the game away.
  *
  * ```json
  * "plugins": [

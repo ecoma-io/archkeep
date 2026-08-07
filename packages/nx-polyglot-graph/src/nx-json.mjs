@@ -24,7 +24,7 @@
  * and `./options.mjs` is reached from `../index.mjs`, the entry Nx loads on
  * EVERY graph computation. A shared module is also the only way the two can
  * stay one answer — the same reader in two files was an unsynced copy of one
- * fact the day the second one was written (Rule 14).
+ * fact the day the second one was written.
  */
 import { createRequire } from "node:module";
 

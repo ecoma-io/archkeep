@@ -13,7 +13,7 @@
  *   say "error" agree on nothing until they name the same rule, and a
  *   differential comparison against `@nx/enforce-module-boundaries` has nothing
  *   to compare otherwise. The rule catalogue is DERIVED from that module's
- *   message table (Rule 14), so a rule added upstream cannot be missing here.
+ *   message table, so a rule added upstream cannot be missing here.
  * - **`artifactLocation.uri` is workspace-relative**, which is what GitHub
  *   resolves an annotation against. The analysis contract already produces
  *   workspace-relative paths, so this module only has to not break one — it
@@ -34,9 +34,14 @@
  * "the tool had trouble here", at `warning` — `executionSuccessful` stays true
  * because the run did complete.
  *
- * No `version`/`semanticVersion` on the driver: libraries in this workspace are
- * internal and unversioned (root `CLAUDE.md`), so there is no honest number to
- * put there and `0.0.0` would only look like one.
+ * **The driver carries no `version`/`semanticVersion`, and that is now a gap
+ * rather than a decision.** It was written when this package was unversioned and
+ * unpublished, where any number would have been invented; the package has a real
+ * version and a registry entry today, so a consumer comparing two SARIF uploads
+ * has no way to tell which build produced which. Filling it in changes the
+ * reported output, which is the one kind of change this repository treats as
+ * breaking even when no API moved, so it lands as its own decision rather than
+ * as a side effect of a comment being corrected.
  */
 import { MESSAGE_IDS, MESSAGES } from "../rules/messages.mjs";
 

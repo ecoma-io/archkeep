@@ -10,8 +10,8 @@
  * exploring. A failing dev run prints its seed in the test title
  * (`with seed=…`) for replay.
  *
- * It sits INSIDE this project rather than at the workspace root, which is Rule
- * 14 rung 3 and passes its rubric today for one reason only: this is the sole
+ * It sits INSIDE this project rather than at the workspace root, and that is
+ * sound today for one reason only: this is the sole
  * project in the workspace that runs property tests, so there is nothing to
  * synchronise with. The moment a second one arrives, this file and the seed it
  * pins hoist to the root — a per-project copy of a value two projects share is

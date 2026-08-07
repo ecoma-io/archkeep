@@ -109,6 +109,18 @@ when the work happens inside that directory, which is why none of it is here.
   a tool reads — gets checked against that tool's current documentation or an
   actual run. A remembered API is how a document becomes authoritative and wrong
   at the same time.
+- **A comment may only cite a document in this repository, and only by a path
+  that resolves from where it is written.** This file and
+  `packages/nx-polyglot-graph/CLAUDE.md` are the two that exist; there is no
+  numbered rule list anywhere here, so a citation of the form "Rule 14" or "root
+  `CLAUDE.md`" points at nothing a reader can open. The extraction arrived
+  carrying thirty of them, plus prose justifying real behaviour with mechanisms
+  that only exist in the workspace it came from — a comment is worse than absent
+  when it explains correct code by a fact that is not true here, because the
+  next reader has no way to tell which half is stale. The same applies to
+  fixtures: an invented project name (`acme/libs/alpha`, `example.com/acme/beta`)
+  reads as invented, while a real path from another tree reads as a fact about
+  this one.
 
 ## No TypeScript here, and why
 

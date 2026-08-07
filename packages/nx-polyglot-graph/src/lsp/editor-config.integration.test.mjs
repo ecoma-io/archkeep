@@ -3,8 +3,8 @@
  *
  * A `.lsp.json`-style manifest cannot import anything — it is data an editor
  * reads before any of this code runs — so the list of extensions it routes here
- * is a second copy of a fact `../analysis/analyze.mjs` already owns. Rule 14
- * allows that only when something keeps the copy honest, which is this file:
+ * is a second copy of a fact `../analysis/analyze.mjs` already owns. A second
+ * copy is allowed only when something keeps it honest, which is this file:
  * the same arrangement `../rules/messages.mjs` has with
  * `../rules/upstream.integration.test.mjs`.
  *
