@@ -83,8 +83,15 @@ describe("loadBoundaryConfig over this workspace", () => {
     const elsewhere = mkdtempSync(join(tmpdir(), "polyglot-boundaries-"));
     afterAll(() => rmSync(elsewhere, { recursive: true, force: true }));
 
+    // Both halves go through `RegExp.escape`: the path comes from `mkdtemp`
+    // and the filename from an option, so neither is a literal this test
+    // controls, and an unescaped `.` or `+` in either would quietly widen what
+    // this assertion accepts rather than fail loudly.
     await expect(loadBoundaryConfig(elsewhere, DEFAULT_OPTIONS.boundaryConfig)).rejects.toThrow(
-      new RegExp(`cannot load ${elsewhere}/${DEFAULT_OPTIONS.boundaryConfig}`),
+      new RegExp(
+        `cannot load ${RegExp.escape(elsewhere)}/${RegExp.escape(DEFAULT_OPTIONS.boundaryConfig)}`,
+        "u",
+      ),
     );
   });
 

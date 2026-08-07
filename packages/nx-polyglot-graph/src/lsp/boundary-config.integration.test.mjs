@@ -86,7 +86,11 @@ describe("reading a boundary config that outlives the process reading it", () =>
     const empty = mkdtempSync(join(tmpdir(), "nx-polyglot-graph-config-empty-"));
     try {
       await expect(readBoundaryConfig(empty, 0, CONFIG_FILE)).rejects.toThrow(
-        new RegExp(`cannot load .*${CONFIG_FILE.replace(/\./gu, "\\.")}`, "u"),
+        // `RegExp.escape` rather than a hand-rolled `.` replacement: escaping
+        // one meta-character leaves every other one live, which CodeQL flags as
+        // `js/incomplete-sanitization` and is right to. Node 24 is the floor
+        // here (`.node-version`), and it has the built-in.
+        new RegExp(`cannot load .*${RegExp.escape(CONFIG_FILE)}`, "u"),
       );
     } finally {
       rmSync(empty, { recursive: true, force: true });
