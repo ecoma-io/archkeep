@@ -1,0 +1,83 @@
+import { fc, test } from "@fast-check/vitest";
+import { describe, expect, it } from "vitest";
+
+import { normalizePath, parseManifest } from "./manifest-util.mjs";
+
+const segment = fc
+  .array(fc.constantFrom(..."abcdefgh"), { minLength: 1, maxLength: 6 })
+  .map((chars) => chars.join(""));
+// Path pieces including the ones a hand-written manifest actually carries:
+// `..`, `.`, and the empty segment a doubled or trailing slash leaves behind.
+const pathPiece = fc.oneof(segment, fc.constantFrom("..", ".", ""));
+const pathText = fc.array(pathPiece, { maxLength: 8 }).map((pieces) => pieces.join("/"));
+const value = fc
+  .array(fc.constantFrom(..."abcdefgh -_/."), { maxLength: 12 })
+  .map((chars) => chars.join(""));
+
+describe("parseManifest", () => {
+  it("parses TOML and returns null on malformed input", () => {
+    expect(parseManifest('[package]\nname = "x"').package.name).toBe("x");
+    expect(parseManifest("[package\nbroken")).toBeNull();
+  });
+
+  // This runs over every tracked Cargo.toml and pyproject.toml in the
+  // workspace, including the half-written one on somebody's branch. A throw
+  // here does not fail one project — it fails project-graph computation, so
+  // every Nx command in the repository stops working until that file is fixed.
+  test.prop([
+    fc.oneof(
+      fc.string(),
+      fc.string({ unit: fc.constantFrom("[", "]", "=", '"', "'", "\n", "#", "\\", ".", "a", "1") }),
+    ),
+  ])("answers null instead of throwing, whatever the file holds", (text) => {
+    const parsed = parseManifest(text);
+    expect(parsed === null || typeof parsed === "object").toBe(true);
+  });
+
+  test.prop([fc.uniqueArray(fc.tuple(segment, value), { selector: ([key]) => key, maxLength: 5 })])(
+    "reads back every key a well-formed manifest declares",
+    (entries) => {
+      const text = entries.map(([key, declared]) => `${key} = "${declared}"`).join("\n");
+      expect(parseManifest(text)).toEqual(Object.fromEntries(entries));
+    },
+  );
+});
+
+describe("normalizePath", () => {
+  it("normalizes ../ and ./ segments against a base directory", () => {
+    expect(normalizePath("acme/libs/alpha", "../beta")).toBe("acme/libs/beta");
+    expect(normalizePath("acme/libs/alpha", "./sub")).toBe("acme/libs/alpha/sub");
+  });
+
+  // The result is compared against project roots by string equality, so any
+  // `.`, `..` or empty segment left in it resolves to no project and drops the
+  // edge — a missing edge means `nx affected` skips a dependent, the one
+  // failure this plugin exists to prevent, and it fails nothing visibly.
+  test.prop([pathText, pathText])(
+    "leaves no '.', '..' or empty segment in the path it returns",
+    (baseDir, relative) => {
+      const normalized = normalizePath(baseDir, relative);
+      const segments = normalized === "" ? [] : normalized.split("/");
+      for (const part of segments) expect([".", "..", ""]).not.toContain(part);
+    },
+  );
+
+  test.prop([pathText, pathText])(
+    "is idempotent: normalizing an already-normalized path changes nothing",
+    (baseDir, relative) => {
+      const once = normalizePath(baseDir, relative);
+      expect(normalizePath(".", once)).toBe(once);
+    },
+  );
+
+  // The shape every Cargo `{ path = "../other" }` dependency takes, over
+  // arbitrary names rather than the two the example above happens to use.
+  test.prop([segment, segment, segment])(
+    "resolves a sibling of the directory the manifest declaring it sits in",
+    (subsystem, declaring, sibling) => {
+      expect(normalizePath(`${subsystem}/${declaring}`, `../${sibling}`)).toBe(
+        `${subsystem}/${sibling}`,
+      );
+    },
+  );
+});

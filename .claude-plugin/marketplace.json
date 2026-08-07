@@ -1,0 +1,23 @@
+{
+  "$comment": "The catalogue this repository publishes, so a consumer gets the language server by name instead of by path: `claude plugin marketplace add ecoma-io/lattice`, then `claude plugin install nx-polyglot-graph@lattice`. It is at the repository root rather than under `.claude/`, because a marketplace added from GitHub is read from the default branch's root and a catalogue hidden inside an agent's own config directory would be found by this repository's sessions and by nobody else's.\n\nA session in THIS repository reads it too, which is the arrangement worth naming: the plugin ships from the same commit as the code it acts on, so a change to the server is reviewed in the pull request that makes it, and there is no published version for a session here to be behind.\n\nThis file lists what the repository OFFERS. `.claude/settings.json` decides what a session here USES, and the two are deliberately not the same set — that file enables `litmus@litmus`, a skill package from another repository, and says nothing about installing this one. `packages/nx-polyglot-graph/src/conformance/plugin-catalogue.integration.test.mjs` holds both halves to what they can each be checked against: every entry here against the manifest it points at, and every plugin those settings enable against the marketplace they name.\n\nClaude Code ignores manifest keys it does not know (`claude plugin validate` says so in as many words), which is where this note lives.",
+  "name": "lattice",
+  "description": "Nx tooling that makes a polyglot workspace's dependency graph and module boundaries real.",
+  "owner": {
+    "name": "Mai Ngọc Hóa (John Martin)",
+    "email": "john.itvn@gmail.com",
+    "url": "https://github.com/ecoma-io"
+  },
+  "plugins": [
+    {
+      "name": "nx-polyglot-graph",
+      "source": "./packages/nx-polyglot-graph",
+      "version": "1.0.0",
+      "description": "Module-boundary diagnostics at edit time for Go, Rust, Python and Vue, from the workspace's own boundary config",
+      "category": "productivity",
+      "tags": ["nx", "monorepo", "module-boundaries", "polyglot", "language-server"],
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/ecoma-io/lattice#readme",
+      "repository": "https://github.com/ecoma-io/lattice"
+    }
+  ]
+}

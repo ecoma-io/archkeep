@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+
+import { MESSAGE_IDS, renderMessage } from "../rules/messages.mjs";
+
+import { buildSarifLog } from "./sarif.mjs";
+
+/**
+ * The real message table, the real constraint renderer, and every `messageId`
+ * the engine can produce — driven together, because the failure this guards
+ * against is not a wrong string. It is a file GitHub's `upload-sarif` rejects:
+ * the job stays green, no annotation ever appears, and nothing says why.
+ *
+ * So the assertions below are GitHub's documented requirements for a code
+ * scanning upload, restated as checks rather than trusted:
+ * `version`, `tool.driver.name`, a `ruleId` that resolves in the catalogue, a
+ * non-empty `message.text`, and a physical location whose `uri` is repository
+ * relative with a 1-based `startLine`. The full 2.1.0 schema is a superset of
+ * these; what is pinned here is the subset a rejected upload turns on.
+ */
+
+/** One violation per `messageId`, rendered through the real message table. */
+const everyViolation = () =>
+  MESSAGE_IDS.map((messageId, index) => ({
+    sourceFile: `platform/libs/engine-domain/file-${index}.go`,
+    line: index + 1,
+    column: index + 2,
+    specifier: "@ecoma-io/engine-adapters",
+    kind: "static",
+    messageId,
+    message: renderMessage(messageId, { sourceTag: "layer:domain", tags: "layer:util", imp: "x" }),
+    sourceProject: "engine-domain",
+    targetProject: "engine-adapters",
+    constraint: { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:util"] },
+    data: {},
+  }));
+
+const log = buildSarifLog({
+  violations: everyViolation(),
+  failures: [
+    { sourceFile: "website/apps/site/app/app.vue", line: 2, column: 40, reason: "cannot resolve" },
+    { sourceFile: "a/b.rs", line: null, column: null, reason: "could not be read" },
+  ],
+});
+
+describe("the SARIF log against what GitHub requires of an upload", () => {
+  it("declares version 2.1.0 and a named driver, the two fields an upload is rejected without", () => {
+    expect(log.version).toBe("2.1.0");
+    expect(log.runs).toHaveLength(1);
+    expect(log.runs[0].tool.driver.name).toBe("nx-polyglot-graph");
+  });
+
+  it("gives every rule the engine can report a descriptor with an id, so no finding is nameless", () => {
+    const ids = log.runs[0].tool.driver.rules.map((rule) => rule.id);
+    expect(ids).toEqual([...MESSAGE_IDS]);
+    expect(ids.every((id) => typeof id === "string" && id !== "")).toBe(true);
+  });
+
+  it("resolves every result's ruleId and ruleIndex against that catalogue", () => {
+    const { rules } = log.runs[0].tool.driver;
+    for (const result of log.runs[0].results) {
+      expect(rules[result.ruleIndex]).toBeDefined();
+      expect(rules[result.ruleIndex].id).toBe(result.ruleId);
+    }
+  });
+
+  it("carries a non-empty message and one of SARIF's own levels on every result", () => {
+    for (const result of log.runs[0].results) {
+      expect(result.message.text.length).toBeGreaterThan(0);
+      expect(["none", "note", "warning", "error"]).toContain(result.level);
+    }
+  });
+
+  it("locates every result at a repository-relative path with a 1-based line and column", () => {
+    for (const result of log.runs[0].results) {
+      const { artifactLocation, region } = result.locations[0].physicalLocation;
+      // An absolute path, a `file:` URI, or a `..` escape are the three shapes
+      // GitHub cannot map onto a file in the checkout — the annotation is then
+      // dropped silently, which is worse than a red upload.
+      expect(artifactLocation.uri.startsWith("/")).toBe(false);
+      expect(artifactLocation.uri).not.toMatch(/^[a-z][a-z0-9+.-]*:/i);
+      expect(artifactLocation.uri.split("/")).not.toContain("..");
+      expect(region.startLine).toBeGreaterThanOrEqual(1);
+      expect(region.startColumn).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("reports one result per violation and none for a failure, keeping the two kinds apart", () => {
+    expect(log.runs[0].results).toHaveLength(MESSAGE_IDS.length);
+    expect(log.runs[0].invocations[0].toolExecutionNotifications).toHaveLength(2);
+  });
+
+  it("survives a JSON round trip unchanged, which is the only form GitHub ever sees", () => {
+    expect(JSON.parse(JSON.stringify(log))).toEqual(log);
+  });
+});

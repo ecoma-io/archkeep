@@ -42,6 +42,38 @@ pnpm install
 place. If you have ever wondered why a repository's hooks did not run for you: it
 is because that step was skipped. Do not skip it.
 
+### If you use Claude Code
+
+`.claude/settings.json` is checked in, so the setup is the same for everyone and
+you run no command in the normal case. Two things it does:
+
+- **Format and lint on every write.** Hooks in `.claude/hooks/` run the moment a
+  file is edited, so a problem surfaces while the edit is still in context rather
+  than at commit time.
+- **Enables `litmus`** — a skill package about test craft, published from
+  `ecoma-io/litmus`. It advises a session writing tests; it gates nothing, and no
+  merge depends on it.
+
+Your **first session in this directory prompts you to trust it**. Agreeing is
+what registers the `litmus` marketplace and installs the plugin — measured on
+Claude Code 2.1.223, where a repository's `extraKnownMarketplaces` is read only
+after that trust dialog is accepted. That gate is the whole safety property: a
+checkout you have not vouched for cannot make your session fetch and run anything.
+There is deliberately no `SessionStart` hook doing this automatically, because
+such a hook would route around the one gate that makes the arrangement safe, and
+would pay a `git clone` per session for it.
+
+If you decline, or the prompt does not appear, Claude Code says so and prints the
+exact command:
+
+```text
+Plugin "litmus@litmus" is enabled in project settings but isn't installed
+ — run `claude plugin install litmus@litmus --scope project`
+```
+
+Nothing else in the repository depends on it. Every gate a pull request must pass
+runs in CI and in the Git hooks.
+
 ## The commands
 
 | Command               | What it does                                                                  |
@@ -49,13 +81,20 @@ is because that step was skipped. Do not skip it.
 | `pnpm format`         | Prettier, in place                                                            |
 | `pnpm format:check`   | Prettier, read-only — what CI runs                                            |
 | `pnpm lint`           | ESLint, zero warnings tolerated                                               |
-| `pnpm test`           | `node --test` over `scripts/*.test.mjs`                                       |
+| `pnpm test`           | `node --test` over `scripts/*.test.mjs` — the gate scripts, nothing else      |
 | `pnpm check-packages` | Asserts every `packages/*` directory is a project Nx can see, with CI targets |
 
-Plus every project's own targets, once there are projects:
+Plus every project's own targets — a different suite, not a superset of the one
+above:
 
 ```bash
 pnpm exec nx run-many -t lint test build typecheck
+```
+
+And the tool on the tree that ships it, which is the last thing CI does:
+
+```bash
+node packages/nx-polyglot-graph/cli.mjs check
 ```
 
 Run all of them before you push. A shorter local run just moves the red to the
@@ -77,16 +116,27 @@ different states of `packages/` produce an identical exit code 0:
    `project.json`.** It is invisible to `nx show projects` entirely — nothing is
    even skipped, because as far as Nx is concerned nothing exists.
 
-State 1 is the truth today. What makes the other two a problem is the day
-someone adds the first package in shape 2 or 3: the build stays green, and
-nobody is told that a package is not being checked.
+State 2 and 3 are the ones that cost you: the build stays green and nobody is
+told a package is not being checked.
 
 `scripts/check-packages.mjs` turns each state into a distinct outcome — 3 fails,
-2 fails, and 1 prints `0 packages — declared empty`. It reads the list of targets
-out of the `nx run-many -t …` line in `.github/workflows/ci.yml` rather than
-holding a copy: CI is where "green" is defined, and a second copy would agree
-with it only until someone edited one of them. That is exactly the drift the
-script exists to catch, so it must not contain an instance of it.
+2 fails, and 1 prints `0 packages — declared empty`. A package that legitimately
+runs only some of the targets is reported as exactly that, and it is the expected
+answer rather than a finding:
+
+```text
+ok   nx-polyglot-graph — lint, test (no build, typecheck)
+```
+
+`nx-polyglot-graph` ships as `.mjs` and has nothing to build. Adding an empty
+`build` target to make that line read fuller is the placeholder-green the script
+exists to catch, so do not.
+
+It reads the list of targets out of the `nx run-many -t …` line in
+`.github/workflows/ci.yml` rather than holding a copy: CI is where "green" is
+defined, and a second copy would agree with it only until someone edited one of
+them. That is exactly the drift the script exists to catch, so it must not
+contain an instance of it.
 
 If you add a package, you will meet this check. It is not in your way — it is
 telling you Nx cannot see what you just added.
@@ -102,7 +152,8 @@ telling you Nx cannot see what you just added.
 
 If you are working with an AI coding agent, `.claude/` configures format and lint
 to run the moment a file is written, so problems surface while the edit is still
-in context rather than at commit time.
+in context rather than at commit time — see
+[If you use Claude Code](#if-you-use-claude-code).
 
 Bypassing a hook with `--no-verify` is occasionally the right call during a
 rebase. It is never the right way to land a change.

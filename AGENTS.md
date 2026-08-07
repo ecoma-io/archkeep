@@ -12,9 +12,11 @@ imports and so `nx affected` and `@nx/enforce-module-boundaries` work there;
 for the other three both go quiet, and quiet is the problem — an under-selecting
 `affected` and an absent boundary rule look exactly like a clean workspace.
 
-**Today the repository holds the toolchain and nothing else.** `packages/` is
-empty on purpose. The plugin lands in its own pull request. If you are about to
-write product code here, check that it is actually what was asked for.
+**The repository holds the toolchain and the one package it exists to ship.**
+`packages/nx-polyglot-graph/` is that package — an Nx plugin plus a boundary
+checker and a language server over the same engine. Everything else here is the
+apparatus that keeps it honest. If you are about to write product code, check
+that it is actually what was asked for.
 
 ## The invariant everything is judged against
 
@@ -44,24 +46,41 @@ test that only pins the message text is half a test.
   ISSUE_TEMPLATE/          bug · missed violation · feature
   assets/                  logo.svg is the source; the PNGs are rendered
   renovate.json5
+.claude-plugin/
+  marketplace.json         the catalogue this repository publishes
 scripts/
   check-packages.mjs       the gate that makes a green build mean something
   check-packages.test.mjs
-packages/                  deliberately empty — see below
+packages/
+  nx-polyglot-graph/       the plugin, the checker, the language server
+module-boundaries.config.mjs   this repository's own boundary law
 ```
+
+The package carries its own `CLAUDE.md` for everything below this level — the
+layer split, the per-language parse limits, the modelling assumptions. It loads
+when the work happens inside that directory, which is why none of it is here.
 
 ## Rules with teeth
 
-- **`packages/` being empty is a declared state, not an absence.** Three
-  different states of that directory produce an identical `exit 0` from
+- **A package that runs no target is indistinguishable from no package at all.**
+  Three different states of `packages/` produce an identical `exit 0` from
   `nx run-many` — measured against nx 23.1.1 by running it, not by reading
   docs: nothing there (`No tasks were run`); a project there declaring none of
   the targets (**skipped in silence**, no warning line at all); a directory with
   sources but no `package.json` or `project.json` (**invisible** to
-  `nx show projects`). `scripts/check-packages.mjs` splits those three apart.
-  Do not weaken it, and do not "fix" a failure from it by adding an empty target
-  to satisfy it — an empty `build` that exits 0 is exactly the placeholder-green
-  the script exists to catch.
+  `nx show projects`). `scripts/check-packages.mjs` splits those three apart, and
+  its verdict names the targets each package actually runs:
+
+  ```text
+  ok   nx-polyglot-graph — lint, test (no build, typecheck)
+  ```
+
+  A partial set is the expected answer, not a finding. `nx-polyglot-graph` ships
+  as `.mjs` and has nothing to build; declaring an empty `build` that exits 0 to
+  make that line read fuller is exactly the placeholder-green the script exists
+  to catch. Do not weaken it, and do not "fix" a failure from it by adding a
+  target.
+
 - **`check-packages.mjs` derives its target list from `ci.yml`.** It parses the
   `nx run-many -t …` line rather than holding a copy, because CI is where "green"
   is defined and a second copy agrees with the first only until someone edits
@@ -95,21 +114,32 @@ packages/                  deliberately empty — see below
 
 The repository runs on `.mjs` with JSDoc. This is not asceticism: Nx loads a
 plugin's entry point directly in the process that runs _every_ `nx` invocation,
-so the shipped artefact has to be loadable with no build step in the way. The
-gate scripts follow the same rule so there is one story rather than two, and
-`typescript-eslint` would have no program to consult. When the plugin lands and
-needs a build, that is the pull request that decides it — not a drive-by.
+so the shipped artefact has to be loadable with no build step in the way. That is
+also why `nx-polyglot-graph` declares no `build` target and no `typecheck` — there
+is no program for `typescript-eslint` to consult, and nothing to emit. The gate
+scripts follow the same rule so there is one story rather than two.
+
+Type-checking the JSDoc with `tsc --checkJs` would be a real gain and is not
+ruled out; it is a target nobody has added, and adding it is its own pull request
+rather than a drive-by.
 
 ## What scans this repository
 
-Four things, and they own different halves of "correct". None substitutes for
+Five things, and they own different halves of "correct". None substitutes for
 another.
 
 - **CI (`ci.yml`)** — Prettier, ESLint, `node --test`, `check-packages`, then
-  `nx run-many`. `ci-gate` is the only check name the branch ruleset requires, so
-  a job added later tightens the gate without touching repository settings. It
-  fails on any needed job that is `skipped` or `cancelled`, because `needs` alone
-  only blocks on `failure`.
+  `nx run-many`, and last the tool itself run on this tree. `ci-gate` is the only
+  check name the branch ruleset requires, so a job added later tightens the gate
+  without touching repository settings. It fails on any needed job that is
+  `skipped` or `cancelled`, because `needs` alone only blocks on `failure`.
+- **The repository's own module boundaries** — the final CI step runs
+  `packages/nx-polyglot-graph/cli.mjs check` against `module-boundaries.config.mjs`
+  at this root. Every step before it proves the code correct against fixtures it
+  built itself; this is the only one where the enforcer meets real source under a
+  tag vocabulary (`type:package`, `scope:nx`) that nothing in `src/` knows about.
+  A repository shipping an enforcer it did not run on itself would be answering a
+  consumer's first question with a promise.
 - **The PR title runs through commitlint.** Squash is the only merge button, so
   the title becomes the subject of the commit on `main` — the one commit message
   that never passes through the `commit-msg` hook. The title reaches the step via
@@ -124,6 +154,12 @@ another.
 - **cubic** — reviews for the defect class no gate can decide: a path that
   reports nothing. Its scope and reasoning live in `cubic.yaml`, in that file
   rather than here, because a config file is read by whoever is editing it.
+
+**litmus is not on that list, and the distinction is the point.** It is a skill
+package about test craft, enabled in `.claude/settings.json` and installed from
+the `ecoma-io/litmus` marketplace; it advises a session writing tests. Nothing it
+says blocks a merge. Setup is in `CONTRIBUTING.md` — a developer runs no command
+for it in the normal case.
 
 ### The Semgrep directory has two non-obvious constraints
 
@@ -149,10 +185,16 @@ pnpm install            # also installs the Git hooks (lefthook)
 pnpm format             # Prettier, in place
 pnpm format:check       # what CI runs
 pnpm lint               # ESLint, zero warnings
-pnpm test               # node --test over scripts/*.test.mjs
-pnpm check-packages     # prints "0 packages — declared empty" today
-pnpm exec nx run-many -t lint test build typecheck
+pnpm test               # node --test over scripts/*.test.mjs — the gate scripts only
+pnpm check-packages     # every packages/* directory, and which CI targets it runs
+pnpm exec nx run-many -t lint test build typecheck   # each package's own suite
+node packages/nx-polyglot-graph/cli.mjs check        # this tree's own boundaries
 ```
+
+`pnpm test` and `nx run-many` are not the same suite and neither covers the other:
+the first is `node --test` over `scripts/`, the second is each package's own
+`test` target — which for `nx-polyglot-graph` is Vitest, including the
+differential against a real `@nx/enforce-module-boundaries`.
 
 Semgrep the way CI runs it, needing Docker but no local install:
 

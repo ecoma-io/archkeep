@@ -97,6 +97,23 @@ jobs:
           NX_DAEMON: "false"
         run: pnpm exec nx run-many -t lint test build typecheck
 
+      # The tool, run on the tree that ships it. Everything above proves the
+      # code is correct against fixtures it built itself; this is the only step
+      # where the boundary law in `module-boundaries.config.mjs` is enforced
+      # against real source, over a tag vocabulary the tool has no knowledge of.
+      # A consumer's first question is whether this works outside the workspace
+      # it was written in, and a repository that shipped an enforcer it did not
+      # run on itself would be answering that question with a promise.
+      #
+      # It runs LAST on purpose: it spawns `nx graph`, so a plugin that breaks
+      # graph computation fails the step above with a clearer message than this
+      # one could give. Exit 3 — could not look — is distinct from exit 1, so a
+      # broken run never reads as a clean tree.
+      - name: Check this repository's own module boundaries
+        env:
+          NX_DAEMON: "false"
+        run: node packages/nx-polyglot-graph/cli.mjs check
+
   ci-gate:
     name: ci-gate
     # The single check name a branch ruleset requires, on pull requests and in

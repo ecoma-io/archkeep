@@ -29,12 +29,28 @@
 
 ---
 
-> **Status: the toolchain, and nothing else yet.**
-> This commit establishes the gate, the analysis and the governance — before
-> there is any code for them to be lenient about. `packages/` is deliberately
-> empty, and [`scripts/check-packages.mjs`](scripts/check-packages.mjs) is what
-> says so out loud rather than letting a green build imply it. The plugin lands
-> next, in its own pull request.
+## Install
+
+```bash
+pnpm add -D @ecoma-io/nx-polyglot-graph
+```
+
+Register it in `nx.json` and it starts adding the missing edges:
+
+```json
+{
+  "plugins": ["@ecoma-io/nx-polyglot-graph"]
+}
+```
+
+Then check the boundaries those edges cross:
+
+```bash
+pnpm exec nx-polyglot-graph check
+```
+
+Full documentation — the options, the boundary config, the language server, the
+exit codes — in [`packages/nx-polyglot-graph/`](packages/nx-polyglot-graph/README.md).
 
 ## The problem
 
@@ -74,21 +90,21 @@ one you see depends on what you are: **structure** if you are being held,
   the tags say must not exist. Finding those, in files no ESLint rule can parse,
   is the whole job.
 
-## What is planned
+## What is here
 
-| Package                                   |                                                                                                                                                                                                        |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`@ecoma-io/lattice`** _(the Nx plugin)_ | Reads Go, Rust and Python manifests into the Nx project graph, then judges imports against tag-based boundary rules — the `@nx/enforce-module-boundaries` contract, for the languages it cannot reach. |
-| **the editor extension**                  | The same verdicts as diagnostics while you type, over a language server, rather than only at commit time.                                                                                              |
+| Package                                                                   |                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [**`@ecoma-io/nx-polyglot-graph`**](packages/nx-polyglot-graph/README.md) | Reads Go, Rust and Python manifests into the Nx project graph, then judges imports against tag-based boundary rules — the `@nx/enforce-module-boundaries` contract, for the languages it cannot reach. |
+| _the editor extension_                                                    | Planned. The language server already ships in the package above and works in any LSP client, including Claude Code; a VS Code marketplace listing is what is missing.                                  |
 
-Both are extracted from tooling that has been running in Ecoma's own polyglot
-workspace rather than written speculatively. Neither is in this repository yet —
-see the status note above.
+The package was extracted from tooling that had been running in Ecoma's own
+polyglot workspace rather than written speculatively, and CI here runs it against
+this repository's source under a tag vocabulary it has never seen — which is the
+only evidence that "works in your workspace too" is more than a claim.
 
 ## Design commitments
 
-These are the things the implementation is held to, stated before the code lands
-so they can be argued with:
+These are the things the implementation is held to:
 
 **Static reading only.** Manifests are parsed as data. Nothing invokes `go`,
 `cargo` or `uv` to answer a question about imports — a graph that needs four
@@ -138,6 +154,7 @@ pnpm install     # also installs the Git hooks
 | `pnpm test`                                          | `node --test` over the gate scripts' own tests               |
 | `pnpm check-packages`                                | Asserts every `packages/*` directory is a project Nx can see |
 | `pnpm exec nx run-many -t lint test build typecheck` | Every project's own targets                                  |
+| `node packages/nx-polyglot-graph/cli.mjs check`      | The tool, on the tree that ships it                          |
 
 Full contribution flow, commit format and review bar: [CONTRIBUTING.md](CONTRIBUTING.md).
 
