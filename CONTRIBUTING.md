@@ -293,9 +293,11 @@ semgrep 1.172.0 rather than assumed:
 4. Keep it focused. Unrelated cleanup found along the way is welcome as its own
    pull request — mixed into this one it makes the real change unreviewable.
 
-Reviews come from a maintainer and from [cubic](https://cubic.dev), which reads
-the diff for correctness defects. cubic is advisory: it cannot approve, and it
-cannot stand in for a required check.
+Reviews come from a maintainer. [cubic](https://cubic.dev) is configured to read
+the diff for correctness defects but is not currently running — its free-tier
+review budget is exhausted and it has not posted a review on any pull request
+here. cubic is advisory in any case: it cannot approve, and it cannot stand in
+for a required check.
 
 ### How a pull request lands
 
