@@ -263,3 +263,15 @@ reaching a shell is a command injection. Read it before touching `scripts/`.
 
 When one of those documents and this file would say the same thing, the
 human-facing one says it and this one links.
+
+**Every document here is English, and there is no translated variant of any of
+them.** The package once carried `README.vi.md` and `README.zh.md` beside its
+English one, with frontmatter and a language-switcher nav line; both are gone.
+They arrived with the extraction from a workspace that mandates a three-language
+triad and runs a gate over it, and neither half of that survived the move — no
+gate here checks a translation, and this repository's own root `README.md` never
+followed the convention anyway. What was left was two files a contributor had to
+keep in sync by hand, indefinitely, against no check: a translation that silently
+falls behind the English is worse than an absent one, because it reads as
+current. Adding a language back is a decision that first names what keeps it
+honest.
