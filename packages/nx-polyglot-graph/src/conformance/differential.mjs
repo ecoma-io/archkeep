@@ -324,7 +324,7 @@ function tallyFor(rows, messageId) {
  *
  * Driven by the id list read off the INSTALLED rule, so a message this engine
  * has never heard of appears as a row rather than being absent from a table
- * that then looks complete (Rule 11).
+ * that then looks complete (an empty result is a claim, not a shrug).
  *
  * @param {object[]} rows From `compareCase`.
  * @param {string[]} upstreamMessageIds Every id upstream defines.

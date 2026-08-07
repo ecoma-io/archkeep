@@ -8,8 +8,8 @@ import { evaluate, MESSAGE_IDS } from "./index.mjs";
  * the records can be written by hand.
  *
  * Every project name, root and tag below is invented for these tests. Nothing
- * here may be read as a fact about this repository (project CLAUDE.md — the
- * tool runs over a second, private tree with entirely different names).
+ * here may be read as a fact about this repository (`../../CLAUDE.md` — the
+ * tool runs over consumers' trees, whose names it has never seen).
  *
  * Each rule gets its violating case AND the near miss that must stay silent.
  * The near misses are the tests that matter: a suite of violations alone still

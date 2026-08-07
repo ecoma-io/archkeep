@@ -10,8 +10,7 @@
  *
  * The version is the same shape of copy. It is written twice, once in each
  * manifest, and the plugin's own note says they must match — which is a
- * constraint stated in prose beside two values nothing compares (Rule 14: a
- * value copied across two files was never a valid hardcode). An installed plugin
+ * constraint stated in prose beside two values nothing compares. An installed plugin
  * is cached per version, so a mismatch is not cosmetic: Claude Code and the
  * catalogue disagree about which build a session is running.
  *

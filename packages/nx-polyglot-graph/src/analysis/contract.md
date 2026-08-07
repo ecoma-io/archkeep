@@ -210,11 +210,12 @@ TypeScript's resolver needs.
 
 ### Resolution is delegated, never reimplemented
 
-TypeScript resolution is `ts.resolveModuleName` — a public TypeScript API,
-already a root dependency at 5.9.3, and already correct on this workspace: it
-resolves `@ecoma-io/ui` to `shared/libs/core-ui/src/index.ts`, resolves
-`@ecoma-io/ui/a11y` to the secondary entry, and flags `vue` as
-`isExternalLibraryImport`. Reimplementing `tsconfig.base.json` path mapping,
+TypeScript resolution is `ts.resolveModuleName` — a public TypeScript API and
+already a declared dependency. `./typescript.test.mjs` is where it is held to
+the three answers this analyzer needs: a `tsconfig.base.json` path alias
+resolves to the file it names, a secondary entry resolves to its own file rather
+than to the package's main one, and a real third-party package comes back
+flagged `isExternalLibraryImport`. Reimplementing `tsconfig.base.json` path mapping,
 `exports` conditions, and extension probing would be a second answer to a
 question TypeScript already answers, and the two would disagree exactly where
 it matters.

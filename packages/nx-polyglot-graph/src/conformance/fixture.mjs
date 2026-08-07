@@ -327,7 +327,7 @@ function writeCase(root, spec) {
  * @param {object[]} cases The catalogue.
  * @param {object} defaultOptions The plugin's OWN `defaultOptions[0]`, read off
  *   the installed rule — never restated here, so a case states only what it
- *   changes and no copy of the eight option values can drift (Rule 14).
+ *   changes and no copy of the eight option values can drift.
  * @returns {Map<string, object>} case id → everything both engines need.
  */
 export function materialize(root, cases, defaultOptions) {

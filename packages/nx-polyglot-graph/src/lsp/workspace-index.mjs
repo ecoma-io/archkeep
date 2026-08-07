@@ -10,7 +10,7 @@
  *
  * ## What it may assume about the tree, which is nothing
  *
- * No project name, no directory layout, no tag vocabulary (project CLAUDE.md —
+ * No project name, no directory layout, no tag vocabulary (`../../CLAUDE.md` —
  * the tool is installed into workspaces it has never seen). Everything below is
  * derived: projects from the `project.json`
  * files that exist, node types from `projectType` by Nx's own rule, tags from
@@ -22,8 +22,7 @@
  * git is the one component that already answers that exactly. The alternative
  * is a directory walk with a skip list — `node_modules`, `dist`, `target`,
  * `.venv` — which is a config nobody maintains until the day it swallows a real
- * source directory and the boundary quietly stops being enforced there
- * (Rule 14: derive before you configure). `--others --exclude-standard` adds
+ * source directory and the boundary quietly stops being enforced there. `--others --exclude-standard` adds
  * files that exist but are not committed yet, because a file a developer
  * created five seconds ago is exactly the one they are about to import.
  *

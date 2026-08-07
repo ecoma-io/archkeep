@@ -12,7 +12,7 @@
  * Framing is the LSP base protocol: `Content-Length: <n>\r\n\r\n<utf8 json>`.
  * Implemented in `src/lsp/protocol.mjs` rather than pulled from a dependency
  * because it is a fixed external contract of about forty lines, and because
- * this tool stays on Node built-ins (project CLAUDE.md, Rule 2).
+ * this tool stays on Node built-ins (CLAUDE.md).
  *
  * **stdout carries the protocol and nothing else.** Every log line goes to
  * stderr: one stray `console.log` here would be read by the client as a

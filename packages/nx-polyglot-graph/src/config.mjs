@@ -394,10 +394,11 @@ export function findBoundaryConfigViolations(module) {
  *
  * The path-taking form exists because the config's location and the tree being
  * judged are two facts, not one. They coincide in this repository and come
- * apart under a pinned harness clone, and a run may need to say so explicitly —
- * `cli.mjs --config` is that seam. `loadBoundaryConfig` below is the common
- * case expressed in terms of this one, so both forms answer through the same
- * validation and neither can drift into a second opinion about a malformed row.
+ * apart wherever a workspace keeps its law somewhere else, and a run may need
+ * to say so explicitly — `cli.mjs --config` is that seam. `loadBoundaryConfig`
+ * below is the common case expressed in terms of this one, so both forms answer
+ * through the same validation and neither can drift into a second opinion about
+ * a malformed row.
  *
  * @param {string} path Absolute path of the config file.
  * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
@@ -430,8 +431,8 @@ export async function loadBoundaryConfigFile(path) {
  * Loads and validates the boundary config a workspace root implies.
  *
  * @param {string} workspaceRoot Absolute path of the workspace root — the tree
- *   being judged, which is not this module's own tree when the tool runs from
- *   a pinned harness clone.
+ *   being judged, which is not this module's own tree once the package is
+ *   installed into a consumer's `node_modules`.
  * @param {string} boundaryConfig The config's filename in THIS workspace,
  *   resolved by the caller from the plugin's options (`./options.mjs`). Required
  *   rather than defaulted here, so no code path can read a filename this module

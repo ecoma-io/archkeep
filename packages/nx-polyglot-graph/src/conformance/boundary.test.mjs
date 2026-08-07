@@ -48,7 +48,7 @@ const TEST_ONLY_PACKAGES = [
  * Every third-party specifier a SHIPPED module may name, and why. Node
  * built-ins are allowed everywhere and are recognised by `isBuiltin` rather
  * than listed — a hand-kept list of them is a second registry that drifts from
- * Node (Rule 14).
+ * Node.
  */
 const SHIPPED_PACKAGES = new Map([
   ["typescript", "module resolution, delegated rather than reimplemented"],

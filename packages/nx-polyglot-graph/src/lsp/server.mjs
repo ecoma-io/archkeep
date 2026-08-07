@@ -18,7 +18,7 @@
  *
  * Go, Rust and Python have no ESLint parser at all — `eslint` answers "File
  * ignored because no matching configuration was supplied" and the project's
- * `lint` target exits 0 over a violating import (project CLAUDE.md). So this
+ * `lint` target exits 0 over a violating import (`../../CLAUDE.md`). So this
  * server is the ONLY enforcement those three have, and for JS, TS and Vue it
  * is a second opinion that `../conformance/` holds to the same verdict. One
  * protocol every editor speaks serves all of them at once.

@@ -14,8 +14,7 @@
  * entry in the second **throws**, and that is the scaffold staying loud for
  * whichever language arrives next: an empty result would read as "this file
  * imports nothing", which is indistinguishable from "clean" and is the exact
- * fake-green this repository refuses (root CLAUDE.md — scaffold openly, never
- * fake done). An extension in neither table is a different case and returns
+ * fake-green this repository refuses (an empty result is a claim, not a shrug). An extension in neither table is a different case and returns
  * the empty envelope.
  */
 

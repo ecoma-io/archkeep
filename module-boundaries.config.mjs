@@ -35,7 +35,7 @@
  * cross-project JavaScript import for `@nx/enforce-module-boundaries` to judge
  * yet. It gains a second reader in the change that lands the first project that
  * imports another, and the table is authored once here so that change wires a
- * reader rather than writing a second copy (Rule 14 rung 2).
+ * reader rather than writing a second copy.
  *
  * Root-owned, at the root, because the boundary spans every package: no one
  * package can own the rule that says which packages may import which.

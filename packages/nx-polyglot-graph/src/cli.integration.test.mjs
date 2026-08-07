@@ -142,9 +142,9 @@ describe("checking a real tree", () => {
   });
 
   it("reads the boundary law from --config, whose location is not the tree being judged", async () => {
-    // Under a pinned harness clone the tool and the law live in different
-    // trees. Pointing at a table that permits the import must clear it without
-    // moving which workspace is analyzed.
+    // The law's location and the tree being judged are two facts. Pointing at a
+    // table that permits the import must clear it without moving which
+    // workspace is analyzed.
     const permissive = join(root, "permissive.config.mjs");
     writeFileSync(
       permissive,

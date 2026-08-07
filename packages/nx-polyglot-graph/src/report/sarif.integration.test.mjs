@@ -21,10 +21,10 @@ import { buildSarifLog } from "./sarif.mjs";
 /** One violation per `messageId`, rendered through the real message table. */
 const everyViolation = () =>
   MESSAGE_IDS.map((messageId, index) => ({
-    sourceFile: `platform/libs/engine-domain/file-${index}.go`,
+    sourceFile: `acme/libs/engine-domain/file-${index}.go`,
     line: index + 1,
     column: index + 2,
-    specifier: "@ecoma-io/engine-adapters",
+    specifier: "@acme/engine-adapters",
     kind: "static",
     messageId,
     message: renderMessage(messageId, { sourceTag: "layer:domain", tags: "layer:util", imp: "x" }),
@@ -37,7 +37,7 @@ const everyViolation = () =>
 const log = buildSarifLog({
   violations: everyViolation(),
   failures: [
-    { sourceFile: "website/apps/site/app/app.vue", line: 2, column: 40, reason: "cannot resolve" },
+    { sourceFile: "acme/apps/site/app/app.vue", line: 2, column: 40, reason: "cannot resolve" },
     { sourceFile: "a/b.rs", line: null, column: null, reason: "could not be read" },
   ],
 });

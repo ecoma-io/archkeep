@@ -10,10 +10,10 @@ import { formatConstraint, formatFailures, formatReport, formatViolation } from 
  */
 
 const violation = (overrides = {}) => ({
-  sourceFile: "platform/libs/engine-domain/doc.go",
+  sourceFile: "acme/libs/engine-domain/doc.go",
   line: 12,
   column: 23,
-  specifier: "github.com/ecoma-io/ecoma/platform/libs/engine-adapters",
+  specifier: "example.com/acme/engine-adapters",
   kind: "static",
   messageId: "onlyTagsConstraintViolation",
   message: 'A project tagged with "layer:domain" can only depend on libs tagged with layer:domain',
@@ -30,7 +30,7 @@ const violation = (overrides = {}) => ({
 describe("a violation entry", () => {
   it("opens with an unindented file:line:column so a terminal and an editor can jump to it", () => {
     const [first] = formatViolation(violation()).split("\n");
-    expect(first).toBe("platform/libs/engine-domain/doc.go:12:23  onlyTagsConstraintViolation");
+    expect(first).toBe("acme/libs/engine-domain/doc.go:12:23  onlyTagsConstraintViolation");
   });
 
   it("names the upstream messageId, which is what makes the verdict comparable to ESLint's", () => {
@@ -42,7 +42,7 @@ describe("a violation entry", () => {
 
   it("carries the import as written, its form, and the project pair it crosses", () => {
     expect(formatViolation(violation())).toContain(
-      'import      "github.com/ecoma-io/ecoma/platform/libs/engine-adapters" (static)  engine-domain → engine-adapters',
+      'import      "example.com/acme/engine-adapters" (static)  engine-domain → engine-adapters',
     );
   });
 
@@ -78,7 +78,7 @@ describe("a violation entry", () => {
 describe("the constraint line", () => {
   it("renders whatever fields the row carries, so a new upstream field cannot go missing", () => {
     // Enumerating today's four constraint keys would silently drop the fifth
-    // the day @nx/enforce-module-boundaries adds one (Rule 14).
+    // the day @nx/enforce-module-boundaries adds one.
     expect(
       formatConstraint({
         sourceTag: "layer:view",

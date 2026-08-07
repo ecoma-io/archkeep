@@ -291,12 +291,12 @@ describe("resolveGoDependencies", () => {
   const projects = [
     { name: "alpha", root: "acme/libs/alpha" },
     { name: "beta", root: "acme/libs/beta" },
-    { name: "web", root: "shared/libs/web" }, // not a Go project
+    { name: "web", root: "acme/libs/web" }, // not a Go project
   ];
   const files = {
     alpha: ["acme/libs/alpha/go.mod", "acme/libs/alpha/main.go"],
     beta: ["acme/libs/beta/go.mod", "acme/libs/beta/lib.go", "acme/libs/beta/lib_test.go"],
-    web: ["shared/libs/web/project.json"],
+    web: ["acme/libs/web/project.json"],
   };
   const contents = {
     "acme/libs/alpha/go.mod": "module example.com/acme/alpha\n\ngo 1.24\n",

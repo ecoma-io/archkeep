@@ -31,7 +31,7 @@ const CONTINUED = "    ";
  * The constraint row that fired, rendered from the row's own keys rather than
  * from a list of the keys we expect. `@nx/enforce-module-boundaries` can grow a
  * constraint field, and a renderer enumerating today's four would silently drop
- * the new one from every report (Rule 14 — derive, don't restate).
+ * the new one from every report.
  *
  * @param {object|null} constraint A `depConstraints` row, or `null`.
  * @returns {string}

@@ -65,7 +65,7 @@ describe("where the file list comes from", () => {
   it("respects .gitignore, so a generated tree is not analyzed as source", () => {
     // This is the whole reason the list is derived from git rather than from a
     // hand-kept skip list: `.gitignore` is the tree's own single statement of
-    // what is not source, and it cannot drift from itself (Rule 14).
+    // what is not source, and it cannot drift from itself.
     expect(listWorkspaceFiles(root)).not.toContain("ignored/generated.go");
   });
 

@@ -40,9 +40,9 @@ import { pathExists } from "./reachability.mjs";
 /**
  * Nx's default `workspaceLayout`. Applied when the graph does not carry one,
  * because upstream applies exactly this default when `nx.json` omits the key —
- * the value is intrinsic to the upstream contract, not a preference of ours
- * (Rule 14 rung 3), and getting it wrong changes which imports count as
- * "absolute into another project".
+ * the value is intrinsic to the upstream contract, not a preference of ours, and
+ * getting it wrong changes which imports count as "absolute into another
+ * project".
  */
 export const DEFAULT_WORKSPACE_LAYOUT = Object.freeze({ libsDir: "libs", appsDir: "apps" });
 

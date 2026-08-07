@@ -7,24 +7,24 @@ const request = (sourceFile) => ({ sourceFile, text: "", workspace: {} });
 describe("languageOf", () => {
   it("claims an extension only through the registry, so one map decides every dispatch", () => {
     for (const [extension, language] of Object.entries(LANGUAGE_BY_EXTENSION)) {
-      expect(languageOf(`shared/libs/thing/src/file${extension}`)).toBe(language);
+      expect(languageOf(`acme/libs/thing/src/file${extension}`)).toBe(language);
     }
   });
 
   it("reads the last extension of a dotted filename, not the first", () => {
     expect(languageOf("vitest.config.mjs")).toBe("typescript");
-    expect(languageOf("shared/tools/thing/foo.test.mjs")).toBe("typescript");
+    expect(languageOf("acme/tools/thing/foo.test.mjs")).toBe("typescript");
   });
 
   it("claims nothing for a file no analyzer can read", () => {
-    expect(languageOf("shared/tools/thing/README.md")).toBeNull();
-    expect(languageOf("shared/tools/thing/project.json")).toBeNull();
+    expect(languageOf("acme/tools/thing/README.md")).toBeNull();
+    expect(languageOf("acme/tools/thing/project.json")).toBeNull();
     expect(languageOf("Makefile")).toBeNull();
   });
 
   it("treats a dotfile as having no extension rather than as its own extension", () => {
     expect(languageOf(".gitignore")).toBeNull();
-    expect(languageOf("shared/libs/thing/.npmrc")).toBeNull();
+    expect(languageOf("acme/libs/thing/.npmrc")).toBeNull();
   });
 
   it("gives a Vue SFC its own language, not TypeScript's", () => {
@@ -59,7 +59,7 @@ describe("analyzeFile", () => {
   // whose language IS in scope and reports nothing would be indistinguishable
   // from a clean file. The first is a no-op; the second must be impossible.
   it("returns an empty result for a file no analyzer claims", () => {
-    expect(analyzeFile(request("shared/tools/thing/README.md"))).toEqual({
+    expect(analyzeFile(request("acme/tools/thing/README.md"))).toEqual({
       imports: [],
       failures: [],
     });

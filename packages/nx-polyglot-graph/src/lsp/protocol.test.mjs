@@ -94,7 +94,7 @@ describe("document URIs", () => {
 describe("protocol constants", () => {
   it("names itself from the package manifest rather than from a second copy", () => {
     // Two versions of this server installed side by side must be tellable
-    // apart by what they say in `initialize` (Rule 14 rung 1). The npm scope is
+    // apart by what they say in `initialize`. The npm scope is
     // stripped because it names a registry namespace rather than a server, and
     // pinning that here is what would fail if the strip were dropped and every
     // editor's output channel silently gained a `@ecoma-io/` prefix.
