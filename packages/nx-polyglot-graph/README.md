@@ -197,7 +197,8 @@ Both halves run, and CI proves it on this repository's own source: the same
 with the workspace the tool was written against.
 
 `src/conformance/` measures where this engine and ESLint agree and where they do
-not, over 37 fixture workspaces built for the purpose. Both enforcers are meant
+not, over 46 fixture workspaces built for the purpose — 37 of them in the
+languages ESLint can read. Both enforcers are meant
 to run side by side: ESLint stays authoritative for JavaScript, TypeScript and
 Vue; this tool covers Go, Rust and Python, where ESLint reports nothing at all.
 

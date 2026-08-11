@@ -61,6 +61,44 @@ export const depConstraints = [
   // nothing on a consumer's disk.
   { sourceTag: "type:package", onlyDependOnLibsWithTags: ["type:package"] },
 
+  // `type:extension` is an editor client — today `packages/lattice-vscode`, a
+  // VS Code extension. The empty list is the strongest form the option has: a
+  // project carrying this tag may depend on no tagged project at all. (The
+  // mechanism, since an empty array reads as vacuous: an empty
+  // `onlyDependOnLibsWithTags` fires on any dependency whose target carries at
+  // least one tag, and every project here is tagged. Third-party packages are
+  // unaffected — an npm target returns before the tag block.)
+  //
+  // It states the extension's central design decision as law. The extension does
+  // not bundle the boundary server; it resolves the server out of the workspace
+  // being edited and speaks to it over stdio, so the diagnostics in the buffer
+  // come from the same version that workspace's pipeline runs. An `import` of
+  // `@ecoma-io/nx-polyglot-graph` from there would be that decision quietly
+  // reversed — a second, marketplace-pinned analyzer, free to disagree with CI
+  // about the same import while both report confidently.
+  //
+  // **What this row does not do is catch that today, and the honest reason is
+  // measured rather than argued.** Both ways of writing the import were tried
+  // against this tree before the row was written:
+  //
+  //   - By package name, with the server linked in as a workspace dependency:
+  //     reported `external`, and an external target never reaches the tag block.
+  //     `src/analysis/typescript.mjs` states why in its header — it does not
+  //     call `realpath`, so a pnpm workspace link resolves to its link path
+  //     instead of naming the project behind it. That is a pinned limit of the
+  //     engine, not an oversight here.
+  //   - By relative path: caught, but by `noRelativeOrAbsoluteImportsAcrossLibraries`,
+  //     which fires before the constraint table is read at all.
+  //
+  // So the row changes no verdict in this workspace as it stands, and it is kept
+  // anyway for the same reason the eight options below are written out at their
+  // defaults: it is the value a second reader cannot recover from silence. It
+  // starts deciding the moment this workspace grows a `tsconfig.base.json` —
+  // path aliases are what make a cross-project specifier resolve to a project
+  // rather than to a link — and the day it does, this row is already correct
+  // rather than remembered.
+  { sourceTag: "type:extension", onlyDependOnLibsWithTags: [] },
+
   // Scope axis. `scope:nx` is the Nx-toolchain scope — plugins, and the
   // language server and CLI that share their analysis. A second scope arrives
   // with the first package that is not Nx tooling, and this row is what will
