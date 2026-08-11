@@ -32,9 +32,10 @@
  * boundary alert on code that may well be clean. They travel as
  * `invocations[].toolExecutionNotifications`, which is SARIF's own slot for
  * "the tool had trouble here", at `warning` — `executionSuccessful` stays true
- * because the run did complete. go.work drift findings ARE results, under
- * their own rule ids: they are verdicts the run fails on, not trouble it hit
- * (`sarifGoWorkResult`).
+ * because the run did complete. go.work drift findings and dead tsconfig path
+ * aliases ARE results, under their own rule ids: they are verdicts the run
+ * fails on, not trouble it hit (`sarifGoWorkResult`,
+ * `sarifTsconfigPathsResult`).
  *
  * **The driver carries no `version`/`semanticVersion`, and that is now a gap
  * rather than a decision.** It was written when this package was unversioned and
@@ -47,6 +48,7 @@
  */
 import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
 import { MESSAGE_IDS, MESSAGES } from "../rules/messages.mjs";
+import { TSCONFIG_PATHS_MESSAGE_IDS, TSCONFIG_PATHS_MESSAGES } from "../tsconfig-paths.mjs";
 
 import { formatConstraint } from "./text.mjs";
 
@@ -73,7 +75,8 @@ export function toUriReference(path) {
 /**
  * The rule catalogue: one descriptor per `messageId` a run can produce — the
  * upstream boundary ids in `MESSAGE_IDS` order, then this package's own
- * go.work drift ids, so `ruleIndex` is an index into this exact array.
+ * go.work drift ids, then its tsconfig paths hygiene ids, so `ruleIndex` is an
+ * index into this exact array.
  *
  * Every id is listed, not only the ones that fired. A GitHub alert shows the
  * rule's description beside the finding, and a catalogue that grew only as
@@ -104,6 +107,13 @@ export function sarifRules() {
       name: id,
       shortDescription: { text: GO_WORK_MESSAGES[id].split("\n")[0] },
       fullDescription: { text: GO_WORK_MESSAGES[id] },
+      defaultConfiguration: { level: "error" },
+    })),
+    ...TSCONFIG_PATHS_MESSAGE_IDS.map((id) => ({
+      id,
+      name: id,
+      shortDescription: { text: TSCONFIG_PATHS_MESSAGES[id].split("\n")[0] },
+      fullDescription: { text: TSCONFIG_PATHS_MESSAGES[id] },
       defaultConfiguration: { level: "error" },
     })),
   ];
@@ -183,6 +193,36 @@ export function sarifGoWorkResult(finding) {
 }
 
 /**
+ * One dead tsconfig path alias as a SARIF result.
+ *
+ * A result for the same reason a go.work drift finding is one: it is a verdict
+ * the run fails on. The finding is positionless by construction — the parsed
+ * compiler options carry no source positions, and under `extends` the alias
+ * may not be declared in the file the workspace names — so the location
+ * carries the artifact alone rather than a fabricated line 1, the reasoning
+ * `sarifNotification` states.
+ *
+ * @param {object} finding A finding from `../tsconfig-paths.mjs`.
+ * @returns {object}
+ */
+export function sarifTsconfigPathsResult(finding) {
+  return {
+    ruleId: finding.messageId,
+    ruleIndex:
+      MESSAGE_IDS.length +
+      GO_WORK_MESSAGE_IDS.length +
+      TSCONFIG_PATHS_MESSAGE_IDS.indexOf(finding.messageId),
+    level: "error",
+    message: { text: finding.message },
+    locations: [{ physicalLocation: { artifactLocation: { uri: toUriReference(finding.file) } } }],
+    properties: {
+      alias: finding.alias,
+      targets: finding.targets,
+    },
+  };
+}
+
+/**
  * One analysis failure as a tool-execution notification.
  *
  * A failure with no position is about the file as a whole (`line`/`column`
@@ -208,10 +248,10 @@ export function sarifNotification(failure) {
 /**
  * The whole SARIF log.
  *
- * @param {{violations: object[], failures: object[], goWork?: {findings: object[]}|null}} run
+ * @param {{violations: object[], failures: object[], goWork?: {findings: object[]}|null, tsconfigPaths?: {findings: object[]}|null}} run
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
-export function buildSarifLog({ violations, failures, goWork }) {
+export function buildSarifLog({ violations, failures, goWork, tsconfigPaths }) {
   return {
     $schema: SARIF_SCHEMA,
     version: SARIF_VERSION,
@@ -222,6 +262,7 @@ export function buildSarifLog({ violations, failures, goWork }) {
         results: [
           ...violations.map(sarifResult),
           ...(goWork?.findings ?? []).map(sarifGoWorkResult),
+          ...(tsconfigPaths?.findings ?? []).map(sarifTsconfigPathsResult),
         ],
         invocations: [
           {
@@ -241,7 +282,7 @@ export function buildSarifLog({ violations, failures, goWork }) {
  * The SARIF log as the bytes to write — pretty-printed with a trailing newline,
  * so a file that lands in a diff or a log stays readable.
  *
- * @param {{violations: object[], failures: object[], goWork?: {findings: object[]}|null}} run
+ * @param {{violations: object[], failures: object[], goWork?: {findings: object[]}|null, tsconfigPaths?: {findings: object[]}|null}} run
  * @returns {string}
  */
 export function formatSarif(run) {

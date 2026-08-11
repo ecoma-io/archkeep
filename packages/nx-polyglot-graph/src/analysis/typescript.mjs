@@ -303,6 +303,33 @@ const contextFor = perWorkspace((workspace) => {
   };
 });
 
+/**
+ * The alias table exactly as this analyzer's resolver will use it — for the
+ * paths hygiene check in `../tsconfig-paths.mjs`. Reading `contextFor`'s own
+ * memoised context (same file via `tsConfigOf`, same parse, same `extends`
+ * handling) is what makes "the check judges the table the resolver reads" a
+ * construction rather than a promise: there is no second load that could
+ * disagree. `paths` is `undefined` when the workspace has no tsconfig or the
+ * tsconfig declares none — the caller's silent case — while a config that
+ * failed to load reports through `configFailure`, never as an absent table.
+ * `base` is what `paths` targets resolve against: `baseUrl` when set, else
+ * TypeScript's own `pathsBasePath` (the declaring config's directory), else
+ * the workspace root — the same precedence `ts.resolveModuleName` applies.
+ *
+ * @param {import("../workspace.mjs").Workspace} workspace
+ * @returns {{ tsConfig: string, configFailure: string|null,
+ *   paths: Record<string, unknown>|undefined, base: string }}
+ */
+export function tsconfigPathsFacts(workspace) {
+  const context = contextFor(workspace);
+  return {
+    tsConfig: tsConfigOf(workspace),
+    configFailure: context.configFailure,
+    paths: context.options.paths,
+    base: context.options.baseUrl ?? context.options.pathsBasePath ?? context.host.root,
+  };
+}
+
 /** `static` unless nothing in the import clause survives to runtime. */
 function importDeclarationKind(node) {
   const clause = node.importClause;

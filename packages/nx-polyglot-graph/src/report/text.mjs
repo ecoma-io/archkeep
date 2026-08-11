@@ -183,6 +183,51 @@ export function formatGoWork(goWork) {
 }
 
 /**
+ * The tsconfig paths hygiene section — rendered only when the run HAS a paths
+ * verdict, decided nowhere here.
+ *
+ * `tsconfigPaths` is `null` (or absent) when the workspace has no tsconfig or
+ * its tsconfig declares no `paths`, and then this prints nothing: a workspace
+ * without the table pays nothing and hears nothing, the same bargain
+ * `formatGoWork` states. When the check ran, even a clean result is a line
+ * that counts the aliases judged — and separately the ones the check's rule
+ * cannot judge (`../tsconfig-paths.mjs` header) — because "no dead aliases"
+ * is a claim about coverage the reader cannot otherwise tell from silence.
+ *
+ * Findings are positionless by construction (the parsed options carry no
+ * source positions, and under `extends` the alias may be declared in another
+ * file), so every entry renders the file alone, never a fabricated line 1.
+ *
+ * @param {{tsConfig: string, findings: object[], aliases: number,
+ *   unjudged: number}|null|undefined} tsconfigPaths
+ * @returns {string} Empty exactly when there is no paths verdict to render.
+ */
+export function formatTsconfigPaths(tsconfigPaths) {
+  if (tsconfigPaths == null) return "";
+  const { tsConfig, findings, aliases, unjudged } = tsconfigPaths;
+  const judged =
+    `${aliases} alias${aliases === 1 ? "" : "es"} judged in ${tsConfig}` +
+    (unjudged > 0 ? `, ${unjudged} outside this check's rule and not judged` : "");
+  if (findings.length === 0) {
+    return `✔ no dead tsconfig path aliases (${judged})`;
+  }
+  const entries = findings.map((finding) => {
+    const message = finding.message
+      .split("\n")
+      .map((line) => (line === "" ? "" : `${CONTINUED}${line}`))
+      .join("\n");
+    return [`${finding.file}  ${finding.messageId}`, message].join("\n");
+  });
+  return [
+    entries.join("\n\n"),
+    `✖ dead tsconfig path aliases: ${findings.length} ` +
+      `finding${findings.length === 1 ? "" : "s"} (${judged}) — no import matching ` +
+      `${findings.length === 1 ? "this alias" : "these aliases"} can resolve through the ` +
+      `paths table, and the run fails`,
+  ].join("\n\n");
+}
+
+/**
  * The whole report, violations first.
  *
  * The summary states what was inspected and not only what was found, because
@@ -191,10 +236,18 @@ export function formatGoWork(goWork) {
  * that indistinguishability is the defect this whole tool exists to end
  * (`../../CLAUDE.md`).
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null}} run
  * @returns {string}
  */
-export function formatReport({ violations, failures, analyzed, projects, imports, goWork }) {
+export function formatReport({
+  violations,
+  failures,
+  analyzed,
+  projects,
+  imports,
+  goWork,
+  tsconfigPaths,
+}) {
   const inspected =
     `${imports} import${imports === 1 ? "" : "s"} in ${analyzed} file${analyzed === 1 ? "" : "s"} ` +
     `across ${projects} project${projects === 1 ? "" : "s"}`;
@@ -213,6 +266,9 @@ export function formatReport({ violations, failures, analyzed, projects, imports
 
   const goWorkSection = formatGoWork(goWork);
   if (goWorkSection !== "") sections.push(goWorkSection);
+
+  const tsconfigPathsSection = formatTsconfigPaths(tsconfigPaths);
+  if (tsconfigPathsSection !== "") sections.push(tsconfigPathsSection);
 
   const unresolved = formatFailures(failures);
   if (unresolved !== "") sections.push(unresolved);

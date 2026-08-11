@@ -295,6 +295,46 @@ should keep running for it. This analyzer exists because the CLI and the languag
 server judge the whole tree, and a report that skipped TypeScript would be
 answering a different question than the one asked.
 
+### The paths table is checked for dead aliases
+
+A `paths` alias whose every target has rotted away resolves no import: the
+build breaks on it, or — worse — TypeScript falls back to `node_modules` and an
+installed package of the same name answers instead, so every boundary decision
+quietly reads the import as external rather than as the workspace source the
+alias promised. Nothing else reports either state, so when the workspace
+tsconfig declares a `paths` table, `check` judges each alias for life and a
+dead one — one message id, **`tsconfigDeadPathAlias`** — **fails the run with
+exit 1**, the way a violation does.
+
+The check judges the alias table itself and never resolves a specifier —
+resolving one would mean applying `paths` here, which is the second resolver
+this package must not grow (the refusal two paragraphs up). What it may
+honestly decide instead rests on one measured fact: every candidate TypeScript
+can form from a target lives at or below the directory of the target's static
+prefix (the text before the first `*`; the whole target when it has none). So
+a target is unreachable when that directory does not exist, and an alias is
+dead when its target list is empty or every target is unreachable. Targets
+resolve against `baseUrl` when set, else against the declaring config file's
+directory — TypeScript's own precedence — and the table itself is read from
+the same parsed tsconfig `ts.resolveModuleName` uses, `extends` chains
+included, so the check and the resolver cannot disagree about what it says.
+
+The honest limits, each the near side of that same line: a missing file whose
+directory survives is **not** reported (TypeScript probes other extensions and
+`index` candidates there, and reproducing that per-mode set is the refused
+resolver); an alias whose pattern holds more than one `*` (which TypeScript
+ignores entirely), or a target pointing outside the workspace, is counted
+beside the verdict as unjudged, never guessed either way. A tsconfig that does
+not load, or a `paths` value that is not an array of strings, **fails the run
+with exit 3** rather than being read as "no aliases" — an absent table and a
+broken one must not report alike.
+
+A workspace whose tsconfig declares no `paths` — or that has no tsconfig —
+pays nothing, and the report says nothing about it; there is no switch. Like
+the go.work comparison above, the check runs on the CLI only, not in the
+language server, for the same reason: it describes the workspace's table, not
+any file being edited.
+
 ---
 
 ## Vue

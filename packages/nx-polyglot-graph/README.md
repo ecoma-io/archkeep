@@ -104,7 +104,7 @@ Four exit codes, and the distinction that matters is **3** against **0**:
 | code | meaning                                                                    |
 | ---- | -------------------------------------------------------------------------- |
 | 0    | clean — and every selected file was analyzed                               |
-| 1    | findings — boundary violations, or go.work drift                           |
+| 1    | findings — boundary violations, go.work drift, or dead tsconfig aliases    |
 | 2    | usage error                                                                |
 | 3    | no verdict — the run could not start, or a selected file could not be read |
 
@@ -131,6 +131,18 @@ cannot parse fails the run with exit 3 rather than being read as an empty `use`
 list. A workspace without a root `go.work` pays nothing and hears nothing. The
 check runs on the CLI only: a drift finding describes the workspace, not any
 file being edited, so the language server does not publish it.
+
+When the workspace tsconfig declares a `paths` table, `check` also judges each
+alias for life: an alias mapped only to targets whose directories do not exist
+resolves no import — the build breaks on it, or it silently resolves to an
+installed package of the same name — and is a finding, exit 1. The table is
+read from the same parsed tsconfig the import resolver uses and no specifier is
+ever re-resolved; the exact rule and its limits are in
+[docs/usage/languages.md](../../docs/usage/languages.md). A tsconfig that will
+not load, or a `paths` value that is not an array of strings, fails the run
+with exit 3 rather than being read as "no aliases". A workspace whose tsconfig
+declares no `paths` pays nothing and hears nothing, and this check too runs on
+the CLI only.
 
 ## Running it in an editor
 

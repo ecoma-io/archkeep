@@ -137,6 +137,34 @@ below.
 
 ---
 
+## A dead tsconfig path alias finding
+
+**`tsconfigDeadPathAlias`** appears only in a workspace whose tsconfig declares
+a `paths` table, and it fails the run with exit 1 because an alias mapped only
+to directories that do not exist resolves no import: the build breaks on it, or
+it silently resolves to an installed package of the same name and every
+boundary decision reads the import as external. The rule and its limits are in
+[languages.md](languages.md) § _The paths table is checked for dead aliases_.
+
+The fix is what the message says: point the alias at the moved source, or
+delete it. Two shapes worth knowing before disputing one:
+
+- The judged base is `baseUrl` when your tsconfig sets one, else the directory
+  of the config file that declared `paths` — so under an `extends` chain, a
+  target is relative to the file that wrote it, not necessarily the file
+  `check` was pointed at.
+- The check asks only whether each target's static prefix directory exists. A
+  finding therefore means _no_ candidate TypeScript could form from those
+  targets can exist — while the converse miss (file deleted, directory kept)
+  is deliberately not reported, because deciding it would need TypeScript's
+  per-mode candidate probing.
+
+A tsconfig that does not load, or a `paths` value that is not an array of
+strings, is not a finding: it is exit 3, below — a broken table must never
+read as an absent one.
+
+---
+
 ## Exit 3 — "no verdict"
 
 The run could not reach an answer, either at all or for part of the tree. That is
@@ -160,7 +188,11 @@ Common causes: a file the analyzer could not parse, a file whose extension is
 registered but whose analyzer is missing, a `tsconfig` that will not load, or —
 for Vue — `vue` not installed in a workspace that has `.vue` files. A malformed
 `go.work` lands here too, naming its line: a use list this tool cannot read
-must not be read as an empty one, because empty would mean "no drift".
+must not be read as an empty one, because empty would mean "no drift". So does
+a `paths` value that is not an array of strings, naming its alias: TypeScript's
+own config parse accepts that shape without a diagnostic, and read as "no
+aliases" it would silence the dead-alias check exactly where the table is most
+broken.
 
 The fix is whatever the failure line names. What is _not_ a fix is treating exit
 3 as success; see [ci.md](ci.md) § _The exit codes_.
