@@ -106,6 +106,32 @@ source level, so the edge exists while the source-level location does not.
 
 ---
 
+## A go.work drift finding
+
+These appear only in a workspace with a tracked `go.work` at its root, and they
+fail the run with exit 1 because both directions mean the same dangerous thing:
+a developer's `go build` and CI select different module sets, and nothing else
+notices. What each finding asks for — the four ids and their semantics are in
+[languages.md](languages.md) § _go.work is checked against the graph_:
+
+- **`goWorkMissingUse`** — add the named `use` entry (the message spells it),
+  or, if the module really should not be built locally, ask why it is an Nx
+  project at all.
+- **`goWorkStaleUse`** — remove the entry, or track the `go.mod` it points at:
+  the file set is `git ls-files`, so an untracked module reads as absent.
+- **`goWorkUnmodeledUse`** — the module builds locally but the graph does not
+  model it (one module per project root). Split it into its own project, the
+  same fix as the nested-`go.mod` case under `nx affected` below.
+- **`goWorkOutsideUse`** — a `use` pointing above the workspace is a
+  multi-checkout development setup; it may be deliberate on one machine, but
+  committed to `go.work` it promises every machine a directory only one has.
+
+A finding you believe is wrong is worth filing — that is the loud direction
+working. A `go.work` the parser could not read is not a finding: it is exit 3,
+below.
+
+---
+
 ## Exit 3 — "no verdict"
 
 The run could not reach an answer, either at all or for part of the tree. That is
@@ -127,7 +153,9 @@ in the claim the clean line makes.
 
 Common causes: a file the analyzer could not parse, a file whose extension is
 registered but whose analyzer is missing, a `tsconfig` that will not load, or —
-for Vue — `vue` not installed in a workspace that has `.vue` files.
+for Vue — `vue` not installed in a workspace that has `.vue` files. A malformed
+`go.work` lands here too, naming its line: a use list this tool cannot read
+must not be read as an empty one, because empty would mean "no drift".
 
 The fix is whatever the failure line names. What is _not_ a fix is treating exit
 3 as success; see [ci.md](ci.md) § _The exit codes_.

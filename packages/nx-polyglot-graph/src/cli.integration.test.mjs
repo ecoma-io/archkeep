@@ -131,6 +131,15 @@ describe("checking a real tree", () => {
     expect(report).toMatch(/1 import in 2 files across 2 projects/);
   });
 
+  it("says nothing about go.work in a workspace that has none — no manifest, no check, no claim", async () => {
+    const { report, goWorkDrift } = await check(
+      { format: "text", config: null, paths: [] },
+      context,
+    );
+    expect(goWorkDrift).toBe(0);
+    expect(report).not.toContain("go.work");
+  });
+
   it("renders the same verdict as SARIF, located at the same position", async () => {
     const { report } = await check({ format: "sarif", config: null, paths: [] }, context);
     const [result] = JSON.parse(report).runs[0].results;
@@ -296,6 +305,154 @@ export const moduleBoundaryOptions = {
   });
 });
 
+describe("the go.work drift check", () => {
+  // Its own fixture, because go.work drift is exactly the state the main
+  // fixture must not carry: a clean two-module workspace whose go.work is
+  // edited per case. Only Nx and git are injected — the parser reads the real
+  // file and the real comparison judges it, so what is pinned here is the
+  // whole path a consumer's `check` takes.
+  const workRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-gowork-"));
+  afterAll(() => rmSync(workRoot, { recursive: true, force: true }));
+
+  const writeWork = (relativePath, text) => {
+    mkdirSync(join(workRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(workRoot, relativePath), text);
+  };
+
+  writeWork("nx.json", "{}\n");
+  writeWork(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeWork("libs/store/go.mod", "module example.com/store\n\ngo 1.24\n");
+  writeWork("libs/store/store.go", "package store\n");
+  writeWork("libs/pricing/go.mod", "module example.com/pricing\n\ngo 1.24\n");
+  writeWork("libs/pricing/pricing.go", "package pricing\n");
+
+  const workContext = {
+    cwd: workRoot,
+    readGraph: () => ({
+      nodes: {
+        store: { name: "store", type: "lib", data: { root: "libs/store", tags: ["layer:domain"] } },
+        pricing: {
+          name: "pricing",
+          type: "lib",
+          data: { root: "libs/pricing", tags: ["layer:domain"] },
+        },
+      },
+      dependencies: { store: [], pricing: [] },
+    }),
+    listFiles: () => [
+      "nx.json",
+      "module-boundaries.config.mjs",
+      "go.work",
+      "libs/store/go.mod",
+      "libs/store/store.go",
+      "libs/pricing/go.mod",
+      "libs/pricing/pricing.go",
+    ],
+  };
+
+  const workEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      ...workContext,
+    };
+  };
+
+  it("exits 1 on a project missing from the use list, with zero boundary violations to blame", async () => {
+    // The breaking half of this change, deliberately: a workspace whose
+    // imports are all legal and whose go.work has quietly fallen behind was
+    // exit 0 before this check existed, and that green was the drift being
+    // invisible.
+    writeWork("go.work", "go 1.24\n\nuse ./libs/store\n");
+    const streams = workEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("✔ no boundary violations");
+    expect(report).toContain("go.work  goWorkMissingUse");
+    expect(report).toContain('"pricing"');
+    expect(report).toContain("✖ go.work drifts from the project graph: 1 finding");
+  });
+
+  it("exits 1 on a stale use entry, locating it at the line and column that wrote it", async () => {
+    const goWork = "go 1.24\n\nuse (\n\t./libs/store\n\t./libs/pricing\n\t./libs/checkout\n)\n";
+    writeWork("go.work", goWork);
+    // Position computed from the fixture, so editing it moves both sides.
+    const lines = goWork.split("\n");
+    const line = lines.findIndex((candidate) => candidate.includes("./libs/checkout")) + 1;
+    const column = lines[line - 1].indexOf("./libs/checkout") + 1;
+    const streams = workEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    expect(streams.lines.out.join("\n")).toContain(`go.work:${line}:${column}  goWorkStaleUse`);
+  });
+
+  it("exits 0 when the use list and the graph agree, and claims that agreement out loud", async () => {
+    writeWork("go.work", "go 1.24\n\nuse (\n\t./libs/store\n\t./libs/pricing\n)\n");
+    const streams = workEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.ok);
+    expect(streams.lines.out.join("\n")).toContain(
+      "✔ go.work agrees with the project graph (2 Go module projects)",
+    );
+  });
+
+  it("exits 3 on a go.work it cannot parse — a malformed file must never read as 'no drift'", async () => {
+    // The silent direction, end to end: an unclosed block truncates the use
+    // list, and a parser that shrugged would hand the comparison an empty one,
+    // reporting every module as missing at best and nothing at worst. The run
+    // refuses a verdict instead.
+    writeWork("go.work", "go 1.24\n\nuse (\n\t./libs/store\n");
+    const streams = workEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("could not be analyzed at all");
+    expect(report).toContain("go.work:3: 'use (' block is never closed");
+    expect(report).not.toContain("goWorkMissingUse");
+  });
+
+  it("carries drift into the SARIF report as results, so a code-scanning consumer sees the red", async () => {
+    writeWork("go.work", "go 1.24\n\nuse ./libs/store\n");
+    const { report, violations, goWorkDrift } = await check(
+      { format: "sarif", config: null, paths: [] },
+      workContext,
+    );
+    expect(violations).toBe(0);
+    expect(goWorkDrift).toBe(1);
+    const run = JSON.parse(report).runs[0];
+    const [result] = run.results;
+    expect(result.ruleId).toBe("goWorkMissingUse");
+    expect(run.tool.driver.rules[result.ruleIndex].id).toBe("goWorkMissingUse");
+    expect(result.locations[0].physicalLocation.artifactLocation.uri).toBe("go.work");
+  });
+
+  it("counts drift findings on the stderr summary of an --output run, beside the violations", async () => {
+    writeWork("go.work", "go 1.24\n\nuse ./libs/store\n");
+    const target = join(workRoot, "drift.sarif");
+    const streams = workEnv();
+    expect(await runCli(["check", "--format", "sarif", "--output", target], streams)).toBe(
+      EXIT.violations,
+    );
+    expect(streams.lines.err.join("\n")).toContain("1 go.work drift finding");
+  });
+});
+
 describe("the exit contract", () => {
   it("exits 1 when the tree violates a boundary — the code a hook and CI block on", async () => {
     const streams = env();
@@ -400,6 +557,6 @@ describe("the usage message", () => {
     expect(result.stdout).toContain("nx-polyglot-graph check");
     expect(result.stdout).toContain("module-boundaries.config.mjs");
     expect(result.stdout).toContain("--format text|sarif");
-    expect(result.stdout).toContain("1 violations found");
+    expect(result.stdout).toContain("1 violations or go.work drift found");
   });
 });

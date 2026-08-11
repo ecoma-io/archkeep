@@ -104,7 +104,7 @@ Four exit codes, and the distinction that matters is **3** against **0**:
 | code | meaning                                                                    |
 | ---- | -------------------------------------------------------------------------- |
 | 0    | clean — and every selected file was analyzed                               |
-| 1    | violations found                                                           |
+| 1    | findings — boundary violations, or go.work drift                           |
 | 2    | usage error                                                                |
 | 3    | no verdict — the run could not start, or a selected file could not be read |
 
@@ -121,6 +121,16 @@ ever judged. Every verdict therefore names what it inspected:
 An import whose specifier is not statically knowable is not that case — the file
 was judged and one position in it has no answer. Those are printed under their
 own heading as declared blind spots, and the run does not fail on them.
+
+When the workspace has a tracked `go.work` at its root, `check` also compares
+its `use` list against every project's `go.mod`: a module in one list and not
+the other means a developer's `go build` and CI select different trees, which
+is drift nothing else notices. Both directions are findings and exit 1. The
+file is read statically — `go` is never invoked — and a `go.work` the reader
+cannot parse fails the run with exit 3 rather than being read as an empty `use`
+list. A workspace without a root `go.work` pays nothing and hears nothing. The
+check runs on the CLI only: a drift finding describes the workspace, not any
+file being edited, so the language server does not publish it.
 
 ## Running it in an editor
 

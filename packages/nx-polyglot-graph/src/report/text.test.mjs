@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatConstraint, formatFailures, formatReport, formatViolation } from "./text.mjs";
+import {
+  formatConstraint,
+  formatFailures,
+  formatGoWork,
+  formatReport,
+  formatViolation,
+} from "./text.mjs";
 
 /**
  * What a developer must be able to do from the report alone: jump to the site,
@@ -159,6 +165,51 @@ describe("analysis failures", () => {
   });
 });
 
+describe("go.work drift", () => {
+  const finding = (overrides = {}) => ({
+    messageId: "goWorkStaleUse",
+    file: "go.work",
+    line: 4,
+    column: 2,
+    directory: "libs/gone",
+    project: null,
+    message: 'go.work uses "./libs/gone", but the workspace has no tracked go.mod there',
+    ...overrides,
+  });
+
+  it("renders a finding like a violation: a clickable position line, then the indented message", () => {
+    const text = formatGoWork({ findings: [finding()], moduleProjects: 2 });
+    expect(text).toContain("go.work:4:2  goWorkStaleUse");
+    expect(text).toContain('    go.work uses "./libs/gone"');
+    expect(text).toContain("✖ go.work drifts from the project graph: 1 finding");
+    expect(text).toContain("the run fails");
+  });
+
+  it("prints a missing-use finding without a position, rather than inventing line 1", () => {
+    const text = formatGoWork({
+      findings: [
+        finding({ messageId: "goWorkMissingUse", line: null, column: null, project: "beta" }),
+      ],
+      moduleProjects: 2,
+    });
+    expect(text).toContain("go.work  goWorkMissingUse");
+    expect(text).not.toContain("go.work:");
+  });
+
+  it("claims agreement out loud when the check ran clean, stating how many modules that covers", () => {
+    // A clean go.work saying nothing would be indistinguishable from a run
+    // that never looked at it — the same reason the summary line counts files.
+    expect(formatGoWork({ findings: [], moduleProjects: 3 })).toBe(
+      "✔ go.work agrees with the project graph (3 Go module projects)",
+    );
+  });
+
+  it("says nothing at all when the workspace has no go.work, which is the one silent case allowed", () => {
+    expect(formatGoWork(null)).toBe("");
+    expect(formatGoWork(undefined)).toBe("");
+  });
+});
+
 describe("the report as a whole", () => {
   const run = (overrides) => ({
     violations: [],
@@ -195,5 +246,34 @@ describe("the report as a whole", () => {
     expect(text).toContain("✖ 1 boundary violation");
     expect(text).toContain("blind spots inside files that were analyzed");
     expect(text).toContain("could not be analyzed at all");
+  });
+
+  it("carries the go.work section between the verdict and the failures when the check ran", () => {
+    const text = formatReport(
+      run({
+        goWork: {
+          findings: [
+            {
+              messageId: "goWorkMissingUse",
+              file: "go.work",
+              line: null,
+              column: null,
+              directory: "libs/beta",
+              project: "beta",
+              message: "go.work does not use libs/beta",
+            },
+          ],
+          moduleProjects: 2,
+        },
+      }),
+    );
+    expect(text).toContain("✔ no boundary violations");
+    expect(text).toContain("go.work  goWorkMissingUse");
+    expect(text).toContain("✖ go.work drifts from the project graph");
+  });
+
+  it("never mentions go.work on a run whose workspace has none — no manifest, no claim", () => {
+    expect(formatReport(run())).not.toContain("go.work");
+    expect(formatReport(run({ goWork: null }))).not.toContain("go.work");
   });
 });

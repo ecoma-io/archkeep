@@ -270,9 +270,12 @@ at the repository root. Concretely:
   is not an error.
 - `cli.mjs check` keeps four distinct exit codes, and the distinction that
   matters is **3** (the run could not complete — no workspace, malformed
-  config, `nx graph` or `git` failed) against **1** (violations found) and
-  **0** (clean). A checker that could not look must never be mistaken for one
-  that looked and found nothing; **2** stays a usage error. Exit 0 was the bug.
+  config, `nx graph` or `git` failed) against **1** (findings — boundary
+  violations, or go.work drift; `src/go-work.mjs` owns that check's semantics
+  and parse limits) and **0** (clean). A checker that could not look must never
+  be mistaken for one that looked and found nothing; **2** stays a usage error.
+  Exit 0 was the bug. A malformed go.work is the 3-class on purpose: read as an
+  empty use list it would mean "no drift", which is the silent direction.
   `check` also states what it inspected — imports, files, projects — beside
   every verdict, because "no violations" is a claim about coverage too.
 - `lsp.mjs` advertises `textDocumentSync` because it now serves it. What it

@@ -32,7 +32,9 @@
  * boundary alert on code that may well be clean. They travel as
  * `invocations[].toolExecutionNotifications`, which is SARIF's own slot for
  * "the tool had trouble here", at `warning` — `executionSuccessful` stays true
- * because the run did complete.
+ * because the run did complete. go.work drift findings ARE results, under
+ * their own rule ids: they are verdicts the run fails on, not trouble it hit
+ * (`sarifGoWorkResult`).
  *
  * **The driver carries no `version`/`semanticVersion`, and that is now a gap
  * rather than a decision.** It was written when this package was unversioned and
@@ -43,6 +45,7 @@
  * breaking even when no API moved, so it lands as its own decision rather than
  * as a side effect of a comment being corrected.
  */
+import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
 import { MESSAGE_IDS, MESSAGES } from "../rules/messages.mjs";
 
 import { formatConstraint } from "./text.mjs";
@@ -68,30 +71,42 @@ export function toUriReference(path) {
 }
 
 /**
- * The rule catalogue: one descriptor per `messageId` the engine can produce,
- * in `MESSAGE_IDS` order so `ruleIndex` is that array's index.
+ * The rule catalogue: one descriptor per `messageId` a run can produce — the
+ * upstream boundary ids in `MESSAGE_IDS` order, then this package's own
+ * go.work drift ids, so `ruleIndex` is an index into this exact array.
  *
  * Every id is listed, not only the ones that fired. A GitHub alert shows the
  * rule's description beside the finding, and a catalogue that grew only as
  * violations appeared would describe a rule on the run that reported it and
- * leave it nameless on the next.
+ * leave it nameless on the next. Both halves are derived from their message
+ * tables rather than restated, so an id added to either cannot go missing.
  *
  * `shortDescription` is the template's first line and `fullDescription` the
  * whole template, `{{placeholder}}`s intact — the placeholders are honest here:
  * they show which facts the message interpolates, which is exactly what a rule
- * description should say.
+ * description should say. The drift rules carry no `upstreamRule` property,
+ * because they have none: ESLint has no notion of go.work.
  *
  * @returns {object[]}
  */
 export function sarifRules() {
-  return MESSAGE_IDS.map((id) => ({
-    id,
-    name: id,
-    shortDescription: { text: MESSAGES[id].split("\n")[0] },
-    fullDescription: { text: MESSAGES[id] },
-    defaultConfiguration: { level: "error" },
-    properties: { upstreamRule: "@nx/enforce-module-boundaries" },
-  }));
+  return [
+    ...MESSAGE_IDS.map((id) => ({
+      id,
+      name: id,
+      shortDescription: { text: MESSAGES[id].split("\n")[0] },
+      fullDescription: { text: MESSAGES[id] },
+      defaultConfiguration: { level: "error" },
+      properties: { upstreamRule: "@nx/enforce-module-boundaries" },
+    })),
+    ...GO_WORK_MESSAGE_IDS.map((id) => ({
+      id,
+      name: id,
+      shortDescription: { text: GO_WORK_MESSAGES[id].split("\n")[0] },
+      fullDescription: { text: GO_WORK_MESSAGES[id] },
+      defaultConfiguration: { level: "error" },
+    })),
+  ];
 }
 
 /**
@@ -137,6 +152,37 @@ export function sarifResult(violation) {
 }
 
 /**
+ * One go.work drift finding as a SARIF result.
+ *
+ * A result and not a notification, deliberately: drift is a verdict the run
+ * fails on, exactly like a violation, and a finding that only reached the exit
+ * code would leave a code-scanning consumer looking at a red job with an empty
+ * upload. A missing-use finding is about an entry that does not exist, so its
+ * location carries the artifact alone rather than a fabricated line 1 — the
+ * same reasoning as `sarifNotification` below.
+ *
+ * @param {object} finding A finding from `../go-work.mjs` `compareGoWork`.
+ * @returns {object}
+ */
+export function sarifGoWorkResult(finding) {
+  const physicalLocation = { artifactLocation: { uri: toUriReference(finding.file) } };
+  if (finding.line !== null) {
+    physicalLocation.region = { startLine: finding.line, startColumn: finding.column };
+  }
+  return {
+    ruleId: finding.messageId,
+    ruleIndex: MESSAGE_IDS.length + GO_WORK_MESSAGE_IDS.indexOf(finding.messageId),
+    level: "error",
+    message: { text: finding.message },
+    locations: [{ physicalLocation }],
+    properties: {
+      directory: finding.directory,
+      project: finding.project,
+    },
+  };
+}
+
+/**
  * One analysis failure as a tool-execution notification.
  *
  * A failure with no position is about the file as a whole (`line`/`column`
@@ -162,10 +208,10 @@ export function sarifNotification(failure) {
 /**
  * The whole SARIF log.
  *
- * @param {{violations: object[], failures: object[]}} run
+ * @param {{violations: object[], failures: object[], goWork?: {findings: object[]}|null}} run
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
-export function buildSarifLog({ violations, failures }) {
+export function buildSarifLog({ violations, failures, goWork }) {
   return {
     $schema: SARIF_SCHEMA,
     version: SARIF_VERSION,
@@ -173,7 +219,10 @@ export function buildSarifLog({ violations, failures }) {
       {
         tool: { driver: { name: "nx-polyglot-graph", rules: sarifRules() } },
         columnKind: "utf16CodeUnits",
-        results: violations.map(sarifResult),
+        results: [
+          ...violations.map(sarifResult),
+          ...(goWork?.findings ?? []).map(sarifGoWorkResult),
+        ],
         invocations: [
           {
             // True even on a red run: the tool did its job, and the findings
@@ -192,7 +241,7 @@ export function buildSarifLog({ violations, failures }) {
  * The SARIF log as the bytes to write — pretty-printed with a trailing newline,
  * so a file that lands in a diff or a log stays readable.
  *
- * @param {{violations: object[], failures: object[]}} run
+ * @param {{violations: object[], failures: object[], goWork?: {findings: object[]}|null}} run
  * @returns {string}
  */
 export function formatSarif(run) {

@@ -141,6 +141,48 @@ export function formatFailures(failures) {
 }
 
 /**
+ * The go.work drift section — rendered only when the run HAS a go.work
+ * verdict, decided nowhere here.
+ *
+ * `goWork` is `null` (or absent) when the workspace has no tracked root
+ * go.work, and then this prints nothing: a workspace without the manifest pays
+ * nothing and hears nothing. When the check ran, even a clean result is a
+ * line, because "go.work agrees" is a claim about coverage the reader cannot
+ * otherwise tell apart from "nothing looked" — the same reason the summary
+ * line counts files (`../go-work.mjs` owns the findings' semantics).
+ *
+ * A finding with a position renders `go.work:line:column` like a violation; a
+ * missing-use finding is about an entry that does not exist, so it renders the
+ * file alone rather than a fabricated line 1.
+ *
+ * @param {{findings: object[], moduleProjects: number}|null|undefined} goWork
+ * @returns {string} Empty exactly when there is no go.work verdict to render.
+ */
+export function formatGoWork(goWork) {
+  if (goWork == null) return "";
+  const { findings, moduleProjects } = goWork;
+  const modules = `${moduleProjects} Go module project${moduleProjects === 1 ? "" : "s"}`;
+  if (findings.length === 0) {
+    return `✔ go.work agrees with the project graph (${modules})`;
+  }
+  const entries = findings.map((finding) => {
+    const site =
+      finding.line === null ? finding.file : `${finding.file}:${finding.line}:${finding.column}`;
+    const message = finding.message
+      .split("\n")
+      .map((line) => (line === "" ? "" : `${CONTINUED}${line}`))
+      .join("\n");
+    return [`${site}  ${finding.messageId}`, message].join("\n");
+  });
+  return [
+    entries.join("\n\n"),
+    `✖ go.work drifts from the project graph: ${findings.length} ` +
+      `finding${findings.length === 1 ? "" : "s"} (${modules}) — a developer's go build and ` +
+      `CI select different module sets, and the run fails`,
+  ].join("\n\n");
+}
+
+/**
  * The whole report, violations first.
  *
  * The summary states what was inspected and not only what was found, because
@@ -149,10 +191,10 @@ export function formatFailures(failures) {
  * that indistinguishability is the defect this whole tool exists to end
  * (`../../CLAUDE.md`).
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null}} run
  * @returns {string}
  */
-export function formatReport({ violations, failures, analyzed, projects, imports }) {
+export function formatReport({ violations, failures, analyzed, projects, imports, goWork }) {
   const inspected =
     `${imports} import${imports === 1 ? "" : "s"} in ${analyzed} file${analyzed === 1 ? "" : "s"} ` +
     `across ${projects} project${projects === 1 ? "" : "s"}`;
@@ -168,6 +210,9 @@ export function formatReport({ violations, failures, analyzed, projects, imports
   } else {
     sections.push(`✔ no boundary violations (${inspected})`);
   }
+
+  const goWorkSection = formatGoWork(goWork);
+  if (goWorkSection !== "") sections.push(goWorkSection);
 
   const unresolved = formatFailures(failures);
   if (unresolved !== "") sections.push(unresolved);
