@@ -2,7 +2,7 @@
   "name": "lattice",
   "displayName": "Lattice — polyglot module boundaries",
   "description": "Module-boundary diagnostics in the buffer for Go, Rust, Python and Vue, read from your Nx workspace's own boundary config",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "publisher": "ecoma-io",
   "license": "Apache-2.0",
@@ -66,7 +66,8 @@
     "vscode-languageclient": "10.1.0"
   },
   "devDependencies": {
-    "@types/vscode": "1.100.0"
+    "@types/vscode": "1.100.0",
+    "@vscode/vsce": "3.9.2"
   },
   "homepage": "https://github.com/ecoma-io/lattice/tree/main/packages/lattice-vscode#readme",
   "bugs": {

@@ -48,9 +48,11 @@ _LSP_ means any LSP client reaches the diagnostics; Claude Code does, from this
 repository's own marketplace. _VS Code_ means `packages/lattice-vscode`, which
 routes the same four extensions and starts the server the workspace has
 installed. The cell is not a checkmark because that client is not on the
-marketplace yet: it runs from a development host or a locally built `.vsix`, so a
-developer who does not already run an LSP client still has a step to take. What
-is missing there is publishing, and it is one piece of work rather than four.
+marketplace yet: it runs from a development host or the `.vsix` CI builds,
+verifies and attaches to each of its releases, so a developer who does not
+already run an LSP client still has a manual install to perform. What is
+missing there is the marketplace publisher account — the release lane already
+publishes the moment one exists — and it is one piece of work rather than four.
 
 Two cells are refusals rather than gaps, and both are argued where they are
 implemented. Nx already infers TypeScript edges, so a second inference would be a

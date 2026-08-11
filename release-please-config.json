@@ -1,12 +1,33 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "$comment": "What a release means here, and what it deliberately leaves alone.\n\nThe releasable unit is the package, not the repository. `packages/nx-polyglot-graph` is what a consumer installs; the root manifest is `private: true` and has no version anyone can depend on. So the entry below is the package path — release-please bumps that manifest, writes that changelog, and tags from the commits that touched it.\n\n`pull-request-title-pattern` overrides a default that this repository would reject. release-please titles its release pull request `chore${scope}: release${component} ${version}`, where `${scope}` is the target branch — `chore(main): release 0.1.0`. CI runs commitlint on every pull request title (the squash subject is the one commit message the `commit-msg` hook never sees), and `main` is not in `commitlint.config.mjs`'s `scope-enum`: the release pull request would fail a required check and could never merge. `workspace` is in that enum and is the honest scope — cutting a release is an act of the repository, not a change inside the package. Fixing it here rather than by adding `main` to the enum keeps the enum meaning what it says it means: one entry per package, plus the three that name a change owning no package.\n\nNo `extra-files` entry for `.claude-plugin/plugin.json`, and that is not an oversight. That version keys Claude Code's plugin cache and moves when the manifest moves; this one is the tool's own and is what the language server announces as `serverInfo`. Tying them would force a plugin-cache bump on every release of code the manifest does not contain, and `src/conformance/plugin-catalogue.integration.test.mjs` already holds the manifest version to the marketplace entry that must match it. Two facts wearing one word.",
+  "$comment": "What a release means here, and what it deliberately leaves alone.\n\nThe releasable unit is the package, not the repository. `packages/nx-polyglot-graph` is what a consumer installs from npm; `packages/lattice-vscode` is what a marketplace would serve. The root manifest is `private: true` and has no version anyone can depend on. So the entries below are package paths — release-please bumps each manifest, writes each changelog, and tags from the commits that touched that path.\n\n`separate-pull-requests` is stated because with two packages its default flips. release-please defaults it to `packages.length === 1` (measured in release-please 17.11.1, manifest.js): with only the plugin listed it was implicitly true, and adding the second entry would silently switch to one merged pull request titled from `group-pull-request-title-pattern` — whose default, `chore: release main`, carries neither a version nor a per-package title. Separate pull requests keep the branch names, tags and titles each component already has, and let one component release without holding the other.\n\nEach `pull-request-title-pattern` overrides a default that this repository would reject. release-please titles a release pull request `chore${scope}: release${component} ${version}`, where `${scope}` is the target branch — `chore(main): release 0.1.0`. CI runs commitlint on every pull request title (the squash subject is the one commit message the `commit-msg` hook never sees), and `main` is not in `commitlint.config.mjs`'s `scope-enum`: the release pull request would fail a required check and could never merge. The plugin keeps `workspace` — cutting the repository's principal release is an act of the repository. The extension uses `vscode`, its own entry in that enum, so the two release pull requests are distinguishable at a glance and both merge. Fixing it here rather than by adding `main` to the enum keeps the enum meaning what it says it means: one entry per package, plus the three that name a change owning no package.\n\n`component` for the extension is stated because the default is wrong twice over: release-please derives it from the package's manifest `name`, which is `lattice` (the marketplace listing name), so the tag would read `lattice-v0.1.0` — indistinguishable from a tag for the repository itself. `lattice-vscode` names the directory, and `include-component-in-tag` (default true, deliberately not overridden the way the plugin's entry overrides it) keeps its tags `lattice-vscode-v*`, disjoint from the plugin's bare `v*`.\n\nThe workflow reading these outputs keys them by PATH, not component — `packages/lattice-vscode--release_created` — see the comment in .github/workflows/release.yml, which is the other half of this file.\n\nNo `extra-files` entry for `.claude-plugin/plugin.json`, and that is not an oversight. That version keys Claude Code's plugin cache and moves when the manifest moves; this one is the tool's own and is what the language server announces as `serverInfo`. Tying them would force a plugin-cache bump on every release of code the manifest does not contain, and `src/conformance/plugin-catalogue.integration.test.mjs` already holds the manifest version to the marketplace entry that must match it. Two facts wearing one word.",
+  "separate-pull-requests": true,
   "packages": {
     "packages/nx-polyglot-graph": {
       "release-type": "node",
       "initial-version": "0.1.0",
       "include-component-in-tag": false,
       "pull-request-title-pattern": "chore(workspace): release ${version}",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "changelog-sections": [
+        { "type": "feat", "section": "Features" },
+        { "type": "fix", "section": "Bug Fixes" },
+        { "type": "docs", "section": "Documentation" },
+        { "type": "refactor", "section": "Internal", "hidden": true },
+        { "type": "perf", "section": "Internal", "hidden": true },
+        { "type": "test", "section": "Internal", "hidden": true },
+        { "type": "build", "section": "Internal", "hidden": true },
+        { "type": "ci", "section": "Internal", "hidden": true },
+        { "type": "chore", "section": "Internal", "hidden": true },
+        { "type": "style", "section": "Internal", "hidden": true }
+      ]
+    },
+    "packages/lattice-vscode": {
+      "release-type": "node",
+      "component": "lattice-vscode",
+      "initial-version": "0.1.0",
+      "pull-request-title-pattern": "chore(vscode): release ${version}",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
       "changelog-sections": [
