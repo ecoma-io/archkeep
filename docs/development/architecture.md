@@ -92,6 +92,13 @@ files attributed to a project.
 analyzer is handed one file and a rule is handed records, so the question has to
 land somewhere, and it lands here with the two spawns that come with it.
 
+Before anything is judged, the graph nodes are annotated with the three facts
+`nx graph --file=` cannot carry — `mfeRemote`, `entryPoints` and
+`declaredPackages` — read from the same files upstream reads per lint run
+(`annotateMFERemotes` and `annotatePackageFacts` in `src/workspace.mjs`, whose
+headers own the semantics). The rules fail closed on an absent fact, so
+skipping this step would report exemptions upstream grants as violations.
+
 ### 6. Select
 
 `selectFiles(owned, paths, { root, cwd })` narrows to the paths named on the
@@ -118,7 +125,19 @@ throws on a malformed file — a failure is a record, because an analyzer that
 threw would take down the run for the file it could not read, and one that
 returned empty would call it clean.
 
-### 8. Evaluate
+### 8. Judge the workspace's own declarations
+
+Two checks that read no import: when a tracked `go.work` exists at the root,
+its `use` list is compared against every project's `go.mod`; and when the
+workspace tsconfig declares a `paths` table, each alias is judged for life.
+`src/go-work.mjs` and `src/tsconfig-paths.mjs` own the rules and their limits;
+[languages.md](../usage/languages.md) is the reader's view. Both ignore any
+paths named on the command line — a workspace fact is judged, not files
+analyzed — and both run on the CLI only, because their findings describe the
+workspace rather than any open file. A `go.work` or tsconfig the tool cannot
+read becomes a whole-file failure, exit 3, never an empty list.
+
+### 9. Evaluate
 
 `evaluate(importSites, graph, config)` is the entire rules layer, and it is
 **pure**: records and config in, violations out. No filesystem, no git, no Nx.
@@ -134,14 +153,14 @@ reimplementation gets backwards — starting with _no matching constraint is an
 error, not a pass_ — and every place this engine is deliberately stricter than
 ESLint.
 
-### 9. Suppress
+### 10. Suppress
 
 Suppressions are applied **after** every import has been judged. A suppression
 removes a _verdict_ and never a _failure_, so a file listed in
 `boundarySuppressions` is still fully analyzed and anything it could not resolve
 is still reported. You cannot use a suppression to silence a blind spot.
 
-### 10. Report
+### 11. Report
 
 `src/report/` renders and decides nothing. A formatter that filtered would be a
 rule wearing a formatter's name, and it would disagree with the engine the first
@@ -150,10 +169,12 @@ time either changed.
 Two formats, two audiences: `text.mjs` produces the `file:line:column` a terminal
 turns into a link, and `sarif.mjs` produces what GitHub code scanning accepts.
 
-### 11. Exit
+### 12. Exit
 
 ```js
-if (result.violations > 0) return EXIT.violations; // 1
+if (result.violations > 0 || result.goWorkDrift > 0 || result.tsconfigPathsDead > 0) {
+  return EXIT.violations; // 1
+}
 return result.unchecked > 0 ? EXIT.error : EXIT.ok; // 3 or 0
 ```
 

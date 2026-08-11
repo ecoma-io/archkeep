@@ -235,7 +235,7 @@ analyzer:
 
 ### 9. Documentation
 
-Three files, and none of them optional:
+Four files, and none of them optional:
 
 | file                                               | what to add                                                                             |
 | -------------------------------------------------- | --------------------------------------------------------------------------------------- |

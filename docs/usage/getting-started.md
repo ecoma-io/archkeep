@@ -158,7 +158,7 @@ Keep running it. It stays authoritative for JavaScript, TypeScript and Vue; this
 tool is for the languages it cannot parse. The conditions under which you could
 eventually drop it are enumerated in
 [`src/conformance/`](../../packages/nx-polyglot-graph/src/conformance/README.md),
-and two of the three are not met yet.
+and one of the three is not met yet.
 
 ## 5. Run the check
 
@@ -199,8 +199,9 @@ The full list of message ids and what resolves each one is
 pnpm exec nx-polyglot-graph check
 ```
 
-Exit 0 is clean, 1 is violations, 2 is a usage error, and **3 is "no verdict" —
-the run could not look**. Do not collapse 3 into 0. That distinction is the
+Exit 0 is clean, 1 is findings — boundary violations, go.work drift, or dead
+tsconfig aliases — 2 is a usage error, and **3 is "no verdict" — the run could
+not look**. Do not collapse 3 into 0. That distinction is the
 reason this tool can be trusted, and [ci.md](ci.md) covers it along with SARIF
 upload to GitHub code scanning.
 

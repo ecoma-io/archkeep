@@ -14,7 +14,8 @@ nx-polyglot-graph --help              Show this message
 
   --format text|sarif   Terminal report (default), or SARIF 2.1.0 for GitHub code scanning
   --output <file>       Write the report to a file instead of stdout
-  --config <file>       Read the boundary law from here instead of the one at the root
+  --config <file>       Read the boundary law from here instead of
+                        <workspace root>/module-boundaries.config.mjs
 ```
 
 Both `--flag value` and `--flag=value` work. An unknown flag is a **usage error**
@@ -109,22 +110,41 @@ step could give. That is the order this repository's own CI uses on itself.
 
 ## SARIF and GitHub code scanning
 
+**The exit code is the gate; SARIF is presentation.** The gate is the plain
+`check` step above, which fails the job on findings and on "no verdict" alike.
+The SARIF is a second rendering of the same verdict, uploaded so the findings
+appear as inline annotations on the pull request diff and as alerts code
+scanning tracks new-versus-base. Two steps, in that order:
+
 ```yaml
+# The gate. Fails the job — exit 1 on findings, exit 3 on "no verdict".
 - name: Check module boundaries
+  env:
+    NX_DAEMON: "false"
+  run: pnpm exec nx-polyglot-graph check
+
+# The presentation. Runs even when the gate just failed — the annotations
+# matter most on a red run — and its own exit code decides nothing, because
+# the gate already did.
+- name: Render the verdict as SARIF
+  if: ${{ !cancelled() }}
   env:
     NX_DAEMON: "false"
   run: pnpm exec nx-polyglot-graph check --format sarif --output boundaries.sarif
   continue-on-error: true
 
 - uses: github/codeql-action/upload-sarif@v3
+  if: ${{ !cancelled() }}
   with:
     sarif_file: boundaries.sarif
 ```
 
-`continue-on-error` is there so the upload step still runs when violations are
-found — the annotations are the point. Add a later step that re-reads the outcome
-if you want the job itself to go red, or run the plain `check` as a separate
-gating step.
+The SARIF step exits non-zero on the same findings the gate already failed on,
+so its `continue-on-error` hides nothing — but a lone SARIF step wearing
+`continue-on-error` with no gate step is a pipeline that turns every exit code
+green. The upload needs the `security-events: write` permission on the job, and
+code scanning displays the results only on a public repository or one with
+GitHub Advanced Security — the gate step works everywhere either way.
 
 What the SARIF carries, and why each choice was made:
 
@@ -156,7 +176,8 @@ What the SARIF carries, and why each choice was made:
 
 That last point has a consequence worth stating plainly: **the SARIF upload does
 not carry the exit-3 signal.** Code scanning will show you violations, not
-coverage loss. Keep the exit code as the gate.
+coverage loss — which is why the gate in the recipe above is the plain `check`
+step and never the upload.
 
 ## Running both enforcers
 
@@ -170,7 +191,8 @@ rather than two that drift — see
 The conditions under which you could eventually drop the ESLint rule are
 enumerated in
 [`src/conformance/`](../../packages/nx-polyglot-graph/src/conformance/README.md).
-Two of the three are not met, and neither is about correctness on the fixtures.
+One of the three is not met — agreement measured on real trees — and it is not
+about correctness on the fixtures.
 
 ## Pre-commit
 

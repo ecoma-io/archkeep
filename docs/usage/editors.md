@@ -2,8 +2,12 @@
 
 The package ships a language server, so a boundary violation is a squiggle under
 the import rather than a CI failure an hour later. Same engine, same fifteen
-message ids, same boundary table — the only difference from the CLI is when you
-find out.
+message ids, same boundary table — for anything decided at an import site, the
+only difference from the CLI is when you find out. What the server deliberately
+does not publish are the CLI's two workspace-level checks, go.work drift and
+dead tsconfig path aliases: [languages.md](languages.md) owns both, and why a
+finding that describes the workspace stays out of whichever file happens to be
+open.
 
 ## The one guarantee
 
