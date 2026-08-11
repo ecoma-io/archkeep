@@ -87,10 +87,12 @@ The client lives in this repository, at
 VS Code 1.100 or newer, routes the same four extensions, and starts the server
 that is installed in the workspace you opened.
 
-**It is not on the marketplace yet** — packaging and publishing are not wired
-into CI, so today it runs from a development host or a locally built `.vsix`, and
-a generic LSP bridge extension configured from the table above remains a working
-alternative.
+**It is not on the marketplace yet** — the publisher account does not exist, so
+the release lane's marketplace step skips (loudly) for now. CI does package and
+verify the `.vsix` on every change and attaches it to each `lattice-vscode-v*`
+release, so today you install that file by hand (**Extensions: Install from
+VSIX…**) or run from a development host, and a generic LSP bridge extension
+configured from the table above remains a working alternative.
 
 Two things about it are worth knowing before you install it, because both are
 refusals rather than omissions:

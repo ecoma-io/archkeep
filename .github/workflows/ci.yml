@@ -114,6 +114,26 @@ jobs:
           NX_DAEMON: "false"
         run: node packages/nx-polyglot-graph/cli.mjs check
 
+      # The extension's own artifact, built on every pull request so a change
+      # that breaks packaging turns THIS build red instead of the release lane
+      # weeks later. It cannot run where the tests above ran: vsce walks
+      # `node_modules` with `npm list --production`, which fails outright
+      # against pnpm's symlinked layout, so the script stages the tracked files
+      # into a throwaway directory, installs the runtime dependencies with npm,
+      # and packs there — package-vsix.mjs holds the measurement.
+      - name: Package the VS Code extension
+        run: node scripts/package-vsix.mjs packages/lattice-vscode dist/lattice-vscode.vsix
+
+      # And prove the vsix holds what an install needs — the entry point, the
+      # decision modules, and `node_modules/vscode-languageclient`, the runtime
+      # dependency the extension imports on activation. `vsce package` exiting 0
+      # proves none of that: a vsix missing the language client installs
+      # cleanly and dies in the extension host, which no gate in this file
+      # would otherwise see. The release lane runs the same check against the
+      # exact bytes it uploads.
+      - name: Prove the vsix holds what an install needs
+        run: node scripts/verify-vsix.mjs dist/lattice-vscode.vsix
+
       # Everything above runs the tool where its dependencies already exist, so
       # none of it can see the failure this step is for: the manifest declared
       # zero dependencies once, and the suite stayed green because `typescript`

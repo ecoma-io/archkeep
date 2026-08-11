@@ -7,21 +7,26 @@ name: Release
 # last tag. That pull request *is* the release proposal: merging it is what
 # tags, and the tag is what publishes.
 #
-# What ships is the npm package and nothing else. litmus, the sibling this
-# workflow is modelled on, also builds a reproducible tarball and has SLSA sign
-# it — because a skills package is consumed by `curl` as often as by `npm i`.
-# Here the package IS the artifact: an Nx plugin reaches a workspace through its
-# `node_modules` or it does not reach it at all. So there is no archive, no
-# release asset, and one publish job.
+# Two components release from here, each to the destination that can serve it.
+# The npm package ships to the registry and nothing else: an Nx plugin reaches
+# a workspace through its `node_modules` or it does not reach it at all, so its
+# release carries no assets. litmus, the sibling this workflow is modelled on,
+# also builds a reproducible tarball and has SLSA sign it — because a skills
+# package is consumed by `curl` as often as by `npm i`; that does not apply
+# here. The VS Code extension is the reverse case: npm can never serve it (its
+# manifest is `private: true` on purpose), so its release DOES carry an asset —
+# the .vsix, the one file a person can install by hand — and the marketplace
+# publish is guarded below until a publisher account exists.
 #
-# The cost of that is exact and worth naming rather than discovering later:
-# OpenSSF Scorecard's Signed-Releases check looks for a signature file among a
-# release's assets, so a release carrying no assets scores nothing there. npm
-# provenance — the `--provenance` flag below — is a real attestation, published
-# to Sigstore's transparency log and shown on the package page, but it lives at
-# the registry rather than on the GitHub release, and that check does not look
-# there. The trade is deliberate: a tarball built only to hold a signature would
-# be an asset nobody installs, existing to move a score.
+# The cost of the plugin's asset-less releases is exact and worth naming rather
+# than discovering later: OpenSSF Scorecard's Signed-Releases check looks for a
+# signature file among a release's assets, so those releases score nothing
+# there — and the vsix is uploaded unsigned, so the extension scores the same.
+# npm provenance — the `--provenance` flag below — is a real attestation,
+# published to Sigstore's transparency log and shown on the package page, but
+# it lives at the registry rather than on the GitHub release, and that check
+# does not look there. The trade is deliberate: an artifact built or signed
+# only to move a score would be an asset nobody installs.
 
 on:
   push:
@@ -65,6 +70,9 @@ jobs:
       # by publishing the wrong tree.
       released: ${{ steps.release.outputs['packages/nx-polyglot-graph--release_created'] }}
       tag: ${{ steps.release.outputs['packages/nx-polyglot-graph--tag_name'] }}
+      # The extension's pair, same prefix rule, steered on by `publish-vsix`.
+      vsix_released: ${{ steps.release.outputs['packages/lattice-vscode--release_created'] }}
+      vsix_tag: ${{ steps.release.outputs['packages/lattice-vscode--tag_name'] }}
     steps:
       # An escape hatch, off by default. GitHub documents that events raised
       # with `GITHUB_TOKEN` do not start new workflow runs — which would leave
@@ -98,29 +106,41 @@ jobs:
           manifest-file: .release-please-manifest.json
 
       # The tripwire for the defect above coming back by another spelling.
-      # `releases_created` is the top-level output, true when release-please cut
-      # ANY release, and it carries no path prefix to get wrong. So it and the
-      # per-path output must agree: a run that created a release while the
-      # output this workflow steers on reads empty is precisely the state that
-      # published nothing and reported success, and it fails here instead —
-      # naming both values rather than leaving a reader to infer which one lied.
+      # `paths_released` is the top-level output naming every path release-please
+      # cut a release for, and it carries no prefix to get wrong. So it and the
+      # per-path outputs must agree: a run that created a release for a path
+      # while the output a publish job steers on reads empty is precisely the
+      # state that published nothing and reported success, and it fails here
+      # instead — naming the values rather than leaving a reader to infer which
+      # one lied. Checked for BOTH components, because either publish job
+      # skipping on a drifted path is the same silent green.
       #
-      # The reverse can be benign: a release-less run is the ordinary case for
-      # every commit that merely updates the release pull request, so this only
-      # fires when a release WAS created and the steering output disagrees.
-      - name: Fail if a release was cut that publish cannot see
-        if: steps.release.outputs.releases_created == 'true' && steps.release.outputs['packages/nx-polyglot-graph--release_created'] != 'true'
+      # A release-less run is the ordinary case for every commit that merely
+      # updates a release pull request, so an empty list fires nothing.
+      - name: Fail if a release was cut that a publish job cannot see
+        env:
+          PATHS_RELEASED: ${{ steps.release.outputs.paths_released }}
+          GRAPH_RELEASED: ${{ steps.release.outputs['packages/nx-polyglot-graph--release_created'] }}
+          VSIX_RELEASED: ${{ steps.release.outputs['packages/lattice-vscode--release_created'] }}
         run: |
-          echo "release-please created a release, but the per-path output this"
-          echo "workflow steers on did not report it."
-          echo "  releases_created                             = '${{ steps.release.outputs.releases_created }}'"
-          echo "  packages/nx-polyglot-graph--release_created  = '${{ steps.release.outputs['packages/nx-polyglot-graph--release_created'] }}'"
-          echo "  paths_released                               = ${{ toJSON(steps.release.outputs.paths_released) }}"
-          echo ""
-          echo "The package path in this workflow and the one in"
-          echo "release-please-config.json have drifted. Publish would skip and"
-          echo "this lane would report success having shipped nothing."
-          exit 1
+          status=0
+          check() {
+            path="$1"; seen="$2"
+            if printf '%s' "$PATHS_RELEASED" | grep -qF "\"$path\"" && [ "$seen" != "true" ]; then
+              echo "release-please created a release for $path, but the per-path"
+              echo "output the publish job steers on did not report it:"
+              echo "  paths_released              = $PATHS_RELEASED"
+              echo "  $path--release_created read '$seen'"
+              echo ""
+              echo "That path in this workflow and in release-please-config.json"
+              echo "have drifted. Publish would skip and this lane would report"
+              echo "success having shipped nothing."
+              status=1
+            fi
+          }
+          check "packages/nx-polyglot-graph" "$GRAPH_RELEASED"
+          check "packages/lattice-vscode" "$VSIX_RELEASED"
+          exit "$status"
 
   publish:
     name: Publish to npm
@@ -192,3 +212,88 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
         run: npm publish --provenance --access public
+
+  publish-vsix:
+    name: Publish the VS Code extension
+    needs: prepare
+    if: needs.prepare.outputs.vsix_released == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # write because the .vsix is uploaded to the GitHub release below — the
+      # one installable artifact this component has until a marketplace
+      # publisher exists, and the durable record of what each release held
+      # after one does.
+      contents: write
+    steps:
+      # The tag, not the branch, for the same reason the npm job states: `main`
+      # may have moved, and the vsix must hold the tagged bytes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.vsix_tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The same two steps CI runs on every pull request, here against the
+      # exact bytes about to be uploaded and published: stage, pack, then open
+      # the vsix and prove the runtime dependency and every module an install
+      # needs are inside. Before upload, not after, because an asset on a
+      # tagged release is a record people install from.
+      - name: Package the VS Code extension
+        run: node scripts/package-vsix.mjs packages/lattice-vscode dist/lattice-vscode.vsix
+
+      - name: Prove the vsix holds what an install needs
+        run: node scripts/verify-vsix.mjs dist/lattice-vscode.vsix
+
+      - name: Upload the vsix to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.vsix_tag }}
+        run: gh release upload "$TAG" dist/lattice-vscode.vsix
+
+      # Publishing is guarded, not wired to a publisher that does not exist
+      # yet: the `ecoma-io` marketplace publisher account has not been created,
+      # so there is no VSCE_PAT secret to hold. When the secret is absent this
+      # step SKIPS LOUDLY — a log line and a step-summary entry saying so and
+      # why — never silently, because a green release lane that shipped nothing
+      # is the exact defect the prepare job's tripwire exists for. The vsix on
+      # the release above is real either way. The secret reaches vsce through
+      # the environment (vsce documents reading VSCE_PAT), never through `${{}}`
+      # interpolation into this script.
+      #
+      # To turn publishing on: create the publisher, mint a marketplace PAT,
+      # store it as the VSCE_PAT repository secret. No workflow change needed.
+      - name: Publish to the marketplace, or say loudly why not
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          TAG: ${{ needs.prepare.outputs.vsix_tag }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            {
+              echo "## Marketplace publish SKIPPED"
+              echo ""
+              echo "\`$TAG\` was released and its .vsix is on the GitHub release,"
+              echo "but it was NOT published to the VS Code Marketplace: the"
+              echo "VSCE_PAT secret is absent because the publisher account does"
+              echo "not exist yet. Create the publisher, store its PAT as the"
+              echo "VSCE_PAT repository secret, and the next release publishes."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "SKIPPED, and here is why: VSCE_PAT is absent (no marketplace publisher account"
+            echo "exists yet), so $TAG was NOT published to the VS Code Marketplace. The .vsix"
+            echo "is on the GitHub release. Store a VSCE_PAT secret to turn publishing on."
+            exit 0
+          fi
+          pnpm --dir packages/lattice-vscode exec vsce publish --packagePath "$GITHUB_WORKSPACE/dist/lattice-vscode.vsix"
+          {
+            echo "## Marketplace publish"
+            echo ""
+            echo "\`$TAG\` was published to the VS Code Marketplace from the vsix on its GitHub release."
+          } >> "$GITHUB_STEP_SUMMARY"

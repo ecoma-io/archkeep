@@ -91,10 +91,16 @@ engine and stay invisible in the editor.
 
 ## Status
 
-Not published to the marketplace yet: packaging and publishing are not wired into
-this repository's CI, so the version above is what the source is, not what anyone
-can install. `private: true` is there to make `npm publish` refuse — this is an
-extension, not a package, and the marketplace is its only destination.
+Not on the marketplace yet, and the missing piece is the publisher account, not
+the pipeline. CI packages the `.vsix` on every pull request and opens it to
+prove an install would hold what it needs (`scripts/package-vsix.mjs` and
+`scripts/verify-vsix.mjs` at the repository root), release-please versions this
+package and writes its changelog, and every release uploads the verified
+`.vsix` to the GitHub release — installable today via **Install from VSIX**.
+The marketplace publish step exists in the release lane but skips, loudly,
+until an `ecoma-io` publisher account and its `VSCE_PAT` secret exist.
+`private: true` is there to make `npm publish` refuse — this is an extension,
+not a package, and the marketplace is its only destination.
 
 ## Development
 

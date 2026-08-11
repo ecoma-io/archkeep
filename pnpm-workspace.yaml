@@ -21,9 +21,21 @@ packages:
 # nx: false — its postinstall compiles the optional native watcher and warms the
 # daemon. CI runs with the daemon off (a single-shot runner has nothing to reuse
 # it for) and no target here watches files, so the build buys nothing.
+# @vscode/vsce-sign: false — its postinstall copies a prebuilt signing binary out
+# of a platform optionalDependency, falling back to an HTTPS download when that
+# resolution fails; a network fetch at install time is exactly what this block
+# exists to stop. Nothing here signs or verifies a vsix — `vsce package` never
+# invokes the binary — and if publishing ever needs it, vsce fails loudly asking
+# for it, which is the moment to revisit this decision.
+# keytar: false — a node-gyp native build used only by `vsce login` to store
+# credentials in the OS keychain. The release lane passes the token via
+# environment instead, and nothing interactive runs in CI, so the build is dead
+# weight on every install.
 allowBuilds:
   lefthook: false
   nx: false
+  "@vscode/vsce-sign": false
+  keytar: false
 
 # brace-expansion < 5.0.9 is vulnerable to GHSA-rgw5-rvv9-x895 (DoS via
 # unbounded intermediate arrays). nx@23.1.1 pulls brace-expansion@5.0.8 through
