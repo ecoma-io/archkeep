@@ -78,25 +78,35 @@ export const depConstraints = [
   // about the same import while both report confidently.
   //
   // **What this row does not do is catch that today, and the honest reason is
-  // measured rather than argued.** Both ways of writing the import were tried
-  // against this tree before the row was written:
+  // measured rather than argued.** Every way of writing the import was probed
+  // against this tree after it gained its root `tsconfig.base.json` (module
+  // `nodenext`, no `paths` — its header says why), typescript 5.9.3:
   //
+  //   - By package name, as the tree stands (the extension declares no
+  //     dependency on the engine): the specifier resolves to nothing and is
+  //     reported as an unresolved blind spot — a loud record, never a verdict,
+  //     so it never reaches this table.
   //   - By package name, with the server linked in as a workspace dependency:
-  //     reported `external`, and an external target never reaches the tag block.
-  //     `src/analysis/typescript.mjs` states why in its header — it does not
-  //     call `realpath`, so a pnpm workspace link resolves to its link path
-  //     instead of naming the project behind it. That is a pinned limit of the
-  //     engine, not an oversight here.
+  //     resolves, but to the pnpm link path
+  //     (`packages/lattice-vscode/node_modules/@ecoma-io/nx-polyglot-graph/index.mjs`),
+  //     which classifies `external` — and an external target never reaches the
+  //     tag block. `packages/nx-polyglot-graph/src/analysis/typescript.mjs`
+  //     states why in its header — it does not call `realpath`, so a pnpm
+  //     workspace link resolves to its link path instead of naming the project
+  //     behind it. The tsconfig changed nothing here: `nodenext` resolution
+  //     follows the same link.
   //   - By relative path: caught, but by `noRelativeOrAbsoluteImportsAcrossLibraries`,
   //     which fires before the constraint table is read at all.
   //
   // So the row changes no verdict in this workspace as it stands, and it is kept
   // anyway for the same reason the eight options below are written out at their
-  // defaults: it is the value a second reader cannot recover from silence. It
-  // starts deciding the moment this workspace grows a `tsconfig.base.json` —
-  // path aliases are what make a cross-project specifier resolve to a project
-  // rather than to a link — and the day it does, this row is already correct
-  // rather than remembered.
+  // defaults: it is the value a second reader cannot recover from silence. What
+  // makes it decide is a `paths` alias, not the tsconfig's mere existence:
+  // mapping `@ecoma-io/nx-polyglot-graph` onto the project's own source in
+  // `tsconfig.base.json` made the probe import resolve inside the workspace,
+  // reach this table, and trip this row (`emptyOnlyTagsConstraintViolation`,
+  // exit 1 — measured, then reverted). This tree's tsconfig carries no `paths`,
+  // so until one arrives the row stays a stated law with no case to judge.
   { sourceTag: "type:extension", onlyDependOnLibsWithTags: [] },
 
   // Scope axis. `scope:nx` is the Nx-toolchain scope — plugins, and the
