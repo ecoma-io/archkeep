@@ -229,6 +229,7 @@ export function buildNodes(projects) {
  * @returns {Record<string, {source: string, target: string, type: string}[]>}
  */
 export function buildDependencies({ importSites, nodes, projectOf }) {
+  /** @type {Record<string, {source: string, target: string, type: string}[]>} */
   const dependencies = {};
   const seen = new Set();
   const add = (source, target, type) => {

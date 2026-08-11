@@ -19,6 +19,9 @@ import { evaluateVsix, importedPackages } from "./verify-vsix.mjs";
 
 /** A complete, correct vsix — each test tampers with one copy of this. */
 function completeFixture() {
+  // Typed as `evaluateVsix` receives it, not as this literal, so a test may
+  // drop or replace a key — the tampering is the point of the fixture.
+  /** @type {Record<string, any>} */
   const sourceManifest = {
     name: "lattice",
     version: "0.1.0",

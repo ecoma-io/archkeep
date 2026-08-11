@@ -89,6 +89,8 @@ describe("loadBoundaryConfig over this workspace", () => {
     // this assertion accepts rather than fail loudly.
     await expect(loadBoundaryConfig(elsewhere, DEFAULT_OPTIONS.boundaryConfig)).rejects.toThrow(
       new RegExp(
+        // @ts-expect-error -- `RegExp.escape` is real on Node >= 24
+        // (`.node-version`); TypeScript 5.9 ships no lib that declares it yet.
         `cannot load ${RegExp.escape(elsewhere)}/${RegExp.escape(DEFAULT_OPTIONS.boundaryConfig)}`,
         "u",
       ),

@@ -259,7 +259,7 @@ const contextFor = perWorkspace((workspace) => {
 
   const text = workspace.readFile(tsConfig);
   if (text === null) {
-    const options = {};
+    const options = /** @type {import("typescript").CompilerOptions} */ ({});
     return {
       host,
       options,
@@ -270,7 +270,7 @@ const contextFor = perWorkspace((workspace) => {
 
   const json = ts.parseConfigFileTextToJson(tsConfig, text);
   if (json.error) {
-    const options = {};
+    const options = /** @type {import("typescript").CompilerOptions} */ ({});
     return {
       host,
       options,
@@ -316,7 +316,7 @@ const contextFor = perWorkspace((workspace) => {
  * TypeScript's own `pathsBasePath` (the declaring config's directory), else
  * the workspace root — the same precedence `ts.resolveModuleName` applies.
  *
- * @param {import("../workspace.mjs").Workspace} workspace
+ * @param {import("./analyze.mjs").Workspace} workspace
  * @returns {{ tsConfig: string, configFailure: string|null,
  *   paths: Record<string, unknown>|undefined, base: string }}
  */

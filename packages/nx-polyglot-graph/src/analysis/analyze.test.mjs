@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { analyzeFile, analyzerFor, LANGUAGE_BY_EXTENSION, languageOf } from "./analyze.mjs";
 
-const request = (sourceFile) => ({ sourceFile, text: "", workspace: {} });
+// The empty workspace is deliberate: a file no analyzer claims must be decided
+// on its extension alone, before anything would read the workspace.
+const request = (sourceFile) => ({ sourceFile, text: "", workspace: /** @type {any} */ ({}) });
 
 describe("languageOf", () => {
   it("claims an extension only through the registry, so one map decides every dispatch", () => {

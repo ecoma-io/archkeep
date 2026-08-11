@@ -67,7 +67,7 @@ describe("the numbers README.md states about this catalogue", () => {
     expect(cases, correction("N fixture workspaces")).toBe(CONFORMANCE_CASES.length);
     expect(probeCount, correction("N probes")).toBe(probes.length);
     expect(projects, correction("N projects")).toBe(
-      CONFORMANCE_CASES.flatMap((spec) => spec.projects).length,
+      CONFORMANCE_CASES.flatMap((spec) => /** @type {readonly any[]} */ (spec.projects)).length,
     );
   });
 
@@ -112,7 +112,9 @@ describe("the numbers README.md states about this catalogue", () => {
     // ledger's shape in words, and a reader who wants the count can take it
     // from here or from the run. What must never happen is the count moving
     // without anyone noticing, which the differential's own ledger test covers.
-    const ledgered = probes.filter((probe) => probe.divergence?.direction === "weaker");
+    const ledgered = probes.filter(
+      (probe) => "divergence" in probe && probe.divergence?.direction === "weaker",
+    );
     const readable = ledgered.filter((probe) => isUpstreamReadable(probe.file));
 
     // Every declared false negative must sit on a file ESLint can parse.

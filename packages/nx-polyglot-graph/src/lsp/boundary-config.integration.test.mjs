@@ -90,6 +90,8 @@ describe("reading a boundary config that outlives the process reading it", () =>
         // one meta-character leaves every other one live, which CodeQL flags as
         // `js/incomplete-sanitization` and is right to. Node 24 is the floor
         // here (`.node-version`), and it has the built-in.
+        // @ts-expect-error -- `RegExp.escape` is real on Node >= 24
+        // (`.node-version`); TypeScript 5.9 ships no lib that declares it yet.
         new RegExp(`cannot load .*${RegExp.escape(CONFIG_FILE)}`, "u"),
       );
     } finally {

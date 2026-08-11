@@ -1,7 +1,16 @@
 /** Shared manifest helpers for the per-language resolvers. */
 import { parse as parseToml } from "smol-toml";
 
-/** Parses TOML, returning null instead of throwing on malformed input. */
+/**
+ * Parses TOML, returning null instead of throwing on malformed input.
+ *
+ * The return type is deliberately loose: a manifest's shape is whatever its
+ * author wrote, and every reader here guards each access with optional
+ * chaining and typeof checks rather than trusting a declared shape.
+ *
+ * @param {string} text
+ * @returns {Record<string, any> | null}
+ */
 export function parseManifest(text) {
   try {
     return parseToml(text);

@@ -11,7 +11,9 @@ import { defineConfig } from "vitest/config";
 // checker reports. The four keys are named individually rather than spread, so
 // a comment or a new key in that file cannot arrive here as a threshold vitest
 // does not know.
-const floor = JSON.parse(readFileSync(new URL("../../coverage.config.json", import.meta.url)));
+const floor = JSON.parse(
+  readFileSync(new URL("../../coverage.config.json", import.meta.url), "utf8"),
+);
 const thresholds = {
   lines: floor.lines,
   functions: floor.functions,

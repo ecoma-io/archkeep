@@ -10,12 +10,18 @@ import { createServer, SERVER_CAPABILITIES, watchedFilesFor } from "./server.mjs
 // nothing — cannot be produced by the real one on purpose.
 vi.mock("./diagnose.mjs", () => ({ diagnoseDocument: vi.fn() }));
 
-const { diagnoseDocument } = await import("./diagnose.mjs");
+const diagnoseDocument = vi.mocked((await import("./diagnose.mjs")).diagnoseDocument);
 
 const ROOT = "/fixture";
 const URI = "file:///fixture/libs/inner/main.go";
 
-/** A server plus everything it said and did, for assertions. */
+/**
+ * A server plus everything it said and did, for assertions.
+ *
+ * @param {{ buildIndex?: (options: any) => any,
+ *   readConfig?: (root: string, revision: number, boundaryConfig: string) => Promise<any>,
+ *   readOptions?: (root: string) => any }} [overrides]
+ */
 function session({ buildIndex, readConfig, readOptions } = {}) {
   const sent = [];
   const exits = [];

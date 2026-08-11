@@ -498,7 +498,10 @@ describe("analyzing the selection", () => {
   it("records an unreadable file as a failure and keeps going, rather than blanking the run", () => {
     // A report empty because the tool tripped on file three and a report empty
     // because the tree is clean print the same thing (analysis/contract.md).
-    const analyze = vi.fn(() => ({ imports: [{ specifier: "x" }], failures: [] }));
+    const analyze = vi.fn(() => ({
+      imports: [/** @type {any} */ ({ specifier: "x" })],
+      failures: [],
+    }));
     const result = analyzeWorkspace(
       { readFile: (path) => (path === "b.go" ? null : "package main") },
       ["a.go", "b.go", "c.go"],

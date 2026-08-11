@@ -1,6 +1,6 @@
-// This workspace has no TypeScript program — it runs on .mjs with JSDoc, no
-// build and no typecheck (AGENTS.md, "No TypeScript here, and why"). This file
-// exists solely so the boundary checker's import resolution can read modern
+// This workspace runs on .mjs with JSDoc and emits nothing (AGENTS.md, "No
+// TypeScript here, and why"). This file's first duty is the boundary checker's
+// import resolution — it is what lets that resolution read modern
 // packages: nx-polyglot-graph resolves every specifier through
 // `ts.resolveModuleName`, and with no tsconfig that call runs under default
 // (pre-Node16) settings that cannot read a package `exports` map. Measured on
@@ -16,6 +16,10 @@
 // comments; it uses `compilerOptions` only and ignores include/files globs.
 // The filename is the default value of the plugin's `tsConfig` option
 // (packages/nx-polyglot-graph/src/options.mjs), so no nx.json change is needed.
+//
+// The `typecheck` programs — packages/*/tsconfig.json and scripts/tsconfig.json
+// — extend this file because their `tsc --noEmit` runs need the same `nodenext`
+// resolution; everything they add on top is argued in their own headers.
 {
   "compilerOptions": {
     "module": "nodenext",

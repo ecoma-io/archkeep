@@ -416,16 +416,17 @@ function parseExportsInto(exports, projectRoot, entryPaths, basePath = ".") {
     });
     return;
   }
-  if (exports.import || exports.require || exports.default || exports.node) {
+  const table = /** @type {Record<string, unknown>} */ (exports);
+  if (table.import || table.require || table.default || table.node) {
     parseExportsInto(
-      exports.default || exports.import || exports.require || exports.node,
+      table.default || table.import || table.require || table.node,
       projectRoot,
       entryPaths,
       basePath,
     );
     return;
   }
-  for (const [key, value] of Object.entries(exports)) {
+  for (const [key, value] of Object.entries(table)) {
     parseExportsInto(value, projectRoot, entryPaths, key);
   }
 }

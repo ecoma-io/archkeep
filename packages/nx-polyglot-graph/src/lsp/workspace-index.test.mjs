@@ -22,7 +22,7 @@ vi.mock("../rules/match.mjs", () => ({
   findMatchingProjects: (patterns) => patterns.filter((p) => !p.startsWith("!")),
 }));
 
-const { analyzeFile } = await import("../analysis/analyze.mjs");
+const analyzeFile = vi.mocked((await import("../analysis/analyze.mjs")).analyzeFile);
 
 /** A tree as `buildWorkspaceIndex` reads one: a file list and a reader. */
 function tree(files) {

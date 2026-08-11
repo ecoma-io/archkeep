@@ -104,6 +104,7 @@ describe("refusing a go.work it cannot read", () => {
   // these with a short (or empty) use list would turn a file it misread into
   // "no drift" — the exact false green the check exists to remove. Each case
   // must throw, never return.
+  /** @type {[string, string, RegExp][]} */
   const malformed = [
     ["an unclosed use block", "use (\n\t./libs/domain\n", /'use \(' block is never closed/],
     ["a use with no path", "use\n", /'use' needs a directory path/],

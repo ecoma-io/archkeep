@@ -18,6 +18,13 @@
         "cwd": "{projectRoot}",
         "command": "vitest run"
       }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "tsc -p tsconfig.json"
+      }
     }
   }
 }

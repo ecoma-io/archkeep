@@ -79,6 +79,11 @@ jobs:
       # that would say so.
       - run: pnpm test
 
+      # The gate scripts' JSDoc, type-checked. `scripts/` is not an Nx project,
+      # so the `nx run-many` step below never reaches it — each package's own
+      # `typecheck` target covers only that package.
+      - run: pnpm typecheck
+
       # Reads the target list out of THIS FILE — out of the `nx run-many` line
       # below — and asserts every directory under `packages/` is a project the
       # graph can see which declares at least one of those targets. Without it

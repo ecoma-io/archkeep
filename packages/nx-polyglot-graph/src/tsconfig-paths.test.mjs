@@ -169,6 +169,7 @@ describe("refusing a paths table it cannot read", () => {
   // skipped them quietly would read a broken table as a clean one. They must
   // come back in `malformed` for the caller to refuse loudly — and produce no
   // finding, because a guessed verdict is the other half of the same defect.
+  /** @type {[string, Record<string, unknown>][]} */
   const shapes = [
     ["a value that is not an array", { "@acme/lib": "libs/lib/src/index.ts" }],
     ["a target list with a non-string entry", { "@acme/lib": [42] }],

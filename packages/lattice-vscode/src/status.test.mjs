@@ -46,6 +46,7 @@ describe("describeStatus", () => {
   it("throws on a state it does not know instead of describing it neutrally", () => {
     // A fourth state that fell through to "information" would be a new way for
     // this extension to look fine while doing nothing.
-    expect(() => describeStatus({ state: "degraded" })).toThrow(/degraded/);
+    // The whole point is input outside `SessionPlan`, so the cast is the test.
+    expect(() => describeStatus(/** @type {any} */ ({ state: "degraded" }))).toThrow(/degraded/);
   });
 });

@@ -31,7 +31,9 @@
  */
 export function buildReachability(graph) {
   const nodes = Object.keys(graph.nodes ?? {});
+  /** @type {Record<string, string[]>} */
   const adjList = {};
+  /** @type {Record<string, Record<string, boolean>>} */
   const matrix = {};
   for (const name of nodes) {
     adjList[name] = [];

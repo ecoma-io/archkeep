@@ -32,6 +32,12 @@ const jsSpelling = (specifier) => {
   return { path: relative || specifier.startsWith("/"), relative };
 };
 
+/**
+ * @param {string} name
+ * @param {{ type?: string, root?: string, tags?: string[] } & Record<string, any>} [overrides]
+ *   Everything beyond the three named keys lands in `data` — `targets`,
+ *   `entryPoints`, `mfeRemote`, `declaredPackages` all travel that way.
+ */
 const project = (name, { type = "lib", root = `area/${name}`, tags = [], ...data } = {}) => ({
   name,
   type,
@@ -1098,7 +1104,9 @@ describe("evaluate", () => {
     });
 
     it("rejects a graph with no nodes map", () => {
-      expect(() => evaluate([site()], {}, config(permissive))).toThrow(/needs a project graph/);
+      expect(() => evaluate([site()], /** @type {any} */ ({}), config(permissive))).toThrow(
+        /needs a project graph/,
+      );
     });
 
     it("rejects a record naming a project the graph does not contain", () => {

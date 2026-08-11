@@ -3,9 +3,10 @@
 Directory-scoped mechanics only — principles live in `AGENTS.md` at the
 repository root.
 Nx project name `nx-polyglot-graph` (tags `type:package`, `scope:nx`), published
-as `@ecoma-io/nx-polyglot-graph`. Plain-ESM `.mjs`, no build/typecheck; the
-plugin half is loaded by Nx itself via `nx.json → plugins`, in the consumer's
-own `nx` process.
+as `@ecoma-io/nx-polyglot-graph`. Plain-ESM `.mjs` with no build; `typecheck`
+is `tsc --noEmit` over the JSDoc (`AGENTS.md`, "No TypeScript here, and why").
+The plugin half is loaded by Nx itself via `nx.json → plugins`, in the
+consumer's own `nx` process.
 
 **This package runs in workspaces it is not part of, and every mechanic below
 follows from that.** It is installed from a registry into a tree whose project

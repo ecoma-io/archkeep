@@ -9,8 +9,8 @@ import { diagnoseDocument } from "./diagnose.mjs";
 vi.mock("../analysis/analyze.mjs", () => ({ analyzeFile: vi.fn() }));
 vi.mock("../rules/index.mjs", () => ({ evaluate: vi.fn() }));
 
-const { analyzeFile } = await import("../analysis/analyze.mjs");
-const { evaluate } = await import("../rules/index.mjs");
+const analyzeFile = vi.mocked((await import("../analysis/analyze.mjs")).analyzeFile);
+const evaluate = vi.mocked((await import("../rules/index.mjs")).evaluate);
 
 const SOURCE_FILE = "libs/inner/main.go";
 const TEXT = 'package inner\n\nimport "example.test/outer"\n';
@@ -56,7 +56,10 @@ describe("an empty diagnostic list means no violation, and nothing else", () => 
     // `evaluate` throws when the graph and the records describe different trees.
     // Every verdict after that point would be guesswork, so there is no partial
     // answer to fall back to — and no answer must not look like a clean one.
-    analyzeFile.mockReturnValue({ imports: [{ sourceFile: SOURCE_FILE }], failures: [] });
+    analyzeFile.mockReturnValue({
+      imports: [/** @type {any} */ ({ sourceFile: SOURCE_FILE })],
+      failures: [],
+    });
     evaluate.mockImplementation(() => {
       throw new Error("the graph and the analysis records describe different trees");
     });
@@ -115,14 +118,14 @@ describe("an empty diagnostic list means no violation, and nothing else", () => 
     // it qualifies, or a reader takes the violation list for the whole answer.
     analyzeFile.mockReturnValue({ imports: [], failures: [] });
     evaluate.mockReturnValue([
-      {
+      /** @type {any} */ ({
         sourceFile: SOURCE_FILE,
         line: 3,
         column: 8,
         specifier: "example.test/outer",
         messageId: "onlyTagsConstraintViolation",
         message: "A project tagged with x can only depend on libs tagged with y",
-      },
+      }),
     ]);
 
     const { analyzed, diagnostics } = diagnoseDocument({
@@ -170,14 +173,14 @@ describe("an empty diagnostic list means no violation, and nothing else", () => 
     // published as if it were.
     analyzeFile.mockReturnValue({ imports: [], failures: [] });
     evaluate.mockReturnValue([
-      {
+      /** @type {any} */ ({
         sourceFile: "libs/other/main.go",
         line: 1,
         column: 1,
         specifier: "x",
         messageId: "noImportsOfApps",
         message: "Imports of apps are forbidden",
-      },
+      }),
     ]);
 
     const { analyzed, diagnostics } = diagnoseDocument(REQUEST);
@@ -194,7 +197,7 @@ describe("a verdict that did reach a conclusion", () => {
     const linesBefore = TEXT.slice(0, offset).split("\n");
     analyzeFile.mockReturnValue({ imports: [], failures: [] });
     evaluate.mockReturnValue([
-      {
+      /** @type {any} */ ({
         sourceFile: SOURCE_FILE,
         line: linesBefore.length,
         column: linesBefore.at(-1).length + 1,
@@ -202,7 +205,7 @@ describe("a verdict that did reach a conclusion", () => {
         messageId: "onlyTagsConstraintViolation",
         message:
           'A project tagged with "zone:inner" can only depend on libs tagged with zone:inner',
-      },
+      }),
     ]);
 
     const { analyzed, diagnostics } = diagnoseDocument(REQUEST);

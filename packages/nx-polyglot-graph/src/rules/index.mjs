@@ -38,7 +38,7 @@
  * lets both the CLI and the language server share one verdict, and what lets a
  * test drive all fifteen rules from fixtures with no workspace at all.
  *
- * @see ../analysis/contract.md for the `ImportSite` shape this consumes.
+ * See ../analysis/contract.md for the `ImportSite` shape this consumes.
  */
 import { findBoundaryConfigViolations, suppressionCovers } from "../config.mjs";
 
