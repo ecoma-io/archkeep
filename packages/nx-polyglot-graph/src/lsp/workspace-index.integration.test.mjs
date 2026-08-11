@@ -15,9 +15,24 @@ import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { environmentForTree } from "../workspace.mjs";
+import { diagnoseDocument } from "./diagnose.mjs";
 import { buildWorkspaceIndex, listWorkspaceFiles, readWorkspaceFile } from "./workspace-index.mjs";
 
 let root;
+
+/** A Go file importing two apps: the exposing remote, and the near-identical host. */
+const CONSUMER_GO = [
+  "package consumer",
+  "",
+  "import (",
+  '\t"example.test/widgets"',
+  '\t"example.test/portal"',
+  ")",
+  "",
+  "var _ = widgets.Name",
+  "var _ = portal.Name",
+  "",
+].join("\n");
 
 const write = (relativePath, text) => {
   const absolute = join(root, relativePath);
@@ -41,6 +56,32 @@ beforeAll(() => {
   write("libs/outer/go.mod", "module example.test/outer\n\ngo 1.23\n");
   write("libs/outer/thing/thing.go", "package thing\n");
   write("ignored/generated.go", 'package generated\n\nimport "example.test/inner"\n');
+  // Two near-identical apps and the library importing both — the pair the
+  // Module Federation exemption is decided between. Only the config files on
+  // disk separate them, which is exactly the fact the index must read.
+  write(
+    "apps/widgets/project.json",
+    '{"name":"widgets","projectType":"application","tags":["zone:site"]}',
+  );
+  write("apps/widgets/go.mod", "module example.test/widgets\n\ngo 1.23\n");
+  write("apps/widgets/widgets.go", "package widgets\n");
+  write(
+    "apps/widgets/module-federation.config.js",
+    "module.exports = { exposes: { './Widget': './src/widget' } };\n",
+  );
+  write(
+    "apps/portal/project.json",
+    '{"name":"portal","projectType":"application","tags":["zone:site"]}',
+  );
+  write("apps/portal/go.mod", "module example.test/portal\n\ngo 1.23\n");
+  write("apps/portal/portal.go", "package portal\n");
+  write("apps/portal/module-federation.config.js", "module.exports = { remotes: ['widgets'] };\n");
+  write(
+    "libs/consumer/project.json",
+    '{"name":"consumer","projectType":"library","tags":["zone:site"]}',
+  );
+  write("libs/consumer/go.mod", "module example.test/consumer\n\ngo 1.23\n");
+  write("libs/consumer/consumer.go", CONSUMER_GO);
   // `environmentForTree` because `GIT_DIR` beats `cwd`, and this suite runs
   // from a git hook on every push: inheriting it would re-initialise the
   // ambient repository and leave this fixture with no `.git` of its own.
@@ -103,5 +144,58 @@ describe("the graph the index hands the rule engine", () => {
     expect(index.graph.nodes.outer.type).toBe("lib");
     expect(index.skippedProjects).toEqual([]);
     expect(index.fileFailures).toEqual([]);
+  });
+
+  it("reads the Module Federation fact off the real config files beside each app", () => {
+    // The fail-closed field the app-import exemption turns on
+    // (`../rules/topology.mjs`), populated the way upstream populates its
+    // answer: from `module-federation.config.js` on disk, never from anything
+    // the graph was told.
+    const index = buildWorkspaceIndex({ root });
+
+    expect(index.graph.nodes.widgets.data.mfeRemote).toBe(true);
+    expect(index.graph.nodes.portal.data.mfeRemote).toBe(false);
+  });
+});
+
+describe("the verdict an editor shows for an import of an app", () => {
+  const config = {
+    depConstraints: [{ sourceTag: "zone:site", onlyDependOnLibsWithTags: ["zone:site"] }],
+    options: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies: false,
+      checkNestedExternalImports: false,
+    },
+  };
+
+  // The position the marker lands on, computed from the fixture rather than
+  // written as a literal, so editing the fixture moves both sides. LSP
+  // positions are 0-based (`./diagnostics.mjs`).
+  const lines = CONSUMER_GO.split("\n");
+  const portalLine = lines.findIndex((line) => line.includes("example.test/portal"));
+  const portalCharacter = lines[portalLine].indexOf('"');
+
+  it("flags the host app and not the remote — both directions of the exemption, over a real tree", () => {
+    // The whole change in one verdict: before the index populated `mfeRemote`,
+    // the widgets import was a false `noImportsOfApps` here; and the exemption
+    // must not over-fire, because a waived real violation is silent — upstream
+    // reports the portal import, so this diagnostic list must carry it.
+    const index = buildWorkspaceIndex({ root });
+    const { analyzed, diagnostics } = diagnoseDocument({
+      sourceFile: "libs/consumer/consumer.go",
+      text: CONSUMER_GO,
+      index,
+      config,
+    });
+
+    expect(analyzed).toBe(true);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].code).toBe("noImportsOfApps");
+    expect(diagnostics[0].range.start).toEqual({ line: portalLine, character: portalCharacter });
   });
 });

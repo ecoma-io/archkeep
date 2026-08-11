@@ -47,7 +47,7 @@ import { join } from "node:path";
 import { analyzeFile, languageOf } from "../analysis/analyze.mjs";
 import { parseNxJson } from "../nx-json.mjs";
 import { findMatchingProjects } from "../rules/match.mjs";
-import { environmentForTree } from "../workspace.mjs";
+import { annotateMFERemotes, environmentForTree } from "../workspace.mjs";
 
 /** The file Nx reads to learn a project exists — and so does this. */
 export const PROJECT_CONFIG_FILE = "project.json";
@@ -296,6 +296,12 @@ export function buildWorkspaceIndex({
   const readFile = (path) => readFileAt(root, path);
   const { projects, skipped } = discoverProjects({ files, readFile });
   const nodes = buildNodes(projects);
+  // The same Module Federation fact the CLI path computes, from the same
+  // predicate (`../workspace.mjs` → `annotateMFERemotes`): a CLI verdict and an
+  // editor verdict on the same import must match, and the field failing closed
+  // means an index that skipped this write would flag every import of a real
+  // remote as `noImportsOfApps`.
+  annotateMFERemotes(nodes, readFile);
 
   // Longest root wins, for the reason `../analysis/source-util.mjs` gives: a
   // project nested inside another's directory matches both roots, and a

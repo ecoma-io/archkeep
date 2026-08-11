@@ -406,10 +406,14 @@ Three things have to become true first, and one of them is.
    keeps its `eslint-disable` directives beside its `boundarySuppressions`
    entries closes it. This is the condition that can regress in one commit, so
    it is the one worth re-reading the run for rather than this paragraph.
-2. **The stricter list stays a decision, not a surprise.** Every fail-closed row
-   fires on a graph field `src/graph/` does not populate today.
-   Removing ESLint would put those false alarms in front of contributors on real
-   code, so either the adapter supplies `mfeRemote`, `entryPoints` and
+2. **The stricter list stays a decision, not a surprise.** Two of the three
+   fail-closed rows fire on graph fields no adapter populates today.
+   `data.mfeRemote` is no longer one of them: both adapters compute it from the
+   `module-federation.config.{js,ts}` beside each app the way upstream does
+   (`../workspace.mjs` → `annotateMFERemotes`, shared by the CLI path and the
+   LSP index), so its row fires only on a graph something else built. Removing
+   ESLint would still put the remaining false alarms in front of contributors
+   on real code, so either the adapter supplies `entryPoints` and
    `declaredPackages`, or each absence is accepted with its noise understood.
 3. **The differential runs on real trees, not only on fixtures.** A suite of
    minimal fixtures proves the rules agree about the situations someone thought

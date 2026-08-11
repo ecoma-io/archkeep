@@ -172,6 +172,130 @@ describe("checking a real tree", () => {
   });
 });
 
+describe("honouring Module Federation remotes in the app-import ban", () => {
+  // `nx graph --file=` carries no Module Federation fact (see
+  // `annotateMFERemotes` in `./workspace.mjs`), so the CLI computes it from the
+  // config files on disk the way upstream does. Two apps, near-identical: one
+  // exposes a remote, the other only hosts. Upstream flags only the second, so
+  // this run must too — in both directions, because the exemption over-firing
+  // (waiving the host) is the silent one nobody would ever report.
+  const mfeRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-mfe-"));
+  afterAll(() => rmSync(mfeRoot, { recursive: true, force: true }));
+
+  const writeMfe = (relativePath, text) => {
+    mkdirSync(join(mfeRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(mfeRoot, relativePath), text);
+  };
+
+  const CONSUMER_GO = [
+    "package consumer",
+    "",
+    "import (",
+    '\t"example.com/widgets"',
+    '\t"example.com/portal"',
+    ")",
+    "",
+    "var _ = widgets.Name",
+    "var _ = portal.Name",
+    "",
+  ].join("\n");
+
+  writeMfe("nx.json", "{}\n");
+  writeMfe(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "zone:site", onlyDependOnLibsWithTags: ["zone:site"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeMfe("libs/consumer/go.mod", "module example.com/consumer\n\ngo 1.24\n");
+  writeMfe("libs/consumer/consumer.go", CONSUMER_GO);
+  writeMfe("apps/widgets/go.mod", "module example.com/widgets\n\ngo 1.24\n");
+  writeMfe("apps/widgets/widgets.go", "package widgets\n");
+  writeMfe(
+    "apps/widgets/module-federation.config.js",
+    "module.exports = { exposes: { './Widget': './src/widget' } };\n",
+  );
+  writeMfe("apps/portal/go.mod", "module example.com/portal\n\ngo 1.24\n");
+  writeMfe("apps/portal/portal.go", "package portal\n");
+  // The near-identical config: it names remotes and exposes nothing.
+  writeMfe(
+    "apps/portal/module-federation.config.js",
+    "module.exports = { remotes: ['widgets'] };\n",
+  );
+
+  const mfeContext = {
+    cwd: mfeRoot,
+    readGraph: () => ({
+      nodes: {
+        consumer: {
+          name: "consumer",
+          type: "lib",
+          data: { root: "libs/consumer", tags: ["zone:site"] },
+        },
+        widgets: {
+          name: "widgets",
+          type: "app",
+          data: { root: "apps/widgets", tags: ["zone:site"] },
+        },
+        portal: { name: "portal", type: "app", data: { root: "apps/portal", tags: ["zone:site"] } },
+      },
+      dependencies: { consumer: [], widgets: [], portal: [] },
+    }),
+    listFiles: () => [
+      "nx.json",
+      "module-boundaries.config.mjs",
+      "libs/consumer/go.mod",
+      "libs/consumer/consumer.go",
+      "apps/widgets/go.mod",
+      "apps/widgets/widgets.go",
+      "apps/widgets/module-federation.config.js",
+      "apps/portal/go.mod",
+      "apps/portal/portal.go",
+      "apps/portal/module-federation.config.js",
+    ],
+  };
+
+  // The position a reader acts on, computed from the fixture rather than
+  // written as a literal, so editing the fixture moves both sides.
+  const lines = CONSUMER_GO.split("\n");
+  const portalLine = lines.findIndex((line) => line.includes("example.com/portal")) + 1;
+  const portalColumn = lines[portalLine - 1].indexOf('"') + 1;
+
+  it("flags the import of the app that exposes nothing, exactly as upstream would", async () => {
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: [] },
+      mfeContext,
+    );
+
+    expect(violations).toBe(1);
+    expect(report).toContain(`libs/consumer/consumer.go:${portalLine}:${portalColumn}`);
+    expect(report).toContain("noImportsOfApps");
+  });
+
+  it("does not flag the import of the remote, which upstream exempts", async () => {
+    // The false positive this change removes: before the adapters populated
+    // `mfeRemote`, this exact import was reported as `noImportsOfApps`.
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: [] },
+      mfeContext,
+    );
+
+    expect(violations).toBe(1);
+    expect(report).not.toContain("example.com/widgets");
+  });
+});
+
 describe("the exit contract", () => {
   it("exits 1 when the tree violates a boundary — the code a hook and CI block on", async () => {
     const streams = env();

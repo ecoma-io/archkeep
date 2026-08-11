@@ -269,6 +269,43 @@ describe("building the index over a whole tree", () => {
   });
 });
 
+describe("the Module Federation fact the app-import exemption turns on", () => {
+  // `data.mfeRemote` fails closed in the rule engine (`../rules/topology.mjs`),
+  // so an index that never wrote it would flag every import of a real remote as
+  // `noImportsOfApps` — noise upstream ESLint does not produce. The predicate
+  // itself is `../workspace.mjs`'s, shared with the CLI path so the two
+  // adapters cannot answer differently about the same app.
+  const files = {
+    [`apps/widgets/${PROJECT_CONFIG_FILE}`]: '{"name":"widgets","projectType":"application"}',
+    "apps/widgets/module-federation.config.js":
+      "module.exports = { exposes: { './Widget': './src/widget' } };\n",
+    [`apps/portal/${PROJECT_CONFIG_FILE}`]: '{"name":"portal","projectType":"application"}',
+    // The near-identical host: a config that names remotes and exposes nothing.
+    "apps/portal/module-federation.config.js": "module.exports = { remotes: ['widgets'] };\n",
+    [`libs/plain/${PROJECT_CONFIG_FILE}`]: '{"name":"plain","projectType":"library"}',
+  };
+  const index = buildWorkspaceIndex({
+    root: "/fixture",
+    listFiles: () => Object.keys(files),
+    readFileAt: (_root, path) => files[path] ?? null,
+  });
+
+  it("marks the app that exposes a remote, so the exemption can fire", () => {
+    expect(index.graph.nodes.widgets.data.mfeRemote).toBe(true);
+  });
+
+  it("marks the near-identical app that exposes nothing as NOT a remote", () => {
+    // The silent direction: `true` here would waive a real `noImportsOfApps`
+    // and the editor would paint the import clean, exactly like upstream never
+    // would.
+    expect(index.graph.nodes.portal.data.mfeRemote).toBe(false);
+  });
+
+  it("leaves the fact off libraries, whose imports the app ban never judges", () => {
+    expect(index.graph.nodes.plain.data).not.toHaveProperty("mfeRemote");
+  });
+});
+
 describe("what the index could not read, as something a caller can publish", () => {
   it("says nothing at all about a tree that was read whole", () => {
     // The property the whole design rests on: this must be silent in the normal
