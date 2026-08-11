@@ -230,12 +230,14 @@ which stays unresolved on purpose because resolving it would mean applying
   misread. The worst case of every one is a spurious record naming text the
   file really contains — never a missed project.
 - **Graph edges and source records answer different questions, and both stay.**
-  A Python manifest edge follows uv semantics strictly — no
-  `[tool.uv.sources]` entry, no edge, even when the name matches a sibling
-  package — while `analyzePython` reads the `.py` sources, where an undeclared
-  `import other_project.thing` imports fine at runtime and crosses the boundary
-  anyway. Neither replaces the other; a declared-but-unused dependency and an
-  undeclared-but-imported one are both findings.
+  A Python manifest edge requires an explicit workspace wiring under the
+  declaring tool's documented semantics — a `[tool.uv.sources]` route, a Poetry
+  `{ path = "…" }`, a PDM root-anchored local URL; no declaration, no edge,
+  even when the name matches a sibling package — while `analyzePython` reads
+  the `.py` sources, where an undeclared `import other_project.thing` imports
+  fine at runtime and crosses the boundary anyway. Neither replaces the other;
+  a declared-but-unused dependency and an undeclared-but-imported one are both
+  findings.
 - External packages (crates.io, PyPI, Go module proxy) are deliberately NOT
   added as `externalNodes` — only project↔project edges matter to
   `nx affected`, and external-node bookkeeping is where the community

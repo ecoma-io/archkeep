@@ -13,10 +13,15 @@
  * growing fields Nx will drop and analysis from being trimmed to what Nx keeps.
  *
  * Each resolver reads tracked manifests and sources statically (regex for Go
- * imports, smol-toml for Cargo/uv manifests) so the graph computes without any
- * language toolchain installed. A workspace with no Go/Rust/Python projects
- * pays nothing: every resolver keys off `<projectRoot>/<manifest>` existing in
- * the project's tracked files.
+ * imports, smol-toml for Cargo/pyproject manifests) so the graph computes
+ * without any language toolchain installed. A workspace with no Go/Rust/Python
+ * projects pays nothing: every resolver keys off `<projectRoot>/<manifest>`
+ * existing in the project's tracked files. A resolver may THROW instead of
+ * returning — the Python one does, for a declared path dependency it cannot
+ * attribute to any project (`../analysis/python.mjs` header) — and the throw
+ * is deliberate: edges and an error are the only two outputs this hook has,
+ * and an edge quietly missing from the graph is the failure mode this plugin
+ * exists to close.
  *
  * Resolver contract (kept identical across languages, see `../analysis/*.mjs`):
  *   resolve(projects, filesOf, readFile) -> [{ source, target, sourceFile, type }]

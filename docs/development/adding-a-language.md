@@ -143,9 +143,15 @@ The resolver contract is shared and injectable:
 
 Two things to get right, both learned the hard way in Python:
 
-- **Follow the ecosystem's real semantics, not string matching.** A uv edge
-  exists only when `[tool.uv.sources]` routes the name to the workspace; a name
-  that merely coincides with a sibling package is not a dependency.
+- **Follow the ecosystem's real semantics, not string matching.** A Python edge
+  exists only where the manifest explicitly wires a dependency to a workspace
+  path — a `[tool.uv.sources]` route, a Poetry `{ path = "…" }`, a PDM
+  root-anchored local URL — each shape taken from that tool's current
+  documentation, cited in the resolver's header. A name that merely coincides
+  with a sibling package is not a dependency, and a declared path the resolver
+  cannot attribute to any project's root fails graph computation rather than
+  being dropped: the hook's only outputs are edges and an error, and a dropped
+  entry is an edge `nx affected` silently never sees.
 - **Never classify an unresolved first-party import as external.** That is a
   positive assertion that a project is a third-party package, and every tag
   constraint then evaporates — the rules return from their npm branch before the

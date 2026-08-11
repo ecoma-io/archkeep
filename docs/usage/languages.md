@@ -12,13 +12,13 @@ never says a boundary _was crossed_, and `Cargo.toml:1` is not a location anyone
 can act on. The two disagreeing is itself information: a declared-but-unused
 dependency and an undeclared-but-imported one are both findings.
 
-| extension                                             | language                | edges from                             | analysis |
-| ----------------------------------------------------- | ----------------------- | -------------------------------------- | -------- |
-| `.go`                                                 | Go                      | `go.mod`                               | ✅       |
-| `.rs`                                                 | Rust                    | `Cargo.toml`                           | ✅       |
-| `.py`                                                 | Python                  | `pyproject.toml` + `[tool.uv.sources]` | ✅       |
-| `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` | TypeScript / JavaScript | Nx's own inference                     | ✅       |
-| `.vue`                                                | Vue                     | Nx's own inference                     | ✅       |
+| extension                                             | language                | edges from                         | analysis |
+| ----------------------------------------------------- | ----------------------- | ---------------------------------- | -------- |
+| `.go`                                                 | Go                      | `go.mod`                           | ✅       |
+| `.rs`                                                 | Rust                    | `Cargo.toml`                       | ✅       |
+| `.py`                                                 | Python                  | `pyproject.toml` (uv, Poetry, PDM) | ✅       |
+| `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` | TypeScript / JavaScript | Nx's own inference                 | ✅       |
+| `.vue`                                                | Vue                     | Nx's own inference                 | ✅       |
 
 Anything else is a no-op: the dispatcher is pointed at every tracked file, and
 `README.md` is not an error. A file whose extension _is_ on this list but whose
@@ -132,17 +132,50 @@ modelling limit surfacing, not a bug in either.
 ## Python
 
 **Identity:** one package per Nx project, at `<projectRoot>/pyproject.toml`,
-named by `[project].name`. Edges follow **uv semantics strictly**: a dependency
-string in `[project].dependencies`, `[project.optional-dependencies].*` or
-`[dependency-groups].*` creates an edge only when `[tool.uv.sources]` routes that
-name to the workspace (`{ workspace = true }`) or to a path that is another
-project's directory. A name that merely coincides with a sibling package draws no
-edge.
+named by `[project].name`. An edge exists only where the manifest **explicitly
+wires a dependency to a workspace path** — each tool's documented semantics, not
+string matching. A name that merely coincides with a sibling package draws no
+edge, under any of the three tools read:
+
+- **uv** — a dependency string in `[project].dependencies`,
+  `[project.optional-dependencies].*` or `[dependency-groups].*` creates an edge
+  only when `[tool.uv.sources]` routes that name to the workspace
+  (`{ workspace = true }`) or to a path that is another project's directory.
+- **Poetry** — `name = { path = "…" }` in `[tool.poetry.dependencies]` or
+  `[tool.poetry.group.<group>.dependencies]`, including each element of the
+  multiple-constraints array form. `develop` changes install mode, never whether
+  the dependency exists, so it is ignored. The legacy
+  `[tool.poetry.dev-dependencies]` table is not read: it appears nowhere in
+  current Poetry documentation.
+- **PDM** — a requirement string in the same three dependency arrays, in the two
+  root-anchored local forms its docs write:
+  `name @ file:///${PROJECT_ROOT}/<path>` (pdm-backend) and
+  `name @ {root:uri}/<path>` (hatchling), plus the editable
+  `-e file:///${PROJECT_ROOT}/<path>` entry in `[dependency-groups]`.
+  `[tool.pdm.dev-dependencies]` is not read: current PDM docs route development
+  groups through `[dependency-groups]`, which is already scanned.
+
+**Where a declared path lands decides what happens, and one landing is loud.**
+Relative paths resolve against the declaring manifest's directory. Another
+project's root is an edge. The declaring project itself — its root or anything
+under it, such as a vendored wheel — is no edge, because no cross-project wiring
+exists. A path that climbs out of the workspace is no edge, as a verdict: what
+sits outside the tree is not a workspace project, the same answer a PyPI package
+gets. But a path that lands **anywhere else in the tree** — no project's root, or
+a file inside another project — **fails graph computation with an error** naming
+the manifest, the entry, and where the path landed. A skipped entry there would
+be an edge `nx affected` silently never sees on a wiring the manifest plainly
+states. A PDM local URL that is not root-anchored (an absolute `file:///…`, which
+other build backends write) fails the same way, because without the anchor the
+target cannot even be placed relative to the tree. A `pyproject.toml` that is not
+valid TOML draws no edges and does **not** fail — Nx recomputes the graph on
+every invocation, so a manifest is malformed mid-keystroke in every editing
+session; the loud report for that state is the analysis layer's.
 
 **The manifest and the source disagree here more than anywhere else, and that gap
 is a real false negative rather than a theoretical one.** A `.py` file writing
-`import other_project.thing` with no `[tool.uv.sources]` entry imports perfectly
-at runtime — in a uv workspace both packages are installed and both are on
+`import other_project.thing` with no manifest declaration imports perfectly at
+runtime — in a uv workspace both packages are installed and both are on
 `sys.path` — while the manifest says nothing at all. Source-level analysis is
 what catches it.
 
