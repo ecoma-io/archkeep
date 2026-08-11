@@ -306,6 +306,58 @@ describe("the Module Federation fact the app-import exemption turns on", () => {
   });
 });
 
+describe("the two package.json facts the entry-point and transitive rules turn on", () => {
+  // `data.entryPoints` and `data.declaredPackages` fail closed in the rule
+  // engine (`../rules/topology.mjs`), so an index that never wrote them would
+  // report a self-import of a real secondary entry point and, with
+  // `banTransitiveDependencies` on, every declared external package. The
+  // functions are `../workspace.mjs`'s, shared with the CLI path so the two
+  // adapters cannot answer differently about the same import.
+  const files = {
+    "package.json": '{"dependencies":{"root-dep":"^1.0.0"}}',
+    [`libs/gadgets/${PROJECT_CONFIG_FILE}`]: '{"name":"gadgets"}',
+    "libs/gadgets/package.json":
+      '{"dependencies":{"local-dep":"^2.0.0"},"exports":{"./models":"./src/models.ts"}}',
+    [`libs/bare/${PROJECT_CONFIG_FILE}`]: '{"name":"bare"}',
+    // A project whose config smuggles both fields in: `buildNodes` spreads
+    // project.json into `data` verbatim, so without the annotator's delete
+    // these unmeasured claims would ride onto the graph and waive violations.
+    [`libs/stale/${PROJECT_CONFIG_FILE}`]:
+      '{"name":"stale","entryPoints":[{"path":"libs/stale/x","file":"libs/stale/x.ts"}],' +
+      '"declaredPackages":["waived-package"]}',
+  };
+  const index = buildWorkspaceIndex({
+    root: "/fixture",
+    listFiles: () => Object.keys(files),
+    readFileAt: (_root, path) => files[path] ?? null,
+  });
+
+  it("writes the entry points a project's own manifest declares", () => {
+    expect(index.graph.nodes.gadgets.data.entryPoints).toEqual([
+      { path: "libs/gadgets/models", file: "libs/gadgets/src/models.ts" },
+    ]);
+  });
+
+  it("unions the root manifest into every project's declared packages", () => {
+    expect(index.graph.nodes.gadgets.data.declaredPackages).toEqual(["root-dep", "local-dep"]);
+    expect(index.graph.nodes.bare.data.declaredPackages).toEqual(["root-dep"]);
+  });
+
+  it("keeps entryPoints absent on a project with no manifest of its own", () => {
+    // Only the project's own package.json can declare entry points; absent
+    // stays absent, and absence fails closed downstream.
+    expect(index.graph.nodes.bare.data).not.toHaveProperty("entryPoints");
+  });
+
+  it("overrides both fields a project.json smuggled in unmeasured — the silent direction", () => {
+    // The unmeasurable one is deleted; the measurable one is replaced by the
+    // measurement. Either way the config's claim — which would have waived
+    // violations nobody checked — never reaches the rule engine.
+    expect(index.graph.nodes.stale.data).not.toHaveProperty("entryPoints");
+    expect(index.graph.nodes.stale.data.declaredPackages).toEqual(["root-dep"]);
+  });
+});
+
 describe("what the index could not read, as something a caller can publish", () => {
   it("says nothing at all about a tree that was read whole", () => {
     // The property the whole design rests on: this must be silent in the normal

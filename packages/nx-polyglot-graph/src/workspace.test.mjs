@@ -17,8 +17,11 @@ vi.mock("./analysis/source-util.mjs", () => ({
 import {
   analyzeWorkspace,
   annotateMFERemotes,
+  annotatePackageFacts,
   createWorkspace,
+  declaredPackages,
   listTrackedFiles,
+  packageEntryPoints,
   projectIsMFERemote,
   runProcess,
   selectFiles,
@@ -139,6 +142,302 @@ describe("marking Module Federation remotes", () => {
     const files = readerOf({ "module-federation.config.js": EXPOSING });
     expect(projectIsMFERemote("", files)).toBe(true);
     expect(projectIsMFERemote(".", files)).toBe(true);
+  });
+});
+
+describe("reading a project's entry points from its package.json exports", () => {
+  const readerOf = (files) => (path) => files[path] ?? null;
+  const manifest = (exports) => JSON.stringify({ name: "gadgets", exports });
+
+  it("answers null — not [] — when the manifest is absent, so the graph field stays absent", () => {
+    // The silent-direction distinction this function exists to keep: `[]` is
+    // "measured, no secondary entry points" and travels onto the node, where it
+    // is a CLAIM; only null keeps the field absent and failing closed.
+    expect(packageEntryPoints("libs/gadgets", readerOf({}))).toBe(null);
+  });
+
+  it("treats an existing-but-empty manifest as absent, upstream's readFileIfExisting quirk", () => {
+    expect(packageEntryPoints("libs/gadgets", readerOf({ "libs/gadgets/package.json": "" }))).toBe(
+      null,
+    );
+  });
+
+  it("answers null for a manifest no parser reads, keeping the field absent rather than throwing", () => {
+    // Named divergence: upstream's `parseJson` throws mid-lint here. Absence
+    // over-reports — the loud direction — and a manifest is malformed for
+    // exactly as long as someone is typing inside it.
+    expect(
+      packageEntryPoints("libs/gadgets", readerOf({ "libs/gadgets/package.json": "{ not json" })),
+    ).toBe(null);
+  });
+
+  it("reads a manifest carrying the JSONC forms Nx accepts, the way upstream's parseJson does", () => {
+    const text = `{\n  // the package\n  "exports": { "./models": "./src/models.ts", },\n}`;
+    expect(
+      packageEntryPoints("libs/gadgets", readerOf({ "libs/gadgets/package.json": text })),
+    ).toEqual([{ path: "libs/gadgets/models", file: "libs/gadgets/src/models.ts" }]);
+  });
+
+  it("answers [] for a manifest with no exports map — measured, exactly what upstream answers", () => {
+    expect(
+      packageEntryPoints(
+        "libs/gadgets",
+        readerOf({ "libs/gadgets/package.json": JSON.stringify({ name: "gadgets" }) }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("collects only SECONDARY entry points: a top-level string and the '.' key both yield nothing", () => {
+    const read = (exports) =>
+      packageEntryPoints(
+        "libs/gadgets",
+        readerOf({ "libs/gadgets/package.json": manifest(exports) }),
+      );
+    expect(read("./index.ts")).toEqual([]);
+    expect(read({ ".": "./index.ts" })).toEqual([]);
+  });
+
+  it("builds {path, file} pairs the way upstream's parseExports joins them", () => {
+    expect(
+      packageEntryPoints(
+        "libs/gadgets",
+        readerOf({ "libs/gadgets/package.json": manifest({ "./models": "./src/models.ts" }) }),
+      ),
+    ).toEqual([{ path: "libs/gadgets/models", file: "libs/gadgets/src/models.ts" }]);
+  });
+
+  it("keeps a key's trailing slash — the one shape entryPointOf's walk can ever match", () => {
+    // See `./conformance/README.md`, "`getEntryPoint`'s directory branch is
+    // dead upstream" — corrected: the walk compares against `parent`, which
+    // always carries a trailing slash, so this key shape is the live one.
+    expect(
+      packageEntryPoints(
+        "libs/gadgets",
+        readerOf({ "libs/gadgets/package.json": manifest({ "./models/": "./src/models/" }) }),
+      ),
+    ).toEqual([{ path: "libs/gadgets/models/", file: "libs/gadgets/src/models/" }]);
+  });
+
+  it("resolves a conditional-exports object as default||import||require||node — NOT the guard's order", () => {
+    // Upstream detects the object by `import || require || default || node`
+    // but picks by `default || import || require || node`. The orders differ,
+    // so {import, default} follows `default`. Measured against 23.1.1;
+    // reproduced, not repaired.
+    expect(
+      packageEntryPoints(
+        "libs/gadgets",
+        readerOf({
+          "libs/gadgets/package.json": manifest({
+            "./models": { import: "./esm/models.js", default: "./dist/models.js" },
+          }),
+        }),
+      ),
+    ).toEqual([{ path: "libs/gadgets/models", file: "libs/gadgets/dist/models.js" }]);
+  });
+
+  it("skips a conditional member declared falsy, since upstream's pick tests truthiness", () => {
+    expect(
+      packageEntryPoints(
+        "libs/gadgets",
+        readerOf({
+          "libs/gadgets/package.json": manifest({
+            "./models": { import: "", require: "./cjs/models.js" },
+          }),
+        }),
+      ),
+    ).toEqual([{ path: "libs/gadgets/models", file: "libs/gadgets/cjs/models.js" }]);
+  });
+
+  it("recurses into any other object per KEY, which discards the parent key — upstream's quirk", () => {
+    // {"./sub": {"./deep": f}} yields `<root>/deep`, not `<root>/sub/deep`:
+    // the recursion replaces basePath with each key rather than joining them.
+    // A types-only object rides the same branch, making `<root>/types` a
+    // "path". Both measured; both reproduced so the two enforcers walk the
+    // same pairs.
+    expect(
+      packageEntryPoints(
+        "libs/gadgets",
+        readerOf({
+          "libs/gadgets/package.json": manifest({
+            "./sub": { "./deep": "./src/deep.ts" },
+            "./typed": { types: "./typed.d.ts" },
+          }),
+        }),
+      ),
+    ).toEqual([
+      { path: "libs/gadgets/deep", file: "libs/gadgets/src/deep.ts" },
+      { path: "libs/gadgets/types", file: "libs/gadgets/typed.d.ts" },
+    ]);
+  });
+
+  it("drops a null target and walks an array by index, as upstream does", () => {
+    expect(
+      packageEntryPoints(
+        "libs/gadgets",
+        readerOf({
+          "libs/gadgets/package.json": manifest({
+            "./gone": null,
+            "./pair": ["./a.ts", "./b.ts"],
+          }),
+        }),
+      ),
+    ).toEqual([
+      { path: "libs/gadgets/0", file: "libs/gadgets/a.ts" },
+      { path: "libs/gadgets/1", file: "libs/gadgets/b.ts" },
+    ]);
+  });
+
+  it("finds the manifest of a project at the workspace root under both spellings of that root", () => {
+    // Same two spellings `projectIsMFERemote` handles: the LSP index writes
+    // `''`, `nx graph --file=` writes `'.'`.
+    const files = readerOf({ "package.json": manifest({ "./models": "./src/models.ts" }) });
+    expect(packageEntryPoints("", files)).toEqual([{ path: "models", file: "src/models.ts" }]);
+    expect(packageEntryPoints(".", files)).toEqual([{ path: "models", file: "src/models.ts" }]);
+  });
+});
+
+describe("reading a project's declared packages from the two manifests upstream reads", () => {
+  const readerOf = (files) => (path) => files[path] ?? null;
+
+  it("unions the workspace root's manifest with the project's own, upstream's || of two lookups", () => {
+    // `isDirectDependency` is `packageExistsInPackageJson(pkg, '.') ||
+    // packageExistsInPackageJson(pkg, source.data.root)` — either manifest
+    // alone is enough to make a package direct.
+    expect(
+      declaredPackages(
+        "libs/gadgets",
+        readerOf({
+          "package.json": JSON.stringify({ dependencies: { "root-dep": "^1.0.0" } }),
+          "libs/gadgets/package.json": JSON.stringify({ dependencies: { "local-dep": "^2.0.0" } }),
+        }),
+      ),
+    ).toEqual(["root-dep", "local-dep"]);
+  });
+
+  it("reads dependencies, peerDependencies and devDependencies — and NOT optionalDependencies", () => {
+    // Upstream's own `getAllDependencies` includes optionalDependencies, but
+    // `packageExistsInPackageJson` never calls it: an optional dependency is
+    // transitive to the boundary rule, and repairing that would silently waive
+    // reports upstream makes.
+    expect(
+      declaredPackages(
+        "libs/gadgets",
+        readerOf({
+          "libs/gadgets/package.json": JSON.stringify({
+            dependencies: { runtime: "1.0.0" },
+            peerDependencies: { peer: "1.0.0" },
+            devDependencies: { dev: "1.0.0" },
+            optionalDependencies: { optional: "1.0.0" },
+          }),
+        }),
+      ),
+    ).toEqual(["runtime", "peer", "dev"]);
+  });
+
+  it("does not see a dependency declared with a falsy version, upstream's truthy-value test", () => {
+    // The silent direction of over-population: including it would exempt an
+    // import upstream reports as transitive.
+    expect(
+      declaredPackages(
+        "libs/gadgets",
+        readerOf({
+          "libs/gadgets/package.json": JSON.stringify({
+            dependencies: { visible: "^1.0.0", invisible: "" },
+          }),
+        }),
+      ),
+    ).toEqual(["visible"]);
+  });
+
+  it("answers null only when NEITHER manifest could be measured", () => {
+    // One readable manifest is a measurement: the root manifest alone must
+    // produce a list, or every project without its own package.json — most of
+    // them — would lose the exemption the root manifest grants.
+    expect(declaredPackages("libs/gadgets", readerOf({}))).toBe(null);
+    expect(
+      declaredPackages(
+        "libs/gadgets",
+        readerOf({ "package.json": JSON.stringify({ dependencies: { "root-dep": "1" } }) }),
+      ),
+    ).toEqual(["root-dep"]);
+  });
+
+  it("reads the workspace root's manifest once, not unioned with itself, for a root project", () => {
+    const read = vi.fn(
+      readerOf({ "package.json": JSON.stringify({ dependencies: { "root-dep": "1" } }) }),
+    );
+    expect(declaredPackages("", read)).toEqual(["root-dep"]);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(
+      declaredPackages(".", readerOf({ "package.json": '{"dependencies":{"a":"1"}}' })),
+    ).toEqual(["a"]);
+  });
+});
+
+describe("annotating package facts onto the graph nodes", () => {
+  const readerOf = (files) => (path) => files[path] ?? null;
+  const libNode = (name, root) => ({ name, type: "lib", data: { root } });
+
+  it("writes both fields on every project node whose manifests answered", () => {
+    // Upstream reads the SOURCE project's manifest for entry-point and
+    // direct-dependency questions and the TARGET's for the lazy-load check, so
+    // no node type may be skipped.
+    const nodes = {
+      gadgets: libNode("gadgets", "libs/gadgets"),
+      portal: { name: "portal", type: "app", data: { root: "apps/portal" } },
+    };
+    annotatePackageFacts(
+      nodes,
+      readerOf({
+        "package.json": JSON.stringify({ dependencies: { "root-dep": "1" } }),
+        "libs/gadgets/package.json": JSON.stringify({
+          dependencies: { "local-dep": "1" },
+          exports: { "./models": "./src/models.ts" },
+        }),
+      }),
+    );
+    expect(nodes.gadgets.data.entryPoints).toEqual([
+      { path: "libs/gadgets/models", file: "libs/gadgets/src/models.ts" },
+    ]);
+    expect(nodes.gadgets.data.declaredPackages).toEqual(["root-dep", "local-dep"]);
+    // The two facts part ways on a project with no manifest of its own: only
+    // that manifest can declare entry points, so the field stays absent (fails
+    // closed), while the root manifest alone still grants declared packages.
+    expect(nodes.portal.data).not.toHaveProperty("entryPoints");
+    expect(nodes.portal.data.declaredPackages).toEqual(["root-dep"]);
+  });
+
+  it("DELETES a stale field a manifest-less node carried in from config — the silent direction", () => {
+    // `nx graph --file=` copies arbitrary `project.json` keys into `data`
+    // verbatim, and `buildNodes` in `lsp/workspace-index.mjs` spreads the same
+    // config. A stale `entryPoints` or `declaredPackages` riding in that way
+    // would WAIVE violations on a claim nobody measured; deleting it restores
+    // "absent fails closed".
+    const nodes = {
+      gadgets: {
+        name: "gadgets",
+        type: "lib",
+        data: {
+          root: "libs/gadgets",
+          entryPoints: [{ path: "libs/gadgets/anything", file: "libs/gadgets/x.ts" }],
+          declaredPackages: ["waived-package"],
+        },
+      },
+    };
+    annotatePackageFacts(nodes, readerOf({}));
+    expect(nodes.gadgets.data).not.toHaveProperty("entryPoints");
+    expect(nodes.gadgets.data).not.toHaveProperty("declaredPackages");
+  });
+
+  it("reads each manifest once per pass, since every node's answer unions the root's manifest", () => {
+    const read = vi.fn(readerOf({ "package.json": '{"dependencies":{"a":"1"}}' }));
+    annotatePackageFacts(
+      { one: libNode("one", "libs/one"), two: libNode("two", "libs/two") },
+      read,
+    );
+    const paths = read.mock.calls.map(([path]) => path);
+    expect(paths.filter((path) => path === "package.json")).toHaveLength(1);
+    expect(new Set(paths).size).toBe(paths.length);
   });
 });
 

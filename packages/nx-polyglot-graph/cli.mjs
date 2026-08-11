@@ -60,6 +60,7 @@ import { evaluate } from "./src/rules/index.mjs";
 import {
   analyzeWorkspace,
   annotateMFERemotes,
+  annotatePackageFacts,
   createWorkspace,
   findWorkspaceRoot,
   listTrackedFiles,
@@ -226,6 +227,10 @@ export async function check(
   // `annotateMFERemotes` — so it is computed here, before the rules run, or
   // every import of a real remote app would be a false `noImportsOfApps`.
   annotateMFERemotes(graph.nodes, workspace.readFile);
+  // Nor the two `package.json` facts — `data.entryPoints` and
+  // `data.declaredPackages`, see `annotatePackageFacts` — which decide the
+  // secondary-entry-point exemptions and `noTransitiveDependencies`.
+  annotatePackageFacts(graph.nodes, workspace.readFile);
   const selected = selectFiles(
     owned.map(({ file }) => file),
     options.paths,
