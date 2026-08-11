@@ -1,0 +1,13 @@
+# What stays out of the .vsix.
+#
+# Tests and their configuration are the bulk of it: they run in this repository
+# and have no meaning on a user's disk. `project.json` is Nx's view of this
+# directory and travels no further.
+#
+# `node_modules` is deliberately NOT listed. The extension has one runtime
+# dependency and it has to ship inside the package — an extension host does not
+# install anything.
+**/*.test.mjs
+vitest.config.mjs
+project.json
+.vscodeignore

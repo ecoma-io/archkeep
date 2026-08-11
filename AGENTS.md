@@ -12,11 +12,13 @@ imports and so `nx affected` and `@nx/enforce-module-boundaries` work there;
 for the other three both go quiet, and quiet is the problem — an under-selecting
 `affected` and an absent boundary rule look exactly like a clean workspace.
 
-**The repository holds the toolchain and the one package it exists to ship.**
-`packages/nx-polyglot-graph/` is that package — an Nx plugin plus a boundary
-checker and a language server over the same engine. Everything else here is the
-apparatus that keeps it honest. If you are about to write product code, check
-that it is actually what was asked for.
+**The repository holds the toolchain and the engine it exists to ship.**
+`packages/nx-polyglot-graph/` is that engine — an Nx plugin plus a boundary
+checker and a language server, one analysis behind three faces.
+`packages/lattice-vscode/` is a client of it and holds no analysis at all; it
+ships to a marketplace rather than to npm, and it deliberately does not bundle
+the server. Everything else here is the apparatus that keeps them honest. If you
+are about to write product code, check that it is actually what was asked for.
 
 ## The invariant everything is judged against
 
@@ -48,17 +50,27 @@ test that only pins the message text is half a test.
   renovate.json5
 .claude-plugin/
   marketplace.json         the catalogue this repository publishes
+docs/
+  README.md                the index, and the map of which file owns what
+  north-star.md            the direction, and the refusals that follow from it
+  why.md                   the gap this exists to close, measured
+  usage/                   for someone using the tool
+  development/             for someone changing it
 scripts/
   check-packages.mjs       the gate that makes a green build mean something
   check-packages.test.mjs
 packages/
   nx-polyglot-graph/       the plugin, the checker, the language server
+  lattice-vscode/          the VS Code client for that server
 module-boundaries.config.mjs   this repository's own boundary law
+coverage.config.json           the coverage floor both packages read
 ```
 
-The package carries its own `CLAUDE.md` for everything below this level — the
-layer split, the per-language parse limits, the modelling assumptions. It loads
-when the work happens inside that directory, which is why none of it is here.
+`nx-polyglot-graph` carries its own `CLAUDE.md` for everything below this level —
+the layer split, the per-language parse limits, the modelling assumptions. It
+loads when the work happens inside that directory, which is why none of it is
+here. `lattice-vscode` has none: it is a client whose every decision is a pure
+function under `src/`, and its README says what it refuses and why.
 
 ## Rules with teeth
 
@@ -282,11 +294,24 @@ same pair litmus declares. Changing one is a brand decision, not a styling one.
 
 ## Human-facing documents
 
-`README.md` owns what the project is and why. `CONTRIBUTING.md` owns the
-contribution bar, the commands and how a pull request lands. `SECURITY.md` owns
-the threat model, and it is not boilerplate here: a gate that reports nothing on
-crafted input is a security-relevant false negative, and package-tree values
-reaching a shell is a command injection. Read it before touching `scripts/`.
+**`docs/README.md` holds the ownership map**, and it is the file to read before
+adding a page or moving a paragraph — it says which document owns each topic and,
+for the two places that deliberately overlap, which copy binds. It is not
+reproduced here.
+
+Three things that map does not decide, because they sit outside `docs/`:
+
+- **`README.md` is a landing page.** Pitch, install, and links onward. It states
+  no rule and documents no option; anything that would need maintaining as the
+  tool changes belongs in `docs/` with a link from the README.
+- **`CONTRIBUTING.md` owns the contribution bar**, the commands and how a pull
+  request lands. It stays at the repository root because GitHub surfaces it in
+  the issue and pull-request UI from nowhere else. `docs/development/` owns how
+  the thing works inside, never how to contribute to it.
+- **`SECURITY.md` owns the threat model**, and it is not boilerplate here: a gate
+  that reports nothing on crafted input is a security-relevant false negative,
+  and package-tree values reaching a shell is a command injection. Read it before
+  touching `scripts/`.
 
 When one of those documents and this file would say the same thing, the
 human-facing one says it and this one links.

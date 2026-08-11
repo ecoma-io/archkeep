@@ -2,22 +2,24 @@
 // Default pool is fine: no test chdirs or mutates process.env (the integration
 // test passes absolute fixture paths through the resolver contract instead of
 // relying on the working directory).
+import { readFileSync } from "node:fs";
+
 import { defineConfig } from "vitest/config";
 
-// The coverage floor is stated here rather than read from a workspace-level
-// file, and that is sound for exactly as long as
-// this is the only package with tests: there is no second consumer to drift
-// from. When a second package earns a test target, these four numbers hoist to
-// a root `coverage.config.json` that both configs read — a value copied across
-// two files was never a valid hardcode, it was an unsynced config.
-//
-// 80 is a floor, not a target: it exists so a change that deletes coverage
-// fails instead of passing quietly. This suite sits well above it.
+// The coverage floor used to be four literals here, with a note saying they
+// would hoist to a root `coverage.config.json` the moment a second package
+// earned a test target. `packages/lattice-vscode` is that package, and this is
+// the hoist. It is read rather than imported: JSON has no import, and a relative
+// import from inside a project up to a root-level file is a boundary violation
+// this repository's own checker reports. The four keys are named individually
+// rather than spread, so a comment or a new key in that file cannot arrive here
+// as a threshold vitest does not know.
+const floor = JSON.parse(readFileSync(new URL("../../coverage.config.json", import.meta.url)));
 const thresholds = {
-  lines: 80,
-  functions: 80,
-  branches: 80,
-  statements: 80,
+  lines: floor.lines,
+  functions: floor.functions,
+  branches: floor.branches,
+  statements: floor.statements,
 };
 
 export default defineConfig({

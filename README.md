@@ -5,7 +5,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg" alt="Node >= 24" />
   <img src="https://img.shields.io/badge/nx-23-143055.svg" alt="Nx 23" />
-  <img src="https://img.shields.io/badge/languages-Go%20%C2%B7%20Rust%20%C2%B7%20Python%20%C2%B7%20TypeScript-335170.svg" alt="Go, Rust, Python, TypeScript" />
+  <img src="https://img.shields.io/badge/languages-Go%20%C2%B7%20Rust%20%C2%B7%20Python%20%C2%B7%20TypeScript%20%C2%B7%20Vue-335170.svg" alt="Go, Rust, Python, TypeScript, Vue" />
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-9B4D2C.svg" alt="Pull requests welcome" /></a>
 </p>
 
@@ -24,7 +24,10 @@
 </p>
 
 <p align="center">
-  <a href="https://ecoma.io"><strong>About&nbsp;Ecoma&nbsp;→</strong></a>
+  <a href="docs/usage/getting-started.md"><strong>Get&nbsp;started&nbsp;→</strong></a> ·
+  <a href="docs/why.md">Why&nbsp;it&nbsp;exists</a> ·
+  <a href="docs/north-star.md">Where&nbsp;it&nbsp;is&nbsp;going</a> ·
+  <a href="https://ecoma.io">About&nbsp;Ecoma</a>
 </p>
 
 ---
@@ -49,31 +52,12 @@ Then check the boundaries those edges cross:
 pnpm exec nx-polyglot-graph check
 ```
 
-Full documentation — the options, the boundary config, the language server, the
-exit codes — in [`packages/nx-polyglot-graph/`](packages/nx-polyglot-graph/README.md).
+```text
+✔ no boundary violations (264 imports in 78 files across 12 projects)
+```
 
-## The problem
-
-Nx's project graph is what makes a monorepo tractable: `nx affected` runs only
-what a change can reach, and `@nx/enforce-module-boundaries` refuses an import
-that crosses a line the architecture drew. Both rest on one thing — Nx knowing
-which project depends on which.
-
-For TypeScript it does, because it reads the imports. For Go, Rust and Python it
-does not, and the way it fails is the problem:
-
-- **`nx affected` under-selects.** A Go library changes; the service importing
-  it is not marked affected, so its tests never run. CI is green because nothing
-  ran, which is indistinguishable on the dashboard from green because everything
-  passed.
-- **`@nx/enforce-module-boundaries` never sees the file.** It is an ESLint rule.
-  ESLint does not parse `.go`, `.rs` or `.py`, so the architectural rule that
-  every TypeScript library is held to simply does not exist for the rest of the
-  workspace. Not weaker — absent.
-
-Neither of these announces itself. You find out when a change ships broken, or
-when someone notices a `go.mod` that has been importing across a boundary for
-six months.
+Ten minutes end to end, most of it spent deciding what your tags mean:
+[**Getting started →**](docs/usage/getting-started.md)
 
 ## The idea in one picture
 
@@ -90,37 +74,56 @@ one you see depends on what you are: **structure** if you are being held,
   the tags say must not exist. Finding those, in files no ESLint rule can parse,
   is the whole job.
 
+## Why it exists
+
+`nx affected` under-selects and `@nx/enforce-module-boundaries` never sees the
+file — so a Go project's `layer:` and `scope:` tags are a declaration with no
+mechanism behind them. Neither failure announces itself.
+
+That claim was measured rather than assumed, and the measurement is in
+[**docs/why.md**](docs/why.md), along with why an ESLint parser and an
+inferred-target plugin were both the wrong answer.
+
 ## What is here
 
-| Package                                                                   |                                                                                                                                                                                                        |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [**`@ecoma-io/nx-polyglot-graph`**](packages/nx-polyglot-graph/README.md) | Reads Go, Rust and Python manifests into the Nx project graph, then judges imports against tag-based boundary rules — the `@nx/enforce-module-boundaries` contract, for the languages it cannot reach. |
-| _the editor extension_                                                    | Planned. The language server already ships in the package above and works in any LSP client, including Claude Code; a VS Code marketplace listing is what is missing.                                  |
+| Package                                                                   |                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [**`@ecoma-io/nx-polyglot-graph`**](packages/nx-polyglot-graph/README.md) | Reads Go, Rust and Python manifests into the Nx project graph, then judges imports against tag-based boundary rules — the `@nx/enforce-module-boundaries` contract, for the languages it cannot reach.                  |
+| [**`lattice-vscode`**](packages/lattice-vscode/README.md)                 | The VS Code client for that server: the same verdicts, at the edit. It runs the server your workspace installed rather than one of its own, so the buffer and the pipeline cannot disagree. Not on the marketplace yet. |
 
-The package was extracted from tooling that had been running in Ecoma's own
-polyglot workspace rather than written speculatively, and CI here runs it against
-this repository's source under a tag vocabulary it has never seen — which is the
-only evidence that "works in your workspace too" is more than a claim.
+Fifteen violation types, eight options, and the same `messageId`s ESLint reports
+— so the two enforcers can be compared rather than merely both being red. Five
+languages today; [more is the direction](docs/north-star.md).
 
-## Design commitments
+## The one commitment behind all of it
 
-These are the things the implementation is held to:
+**An empty result is a claim, not a shrug.**
 
-**Static reading only.** Manifests are parsed as data. Nothing invokes `go`,
-`cargo` or `uv` to answer a question about imports — a graph that needs four
-toolchains installed to compute is a graph that fails on the machine that does
-not have them, and Nx computes the graph on every single invocation.
-
-**An empty result is a claim, not a shrug.** The central invariant: an empty
-diagnostic list must mean "no violation", and nothing else. Every path that
-cannot reach a verdict says so instead of returning quietly. This is why the
-issue tracker has a
+An empty diagnostic list means "no violation" and nothing else. Every path that
+cannot reach a verdict says so instead of returning quietly — which is why the
+CLI has an exit code for _could not look_ that is distinct from _looked and found
+nothing_, and why the issue tracker has a
 [dedicated form for a missed violation](.github/ISSUE_TEMPLATE/missed_violation.yml)
-separate from the ordinary bug form — a false negative is a different class of
-defect, and it is the dangerous one.
+separate from the ordinary bug form.
 
-**TypeScript stays with `@nx/eslint-plugin`.** Lattice does not replace a rule
-that already works. It covers the languages that have nothing.
+A tool that replaced a known gap with an unknown one, wearing a green checkmark,
+would be worse than the silence it replaced. The rest of the reasoning, and the
+refusals that follow from it, are in [**docs/north-star.md**](docs/north-star.md).
+
+## Documentation
+
+|                                                                                                                                                        |                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| [**Getting started**](docs/usage/getting-started.md)                                                                                                   | Install, configure, first violation                                      |
+| [Designing boundaries](docs/usage/designing-boundaries.md)                                                                                             | The constraint table, and the five semantics that surprise people        |
+| [The fifteen violations](docs/usage/violations.md)                                                                                                     | What each `messageId` means, and what fixes it                           |
+| [What each language sees](docs/usage/languages.md)                                                                                                     | Per-language coverage and every declared parse limit                     |
+| [CI](docs/usage/ci.md) · [Editors](docs/usage/editors.md) · [Troubleshooting](docs/usage/troubleshooting.md)                                           | Exit codes, SARIF, LSP setup, and what to check when it reported nothing |
+| [Architecture](docs/development/architecture.md) · [Adding a language](docs/development/adding-a-language.md) · [Testing](docs/development/testing.md) | For contributors                                                         |
+
+Full index: [**docs/**](docs/README.md). The package's own reference, which
+stands alone as the npm landing page, is
+[here](packages/nx-polyglot-graph/README.md).
 
 ## Built for Ecoma — a labor operating system for humans and AI agents
 
@@ -136,28 +139,6 @@ warning. The rules here are the ones that survived contact with that problem.
 
 You do not need Ecoma to use them. Nothing in this repository depends on it.
 
-## Working on this repository
-
-Requirements: **Node ≥ 24** (`.node-version` pins the major) and **pnpm 11**
-(pinned via `packageManager`, so Corepack fetches the right one).
-
-```bash
-git clone https://github.com/ecoma-io/lattice.git
-cd lattice
-pnpm install     # also installs the Git hooks
-```
-
-| Command                                              | What it does                                                 |
-| ---------------------------------------------------- | ------------------------------------------------------------ |
-| `pnpm format:check`                                  | Prettier, read-only — what CI runs                           |
-| `pnpm lint`                                          | ESLint, zero warnings tolerated                              |
-| `pnpm test`                                          | `node --test` over the gate scripts' own tests               |
-| `pnpm check-packages`                                | Asserts every `packages/*` directory is a project Nx can see |
-| `pnpm exec nx run-many -t lint test build typecheck` | Every project's own targets                                  |
-| `node packages/nx-polyglot-graph/cli.mjs check`      | The tool, on the tree that ships it                          |
-
-Full contribution flow, commit format and review bar: [CONTRIBUTING.md](CONTRIBUTING.md).
-
 ## Contributing
 
 The most valuable contribution here is a **missed violation** — an import that
@@ -165,8 +146,10 @@ crosses a boundary in a real workspace and produced no output. That is a bug of
 the worst kind this project has, and it earns a permanent regression fixture,
 not just a fix.
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md). By participating you agree to the
-[Code of Conduct](CODE_OF_CONDUCT.md). Security reports go through
+Setup, commands, commit format and how a pull request lands:
+[CONTRIBUTING.md](CONTRIBUTING.md). How the thing works inside:
+[docs/development/](docs/development/architecture.md). By participating you agree
+to the [Code of Conduct](CODE_OF_CONDUCT.md). Security reports go through
 [SECURITY.md](SECURITY.md), never a public issue.
 
 ## License
