@@ -81,6 +81,48 @@ No edge, no record, and the file reports clean with a violation sitting in it.
   and no re-export form; a blank (`_`) or dot (`.`) import is still a
   compile-time dependency.
 
+### go.work is checked against the graph
+
+A `go.work` at the workspace root decides, through its `use` directives, which
+modules a developer's `go build` and gopls load — while the graph covers every
+project carrying `<projectRoot>/go.mod`. Nothing ties the two lists together,
+and drift between them is byte-for-byte invisible: the dev machine and CI build
+different module sets and both look fine on their own. So when a **tracked**
+`go.work` exists at the root, `check` compares the lists, both directions are
+findings, and either direction fails the run with exit 1:
+
+- **`goWorkMissingUse`** — a `go.mod` project whose directory no `use` entry
+  names. The graph judges it; the developer's build skips it.
+- **`goWorkStaleUse`** — a `use` entry with no tracked `go.mod` at its
+  directory. `go` itself fails on such an entry on every developer machine,
+  while CI — which never reads `go.work` — stays green.
+- **`goWorkUnmodeledUse`** — a `use` entry whose `go.mod` exists but is not at
+  an Nx project root: nested inside a project, or inside no project. It builds
+  locally while `nx affected` and the boundary check never see it.
+- **`goWorkOutsideUse`** — a `use` path above the workspace root, which no run
+  over this workspace can cover.
+
+The comparison follows the graph's model — one module per project root — so a
+nested `go.mod` is never _required_ to appear in `use`; it is reported only
+when a `use` entry names it, because that is the moment the developer's build
+and the graph demonstrably diverge.
+
+Reading is static, per the documented `go.work` grammar (single-line and block
+`use`, `//` comments, quoted and raw string paths, absolute and relative
+paths); `go` is never invoked, the same refusal as everything else on this
+page. A `go.work` the parser cannot read — an unclosed block, an unterminated
+string, a `use` without a path — **fails the run with exit 3** rather than
+being read as an empty `use` list, because an empty list here would mean "no
+drift". Two declared parse limits: a string may not span a line, and paths are
+compared with `/` separators, so a `\`-separated Windows path surfaces as a
+drift finding naming the text the file contains — loud, never silent.
+
+A workspace with no root `go.work` pays nothing, and the report says nothing
+about it; there is no switch. The check runs on the CLI only, not in the
+language server: a drift finding describes the workspace, not any file being
+edited, and a workspace-level report pinned to whichever file happens to be
+open would put the report where its fix is not.
+
 ---
 
 ## Rust

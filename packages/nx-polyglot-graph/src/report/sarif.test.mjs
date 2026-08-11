@@ -12,6 +12,10 @@ vi.mock("../rules/messages.mjs", () => ({
     secondRule: "Second rule says {{what}}\n\nAnd then some detail",
   },
 }));
+vi.mock("../go-work.mjs", () => ({
+  GO_WORK_MESSAGE_IDS: ["driftRule"],
+  GO_WORK_MESSAGES: { driftRule: "Drift rule's summary line\n\nAnd its detail" },
+}));
 vi.mock("./text.mjs", () => ({ formatConstraint: () => "THE CONSTRAINT" }));
 
 import { buildSarifLog, formatSarif, sarifRules, toUriReference } from "./sarif.mjs";
@@ -55,9 +59,10 @@ describe("the SARIF envelope", () => {
 describe("the rule catalogue", () => {
   it("lists every message id the engine can produce, not only the ones that fired", () => {
     // A catalogue that grew with the findings would describe a rule on the run
-    // that reported it and leave it nameless on the next.
-    expect(sarifRules().map((rule) => rule.id)).toEqual(["firstRule", "secondRule"]);
-    expect(log().tool.driver.rules).toHaveLength(2);
+    // that reported it and leave it nameless on the next. The go.work drift
+    // ids come after the upstream ones, so every existing ruleIndex is stable.
+    expect(sarifRules().map((rule) => rule.id)).toEqual(["firstRule", "secondRule", "driftRule"]);
+    expect(log().tool.driver.rules).toHaveLength(3);
   });
 
   it("keeps the whole template as the description and its first line as the summary", () => {
@@ -95,6 +100,49 @@ describe("a result", () => {
   it("keeps the upstream message verbatim in the property bag, so a comparison still has it", () => {
     const [result] = log({ violations: [violation()] }).results;
     expect(result.properties.upstreamMessage).toBe("Second rule says no");
+  });
+});
+
+describe("a go.work drift finding", () => {
+  const finding = (overrides = {}) => ({
+    messageId: "driftRule",
+    file: "go.work",
+    line: 4,
+    column: 2,
+    directory: "libs/gone",
+    project: null,
+    message: "the drift, spelled out",
+    ...overrides,
+  });
+
+  it("is a result whose ruleId resolves in the catalogue, exactly like a violation's", () => {
+    // A drift finding that only reached the exit code would leave a
+    // code-scanning consumer looking at a red job with an empty upload.
+    const built = log({ goWork: { findings: [finding()], moduleProjects: 2 } });
+    const [result] = built.results;
+    expect(result.ruleId).toBe("driftRule");
+    expect(built.tool.driver.rules[result.ruleIndex].id).toBe("driftRule");
+    expect(result.level).toBe("error");
+    expect(result.message.text).toBe("the drift, spelled out");
+    expect(result.locations[0].physicalLocation).toEqual({
+      artifactLocation: { uri: "go.work" },
+      region: { startLine: 4, startColumn: 2 },
+    });
+  });
+
+  it("carries no region for a missing-use finding, rather than a fabricated line 1", () => {
+    const built = log({
+      goWork: { findings: [finding({ line: null, column: null })], moduleProjects: 2 },
+    });
+    expect(built.results[0].locations[0].physicalLocation.region).toBeUndefined();
+  });
+
+  it("appears beside the violations, neither replacing the other", () => {
+    const built = log({
+      violations: [violation()],
+      goWork: { findings: [finding()], moduleProjects: 2 },
+    });
+    expect(built.results.map((result) => result.ruleId)).toEqual(["secondRule", "driftRule"]);
   });
 });
 

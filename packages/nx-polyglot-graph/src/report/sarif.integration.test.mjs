@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
 import { MESSAGE_IDS, renderMessage } from "../rules/messages.mjs";
 
 import { buildSarifLog } from "./sarif.mjs";
@@ -34,12 +35,29 @@ const everyViolation = () =>
     data: {},
   }));
 
+/**
+ * One drift finding per go.work `messageId` — the missing-use one positionless
+ * (`line: null`), the shape `compareGoWork` really emits for an entry that
+ * does not exist, so the region-handling below is exercised on both branches.
+ */
+const everyDriftFinding = () =>
+  GO_WORK_MESSAGE_IDS.map((messageId, index) => ({
+    messageId,
+    file: "go.work",
+    line: messageId === "goWorkMissingUse" ? null : index + 1,
+    column: messageId === "goWorkMissingUse" ? null : 2,
+    directory: "acme/libs/engine-domain",
+    project: messageId === "goWorkMissingUse" ? "engine-domain" : null,
+    message: GO_WORK_MESSAGES[messageId],
+  }));
+
 const log = buildSarifLog({
   violations: everyViolation(),
   failures: [
     { sourceFile: "acme/apps/site/app/app.vue", line: 2, column: 40, reason: "cannot resolve" },
     { sourceFile: "a/b.rs", line: null, column: null, reason: "could not be read" },
   ],
+  goWork: { findings: everyDriftFinding(), moduleProjects: 2 },
 });
 
 describe("the SARIF log against what GitHub requires of an upload", () => {
@@ -51,7 +69,7 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
 
   it("gives every rule the engine can report a descriptor with an id, so no finding is nameless", () => {
     const ids = log.runs[0].tool.driver.rules.map((rule) => rule.id);
-    expect(ids).toEqual([...MESSAGE_IDS]);
+    expect(ids).toEqual([...MESSAGE_IDS, ...GO_WORK_MESSAGE_IDS]);
     expect(ids.every((id) => typeof id === "string" && id !== "")).toBe(true);
   });
 
@@ -79,13 +97,19 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
       expect(artifactLocation.uri.startsWith("/")).toBe(false);
       expect(artifactLocation.uri).not.toMatch(/^[a-z][a-z0-9+.-]*:/i);
       expect(artifactLocation.uri.split("/")).not.toContain("..");
+      if (result.ruleId === "goWorkMissingUse") {
+        // The one result about an entry that does not exist: no region, rather
+        // than a fabricated line 1 marking text the drift is not about.
+        expect(region).toBeUndefined();
+        continue;
+      }
       expect(region.startLine).toBeGreaterThanOrEqual(1);
       expect(region.startColumn).toBeGreaterThanOrEqual(1);
     }
   });
 
-  it("reports one result per violation and none for a failure, keeping the two kinds apart", () => {
-    expect(log.runs[0].results).toHaveLength(MESSAGE_IDS.length);
+  it("reports one result per violation and drift finding, and none for a failure", () => {
+    expect(log.runs[0].results).toHaveLength(MESSAGE_IDS.length + GO_WORK_MESSAGE_IDS.length);
     expect(log.runs[0].invocations[0].toolExecutionNotifications).toHaveLength(2);
   });
 

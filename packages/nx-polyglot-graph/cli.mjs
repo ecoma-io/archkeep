@@ -17,10 +17,17 @@
  * something is a violation. This file owns the two decisions nobody else may
  * make — which tree to judge, and what the exit code means.
  *
+ * When the workspace has a tracked `go.work` at its root, `check` also
+ * compares its `use` list against the graph's go.mod projects
+ * (`src/go-work.mjs` owns the mechanics): drift means a developer's `go build`
+ * and CI select different module sets, so a drift finding fails the run the
+ * way a violation does. The comparison is workspace-level and ignores path
+ * scoping — two lists are being compared, not files analyzed.
+ *
  * Exit codes are part of the contract; a script calling this has to tell "your
  * tree is dirty" from "you typed it wrong" from "the checker itself broke":
  *   0  no violations, and every selected file was analyzed
- *   1  boundary violations found
+ *   1  findings — boundary violations, or go.work drift
  *   2  usage error — unknown command, missing argument, path outside the tree
  *   3  no verdict — no workspace, malformed config, `nx graph` or `git` failed,
  *      or a selected file could not be analyzed at all. Distinct from 1 on
@@ -42,9 +49,10 @@
 import { writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
-import { isWholeFileFailure } from "./src/analysis/source-util.mjs";
+import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile } from "./src/config.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
+import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
 import { DEFAULT_OPTIONS, readPluginOptions } from "./src/options.mjs";
 import { formatSarif } from "./src/report/sarif.mjs";
 import { formatReport } from "./src/report/text.mjs";
@@ -102,7 +110,11 @@ Naming paths scopes the run to those files. That is a fast local pre-check and
 not the gate: the cycle and lazy-load rules judge the file graph as a whole, so
 a scoped run can miss what a whole-workspace run would find.
 
-Exit codes: ${EXIT.ok} clean · ${EXIT.violations} violations found · ${EXIT.usage} usage error · ${EXIT.error} no verdict (a file could not be analyzed, or the run could not start)`;
+A workspace with a go.work at its root also has its use list compared against
+every project's go.mod, whatever paths scope the run — a module in one list
+and not the other means a developer's go build and CI build different trees.
+
+Exit codes: ${EXIT.ok} clean · ${EXIT.violations} violations or go.work drift found · ${EXIT.usage} usage error · ${EXIT.error} no verdict (a file could not be analyzed, or the run could not start)`;
 
 /**
  * The options to WORD the help text with — best-effort, never fatal.
@@ -221,6 +233,37 @@ export async function check(
   );
 
   const { imports, failures, analyzed } = analyzeWorkspace(workspace, selected);
+
+  // The go.work drift check, keyed off the manifest's presence the way every
+  // resolver keys off its language's manifest: no tracked root go.work, no
+  // check and no mention. It ignores `selected` on purpose — two workspace
+  // facts are compared, not files analyzed — and a go.work the parser cannot
+  // read becomes a whole-file failure (exit 3) rather than a truncated use
+  // list, because a use list cut short at the malformed line would hide every
+  // stale entry below it while inventing missing-use findings above it — a
+  // verdict about a file that was never read (`src/go-work.mjs`).
+  let goWork = null;
+  if (tracked.includes("go.work")) {
+    try {
+      const goWorkText = workspace.readFile("go.work");
+      if (goWorkText === null) throw new Error("go.work could not be read");
+      goWork = compareGoWork({
+        uses: parseGoWorkUse(goWorkText),
+        workspaceRoot: root,
+        projects: workspace.projects,
+        files: tracked,
+      });
+    } catch (cause) {
+      failures.push(
+        fileFailure(
+          "go.work",
+          `${cause?.message ?? cause} — a go.work this tool cannot read is a coverage hole, ` +
+            `not an empty use list, so the drift check reached no verdict`,
+        ),
+      );
+    }
+  }
+
   const violations = evaluate(imports, graph, config);
   return {
     report: FORMATS[options.format]({
@@ -229,8 +272,10 @@ export async function check(
       analyzed,
       imports: imports.length,
       projects: Object.keys(graph.nodes).length,
+      goWork,
     }),
     violations: violations.length,
+    goWorkDrift: goWork === null ? 0 : goWork.findings.length,
     analyzed,
     // Files the run produced no verdict about, counted here rather than
     // recomputed by the caller: the exit code and the report must agree about
@@ -310,6 +355,9 @@ export async function runCli(argv, env) {
     env.err(
       `nx-polyglot-graph: ${result.violations} violation${result.violations === 1 ? "" : "s"} ` +
         `over ${result.analyzed} analyzed file${result.analyzed === 1 ? "" : "s"}` +
+        (result.goWorkDrift > 0
+          ? `, ${result.goWorkDrift} go.work drift finding${result.goWorkDrift === 1 ? "" : "s"}`
+          : "") +
         (result.unchecked > 0
           ? `, ${result.unchecked} file${result.unchecked === 1 ? "" : "s"} not analyzed`
           : "") +
@@ -319,11 +367,12 @@ export async function runCli(argv, env) {
     env.out(result.report);
   }
 
-  // Violations first: they are a verdict, and a caller that gets 1 knows the
-  // tree is dirty whatever else the run could not reach — the report lists the
-  // unreached files either way. A clean run with a file nobody could analyze is
-  // the case that must not return 0, because 0 is read as "checked, and fine".
-  if (result.violations > 0) return EXIT.violations;
+  // Findings first — boundary violations and go.work drift alike are verdicts,
+  // and a caller that gets 1 knows the tree is dirty whatever else the run
+  // could not reach; the report lists the unreached files either way. A clean
+  // run with a file nobody could analyze is the case that must not return 0,
+  // because 0 is read as "checked, and fine".
+  if (result.violations > 0 || result.goWorkDrift > 0) return EXIT.violations;
   return result.unchecked > 0 ? EXIT.error : EXIT.ok;
 }
 
