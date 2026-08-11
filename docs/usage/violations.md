@@ -268,7 +268,7 @@ that stopped at the first hop would be trivially bypassable.
 
 ---
 
-## Two things that are not violations
+## Three things that are not violations
 
 **Unresolvable import sites.** A specifier that is not statically knowable — a
 computed `import()` argument, a Rust brace group with no leading crate name — is
@@ -280,4 +280,12 @@ section, and it **does** fail the run with exit 3. That distinction is the whole
 design: a checker that could not look must never be mistaken for one that looked
 and found nothing.
 
-Both sections are explained in [troubleshooting.md](troubleshooting.md).
+**Workspace-level findings.** go.work drift (the `goWork*` ids) and a dead
+tsconfig paths alias (`tsconfigDeadPathAlias`) are judged against the
+workspace's own declarations rather than against any import, so no constraint
+row applies to them and no suppression removes them. They fail the run with
+exit 1 exactly as a violation does. [languages.md](languages.md) owns each
+check's semantics.
+
+All three, including what fixes each finding, are explained in
+[troubleshooting.md](troubleshooting.md).

@@ -4,7 +4,8 @@
 
 `nx affected` only knows about a dependency if it shows up as an edge in the Nx
 project graph, and Nx's own graph inference has no notion of a Go import, a
-Cargo path dependency, or a `[tool.uv.sources]` entry. Without this plugin,
+Cargo path dependency, or a `pyproject.toml` path dependency (uv, Poetry or
+PDM). Without this plugin,
 changing a Go library never marks a sibling Go project affected — silently
 defeating `nx affected` for every polyglot project in the workspace. Community
 plugins for this problem (gonx, `@nxlv/python`) solve it by also inferring

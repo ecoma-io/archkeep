@@ -17,7 +17,7 @@ on the way.
 | [getting-started.md](usage/getting-started.md)           | Install, register the plugin, write the first boundary table, see a violation |
 | [designing-boundaries.md](usage/designing-boundaries.md) | What to put in the constraint table, and how to pick tags that hold           |
 | [violations.md](usage/violations.md)                     | Each of the fifteen violations: what it means, and what fixes it              |
-| [languages.md](usage/languages.md)                       | What each analyzer reads, and the shapes it cannot                            |
+| [languages.md](usage/languages.md)                       | What each analyzer reads, the shapes it cannot, and the two workspace checks  |
 | [ci.md](usage/ci.md)                                     | The exit codes in a pipeline, and SARIF into GitHub code scanning             |
 | [editors.md](usage/editors.md)                           | Diagnostics at the edit, per client                                           |
 | [troubleshooting.md](usage/troubleshooting.md)           | It found nothing · it found too much · it could not look                      |

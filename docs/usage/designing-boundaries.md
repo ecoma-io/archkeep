@@ -129,7 +129,7 @@ value your config already states.
 | `allowCircularSelfDependency`        | Whether a file may reach its own project through the project's public entry point. Off means that is a cycle through the barrel, and an error.                      |
 | `checkDynamicDependenciesExceptions` | Specifiers whose `import()` is exempt. Empty means a lazy boundary violation is still a violation — it just fails later.                                            |
 | `ignoredCircularDependencies`        | Project pairs excused from the cycle check. Exact names only, per above.                                                                                            |
-| `banTransitiveDependencies`          | Whether importing a package not declared in the project's own manifest is an error.                                                                                 |
+| `banTransitiveDependencies`          | Whether importing a package declared in neither the project's own manifest nor the workspace root's is an error.                                                    |
 | `checkNestedExternalImports`         | Whether `bannedExternalImports` is judged against what dependencies drag in, as well as direct imports.                                                             |
 
 ## Choosing axes that hold

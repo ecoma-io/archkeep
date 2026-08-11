@@ -228,16 +228,18 @@ A crate nested inside a project — `src-tauri/` is the usual case — gets no g
 edge while its sources are still analyzed. That disagreement is the documented
 modelling limit surfacing, not a bug in either half.
 
-**Python.** Edges follow uv semantics strictly: a dependency string creates an
-edge only when `[tool.uv.sources]` routes that name to the workspace or to
-another project's directory. A name that merely coincides with a sibling package
-draws nothing.
+**Python.** An edge needs an explicit workspace wiring in the manifest, under
+the declaring tool's own semantics — a `[tool.uv.sources]` route, a Poetry
+`{ path = "…" }`, a PDM root-anchored local URL; the exact shapes are in
+[languages.md](languages.md) § _Python_. A name that merely coincides with a
+sibling package draws nothing, and a declared path that lands on no project's
+root fails graph computation outright rather than being dropped.
 
 This is the language where the manifest and the sources most often disagree, and
 the gap is real rather than theoretical — `import other_project.thing` with no
-`[tool.uv.sources]` entry imports fine at runtime while the manifest says nothing
-at all. The boundary check catches it; `nx affected` will not until the
-dependency is declared.
+manifest declaration imports fine at runtime while the manifest says nothing at
+all. The boundary check catches it; `nx affected` will not until the dependency
+is declared.
 
 **Verify what the graph actually holds:**
 
