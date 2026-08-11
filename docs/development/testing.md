@@ -113,6 +113,15 @@ resolves it once, on first load, and never again), and **same site, not same
 column** (ESLint reports the whole statement, this engine reports the specifier,
 and a pair matches when this engine's position falls inside ESLint's range).
 
+The real-tree half of that comparison lives outside the package:
+[`scripts/differential-real-trees.mjs`](../../scripts/differential-real-trees.mjs)
+drives the same two engines over public Nx workspaces pinned at fixed commits,
+from `.github/workflows/differential.yml` rather than from any `test` target —
+the conformance README's condition 3 states what it measures and why a red run
+there is a regression, and its pure halves (ledger matching, the empty-verdict
+claim) are what `scripts/differential-real-trees.test.mjs` pins under
+`pnpm test`.
+
 Three cheaper files sit beside the differential and check the project against its
 own declarations rather than against ESLint: `boundary.test.mjs` holds the
 shipped tool to what it may depend on, `stated-counts.integration.test.mjs` holds

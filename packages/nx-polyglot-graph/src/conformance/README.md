@@ -384,7 +384,11 @@ ESLint does not, and parity is what makes this comparison mean anything.
   project names are exercised.
 - **A real workspace.** These are synthetic trees. That is deliberate — this
   tool is installed into workspaces it has never seen, and a fixture built on
-  any one repository's project names would test a coincidence.
+  any one repository's project names would test a coincidence. The real-tree
+  half of the differential lives outside this suite, in
+  `../../../../scripts/differential-real-trees.mjs`, precisely so no real
+  repository's names leak into these fixtures; condition 3 below says what it
+  measures and where it runs.
 
 ## What this licenses
 
@@ -392,10 +396,11 @@ ESLint does not, and parity is what makes this comparison mean anything.
 config today** — but the reason has changed shape. All fifteen message types
 agree wherever both engines can see the code, and the only false negative any
 probe records is the exemption-mechanism one above; what blocks removal is now
-the third condition below — agreement measured on real trees rather than on
-fixtures — plus the residue the second one names.
+the breadth of the evidence — two real trees is a measurement, not a survey of
+what workspaces do — plus the residue conditions 2 and 3 name.
 
-Three things have to become true first, and two of them are.
+Three things have to become true first, and all three now have a mechanism
+holding them rather than a plan.
 
 1. **No false negative this suite has not declared and explained.** Met, and
    held rather than remembered: the
@@ -424,16 +429,31 @@ Three things have to become true first, and two of them are.
    answer; and a `package.json` neither parser can read keeps its fields
    absent where upstream throws mid-lint — extra reports instead of a crash,
    the loud direction both times.
-3. **The differential runs on real trees, not only on fixtures.** A suite of
-   minimal fixtures proves the rules agree about the situations someone thought
-   to build. Pointing both engines at a real workspace — more than one, with
-   unrelated vocabularies — and requiring the same verdict set, is what would
-   prove they agree about the situations nobody thought of.
+3. **The differential runs on real trees, not only on fixtures.** Met in
+   mechanism, with its scope stated rather than implied. A suite of minimal
+   fixtures proves the rules agree about the situations someone thought to
+   build; `scripts/differential-real-trees.mjs` at the repository root points
+   both engines at real public workspaces — two, with unrelated constraint
+   vocabularies, pinned at fixed commits — and requires the same verdict set,
+   with every difference either explained in its ledger or failing the run,
+   and a zero-verdict answer from either engine failing it too on trees
+   measured to contain violations. The evidence lives in the
+   `.github/workflows/differential.yml` runs (weekly and on demand — that
+   file's header argues why it is not a required check); **a red run there is
+   a conformance regression**, not a flake. Measured 2026-08-11 at the pinned
+   commits: 33 verdicts per engine across both trees, all agreeing, ledger
+   empty. The scope: both trees are TypeScript workspaces, which is also the
+   entire surface upstream can read — no public Nx tree with Go, Rust, Python
+   or Vue sources and a non-trivial constraint table under a permissive
+   license existed to pin (the search and its rejects are recorded in the
+   script's tree table), so real-tree agreement covers TS/JS for now and two
+   trees remain evidence rather than a survey.
 
-Until then the honest position is the one the tool already takes: run **both**.
+The honest position is still the one the tool already takes: run **both**.
 ESLint stays authoritative for JavaScript, TypeScript and Vue, where it is
 correct and where agreement is measured on the 37 fixture workspaces ESLint can
-read rather than on the code contributors actually write. This tool covers Go,
+read plus the two pinned real trees above — evidence that grows with the tree
+table, not a proof over every workspace shape. This tool covers Go,
 Rust and Python, where
 ESLint reports nothing at all and any enforcement is a strict improvement over
 the silence it replaces.

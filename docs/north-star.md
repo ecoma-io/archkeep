@@ -121,9 +121,9 @@ that makes it trustworthy.
 There is one measurable finish line already written down, and it is not this
 document's to restate: `src/conformance/README.md` § _What this licenses_ states
 the three things that have to be true before a workspace can drop
-`@nx/enforce-module-boundaries` and run Lattice alone. Two are met. The third
-is the real roadmap for the enforcement half, and it is about evidence rather
-than about features:
+`@nx/enforce-module-boundaries` and run Lattice alone. All three now have a
+mechanism holding them; what remains open is breadth of evidence, not a missing
+feature:
 
 1. no false negative the suite has not declared and explained — **met**, and held
    by a test that fails both when a new one appears and when a declared one is
@@ -131,12 +131,16 @@ than about features:
 2. the deliberately-stricter list stays a decision rather than a surprise —
    **met**: both adapters now populate every fail-closed graph field from the
    files upstream reads, with the residue named where that condition is stated;
-3. the differential runs against real trees, not only against fixtures.
+3. the differential runs against real trees, not only against fixtures —
+   **met in mechanism**: `scripts/differential-real-trees.mjs` runs both
+   engines over public Nx workspaces pinned at fixed commits, weekly and on
+   demand, with the scope and residue stated where that condition is.
 
 The third is the one that matters most at platform scale, and it gets harder with
 every language added — which is the honest cost of choosing breadth. A suite of
 fixtures proves the rules agree about the situations someone thought to build.
-Only a real tree proves they agree about the situations nobody thought of.
+Only a real tree proves they agree about the situations nobody thought of, and
+two pinned trees are the start of that proof rather than its end.
 
 ## The refusals
 

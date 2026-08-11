@@ -1,0 +1,58 @@
+# The conformance differential against REAL public Nx workspaces, pinned at
+# fixed commits — `scripts/differential-real-trees.mjs`, which holds the tree
+# table, the explained-differences ledger, and the exit contract.
+#
+# THIS IS NOT A REQUIRED CHECK, AND THAT ABSENCE IS DELIBERATE — read this
+# before wiring it into `ci-gate`. Every required check answers for the diff
+# under review; this one also depends on two third-party repositories being
+# reachable and on their registries serving ~5000 packages. Gating merges on
+# that would block every pull request the hour GitHub or npm hiccups, and the
+# pressure to get unblocked is exactly how a differential gets deleted. So it
+# runs weekly and on demand instead — but the demotion is in WHERE it runs,
+# never in what a result means: `src/conformance/README.md` (condition 3 under
+# "What this licenses") points here as the evidence, and a red run of this
+# workflow is a conformance regression to be fixed like a failing required
+# check, not a flake to re-run. The weekly schedule exists so that a
+# renovate-bumped `@nx/eslint-plugin` or eslint is re-measured against the
+# pinned trees within days of landing, not on whichever release notices.
+#
+# Nothing tree-side is cached (the script's header carries the argument: a
+# fresh clone at a pinned sha cannot be stale, and a cached node_modules that
+# survived a lockfile change would measure yesterday's inputs under today's
+# shas). The `cache: pnpm` below caches only THIS repository's own store, the
+# same as ci.yml.
+name: Differential
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 04:17 UTC — an off-peak minute rather than a popular
+    # on-the-hour slot GitHub delays or drops under load.
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  differential:
+    name: Differential against real trees
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Exit 3 (clone/install/graph failed — the run could not look) is as red
+      # as exit 1 (an unexplained difference or an empty-verdict breach); the
+      # log's last lines say which one it was.
+      - run: node scripts/differential-real-trees.mjs

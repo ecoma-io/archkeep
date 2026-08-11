@@ -173,7 +173,13 @@ export async function createUpstreamRunner(root) {
     return byFile;
   };
 
-  return { workspaceRoot, defaultOptions, upstreamMessageIds, run };
+  // `lint` is exported beside `run` because the fixture suite is not its only
+  // caller: `scripts/differential-real-trees.mjs` drives the same upstream rule
+  // over cloned public workspaces, and the globalThis dance this file's header
+  // describes is exactly the part that must not exist twice — a drifted copy
+  // would compare this engine against a mis-driven upstream and call the
+  // difference a finding.
+  return { workspaceRoot, defaultOptions, upstreamMessageIds, lint, run };
 }
 
 /**
