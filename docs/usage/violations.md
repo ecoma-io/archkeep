@@ -180,7 +180,8 @@ nothing is built, turn this option off — the check has nothing true to say the
 > Only packages defined in the "package.json" can be imported. Transitive or unresolvable dependencies are not allowed.
 
 An external package was imported without being declared in the importing
-project's own manifest. It works today because something else installed it, and
+project's own manifest or the workspace root's — the same two files upstream
+checks. It works today because something else installed it, and
 it breaks the day that something else stops depending on it.
 
 Only fires under `banTransitiveDependencies: true`. Node built-ins are exempt.

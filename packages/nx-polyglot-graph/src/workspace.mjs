@@ -30,10 +30,11 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
 
 import { analyzeFile, languageOf } from "./analysis/analyze.mjs";
 import { fileFailure, projectOwning } from "./analysis/source-util.mjs";
+import { parseNxJson } from "./nx-json.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -255,6 +256,15 @@ export function createWorkspace({ root, graph, files, tsConfig, read }) {
 }
 
 /**
+ * A file's workspace-relative path inside a project. `""` (the LSP index) and
+ * `"."` (Nx's graph output) both mean the workspace root itself, and neither
+ * may leak into the path: an in-memory reader keyed by exact path would answer
+ * `null` for `./package.json`.
+ */
+const fileUnder = (projectRoot, name) =>
+  projectRoot === "" || projectRoot === "." ? name : `${projectRoot}/${name}`;
+
+/**
  * Is the project at `projectRoot` a Module Federation remote? Upstream's own
  * test, reproduced from `@nx/eslint-plugin`'s `appIsMFERemote` in its
  * `runtime-lint-utils` (measured at 23.1.1): read
@@ -273,10 +283,9 @@ export function createWorkspace({ root, graph, files, tsConfig, read }) {
  * @returns {boolean}
  */
 export function projectIsMFERemote(projectRoot, readFile) {
-  const at = (name) =>
-    projectRoot === "" || projectRoot === "." ? name : `${projectRoot}/${name}`;
   const config =
-    readFile(at("module-federation.config.js")) || readFile(at("module-federation.config.ts"));
+    readFile(fileUnder(projectRoot, "module-federation.config.js")) ||
+    readFile(fileUnder(projectRoot, "module-federation.config.ts"));
   if (!config) return false;
   return /('|")?exposes('|")?:/.test(config);
 }
@@ -305,6 +314,216 @@ export function annotateMFERemotes(nodes, readFile) {
   for (const node of Object.values(nodes)) {
     if (node.type !== "app") continue;
     node.data.mfeRemote = projectIsMFERemote(node.data.root, readFile);
+  }
+}
+
+/**
+ * The parsed `package.json` of the project at `projectRoot`, or `null` when
+ * there is nothing to measure.
+ *
+ * Upstream reads this file through `readFileIfExisting`, which answers `''`
+ * for a missing file, and then tests that answer for truthiness — so an
+ * existing-but-empty manifest and an absent one are the same non-answer there,
+ * and they are here. The parser is `parseNxJson`, because upstream hands the
+ * text to `@nx/devkit`'s `parseJson` and a manifest carrying a trailing comma
+ * or a comment is a manifest upstream reads.
+ *
+ * One deliberate divergence, in the loud direction: on a manifest neither
+ * parser can read, upstream's `parseJson` throws mid-lint. Here the answer is
+ * `null` — the fact was not measured, the field stays absent, and absence
+ * fails closed in the rule layer (`rules/topology.mjs`), so the broken
+ * manifest costs extra reports and never a waived violation. An editor's
+ * language server re-reads on every keystroke, and a manifest is malformed for
+ * exactly as long as someone is typing inside it.
+ *
+ * @param {string} projectRoot Workspace-relative; `""` and `"."` both mean the
+ *   workspace root itself.
+ * @param {(path: string) => string|null} readFile Workspace-relative reader.
+ * @returns {object|null}
+ */
+function readPackageManifest(projectRoot, readFile) {
+  const text = readFile(fileUnder(projectRoot, "package.json"));
+  if (!text) return null;
+  try {
+    return parseNxJson(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The secondary entry points a project's `package.json` `exports` map
+ * declares, as the `{path, file}` pairs `rules/topology.mjs` walks — or `null`
+ * when the manifest itself could not be measured (`readPackageManifest`), so
+ * the caller keeps the graph field absent rather than claiming an empty list.
+ *
+ * Port of `@nx/eslint-plugin`'s `getPackageEntryPoints` + `parseExports` in
+ * its `runtime-lint-utils` (measured at 23.1.1), the only files/fields
+ * upstream consults for this fact: `<projectRoot>/package.json`, field
+ * `exports`, and nothing else — `project.json` is never read for it, and the
+ * `ng-package.json` fallback lives inside upstream's `getEntryPoint` walk, the
+ * part `rules/topology.mjs` declares it does not reproduce. A manifest with no
+ * `exports` answers `[]` exactly as upstream does.
+ *
+ * @param {string} projectRoot Workspace-relative; `""` and `"."` both mean the
+ *   workspace root itself.
+ * @param {(path: string) => string|null} readFile Workspace-relative reader.
+ * @returns {{path: string, file: string}[]|null}
+ */
+export function packageEntryPoints(projectRoot, readFile) {
+  const manifest = readPackageManifest(projectRoot, readFile);
+  if (manifest === null) return null;
+  if (!manifest.exports) return [];
+  const entryPaths = [];
+  parseExportsInto(manifest.exports, projectRoot, entryPaths);
+  return entryPaths;
+}
+
+/**
+ * Upstream's `parseExports`, reproduced quirk for quirk rather than repaired,
+ * because the walk in `rules/topology.mjs` compares against exactly the pairs
+ * upstream builds (each measured against the installed 23.1.1 by calling it):
+ *
+ * - A string at the top level, or under the `"."` key, is the MAIN entry point
+ *   and yields nothing — only secondary entry points are collected.
+ * - A conditional-exports object is detected by `import || require || default
+ *   || node` but resolved as `default || import || require || node` — the two
+ *   orders differ, so `{import, default}` follows `default`. The test is
+ *   truthiness, so a key present with value `""` does not count.
+ * - Any other object recurses per key with the KEY as the new base path —
+ *   which discards the parent key (`{"./sub": {"./deep": f}}` yields
+ *   `<root>/deep`), and turns a lone non-conditional key like `types` into an
+ *   entry at `<root>/types`. An array walks the same branch, one entry per
+ *   index (`<root>/0`, `<root>/1`).
+ * - `path` and `file` are `joinPathFragments(projectRoot, …)`; `posix.join`
+ *   computes the same answer on the workspace-relative `/`-separated paths
+ *   both adapters feed it, including preserving a key's trailing slash — the
+ *   one shape whose walk can match, see `./conformance/README.md`
+ *   ("`getEntryPoint`'s directory branch is dead upstream" — corrected).
+ *
+ * @param {unknown} exports The `exports` value, any shape a manifest can hold.
+ * @param {string} projectRoot
+ * @param {{path: string, file: string}[]} entryPaths Mutated in place.
+ * @param {string} [basePath]
+ */
+function parseExportsInto(exports, projectRoot, entryPaths, basePath = ".") {
+  if (exports === null) return;
+  if (typeof exports === "string") {
+    if (basePath === ".") return;
+    entryPaths.push({
+      path: posix.join(projectRoot, basePath),
+      file: posix.join(projectRoot, exports),
+    });
+    return;
+  }
+  if (exports.import || exports.require || exports.default || exports.node) {
+    parseExportsInto(
+      exports.default || exports.import || exports.require || exports.node,
+      projectRoot,
+      entryPaths,
+      basePath,
+    );
+    return;
+  }
+  for (const [key, value] of Object.entries(exports)) {
+    parseExportsInto(value, projectRoot, entryPaths, key);
+  }
+}
+
+/**
+ * The external packages the project at `projectRoot` may treat as DIRECT
+ * dependencies — the fact `noTransitiveDependencies` turns on — or `null` when
+ * neither manifest could be measured, so the caller keeps the field absent.
+ *
+ * Port of `@nx/eslint-plugin`'s `isDirectDependency` in its
+ * `runtime-lint-utils` (measured at 23.1.1), which answers
+ * `packageExistsInPackageJson(name, '.') ||
+ * packageExistsInPackageJson(name, source.data.root)` — the workspace root's
+ * `package.json` and the source project's own, as one union, which is why one
+ * list per node is enough for `rules/topology.mjs` to reproduce the `||`.
+ * `packageExistsInPackageJson` itself is reproduced quirk for quirk:
+ *
+ * - Only `dependencies`, `peerDependencies` and `devDependencies` are read.
+ *   `optionalDependencies` is NOT — upstream's own `getAllDependencies` in its
+ *   `package-json-utils` includes it, but the boundary rule never calls that.
+ * - The test is `dependencies[packageName]` — truthiness of the VALUE — so a
+ *   dependency declared as `"pkg": ""` is invisible to upstream, and so it is
+ *   invisible here.
+ *
+ * @param {string} projectRoot Workspace-relative; `""` and `"."` both mean the
+ *   workspace root itself, whose manifest is then read once, not unioned with
+ *   itself.
+ * @param {(path: string) => string|null} readFile Workspace-relative reader.
+ * @returns {string[]|null}
+ */
+export function declaredPackages(projectRoot, readFile) {
+  const own = readPackageManifest(projectRoot, readFile);
+  const atWorkspaceRoot = projectRoot === "" || projectRoot === ".";
+  const workspace = atWorkspaceRoot ? own : readPackageManifest(".", readFile);
+  if (own === null && workspace === null) return null;
+  const names = new Set();
+  for (const manifest of workspace === own ? [own] : [workspace, own]) {
+    if (manifest === null) continue;
+    for (const section of ["dependencies", "peerDependencies", "devDependencies"]) {
+      const packages = manifest[section];
+      if (!packages) continue;
+      for (const [name, version] of Object.entries(packages)) {
+        if (version) names.add(name);
+      }
+    }
+  }
+  return [...names];
+}
+
+/**
+ * Writes the two `package.json` facts the rule layer reads as optional graph
+ * fields — `data.entryPoints` (the secondary-entry-point exemptions) and
+ * `data.declaredPackages` (`noTransitiveDependencies`) — onto every project
+ * node, from the same manifests upstream reads per lint run.
+ *
+ * Neither fact is in `nx graph --file=` output — nothing in nx 23.1.1 writes
+ * an `entryPoints` or `declaredPackages` field onto a graph node (verified by
+ * searching its dist: `declaredPackages` appears nowhere, and every
+ * `entryPoints` hit is the internal `entryPointsToProjectMap` its import
+ * resolver builds and discards); upstream ESLint computes both per lint run
+ * off the filesystem — so both adapters compute them here, through the two
+ * functions above, which is what keeps a CLI verdict and an LSP verdict on the
+ * same import from disagreeing (the arrangement `annotateMFERemotes`
+ * established).
+ *
+ * Every project node is annotated, not one type: upstream reads the SOURCE
+ * project's manifest for `belongsToDifferentEntryPoint` and
+ * `isDirectDependency`, and the TARGET project's for its lazy-load check, so
+ * any node can be asked for either fact.
+ *
+ * On these two adapters' graphs the fields mean "measured from
+ * `package.json`", so a node whose manifest answers nothing has the field
+ * DELETED rather than left as whatever the node carried: `nx graph --file=`
+ * copies arbitrary `project.json` keys into `data` verbatim, and a stale
+ * `entryPoints` or `declaredPackages` riding in from config would WAIVE
+ * violations on a claim nobody measured — the silent direction. An absent
+ * manifest therefore keeps (or makes) the field absent, and absence keeps
+ * failing closed downstream.
+ *
+ * @param {Record<string, object>} nodes Graph nodes, mutated in place.
+ * @param {(path: string) => string|null} readFile Workspace-relative reader.
+ */
+export function annotatePackageFacts(nodes, readFile) {
+  // One read per distinct manifest per pass: every project's answer unions the
+  // workspace root's manifest, and n reads of one unchanged file are n − 1
+  // more than the fact needs.
+  const seen = new Map();
+  const readOnce = (path) => {
+    if (!seen.has(path)) seen.set(path, readFile(path));
+    return seen.get(path);
+  };
+  for (const node of Object.values(nodes)) {
+    const entryPoints = packageEntryPoints(node.data.root, readOnce);
+    if (entryPoints === null) delete node.data.entryPoints;
+    else node.data.entryPoints = entryPoints;
+    const declared = declaredPackages(node.data.root, readOnce);
+    if (declared === null) delete node.data.declaredPackages;
+    else node.data.declaredPackages = declared;
   }
 }
 

@@ -82,8 +82,13 @@ reporting because the alternative is silence. The ones that change a verdict:
 - Facts upstream reads off disk are optional graph fields here, and **absent
   means the exemption does not apply** — `mfeRemote` (for `noImportsOfApps`),
   `entryPoints` (secondary entry points), `declaredPackages` (for
-  `noTransitiveDependencies`). Nothing populates those today, so an import that
-  ESLint would exempt on one of those grounds is reported here.
+  `noTransitiveDependencies`). The CLI and the language server populate all
+  three from the same files upstream reads, so through them these grounds
+  exempt exactly what ESLint exempts; the strict answer remains for a graph
+  built by anything else. One named gap that can change a verdict: secondary
+  entry points declared only by an Angular `ng-package.json` are not read —
+  that fallback of upstream's `getEntryPoint` is deliberately not reproduced —
+  so a self-import through one is reported here where ESLint exempts it.
 - **`require()` and `require.resolve()` of a lazy-loaded library are reported**,
   where ESLint exempts both. The analysis record cannot tell the three call forms
   apart.

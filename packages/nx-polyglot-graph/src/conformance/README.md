@@ -392,10 +392,10 @@ ESLint does not, and parity is what makes this comparison mean anything.
 config today** — but the reason has changed shape. All fifteen message types
 agree wherever both engines can see the code, and the only false negative any
 probe records is the exemption-mechanism one above; what blocks removal is now
-the other two conditions below, neither of which is about correctness on the
-fixtures.
+the third condition below — agreement measured on real trees rather than on
+fixtures — plus the residue the second one names.
 
-Three things have to become true first, and one of them is.
+Three things have to become true first, and two of them are.
 
 1. **No false negative this suite has not declared and explained.** Met, and
    held rather than remembered: the
@@ -406,15 +406,24 @@ Three things have to become true first, and one of them is.
    keeps its `eslint-disable` directives beside its `boundarySuppressions`
    entries closes it. This is the condition that can regress in one commit, so
    it is the one worth re-reading the run for rather than this paragraph.
-2. **The stricter list stays a decision, not a surprise.** Two of the three
-   fail-closed rows fire on graph fields no adapter populates today.
-   `data.mfeRemote` is no longer one of them: both adapters compute it from the
-   `module-federation.config.{js,ts}` beside each app the way upstream does
-   (`../workspace.mjs` → `annotateMFERemotes`, shared by the CLI path and the
-   LSP index), so its row fires only on a graph something else built. Removing
-   ESLint would still put the remaining false alarms in front of contributors
-   on real code, so either the adapter supplies `entryPoints` and
-   `declaredPackages`, or each absence is accepted with its noise understood.
+2. **The stricter list stays a decision, not a surprise.** Met: all three
+   fail-closed rows are populated by both adapters from the files upstream
+   reads. `data.mfeRemote` comes from the `module-federation.config.{js,ts}`
+   beside each app (`../workspace.mjs` → `annotateMFERemotes`), and the two
+   `package.json` facts come from `annotatePackageFacts` in the same file —
+   `entryPoints` from the project manifest's `exports` the way upstream's
+   `parseExports` builds them, quirks reproduced rather than repaired, and
+   `declaredPackages` as the union of the root manifest and the project's own,
+   the `||` inside upstream's `isDirectDependency`. Both functions are shared
+   by the CLI path and the LSP index, so the two faces cannot answer
+   differently. The residue, named rather than discovered later: the rows
+   still fire on a graph something else built, which is why they stay in the
+   table above; upstream's `getEntryPoint` has an `ng-package.json` fallback
+   `src/rules/topology.mjs` declares it does not reproduce, so an Angular
+   workspace declaring secondary entry points that way still gets the strict
+   answer; and a `package.json` neither parser can read keeps its fields
+   absent where upstream throws mid-lint — extra reports instead of a crash,
+   the loud direction both times.
 3. **The differential runs on real trees, not only on fixtures.** A suite of
    minimal fixtures proves the rules agree about the situations someone thought
    to build. Pointing both engines at a real workspace — more than one, with

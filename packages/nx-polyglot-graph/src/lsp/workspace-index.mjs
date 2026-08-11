@@ -47,7 +47,7 @@ import { join } from "node:path";
 import { analyzeFile, languageOf } from "../analysis/analyze.mjs";
 import { parseNxJson } from "../nx-json.mjs";
 import { findMatchingProjects } from "../rules/match.mjs";
-import { annotateMFERemotes, environmentForTree } from "../workspace.mjs";
+import { annotateMFERemotes, annotatePackageFacts, environmentForTree } from "../workspace.mjs";
 
 /** The file Nx reads to learn a project exists — and so does this. */
 export const PROJECT_CONFIG_FILE = "project.json";
@@ -302,6 +302,15 @@ export function buildWorkspaceIndex({
   // means an index that skipped this write would flag every import of a real
   // remote as `noImportsOfApps`.
   annotateMFERemotes(nodes, readFile);
+  // And the two `package.json` facts, from the same shared functions the CLI
+  // path calls (`../workspace.mjs` → `annotatePackageFacts`). Skipping this
+  // write would fail closed — extra reports, not waived ones — but the two
+  // faces would then disagree about the same import, which is the line
+  // `src/lsp/` exists to hold. It also DELETES a stale `entryPoints` or
+  // `declaredPackages` riding in from `project.json` (`buildNodes` spreads that
+  // config into `data` verbatim), because an unmeasured claim that waives
+  // violations is the silent direction.
+  annotatePackageFacts(nodes, readFile);
 
   // Longest root wins, for the reason `../analysis/source-util.mjs` gives: a
   // project nested inside another's directory matches both roots, and a

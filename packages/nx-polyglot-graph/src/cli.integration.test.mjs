@@ -453,6 +453,171 @@ export const moduleBoundaryOptions = {
   });
 });
 
+describe("honouring the two package.json facts the graph cannot carry", () => {
+  // `nx graph --file=` carries neither `entryPoints` nor `declaredPackages`
+  // (see `annotatePackageFacts` in `./workspace.mjs`), so the CLI computes both
+  // from the manifests on disk the way upstream does per lint run. One
+  // TypeScript project, real files, real `ts.resolveModuleName`; only Nx and
+  // git are injected — and the injected graph node deliberately carries
+  // NEITHER field, because computing them is exactly what is under test.
+  const pkgRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-pkg-"));
+  afterAll(() => rmSync(pkgRoot, { recursive: true, force: true }));
+
+  const writePkg = (relativePath, text) => {
+    mkdirSync(join(pkgRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(pkgRoot, relativePath), text);
+  };
+
+  writePkg("nx.json", "{}\n");
+  writePkg(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "zone:kit", onlyDependOnLibsWithTags: ["zone:kit"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: true,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writePkg(
+    "tsconfig.base.json",
+    JSON.stringify({
+      compilerOptions: {
+        target: "ES2022",
+        module: "ESNext",
+        moduleResolution: "Bundler",
+        baseUrl: ".",
+        paths: {
+          "@fixture/gadgets": ["libs/gadgets/src/index.ts"],
+          "@fixture/gadgets/models": ["libs/gadgets/src/models.ts"],
+        },
+      },
+    }),
+  );
+  // The two manifests upstream unions: the workspace root's declares one
+  // package, the project's own declares another — and the project's also
+  // declares the secondary entry point.
+  writePkg(
+    "package.json",
+    JSON.stringify({ name: "fixture", dependencies: { "direct-dep": "^1.0.0" } }),
+  );
+  writePkg(
+    "libs/gadgets/package.json",
+    JSON.stringify({
+      name: "@fixture/gadgets",
+      dependencies: { "local-dep": "^1.0.0" },
+      exports: { ".": "./src/index.ts", "./models": "./src/models.ts" },
+    }),
+  );
+  // All three packages are INSTALLED — an unresolvable specifier is reported
+  // as transitive regardless of declaration (upstream the same), which would
+  // let an always-empty `declaredPackages` pass the flagged case for the wrong
+  // reason.
+  for (const name of ["direct-dep", "local-dep", "transitive-dep"]) {
+    writePkg(
+      `node_modules/${name}/package.json`,
+      JSON.stringify({
+        name,
+        version: "1.0.0",
+        types: "./index.d.ts",
+        exports: { ".": "./index.d.ts", "./*": "./*.d.ts" },
+      }),
+    );
+    writePkg(`node_modules/${name}/index.d.ts`, "export declare const name: string;\n");
+  }
+
+  const INDEX_TS = [
+    'import { name as direct } from "direct-dep";',
+    'import { name as local } from "local-dep";',
+    'import { name as transitive } from "transitive-dep";',
+    "",
+    "export const gadgets = [direct, local, transitive];",
+    "",
+  ].join("\n");
+  writePkg("libs/gadgets/src/index.ts", INDEX_TS);
+  writePkg("libs/gadgets/src/models.ts", 'export const models = "models";\n');
+  // A file in the SECONDARY entry point's subtree importing it by alias —
+  // upstream's `belongsToDifferentEntryPoint` exemption…
+  writePkg(
+    "libs/gadgets/src/deep/feature.ts",
+    'import { models } from "@fixture/gadgets/models";\n\nexport const feature = models;\n',
+  );
+  // …and the near-identical import of the MAIN entry, which stays a cycle
+  // through the barrel.
+  const BARREL_TS =
+    'import { gadgets } from "@fixture/gadgets";\n\nexport const viaBarrel = gadgets;\n';
+  writePkg("libs/gadgets/src/barrel-user.ts", BARREL_TS);
+
+  const pkgContext = {
+    cwd: pkgRoot,
+    readGraph: () => ({
+      nodes: {
+        gadgets: {
+          name: "gadgets",
+          type: "lib",
+          data: { root: "libs/gadgets", tags: ["zone:kit"] },
+        },
+      },
+      dependencies: { gadgets: [] },
+    }),
+    listFiles: () => [
+      "nx.json",
+      "module-boundaries.config.mjs",
+      "tsconfig.base.json",
+      "package.json",
+      "libs/gadgets/package.json",
+      "libs/gadgets/src/index.ts",
+      "libs/gadgets/src/models.ts",
+      "libs/gadgets/src/deep/feature.ts",
+      "libs/gadgets/src/barrel-user.ts",
+    ],
+  };
+
+  // Positions computed from the fixture, not written as literals: the offset
+  // the analyzer records is the specifier literal's opening quote.
+  const indexLines = INDEX_TS.split("\n");
+  const transitiveLine = indexLines.findIndex((line) => line.includes("transitive-dep")) + 1;
+  const transitiveColumn = indexLines[transitiveLine - 1].indexOf('"') + 1;
+  const barrelColumn = BARREL_TS.split("\n")[0].indexOf('"') + 1;
+
+  it("flags only the UNDECLARED package as transitive, from the union of both manifests", async () => {
+    // Both directions at once: `transitive-dep` missing would mean
+    // `declaredPackages` over-populated (a silently waived report upstream
+    // makes); `direct-dep` or `local-dep` appearing would mean the root or the
+    // project manifest was not read (the pre-change false alarm).
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: [] },
+      pkgContext,
+    );
+
+    expect(report).toContain(`libs/gadgets/src/index.ts:${transitiveLine}:${transitiveColumn}`);
+    expect(report).toContain("noTransitiveDependencies");
+    expect(report).not.toContain("direct-dep");
+    expect(report).not.toContain("local-dep");
+    expect(violations).toBe(2);
+  });
+
+  it("exempts the secondary-entry-point self-import and still flags the barrel one", async () => {
+    // `feature.ts` importing `@fixture/gadgets/models` is upstream's
+    // `belongsToDifferentEntryPoint` escape hatch — the pre-change false alarm
+    // this field removes. `barrel-user.ts` importing the main entry is the
+    // cycle that must survive it: losing that report would be `entryPoints`
+    // over-firing, the silent direction.
+    const { report } = await check({ format: "text", config: null, paths: [] }, pkgContext);
+
+    expect(report).not.toContain("feature.ts");
+    expect(report).toContain(`libs/gadgets/src/barrel-user.ts:1:${barrelColumn}`);
+    expect(report).toContain("noSelfCircularDependencies");
+  });
+});
+
 describe("the exit contract", () => {
   it("exits 1 when the tree violates a boundary — the code a hook and CI block on", async () => {
     const streams = env();

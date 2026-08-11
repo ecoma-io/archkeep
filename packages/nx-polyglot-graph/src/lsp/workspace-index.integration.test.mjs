@@ -34,6 +34,24 @@ const CONSUMER_GO = [
   "",
 ].join("\n");
 
+/** Imports of the three installed packages, of which only two are declared. */
+const GADGETS_INDEX_TS = [
+  'import { name as direct } from "direct-dep";',
+  'import { name as local } from "local-dep";',
+  'import { name as transitive } from "transitive-dep";',
+  "",
+  "export const gadgets = [direct, local, transitive];",
+  "",
+].join("\n");
+
+/** A file in the secondary entry point's subtree importing it by alias. */
+const FEATURE_TS =
+  'import { models } from "@fixture/gadgets/models";\n\nexport const feature = models;\n';
+
+/** The near-identical import of the MAIN entry: a cycle through the barrel. */
+const BARREL_TS =
+  'import { gadgets } from "@fixture/gadgets";\n\nexport const viaBarrel = gadgets;\n';
+
 const write = (relativePath, text) => {
   const absolute = join(root, relativePath);
   mkdirSync(dirname(absolute), { recursive: true });
@@ -42,7 +60,7 @@ const write = (relativePath, text) => {
 
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), "nx-polyglot-graph-index-"));
-  write(".gitignore", "ignored/\n");
+  write(".gitignore", "ignored/\nnode_modules/\n");
   write(
     "libs/inner/project.json",
     '{"name":"inner","projectType":"library","tags":["zone:inner"]}',
@@ -82,6 +100,58 @@ beforeAll(() => {
   );
   write("libs/consumer/go.mod", "module example.test/consumer\n\ngo 1.23\n");
   write("libs/consumer/consumer.go", CONSUMER_GO);
+  // A TypeScript project carrying the two package.json facts the index must
+  // read off the real tree: a secondary entry point in its `exports`, a
+  // dependency in its own manifest, and one in the workspace root's.
+  write("package.json", '{"name":"fixture","dependencies":{"direct-dep":"^1.0.0"}}');
+  write(
+    "tsconfig.base.json",
+    JSON.stringify({
+      compilerOptions: {
+        target: "ES2022",
+        module: "ESNext",
+        moduleResolution: "Bundler",
+        baseUrl: ".",
+        paths: {
+          "@fixture/gadgets": ["libs/gadgets/src/index.ts"],
+          "@fixture/gadgets/models": ["libs/gadgets/src/models.ts"],
+        },
+      },
+    }),
+  );
+  write(
+    "libs/gadgets/project.json",
+    '{"name":"gadgets","projectType":"library","tags":["zone:site"]}',
+  );
+  write(
+    "libs/gadgets/package.json",
+    JSON.stringify({
+      name: "@fixture/gadgets",
+      dependencies: { "local-dep": "^1.0.0" },
+      exports: { ".": "./src/index.ts", "./models": "./src/models.ts" },
+    }),
+  );
+  write("libs/gadgets/src/index.ts", GADGETS_INDEX_TS);
+  write("libs/gadgets/src/models.ts", 'export const models = "models";\n');
+  write("libs/gadgets/src/deep/feature.ts", FEATURE_TS);
+  write("libs/gadgets/src/barrel-user.ts", BARREL_TS);
+  // All three packages are INSTALLED (and gitignored, as node_modules is in
+  // any real tree): an unresolvable specifier is reported as transitive
+  // regardless of declaration — upstream the same — which would let an
+  // always-empty `declaredPackages` pass the flagged case for the wrong
+  // reason.
+  for (const name of ["direct-dep", "local-dep", "transitive-dep"]) {
+    write(
+      `node_modules/${name}/package.json`,
+      JSON.stringify({
+        name,
+        version: "1.0.0",
+        types: "./index.d.ts",
+        exports: { ".": "./index.d.ts", "./*": "./*.d.ts" },
+      }),
+    );
+    write(`node_modules/${name}/index.d.ts`, "export declare const name: string;\n");
+  }
   // `environmentForTree` because `GIT_DIR` beats `cwd`, and this suite runs
   // from a git hook on every push: inheriting it would re-initialise the
   // ambient repository and leave this fixture with no `.git` of its own.
@@ -197,5 +267,99 @@ describe("the verdict an editor shows for an import of an app", () => {
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0].code).toBe("noImportsOfApps");
     expect(diagnostics[0].range.start).toEqual({ line: portalLine, character: portalCharacter });
+  });
+});
+
+describe("the two package.json facts, read off the real tree", () => {
+  it("writes the entry points and the two-manifest union onto the node, and neither from config", () => {
+    // The fail-closed fields the entry-point exemptions and
+    // `noTransitiveDependencies` turn on (`../rules/topology.mjs`), populated
+    // the way upstream populates its answers: from `package.json` files on
+    // disk, never from anything the graph was told.
+    const index = buildWorkspaceIndex({ root, tsConfig: "tsconfig.base.json" });
+
+    expect(index.graph.nodes.gadgets.data.entryPoints).toEqual([
+      { path: "libs/gadgets/models", file: "libs/gadgets/src/models.ts" },
+    ]);
+    expect(index.graph.nodes.gadgets.data.declaredPackages).toEqual(["direct-dep", "local-dep"]);
+    // A project with no manifest of its own: the root manifest alone grants
+    // declared packages, and nothing can grant entry points — absent, so the
+    // rule layer keeps failing closed for it.
+    expect(index.graph.nodes.consumer.data.declaredPackages).toEqual(["direct-dep"]);
+    expect(index.graph.nodes.consumer.data).not.toHaveProperty("entryPoints");
+  });
+});
+
+describe("the verdict an editor shows once the package facts are populated", () => {
+  const config = {
+    depConstraints: [{ sourceTag: "zone:site", onlyDependOnLibsWithTags: ["zone:site"] }],
+    options: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies: true,
+      checkNestedExternalImports: false,
+    },
+  };
+
+  // Positions computed from the fixture, 0-based (`./diagnostics.mjs`); the
+  // offset the analyzer records is the specifier literal's opening quote.
+  const indexLines = GADGETS_INDEX_TS.split("\n");
+  const transitiveLine = indexLines.findIndex((line) => line.includes("transitive-dep"));
+  const transitiveCharacter = indexLines[transitiveLine].indexOf('"');
+
+  it("flags only the undeclared package as transitive, from the union of both manifests", () => {
+    // Both directions at once: losing the `transitive-dep` diagnostic would be
+    // `declaredPackages` over-populated — a silently waived report upstream
+    // makes — and a diagnostic on `direct-dep` or `local-dep` would mean one
+    // of the two manifests was not read, the pre-change false alarm.
+    const index = buildWorkspaceIndex({ root, tsConfig: "tsconfig.base.json" });
+    const { analyzed, diagnostics } = diagnoseDocument({
+      sourceFile: "libs/gadgets/src/index.ts",
+      text: GADGETS_INDEX_TS,
+      index,
+      config,
+    });
+
+    expect(analyzed).toBe(true);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].code).toBe("noTransitiveDependencies");
+    expect(diagnostics[0].range.start).toEqual({
+      line: transitiveLine,
+      character: transitiveCharacter,
+    });
+  });
+
+  it("exempts the secondary-entry-point self-import and still flags the barrel one", () => {
+    // `feature.ts` is upstream's `belongsToDifferentEntryPoint` escape hatch —
+    // the pre-change false alarm `entryPoints` removes — and the clean list is
+    // a CLAIM this suite may only make beside the barrel import still being
+    // caught, because that pair is what proves the exemption did not over-fire.
+    const index = buildWorkspaceIndex({ root, tsConfig: "tsconfig.base.json" });
+    const feature = diagnoseDocument({
+      sourceFile: "libs/gadgets/src/deep/feature.ts",
+      text: FEATURE_TS,
+      index,
+      config,
+    });
+    const barrel = diagnoseDocument({
+      sourceFile: "libs/gadgets/src/barrel-user.ts",
+      text: BARREL_TS,
+      index,
+      config,
+    });
+
+    expect(feature.analyzed).toBe(true);
+    expect(feature.diagnostics).toEqual([]);
+    expect(barrel.analyzed).toBe(true);
+    expect(barrel.diagnostics).toHaveLength(1);
+    expect(barrel.diagnostics[0].code).toBe("noSelfCircularDependencies");
+    expect(barrel.diagnostics[0].range.start).toEqual({
+      line: 0,
+      character: BARREL_TS.indexOf('"'),
+    });
   });
 });
