@@ -107,6 +107,213 @@ describe("resolvePythonDependencies", () => {
   });
 });
 
+describe("resolvePythonDependencies — Poetry and PDM path declarations", () => {
+  const projects = [
+    { name: "alpha", root: "acme/libs/alpha" },
+    { name: "beta", root: "acme/libs/beta" },
+  ];
+  const files = {
+    alpha: ["acme/libs/alpha/pyproject.toml"],
+    beta: ["acme/libs/beta/pyproject.toml"],
+  };
+  const filesOf = (name) => files[name] ?? [];
+  const alphaEdge = {
+    source: "alpha",
+    target: "beta",
+    sourceFile: "acme/libs/alpha/pyproject.toml",
+    type: "static",
+  };
+  /** Resolves a two-project tree where alpha's manifest is `lines`. */
+  const resolveWith = (lines) => {
+    const contents = {
+      "acme/libs/alpha/pyproject.toml": lines.join("\n"),
+      "acme/libs/beta/pyproject.toml": '[project]\nname = "acme-beta"\nversion = "0.1.0"\n',
+    };
+    return resolvePythonDependencies(projects, filesOf, (p) => contents[p] ?? null);
+  };
+
+  it("draws an edge from a Poetry path dependency, whatever `develop` says", () => {
+    // The silent-direction proof for the whole feature: with the Poetry reader
+    // disabled this returns [], and the assertion goes red on a manifest that
+    // plainly declares the wiring.
+    expect(
+      resolveWith([
+        "[tool.poetry.dependencies]",
+        'acme-beta = { path = "../beta", develop = true }',
+      ]),
+    ).toEqual([alphaEdge]);
+  });
+
+  it("draws an edge from a Poetry group dependency with a path", () => {
+    expect(
+      resolveWith(["[tool.poetry.group.dev.dependencies]", 'acme-beta = { path = "../beta" }']),
+    ).toEqual([alphaEdge]);
+  });
+
+  it("reads each element of Poetry's multiple-constraints array form", () => {
+    expect(
+      resolveWith([
+        "[tool.poetry.dependencies]",
+        'acme-beta = [{ version = "^1.0", python = "<3.11" }, { path = "../beta", python = ">=3.11" }]',
+      ]),
+    ).toEqual([alphaEdge]);
+  });
+
+  it("draws no edge from a Poetry entry without a path, even when the name matches a sibling", () => {
+    expect(
+      resolveWith([
+        "[tool.poetry.dependencies]",
+        'acme-beta = "^1.0"',
+        "[tool.poetry.group.dev.dependencies]",
+        'acme-alpha-tools = { version = "^2", optional = true }',
+      ]),
+    ).toEqual([]);
+  });
+
+  it("does not require either manifest to carry [project] — Poetry's legacy layout", () => {
+    // A pre-PEP-621 Poetry pair names the package under [tool.poetry] and has
+    // no [project] table at all. Path attribution is by directory, so identity
+    // is not needed on either end.
+    const contents = {
+      "acme/libs/alpha/pyproject.toml": [
+        "[tool.poetry]",
+        'name = "acme-alpha"',
+        'version = "0.1.0"',
+        "[tool.poetry.dependencies]",
+        'acme-beta = { path = "../beta" }',
+      ].join("\n"),
+      "acme/libs/beta/pyproject.toml": '[tool.poetry]\nname = "acme-beta"\nversion = "0.1.0"\n',
+    };
+    expect(resolvePythonDependencies(projects, filesOf, (p) => contents[p] ?? null)).toEqual([
+      alphaEdge,
+    ]);
+  });
+
+  it("draws an edge from PDM's pdm-backend and hatchling local-URL forms", () => {
+    for (const url of ["file:///${PROJECT_ROOT}/../beta", "{root:uri}/../beta"]) {
+      expect(
+        resolveWith([
+          "[project]",
+          'name = "acme-alpha"',
+          'version = "0.1.0"',
+          `dependencies = ["acme-beta @ ${url}"]`,
+        ]),
+        url,
+      ).toEqual([alphaEdge]);
+    }
+  });
+
+  it("draws an edge from PDM's editable entry in a dependency group", () => {
+    expect(
+      resolveWith(["[dependency-groups]", 'dev = ["-e file:///${PROJECT_ROOT}/../beta"]']),
+    ).toEqual([alphaEdge]);
+  });
+
+  it("draws one edge when several groups declare the same sibling", () => {
+    expect(
+      resolveWith([
+        "[project]",
+        'name = "acme-alpha"',
+        'version = "0.1.0"',
+        'dependencies = ["acme-beta @ file:///${PROJECT_ROOT}/../beta"]',
+        "[tool.poetry.dependencies]",
+        'acme-beta = { path = "../beta" }',
+        "[tool.poetry.group.dev.dependencies]",
+        'acme-beta = { path = "../beta" }',
+      ]),
+    ).toEqual([alphaEdge]);
+  });
+
+  it("throws for a declared path that resolves to no project's tree", () => {
+    // The loud direction, chosen on purpose: a dropped entry here is an edge
+    // `nx affected` silently never sees on a wiring the manifest plainly
+    // states. See the module header's landing table.
+    expect(() =>
+      resolveWith(["[tool.poetry.dependencies]", 'acme-beta = { path = "../nowhere" }']),
+    ).toThrow(
+      /acme\/libs\/alpha\/pyproject\.toml.*'acme-beta'.*'\.\.\/nowhere'.*not in any Nx project's tree/su,
+    );
+  });
+
+  it("throws for a path inside another project that is not that project's root", () => {
+    // A dependency on a sibling's built artifact is a real dependency on that
+    // project, but the one-manifest-per-project-root model can only attribute
+    // a root — so it is refused loudly rather than modeled wrongly.
+    expect(() =>
+      resolveWith([
+        "[tool.poetry.dependencies]",
+        'acme-beta = { path = "../beta/dist/acme-beta-0.1.0.tar.gz" }',
+      ]),
+    ).toThrow(/inside project 'beta' but not at its root/u);
+  });
+
+  it("throws for a PDM local URL that is not root-anchored", () => {
+    // Backends other than pdm-backend/hatchling write absolute paths (PDM
+    // docs, "Local dependencies"); without the anchor nothing says whether
+    // the target is even in the tree, so guessing either way is out.
+    expect(() =>
+      resolveWith([
+        "[project]",
+        'name = "acme-alpha"',
+        'version = "0.1.0"',
+        'dependencies = ["acme-beta @ file:///opt/checkouts/beta"]',
+      ]),
+    ).toThrow(/not anchored/u);
+  });
+
+  it("draws nothing, quietly, for a path that leaves the workspace", () => {
+    // Whatever sits outside the tree is not a workspace project, so "no edge"
+    // is a verdict here, not a shrug — the same answer a PyPI dependency gets.
+    expect(
+      resolveWith([
+        "[tool.poetry.dependencies]",
+        'shared-lib = { path = "../../../../elsewhere/shared-lib" }',
+      ]),
+    ).toEqual([]);
+  });
+
+  it("draws nothing, quietly, for a vendored artifact inside the declaring project", () => {
+    expect(
+      resolveWith([
+        "[project]",
+        'name = "acme-alpha"',
+        'version = "0.1.0"',
+        'dependencies = ["first @ file:///${PROJECT_ROOT}/vendor/first-1.0.0-py2.py3-none-any.whl"]',
+        "[tool.poetry.dependencies]",
+        'acme-alpha-plugin = { path = "." }', // self-reference wires nothing new
+      ]),
+    ).toEqual([]);
+  });
+
+  it("draws nothing for URL dependencies that are not local paths", () => {
+    expect(
+      resolveWith([
+        "[project]",
+        'name = "acme-alpha"',
+        'version = "0.1.0"',
+        "dependencies = [",
+        '  "pip @ git+https://github.com/pypa/pip.git@22.0",',
+        '  "numpy @ https://github.com/numpy/numpy/releases/download/v1.20.0/numpy-1.20.0.tar.gz",',
+        "]",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("draws no edges from a manifest that is not valid TOML, and does not throw", () => {
+    // Deliberately quiet HERE and loud elsewhere: Nx recomputes the graph on
+    // every invocation, so a manifest is malformed mid-keystroke in every
+    // editing session, and a throw would brick every `nx` command until the
+    // file parses (`manifest-util.test.mjs` pins the survival). The loud
+    // report is the analysis layer's: `pythonPackageLayout` returns the same
+    // manifest as unmodelled, which the layout tests above pin.
+    const contents = {
+      "acme/libs/alpha/pyproject.toml": "[tool.poetry.dependencies\nbroken = { path = ",
+      "acme/libs/beta/pyproject.toml": '[project]\nname = "acme-beta"\n',
+    };
+    expect(resolvePythonDependencies(projects, filesOf, (p) => contents[p] ?? null)).toEqual([]);
+  });
+});
+
 describe("import roots derived from the layout", () => {
   it("reads a src layout, a flat layout and a single module the way Python does", () => {
     // Not from the manifest: setuptools, hatchling, poetry, pdm and flit each

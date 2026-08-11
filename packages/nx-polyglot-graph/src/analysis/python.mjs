@@ -3,12 +3,84 @@
  * no `uv` binary required.
  *
  * Model: one package per Nx project (`<projectRoot>/pyproject.toml`,
- * `[project].name`), wired together the uv way: a dependency string in
- * `[project].dependencies`, `[project.optional-dependencies].*`, or
- * `[dependency-groups].*` creates an edge only when `[tool.uv.sources]`
- * routes that name to the workspace (`{ workspace = true }`) or to a path
- * that is another project's directory. A name that merely coincides with a
- * PyPI package never creates an edge — uv semantics, not string matching.
+ * `[project].name`), and an edge exists only where the manifest EXPLICITLY
+ * wires a dependency to a workspace path. A name that merely coincides with a
+ * sibling package or a PyPI package never creates an edge — each tool's
+ * documented semantics, not string matching. Three tools' declarations are
+ * read, each against its current documentation (fetched 2026-08-11):
+ *
+ * - **uv** — a dependency string in `[project].dependencies`,
+ *   `[project.optional-dependencies].*`, or `[dependency-groups].*` creates an
+ *   edge only when `[tool.uv.sources]` routes that name to the workspace
+ *   (`{ workspace = true }`) or to a path that is another project's directory.
+ *   Unchanged, including its quiet handling of a path source that resolves to
+ *   no project.
+ * - **Poetry** — `name = { path = "…" }` in `[tool.poetry.dependencies]` or
+ *   `[tool.poetry.group.<group>.dependencies]`
+ *   (https://python-poetry.org/docs/dependency-specification/ §"Path
+ *   dependencies", https://python-poetry.org/docs/managing-dependencies/
+ *   §"Dependency groups"). An entry that is an array of tables — the
+ *   documented multiple-constraints form — has each element read the same
+ *   way. `develop` changes install mode, never whether the dependency exists,
+ *   so it is ignored. The entry itself is the declaration in both of Poetry's
+ *   modes: in the legacy layout `[tool.poetry.dependencies]` IS the dependency
+ *   list, and in PEP 621 layout the docs state it "is only used to enrich
+ *   `project.dependencies` for locking" — either way a `path` there is an
+ *   explicit local wiring. The `[tool.poetry.dev-dependencies]` table of old
+ *   Poetry versions is deliberately NOT read: it appears nowhere in the
+ *   current documentation, and reading undocumented shapes is how a resolver
+ *   drifts from the tool it mirrors.
+ * - **PDM** — a requirement string in the same three dependency arrays, in the
+ *   two root-anchored local-URL forms its docs write
+ *   (https://pdm-project.org/latest/usage/dependency/ §"Local dependencies",
+ *   https://pdm-project.org/latest/reference/pep621/ §"Relative paths"):
+ *   `name @ file:///${PROJECT_ROOT}/<path>` (pdm-backend) and
+ *   `name @ {root:uri}/<path>` (hatchling), plus the editable
+ *   `-e file:///${PROJECT_ROOT}/<path>` entry form the monorepo guide puts in
+ *   `[dependency-groups]` (https://pdm-project.org/latest/usage/advanced/).
+ *   `${PROJECT_ROOT}` "will be expanded based on the project root" per those
+ *   docs, i.e. against the manifest's own directory — the same base every
+ *   relative `path` above resolves against. A `[tool.pdm.dev-dependencies]`
+ *   table is deliberately NOT read for the same reason as Poetry's legacy
+ *   table: current PDM docs route development groups through
+ *   `[dependency-groups]`, which is already scanned.
+ *
+ * ## Where a declared path may land, and what each landing produces
+ *
+ * Relative paths resolve against the declaring manifest's directory. The
+ * verdicts, in the order they are tested:
+ *
+ * - **Another Nx project's root** — an edge. Exactly the root: the
+ *   one-manifest-per-project-root model (`packages/nx-polyglot-graph/CLAUDE.md`)
+ *   is what makes a directory-to-project attribution well defined at all.
+ * - **The declaring project itself** (its root, or anything under it, such as
+ *   a vendored wheel `file:///${PROJECT_ROOT}/vendor/x.whl`) — no edge. No
+ *   cross-project wiring exists to lose.
+ * - **Outside the workspace** (the path climbs above the root) — no edge, and
+ *   that is a verdict rather than a shrug: whatever sits there is not a
+ *   workspace project, so no project↔project edge can exist. Same answer an
+ *   external PyPI package gets.
+ * - **Anywhere else in the tree** — a directory that is no project's root, a
+ *   file inside another project, a path that resolves to nothing — **throws**,
+ *   failing graph computation with an error naming the manifest, the entry,
+ *   and where the path landed. The graph hook has exactly two outputs, edges
+ *   and a throw; a skipped entry here is an edge `nx affected` silently never
+ *   sees on a wiring the manifest plainly states, and a stderr line during
+ *   graph computation is scrollback, not a report. Throwing is the same door
+ *   `../options.mjs` uses for an unknown key, and it is self-correcting in
+ *   the way silence is not: the error says to point the path at the owning
+ *   project's root, split the nested package into its own project, or fix the
+ *   typo. A PDM local URL that is NOT root-anchored (an absolute `file:///…`,
+ *   which the PDM docs note other build backends write) throws for the same
+ *   reason from one step earlier: without the anchor this resolver cannot
+ *   even say whether the target is in the tree.
+ * - **A `pyproject.toml` that is not valid TOML** draws no edges and does NOT
+ *   throw — deliberately asymmetric with the dangling path. Nx recomputes the
+ *   graph on every invocation, so a manifest is malformed mid-keystroke in
+ *   every editing session (`manifest-util.test.mjs` pins that survival), while
+ *   a dangling path is a stable, readable claim. The loud report for a
+ *   malformed manifest is the analysis layer's: `pythonPackageLayout` returns
+ *   it as unmodelled, and imports then fail rather than resolve.
  *
  * ## Two resolutions, kept side by side, because they answer different things
  *
@@ -117,7 +189,7 @@
  *   the PyPI distribution name. The two differ (`import PIL` ships as
  *   `pillow`) and only the import name is knowable from a source file.
  */
-import { normalizePath, parseManifest } from "./manifest-util.mjs";
+import { normalizePath, parseManifest, resolveWithinWorkspace } from "./manifest-util.mjs";
 import {
   emptyResult,
   fileFailure,
@@ -156,21 +228,138 @@ export function collectDeclaredDependencies(manifest) {
 }
 
 /**
+ * Poetry's documented path dependencies: `name = { path = "…" }` entries in
+ * `[tool.poetry.dependencies]` and `[tool.poetry.group.<group>.dependencies]`,
+ * including each element of a multiple-constraints array. See the header for
+ * the doc pages and for the two tables deliberately not read.
+ *
+ * @param {object} manifest A parsed pyproject.toml.
+ * @returns {{ name: string, path: string, declaredIn: string }[]}
+ */
+function poetryPathDependencies(manifest) {
+  const tables = [];
+  const main = manifest.tool?.poetry?.dependencies;
+  if (main !== undefined) tables.push(["[tool.poetry.dependencies]", main]);
+  const groups = manifest.tool?.poetry?.group;
+  if (typeof groups === "object" && groups !== null && !Array.isArray(groups)) {
+    for (const [groupName, group] of Object.entries(groups)) {
+      const deps = group?.dependencies;
+      if (deps !== undefined) {
+        tables.push([`[tool.poetry.group.${groupName}.dependencies]`, deps]);
+      }
+    }
+  }
+
+  const entries = [];
+  for (const [declaredIn, table] of tables) {
+    if (typeof table !== "object" || table === null || Array.isArray(table)) continue;
+    for (const [name, spec] of Object.entries(table)) {
+      for (const constraint of Array.isArray(spec) ? spec : [spec]) {
+        if (typeof constraint !== "object" || constraint === null) continue;
+        if (typeof constraint.path !== "string") continue;
+        entries.push({ name, path: constraint.path, declaredIn });
+      }
+    }
+  }
+  return entries;
+}
+
+/**
+ * The two root-anchored spellings PDM's docs write a local dependency in.
+ * `${PROJECT_ROOT}` is not expanded by TOML — it reaches this reader verbatim.
+ */
+const PDM_LOCAL_ANCHORS = ["file:///${PROJECT_ROOT}/", "{root:uri}/"];
+
+/**
+ * PDM's documented local-path requirements across the three dependency
+ * arrays: `name @ <anchored-url>` and the editable `-e <anchored-url>` form.
+ *
+ * A `file:` URL WITHOUT one of the two anchors is returned with
+ * `unanchored` set instead of a path — the docs note that backends other
+ * than pdm-backend/hatchling "will write the absolute path instead", and an
+ * absolute path gives this reader no way to place the target relative to the
+ * tree, so the caller reports it rather than guessing. Any other URL (https,
+ * git+…) and any plain name requirement is not a local path and yields
+ * nothing here.
+ *
+ * @param {object} manifest A parsed pyproject.toml.
+ * @returns {{ name: string|null, path?: string, unanchored?: string, declaredIn: string }[]}
+ */
+function pdmLocalDependencies(manifest) {
+  const arrays = [
+    ["[project] dependencies", manifest.project?.dependencies],
+    ...Object.entries(manifest.project?.["optional-dependencies"] ?? {}).map(([extra, list]) => [
+      `[project.optional-dependencies] ${extra}`,
+      list,
+    ]),
+    ...Object.entries(manifest["dependency-groups"] ?? {}).map(([group, list]) => [
+      `[dependency-groups] ${group}`,
+      list,
+    ]),
+  ];
+
+  const entries = [];
+  for (const [declaredIn, list] of arrays) {
+    if (!Array.isArray(list)) continue;
+    for (const requirement of list) {
+      if (typeof requirement !== "string") continue; // {include-group = …} tables
+      const trimmed = requirement.trim();
+      let name = null;
+      let url;
+      if (/^-e\s/.test(trimmed)) {
+        url = trimmed.slice(2).trim();
+      } else {
+        // PEP 508 direct reference: `name[extras] @ URI ; markers`. The name
+        // cannot contain `@`, so the first one is the separator; the URI runs
+        // to the first whitespace, which is also where a marker would start.
+        const at = trimmed.indexOf("@");
+        if (at === -1) continue;
+        name = parseRequirementName(trimmed.slice(0, at));
+        url = trimmed.slice(at + 1).trim();
+      }
+      url = url.split(/\s/, 1)[0];
+      const anchor = PDM_LOCAL_ANCHORS.find((prefix) => url.startsWith(prefix));
+      if (anchor) {
+        entries.push({ name, path: url.slice(anchor.length), declaredIn });
+      } else if (url.startsWith("file:")) {
+        entries.push({ name, unanchored: url, declaredIn });
+      }
+    }
+  }
+  return entries;
+}
+
+/**
  * Static edges between Python projects. Same contract as the other
  * resolvers: `projects` [{ name, root }], `filesOf(name)`, `readFile(path)`.
+ *
+ * @throws {Error} when a well-formed manifest declares a Poetry/PDM path
+ *   dependency this resolver cannot attribute to a project — the header's
+ *   "Where a declared path may land" section is the argument.
  */
 export function resolvePythonDependencies(projects, filesOf, readFile) {
   const projectByPackage = new Map(); // normalized package name -> project name
-  const projectByRoot = new Map();
-  const packages = [];
+  const packageProjectByRoot = new Map(); // uv path sources resolve against Python packages only
+  const projectByRoot = new Map(); // every Nx project root, for declared path dependencies
+  const packages = []; // manifests with a [project].name — the uv flow's scan set
+  const manifests = []; // every parseable manifest — the Poetry/PDM flow's scan set
+  const normalizedProjects = projects.map((project) => ({
+    name: project.name,
+    root: normalizePath(project.root, ""),
+  }));
+  for (const project of normalizedProjects) {
+    projectByRoot.set(project.root, project.name);
+  }
   for (const project of projects) {
     const manifestPath = `${project.root}/pyproject.toml`;
     if (!filesOf(project.name).includes(manifestPath)) continue;
     const manifest = parseManifest(readFile(manifestPath) ?? "");
-    const packageName = manifest?.project?.name;
+    if (manifest === null) continue; // malformed mid-keystroke must not fail the graph — see header
+    manifests.push({ project, manifest, manifestPath });
+    const packageName = manifest.project?.name;
     if (!packageName) continue; // a uv workspace root without [project] is not a package
     projectByPackage.set(normalizePackageName(packageName), project.name);
-    projectByRoot.set(project.root, project.name);
+    packageProjectByRoot.set(project.root, project.name);
     packages.push({ project, manifest, manifestPath });
   }
 
@@ -187,7 +376,7 @@ export function resolvePythonDependencies(projects, filesOf, readFile) {
       if (spec.workspace === true) {
         target = projectByPackage.get(depName) ?? null;
       } else if (typeof spec.path === "string") {
-        target = projectByRoot.get(normalizePath(project.root, spec.path)) ?? null;
+        target = packageProjectByRoot.get(normalizePath(project.root, spec.path)) ?? null;
       }
       if (target && target !== project.name) {
         dependencies.push({
@@ -199,7 +388,60 @@ export function resolvePythonDependencies(projects, filesOf, readFile) {
       }
     }
   }
-  return dependencies;
+
+  for (const { project, manifest, manifestPath } of manifests) {
+    const declared = [...poetryPathDependencies(manifest), ...pdmLocalDependencies(manifest)];
+    for (const entry of declared) {
+      const label = entry.name === null ? "an editable entry" : `'${entry.name}'`;
+      if (entry.unanchored !== undefined) {
+        throw new Error(
+          `nx-polyglot-graph: ${manifestPath} declares ${label} in ${entry.declaredIn} with the ` +
+            `local URL '${entry.unanchored}', which is not anchored to the manifest's directory. ` +
+            `Only the documented root-anchored forms — 'file:///\${PROJECT_ROOT}/…' (pdm-backend) ` +
+            `and '{root:uri}/…' (hatchling) — can be placed relative to the workspace, so this ` +
+            `resolver cannot tell whether the target is a workspace project, and a dropped entry ` +
+            `would be an edge \`nx affected\` silently never sees.`,
+        );
+      }
+      const resolved = resolveWithinWorkspace(project.root, entry.path);
+      if (resolved === null) continue; // left the workspace: not a workspace project, so no edge exists
+      const target = projectByRoot.get(resolved);
+      if (target === project.name) continue; // self-reference wires nothing new
+      if (target !== undefined) {
+        dependencies.push({
+          source: project.name,
+          target,
+          sourceFile: manifestPath,
+          type: "static",
+        });
+        continue;
+      }
+      const owner = projectOwning(normalizedProjects, resolved);
+      if (owner?.name === project.name) continue; // inside its own tree: a vendored artifact, not a wiring
+      const landed =
+        owner === null
+          ? `'${resolved}' — not in any Nx project's tree`
+          : `'${resolved}', inside project '${owner.name}' but not at its root`;
+      throw new Error(
+        `nx-polyglot-graph: ${manifestPath} declares ${label} in ${entry.declaredIn} as a path ` +
+          `dependency on '${entry.path}', which resolves to ${landed}. An explicit workspace ` +
+          `path this resolver cannot attribute to a project's root means the graph would be ` +
+          `missing an edge \`nx affected\` needs, so none is handed over: point the path at the ` +
+          `root of the project that owns that location, split a nested package into its own ` +
+          `project, or fix the path.`,
+      );
+    }
+  }
+
+  // One edge per (source, target): the same sibling declared in several
+  // groups, or by uv and Poetry at once, is still one dependency.
+  const seen = new Set();
+  return dependencies.filter((dependency) => {
+    const key = `${dependency.source} ${dependency.target}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**

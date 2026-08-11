@@ -1,7 +1,7 @@
 import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
 
-import { normalizePath, parseManifest } from "./manifest-util.mjs";
+import { normalizePath, parseManifest, resolveWithinWorkspace } from "./manifest-util.mjs";
 
 const segment = fc
   .array(fc.constantFrom(..."abcdefgh"), { minLength: 1, maxLength: 6 })
@@ -78,6 +78,38 @@ describe("normalizePath", () => {
       expect(normalizePath(`${subsystem}/${declaring}`, `../${sibling}`)).toBe(
         `${subsystem}/${sibling}`,
       );
+    },
+  );
+});
+
+describe("resolveWithinWorkspace", () => {
+  it("resolves like normalizePath while the path stays inside the tree", () => {
+    expect(resolveWithinWorkspace("acme/libs/alpha", "../beta")).toBe("acme/libs/beta");
+    expect(resolveWithinWorkspace("acme/libs/alpha", "./vendor//pkg/")).toBe(
+      "acme/libs/alpha/vendor/pkg",
+    );
+  });
+
+  // The distinction this function exists for: normalizePath answers
+  // `elsewhere` here — an in-tree spelling of a directory that is NOT in the
+  // tree — and a caller comparing that against project roots would reason
+  // about the wrong directory. Escape has to be a distinct answer.
+  it("answers null the moment the path climbs above the workspace root", () => {
+    expect(resolveWithinWorkspace("acme/libs/alpha", "../../../../elsewhere")).toBeNull();
+    expect(resolveWithinWorkspace("", "..")).toBeNull();
+    // Escaping and coming back is still an escape: the segments walked through
+    // are outside the tree, so nothing is known about where it landed.
+    expect(resolveWithinWorkspace("acme", "../../acme")).toBeNull();
+  });
+
+  test.prop([pathText, pathText])(
+    "either escapes to null or returns a path with no '.', '..' or empty segment",
+    (baseDir, relative) => {
+      const resolved = resolveWithinWorkspace(baseDir, relative);
+      if (resolved === null) return;
+      expect(resolved).toBe(normalizePath(baseDir, relative));
+      const segments = resolved === "" ? [] : resolved.split("/");
+      for (const part of segments) expect([".", "..", ""]).not.toContain(part);
     },
   );
 });

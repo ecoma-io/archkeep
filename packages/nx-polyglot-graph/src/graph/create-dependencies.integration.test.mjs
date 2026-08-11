@@ -8,7 +8,8 @@ import { createDependencies } from "../../index.mjs";
 
 /**
  * Drives the real plugin entry point over a real filesystem fixture holding
- * one project pair per language, with the exact context shape Nx passes
+ * a project pair per language — three for Python, one per manifest dialect
+ * the resolver reads (uv, Poetry, PDM) — with the exact context shape Nx passes
  * (projects, fileMap.projectFileMap, workspaceRoot). What this pins: the
  * adapter wiring — ctx → resolver contract → raw dependency objects — not
  * the per-language parsing, which the unit tests own.
@@ -38,12 +39,24 @@ describe("createDependencies over a real workspace fixture", () => {
     '[package]\nname = "a"\nversion = "0.1.0"\n\n[dependencies]\nb = { path = "../b" }\n',
   );
   write("rs/b/Cargo.toml", '[package]\nname = "b"\nversion = "0.1.0"\n');
-  // Python pair
+  // Python pair (uv)
   write(
     "py/p/pyproject.toml",
     '[project]\nname = "p"\nversion = "0"\ndependencies = ["q"]\n\n[tool.uv.sources]\nq = { workspace = true }\n',
   );
   write("py/q/pyproject.toml", '[project]\nname = "q"\nversion = "0"\n');
+  // Python pair (Poetry path dependency)
+  write(
+    "py/r/pyproject.toml",
+    '[tool.poetry]\nname = "r"\nversion = "0"\n\n[tool.poetry.dependencies]\ns = { path = "../s", develop = true }\n',
+  );
+  write("py/s/pyproject.toml", '[tool.poetry]\nname = "s"\nversion = "0"\n');
+  // Python pair (PDM root-anchored local dependency)
+  write(
+    "py/t/pyproject.toml",
+    '[project]\nname = "t"\nversion = "0"\ndependencies = ["u @ file:///${PROJECT_ROOT}/../u"]\n',
+  );
+  write("py/u/pyproject.toml", '[project]\nname = "u"\nversion = "0"\n');
 
   const context = {
     workspaceRoot: root,
@@ -54,6 +67,10 @@ describe("createDependencies over a real workspace fixture", () => {
       "rs-b": { root: "rs/b" },
       "py-p": { root: "py/p" },
       "py-q": { root: "py/q" },
+      "py-r": { root: "py/r" },
+      "py-s": { root: "py/s" },
+      "py-t": { root: "py/t" },
+      "py-u": { root: "py/u" },
     },
     fileMap: {
       projectFileMap: {
@@ -63,6 +80,10 @@ describe("createDependencies over a real workspace fixture", () => {
         "rs-b": [{ file: "rs/b/Cargo.toml" }],
         "py-p": [{ file: "py/p/pyproject.toml" }],
         "py-q": [{ file: "py/q/pyproject.toml" }],
+        "py-r": [{ file: "py/r/pyproject.toml" }],
+        "py-s": [{ file: "py/s/pyproject.toml" }],
+        "py-t": [{ file: "py/t/pyproject.toml" }],
+        "py-u": [{ file: "py/u/pyproject.toml" }],
       },
     },
   };
@@ -73,6 +94,8 @@ describe("createDependencies over a real workspace fixture", () => {
       { source: "go-one", target: "go-two", sourceFile: "go/one/main.go", type: "static" },
       { source: "rs-a", target: "rs-b", sourceFile: "rs/a/Cargo.toml", type: "static" },
       { source: "py-p", target: "py-q", sourceFile: "py/p/pyproject.toml", type: "static" },
+      { source: "py-r", target: "py-s", sourceFile: "py/r/pyproject.toml", type: "static" },
+      { source: "py-t", target: "py-u", sourceFile: "py/t/pyproject.toml", type: "static" },
     ]);
   });
 
