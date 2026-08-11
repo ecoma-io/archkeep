@@ -51,6 +51,7 @@ import { formatReport } from "./src/report/text.mjs";
 import { evaluate } from "./src/rules/index.mjs";
 import {
   analyzeWorkspace,
+  annotateMFERemotes,
   createWorkspace,
   findWorkspaceRoot,
   listTrackedFiles,
@@ -209,6 +210,10 @@ export async function check(
     files: tracked,
     tsConfig: pluginOptions.tsConfig,
   });
+  // `nx graph --file=` does not carry the Module Federation fact — see
+  // `annotateMFERemotes` — so it is computed here, before the rules run, or
+  // every import of a real remote app would be a false `noImportsOfApps`.
+  annotateMFERemotes(graph.nodes, workspace.readFile);
   const selected = selectFiles(
     owned.map(({ file }) => file),
     options.paths,

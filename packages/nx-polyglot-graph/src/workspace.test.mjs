@@ -16,8 +16,10 @@ vi.mock("./analysis/source-util.mjs", () => ({
 
 import {
   analyzeWorkspace,
+  annotateMFERemotes,
   createWorkspace,
   listTrackedFiles,
+  projectIsMFERemote,
   runProcess,
   selectFiles,
 } from "./workspace.mjs";
@@ -58,6 +60,85 @@ describe("building the workspace", () => {
     const { workspace } = createWorkspace({ root: "/w", graph, files: [], read: () => "" });
     expect(workspace.filesOf("alpha")).toEqual([]);
     expect(workspace.filesOf("nonexistent")).toEqual([]);
+  });
+});
+
+describe("marking Module Federation remotes", () => {
+  const appNode = (name, root) => ({ name, type: "app", data: { root } });
+  const readerOf = (files) => (path) => files[path] ?? null;
+
+  const EXPOSING = "module.exports = { exposes: { './Widget': './src/widget' } };\n";
+  // A host: the near-identical config that names remotes and exposes nothing.
+  const HOSTING = "module.exports = { remotes: ['elsewhere'] };\n";
+
+  it("marks an app whose config carries an exposes key, which is what lets the exemption fire", () => {
+    const nodes = { widgets: appNode("widgets", "apps/widgets") };
+    annotateMFERemotes(nodes, readerOf({ "apps/widgets/module-federation.config.js": EXPOSING }));
+    expect(nodes.widgets.data.mfeRemote).toBe(true);
+  });
+
+  it("marks a near-identical app whose config exposes nothing as NOT a remote", () => {
+    // The silent direction. A `true` here would waive `noImportsOfApps` for an
+    // app that is not importable, and a waived violation looks exactly like a
+    // clean import — upstream reports this app, so this tool must too.
+    const nodes = { portal: appNode("portal", "apps/portal") };
+    annotateMFERemotes(nodes, readerOf({ "apps/portal/module-federation.config.js": HOSTING }));
+    expect(nodes.portal.data.mfeRemote).toBe(false);
+  });
+
+  it("marks an app with no module-federation config at all as NOT a remote", () => {
+    const nodes = { plain: appNode("plain", "apps/plain") };
+    annotateMFERemotes(nodes, readerOf({}));
+    expect(nodes.plain.data.mfeRemote).toBe(false);
+  });
+
+  it("falls back to the .ts spelling when the .js one is absent — or empty, upstream's own quirk", () => {
+    // Upstream's `readFileIfExisting` answers '' for a missing file, and the
+    // `||` between its two reads cannot tell an empty `.js` from an absent one.
+    // Reproduced rather than repaired, so the two enforcers give one answer.
+    expect(
+      projectIsMFERemote("apps/a", readerOf({ "apps/a/module-federation.config.ts": EXPOSING })),
+    ).toBe(true);
+    expect(
+      projectIsMFERemote(
+        "apps/a",
+        readerOf({
+          "apps/a/module-federation.config.js": "",
+          "apps/a/module-federation.config.ts": EXPOSING,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("matches the key quoted, the way upstream's pattern is written", () => {
+    expect(
+      projectIsMFERemote(
+        "apps/a",
+        readerOf({ "apps/a/module-federation.config.js": "export default { 'exposes': {} };\n" }),
+      ),
+    ).toBe(true);
+  });
+
+  it("reads nothing for a library or an e2e suite, the kinds the app ban never names", () => {
+    // Only `type === "app"` reaches the exemption (`rules/index.mjs`), and two
+    // candidate reads per library would scale the scan with the tree's size.
+    const read = vi.fn(() => null);
+    const nodes = {
+      util: { name: "util", type: "lib", data: { root: "libs/util" } },
+      "util-e2e": { name: "util-e2e", type: "e2e", data: { root: "apps/util-e2e" } },
+    };
+    annotateMFERemotes(nodes, read);
+    expect(read).not.toHaveBeenCalled();
+    expect(nodes.util.data).not.toHaveProperty("mfeRemote");
+  });
+
+  it("finds the config of an app at the workspace root under both spellings of that root", () => {
+    // The LSP index writes `''` for the tree root; `nx graph --file=` writes
+    // `'.'`. Both must name `module-federation.config.js` and not `./…` or
+    // `/…`, which an in-memory reader keyed by exact path would answer null for.
+    const files = readerOf({ "module-federation.config.js": EXPOSING });
+    expect(projectIsMFERemote("", files)).toBe(true);
+    expect(projectIsMFERemote(".", files)).toBe(true);
   });
 });
 

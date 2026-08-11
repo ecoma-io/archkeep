@@ -255,6 +255,60 @@ export function createWorkspace({ root, graph, files, tsConfig, read }) {
 }
 
 /**
+ * Is the project at `projectRoot` a Module Federation remote? Upstream's own
+ * test, reproduced from `@nx/eslint-plugin`'s `appIsMFERemote` in its
+ * `runtime-lint-utils` (measured at 23.1.1): read
+ * `module-federation.config.js` beside the project root, fall back to the `.ts`
+ * spelling when the `.js` one yields nothing — upstream's `readFileIfExisting`
+ * answers `''` for a missing file and the `||` between the two reads treats an
+ * existing-but-empty `.js` exactly the same way, so this does too — then grep
+ * whichever text arrived for an `exposes:` key. A regex over the raw text,
+ * never a parse: upstream's pattern matches the key quoted or bare, anywhere in
+ * the file, and reproducing the pattern rather than improving on it is what
+ * keeps the two enforcers giving one answer.
+ *
+ * @param {string} projectRoot Workspace-relative; `""` (the LSP index) and
+ *   `"."` (Nx's graph output) both mean the workspace root itself.
+ * @param {(path: string) => string|null} readFile Workspace-relative reader.
+ * @returns {boolean}
+ */
+export function projectIsMFERemote(projectRoot, readFile) {
+  const at = (name) =>
+    projectRoot === "" || projectRoot === "." ? name : `${projectRoot}/${name}`;
+  const config =
+    readFile(at("module-federation.config.js")) || readFile(at("module-federation.config.ts"));
+  if (!config) return false;
+  return /('|")?exposes('|")?:/.test(config);
+}
+
+/**
+ * Marks every app node with whether it is a Module Federation remote — the
+ * fact the `noImportsOfApps` exemption turns on (`rules/topology.mjs` →
+ * `appIsMFERemote` reads `data.mfeRemote`, and its absence fails closed, so an
+ * adapter that does not write the field reports every import of a real remote).
+ *
+ * The fact is NOT in `nx graph --file=` output — nothing in nx 23.1.1 emits an
+ * `mfeRemote` field anywhere (verified by searching its dist); upstream ESLint
+ * computes it per lint run off the filesystem — so both adapters compute it
+ * here, through the one predicate above, which is what keeps a CLI verdict and
+ * an LSP verdict on the same import from disagreeing.
+ *
+ * Only app nodes are marked: the one check that reads the field
+ * (`rules/index.mjs`) tests `type === "app"` first, exactly as upstream calls
+ * its helper only on that branch — and not probing two candidate paths per
+ * library keeps the read count from scaling with a tree's project count.
+ *
+ * @param {Record<string, object>} nodes Graph nodes, mutated in place.
+ * @param {(path: string) => string|null} readFile Workspace-relative reader.
+ */
+export function annotateMFERemotes(nodes, readFile) {
+  for (const node of Object.values(nodes)) {
+    if (node.type !== "app") continue;
+    node.data.mfeRemote = projectIsMFERemote(node.data.root, readFile);
+  }
+}
+
+/**
  * The tracked files a scoped run covers, given the paths a user named.
  *
  * A path may be absolute or relative to `cwd`, and may name a file or a
