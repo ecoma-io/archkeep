@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
 import { MESSAGE_IDS, renderMessage } from "../rules/messages.mjs";
+import { TSCONFIG_PATHS_MESSAGE_IDS, TSCONFIG_PATHS_MESSAGES } from "../tsconfig-paths.mjs";
 
 import { buildSarifLog } from "./sarif.mjs";
 
@@ -51,6 +52,22 @@ const everyDriftFinding = () =>
     message: GO_WORK_MESSAGES[messageId],
   }));
 
+/**
+ * One dead-alias finding per paths hygiene `messageId` — positionless
+ * (`line: null`), the only shape `judgeTsconfigPaths` emits, so the
+ * artifact-only location branch is the one exercised.
+ */
+const everyDeadAliasFinding = () =>
+  TSCONFIG_PATHS_MESSAGE_IDS.map((messageId) => ({
+    messageId,
+    file: "tsconfig.base.json",
+    line: null,
+    column: null,
+    alias: "@acme/engine-domain",
+    targets: ["acme/libs/engine-domain/src/index.ts"],
+    message: TSCONFIG_PATHS_MESSAGES[messageId],
+  }));
+
 const log = buildSarifLog({
   violations: everyViolation(),
   failures: [
@@ -58,6 +75,7 @@ const log = buildSarifLog({
     { sourceFile: "a/b.rs", line: null, column: null, reason: "could not be read" },
   ],
   goWork: { findings: everyDriftFinding(), moduleProjects: 2 },
+  tsconfigPaths: { findings: everyDeadAliasFinding(), aliases: 3, unjudged: 0 },
 });
 
 describe("the SARIF log against what GitHub requires of an upload", () => {
@@ -69,7 +87,7 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
 
   it("gives every rule the engine can report a descriptor with an id, so no finding is nameless", () => {
     const ids = log.runs[0].tool.driver.rules.map((rule) => rule.id);
-    expect(ids).toEqual([...MESSAGE_IDS, ...GO_WORK_MESSAGE_IDS]);
+    expect(ids).toEqual([...MESSAGE_IDS, ...GO_WORK_MESSAGE_IDS, ...TSCONFIG_PATHS_MESSAGE_IDS]);
     expect(ids.every((id) => typeof id === "string" && id !== "")).toBe(true);
   });
 
@@ -97,9 +115,11 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
       expect(artifactLocation.uri.startsWith("/")).toBe(false);
       expect(artifactLocation.uri).not.toMatch(/^[a-z][a-z0-9+.-]*:/i);
       expect(artifactLocation.uri.split("/")).not.toContain("..");
-      if (result.ruleId === "goWorkMissingUse") {
-        // The one result about an entry that does not exist: no region, rather
-        // than a fabricated line 1 marking text the drift is not about.
+      if (result.ruleId === "goWorkMissingUse" || result.ruleId === "tsconfigDeadPathAlias") {
+        // The results about a thing that does not exist — a use entry never
+        // written, an alias with no position in the parsed options: no region,
+        // rather than a fabricated line 1 marking text the finding is not
+        // about.
         expect(region).toBeUndefined();
         continue;
       }
@@ -108,8 +128,10 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
     }
   });
 
-  it("reports one result per violation and drift finding, and none for a failure", () => {
-    expect(log.runs[0].results).toHaveLength(MESSAGE_IDS.length + GO_WORK_MESSAGE_IDS.length);
+  it("reports one result per violation, drift finding and dead alias, and none for a failure", () => {
+    expect(log.runs[0].results).toHaveLength(
+      MESSAGE_IDS.length + GO_WORK_MESSAGE_IDS.length + TSCONFIG_PATHS_MESSAGE_IDS.length,
+    );
     expect(log.runs[0].invocations[0].toolExecutionNotifications).toHaveLength(2);
   });
 

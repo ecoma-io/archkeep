@@ -24,10 +24,17 @@
  * way a violation does. The comparison is workspace-level and ignores path
  * scoping — two lists are being compared, not files analyzed.
  *
+ * When the workspace tsconfig declares a `paths` table, `check` also judges
+ * each alias for life (`src/tsconfig-paths.mjs` owns the rule and its limits):
+ * an alias whose every target points into directories that do not exist
+ * resolves no import, so it fails the run the way a violation does. Same
+ * workspace-level shape as go.work — a table is judged, not files analyzed.
+ *
  * Exit codes are part of the contract; a script calling this has to tell "your
  * tree is dirty" from "you typed it wrong" from "the checker itself broke":
  *   0  no violations, and every selected file was analyzed
- *   1  findings — boundary violations, or go.work drift
+ *   1  findings — boundary violations, go.work drift, or dead tsconfig path
+ *      aliases
  *   2  usage error — unknown command, missing argument, path outside the tree
  *   3  no verdict — no workspace, malformed config, `nx graph` or `git` failed,
  *      or a selected file could not be analyzed at all. Distinct from 1 on
@@ -46,10 +53,11 @@
  * what keeps this package's dependency list short enough to audit; reach for a
  * framework when several commands genuinely need one.
  */
-import { writeFileSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { statSync, writeFileSync } from "node:fs";
+import { isAbsolute, join, resolve } from "node:path";
 
 import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs";
+import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile } from "./src/config.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
@@ -57,6 +65,7 @@ import { DEFAULT_OPTIONS, readPluginOptions } from "./src/options.mjs";
 import { formatSarif } from "./src/report/sarif.mjs";
 import { formatReport } from "./src/report/text.mjs";
 import { evaluate } from "./src/rules/index.mjs";
+import { judgeTsconfigPaths } from "./src/tsconfig-paths.mjs";
 import {
   analyzeWorkspace,
   annotateMFERemotes,
@@ -115,7 +124,13 @@ A workspace with a go.work at its root also has its use list compared against
 every project's go.mod, whatever paths scope the run — a module in one list
 and not the other means a developer's go build and CI build different trees.
 
-Exit codes: ${EXIT.ok} clean · ${EXIT.violations} violations or go.work drift found · ${EXIT.usage} usage error · ${EXIT.error} no verdict (a file could not be analyzed, or the run could not start)`;
+A workspace whose tsconfig declares a paths table also has each alias judged
+for life: an alias whose every target points into directories that do not
+exist resolves no import, so it fails the run the way a violation does. The
+table itself is never re-resolved — the check reads the same parsed tsconfig
+the import resolver uses.
+
+Exit codes: ${EXIT.ok} clean · ${EXIT.violations} findings (violations, go.work drift, dead path aliases) · ${EXIT.usage} usage error · ${EXIT.error} no verdict (a file could not be analyzed, or the run could not start)`;
 
 /**
  * The options to WORD the help text with — best-effort, never fatal.
@@ -185,7 +200,8 @@ export function parseCheckArgs(argv) {
  *
  * @param {{format: string, config: string|null, paths: string[]}} options
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} context
- * @returns {Promise<{report: string, violations: number, analyzed: number}>}
+ * @returns {Promise<{report: string, violations: number, goWorkDrift: number,
+ *   tsconfigPathsDead: number, analyzed: number, unchecked: number}>}
  */
 export async function check(
   options,
@@ -269,6 +285,48 @@ export async function check(
     }
   }
 
+  // The tsconfig paths hygiene check, keyed the same way: no `paths` table in
+  // the workspace tsconfig — or no tsconfig at all — means no check and no
+  // mention. The table, its base and the failure posture all come from the
+  // resolver's own parsed context (`tsconfigPathsFacts`), so the file judged
+  // here is provably the file `ts.resolveModuleName` reads, and a tsconfig
+  // that failed to load is a whole-file failure (exit 3) here exactly as it is
+  // at every TypeScript import site — never an absent table. Only existence is
+  // asked of the filesystem, because the judgement is about directories on
+  // disk, the same disk the resolver probes (`src/tsconfig-paths.mjs` owns the
+  // rule and its limits). Like go.work, `selected` is ignored on purpose: a
+  // workspace fact is judged, not files analyzed.
+  let tsconfigPaths = null;
+  {
+    const facts = tsconfigPathsFacts(workspace);
+    if (facts.configFailure !== null) {
+      failures.push(
+        fileFailure(
+          facts.tsConfig,
+          `${facts.configFailure} — and the paths hygiene check reached no verdict, because a ` +
+            `tsconfig this tool cannot load is a coverage hole, not an empty alias table`,
+        ),
+      );
+    } else if (facts.paths !== undefined) {
+      tsconfigPaths = judgeTsconfigPaths({
+        paths: facts.paths,
+        base: facts.base,
+        workspaceRoot: root,
+        tsConfig: facts.tsConfig,
+        directoryExists: (dir) => {
+          try {
+            return statSync(join(root, dir)).isDirectory();
+          } catch {
+            return false;
+          }
+        },
+      });
+      for (const { reason } of tsconfigPaths.malformed) {
+        failures.push(fileFailure(facts.tsConfig, reason));
+      }
+    }
+  }
+
   const violations = evaluate(imports, graph, config);
   return {
     report: FORMATS[options.format]({
@@ -278,9 +336,11 @@ export async function check(
       imports: imports.length,
       projects: Object.keys(graph.nodes).length,
       goWork,
+      tsconfigPaths,
     }),
     violations: violations.length,
     goWorkDrift: goWork === null ? 0 : goWork.findings.length,
+    tsconfigPathsDead: tsconfigPaths === null ? 0 : tsconfigPaths.findings.length,
     analyzed,
     // Files the run produced no verdict about, counted here rather than
     // recomputed by the caller: the exit code and the report must agree about
@@ -363,6 +423,9 @@ export async function runCli(argv, env) {
         (result.goWorkDrift > 0
           ? `, ${result.goWorkDrift} go.work drift finding${result.goWorkDrift === 1 ? "" : "s"}`
           : "") +
+        (result.tsconfigPathsDead > 0
+          ? `, ${result.tsconfigPathsDead} dead tsconfig path alias${result.tsconfigPathsDead === 1 ? "" : "es"}`
+          : "") +
         (result.unchecked > 0
           ? `, ${result.unchecked} file${result.unchecked === 1 ? "" : "s"} not analyzed`
           : "") +
@@ -372,12 +435,15 @@ export async function runCli(argv, env) {
     env.out(result.report);
   }
 
-  // Findings first — boundary violations and go.work drift alike are verdicts,
-  // and a caller that gets 1 knows the tree is dirty whatever else the run
-  // could not reach; the report lists the unreached files either way. A clean
-  // run with a file nobody could analyze is the case that must not return 0,
-  // because 0 is read as "checked, and fine".
-  if (result.violations > 0 || result.goWorkDrift > 0) return EXIT.violations;
+  // Findings first — boundary violations, go.work drift and dead tsconfig
+  // path aliases alike are verdicts, and a caller that gets 1 knows the tree
+  // is dirty whatever else the run could not reach; the report lists the
+  // unreached files either way. A clean run with a file nobody could analyze
+  // is the case that must not return 0, because 0 is read as "checked, and
+  // fine".
+  if (result.violations > 0 || result.goWorkDrift > 0 || result.tsconfigPathsDead > 0) {
+    return EXIT.violations;
+  }
   return result.unchecked > 0 ? EXIT.error : EXIT.ok;
 }
 

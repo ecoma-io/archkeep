@@ -35,7 +35,7 @@ judged is still the consumer's.
 | code | meaning                                                                    |
 | ---- | -------------------------------------------------------------------------- |
 | `0`  | clean — **and** every selected file was analyzed                           |
-| `1`  | findings — boundary violations, or go.work drift                           |
+| `1`  | findings — boundary violations, go.work drift, or dead tsconfig aliases    |
 | `2`  | usage error                                                                |
 | `3`  | no verdict — the run could not start, or a selected file could not be read |
 
@@ -64,7 +64,7 @@ If you need to distinguish, distinguish explicitly:
 nx-polyglot-graph check
 case $? in
   0) echo "clean" ;;
-  1) echo "boundary violations or go.work drift"; exit 1 ;;
+  1) echo "boundary violations, go.work drift, or dead tsconfig aliases"; exit 1 ;;
   3) echo "the checker could not reach a verdict"; exit 1 ;;
   *) echo "usage error"; exit 1 ;;
 esac
@@ -147,10 +147,12 @@ What the SARIF carries, and why each choice was made:
   `invocations[].toolExecutionNotifications` at `warning` — SARIF's own slot for
   "the tool had trouble here" — and `executionSuccessful` stays true, because the
   run did complete.
-- **go.work drift findings _are_ results**, under their own `goWork*` rule ids:
-  they are verdicts the run fails on, exactly like violations, and a finding
-  that only reached the exit code would leave code scanning showing a red job
-  with an empty upload.
+- **go.work drift findings and dead tsconfig path aliases _are_ results**,
+  under their own rule ids (`goWork*`, `tsconfigDeadPathAlias`): they are
+  verdicts the run fails on, exactly like violations, and a finding that only
+  reached the exit code would leave code scanning showing a red job with an
+  empty upload. Both are workspace-level and positionless where nothing wrote
+  the missing thing, so their locations may carry the artifact alone.
 
 That last point has a consequence worth stating plainly: **the SARIF upload does
 not carry the exit-3 signal.** Code scanning will show you violations, not

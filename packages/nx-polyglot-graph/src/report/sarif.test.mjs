@@ -16,6 +16,10 @@ vi.mock("../go-work.mjs", () => ({
   GO_WORK_MESSAGE_IDS: ["driftRule"],
   GO_WORK_MESSAGES: { driftRule: "Drift rule's summary line\n\nAnd its detail" },
 }));
+vi.mock("../tsconfig-paths.mjs", () => ({
+  TSCONFIG_PATHS_MESSAGE_IDS: ["deadAliasRule"],
+  TSCONFIG_PATHS_MESSAGES: { deadAliasRule: "Dead alias rule's summary line\n\nAnd its detail" },
+}));
 vi.mock("./text.mjs", () => ({ formatConstraint: () => "THE CONSTRAINT" }));
 
 import { buildSarifLog, formatSarif, sarifRules, toUriReference } from "./sarif.mjs";
@@ -60,9 +64,15 @@ describe("the rule catalogue", () => {
   it("lists every message id the engine can produce, not only the ones that fired", () => {
     // A catalogue that grew with the findings would describe a rule on the run
     // that reported it and leave it nameless on the next. The go.work drift
-    // ids come after the upstream ones, so every existing ruleIndex is stable.
-    expect(sarifRules().map((rule) => rule.id)).toEqual(["firstRule", "secondRule", "driftRule"]);
-    expect(log().tool.driver.rules).toHaveLength(3);
+    // ids come after the upstream ones and the paths hygiene ids after those,
+    // so every existing ruleIndex is stable.
+    expect(sarifRules().map((rule) => rule.id)).toEqual([
+      "firstRule",
+      "secondRule",
+      "driftRule",
+      "deadAliasRule",
+    ]);
+    expect(log().tool.driver.rules).toHaveLength(4);
   });
 
   it("keeps the whole template as the description and its first line as the summary", () => {
@@ -143,6 +153,68 @@ describe("a go.work drift finding", () => {
       goWork: { findings: [finding()], moduleProjects: 2 },
     });
     expect(built.results.map((result) => result.ruleId)).toEqual(["secondRule", "driftRule"]);
+  });
+});
+
+describe("a dead tsconfig path alias finding", () => {
+  const deadAlias = (overrides = {}) => ({
+    messageId: "deadAliasRule",
+    file: "tsconfig.base.json",
+    line: null,
+    column: null,
+    alias: "@acme/gone",
+    targets: ["libs/gone/src/index.ts"],
+    message: "the dead alias, spelled out",
+    ...overrides,
+  });
+
+  it("is a result whose ruleId resolves in the catalogue, exactly like a violation's", () => {
+    // A dead alias that only reached the exit code would leave a code-scanning
+    // consumer looking at a red job with an empty upload — the same reasoning
+    // as a drift finding.
+    const built = log({ tsconfigPaths: { findings: [deadAlias()], aliases: 3, unjudged: 0 } });
+    const [result] = built.results;
+    expect(result.ruleId).toBe("deadAliasRule");
+    expect(built.tool.driver.rules[result.ruleIndex].id).toBe("deadAliasRule");
+    expect(result.level).toBe("error");
+    expect(result.message.text).toBe("the dead alias, spelled out");
+    expect(result.properties).toEqual({
+      alias: "@acme/gone",
+      targets: ["libs/gone/src/index.ts"],
+    });
+  });
+
+  it("carries the artifact alone and no region — the finding is positionless by construction", () => {
+    const built = log({ tsconfigPaths: { findings: [deadAlias()], aliases: 1, unjudged: 0 } });
+    expect(built.results[0].locations[0].physicalLocation).toEqual({
+      artifactLocation: { uri: "tsconfig.base.json" },
+    });
+  });
+
+  it("appears beside the violations and the drift findings, none replacing another", () => {
+    const built = log({
+      violations: [violation()],
+      goWork: {
+        findings: [
+          {
+            messageId: "driftRule",
+            file: "go.work",
+            line: 4,
+            column: 2,
+            directory: "libs/gone",
+            project: null,
+            message: "the drift",
+          },
+        ],
+        moduleProjects: 2,
+      },
+      tsconfigPaths: { findings: [deadAlias()], aliases: 1, unjudged: 0 },
+    });
+    expect(built.results.map((result) => result.ruleId)).toEqual([
+      "secondRule",
+      "driftRule",
+      "deadAliasRule",
+    ]);
   });
 });
 

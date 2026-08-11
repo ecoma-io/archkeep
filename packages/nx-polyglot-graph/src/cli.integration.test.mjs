@@ -140,6 +140,18 @@ describe("checking a real tree", () => {
     expect(report).not.toContain("go.work");
   });
 
+  it("says nothing about path aliases in a workspace with no tsconfig — no table, no check, no claim", async () => {
+    // The paths hygiene check's silent case, on the main fixture precisely
+    // because it never writes a tsconfig: a workspace without the table must
+    // pay nothing and hear nothing.
+    const { report, tsconfigPathsDead } = await check(
+      { format: "text", config: null, paths: [] },
+      context,
+    );
+    expect(tsconfigPathsDead).toBe(0);
+    expect(report).not.toContain("tsconfig");
+  });
+
   it("renders the same verdict as SARIF, located at the same position", async () => {
     const { report } = await check({ format: "sarif", config: null, paths: [] }, context);
     const [result] = JSON.parse(report).runs[0].results;
@@ -453,6 +465,183 @@ export const moduleBoundaryOptions = {
   });
 });
 
+describe("the tsconfig paths hygiene check", () => {
+  // Its own fixture, because a dead alias is exactly the state the main
+  // fixture must not carry: a clean one-module Go workspace whose
+  // tsconfig.base.json is rewritten per case. No TypeScript source at all,
+  // deliberately — the table is a workspace fact, so the check must fire (and
+  // refuse) even where no analyzed file ever imports through it. Only Nx and
+  // git are injected: the real parse reads the real file and the real
+  // judgement probes the real directories, so what is pinned here is the whole
+  // path a consumer's `check` takes.
+  const aliasRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-tspaths-"));
+  afterAll(() => rmSync(aliasRoot, { recursive: true, force: true }));
+
+  const writeAlias = (relativePath, text) => {
+    mkdirSync(join(aliasRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(aliasRoot, relativePath), text);
+  };
+
+  writeAlias("nx.json", "{}\n");
+  writeAlias(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeAlias("libs/store/go.mod", "module example.com/store\n\ngo 1.24\n");
+  writeAlias("libs/store/store.go", "package store\n");
+
+  const aliasContext = {
+    cwd: aliasRoot,
+    readGraph: () => ({
+      nodes: {
+        store: { name: "store", type: "lib", data: { root: "libs/store", tags: ["layer:domain"] } },
+      },
+      dependencies: { store: [] },
+    }),
+    listFiles: () => [
+      "nx.json",
+      "module-boundaries.config.mjs",
+      "tsconfig.base.json",
+      "libs/store/go.mod",
+      "libs/store/store.go",
+    ],
+  };
+
+  const aliasEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      ...aliasContext,
+    };
+  };
+
+  const tsconfig = (compilerOptions) => JSON.stringify({ compilerOptions }, null, 2);
+
+  it("exits 1 on an alias whose every target's directory is gone, with zero boundary violations to blame", async () => {
+    // The breaking half of this change, deliberately: a workspace whose
+    // imports are all legal and whose alias table has quietly rotted was exit
+    // 0 before this check existed, and that green was the dead alias being
+    // invisible.
+    writeAlias(
+      "tsconfig.base.json",
+      tsconfig({ paths: { "@shop/catalog": ["libs/catalog/src/index.ts"] } }),
+    );
+    const streams = aliasEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("✔ no boundary violations");
+    expect(report).toContain("tsconfig.base.json  tsconfigDeadPathAlias");
+    expect(report).toContain('"@shop/catalog"');
+    expect(report).toContain("libs/catalog/src/");
+    expect(report).toContain("✖ dead tsconfig path aliases: 1 finding");
+  });
+
+  it("exits 0 while a target's prefix directory exists, and claims the coverage out loud", async () => {
+    // `libs/store` is on disk, so the wildcard alias is alive by the stated
+    // rule whatever a specifier substitutes — and the clean line must say how
+    // many aliases that claim covers.
+    writeAlias("tsconfig.base.json", tsconfig({ paths: { "@shop/store/*": ["libs/store/*"] } }));
+    const streams = aliasEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.ok);
+    expect(streams.lines.out.join("\n")).toContain(
+      "✔ no dead tsconfig path aliases (1 alias judged in tsconfig.base.json)",
+    );
+  });
+
+  it("says nothing when the tsconfig declares no paths — a table that does not exist makes no claim", async () => {
+    writeAlias("tsconfig.base.json", tsconfig({ module: "nodenext" }));
+    const streams = aliasEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.ok);
+    expect(streams.lines.out.join("\n")).not.toContain("tsconfig");
+  });
+
+  it("exits 3 on a tsconfig it cannot load — a broken table must never read as 'no aliases'", async () => {
+    // The silent direction, end to end, in a workspace with no TypeScript
+    // source: nothing else ever loads this tsconfig, so a check that shrugged
+    // here would leave the file broken and the run green. The run refuses a
+    // verdict instead — which is also the one behaviour change a pure-Go
+    // workspace can see from this check.
+    writeAlias("tsconfig.base.json", "{ this is not JSON");
+    const streams = aliasEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("could not be analyzed at all");
+    expect(report).toContain("tsconfig.base.json");
+    expect(report).toContain("not valid JSON");
+    expect(report).not.toContain("tsconfigDeadPathAlias");
+    expect(report).not.toContain("✔ no dead tsconfig path aliases");
+  });
+
+  it("exits 3 on a paths value that is not an array of strings, naming the alias it refused", async () => {
+    // TypeScript's own parse accepts this shape without a diagnostic
+    // (src/tsconfig-paths.mjs header), so reading it as an absent alias would
+    // be the same silent direction with a subtler cause.
+    writeAlias(
+      "tsconfig.base.json",
+      tsconfig({ paths: { "@shop/catalog": "libs/catalog/src/index.ts" } }),
+    );
+    const streams = aliasEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("could not be analyzed at all");
+    expect(report).toContain('"@shop/catalog"');
+    expect(report).toContain("no verdict");
+  });
+
+  it("carries a dead alias into the SARIF report as a result, so a code-scanning consumer sees the red", async () => {
+    writeAlias(
+      "tsconfig.base.json",
+      tsconfig({ paths: { "@shop/catalog": ["libs/catalog/src/index.ts"] } }),
+    );
+    const { report, violations, tsconfigPathsDead } = await check(
+      { format: "sarif", config: null, paths: [] },
+      aliasContext,
+    );
+    expect(violations).toBe(0);
+    expect(tsconfigPathsDead).toBe(1);
+    const run = JSON.parse(report).runs[0];
+    const [result] = run.results;
+    expect(result.ruleId).toBe("tsconfigDeadPathAlias");
+    expect(run.tool.driver.rules[result.ruleIndex].id).toBe("tsconfigDeadPathAlias");
+    expect(result.locations[0].physicalLocation).toEqual({
+      artifactLocation: { uri: "tsconfig.base.json" },
+    });
+    expect(result.properties).toEqual({
+      alias: "@shop/catalog",
+      targets: ["libs/catalog/src/index.ts"],
+    });
+  });
+
+  it("counts dead aliases on the stderr summary of an --output run, beside the violations", async () => {
+    writeAlias(
+      "tsconfig.base.json",
+      tsconfig({ paths: { "@shop/catalog": ["libs/catalog/src/index.ts"] } }),
+    );
+    const target = join(aliasRoot, "dead-alias.sarif");
+    const streams = aliasEnv();
+    expect(await runCli(["check", "--format", "sarif", "--output", target], streams)).toBe(
+      EXIT.violations,
+    );
+    expect(streams.lines.err.join("\n")).toContain("1 dead tsconfig path alias");
+  });
+});
+
 describe("honouring the two package.json facts the graph cannot carry", () => {
   // `nx graph --file=` carries neither `entryPoints` nor `declaredPackages`
   // (see `annotatePackageFacts` in `./workspace.mjs`), so the CLI computes both
@@ -722,6 +911,6 @@ describe("the usage message", () => {
     expect(result.stdout).toContain("nx-polyglot-graph check");
     expect(result.stdout).toContain("module-boundaries.config.mjs");
     expect(result.stdout).toContain("--format text|sarif");
-    expect(result.stdout).toContain("1 violations or go.work drift found");
+    expect(result.stdout).toContain("1 findings (violations, go.work drift, dead path aliases)");
   });
 });

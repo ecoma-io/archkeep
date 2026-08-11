@@ -271,11 +271,15 @@ at the repository root. Concretely:
 - `cli.mjs check` keeps four distinct exit codes, and the distinction that
   matters is **3** (the run could not complete — no workspace, malformed
   config, `nx graph` or `git` failed) against **1** (findings — boundary
-  violations, or go.work drift; `src/go-work.mjs` owns that check's semantics
-  and parse limits) and **0** (clean). A checker that could not look must never
-  be mistaken for one that looked and found nothing; **2** stays a usage error.
-  Exit 0 was the bug. A malformed go.work is the 3-class on purpose: read as an
-  empty use list it would mean "no drift", which is the silent direction.
+  violations, go.work drift, or dead tsconfig path aliases; `src/go-work.mjs`
+  and `src/tsconfig-paths.mjs` own those checks' semantics and limits) and
+  **0** (clean). A checker that could not look must never be mistaken for one
+  that looked and found nothing; **2** stays a usage error. Exit 0 was the
+  bug. A malformed go.work is the 3-class on purpose: read as an empty use
+  list it would mean "no drift", which is the silent direction — and a
+  tsconfig that will not load, or a `paths` value that is not an array of
+  strings, is the 3-class for the same reason: read as "no aliases" it would
+  silence the paths check exactly where the table is most broken.
   `check` also states what it inspected — imports, files, projects — beside
   every verdict, because "no violations" is a claim about coverage too.
 - `lsp.mjs` advertises `textDocumentSync` because it now serves it. What it

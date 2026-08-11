@@ -5,6 +5,7 @@ import {
   formatFailures,
   formatGoWork,
   formatReport,
+  formatTsconfigPaths,
   formatViolation,
 } from "./text.mjs";
 
@@ -210,6 +211,62 @@ describe("go.work drift", () => {
   });
 });
 
+describe("tsconfig paths hygiene", () => {
+  const deadAlias = (overrides = {}) => ({
+    messageId: "tsconfigDeadPathAlias",
+    file: "tsconfig.base.json",
+    line: null,
+    column: null,
+    alias: "@acme/engine-domain",
+    targets: ["libs/engine-domain/src/index.ts"],
+    message: 'tsconfig.base.json maps "@acme/engine-domain" only to targets that are gone',
+    ...overrides,
+  });
+
+  it("renders a finding at the file alone — the finding is positionless by construction", () => {
+    const text = formatTsconfigPaths({
+      tsConfig: "tsconfig.base.json",
+      findings: [deadAlias()],
+      aliases: 3,
+      unjudged: 0,
+    });
+    expect(text).toContain("tsconfig.base.json  tsconfigDeadPathAlias");
+    expect(text).not.toContain("tsconfig.base.json:");
+    expect(text).toContain('    tsconfig.base.json maps "@acme/engine-domain"');
+    expect(text).toContain("✖ dead tsconfig path aliases: 1 finding (3 aliases judged");
+    expect(text).toContain("the run fails");
+  });
+
+  it("claims cleanliness out loud when the check ran, stating how many aliases that covers", () => {
+    // A clean table saying nothing would be indistinguishable from a run that
+    // never looked at it — the same reason the summary line counts files.
+    expect(
+      formatTsconfigPaths({
+        tsConfig: "tsconfig.base.json",
+        findings: [],
+        aliases: 4,
+        unjudged: 0,
+      }),
+    ).toBe("✔ no dead tsconfig path aliases (4 aliases judged in tsconfig.base.json)");
+  });
+
+  it("counts the aliases its rule could not judge beside the verdict, never inside it", () => {
+    const text = formatTsconfigPaths({
+      tsConfig: "tsconfig.base.json",
+      findings: [],
+      aliases: 2,
+      unjudged: 1,
+    });
+    expect(text).toContain("2 aliases judged in tsconfig.base.json");
+    expect(text).toContain("1 outside this check's rule and not judged");
+  });
+
+  it("says nothing at all when the workspace declares no paths, which is the one silent case allowed", () => {
+    expect(formatTsconfigPaths(null)).toBe("");
+    expect(formatTsconfigPaths(undefined)).toBe("");
+  });
+});
+
 describe("the report as a whole", () => {
   const run = (overrides) => ({
     violations: [],
@@ -275,5 +332,42 @@ describe("the report as a whole", () => {
   it("never mentions go.work on a run whose workspace has none — no manifest, no claim", () => {
     expect(formatReport(run())).not.toContain("go.work");
     expect(formatReport(run({ goWork: null }))).not.toContain("go.work");
+  });
+
+  it("carries the tsconfig paths section when the check ran, findings or not", () => {
+    const clean = formatReport(
+      run({
+        tsconfigPaths: { tsConfig: "tsconfig.base.json", findings: [], aliases: 2, unjudged: 0 },
+      }),
+    );
+    expect(clean).toContain("✔ no boundary violations");
+    expect(clean).toContain("✔ no dead tsconfig path aliases");
+    const dirty = formatReport(
+      run({
+        tsconfigPaths: {
+          tsConfig: "tsconfig.base.json",
+          findings: [
+            {
+              messageId: "tsconfigDeadPathAlias",
+              file: "tsconfig.base.json",
+              line: null,
+              column: null,
+              alias: "@acme/gone",
+              targets: ["libs/gone/index.ts"],
+              message: "the dead alias, spelled out",
+            },
+          ],
+          aliases: 2,
+          unjudged: 0,
+        },
+      }),
+    );
+    expect(dirty).toContain("tsconfig.base.json  tsconfigDeadPathAlias");
+    expect(dirty).toContain("✖ dead tsconfig path aliases");
+  });
+
+  it("never mentions the paths table on a run whose workspace declares none — no table, no claim", () => {
+    expect(formatReport(run())).not.toContain("tsconfig");
+    expect(formatReport(run({ tsconfigPaths: null }))).not.toContain("tsconfig");
   });
 });
