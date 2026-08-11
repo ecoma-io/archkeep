@@ -1,0 +1,27 @@
+// The `typecheck` target's program: `tsc -p` over this package's .mjs and the
+// JSDoc it carries, emitting nothing — checking is not a build step, so the
+// shipped artefact stays directly loadable (AGENTS.md, "No TypeScript here,
+// and why"). It extends the root tsconfig.base.json for `module: nodenext`,
+// the same setting the boundary checker itself needs from that file: without
+// it tsc cannot resolve the exports-map-only packages this code imports.
+//
+// - `skipLibCheck` — the target judges this package's JSDoc, not its
+//   dependencies' shipped `.d.ts` files. Without it the run would fail on
+//   upstream declaration conflicts nothing in this repository can fix.
+// - `target: es2022` — decides only which library globals tsc assumes exist,
+//   since nothing is emitted; es2022 is well inside this package's declared
+//   `engines.node >=22`.
+// - No `strict` — the gain this target buys is wrong JSDoc and wrong API
+//   usage caught before review. Auditing the codebase for strict-null
+//   soundness is its own pull request, not a flag flipped here.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    "target": "es2022",
+    "skipLibCheck": true
+  },
+  "include": ["**/*.mjs"]
+}

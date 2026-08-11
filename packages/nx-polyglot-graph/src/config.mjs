@@ -114,12 +114,15 @@ const ROW_LIST_MATCHERS = {
 
 const ROW_LIST_KEYS = Object.keys(ROW_LIST_MATCHERS);
 
+/** @type {(value: unknown) => value is string[]} */
 const isStringArray = (value) =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
 
+/** @type {(value: unknown) => value is [string, string][]} */
 const isTagPairArray = (value) =>
   Array.isArray(value) && value.every((pair) => isStringArray(pair) && pair.length === 2);
 
+/** @type {(value: unknown) => value is Record<string, unknown>} */
 const isPlainObject = (value) =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -182,7 +185,11 @@ function constraintRowViolations(row, index) {
     // unusable tag makes the whole row match nothing — and a row that matches
     // nothing does not error, it approves.
     violations.push(
-      ...listEntryViolations(row.allSourceTags, `${at}.allSourceTags`, tagPatternError),
+      ...listEntryViolations(
+        /** @type {string[]} */ (row.allSourceTags),
+        `${at}.allSourceTags`,
+        tagPatternError,
+      ),
     );
   }
   if (hasSourceTag && typeof row.sourceTag === "string" && row.sourceTag !== "") {
@@ -280,7 +287,7 @@ function suppressionRowViolations(row, index) {
         `a boundary that quietly stopped being enforced`,
     );
   }
-  if ("messageId" in row && !MESSAGE_IDS.includes(row.messageId)) {
+  if ("messageId" in row && !MESSAGE_IDS.includes(/** @type {string} */ (row.messageId))) {
     violations.push(
       `${at}.messageId: ${describe(row.messageId)} is not a violation type this engine ` +
         `reports — expected one of ${MESSAGE_IDS.join(", ")}`,
@@ -369,9 +376,11 @@ export function findBoundaryConfigViolations(module) {
     }
     const at = `moduleBoundaryOptions.${key}`;
     if (type === "string[]") {
-      violations.push(...listEntryViolations(value, at, OPTION_ENTRY_MATCHERS[key]));
+      violations.push(
+        ...listEntryViolations(/** @type {string[]} */ (value), at, OPTION_ENTRY_MATCHERS[key]),
+      );
     } else if (type === "pair[]") {
-      value.forEach((pair, index) =>
+      /** @type {[string, string][]} */ (value).forEach((pair, index) =>
         violations.push(
           ...listEntryViolations(pair, `${at}[${index}]`, OPTION_ENTRY_MATCHERS[key]),
         ),

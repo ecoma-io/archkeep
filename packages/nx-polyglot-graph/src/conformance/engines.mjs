@@ -106,6 +106,10 @@ export async function createUpstreamRunner(root) {
         },
         {
           files: ["**/*.{ts,tsx,js,mjs,cjs,vue}"],
+          // @ts-expect-error -- @nx/eslint-plugin's own declared config types
+          // (legacy-format `parserOptions.ecmaVersion: number`) do not satisfy
+          // eslint 10's `Plugin` type; the plugin object works at runtime and
+          // the mismatch is upstream's to fix.
           plugins: { "@nx": nxPlugin },
           rules: {
             "@nx/enforce-module-boundaries": [

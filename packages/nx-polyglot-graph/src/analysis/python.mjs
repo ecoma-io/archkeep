@@ -234,7 +234,7 @@ export function collectDeclaredDependencies(manifest) {
  * the doc pages and for the two tables deliberately not read.
  *
  * @param {object} manifest A parsed pyproject.toml.
- * @returns {{ name: string, path: string, declaredIn: string }[]}
+ * @returns {{ name: string, path: string, unanchored?: undefined, declaredIn: string }[]}
  */
 function poetryPathDependencies(manifest) {
   const tables = [];
@@ -728,7 +728,8 @@ export function pythonImportRoots(projectRoot, files, directories = []) {
  * project that is compromised but every name that resolves to nothing —
  * whichever file wrote it.
  *
- * @returns {{ byModule: Map<string, object[]>, directoriesOf: Map<string, string[]>,
+ * @returns {{ byModule: Map<string, { project: string, file: string|null }[]>,
+ *   directoriesOf: Map<string, string[]>,
  *   unmodelled: { project: string, reason: string }[] }}
  */
 const pythonModulesOf = perWorkspace((workspace) => {
@@ -756,7 +757,8 @@ const pythonModulesOf = perWorkspace((workspace) => {
 /**
  * The project a dotted module name reaches, by longest matching prefix.
  *
- * @returns {{ owner: object }|{ ambiguous: string[], prefix: string }|null}
+ * @returns {{ owner: { project: string, file: string|null }, ambiguous?: undefined,
+ *   prefix?: undefined }|{ ambiguous: string[], prefix: string, owner?: undefined }|null}
  *   `null` when no project claims any prefix — the module is external.
  */
 function resolveModuleName(dotted, byModule) {

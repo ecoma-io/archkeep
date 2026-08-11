@@ -45,8 +45,10 @@ export function serve(input = process.stdin, output = process.stdout, onExit = n
     log: (text) => process.stderr.write(`${text}\n`),
   });
 
+  /** @type {Buffer} */
   let pending = Buffer.alloc(0);
-  input.on("data", (chunk) => {
+  // No encoding is ever set on `input`, so a data chunk is always a Buffer.
+  input.on("data", (/** @type {Buffer} */ chunk) => {
     const { messages, rest } = frameMessages(Buffer.concat([pending, chunk]));
     pending = rest;
     for (const message of messages) server.handle(message);

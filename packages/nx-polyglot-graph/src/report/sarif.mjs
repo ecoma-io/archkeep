@@ -248,7 +248,9 @@ export function sarifNotification(failure) {
 /**
  * The whole SARIF log.
  *
- * @param {{violations: object[], failures: object[], goWork?: {findings: object[]}|null, tsconfigPaths?: {findings: object[]}|null}} run
+ * @param {{violations: object[], failures: object[],
+ *   goWork?: {findings: object[], moduleProjects?: number}|null,
+ *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null}} run
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
 export function buildSarifLog({ violations, failures, goWork, tsconfigPaths }) {
@@ -282,7 +284,9 @@ export function buildSarifLog({ violations, failures, goWork, tsconfigPaths }) {
  * The SARIF log as the bytes to write — pretty-printed with a trailing newline,
  * so a file that lands in a diff or a log stays readable.
  *
- * @param {{violations: object[], failures: object[], goWork?: {findings: object[]}|null, tsconfigPaths?: {findings: object[]}|null}} run
+ * @param {{violations: object[], failures: object[],
+ *   goWork?: {findings: object[], moduleProjects?: number}|null,
+ *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null}} run
  * @returns {string}
  */
 export function formatSarif(run) {

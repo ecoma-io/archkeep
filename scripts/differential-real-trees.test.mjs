@@ -121,7 +121,11 @@ test("extractBoundaryRule takes the LAST configuring entry, as ESLint binds it",
 
 test("extractBoundaryRule refuses a config without the rule, and one with it off", () => {
   assert.throws(() => extractBoundaryRule([{ rules: {} }]), /no @nx\/enforce-module-boundaries/u);
-  assert.throws(() => extractBoundaryRule({ rules: {} }), /not a flat-config array/u);
+  // A non-array is the very input under test, so it is cast past the signature.
+  assert.throws(
+    () => extractBoundaryRule(/** @type {any} */ ({ rules: {} })),
+    /not a flat-config array/u,
+  );
   assert.throws(
     () => extractBoundaryRule([{ rules: { "@nx/enforce-module-boundaries": "off" } }]),
     /switched off or without options/u,

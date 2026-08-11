@@ -175,6 +175,7 @@ function connect(server = SERVER) {
   const received = [];
   const watchers = new Set();
   let stderr = "";
+  /** @type {Buffer} */
   let buffer = Buffer.alloc(0);
   let exitCode = null;
 

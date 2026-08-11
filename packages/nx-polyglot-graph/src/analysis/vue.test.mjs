@@ -9,7 +9,7 @@ import { analyzeVue } from "./vue.mjs";
 vi.mock("./typescript.mjs", () => ({
   analyzeTypeScript: vi.fn(() => ({ imports: [], failures: [] })),
 }));
-const { analyzeTypeScript } = await import("./typescript.mjs");
+const analyzeTypeScript = vi.mocked((await import("./typescript.mjs")).analyzeTypeScript);
 
 const workspace = { root: "/w", projects: [], filesOf: () => [], readFile: () => null };
 const analyze = (text) => analyzeVue({ sourceFile: "libs/ui/src/Comp.vue", text, workspace });

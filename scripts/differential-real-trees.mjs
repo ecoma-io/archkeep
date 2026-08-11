@@ -207,7 +207,7 @@ export function classifyDifferences(treeName, differences, ledger) {
  * looking, and two engines both answering zero would otherwise count as
  * perfect agreement. Each breach names the engine that went silent.
  *
- * @param {{name: string, expectViolations: boolean}} tree
+ * @param {{name: string, sha: string, expectViolations: boolean}} tree
  * @param {{upstream: number, tool: number}} verdictCounts
  * @returns {string[]}
  */
@@ -408,6 +408,7 @@ function main() {
     process.exit(EXIT.usage);
   }
 
+  /** @type {("infrastructure"|"findings"|"ok")[]} */
   const verdicts = [];
   for (const tree of TREES) {
     const workdir = mkdtempSync(join(tmpdir(), `lattice-differential-${tree.name}-`));

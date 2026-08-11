@@ -82,6 +82,7 @@ runs in CI and in the Git hooks.
 | `pnpm format:check`   | Prettier, read-only — what CI runs                                            |
 | `pnpm lint`           | ESLint, zero warnings tolerated                                               |
 | `pnpm test`           | `node --test` over `scripts/*.test.mjs` — the gate scripts, nothing else      |
+| `pnpm typecheck`      | `tsc --noEmit` over the gate scripts' JSDoc — each package has its own target |
 | `pnpm check-packages` | Asserts every `packages/*` directory is a project Nx can see, with CI targets |
 
 Plus every project's own targets — a different suite, not a superset of the one
@@ -144,7 +145,7 @@ runs only some of the targets is reported as exactly that, and it is the expecte
 answer rather than a finding:
 
 ```text
-ok   nx-polyglot-graph — lint, test (no build, typecheck)
+ok   nx-polyglot-graph — lint, test, typecheck (no build)
 ```
 
 `nx-polyglot-graph` ships as `.mjs` and has nothing to build. Adding an empty

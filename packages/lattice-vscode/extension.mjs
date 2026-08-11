@@ -59,7 +59,13 @@ function applyStatus(item, description) {
 /** One entry per open workspace folder, keyed by folder URI. */
 const sessions = new Map();
 
-/** @type {import("vscode").OutputChannel | null} */
+/**
+ * A log channel, not a plain one, because the language client requires it: its
+ * `outputChannel` option is typed `LogOutputChannel`, and the client calls the
+ * log methods (`trace`, `debug`, …) that only exist on that shape.
+ *
+ * @type {import("vscode").LogOutputChannel | null}
+ */
 let output = null;
 
 /**
@@ -230,7 +236,7 @@ async function restart() {
 
 /** @param {import("vscode").ExtensionContext} context */
 export async function activate(context) {
-  output = window.createOutputChannel("Lattice");
+  output = window.createOutputChannel("Lattice", { log: true });
 
   context.subscriptions.push(
     output,

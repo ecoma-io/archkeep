@@ -130,7 +130,8 @@ export function resolveOptions(rawOptions) {
  * @returns {boolean}
  */
 function namesThisPlugin(entry) {
-  const specifier = typeof entry === "string" ? entry : entry?.plugin;
+  const specifier =
+    typeof entry === "string" ? entry : /** @type {{ plugin?: unknown }} */ (entry)?.plugin;
   if (typeof specifier !== "string") return false;
   const withoutEntryFile = specifier.replace(/\/index\.mjs$/u, "");
   return (

@@ -65,7 +65,12 @@ const BASE_FILES = {
   "node_modules/@acme-vendor/api/window.js": "module.exports = 1;",
 };
 
-/** Analyzes `text` as `apps/web/src/main.ts` of the standard fixture tree. */
+/**
+ * Analyzes `text` as `apps/web/src/main.ts` of the standard fixture tree.
+ *
+ * @param {string} text
+ * @param {{ files?: Record<string, string>, sourceFile?: string, lang?: string }} [options]
+ */
 function analyze(text, { files = {}, sourceFile = "apps/web/src/main.ts", lang } = {}) {
   const workspace = workspaceWith({ ...BASE_FILES, ...files }, PROJECTS);
   return analyzeTypeScript({ sourceFile, text, workspace, lang });

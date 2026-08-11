@@ -327,8 +327,8 @@ function tallyFor(rows, messageId) {
  * that then looks complete (an empty result is a claim, not a shrug).
  *
  * @param {object[]} rows From `compareCase`.
- * @param {string[]} upstreamMessageIds Every id upstream defines.
- * @param {string[]} toolMessageIds Every id this engine can produce.
+ * @param {readonly string[]} upstreamMessageIds Every id upstream defines.
+ * @param {readonly string[]} toolMessageIds Every id this engine can produce.
  */
 export function summarize(rows, upstreamMessageIds, toolMessageIds) {
   const implemented = new Set(toolMessageIds);

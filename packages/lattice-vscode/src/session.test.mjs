@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { planSession } from "./session.mjs";
 
-const FOUND = { path: "/repo/node_modules/@ecoma-io/nx-polyglot-graph/lsp.mjs", searched: [] };
+/** @type {import("./server-module.mjs").ServerLocation} */
+const FOUND = {
+  path: "/repo/node_modules/@ecoma-io/nx-polyglot-graph/lsp.mjs",
+  source: "workspace",
+  searched: [],
+};
 
 describe("planSession", () => {
   it("starts the server against the workspace root, not the open folder", () => {
@@ -45,6 +50,7 @@ describe("planSession", () => {
       findRoot: () => "/repo",
       locateServer: () => ({
         path: null,
+        source: null,
         searched: ["/repo/node_modules/@ecoma-io/nx-polyglot-graph/lsp.mjs"],
         reason: "not installed",
       }),
@@ -78,7 +84,7 @@ describe("planSession", () => {
     const plan = planSession({
       folderPath: "/repo",
       findRoot: () => "/repo",
-      locateServer: () => ({ path: null, searched: [] }),
+      locateServer: () => ({ path: null, source: null, searched: [] }),
     });
 
     expect(plan.state).toBe("blocked");

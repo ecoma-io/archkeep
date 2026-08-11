@@ -84,7 +84,7 @@ function under `src/`, and its README says what it refuses and why.
   its verdict names the targets each package actually runs:
 
   ```text
-  ok   nx-polyglot-graph — lint, test (no build, typecheck)
+  ok   nx-polyglot-graph — lint, test, typecheck (no build)
   ```
 
   A partial set is the expected answer, not a finding. `nx-polyglot-graph` ships
@@ -141,13 +141,16 @@ function under `src/`, and its README says what it refuses and why.
 The repository runs on `.mjs` with JSDoc. This is not asceticism: Nx loads a
 plugin's entry point directly in the process that runs _every_ `nx` invocation,
 so the shipped artefact has to be loadable with no build step in the way. That is
-also why `nx-polyglot-graph` declares no `build` target and no `typecheck` — there
-is no program for `typescript-eslint` to consult, and nothing to emit. The gate
-scripts follow the same rule so there is one story rather than two.
+why neither package declares a `build` target — there is nothing to emit, and an
+artefact that needed emitting would break the sentence above.
 
-Type-checking the JSDoc with `tsc --checkJs` would be a real gain and is not
-ruled out; it is a target nobody has added, and adding it is its own pull request
-rather than a drive-by.
+The JSDoc is type-checked all the same, because checking is not building: each
+package's `typecheck` target runs `tsc -p tsconfig.json` with `noEmit` and
+`checkJs`, which reads the JSDoc as the program and writes nothing, and
+`pnpm typecheck` does the same for the gate scripts, which are not an Nx
+project. Each `tsconfig.json` argues its own compiler options in its header;
+all three extend the root `tsconfig.base.json`, whose first duty is still the
+boundary checker's import resolution — its header owns that story.
 
 ## What scans this repository
 
@@ -240,6 +243,7 @@ pnpm format             # Prettier, in place
 pnpm format:check       # what CI runs
 pnpm lint               # ESLint, zero warnings
 pnpm test               # node --test over scripts/*.test.mjs — the gate scripts only
+pnpm typecheck          # tsc --noEmit over scripts/ — each package has its own target
 pnpm check-packages     # every packages/* directory, and which CI targets it runs
 pnpm exec nx run-many -t lint test build typecheck   # each package's own suite
 node packages/nx-polyglot-graph/cli.mjs check        # this tree's own boundaries

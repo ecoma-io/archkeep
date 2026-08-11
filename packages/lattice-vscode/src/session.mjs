@@ -12,9 +12,15 @@
  */
 
 /**
- * @typedef {{ state: "start", root: string, serverPath: string }} StartPlan
- * @typedef {{ state: "idle", reason: string }} IdlePlan
- * @typedef {{ state: "blocked", root: string, reason: string, searched: string[] }} BlockedPlan
+ * `root` and `searched` are optional on a blocked plan because not every
+ * blockage comes from planning: `extension.mjs` builds one for a server that
+ * died after starting, where there is no search trail to report. The
+ * `?: undefined` members exist so a reader may ask the union for a property
+ * only some states carry without narrowing first.
+ *
+ * @typedef {{ state: "start", root: string, serverPath: string, reason?: undefined }} StartPlan
+ * @typedef {{ state: "idle", reason: string, searched?: undefined }} IdlePlan
+ * @typedef {{ state: "blocked", root?: string, reason: string, searched?: string[] }} BlockedPlan
  * @typedef {StartPlan | IdlePlan | BlockedPlan} SessionPlan
  */
 
