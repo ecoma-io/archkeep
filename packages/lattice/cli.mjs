@@ -64,6 +64,7 @@ import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
 import { DEFAULT_OPTIONS, readPluginOptions } from "./src/options.mjs";
 import { formatSarif } from "./src/report/sarif.mjs";
 import { formatReport } from "./src/report/text.mjs";
+import { readProjectGraph } from "./src/providers/nx.mjs";
 import { evaluate } from "./src/rules/index.mjs";
 import { judgeTsconfigPaths } from "./src/tsconfig-paths.mjs";
 import {
@@ -73,7 +74,6 @@ import {
   createWorkspace,
   findWorkspaceRoot,
   listTrackedFiles,
-  readProjectGraph,
   selectFiles,
 } from "./src/workspace.mjs";
 

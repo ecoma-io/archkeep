@@ -71,11 +71,12 @@ config's location and the tree being judged are separate facts.
 Two spawns, and they are the only two things in this pipeline that reach outside
 the process:
 
-- **`readGraph(root)`** — `nx graph --file=`. Never a second walk of
-  `project.json` files, which would disagree with Nx wherever a plugin
-  contributes an edge.
-- **`listFiles(root)`** — `git ls-files`. The graph JSON carries no file map, and
-  a tree walk would need ignore rules that drift from `.gitignore`.
+- **`readGraph(root)`** — `src/providers/nx.mjs`'s `readProjectGraph`, which
+  asks `nx graph --file=`. Never a second walk of `project.json` files, which
+  would disagree with Nx wherever a plugin contributes an edge.
+- **`listFiles(root)`** — `git ls-files`, in `src/workspace.mjs`. The graph
+  JSON carries no file map, and a tree walk would need ignore rules that drift
+  from `.gitignore`.
 
 Both are **injectable parameters**, which is what lets a test drive the real
 analysis, the real rules and the real report over a fixture tree — pinning the
@@ -90,7 +91,8 @@ files attributed to a project.
 
 `src/workspace.mjs` is the **only** layer allowed to answer "which files". An
 analyzer is handed one file and a rule is handed records, so the question has to
-land somewhere, and it lands here with the two spawns that come with it.
+land somewhere, and it lands here with the git spawn that comes with it — which
+layer may build the graph itself is `packages/lattice/CLAUDE.md`'s rule.
 
 Before anything is judged, the graph nodes are annotated with the three facts
 `nx graph --file=` cannot carry — `mfeRemote`, `entryPoints` and
@@ -208,12 +210,14 @@ than on whichever later CLI run happens to notice.
 `lsp.mjs` holds only stdio wiring; everything with a decision in it lives under
 `src/lsp/`, where coverage can see it.
 
-The one structural difference from the CLI: **`src/lsp/` is the only layer
-allowed to build a graph.** `evaluate` is pure and takes a graph it does not
-build; under Nx that graph comes from Nx, and a language server has no Nx. So
-`src/lsp/workspace-index.mjs` builds the same shape from the tracked
-`project.json` files, reproducing Nx's own `getProjectType` — including the
-`-e2e` suffix rule — rather than inventing a second answer.
+The one structural difference from the CLI: the CLI's graph comes from
+`src/providers/` (today, `src/providers/nx.mjs` reading it from Nx); the
+language server has none, so `src/lsp/workspace-index.mjs` still builds the
+same shape by hand from the tracked `project.json` files, reproducing Nx's own
+`getProjectType` — including the `-e2e` suffix rule — rather than inventing a
+second answer. `evaluate` is pure and takes a graph it does not build either
+way. Which layers may build one is `packages/lattice/CLAUDE.md`'s rule, not
+this page's.
 
 The server's invariant is the CLI's, sharpened: **an empty diagnostic list must
 mean "no violation", and nothing else.** Two guards enforce it —
