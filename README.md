@@ -27,6 +27,7 @@
   <a href="docs/usage/getting-started.md"><strong>Get&nbsp;started&nbsp;→</strong></a> ·
   <a href="docs/why.md">Why&nbsp;it&nbsp;exists</a> ·
   <a href="docs/north-star.md">Where&nbsp;it&nbsp;is&nbsp;going</a> ·
+  <a href="docs/roadmap.md">Roadmap</a> ·
   <a href="https://ecoma.io">About&nbsp;Ecoma</a>
 </p>
 
