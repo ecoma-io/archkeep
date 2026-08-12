@@ -548,3 +548,84 @@ describe("the TypeScript API this analyzer delegates to", () => {
     expect(manifest.peerDependencies.typescript).toBe(">=5 <7");
   });
 });
+
+describe("analyzeTypeScript — import-type queries (typeof import, import().Type)", () => {
+  it("reads import('pkg').Foo as a type-only import with a string-literal specifier", () => {
+    const { imports, failures } = analyze('type X = import("@acme/ui").Button;');
+    expect(failures).toEqual([]);
+    expect(imports).toHaveLength(1);
+    expect(imports[0]).toMatchObject({
+      line: 1,
+      column: 17,
+      specifier: "@acme/ui",
+      kind: "type-only",
+      resolved: { target: "ui", external: false },
+    });
+  });
+
+  it("reads typeof import('pkg') as a type-only import — exactly one site, not two", () => {
+    const { imports, failures } = analyze(
+      'const { logger }: typeof import("@acme/ui") = null as any;',
+    );
+    expect(failures).toEqual([]);
+    expect(imports).toHaveLength(1);
+    expect(imports[0]).toMatchObject({
+      line: 1,
+      column: 33,
+      specifier: "@acme/ui",
+      kind: "type-only",
+      resolved: { target: "ui", external: false },
+    });
+  });
+
+  it("produces exactly one import site for typeof import — not a duplicate alongside any other form", () => {
+    const { imports } = analyze(
+      [
+        'import type { T } from "@acme/ui";',
+        'const x: typeof import("@acme/ui") = null as any;',
+      ].join("\n"),
+    );
+    expect(imports).toHaveLength(2);
+    expect(imports.map((r) => r.kind)).toEqual(["type-only", "type-only"]);
+    expect(imports[0].line).toBe(1);
+    expect(imports[1].line).toBe(2);
+  });
+
+  it("records a non-literal ImportType argument as unresolvable rather than dropping it", () => {
+    const { imports, failures } = analyze("type X = typeof import(s).Foo;");
+    expect(imports).toHaveLength(1);
+    expect(imports[0]).toMatchObject({
+      line: 1,
+      column: 24,
+      specifier: "s",
+      kind: "type-only",
+      resolved: null,
+    });
+    expect(failures).toHaveLength(1);
+    // The callee 'import' appears in the failure reason, distinguishing this
+    // form from a dynamic import() or require() with a non-literal argument.
+    expect(failures[0].reason).toContain("'import(s)'");
+    expect(failures[0].reason).toMatch(/non-literal argument/);
+  });
+
+  it("resolves the specifier through the same tsconfig path table as declarations", () => {
+    const { imports, failures } = analyze('type Config = import("@acme/icons").Icon;');
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toEqual({
+      target: "ui-icons",
+      file: "libs/ui/icons/src/index.ts",
+      external: false,
+      packageName: null,
+    });
+  });
+
+  it("marks a node_modules ImportType specifier external, like any other", () => {
+    const { imports, failures } = analyze('type P = import("left-pad").Pad;');
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toMatchObject({
+      target: null,
+      external: true,
+      packageName: "left-pad",
+    });
+  });
+});

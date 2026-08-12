@@ -11,8 +11,8 @@ replaces. Today ESLint is right about JavaScript, TypeScript and Vue and silent
 about Go, Rust and Python — and silence you know about beats a green light you
 cannot trust.
 
-**46 fixture workspaces, 116 probes, 94 projects.** Every one of upstream's
-fifteen message ids is triggered by at least one probe, and 80 of the 116 probes
+**46 fixture workspaces, 117 probes, 94 projects.** Every one of upstream's
+fifteen message ids is triggered by at least one probe, and 81 of the 117 probes
 are near-misses where ESLint must report nothing.
 
 ## How it runs

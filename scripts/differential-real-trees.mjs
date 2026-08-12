@@ -195,14 +195,14 @@ export const LEDGER = Object.freeze([
   // { tree: "…", direction: "stricter"|"weaker"|"native-extra"|"native-missing",
   //   messageId: "…", sitePattern: "^…", reason: "…" }
 
-  // Both rows below are the SAME defect class, root-caused by running this
-  // leg against code-pushup rather than guessed at: `analysis.imports` —
-  // the one input BOTH engines build their graph from — never contained an
-  // import record for the source in question, for a reason that has nothing
-  // to do with the native provider. `graph.dependencies["workspace"]` on the
-  // real Nx graph carries these nine edges because Nx's own graph plugin
-  // scans imports independently of this package; this package's own pipeline
-  // never saw them, in the Nx-graph-based run OR the native one, because
+  // Root-caused by running this leg against code-pushup rather than guessed at:
+  // `analysis.imports` — the one input BOTH engines build their graph from —
+  // never contained an import record for the source in question, for a reason
+  // that has nothing to do with the native provider.
+  // `graph.dependencies["workspace"]` on the real Nx graph carries these nine
+  // edges because Nx's own graph plugin scans imports independently of this
+  // package; this package's own pipeline never saw them, in the Nx-graph-based
+  // run OR the native one, because
   // `../packages/lattice/src/workspace.mjs`'s `createWorkspace` builds its
   // project list straight from `node.data.root` with no renormalisation —
   // unlike `deriveNativeModel` above, which learned the hard way (its own doc
@@ -268,35 +268,6 @@ export const LEDGER = Object.freeze([
       "reproduce — an absent projectType lands on 'lib' there on purpose, the safe direction since " +
       "lib carries no blanket import ban. A pre-existing, argued design limit, not a defect this " +
       "leg discovered; no issue filed.",
-  },
-
-  // A different root cause from the nine above, from the same real run:
-  // `testing/test-setup/src/lib/logger.setup-file.ts`'s only reference to
-  // `@code-pushup/utils` is `const { logger }: typeof import('@code-pushup/utils')`
-  // — a TypeScript import-TYPE query in a type position, not an
-  // `import …from` declaration or a dynamic `import()` call expression.
-  // `../packages/lattice/src/analysis/typescript.mjs`'s import-site walk
-  // visits `ts.SyntaxKind.ImportKeyword` call expressions (dynamic import)
-  // plus static/type-only import declarations; it has no case for
-  // `ts.SyntaxKind.ImportType` (a `TypeQueryNode` wrapping an
-  // `ImportTypeNode`), so this specifier produces no analysis record for
-  // either engine, while Nx's own graph plugin resolves it and draws the
-  // edge. A genuine, narrow analyzer gap — not native-provider-specific, and
-  // fixing it changes what every workspace using this type-query form
-  // reports, so it is a separate labelled BREAKING change, not this chunk's.
-  {
-    tree: "code-pushup",
-    direction: "native-missing",
-    messageId: "edge",
-    sitePattern: "^test-setup->utils$",
-    reason:
-      "testing/test-setup/src/lib/logger.setup-file.ts references @code-pushup/utils only via " +
-      "`typeof import('@code-pushup/utils')`, a TS import-type query the analyzer's import walk " +
-      "(src/analysis/typescript.mjs) does not visit (no ts.SyntaxKind.ImportType case) — no import " +
-      "record exists for either engine, while Nx's own graph plugin resolves it independently. " +
-      "Pre-existing analyzer gap, not native-specific; out of scope to fix here for the same " +
-      "reason as the row above. Tracked at https://github.com/ecoma-io/lattice/issues/33 — this " +
-      "row is retired in the same PR.",
   },
 ]);
 
