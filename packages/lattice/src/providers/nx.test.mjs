@@ -86,3 +86,68 @@ describe("reading the project graph", () => {
     );
   });
 });
+
+describe("merging nx.json's workspaceLayout onto the graph", () => {
+  // `nx graph --file=` itself emits no `workspaceLayout` (this file's own
+  // header, and `readProjectGraph`'s) — every `run` below writes a graph with
+  // none, so these tests exercise the merge step alone rather than a fixture
+  // that accidentally does the merge's job for it.
+  const graphWithoutLayout = {
+    nodes: { outer: { name: "outer", type: "lib", data: { root: "libs/outer" } } },
+    dependencies: { outer: [] },
+  };
+  const runWritingLayoutlessGraph = (_file, args) => {
+    const target = args.find((arg) => arg.startsWith("--file="))?.slice("--file=".length);
+    writeFileSync(target, JSON.stringify({ graph: graphWithoutLayout }));
+    return "";
+  };
+
+  it("a declared, complete layout is present on the returned graph", () => {
+    const declared = { appsDir: "applications", libsDir: "packages" };
+    const result = readProjectGraph(root, {
+      run: runWritingLayoutlessGraph,
+      readLayout: () => declared,
+    });
+    expect(result.workspaceLayout).toEqual(declared);
+  });
+
+  it("nothing declared leaves `workspaceLayout` absent from the graph, not defaulted", () => {
+    // Silent direction: an always-present defaulted object here would erase
+    // the declared-vs-undeclared distinction `readLayout` exists to preserve —
+    // every caller downstream (`../rules/index.mjs`'s `DEFAULT_WORKSPACE_LAYOUT`
+    // fallback) would then be judging against a value this test never proved
+    // the workspace actually declared. `readLayout` is an injectable seam
+    // precisely so this case is testable with no `nx.json` on disk at all.
+    const result = readProjectGraph(root, {
+      run: runWritingLayoutlessGraph,
+      readLayout: () => null,
+    });
+    expect("workspaceLayout" in result).toBe(false);
+  });
+
+  it("a readLayout failure propagates out of readProjectGraph rather than being swallowed", () => {
+    const readLayout = () => {
+      throw new Error("lattice: nx.json's workspaceLayout must be an object, got string");
+    };
+    expect(() => readProjectGraph(root, { run: runWritingLayoutlessGraph, readLayout })).toThrow(
+      /workspaceLayout must be an object/,
+    );
+  });
+
+  it("a declared-but-incomplete layout throws rather than silently defaulting the missing key", () => {
+    // The parity refusal `requireCompleteWorkspaceLayout` (`../options.mjs`)
+    // exists for: `../rules/specifiers.mjs`'s `isAbsoluteImportIntoAnotherProject`
+    // reads both `appsDir` and `libsDir` off one object with no per-key
+    // fallback, so an `appsDir`-less object here would silently evaluate
+    // every `apps/…` import against `undefined` instead of refusing —
+    // exactly the silent direction the invariant rules out, and the same
+    // refusal `../providers/native/model.mjs` already applies to
+    // `lattice.json`'s identically-shaped field.
+    const result = () =>
+      readProjectGraph(root, {
+        run: runWritingLayoutlessGraph,
+        readLayout: () => ({ libsDir: "packages" }),
+      });
+    expect(result).toThrow(/workspaceLayout declares libsDir but is missing appsDir/);
+  });
+});

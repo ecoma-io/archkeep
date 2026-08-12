@@ -83,6 +83,11 @@ import { join } from "node:path";
 
 import { analyzeFile, languageOf } from "../analysis/analyze.mjs";
 import { parseNxJson } from "../nx-json.mjs";
+import {
+  NX_CONFIG_FILE,
+  readWorkspaceLayout,
+  requireCompleteWorkspaceLayout,
+} from "../options.mjs";
 import { annotateMFERemotes, annotatePackageFacts, environmentForTree } from "../workspace.mjs";
 import { buildDependencies } from "../providers/native/graph.mjs";
 import { nodeTypeOf, PROJECT_CONFIG_FILE } from "../providers/native/discover.mjs";
@@ -237,8 +242,8 @@ export function buildNodes(projects) {
  * new name arrives with a new object and the old parse is dropped with the old
  * one.
  *
- * @param {{root: string, tsConfig?: string, listFiles?: (root: string) => string[], readFileAt?: (root: string, path: string) => string|null}} options
- * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], nativeMarker: boolean, nativeModelFailure: string|null}}
+ * @param {{root: string, tsConfig?: string, listFiles?: (root: string) => string[], readFileAt?: (root: string, path: string) => string|null, readLayout?: typeof readWorkspaceLayout}} options
+ * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], nativeMarker: boolean, nativeModelFailure: string|null, workspaceLayoutFailure: string|null}}
  * @throws {Error} when the file list cannot be obtained. Loud on purpose: an
  *   index built from no files would put every file in no project, and a file in
  *   no project has no boundary to cross — a clean report, produced by not
@@ -249,6 +254,7 @@ export function buildWorkspaceIndex({
   tsConfig,
   listFiles = listWorkspaceFiles,
   readFileAt = readWorkspaceFile,
+  readLayout = readWorkspaceLayout,
 }) {
   const files = listFiles(root);
   const readFile = (path) => readFileAt(root, path);
@@ -300,15 +306,45 @@ export function buildWorkspaceIndex({
 
   const { importSites, fileFailures } = analyzeTrackedFiles({ files, readFile, workspace });
 
+  // `nx.json`'s `workspaceLayout` reaches the rule engine here the same way
+  // `../providers/nx.mjs`'s `readProjectGraph` merges it onto the graph it
+  // returns to `cli.mjs` — see that function's own doc for why a merge step
+  // exists at all (`nx graph --file=` itself emits no such key) and why a
+  // declared-but-incomplete layout is refused rather than completed
+  // (`requireCompleteWorkspaceLayout`, `../options.mjs`). Without this, an
+  // editor open on a workspace with a non-default `appsDir`/`libsDir` would
+  // draw no diagnostic for exactly the import `lattice check` flags on the
+  // same tree — the language server's own stated rule (this package's
+  // `CLAUDE.md`, "An empty diagnostic list must mean 'no violation'"),
+  // violated from the direction it exists to catch. A read/validation
+  // failure is caught rather than thrown onward — one malformed `nx.json`
+  // must not blank the whole index — and recorded as `workspaceLayoutFailure`
+  // for `indexGaps` to turn into a diagnostic, the same shape
+  // `nativeModelFailure` already uses for the native branch's own
+  // model-load failure.
+  let workspaceLayout;
+  let workspaceLayoutFailure = null;
+  try {
+    const declared = requireCompleteWorkspaceLayout(readLayout(root));
+    if (declared !== null) workspaceLayout = declared;
+  } catch (cause) {
+    workspaceLayoutFailure = cause?.message ?? String(cause);
+  }
+
   return {
     root,
     files,
     workspace,
-    graph: { nodes, dependencies: buildDependencies({ importSites, nodes, projectOf }) },
+    graph: {
+      nodes,
+      dependencies: buildDependencies({ importSites, nodes, projectOf }),
+      ...(workspaceLayout === undefined ? {} : { workspaceLayout }),
+    },
     skippedProjects: skipped,
     fileFailures,
     nativeMarker: false,
     nativeModelFailure: null,
+    workspaceLayoutFailure,
   };
 }
 
@@ -365,7 +401,12 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
     // is not thrown onward: one broken `lattice.json` must not take the whole
     // session down. It still has to be LOUD (`../../../../AGENTS.md`), so it
     // becomes `nativeModelFailure` on an index that is otherwise a valid,
-    // empty shape rather than a missing one.
+    // empty shape rather than a missing one. `workspaceLayoutFailure` stays
+    // `null` here rather than growing a second try/catch of its own: a
+    // malformed `lattice.json`'s `workspaceLayout` is one of the shapes
+    // `loadNativeModel` already refuses (`../providers/native/model.mjs`'s
+    // `workspaceLayoutViolations`), so it surfaces as THIS failure, not a
+    // separate one — the two fields would otherwise say the same thing twice.
     const workspace = { root, projects: [], filesOf: () => [], readFile, tsConfig };
     return {
       root,
@@ -376,6 +417,7 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
       fileFailures: [],
       nativeMarker: true,
       nativeModelFailure: cause?.message ?? String(cause),
+      workspaceLayoutFailure: null,
     };
   }
 
@@ -429,6 +471,7 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
     fileFailures,
     nativeMarker: true,
     nativeModelFailure: null,
+    workspaceLayoutFailure: null,
   };
 }
 
@@ -471,16 +514,31 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
  *   that the root carries one — and it **clears itself** the same way:
  *   `lattice.json` is already a watched file (`./server.mjs`), so fixing it
  *   republishes every open document without any editor action.
+ * - **A `workspaceLayoutFailure` gap is the Nx-shaped branch's own
+ *   equivalent of `nativeModelFailure`, not a second copy of it.** It is
+ *   present only while `NX_CONFIG_FILE`'s own `workspaceLayout` is malformed
+ *   or declared partially (`../options.mjs`'s `readWorkspaceLayout` /
+ *   `requireCompleteWorkspaceLayout`, called from `buildWorkspaceIndex`
+ *   above) — never on the native branch, where the identically-shaped
+ *   failure already surfaces as `nativeModelFailure` instead (see
+ *   `buildNativeWorkspaceIndex`). It **clears itself** the same way: `nx.json`
+ *   is already a watched file (`./server.mjs`), so fixing it republishes
+ *   every open document without any editor action. Silently discarding the
+ *   whole declaration instead — falling back to a default layout — would
+ *   evaluate `noRelativeOrAbsoluteImportsAcrossLibraries` against a layout
+ *   the workspace does not use, which reads to a developer as "no
+ *   violation" rather than "this could not be checked".
  *
  * Each sentence names a path, so the diagnostic says which file to open.
  *
- * @param {{skippedProjects?: {file: string, reason: string}[], fileFailures?: {sourceFile: string, reason: string}[], nativeModelFailure?: string|null}} index
+ * @param {{skippedProjects?: {file: string, reason: string}[], fileFailures?: {sourceFile: string, reason: string}[], nativeModelFailure?: string|null, workspaceLayoutFailure?: string|null}} index
  * @returns {string[]}
  */
 export function indexGaps({
   skippedProjects = [],
   fileFailures = [],
   nativeModelFailure = null,
+  workspaceLayoutFailure = null,
 } = {}) {
   return [
     ...(nativeModelFailure === null
@@ -489,6 +547,13 @@ export function indexGaps({
           `${LATTICE_MODEL_FILE} at the workspace root could not be turned into a project model ` +
             `(${firstLine(nativeModelFailure)}), so every project it declares or infers is ` +
             `missing from the graph entirely`,
+        ]),
+    ...(workspaceLayoutFailure === null
+      ? []
+      : [
+          `${NX_CONFIG_FILE}'s workspaceLayout could not be read (${firstLine(workspaceLayoutFailure)}), ` +
+            `so imports across a non-default apps/libs boundary are judged against the default layout ` +
+            `instead of the one this workspace declared`,
         ]),
     ...skippedProjects.map(
       ({ file, reason }) =>

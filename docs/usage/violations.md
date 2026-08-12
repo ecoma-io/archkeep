@@ -268,6 +268,44 @@ that stopped at the first hop would be trivially bypassable.
 
 ---
 
+## `workspaceLayout`, and the one place this deliberately diverges from Nx
+
+`nx.json`'s `workspaceLayout` (`appsDir`, `libsDir`) changes which import can
+produce violation 1 above. `noRelativeOrAbsoluteImportsAcrossLibraries` fires
+on a specifier that begins with the declared `libsDir` (or `appsDir`) prefix,
+not on `"libs/…"` unconditionally — so a workspace naming a non-default pair,
+say `{"libsDir": "packages", "appsDir": "applications"}`, now has that pair
+fully honored: an absolute `"packages/…"` import can produce this finding, the
+same as it would under real Nx and `@nx/enforce-module-boundaries` on the
+identical tree. Previously Lattice never read `nx.json`'s `workspaceLayout` at
+all and judged every workspace against Nx's own default (`libs`/`apps`)
+regardless of what was declared — a workspace with a custom layout got a rule
+that could never fire on its own layout
+([#31](https://github.com/ecoma-io/lattice/issues/31)).
+
+**A complete declaration is honored; a partial one is refused, loudly.**
+`workspaceLayout` must name both `appsDir` and `libsDir`, or neither.
+Declaring only one of the two exits **3** — no verdict — with a message
+naming the key that is missing, rather than running with the other key
+silently defaulted. Real Nx (measured against nx 23.1.1) does the opposite: it
+accepts a partial `workspaceLayout` and evaluates the missing key as though it
+were never configured, silently running half the rule. Lattice cannot make
+that promise — the check reads both keys off one object with no per-key
+fallback, so a workspace that redirected `libsDir` and forgot `appsDir` would
+get a rule quietly checking the wrong half of the tree, and a clean result from
+that half would look identical to "no violation" — the one outcome this tool's
+whole design exists to keep truthful. A named refusal is the loud version of
+that failure; a half-applied layout is the silent one.
+
+**Both are breaking changes in 1.0 terms.** A workspace with a non-default,
+complete `workspaceLayout` can see new findings on a tree it did not touch —
+what the declared layout was always supposed to mean, now actually enforced.
+A workspace with a partial `workspaceLayout` — previously ignored like any
+other declaration, because nothing read the key at all — now gets a new
+exit-3 refusal instead of a pass.
+
+---
+
 ## Three things that are not violations
 
 **Unresolvable import sites.** A specifier that is not statically knowable — a

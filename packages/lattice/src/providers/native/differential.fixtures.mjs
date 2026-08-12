@@ -468,26 +468,18 @@ export const LEDGER_DIRECTIONS = Object.freeze(/** @type {const} */ (["native-on
  * it ever looks at whether a row here matches — no `reason`, however it is
  * worded, can turn that row into an explained one.
  *
+ * Empty today: the one row this ledger ever carried (`layout:
+ * noRelativeOrAbsoluteImportsAcrossLibraries`, native-only, issue #31) retired
+ * when `../nx.mjs`'s `readProjectGraph` started merging `nx.json`'s
+ * `workspaceLayout` back onto the graph it returns — see that function's own
+ * header, and `readWorkspaceLayout`/`requireCompleteWorkspaceLayout` in
+ * `../../options.mjs`. The `layout` fixture pair below is unchanged and now
+ * agrees on both engines instead of differing by one, which is what closes
+ * issue #31: the divergence this row explained no longer exists to explain.
+ *
  * @type {readonly LedgerRow[]}
  */
-export const LEDGER = Object.freeze([
-  Object.freeze({
-    subject: "layout:noRelativeOrAbsoluteImportsAcrossLibraries",
-    field: "count",
-    direction: "native-only",
-    reason:
-      "../nx.mjs's readProjectGraph returns `nx graph --file=`'s output verbatim, and that " +
-      "command emits neither `externalNodes` nor `workspaceLayout` (readProjectGraph's own " +
-      "header says so — measured). Nothing downstream merges nx.json's `workspaceLayout` back " +
-      "onto the graph, so the Nx path always evaluates noRelativeOrAbsoluteImportsAcrossLibraries " +
-      "against ../../rules/specifiers.mjs's DEFAULT_WORKSPACE_LAYOUT, regardless of what nx.json " +
-      "states, while the native path reads lattice.json's own workspaceLayout field verbatim " +
-      "(../../providers/native/graph.mjs). The layout fixture's import is styled to match a " +
-      "NON-default libsDir, so native flags it and Nx does not — native reporting MORE than Nx, " +
-      "the direction AGENTS.md's invariant treats as loud and self-correcting rather than silent.",
-    issue: "https://github.com/ecoma-io/lattice/issues/31",
-  }),
-]);
+export const LEDGER = Object.freeze([]);
 
 /**
  * Every fixture-pair label this file actually runs a comparison over — the
@@ -1166,17 +1158,18 @@ export function buildCompositeNativeTree(
 //    `lattice.json` states that `libsDir`; `nx.json` states the identical
 //    `workspaceLayout` key.
 //
-// The two engines are EXPECTED to disagree on import 2 — see `LEDGER` above.
-// `../nx.mjs`'s `readProjectGraph` returns `nx graph --file=`'s output
-// verbatim, which carries no `workspaceLayout` at all (that function's own
-// header), so the Nx side always falls back to the DEFAULT layout and never
-// sees `"packages/"` as a triggering prefix. The native side reads
-// `lattice.json`'s `workspaceLayout` field directly and does trigger. That
-// makes this fixture's own violation count differ by ONE, by design: native
-// reports two (the control plus this one), Nx reports one (the control
-// alone) — which is why the dedicated `it` for this pair in
-// `differential.integration.test.mjs` does not call `assertPairAgrees`
-// unmodified but asserts this exact ledgered shape instead.
+// The two engines now AGREE on import 2, which is the point of this fixture
+// existing: `../nx.mjs`'s `readProjectGraph` merges `nx.json`'s own
+// `workspaceLayout` back onto the graph it returns (that function's own
+// header — issue #31), so the Nx side sees the identical non-default
+// `libsDir` the native side always read from `lattice.json` directly, and
+// both flag `"packages/"` as a triggering prefix. Before that fix landed, the
+// two disagreed by exactly one violation here — the `LEDGER` row (now
+// retired) that used to explain it, and the reason a dedicated `it` for this
+// pair exists in `differential.integration.test.mjs` at all rather than a
+// generic loop entry: it is the one fixture pair built to prove
+// `workspaceLayout` specifically, and it now asserts plain agreement through
+// `assertPairAgrees` like every other pair.
 const LAYOUT_BOUNDARY_CONFIG = `export const depConstraints = [
   { sourceTag: "layer:thing", onlyDependOnLibsWithTags: ["layer:thing"] },
 ];

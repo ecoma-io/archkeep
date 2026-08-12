@@ -109,7 +109,15 @@ why `reason` is required rather than optional.
 all. Never inferred from directory names — a workspace that wants either
 judged states both explicitly; one that states neither gets the rule
 engine's own default, the same default the Nx path falls back to when Nx's
-own `workspaceLayout` is unset.
+own `workspaceLayout` is unset. An Nx-registered workspace states this same
+fact in `nx.json`'s own top-level `workspaceLayout` field — the ordinary Nx
+one, not a `plugins[].options` entry — and the plugin reads it from there
+directly; a workspace with a custom `libsDir`/`appsDir` does not need to
+repeat the value anywhere for the boundary rules to see it. A declaration
+naming only one of the two keys is refused rather than completed from the
+default — [violations.md](violations.md) § _`workspaceLayout`, and the one
+place this deliberately diverges from Nx_ covers what that refusal reports
+and why.
 
 ### `boundaryConfig` / `tsConfig`
 

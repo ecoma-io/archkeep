@@ -285,6 +285,79 @@ describe("building the index over a whole tree", () => {
   });
 });
 
+describe("nx.json's workspaceLayout reaching the rule engine (Nx-shaped branch)", () => {
+  // `readLayout` is injected here rather than driven through `readFileAt`,
+  // the same way `../providers/nx.mjs`'s `readProjectGraph` takes an injected
+  // `readLayout` rather than routing through its own `readFile` — the real
+  // default (`../options.mjs`'s `readWorkspaceLayout`) reads an ABSOLUTE
+  // `${root}/nx.json` path, while this suite's `readFileAt` fixtures are keyed
+  // by workspace-relative path; the two conventions do not compose, so a test
+  // that wants a specific declared/absent/malformed layout states it directly.
+  const files = {
+    [`libs/inner/${PROJECT_CONFIG_FILE}`]: '{"name":"inner","tags":["zone:inner"]}',
+    "libs/inner/main.go": "package inner\n",
+  };
+  const baseOptions = {
+    root: "/fixture",
+    listFiles: () => Object.keys(files),
+    readFileAt: (_root, path) => files[path] ?? null,
+  };
+
+  it("carries a declared, complete layout onto the graph", () => {
+    // S12: a tree whose nx.json declares a non-default layout must judge
+    // `noRelativeOrAbsoluteImportsAcrossLibraries` against THAT layout — the
+    // breaking fix this chunk exists to ship (issue #31).
+    const declared = { appsDir: "applications", libsDir: "packages" };
+    const index = buildWorkspaceIndex({ ...baseOptions, readLayout: () => declared });
+
+    expect(index.graph.workspaceLayout).toEqual(declared);
+    expect(index.workspaceLayoutFailure).toBeNull();
+  });
+
+  it("leaves workspaceLayout absent from the graph when nx.json declares none", () => {
+    // Silent direction guarded: an always-present defaulted object here would
+    // make every Nx tree read as having declared a layout, hiding the very
+    // declared-vs-undeclared distinction `../rules/index.mjs`'s
+    // `graph.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT` fallback exists for.
+    const index = buildWorkspaceIndex({ ...baseOptions, readLayout: () => null });
+
+    expect("workspaceLayout" in index.graph).toBe(false);
+    expect(index.workspaceLayoutFailure).toBeNull();
+  });
+
+  // S13: a malformed or partial declaration becomes a named, self-clearing
+  // index gap — never a silent fall-through to the default layout, and never
+  // a throw that blanks the whole index over one bad key in nx.json.
+  it("turns a malformed workspaceLayout into a named gap, not a thrown index build", () => {
+    const index = buildWorkspaceIndex({
+      ...baseOptions,
+      readLayout: () => {
+        throw new Error("lattice: nx.json's workspaceLayout must be an object, got string");
+      },
+    });
+
+    expect("workspaceLayout" in index.graph).toBe(false);
+    expect(index.workspaceLayoutFailure).toContain("workspaceLayout must be an object");
+    // The index otherwise built normally: the gap did not cost the project.
+    expect(Object.keys(index.graph.nodes)).toEqual(["inner"]);
+  });
+
+  it("turns a partial workspaceLayout into the same named gap, never a silently completed one", () => {
+    // Parity refusal (`../options.mjs`'s `requireCompleteWorkspaceLayout`):
+    // completing the missing key here would let this branch disagree with
+    // `../providers/native/model.mjs`'s identical refusal for `lattice.json`.
+    const index = buildWorkspaceIndex({
+      ...baseOptions,
+      readLayout: () => ({ libsDir: "packages" }),
+    });
+
+    expect("workspaceLayout" in index.graph).toBe(false);
+    expect(index.workspaceLayoutFailure).toContain(
+      "workspaceLayout declares libsDir but is missing appsDir",
+    );
+  });
+});
+
 describe("the Module Federation fact the app-import exemption turns on", () => {
   // `data.mfeRemote` fails closed in the rule engine (`../rules/topology.mjs`),
   // so an index that never wrote it would flag every import of a real remote as
@@ -468,6 +541,29 @@ describe("what the index could not read, as something a caller can publish", () 
       nativeModelFailure: null,
     };
     expect(indexGaps(index)).toEqual([]);
+  });
+
+  it("reports a gap when nx.json's workspaceLayout could not be turned into a layout", () => {
+    // The Nx-shaped branch's own equivalent of `nativeModelFailure` — see
+    // `buildWorkspaceIndex`'s merge of `../options.mjs`'s `readWorkspaceLayout`/
+    // `requireCompleteWorkspaceLayout`. Silence here would read as "this
+    // workspace uses the default apps/libs layout", which is the silent
+    // direction on exactly the tree whose declaration could not be trusted.
+    const gaps = indexGaps({
+      skippedProjects: [],
+      fileFailures: [],
+      workspaceLayoutFailure:
+        "lattice: nx.json's workspaceLayout declares libsDir but is missing appsDir",
+    });
+
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]).toContain("nx.json");
+    expect(gaps[0]).toContain("workspaceLayout");
+    expect(gaps[0]).toContain("declares libsDir but is missing appsDir");
+  });
+
+  it("stays silent for a tree whose nx.json declares no workspaceLayout, or a complete one", () => {
+    expect(indexGaps({ workspaceLayoutFailure: null })).toEqual([]);
   });
 });
 
