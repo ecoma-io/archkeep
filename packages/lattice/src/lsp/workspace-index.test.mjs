@@ -20,6 +20,12 @@ vi.mock("../analysis/analyze.mjs", () => ({
 }));
 vi.mock("../rules/match.mjs", () => ({
   findMatchingProjects: (patterns) => patterns.filter((p) => !p.startsWith("!")),
+  // `../providers/native/model.mjs`'s `declaredProjectViolations` imports this
+  // to validate `implicitDependencies` entries — needed the moment a test
+  // drives the native branch (`buildNativeWorkspaceIndex`), which loads that
+  // module transitively. `null` means "no problem with this pattern", the same
+  // permissive answer the real function gives every non-glob pattern.
+  projectPatternError: () => null,
 }));
 
 const analyzeFile = vi.mocked((await import("../analysis/analyze.mjs")).analyzeFile);
@@ -412,5 +418,106 @@ describe("what the index could not read, as something a caller can publish", () 
 
     expect(gaps[0]).not.toContain("\n");
     expect(gaps[0]).toContain("InvalidSymbol in JSON at 1:3");
+  });
+
+  // S12: a `lattice.json` root is driven through `../providers/native/`'s own
+  // `discover()`/`buildGraph()` (`buildNativeWorkspaceIndex` below this
+  // module's header), so a project with no `project.json` of its own is NOT
+  // invisible the way it would be to `discoverProjects`. What IS still a real
+  // gap is `discover()` throwing — a malformed `lattice.json`, a declared root
+  // with no tracked file under it, a `projectRules` row matching nothing — and
+  // that is what `nativeModelFailure` reports. `nativeMarker` alone (a clean
+  // native workspace) must stay silent, or every native workspace would read
+  // as permanently incomplete whether or not anything was actually wrong.
+  it("reports a gap for a lattice.json root whose model could not be built", () => {
+    const gaps = indexGaps({
+      skippedProjects: [],
+      fileFailures: [],
+      nativeModelFailure: "lattice.json: projects: this workspace describes zero projects",
+    });
+
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]).toContain("lattice.json");
+    expect(gaps[0]).toContain("missing from the graph");
+  });
+
+  it("stays silent for a native workspace whose model built without error", () => {
+    // The regression this test guards: before `nativeModelFailure` existed,
+    // `nativeMarker: true` alone drove the gap, so a clean native workspace
+    // read as permanently incomplete. `nativeMarker` here is the descriptive
+    // fact the full index object still carries alongside the three
+    // `indexGaps` actually reads — routed through a variable, not an object
+    // literal, so the extra field exercises the real call shape (the full
+    // index) without tripping TypeScript's excess-property check on a
+    // function that deliberately does not declare `nativeMarker` as a
+    // parameter it reads.
+    const index = {
+      skippedProjects: [],
+      fileFailures: [],
+      nativeMarker: true,
+      nativeModelFailure: null,
+    };
+    expect(indexGaps(index)).toEqual([]);
+  });
+});
+
+describe("the native branch buildWorkspaceIndex takes for a lattice.json root", () => {
+  const files = {
+    "lattice.json": '{"projects":{"declared":[{"root":"apps/a"}]}}',
+    "apps/a/main.go": "package a\n",
+  };
+  const options = {
+    root: "/fixture",
+    listFiles: () => Object.keys(files),
+    readFileAt: (_root, path) => files[path] ?? null,
+  };
+
+  // The red-direction case this whole mechanism exists for: `apps/a` is
+  // declared in `lattice.json` and has no `project.json`. Before this module
+  // drove `../providers/native/discover.mjs` directly, `discoverProjects`
+  // found ZERO projects here — a tree this server could not actually see the
+  // shape of, not a tree with nothing in it — and the index looked identical
+  // to a clean, empty workspace. Now the declared project IS discovered
+  // (named `a`, Nx's own directory-basename fallback — no `project.json`, no
+  // `package.json`), and the gap list is empty because there was nothing to
+  // fail on.
+  it("discovers a declared project with no project.json, and reports no gap for it", () => {
+    const index = buildWorkspaceIndex(options);
+
+    expect(index.nativeMarker).toBe(true);
+    expect(index.nativeModelFailure).toBeNull();
+    expect(Object.keys(index.graph.nodes)).toEqual(["a"]);
+    expect(indexGaps(index)).toEqual([]);
+  });
+
+  it("catches a discover() throw into nativeModelFailure instead of the whole session", () => {
+    // Malformed JSON — `loadNativeModel` throws before `discoverNativeProjects`
+    // ever runs. The index this returns must still be a valid, empty shape a
+    // caller can iterate over, not a missing one: the point of catching this at
+    // all is that one broken `lattice.json` must not blank the server.
+    const brokenFiles = { "lattice.json": "{ not json" };
+    const index = buildWorkspaceIndex({
+      root: "/fixture",
+      listFiles: () => Object.keys(brokenFiles),
+      readFileAt: (_root, path) => brokenFiles[path] ?? null,
+    });
+
+    expect(index.nativeMarker).toBe(true);
+    expect(index.nativeModelFailure).toContain("lattice.json");
+    expect(Object.keys(index.graph.nodes)).toEqual([]);
+    expect(indexGaps(index)).toHaveLength(1);
+    expect(indexGaps(index)[0]).toContain("lattice.json");
+  });
+
+  it("leaves nativeMarker false for a tree with no lattice.json at its root", () => {
+    const index = buildWorkspaceIndex({
+      root: "/fixture",
+      listFiles: () => ["apps/a/main.go"],
+      readFileAt: (_root, path) => (path === "apps/a/main.go" ? "package a\n" : null),
+    });
+
+    expect(index.nativeMarker).toBe(false);
+    expect(index.nativeModelFailure).toBeNull();
+    expect(indexGaps(index)).toEqual([]);
   });
 });

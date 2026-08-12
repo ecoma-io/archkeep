@@ -174,12 +174,21 @@ another.
   throwaway workspace, and drives four things a consumer's first hour asks: Nx
   loads the plugin and draws a Go edge, the checker exits 0 on a clean tree and
   **1** on a violating one, and the language server answers `initialize` through
-  the symlinked path an installed plugin is launched by. Every other gate runs
-  where the tool's dependencies already exist, which is why none of them can see
-  a manifest that resolves nothing — the state this package was actually in, and
-  green, until this script existed. It runs in CI and again in the release lane
-  before `npm publish`, because a version that fails to resolve at install time
-  cannot be unpublished away. Its fixture resolves `typescript` and `nx` from the
+  the symlinked path an installed plugin is launched by. It then repeats the
+  clean/violating/language-server three of those four against a SECOND
+  throwaway workspace — `lattice.json` at its root instead of `nx.json`, and no
+  `nx` package requested at all — because those three questions are exactly the
+  ones the package's fixture-only tests (`packages/lattice/src/providers/native/`)
+  cannot answer: a real `pnpm pack` tarball, installed into a tree this
+  repository never built, with no Nx present to fall back on. It also asserts
+  `nx` does not resolve in that second install, which is the optional-peer claim
+  checked against an actual install rather than only against
+  `peerDependenciesMeta`. Every other gate runs where the tool's dependencies
+  already exist, which is why none of them can see a manifest that resolves
+  nothing — the state this package was actually in, and green, until this
+  script existed. It runs in CI and again in the release lane before
+  `npm publish`, because a version that fails to resolve at install time cannot
+  be unpublished away. Its fixtures resolve `typescript` and `nx` from the
   package's own declared peer ranges rather than pinning them, so the range is
   exercised as written: that is what caught `>=5` admitting TypeScript 7, whose
   entry point exports none of the compiler API this tool delegates to.

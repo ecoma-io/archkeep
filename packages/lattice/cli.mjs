@@ -53,7 +53,7 @@
  * what keeps this package's dependency list short enough to audit; reach for a
  * framework when several commands genuinely need one.
  */
-import { statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
 import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs";
@@ -61,10 +61,12 @@ import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile } from "./src/config.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
-import { DEFAULT_OPTIONS, readPluginOptions } from "./src/options.mjs";
+import { DEFAULT_OPTIONS, NX_CONFIG_FILE, readPluginOptions } from "./src/options.mjs";
 import { formatSarif } from "./src/report/sarif.mjs";
 import { formatReport } from "./src/report/text.mjs";
 import { readProjectGraph } from "./src/providers/nx.mjs";
+import { LATTICE_MODEL_FILE, loadNativeModel } from "./src/providers/native/model.mjs";
+import { nativeProvider } from "./src/providers/native/index.mjs";
 import { evaluate } from "./src/rules/index.mjs";
 import { judgeTsconfigPaths } from "./src/tsconfig-paths.mjs";
 import {
@@ -76,6 +78,42 @@ import {
   listTrackedFiles,
   selectFiles,
 } from "./src/workspace.mjs";
+
+/**
+ * Workspace-relative read from `root`, the same default `createWorkspace`
+ * builds when no reader is injected (`./src/workspace.mjs`) — duplicated
+ * rather than imported because it is needed BEFORE a graph exists to build a
+ * `Workspace` from: `readWorkspaceRoot(root)` names one project model, which
+ * `loadNativeModel` and `nativeProvider.discover` both need before there is
+ * anything to hand `createWorkspace`.
+ *
+ * @param {string} root
+ * @returns {(path: string) => string|null}
+ */
+function readWorkspaceRoot(root) {
+  return (path) => {
+    try {
+      return readFileSync(join(root, path), "utf8");
+    } catch {
+      return null;
+    }
+  };
+}
+
+/**
+ * The two facts that decide which project-model provider judges a workspace:
+ * does `root` carry `nx.json`, `lattice.json`, or — a state `check` refuses —
+ * both.
+ *
+ * @param {string} root
+ * @returns {{hasNx: boolean, hasNative: boolean}}
+ */
+function markersAt(root) {
+  return {
+    hasNx: existsSync(join(root, NX_CONFIG_FILE)),
+    hasNative: existsSync(join(root, LATTICE_MODEL_FILE)),
+  };
+}
 
 export const EXIT = Object.freeze({
   ok: 0,
@@ -142,8 +180,14 @@ Exit codes: ${EXIT.ok} clean · ${EXIT.violations} findings (violations, go.work
  */
 function optionsForUsage(cwd) {
   try {
-    const root = findWorkspaceRoot(cwd);
-    return root === null ? DEFAULT_OPTIONS : readPluginOptions(root);
+    const root = findWorkspaceRoot(cwd, [NX_CONFIG_FILE, LATTICE_MODEL_FILE]);
+    if (root === null) return DEFAULT_OPTIONS;
+    const { hasNx, hasNative } = markersAt(root);
+    if (hasNative && !hasNx) {
+      const model = loadNativeModel(root, { readFile: readWorkspaceRoot(root) });
+      return { boundaryConfig: model.boundaryConfig, tsConfig: model.tsConfig };
+    }
+    return readPluginOptions(root);
   } catch {
     return DEFAULT_OPTIONS;
   }
@@ -207,53 +251,153 @@ export async function check(
   options,
   { cwd, readGraph = readProjectGraph, listFiles = listTrackedFiles },
 ) {
-  const root = findWorkspaceRoot(cwd);
+  // Both markers in one walk (`./src/workspace.mjs`'s `findWorkspaceRoot`),
+  // so a native root nested under an unrelated Nx tree — or vice versa — is
+  // found from the working directory the same way either alone would be.
+  // Which marker(s) the returned directory actually carries is then read
+  // back below, because a walk that STOPPED at the first marker it saw could
+  // never tell "only lattice.json here" from "both, one level up".
+  const root = findWorkspaceRoot(cwd, [NX_CONFIG_FILE, LATTICE_MODEL_FILE]);
   if (root === null) {
     throw new Error(
-      `lattice: no Nx workspace above ${cwd} — looked for an nx.json in every parent. ` +
-        `The tree to judge is found from the working directory, never from this tool's own ` +
-        `location: installed from the registry, this tool lives under the consumer's ` +
+      `lattice: no workspace root above ${cwd} — looked for an nx.json or a lattice.json in ` +
+        `every parent. The tree to judge is found from the working directory, never from this ` +
+        `tool's own location: installed from the registry, this tool lives under the consumer's ` +
         `node_modules and the two are always different trees.`,
     );
   }
+  const { hasNx, hasNative } = markersAt(root);
+  if (hasNx && hasNative) {
+    throw new Error(
+      `lattice: ${root} declares both nx.json and lattice.json — this tool judges a workspace ` +
+        `against exactly one project model, and a tree carrying both is a decision nobody made ` +
+        `rather than one this tool can make for them. Remove whichever one is not the ` +
+        `workspace's real source of truth for projects and tags.`,
+    );
+  }
 
-  // What this workspace calls the two files whose names are conventions rather
-  // than contracts. Read before the config, because it decides which config.
-  const pluginOptions = readPluginOptions(root);
-
-  // The config's location is a separate fact from the workspace root, which is
-  // why `--config` does not move the root: pointed at a consumer's tree, the
-  // tool and the law it enforces are in different trees, and the tree being
-  // judged is still the consumer's.
-  const config = options.config
-    ? await loadBoundaryConfigFile(
-        isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-      )
-    : await loadBoundaryConfig(root, pluginOptions.boundaryConfig);
-
-  const graph = readGraph(root);
   const tracked = listFiles(root);
-  const { workspace, owned } = createWorkspace({
-    root,
-    graph,
-    files: tracked,
-    tsConfig: pluginOptions.tsConfig,
-  });
-  // `nx graph --file=` does not carry the Module Federation fact — see
-  // `annotateMFERemotes` — so it is computed here, before the rules run, or
-  // every import of a real remote app would be a false `noImportsOfApps`.
-  annotateMFERemotes(graph.nodes, workspace.readFile);
-  // Nor the two `package.json` facts — `data.entryPoints` and
-  // `data.declaredPackages`, see `annotatePackageFacts` — which decide the
-  // secondary-entry-point exemptions and `noTransitiveDependencies`.
-  annotatePackageFacts(graph.nodes, workspace.readFile);
-  const selected = selectFiles(
-    owned.map(({ file }) => file),
-    options.paths,
-    { root, cwd },
-  );
+  let graph;
+  let workspace;
+  let owned;
+  let config;
+  let discoveredFailures = [];
+  let imports;
+  let failures;
+  let analyzed;
 
-  const { imports, failures, analyzed } = analyzeWorkspace(workspace, selected);
+  if (hasNative) {
+    // No `nx graph`, no `nx.json`, and — verified by this branch existing at
+    // all — no `nx` needing to be installed: `nativeProvider` is imported
+    // from `./src/providers/native/index.mjs`, which imports nothing from
+    // `./src/providers/nx.mjs` and nothing that resolves the `nx` package.
+    const readFile = readWorkspaceRoot(root);
+    const discovered = nativeProvider.discover({ root, files: tracked, readFile });
+    discoveredFailures = discovered.failures;
+    // A graph with nodes but no dependencies yet — `createWorkspace` only
+    // ever reads `data.root` off each node, and dependencies are not known
+    // until the import sites below are analyzed against these same projects.
+    const preGraph = {
+      nodes: Object.fromEntries(
+        discovered.projects.map((project) => [
+          project.name,
+          { name: project.name, data: { root: project.root } },
+        ]),
+      ),
+    };
+    ({ workspace, owned } = createWorkspace({
+      root,
+      graph: preGraph,
+      files: tracked,
+      tsConfig: discovered.model.tsConfig,
+    }));
+
+    // Spec §3.5's order, and why it is not the Nx path's order: on the Nx
+    // path `graph.dependencies` comes from `nx graph`, computed over the
+    // WHOLE workspace regardless of `--paths`, so scoping only ever narrows
+    // which import sites are handed to `evaluate()` for reporting. The
+    // native path has no such independent source — `buildNativeGraph` (via
+    // `nativeProvider.buildGraph`) DERIVES `dependencies` from import sites —
+    // so analyzing only the requested scope first would drop every project
+    // outside it from the dependency graph itself, and a cycle or a
+    // transitive violation that only closes once the rest of the tree's
+    // imports are counted would go unreported. Every owned file is analyzed
+    // here, unconditionally; `selected` below only filters which of the
+    // resulting sites are reported on.
+    const wholeTreeAnalysis = analyzeWorkspace(
+      workspace,
+      owned.map(({ file }) => file),
+    );
+    graph = nativeProvider.buildGraph({
+      discovered,
+      importSites: wholeTreeAnalysis.imports,
+    });
+    annotateMFERemotes(graph.nodes, workspace.readFile);
+    annotatePackageFacts(graph.nodes, workspace.readFile);
+    config = options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : await loadBoundaryConfig(root, discovered.model.boundaryConfig);
+
+    const selected = selectFiles(
+      owned.map(({ file }) => file),
+      options.paths,
+      { root, cwd },
+    );
+    const selectedFiles = new Set(selected);
+    imports = wholeTreeAnalysis.imports.filter((site) => selectedFiles.has(site.sourceFile));
+    failures = wholeTreeAnalysis.failures.filter((failure) =>
+      selectedFiles.has(failure.sourceFile),
+    );
+    analyzed = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file)).length;
+  } else {
+    // What this workspace calls the two files whose names are conventions
+    // rather than contracts. Read before the config, because it decides
+    // which config.
+    const pluginOptions = readPluginOptions(root);
+
+    graph = readGraph(root);
+    ({ workspace, owned } = createWorkspace({
+      root,
+      graph,
+      files: tracked,
+      tsConfig: pluginOptions.tsConfig,
+    }));
+    // `nx graph --file=` does not carry the Module Federation fact — see
+    // `annotateMFERemotes` — so it is computed here, before the rules run, or
+    // every import of a real remote app would be a false `noImportsOfApps`.
+    annotateMFERemotes(graph.nodes, workspace.readFile);
+    // Nor the two `package.json` facts — `data.entryPoints` and
+    // `data.declaredPackages`, see `annotatePackageFacts` — which decide the
+    // secondary-entry-point exemptions and `noTransitiveDependencies`.
+    annotatePackageFacts(graph.nodes, workspace.readFile);
+    const selected = selectFiles(
+      owned.map(({ file }) => file),
+      options.paths,
+      { root, cwd },
+    );
+
+    // The config's location is a separate fact from the workspace root,
+    // which is why `--config` does not move the root: pointed at a
+    // consumer's tree, the tool and the law it enforces are in different
+    // trees, and the tree being judged is still the consumer's.
+    config = options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : await loadBoundaryConfig(root, pluginOptions.boundaryConfig);
+
+    ({ imports, failures, analyzed } = analyzeWorkspace(workspace, selected));
+  }
+
+  // Unclaimed analyzable files — a native-only fact; the Nx path
+  // (`./src/providers/nx.mjs`, `./src/workspace.mjs`) has no unclaimed-file
+  // check of its own, per `./src/providers/native/coverage.mjs`'s header —
+  // become the SAME whole-file `fileFailure` shape a language analyzer
+  // produces for an unreadable file, so nothing downstream needs to know
+  // which provider found the gap.
+  failures.push(...discoveredFailures);
 
   // The go.work drift check, keyed off the manifest's presence the way every
   // resolver keys off its language's manifest: no tracked root go.work, no

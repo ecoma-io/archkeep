@@ -363,3 +363,140 @@ describe("the verdict an editor shows once the package facts are populated", () 
     });
   });
 });
+
+// C1 (cubic): before `buildWorkspaceIndex` drove `../providers/native/`'s own
+// `discover()`/`buildGraph()`, a `lattice.json` root was still read through
+// `discoverProjects`, which finds a project only by its `project.json` — the
+// file a native workspace is not required to have at all. A declared project
+// with none was silently absent from the graph, an import into it resolved as
+// an external package, and the rule engine's npm branch returned clean before
+// any tag check ran: the exact silent-empty-index shape `AGENTS.md`'s
+// invariant refuses. This describe block is a SEPARATE real tree from the one
+// above — an Nx-shaped fixture and a `lattice.json`-shaped one cannot share a
+// root, because `buildWorkspaceIndex` picks its branch by which marker file
+// the root carries.
+describe("a native lattice.json workspace, driven through the real provider", () => {
+  let nativeRoot;
+
+  const INNER_GO = 'package inner\n\nimport "native.test/outer"\n';
+
+  const write2 = (relativePath, text) => {
+    const absolute = join(nativeRoot, relativePath);
+    mkdirSync(dirname(absolute), { recursive: true });
+    writeFileSync(absolute, text, "utf8");
+  };
+
+  const config = {
+    depConstraints: [{ sourceTag: "zone:inner", onlyDependOnLibsWithTags: ["zone:inner"] }],
+    options: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies: false,
+      checkNestedExternalImports: false,
+    },
+  };
+
+  beforeAll(() => {
+    nativeRoot = mkdtempSync(join(tmpdir(), "lattice-native-index-"));
+    // Two declared projects, NEITHER with a `project.json` — the whole point
+    // of `lattice.json` is not needing one, and it is the case
+    // `discoverProjects` cannot see at all.
+    writeFileSync(
+      join(nativeRoot, "lattice.json"),
+      JSON.stringify({
+        projects: {
+          declared: [
+            { root: "apps/inner", tags: ["zone:inner"] },
+            { root: "apps/outer", tags: ["zone:outer"] },
+          ],
+        },
+      }),
+    );
+    write2("apps/inner/go.mod", "module native.test/inner\n\ngo 1.23\n");
+    write2("apps/inner/main.go", INNER_GO);
+    write2("apps/outer/go.mod", "module native.test/outer\n\ngo 1.23\n");
+    write2("apps/outer/outer.go", "package outer\n");
+    execFileSync("git", ["init", "-q"], { cwd: nativeRoot, env: environmentForTree() });
+  });
+
+  afterAll(() => {
+    if (nativeRoot) rmSync(nativeRoot, { recursive: true, force: true });
+  });
+
+  it("discovers a declared project with no project.json and diagnoses a real violation into it", () => {
+    const index = buildWorkspaceIndex({ root: nativeRoot });
+
+    expect(index.nativeMarker).toBe(true);
+    expect(index.nativeModelFailure).toBeNull();
+    expect(Object.keys(index.graph.nodes).sort()).toEqual(["inner", "outer"]);
+    expect(index.graph.dependencies.inner).toEqual([
+      { source: "inner", target: "outer", type: "static" },
+    ]);
+
+    const lines = INNER_GO.split("\n");
+    const importLine = lines.findIndex((line) => line.includes("native.test/outer"));
+    const importCharacter = lines[importLine].indexOf('"');
+
+    const { analyzed, diagnostics } = diagnoseDocument({
+      sourceFile: "apps/inner/main.go",
+      text: INNER_GO,
+      index,
+      config,
+    });
+
+    // The red-direction proof: before the fix, `apps/outer` was absent from
+    // `graph.nodes` entirely, the import resolved as an external package, and
+    // this list was `[]` — an editor showing a clean file for a real crossing.
+    expect(analyzed).toBe(true);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].code).toBe("onlyTagsConstraintViolation");
+    expect(diagnostics[0].range.start).toEqual({ line: importLine, character: importCharacter });
+  });
+
+  it("refuses to call a document analyzed when lattice.json itself is broken", () => {
+    // A second, independently broken root: `projects.declared[0].root` points
+    // at a directory with no tracked file under it at all, which
+    // `discoverNativeProjects` refuses rather than silently drop the project.
+    // Before this fix, `buildWorkspaceIndex` had no branch that could even
+    // reach that throw for a `lattice.json` root — this proves it is now
+    // caught into `nativeModelFailure` rather than crashing the server or
+    // (the silent direction) never running the check at all.
+    const brokenRoot = mkdtempSync(join(tmpdir(), "lattice-native-broken-"));
+    try {
+      writeFileSync(
+        join(brokenRoot, "lattice.json"),
+        JSON.stringify({ projects: { declared: [{ root: "apps/ghost" }] } }),
+      );
+      mkdirSync(join(brokenRoot, "apps"), { recursive: true });
+      execFileSync("git", ["init", "-q"], { cwd: brokenRoot, env: environmentForTree() });
+
+      const index = buildWorkspaceIndex({ root: brokenRoot });
+
+      expect(index.nativeMarker).toBe(true);
+      expect(index.nativeModelFailure).toBeTruthy();
+      expect(Object.keys(index.graph.nodes)).toEqual([]);
+
+      const { analyzed, diagnostics } = diagnoseDocument({
+        sourceFile: "README.md",
+        text: "# nothing to see\n",
+        index,
+        config,
+      });
+
+      // The other half of the same proof: a broken model must not read as a
+      // clean, empty tree. `analyzed: true` here would be exactly that — every
+      // open document in this workspace showing zero diagnostics regardless of
+      // what it imports, because the model that would have caught it never
+      // built at all.
+      expect(analyzed).toBe(false);
+      expect(diagnostics.length).toBeGreaterThan(0);
+      expect(diagnostics[0].message).toContain("lattice.json");
+    } finally {
+      rmSync(brokenRoot, { recursive: true, force: true });
+    }
+  });
+});

@@ -16,14 +16,21 @@
  * imports nothing", which is indistinguishable from "clean" and is the exact
  * fake-green this repository refuses (an empty result is a claim, not a shrug). An extension in neither table is a different case and returns
  * the empty envelope.
+ *
+ * `LANGUAGE_BY_EXTENSION` and `languageOf` are defined in `./registry.mjs`,
+ * not here, and re-exported below — that module's header says why the split
+ * exists. Every other import site keeps naming them from this module.
  */
 
 import { analyzeGo } from "./go.mjs";
 import { analyzePython } from "./python.mjs";
+import { LANGUAGE_BY_EXTENSION, languageOf } from "./registry.mjs";
 import { analyzeRust } from "./rust.mjs";
 import { emptyResult } from "./source-util.mjs";
 import { analyzeTypeScript } from "./typescript.mjs";
 import { analyzeVue } from "./vue.mjs";
+
+export { LANGUAGE_BY_EXTENSION, languageOf };
 
 /**
  * Where a specifier points. `null` on the record itself when the specifier
@@ -152,42 +159,6 @@ import { analyzeVue } from "./vue.mjs";
  */
 
 /**
- * File extension → the language whose analyzer owns it. The one place an
- * extension is mapped: a language whose analyzer arrives registers here and
- * nowhere else.
- *
- * Dispatch is on the extension alone. Not on content — sniffing would be a
- * second, weaker answer to a question the filename already settles — and not
- * on the owning project's tags, because a tag describes a project's boundary,
- * not the syntax of the files inside it.
- *
- * `.mjs`/`.cjs` are listed beside `.js` rather than folded into it: this
- * workspace's own tools are `.mjs`, so leaving them out would exempt the
- * enforcer from itself.
- *
- * `.vue` names its own language rather than folding into `typescript`. A `.vue`
- * file is not TypeScript — its imports live inside `<script>` blocks that have
- * to be located before anything can read them, and the block's `lang` decides
- * which of TypeScript's four dialects applies. The Vue analyzer does that and
- * then hands the block to the TypeScript one; the sharing belongs there, not
- * in this table.
- */
-export const LANGUAGE_BY_EXTENSION = Object.freeze({
-  ".ts": "typescript",
-  ".tsx": "typescript",
-  ".mts": "typescript",
-  ".cts": "typescript",
-  ".js": "typescript",
-  ".jsx": "typescript",
-  ".mjs": "typescript",
-  ".cjs": "typescript",
-  ".vue": "vue",
-  ".go": "go",
-  ".rs": "rust",
-  ".py": "python",
-});
-
-/**
  * Language → the analyzer that owns it. The second of the dispatcher's two
  * tables, kept separate from the extension registry because the two answer
  * different questions: which language a filename is written in, and whether
@@ -200,25 +171,6 @@ const ANALYZER_BY_LANGUAGE = Object.freeze({
   rust: analyzeRust,
   python: analyzePython,
 });
-
-/**
- * The language owning `sourceFile`, or `null` when no analyzer claims its
- * extension. Exported because a caller that walks a project's tracked files
- * wants to skip the ones nothing can read before paying to read them.
- *
- * Matched on the last dot of the basename, so a dotted filename
- * (`foo.config.mjs`) resolves by its real extension and a dotfile with no
- * extension (`.gitignore`) resolves to `null` rather than to itself.
- *
- * @param {string} sourceFile Workspace-relative path.
- * @returns {string|null}
- */
-export function languageOf(sourceFile) {
-  const base = sourceFile.slice(sourceFile.lastIndexOf("/") + 1);
-  const dot = base.lastIndexOf(".");
-  if (dot <= 0) return null; // no extension, or a dotfile that is all extension
-  return LANGUAGE_BY_EXTENSION[base.slice(dot)] ?? null;
-}
 
 /**
  * The analyzer owning `language`.

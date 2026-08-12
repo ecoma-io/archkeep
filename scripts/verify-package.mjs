@@ -28,12 +28,30 @@
 //   4. The language server answers an `initialize` frame when launched through
 //      the symlinked path an installed plugin is launched by.
 //
+// A second, native-provider workspace runs the SAME questions 2-4 again,
+// against a `lattice.json` root instead of an `nx.json` one, with no `nx`
+// package installed at all. Before this addition, the native provider added
+// by this package's M2 had been proven correct only against fixtures this
+// tool's own tests built — a synthetic tree constructed in-process
+// (`../packages/lattice/src/providers/native/discover.test.mjs` and friends)
+// or co-located under the package itself
+// (`../packages/lattice/src/providers/native/differential.integration.test.mjs`).
+// None of that is what question 2-4 above actually answer for the Nx path: a
+// real `pnpm pack` tarball, installed into a workspace this repository never
+// built, with a tag vocabulary nothing in `src/` has seen. The native
+// consumer below is that same real proof, aimed at the provider Oracle 1 does
+// not reach — and it exists to catch the same class of defect `verify-package.mjs`
+// was written for in the first place: a manifest or an entry point that only
+// works because this workspace's own tree happens to have already provided
+// what a fresh install would not.
+//
 // Run from CI on every pull request, so a manifest that stops resolving fails
 // the change that broke it; run again in the release lane before `npm publish`,
 // because a version that resolves nothing cannot be unpublished away.
 
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -165,6 +183,79 @@ function fixtureFiles(packageName, peers, packageManager) {
   };
 }
 
+/**
+ * The same two-project shape as `fixtureFiles`, described as a native
+ * workspace instead: `lattice.json` at the root, no `nx.json`, no
+ * `project.json` per project — native discovery reads the project list from
+ * `lattice.json` itself — and critically no `nx` package requested at all,
+ * so what installs here proves the peer is optional in fact, not only in the
+ * manifest's `peerDependenciesMeta`.
+ *
+ * `module-boundaries.config.mjs` is a `.mjs` file at the root, inside no
+ * project's directory, and `.mjs` is an analyzable extension
+ * (`../packages/lattice/src/analysis/analyze.mjs`'s `LANGUAGE_BY_EXTENSION`).
+ * Left unwaived it would be an unclaimed-file coverage failure — a question
+ * the Nx path never asks (`../packages/lattice/src/providers/native/coverage.mjs`'s
+ * header) — turning what should read as a clean tree into a false one, so
+ * `lattice.json`'s own `coverage.exempt` waives it, the same waiver
+ * `../packages/lattice/src/providers/native/differential.integration.test.mjs`
+ * uses for the identical file.
+ *
+ * @param {string} packageName the name to depend on, read from the manifest
+ * @param {Record<string, string>} peers the package's declared peer ranges
+ * @param {string} packageManager this repository's own pnpm pin, so the fixture
+ *   installs under the version CI installs under rather than whatever is ambient
+ * @returns {Record<string, string>} relative path to contents
+ */
+function fixtureFilesNative(packageName, peers, packageManager) {
+  return {
+    "package.json": `${JSON.stringify(
+      {
+        name: "consumer-native",
+        private: true,
+        type: "module",
+        packageManager,
+        // No `nx` entry — see the header above.
+        devDependencies: {
+          [packageName]: "*",
+          typescript: peers.typescript,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "lattice.json": `${JSON.stringify(
+      {
+        boundaryConfig: "module-boundaries.config.mjs",
+        projects: {
+          declared: [
+            { root: "libs/core", name: "core", tags: ["layer:core"] },
+            { root: "libs/app", name: "app", tags: ["layer:app"] },
+          ],
+        },
+        coverage: {
+          exempt: [
+            {
+              path: "module-boundaries.config.mjs",
+              reason: "workspace tooling config at the root, not itself a project",
+            },
+          ],
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "module-boundaries.config.mjs": BOUNDARY_CONFIG,
+    ".gitignore": "node_modules/\n.nx/\n",
+    "libs/core/go.mod": "module example.test/core\n\ngo 1.22\n",
+    "libs/core/core.go": 'package core\n\nconst Name = "core"\n',
+    "libs/app/go.mod":
+      "module example.test/app\n\ngo 1.22\n\nrequire example.test/core v0.0.0\n\n" +
+      "replace example.test/core => ../core\n",
+    "libs/app/app.go": 'package app\n\nimport "example.test/core"\n\nvar _ = core.Name\n',
+  };
+}
+
 /** The file that makes the tree dirty: `core` reaching up into `app`. */
 const VIOLATING_FILES = {
   "libs/core/go.mod":
@@ -205,128 +296,57 @@ const write = (base, files) => {
   }
 };
 
-const packageDir = resolve(root, process.argv[2] ?? "");
-if (!process.argv[2]) {
-  console.error("usage: verify-package.mjs <package-directory>");
-  process.exit(2);
+/**
+ * `git add -A` + commit, shared by both consumers below — `-c` for identity
+ * rather than config, since CI runners have no `user.email` set. `fresh`
+ * runs `git init` first; the tool reads its file list from `git ls-files`
+ * (never a directory walk), so a workspace with nothing committed yet is an
+ * empty workspace as far as either provider is concerned.
+ *
+ * @param {string} consumer
+ * @param {string} message
+ * @param {boolean} fresh
+ */
+function commitTree(consumer, message, fresh) {
+  if (fresh) run("git", ["init", "-q"], consumer);
+  run("git", ["add", "-A"], consumer);
+  run(
+    "git",
+    [
+      "-c",
+      "user.name=verify-package",
+      "-c",
+      "user.email=verify-package@invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-q",
+      "-m",
+      message,
+    ],
+    consumer,
+  );
 }
 
-const manifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
-const packageName = manifest.name;
-
-// `realpathSync` because macOS hands out a symlinked temp directory, and check 4
-// below is precisely about a symlinked path being told apart from a real one.
-const workdir = realpathSync(mkdtempSync(join(tmpdir(), "verify-package-")));
-const packDir = join(workdir, "pack");
-const consumer = join(workdir, "consumer");
-mkdirSync(packDir);
-mkdirSync(consumer);
-
-let exitCode = 0;
-try {
-  note(`packing ${packageName} from ${process.argv[2]}`);
-  const packed = run("pnpm", ["pack", "--pack-destination", packDir], packageDir);
-  if (packed.status !== 0) {
-    console.error(packed.stdout ?? "");
-    console.error(packed.stderr ?? "");
-    console.error("`pnpm pack` failed, so there is no artifact to verify.");
-    process.exit(1);
-  }
-  const tarball = readdirSync(packDir).find((entry) => entry.endsWith(".tgz"));
-  if (!tarball) {
-    console.error(`\`pnpm pack\` reported success but wrote no .tgz into ${packDir}.`);
-    process.exit(1);
-  }
-
-  const files = fixtureFiles(
-    packageName,
-    manifest.peerDependencies ?? {},
-    JSON.parse(readFileSync(join(root, "package.json"), "utf8")).packageManager,
-  );
-  files["package.json"] = files["package.json"].replace(
-    '"*"',
-    JSON.stringify(`file:${join(packDir, tarball)}`),
-  );
-  write(consumer, files);
-  // `allowBuilds` is not decoration here. pnpm 11 blocks every dependency
-  // install script until the workspace decides on it, and FAILS the install
-  // while any decision is missing — `ERR_PNPM_IGNORED_BUILDS`, exit 1, after
-  // the tree is already correctly on disk. So without these two lines the
-  // fixture install aborts and this script reports that the tarball "could not
-  // be installed", which is a true sentence about a workspace that is fine.
-  //
-  // Measured, and the measurement is why the fixture pins `packageManager`
-  // above: this ran green locally and red in CI because the two ran different
-  // pnpm majors, and pnpm 10 only warns where 11 fails. The values match the
-  // repository's own `pnpm-workspace.yaml` and the reasoning lives there — nx's
-  // postinstall builds a native watcher and warms a daemon this fixture runs
-  // with disabled, and lefthook's installs git hooks into a throwaway tree.
-  writeFileSync(
-    join(consumer, "pnpm-workspace.yaml"),
-    "packages: []\nallowBuilds:\n  lefthook: false\n  nx: false\n",
-    "utf8",
-  );
-
-  // The fixture is a COMMITTED git tree because the tool reads its file list
-  // from `git ls-files` — never a directory walk, which would need ignore rules
-  // that drift from `.gitignore`. `ls-files` lists tracked files only, so a
-  // `git init` with nothing committed yields an empty workspace, and the
-  // checker then reports "no violations (0 imports in 0 files)" on a tree that
-  // violates: green, and meaningless. Measured here rather than reasoned — the
-  // first version of this script did exactly that and check 3 caught it.
-  //
-  // `-c` for identity rather than config: CI runners have no `user.email`, and
-  // a commit that fails leaves the same empty tree this comment is about.
-  const commit = (message) => {
-    run("git", ["add", "-A"], consumer);
-    run(
-      "git",
-      [
-        "-c",
-        "user.name=verify-package",
-        "-c",
-        "user.email=verify-package@invalid",
-        "-c",
-        "commit.gpgsign=false",
-        "commit",
-        "-q",
-        "-m",
-        message,
-      ],
-      consumer,
-    );
-  };
-  run("git", ["init", "-q"], consumer);
-  commit("the clean tree");
-
-  const installed = run("pnpm", ["install", "--no-frozen-lockfile"], consumer);
-  if (installed.status !== 0) {
-    console.error(installed.stdout ?? "");
-    console.error(installed.stderr ?? "");
-    console.error("the packed tarball could not be installed into a fresh workspace.");
-    process.exit(1);
-  }
-  note(`installed into ${consumer}`);
-
-  // 1. The plugin loads inside a real Nx process and draws the Go edge.
-  const graphFile = join(workdir, "graph.json");
-  const graphed = run("pnpm", ["exec", "nx", "graph", `--file=${graphFile}`], consumer);
-  let edges = "graph was not produced";
-  let drewEdge = false;
-  if (graphed.status === 0) {
-    const graph = JSON.parse(readFileSync(graphFile, "utf8"));
-    const dependencies = graph.graph?.dependencies ?? {};
-    edges = JSON.stringify(dependencies);
-    drewEdge = (dependencies.app ?? []).some((edge) => edge.target === "core");
-  } else {
-    edges = `${graphed.stdout ?? ""}\n${graphed.stderr ?? ""}`;
-  }
-  check(
-    "Nx draws the Go edge app -> core, which Nx cannot infer on its own",
-    drewEdge,
-    `dependencies: ${edges}`,
-  );
-
+/**
+ * Checks 2-4 from the header, run against ONE already-installed consumer
+ * workspace. Shared between the Nx and the native consumer on purpose: a
+ * consumer that trusts `lattice check` and the language server has no reason
+ * to know which provider is underneath — that is the whole point of the
+ * `ProjectModelProvider` seam
+ * (`../packages/lattice/CLAUDE.md`'s "`src/providers/` is the only layer
+ * allowed to build a graph") — so these checks cannot tell the two apart,
+ * and are not allowed to.
+ *
+ * @param {string} consumer absolute path to the installed consumer workspace
+ * @param {string} label appended to each check's message, naming which
+ *   consumer a failure came from
+ * @param {string} packageName read from the tarball's own manifest
+ * @param {() => void} [afterViolatingCommit] run after the violating tree is
+ *   committed but before the checker sees it — the Nx consumer uses this to
+ *   reset Nx's own cache, which the native provider has none of.
+ */
+function verifyConsumerChecks(consumer, label, packageName, afterViolatingCommit) {
   // 2. The checker exits 0 on the clean tree, and states what it inspected —
   //    "no violations" is a claim about coverage too, so a 0 that inspected
   //    nothing is the same silence as no check at all. The counts are matched
@@ -336,12 +356,12 @@ try {
   //    `/\d+ import/` test passes.
   const clean = run("pnpm", ["exec", "lattice", "check"], consumer);
   check(
-    "the checker exits 0 on a clean tree",
+    `the checker exits 0 on a clean tree (${label})`,
     clean.status === 0,
     `exit ${clean.status}\n${clean.stdout ?? ""}${clean.stderr ?? ""}`,
   );
   check(
-    "the clean verdict states it inspected something, not merely that it inspected",
+    `the clean verdict states it inspected something, not merely that it inspected (${label})`,
     /[1-9]\d* import/.test(clean.stdout ?? "") &&
       /[1-9]\d* file/.test(clean.stdout ?? "") &&
       /[1-9]\d* project/.test(clean.stdout ?? ""),
@@ -350,17 +370,17 @@ try {
 
   // 3. And exits 1 on a violating one, naming the rule and the position.
   write(consumer, VIOLATING_FILES);
-  commit("core reaches up into app");
-  run("pnpm", ["exec", "nx", "reset"], consumer);
+  commitTree(consumer, "core reaches up into app", false);
+  afterViolatingCommit?.();
   const dirty = run("pnpm", ["exec", "lattice", "check"], consumer);
   const dirtyOutput = `${dirty.stdout ?? ""}${dirty.stderr ?? ""}`;
   check(
-    "the checker exits 1 on a violating tree",
+    `the checker exits 1 on a violating tree (${label})`,
     dirty.status === 1,
     `exit ${dirty.status}\n${dirtyOutput}`,
   );
   check(
-    "the violation names its rule and its file:line:column",
+    `the violation names its rule and its file:line:column (${label})`,
     dirtyOutput.includes("onlyTagsConstraintViolation") &&
       /libs\/core\/violate\.go:\d+:\d+/.test(dirtyOutput),
     dirtyOutput || "(no output)",
@@ -389,12 +409,156 @@ try {
     timeout: 60_000,
   });
   check(
-    "the language server answers initialize when launched through a symlink",
+    `the language server answers initialize when launched through a symlink (${label})`,
     (lsp.stdout ?? "").includes('"serverInfo"'),
     `exit ${lsp.status}\nstdout: ${lsp.stdout || "(empty)"}\nstderr: ${lsp.stderr || "(empty)"}` +
       `\n\nAn empty stdout here is the defect this check exists for: the process started, ` +
       `read nothing, and exited 0. See src/entry-point.mjs.`,
   );
+}
+
+const packageDir = resolve(root, process.argv[2] ?? "");
+if (!process.argv[2]) {
+  console.error("usage: verify-package.mjs <package-directory>");
+  process.exit(2);
+}
+
+const manifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
+const packageName = manifest.name;
+
+// `realpathSync` because macOS hands out a symlinked temp directory, and check 4
+// below is precisely about a symlinked path being told apart from a real one.
+const workdir = realpathSync(mkdtempSync(join(tmpdir(), "verify-package-")));
+const packDir = join(workdir, "pack");
+const consumer = join(workdir, "consumer");
+const consumerNative = join(workdir, "consumer-native");
+mkdirSync(packDir);
+mkdirSync(consumer);
+mkdirSync(consumerNative);
+
+let exitCode = 0;
+try {
+  note(`packing ${packageName} from ${process.argv[2]}`);
+  const packed = run("pnpm", ["pack", "--pack-destination", packDir], packageDir);
+  if (packed.status !== 0) {
+    console.error(packed.stdout ?? "");
+    console.error(packed.stderr ?? "");
+    console.error("`pnpm pack` failed, so there is no artifact to verify.");
+    process.exit(1);
+  }
+  const tarball = readdirSync(packDir).find((entry) => entry.endsWith(".tgz"));
+  if (!tarball) {
+    console.error(`\`pnpm pack\` reported success but wrote no .tgz into ${packDir}.`);
+    process.exit(1);
+  }
+
+  const peers = manifest.peerDependencies ?? {};
+  const packageManager = JSON.parse(
+    readFileSync(join(root, "package.json"), "utf8"),
+  ).packageManager;
+  const tarballRef = JSON.stringify(`file:${join(packDir, tarball)}`);
+
+  const files = fixtureFiles(packageName, peers, packageManager);
+  files["package.json"] = files["package.json"].replace('"*"', tarballRef);
+  write(consumer, files);
+  // `allowBuilds` is not decoration here. pnpm 11 blocks every dependency
+  // install script until the workspace decides on it, and FAILS the install
+  // while any decision is missing — `ERR_PNPM_IGNORED_BUILDS`, exit 1, after
+  // the tree is already correctly on disk. So without these two lines the
+  // fixture install aborts and this script reports that the tarball "could not
+  // be installed", which is a true sentence about a workspace that is fine.
+  //
+  // Measured, and the measurement is why the fixture pins `packageManager`
+  // above: this ran green locally and red in CI because the two ran different
+  // pnpm majors, and pnpm 10 only warns where 11 fails. The values match the
+  // repository's own `pnpm-workspace.yaml` and the reasoning lives there — nx's
+  // postinstall builds a native watcher and warms a daemon this fixture runs
+  // with disabled, and lefthook's installs git hooks into a throwaway tree.
+  writeFileSync(
+    join(consumer, "pnpm-workspace.yaml"),
+    "packages: []\nallowBuilds:\n  lefthook: false\n  nx: false\n",
+    "utf8",
+  );
+
+  // The fixture is a COMMITTED git tree because the tool reads its file list
+  // from `git ls-files` — never a directory walk, which would need ignore rules
+  // that drift from `.gitignore`. `ls-files` lists tracked files only, so a
+  // `git init` with nothing committed yields an empty workspace, and the
+  // checker then reports "no violations (0 imports in 0 files)" on a tree that
+  // violates: green, and meaningless. Measured here rather than reasoned — the
+  // first version of this script did exactly that and check 3 caught it.
+  commitTree(consumer, "the clean tree", true);
+
+  const installed = run("pnpm", ["install", "--no-frozen-lockfile"], consumer);
+  if (installed.status !== 0) {
+    console.error(installed.stdout ?? "");
+    console.error(installed.stderr ?? "");
+    console.error("the packed tarball could not be installed into a fresh workspace (Nx path).");
+    process.exit(1);
+  }
+  note(`installed into ${consumer}`);
+
+  // 1. The plugin loads inside a real Nx process and draws the Go edge.
+  const graphFile = join(workdir, "graph.json");
+  const graphed = run("pnpm", ["exec", "nx", "graph", `--file=${graphFile}`], consumer);
+  let edges = "graph was not produced";
+  let drewEdge = false;
+  if (graphed.status === 0) {
+    const graph = JSON.parse(readFileSync(graphFile, "utf8"));
+    const dependencies = graph.graph?.dependencies ?? {};
+    edges = JSON.stringify(dependencies);
+    drewEdge = (dependencies.app ?? []).some((edge) => edge.target === "core");
+  } else {
+    edges = `${graphed.stdout ?? ""}\n${graphed.stderr ?? ""}`;
+  }
+  check(
+    "Nx draws the Go edge app -> core, which Nx cannot infer on its own",
+    drewEdge,
+    `dependencies: ${edges}`,
+  );
+
+  verifyConsumerChecks(consumer, "Nx path", packageName, () =>
+    run("pnpm", ["exec", "nx", "reset"], consumer),
+  );
+
+  // --- the native consumer: same physical shape, `lattice.json` instead of
+  // `nx.json`, no `nx` requested at all. See this file's header for why this
+  // is not redundant with `differential.integration.test.mjs`'s Oracle 1.
+  const filesNative = fixtureFilesNative(packageName, peers, packageManager);
+  filesNative["package.json"] = filesNative["package.json"].replace('"*"', tarballRef);
+  write(consumerNative, filesNative);
+  writeFileSync(
+    join(consumerNative, "pnpm-workspace.yaml"),
+    "packages: []\nallowBuilds:\n  lefthook: false\n",
+    "utf8",
+  );
+  commitTree(consumerNative, "the clean tree", true);
+
+  const installedNative = run("pnpm", ["install", "--no-frozen-lockfile"], consumerNative);
+  if (installedNative.status !== 0) {
+    console.error(installedNative.stdout ?? "");
+    console.error(installedNative.stderr ?? "");
+    console.error(
+      "the packed tarball could not be installed into a fresh workspace (native path).",
+    );
+    process.exit(1);
+  }
+  note(`installed into ${consumerNative}`);
+
+  // 5. `nx` was never asked for, and none resolves — the peer is optional in
+  //    fact, not only in `peerDependenciesMeta`. A native workspace that had
+  //    to install Nx anyway to run this tool would be the M2 pivot's whole
+  //    premise failing quietly at install time.
+  const nativeModules = existsSync(join(consumerNative, "node_modules"))
+    ? readdirSync(join(consumerNative, "node_modules"))
+    : [];
+  check(
+    "no nx package resolves in the native consumer — the peer is optional in fact",
+    !nativeModules.includes("nx"),
+    `node_modules entries: ${nativeModules.join(", ") || "(none)"}`,
+  );
+
+  verifyConsumerChecks(consumerNative, "native path", packageName);
 } finally {
   rmSync(workdir, { recursive: true, force: true });
 }

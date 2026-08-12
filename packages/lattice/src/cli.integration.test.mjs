@@ -807,6 +807,386 @@ export const moduleBoundaryOptions = {
   });
 });
 
+describe("checking a native lattice.json tree — no nx.json, no nx installed", () => {
+  // A second, independent tmpdir: `root`'s fixture carries `nx.json` and an
+  // injected `readGraph`, and the whole point of this block is a tree where
+  // neither exists. `nativeProvider` is reached through `check()`'s own
+  // `hasNative` branch — nothing here injects a provider, the way the graph
+  // fixture above injects `readGraph` — so this is the wiring itself under
+  // test, not a stand-in for it.
+  const nativeRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-"));
+  afterAll(() => rmSync(nativeRoot, { recursive: true, force: true }));
+
+  const writeNative = (relativePath, text) => {
+    mkdirSync(join(nativeRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(nativeRoot, relativePath), text);
+  };
+
+  writeNative(
+    "lattice.json",
+    JSON.stringify({
+      projects: {
+        declared: [
+          { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+          { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+        ],
+      },
+      // `module-boundaries.config.mjs` sits at the workspace root, which no
+      // declared project owns, and `.mjs` is an analyzable extension
+      // (`LANGUAGE_BY_EXTENSION` in `../analysis/analyze.mjs`) — so without
+      // this waiver the boundary law's own config file would be the
+      // fixture's unclaimed file, which is real and not a fixture mistake:
+      // any native workspace whose root carries tooling config alongside
+      // `lattice.json` needs exactly this waiver or a root-level project.
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "workspace tooling config at the root, not itself a project",
+          },
+        ],
+      },
+    }),
+  );
+  writeNative(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeNative("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeNative("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writeNative("libs/adapter/adapter.go", "package adapter\n");
+  writeNative("libs/adapter/README.md", "# adapter\n");
+  // Same crossing as the Nx fixture above, so the two blocks prove the same
+  // rule fires whichever provider supplied the graph.
+  writeNative(
+    "libs/domain/doc.go",
+    `// Package domain is the layer everything else points at.
+package domain
+
+import (
+	"example.com/adapter"
+)
+
+var _ = adapter.Name
+`,
+  );
+
+  const nativeFiles = [
+    "lattice.json",
+    "module-boundaries.config.mjs",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "libs/adapter/go.mod",
+    "libs/adapter/adapter.go",
+    "libs/adapter/README.md",
+  ];
+
+  /**
+   * `readGraph` is deliberately absent from this context — the native branch
+   * of `check()` must never call it. If a future change wired the two
+   * branches together carelessly and the native path started calling the Nx
+   * `readGraph` seam, this undefined function would throw the moment it was
+   * reached, rather than the test silently reusing the Nx fixture's graph and
+   * passing for the wrong reason.
+   */
+  const nativeContext = { cwd: nativeRoot, listFiles: () => nativeFiles };
+  const nativeEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      ...nativeContext,
+    };
+  };
+
+  it("finds the same layer-crossing Go import with no nx.json and no Nx graph", async () => {
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: [] },
+      nativeContext,
+    );
+    expect(violations).toBe(1);
+    expect(report).toContain("libs/domain/doc.go:5:2  onlyTagsConstraintViolation");
+  });
+
+  it("says nothing about README.md, since it is not an analyzable file — the coverage near-miss that keeps the check usable", async () => {
+    const { report, violations, unchecked } = await check(
+      { format: "text", config: null, paths: [] },
+      nativeContext,
+    );
+    expect(violations).toBe(1);
+    expect(unchecked).toBe(0);
+    expect(report).not.toContain("README.md");
+  });
+
+  it("exits 3 over a file no declared project owns, naming it — the unclaimed-file coverage hole", async () => {
+    // The silent-direction failure this guards: an orphaned analyzable file
+    // must not be dropped the way `createWorkspace` drops a file with no
+    // owning project on the Nx path — it has to surface as a whole-file
+    // failure and flip the exit code, exactly like an unreadable file does.
+    // Scoped to `libs/adapter` so the domain→adapter crossing (a finding, not
+    // a coverage hole) is not selected for analysis and does not conflate
+    // exit 1 with exit 3 — the two are asserted apart in "the exit contract"
+    // below, over the Nx fixture; this block only needs to prove the native
+    // path reaches the same coverage-hole verdict at all.
+    const streams = {
+      ...nativeEnv(),
+      listFiles: () => [...nativeFiles, "libs/orphan/orphan.py"],
+    };
+    writeNative("libs/orphan/orphan.py", "import os\n");
+    expect(await runCli(["check", "libs/adapter"], streams)).toBe(EXIT.error);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("libs/orphan/orphan.py");
+    expect(out).toContain("not owned by any project");
+  });
+
+  it("refuses a root carrying both nx.json and lattice.json, naming the tree rather than guessing", async () => {
+    const bothRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-both-"));
+    try {
+      writeFileSync(join(bothRoot, "nx.json"), "{}\n");
+      writeFileSync(join(bothRoot, "lattice.json"), "{}\n");
+      const streams = {
+        ...nativeEnv(),
+        cwd: bothRoot,
+        listFiles: () => ["nx.json", "lattice.json"],
+      };
+      expect(await runCli(["check"], streams)).toBe(EXIT.error);
+      expect(streams.lines.err.join("\n")).toContain("declares both nx.json and lattice.json");
+    } finally {
+      rmSync(bothRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("scoping a native check must not narrow the graph it is judged against", () => {
+  // The silent-direction bug this guards: on the native path `graph.dependencies`
+  // is DERIVED from analyzed import sites (`./src/providers/native/graph.mjs`),
+  // unlike the Nx path where `nx graph` supplies the whole workspace's
+  // dependencies independent of `--paths`. Analyzing only the requested scope
+  // BEFORE building the graph would drop the far side of a cycle from
+  // `dependencies` entirely, and `lattice check libs/a` on this fixture would
+  // exit 0 over a real a → b → a cycle — silence indistinguishable from a
+  // workspace with no cycle at all.
+  const cycleRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-cycle-"));
+  afterAll(() => rmSync(cycleRoot, { recursive: true, force: true }));
+
+  const writeCycle = (relativePath, text) => {
+    mkdirSync(join(cycleRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(cycleRoot, relativePath), text);
+  };
+
+  writeCycle(
+    "lattice.json",
+    JSON.stringify({
+      projects: {
+        declared: [
+          { root: "libs/a", name: "a", tags: ["layer:x"] },
+          { root: "libs/b", name: "b", tags: ["layer:x"] },
+        ],
+      },
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "workspace tooling config at the root, not itself a project",
+          },
+        ],
+      },
+    }),
+  );
+  writeCycle(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:x", onlyDependOnLibsWithTags: ["layer:x"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeCycle("libs/a/go.mod", "module example.com/a\n\ngo 1.24\n");
+  writeCycle(
+    "libs/a/doc.go",
+    `// Package a is one half of a cycle that only closes through b.
+package a
+
+import (
+	"example.com/b"
+)
+
+var _ = b.Name
+`,
+  );
+  writeCycle("libs/b/go.mod", "module example.com/b\n\ngo 1.24\n");
+  writeCycle(
+    "libs/b/doc.go",
+    `// Package b closes the cycle back to a.
+package b
+
+import (
+	"example.com/a"
+)
+
+var _ = a.Name
+`,
+  );
+
+  const cycleFiles = [
+    "lattice.json",
+    "module-boundaries.config.mjs",
+    "libs/a/go.mod",
+    "libs/a/doc.go",
+    "libs/b/go.mod",
+    "libs/b/doc.go",
+  ];
+
+  const cycleContext = { cwd: cycleRoot, listFiles: () => cycleFiles };
+
+  it("finds the a -> b -> a cycle over the whole tree", async () => {
+    // Control case, unscoped: proves the fixture really is a cycle before the
+    // scoped case below is trusted to say anything about scoping.
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: [] },
+      cycleContext,
+    );
+    expect(violations).toBe(2);
+    expect(report).toContain("noCircularDependencies");
+  });
+
+  it("still reports the cycle when scoped to just one side of it", async () => {
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: ["libs/a"] },
+      cycleContext,
+    );
+    expect(violations).toBe(1);
+    expect(report).toContain("libs/a/doc.go");
+    expect(report).toContain("noCircularDependencies");
+    // The other side of the cycle is out of scope, so it is not itself
+    // reported — proving this is the real filter-after-analyze behaviour and
+    // not an accidental widening that reports everything regardless of scope.
+    expect(report).not.toContain("libs/b/doc.go");
+  });
+});
+
+describe("a declared workspaceLayout must reach the rule engine, not just validate and vanish", () => {
+  // The silent-direction bug: `lattice.json`'s `workspaceLayout` used to be
+  // validated by `./src/providers/native/model.mjs` and then dropped —
+  // `buildNativeGraph` never attached it to the graph object `evaluate()`
+  // reads, so every native check ran against the Nx DEFAULT layout
+  // (`libs`/`apps`) regardless of what a workspace actually declared. A
+  // workspace using a custom `libsDir` would see an absolute import into one
+  // of its own libraries reported as an unremarkable external import instead
+  // of the boundary-crossing spelling it is.
+  const layoutRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-layout-"));
+  afterAll(() => rmSync(layoutRoot, { recursive: true, force: true }));
+
+  const writeLayout = (relativePath, text) => {
+    mkdirSync(join(layoutRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(layoutRoot, relativePath), text);
+  };
+
+  const modelWith = (workspaceLayout) =>
+    JSON.stringify({
+      projects: {
+        declared: [
+          { root: "packages/a", name: "a" },
+          { root: "packages/b", name: "b" },
+        ],
+      },
+      ...(workspaceLayout ? { workspaceLayout } : {}),
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "workspace tooling config at the root, not itself a project",
+          },
+        ],
+      },
+    });
+
+  writeLayout(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeLayout("packages/a/go.mod", "module example.com/a\n\ngo 1.24\n");
+  // The specifier's literal text is what the absolute-import check reads
+  // (`../rules/index.mjs`'s `imp = site.specifier`) — a custom `libsDir` of
+  // `packages` makes `packages/b` an absolute path into another project's
+  // library the same way a default-layout workspace reads `libs/b`.
+  writeLayout(
+    "packages/a/doc.go",
+    `// Package a reaches b by an absolute-looking specifier.
+package a
+
+import (
+	"packages/b"
+)
+
+var _ = b.Name
+`,
+  );
+  writeLayout("packages/b/go.mod", "module example.com/b\n\ngo 1.24\n");
+
+  const layoutFiles = [
+    "module-boundaries.config.mjs",
+    "packages/a/go.mod",
+    "packages/a/doc.go",
+    "packages/b/go.mod",
+  ];
+
+  it("with a custom libsDir declared, catches the absolute import into another library", async () => {
+    writeLayout("lattice.json", modelWith({ appsDir: "applications", libsDir: "packages" }));
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: [] },
+      { cwd: layoutRoot, listFiles: () => [...layoutFiles, "lattice.json"] },
+    );
+    expect(violations).toBe(1);
+    expect(report).toContain("noRelativeOrAbsoluteImportsAcrossLibraries");
+  });
+
+  it("without workspaceLayout declared, the default libs/apps layout misses it — the exact gap the declared layout must close", async () => {
+    writeLayout("lattice.json", modelWith(undefined));
+    const { violations } = await check(
+      { format: "text", config: null, paths: [] },
+      { cwd: layoutRoot, listFiles: () => [...layoutFiles, "lattice.json"] },
+    );
+    expect(violations).toBe(0);
+  });
+});
+
 describe("the exit contract", () => {
   it("exits 1 when the tree violates a boundary — the code a hook and CI block on", async () => {
     const streams = env();
@@ -839,7 +1219,25 @@ describe("the exit contract", () => {
     streams.cwd = mkdtempSync(join(tmpdir(), "polyglot-not-a-workspace-"));
     afterAll(() => rmSync(streams.cwd, { recursive: true, force: true }));
     expect(await runCli(["check"], streams)).toBe(EXIT.error);
-    expect(streams.lines.err.join("\n")).toContain("no Nx workspace above");
+    expect(streams.lines.err.join("\n")).toContain("no workspace root above");
+  });
+
+  // S9: the message used to name only `nx.json`, which pointed a native-only
+  // reader (`lattice.json`, no Nx anywhere) at the wrong marker to create —
+  // and creating an `nx.json` next to an existing `lattice.json` does not fix
+  // the "no root found" case at all, it trades it for the dual-marker refusal
+  // above. The silent-direction risk this pins: a message naming only one
+  // marker reads as correct advice right up until a native-only reader acts
+  // on it, so the fix has to be provable by what the string actually
+  // contains, not by matching against a single word in it.
+  it("names both root markers in the not-a-workspace message, not just nx.json", async () => {
+    const streams = env();
+    streams.cwd = mkdtempSync(join(tmpdir(), "polyglot-not-a-workspace-both-markers-"));
+    afterAll(() => rmSync(streams.cwd, { recursive: true, force: true }));
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const message = streams.lines.err.join("\n");
+    expect(message).toContain("nx.json");
+    expect(message).toContain("lattice.json");
   });
 
   it("calls a path outside the tree a usage error, since retyping it is the fix", async () => {
