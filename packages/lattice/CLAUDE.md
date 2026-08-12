@@ -295,6 +295,30 @@ and the two would disagree the day one changed.
 `src/config.mjs` validates shape only. Whether `layer:adapter` may reach
 `layer:domain` is the workspace's decision, argued in that config's comments.
 
+The file that name resolves to may be an `.mjs`/`.js` module (`import()`ed) or
+a `.json` file (`JSON.parse`d, never JSONC — `../../docs/usage/policy-file.md`
+is the dialect reference). `src/config.mjs`'s dispatch is by extension, and
+both dialects hand their data to the one `findBoundaryConfigViolations`
+function above — never a second copy of what a constraint row or an option may
+hold. A native workspace's `lattice.json` accepts a third spelling for the
+same field: the policy inline, as an object rather than a filename
+(`src/providers/native/model.mjs`), validated by that same function before
+`cli.mjs`'s native branch ever reads it.
+
+All three faces read both file dialects. `src/lsp/boundary-config.mjs`
+dispatches on extension a second time rather than calling
+`loadBoundaryConfigFile` — it needs the `.mjs`/`.js` arm's `import()` to carry
+a revision the module cache would otherwise ignore across edits, which
+`loadBoundaryConfigFile` has no reason to do for a process that loads a config
+once and exits — but shares the same `policyKeyViolations`/`policyFrom`
+validators, so a `.json` `boundaryConfig` reaches the identical verdict from
+the language server as it does from `cli.mjs` and the Nx hook. Only the third
+spelling stays out of reach there: `src/lsp/server.mjs`'s `readWorkspaceOptions`
+refuses to start over a native root whose `boundaryConfig` is the inline-object
+form, loudly, because this server only ever watches and re-reads a policy
+_file_ — `../../docs/usage/policy-file.md`'s "An inline policy, for
+`lattice.json`" names that limitation on the consumer-facing side.
+
 ## What is a stub, and how each one says so
 
 Nothing that cannot enforce reports success — see the invariant in `AGENTS.md`

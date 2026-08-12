@@ -58,7 +58,7 @@ import { isAbsolute, join, resolve } from "node:path";
 
 import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs";
 import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
-import { loadBoundaryConfig, loadBoundaryConfigFile } from "./src/config.mjs";
+import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/config.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
 import { DEFAULT_OPTIONS, NX_CONFIG_FILE, readPluginOptions } from "./src/options.mjs";
@@ -133,9 +133,16 @@ const FORMATS = Object.freeze({ text: formatReport, sarif: formatSarif });
  * `--config`'s whole description is "instead of the one at the root", which
  * says nothing useful if the one at the root is misnamed in the sentence.
  *
- * @param {{boundaryConfig: string}} options
+ * `inline` is true only for a native workspace whose `lattice.json →
+ * boundaryConfig` is the policy object itself rather than a filename
+ * (`docs/usage/policy-file.md`, "An inline policy, for lattice.json") — there
+ * is then no file to name, no ESLint table it is shared with, and no
+ * `nx.json` to change it through, so that case gets its own paragraph rather
+ * than a sentence that assumes a filename exists.
+ *
+ * @param {{boundaryConfig: string, inline?: boolean}} options
  */
-const usage = ({ boundaryConfig }) =>
+const usage = ({ boundaryConfig, inline = false }) =>
   `lattice — module-boundary enforcement across every language in the workspace
 
 Usage:
@@ -146,13 +153,20 @@ Options:
   --format text|sarif   Terminal report (default), or SARIF 2.1.0 for GitHub code scanning
   --output <file>       Write the report to a file instead of stdout
   --config <file>       Read the boundary law from here instead of
-                        <workspace root>/${boundaryConfig}
+                        ${inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`}
 
-Projects and tags come from the Nx project graph; the rules come from
+${
+  inline
+    ? `Projects and tags come from lattice.json's own declared/inferred model; the rules come
+from ${boundaryConfig} — an inline policy object on lattice.json's own \`boundaryConfig\`
+field, not a separate file. There is no filename here for ESLint to share and no nx.json
+to change it through; see docs/usage/policy-file.md's "An inline policy" section.`
+    : `Projects and tags come from the Nx project graph; the rules come from
 ${boundaryConfig} at the workspace root — the same table ESLint
 reads, so both enforcers answer from one source. That filename is the Nx
 convention and can be changed per workspace, through the plugin's
-\`boundaryConfig\` option in nx.json.
+\`boundaryConfig\` option in nx.json.`
+}
 
 Naming paths scopes the run to those files. That is a fast local pre-check and
 not the gate: the cycle and lazy-load rules judge the file graph as a whole, so
@@ -185,7 +199,19 @@ function optionsForUsage(cwd) {
     const { hasNx, hasNative } = markersAt(root);
     if (hasNative && !hasNx) {
       const model = loadNativeModel(root, { readFile: readWorkspaceRoot(root) });
-      return { boundaryConfig: model.boundaryConfig, tsConfig: model.tsConfig };
+      // An inline policy object has no filename to print — `${boundaryConfig}`
+      // below would otherwise coerce it to the literal text "[object Object]",
+      // which reads as a real (and wrong) filename rather than as the "there
+      // is no file" it actually means. `inline: true` is what tells `usage()`
+      // to print the paragraph that says so, instead of the one describing a
+      // named file.
+      return typeof model.boundaryConfig === "string"
+        ? { boundaryConfig: model.boundaryConfig, tsConfig: model.tsConfig }
+        : {
+            boundaryConfig: "an inline policy in lattice.json",
+            tsConfig: model.tsConfig,
+            inline: true,
+          };
     }
     return readPluginOptions(root);
   } catch {
@@ -334,11 +360,26 @@ export async function check(
     });
     annotateMFERemotes(graph.nodes, workspace.readFile);
     annotatePackageFacts(graph.nodes, workspace.readFile);
+    // `discovered.model.boundaryConfig` is either a filename (the common
+    // case, loaded below exactly like the Nx path loads one) or an inline
+    // policy object — `docs/usage/lattice-json.md`'s second accepted shape
+    // for the field. An inline object needs no separate load: `loadNativeModel`
+    // already ran it through `findBoundaryConfigViolations`
+    // (`./src/providers/native/model.mjs`) before `discover()` could return
+    // it, so the call below re-runs that same check (cheap, and the one
+    // place this reshape happens — `./src/config.mjs`'s `policyFrom`) rather
+    // than reshaping the three keys here by hand, which is what silently
+    // skipped validation on this branch before `policyFrom` existed.
     config = options.config
       ? await loadBoundaryConfigFile(
           isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
         )
-      : await loadBoundaryConfig(root, discovered.model.boundaryConfig);
+      : typeof discovered.model.boundaryConfig === "string"
+        ? await loadBoundaryConfig(root, discovered.model.boundaryConfig)
+        : policyFrom(
+            discovered.model.boundaryConfig,
+            `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+          );
 
     const selected = selectFiles(
       owned.map(({ file }) => file),

@@ -201,6 +201,117 @@ describe("findNativeModelViolations", () => {
     });
   });
 
+  /** A minimal well-formed inline policy — the object form of `boundaryConfig`. */
+  const wellFormedPolicy = () => ({
+    depConstraints: [],
+    moduleBoundaryOptions: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies: false,
+      checkNestedExternalImports: false,
+    },
+  });
+
+  describe("boundaryConfig as an inline policy object", () => {
+    it("accepts a well-formed inline policy, validated the same way a .json policy file is", () => {
+      expect(
+        findNativeModelViolations({ ...wellFormed(), boundaryConfig: wellFormedPolicy() }),
+      ).toEqual([]);
+    });
+
+    // The silent-direction failure this guards: a malformed constraint row
+    // inside an inline policy must fail exactly as loudly as the same row
+    // would in a separate file — `../../config.mjs`'s
+    // `findBoundaryConfigViolations` is the one function both routes share,
+    // so a row that "matches nothing and silently approves everything" there
+    // has to be caught here too, not only when the policy lives in its own
+    // file.
+    it("rejects a malformed row inside an inline policy, prefixed so it reads as boundaryConfig's", () => {
+      const violations = findNativeModelViolations({
+        ...wellFormed(),
+        boundaryConfig: {
+          ...wellFormedPolicy(),
+          depConstraints: [{ onlyDependOnLibsWithTags: ["layer:util"] }],
+        },
+      });
+      expect(violations).toHaveLength(1);
+      expect(violations[0]).toMatch(
+        /^boundaryConfig\.depConstraints\[0\]: must carry exactly one of 'sourceTag'/,
+      );
+    });
+
+    it("rejects a missing required option inside an inline policy, not a silently-defaulted one", () => {
+      const policy = wellFormedPolicy();
+      delete policy.moduleBoundaryOptions.banTransitiveDependencies;
+      expect(findNativeModelViolations({ ...wellFormed(), boundaryConfig: policy })).toEqual([
+        "boundaryConfig.moduleBoundaryOptions.banTransitiveDependencies: missing — every option is stated explicitly",
+      ]);
+    });
+
+    // An inline policy has no separate file for an editor to validate
+    // against, so it takes the standalone `.json` dialect's stricter posture
+    // rather than the `.mjs` dialect's tolerance for an export it does not
+    // read — `../../config.mjs`'s `policyKeyViolations`, called here with
+    // `allowSchema: false` (no `$schema` carve-out either, for the same
+    // reason: there is no file an editor validates it against). A typo'd
+    // required key (`depConstraint` for `depConstraints`) was already caught
+    // before this check existed, because the correctly-spelt key then reads
+    // as missing; this is what additionally catches a genuinely EXTRA key
+    // beside the three real ones, by name, instead of silently accepting it.
+    it("rejects a genuinely extra key inside an inline policy, by name", () => {
+      expect(
+        findNativeModelViolations({
+          ...wellFormed(),
+          boundaryConfig: { ...wellFormedPolicy(), extra: "decorative" },
+        }),
+      ).toEqual([
+        "boundaryConfig.extra: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions",
+      ]);
+    });
+
+    it("rejects $schema inside an inline policy too, unlike the standalone .json dialect's carve-out", () => {
+      // A standalone `.json` file tolerates `$schema` because an editor writes
+      // it in unasked, to validate against a schema on disk. An inline policy
+      // has no file for an editor to point a schema at, so `$schema` here
+      // states no rule either and is rejected like any other unrecognised key
+      // — `../../../../../docs/usage/policy-file.md`'s "An inline policy, for
+      // `lattice.json`" is where a workspace author reads why.
+      expect(
+        findNativeModelViolations({
+          ...wellFormed(),
+          boundaryConfig: { ...wellFormedPolicy(), $schema: "./schema.json" },
+        }),
+      ).toEqual([
+        "boundaryConfig.$schema: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions",
+      ]);
+    });
+
+    it("still catches a misspelt required key, because the correctly-spelt one reads as missing", () => {
+      const policy = wellFormedPolicy();
+      policy.depConstraint = policy.depConstraints;
+      delete policy.depConstraints;
+      const violations = findNativeModelViolations({ ...wellFormed(), boundaryConfig: policy });
+      expect(violations[0]).toMatch(/^boundaryConfig\.depConstraints: must be an exported array/);
+    });
+
+    it("rejects a boundaryConfig that is neither a string nor an object", () => {
+      expect(findNativeModelViolations({ ...wellFormed(), boundaryConfig: 42 })).toEqual([
+        "boundaryConfig: must be a string (a filename) or an object (an inline policy), got number (42)",
+      ]);
+    });
+
+    it("leaves a string boundaryConfig unchecked here, exactly as before", () => {
+      // Deferred to `resolveOptions`/`loadBoundaryConfig` at load time — see
+      // this function's own doc comment for why a string is not validated at
+      // this layer.
+      expect(findNativeModelViolations({ ...wellFormed(), boundaryConfig: "" })).toEqual([]);
+    });
+  });
+
   // A version that only reported the first thing wrong would turn fixing a
   // file into fixing it one typo at a time against a tool that never shows the
   // second problem until the first is gone.
@@ -267,6 +378,41 @@ describe("normalizeNativeModel", () => {
       workspaceLayout: { appsDir: "applications", libsDir: "packages" },
     });
     expect(model.workspaceLayout).toEqual({ appsDir: "applications", libsDir: "packages" });
+  });
+
+  it("passes an inline boundaryConfig object through untouched, bypassing resolveOptions", () => {
+    // `resolveOptions` (`../../options.mjs`) throws on any non-string option
+    // value, so an inline policy object has to bypass it entirely rather than
+    // being rejected the moment `normalizeNativeModel` runs — the object has
+    // already passed `findBoundaryConfigViolations` by the time this
+    // function sees it (`loadNativeModel` validates before normalizing).
+    const policy = {
+      depConstraints: [],
+      moduleBoundaryOptions: {
+        allow: [],
+        buildTargets: ["build"],
+        enforceBuildableLibDependency: false,
+        allowCircularSelfDependency: false,
+        checkDynamicDependenciesExceptions: [],
+        ignoredCircularDependencies: [],
+        banTransitiveDependencies: false,
+        checkNestedExternalImports: false,
+      },
+    };
+    const model = normalizeNativeModel({ ...wellFormed(), boundaryConfig: policy });
+    expect(model.boundaryConfig).toBe(policy);
+    expect(model.tsConfig).toBe("tsconfig.base.json");
+  });
+
+  it("still resolves tsConfig normally alongside an inline boundaryConfig object", () => {
+    const policy = { depConstraints: [], moduleBoundaryOptions: {} };
+    const model = normalizeNativeModel({
+      ...wellFormed(),
+      boundaryConfig: policy,
+      tsConfig: "tsconfig.custom.json",
+    });
+    expect(model.boundaryConfig).toBe(policy);
+    expect(model.tsConfig).toBe("tsconfig.custom.json");
   });
 
   it("normalizes a declared project row's optional fields to their empty forms", () => {
@@ -373,6 +519,58 @@ describe("loadNativeModel", () => {
     expect(model.projects.declared).toHaveLength(1);
     expect(model.projects.declared[0].name).toBe("a");
     expect(model.boundaryConfig).toBe("module-boundaries.config.mjs");
+  });
+
+  it("loads an inline boundaryConfig policy end to end, through parse, validate and normalize", () => {
+    const text = JSON.stringify({
+      projects: { declared: [{ root: "apps/a", name: "a" }] },
+      boundaryConfig: {
+        depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+        moduleBoundaryOptions: {
+          allow: [],
+          buildTargets: ["build"],
+          enforceBuildableLibDependency: false,
+          allowCircularSelfDependency: false,
+          checkDynamicDependenciesExceptions: [],
+          ignoredCircularDependencies: [],
+          banTransitiveDependencies: false,
+          checkNestedExternalImports: false,
+        },
+      },
+    });
+    const model = loadNativeModel("/repo", io({ "lattice.json": text }));
+    expect(model.boundaryConfig).toEqual({
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+      moduleBoundaryOptions: {
+        allow: [],
+        buildTargets: ["build"],
+        enforceBuildableLibDependency: false,
+        allowCircularSelfDependency: false,
+        checkDynamicDependenciesExceptions: [],
+        ignoredCircularDependencies: [],
+        banTransitiveDependencies: false,
+        checkNestedExternalImports: false,
+      },
+    });
+  });
+
+  it("names the offending row when an inline boundaryConfig policy is malformed", () => {
+    const text = JSON.stringify({
+      projects: { declared: [] },
+      boundaryConfig: { depConstraints: [{ sourceTag: "" }], moduleBoundaryOptions: {} },
+    });
+    let error;
+    try {
+      loadNativeModel("/repo", io({ "lattice.json": text }));
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeDefined();
+    expect(error.message).toMatch(/lattice: \/repo\/lattice\.json is malformed:/);
+    expect(error.message).toMatch(
+      /boundaryConfig\.depConstraints\[0\]\.sourceTag: must be a non-empty string/,
+    );
+    expect(error.message).toMatch(/boundaryConfig\.moduleBoundaryOptions\.allow: missing/);
   });
 });
 

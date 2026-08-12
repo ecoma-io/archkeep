@@ -17,6 +17,7 @@ version.
 | -------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | [getting-started.md](usage/getting-started.md)           | Install, register the plugin, write the first boundary table, see a violation |
 | [lattice-json.md](usage/lattice-json.md)                 | `lattice.json`'s fields, for a workspace with no Nx at all                    |
+| [policy-file.md](usage/policy-file.md)                   | What `boundaryConfig` may point at: the `.mjs`/`.js` and `.json` dialects     |
 | [designing-boundaries.md](usage/designing-boundaries.md) | What to put in the constraint table, and how to pick tags that hold           |
 | [violations.md](usage/violations.md)                     | Each of the fifteen violations: what it means, and what fixes it              |
 | [languages.md](usage/languages.md)                       | What each analyzer reads, the shapes it cannot, and the two workspace checks  |

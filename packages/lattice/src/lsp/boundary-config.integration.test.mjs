@@ -21,11 +21,10 @@ import { readBoundaryConfig } from "./boundary-config.mjs";
  */
 const CONFIG_FILE = "boundaries.fixture.mjs";
 
-const config = (tag) => `
-export const depConstraints = [
-  { sourceTag: ${JSON.stringify(tag)}, onlyDependOnLibsWithTags: ["zone:inner"] },
-];
-export const moduleBoundaryOptions = {
+/** The `.json` dialect's sibling of {@link CONFIG_FILE}, for the parity test below. */
+const CONFIG_FILE_JSON = "boundaries.fixture.json";
+
+const MODULE_BOUNDARY_OPTIONS = {
   allow: [],
   buildTargets: ["build"],
   enforceBuildableLibDependency: false,
@@ -35,10 +34,24 @@ export const moduleBoundaryOptions = {
   banTransitiveDependencies: false,
   checkNestedExternalImports: false,
 };
+
+const config = (tag) => `
+export const depConstraints = [
+  { sourceTag: ${JSON.stringify(tag)}, onlyDependOnLibsWithTags: ["zone:inner"] },
+];
+export const moduleBoundaryOptions = ${JSON.stringify(MODULE_BOUNDARY_OPTIONS)};
 `;
+
+/** The `.json` dialect's equivalent of {@link config} — same data, JSON syntax. */
+const jsonConfig = (tag) =>
+  JSON.stringify({
+    depConstraints: [{ sourceTag: tag, onlyDependOnLibsWithTags: ["zone:inner"] }],
+    moduleBoundaryOptions: MODULE_BOUNDARY_OPTIONS,
+  });
 
 let root;
 const write = (text) => writeFileSync(join(root, CONFIG_FILE), text, "utf8");
+const writeJson = (text) => writeFileSync(join(root, CONFIG_FILE_JSON), text, "utf8");
 
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), "lattice-config-"));
@@ -97,5 +110,38 @@ describe("reading a boundary config that outlives the process reading it", () =>
     } finally {
       rmSync(empty, { recursive: true, force: true });
     }
+  });
+});
+
+describe("the .json dialect, which this server used to be unable to load at all", () => {
+  // Before `readBoundaryConfig` dispatched on extension, a `.json`
+  // `boundaryConfig` reached the `.mjs` arm's bare `import()`, which Node
+  // refuses for JSON with `ERR_IMPORT_ATTRIBUTE_MISSING` — a message about
+  // import attributes, not about the missing dialect support that was the
+  // real cause.
+  it("loads a .json boundaryConfig and reaches the same verdict as its .mjs sibling", async () => {
+    write(config("zone:parity"));
+    writeJson(jsonConfig("zone:parity"));
+
+    const [fromModule, fromJson] = await Promise.all([
+      readBoundaryConfig(root, 10, CONFIG_FILE),
+      readBoundaryConfig(root, 10, CONFIG_FILE_JSON),
+    ]);
+
+    expect(fromJson).toEqual(fromModule);
+  });
+
+  it("refuses a malformed .json file rather than silently enforcing nothing", async () => {
+    writeJson("{ this is not valid JSON");
+
+    // Asserts an error was actually thrown — not only that its message
+    // happens to contain the right words. A loader that swallowed the parse
+    // failure and resolved to `{ depConstraints: [], options: {} }` would
+    // still pass a message-only assertion made against a DIFFERENT, earlier
+    // call; awaiting the rejection itself is what a silent fallback fails.
+    await expect(readBoundaryConfig(root, 11, CONFIG_FILE_JSON)).rejects.toThrow(Error);
+    await expect(readBoundaryConfig(root, 11, CONFIG_FILE_JSON)).rejects.toThrow(
+      /cannot load .*boundaries\.fixture\.json/u,
+    );
   });
 });

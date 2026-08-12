@@ -45,8 +45,33 @@
  * Python and would give exemptions a second home besides the config this file
  * exists to keep single. Validation is where the mandatory reason is enforced,
  * loudly, at load — see `suppressionRowViolations`.
+ *
+ * ## Two dialects, one validator
+ *
+ * `boundaryConfig` may name a `.mjs`/`.js` module (`import()`ed, as above and
+ * always) or a `.json` file (`JSON.parse`d — never JSONC, never `import()`ed,
+ * so a `.json` boundary law carries no more parser leniency than the language
+ * it is written in promises). `loadBoundaryConfigFile` dispatches on the
+ * extension; both dialects hand their parsed data to the same
+ * `findBoundaryConfigViolations` above, so a constraint row is validated
+ * identically regardless of which file held it — the alternative is a second
+ * copy of these rules that drifts from this one the first time either changes.
+ *
+ * The two dialects are NOT symmetric on one point: an ES module may export
+ * whatever else it likes alongside the three keys this file reads (a helper, a
+ * shared constant), because ESM exports are a legitimate namespace and this
+ * loader only ever reads three names out of it. A JSON object has no such
+ * legitimate reason for a fourth top-level key — there is no namespace to
+ * share, so an extra key is a typo (`depConstraint` for `depConstraints`) far
+ * more often than it is deliberate, and the `.mjs` dialect's tolerance would
+ * make that typo pass in silence. The `.json` dialect therefore rejects any
+ * top-level key beyond `depConstraints`, `moduleBoundaryOptions` and
+ * `boundarySuppressions` by name, with one carve-out: `$schema`, which editors
+ * write into a JSON file unasked for IDE validation and which states no rule
+ * of its own.
  */
-import { posix } from "node:path";
+import { extname, posix } from "node:path";
+import { readFile as readFileFromDisk } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -399,6 +424,148 @@ export function findBoundaryConfigViolations(module) {
 }
 
 /**
+ * The `.json` dialect's top-level keys, beyond the three every dialect reads.
+ * `$schema` is the one key the `.mjs` dialect has no counterpart for at all —
+ * an ES module has no analogous editor-validation hook — so it is carved out
+ * by name rather than folded into a general "ignore unknown" rule, which is
+ * exactly the leniency this file's header argues a JSON object must not get.
+ */
+const JSON_POLICY_KEYS = ["depConstraints", "moduleBoundaryOptions", "boundarySuppressions"];
+
+/**
+ * The `.json` dialect's own shape check, on top of `findBoundaryConfigViolations`:
+ * a top-level key that is neither one of the three every dialect reads nor —
+ * when `allowSchema` is set — `$schema` is rejected by name. Run only when
+ * `parsed` is itself a plain object — a non-object top level is already
+ * `findBoundaryConfigViolations`' first check, and this function would have
+ * nothing to enumerate.
+ *
+ * Exported so the identical check also binds a native workspace's inline
+ * `lattice.json → boundaryConfig` object (`./providers/native/model.mjs`),
+ * with `allowSchema: false`: an inline policy has no separate file for an
+ * editor to validate against, so `$schema` states no rule there either and is
+ * rejected like any other unrecognised key rather than carved out
+ * (`../../docs/usage/policy-file.md`, "An inline policy, for lattice.json").
+ *
+ * @param {unknown} parsed
+ * @param {{allowSchema: boolean}} options
+ * @returns {string[]}
+ */
+export function policyKeyViolations(parsed, { allowSchema }) {
+  if (!isPlainObject(parsed)) return [];
+  const violations = [];
+  for (const key of Object.keys(parsed)) {
+    if (allowSchema && key === "$schema") continue;
+    if (JSON_POLICY_KEYS.includes(key)) continue;
+    violations.push(
+      `${key}: not a recognised top-level key — expected one of ${JSON_POLICY_KEYS.join(", ")}` +
+        (allowSchema ? `, plus '$schema' (ignored, for editor validation)` : ""),
+    );
+  }
+  return violations;
+}
+
+/**
+ * The validate-then-reshape tail every policy loader shares, whichever
+ * dialect or spelling produced `parsed`: run `findBoundaryConfigViolations`
+ * against it, alongside whatever dialect-specific violations the caller
+ * already found (the `.json` dialect's `policyKeyViolations`, for instance),
+ * throw one error naming every violation at once when there are any, and
+ * otherwise reshape the three keys into the `{depConstraints, options,
+ * suppressions}` shape every caller reads.
+ *
+ * Extracted because this exact sequence used to be copied, by hand, into
+ * `loadModulePolicy` and `loadJsonPolicy` below, with a third, UN-validated
+ * copy in `../cli.mjs`'s native inline-`boundaryConfig` branch — three places
+ * that had to be kept in agreement across every future change to either
+ * `findBoundaryConfigViolations` or this return shape, with nothing that
+ * would fail if one of them drifted. `./lsp/boundary-config.mjs`'s `.json`
+ * arm calls this too, for the identical reason.
+ *
+ * @param {any} parsed The dialect's parsed data — a module's exports, a
+ *   parsed JSON object, or a native workspace's inline policy object. Typed
+ *   loosely on purpose: this function is the one place that reshapes it, and
+ *   every field it reads has already been through `findBoundaryConfigViolations`
+ *   by the time the return statement below is reached.
+ * @param {string} sourceLabel What failed, named in the thrown message — an
+ *   absolute path for a file-backed dialect, a descriptive phrase for an
+ *   inline one.
+ * @param {string[]} [extraViolations] Violations the caller already found that
+ *   `findBoundaryConfigViolations` does not check on its own.
+ * @returns {{ depConstraints: object[], options: object, suppressions: object[] }}
+ * @throws {Error} `lattice: ${sourceLabel} is malformed:` followed by every
+ *   violation found, when `extraViolations` or `findBoundaryConfigViolations`
+ *   found any.
+ */
+export function policyFrom(parsed, sourceLabel, extraViolations = []) {
+  const violations = [...extraViolations, ...findBoundaryConfigViolations(parsed)];
+  if (violations.length > 0) {
+    throw new Error(`lattice: ${sourceLabel} is malformed:\n  ${violations.join("\n  ")}`);
+  }
+  return {
+    depConstraints: parsed.depConstraints,
+    options: parsed.moduleBoundaryOptions,
+    suppressions: parsed.boundarySuppressions ?? [],
+  };
+}
+
+/**
+ * Loads and validates the `.mjs`/`.js` dialect: an ES module whose exports
+ * `findBoundaryConfigViolations` above reads by name.
+ *
+ * @param {string} path Absolute path of the config file.
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
+ * @throws {Error} when the file is missing, unloadable, or malformed.
+ */
+async function loadModulePolicy(path) {
+  let module;
+  try {
+    module = await import(pathToFileURL(path).href);
+  } catch (cause) {
+    throw new Error(`lattice: cannot load ${path}: ${cause?.message ?? cause}`, {
+      cause,
+    });
+  }
+  return policyFrom(module, path);
+}
+
+/**
+ * Loads and validates the `.json` dialect: plain `JSON.parse`, never JSONC and
+ * never `import()`, so the file this loader reads carries no more syntax than
+ * the format it declares itself to be. Its three data keys go through the
+ * exact same `findBoundaryConfigViolations` the `.mjs` dialect uses — this
+ * module's header explains why that has to be one function rather than two.
+ *
+ * @param {string} path Absolute path of the config file.
+ * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
+ *   Injectable read, defaulting to `node:fs/promises`' `readFile` — the only
+ *   code in this function that reaches outside the process.
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
+ * @throws {Error} when the file is missing, unreadable, not valid JSON, or
+ *   malformed — either by `findBoundaryConfigViolations`' rules or by carrying
+ *   a top-level key none of those rules knows about.
+ */
+async function loadJsonPolicy(path, { readFile = readFileFromDisk } = {}) {
+  let text;
+  try {
+    text = await readFile(path, "utf8");
+  } catch (cause) {
+    throw new Error(`lattice: cannot load ${path}: ${cause?.message ?? cause}`, {
+      cause,
+    });
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (cause) {
+    throw new Error(`lattice: cannot load ${path}: ${cause?.message ?? cause}`, {
+      cause,
+    });
+  }
+  return policyFrom(parsed, path, policyKeyViolations(parsed, { allowSchema: true }));
+}
+
+/**
  * Loads and validates one boundary config, named by its own absolute path.
  *
  * The path-taking form exists because the config's location and the tree being
@@ -409,31 +576,31 @@ export function findBoundaryConfigViolations(module) {
  * through the same validation and neither can drift into a second opinion about
  * a malformed row.
  *
+ * Dispatches on the path's extension: `.mjs`/`.js` through `loadModulePolicy`
+ * (an `import()`, as this loader has always done) and `.json` through
+ * `loadJsonPolicy` (a `JSON.parse`, new — this module's header explains the
+ * dialect). Anything else is refused by name, in a message that does not
+ * contain the words "cannot load" — a `boundaryConfig` misspelt to a `.yaml`
+ * or `.toml` extension is a naming mistake, not a missing or unreadable file,
+ * and the two must read as different problems.
+ *
  * @param {string} path Absolute path of the config file.
+ * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
+ *   Injectable read, used only by the `.json` dialect — see `loadJsonPolicy`.
  * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
  *   `suppressions` is `[]` when the config declares none.
  * @throws {Error} when the file is missing, unloadable, or malformed. Loud on
  *   purpose: an enforcer that starts with no rules enforces nothing and says
  *   nothing, which is the failure this whole tool exists to end.
  */
-export async function loadBoundaryConfigFile(path) {
-  let module;
-  try {
-    module = await import(pathToFileURL(path).href);
-  } catch (cause) {
-    throw new Error(`lattice: cannot load ${path}: ${cause?.message ?? cause}`, {
-      cause,
-    });
-  }
-  const violations = findBoundaryConfigViolations(module);
-  if (violations.length > 0) {
-    throw new Error(`lattice: ${path} is malformed:\n  ${violations.join("\n  ")}`);
-  }
-  return {
-    depConstraints: module.depConstraints,
-    options: module.moduleBoundaryOptions,
-    suppressions: module.boundarySuppressions ?? [],
-  };
+export async function loadBoundaryConfigFile(path, io = {}) {
+  const extension = extname(path);
+  if (extension === ".mjs" || extension === ".js") return loadModulePolicy(path);
+  if (extension === ".json") return loadJsonPolicy(path, io);
+  throw new Error(
+    `lattice: ${path} names an unsupported boundaryConfig extension '${extension || "(none)"}' — ` +
+      `expected .mjs, .js, or .json`,
+  );
 }
 
 /**
@@ -448,9 +615,11 @@ export async function loadBoundaryConfigFile(path) {
  *   guessed while the workspace uses another one — the failure that would follow
  *   is "cannot load", which reads like a missing config rather than a
  *   misconfigured tool.
+ * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
+ *   Forwarded to `loadBoundaryConfigFile` — see there.
  * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
  * @throws {Error} as `loadBoundaryConfigFile`.
  */
-export async function loadBoundaryConfig(workspaceRoot, boundaryConfig) {
-  return loadBoundaryConfigFile(`${workspaceRoot.replace(/\/$/, "")}/${boundaryConfig}`);
+export async function loadBoundaryConfig(workspaceRoot, boundaryConfig, io = {}) {
+  return loadBoundaryConfigFile(`${workspaceRoot.replace(/\/$/, "")}/${boundaryConfig}`, io);
 }

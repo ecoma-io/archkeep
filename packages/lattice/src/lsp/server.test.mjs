@@ -259,6 +259,35 @@ describe("publishing, where silence has to mean clean", () => {
     expect(diagnoseDocument).not.toHaveBeenCalled();
   });
 
+  it("publishes a failure rather than an empty list when a native root's boundaryConfig is inline", async () => {
+    // `readWorkspaceOptions` (`./server.mjs`) refuses this shape by throwing,
+    // rather than reading `model.boundaryConfig` as though it were a filename —
+    // the loud alternative to the two silent ones it replaced: a
+    // `**/[object Object]` watch glob nothing ever matches, and a
+    // "cannot load .../[object Object]" message from `./boundary-config.mjs`
+    // that reads like a missing file rather than an unsupported form. This
+    // pins the loud failure actually reaching the editor, not just the message
+    // text: if `refreshOptions` ever went back to swallowing the throw and
+    // falling back to `DEFAULT_OPTIONS`, `currentResources` would stop seeing
+    // `optionsFailure` and `diagnoseDocument` would run against a config the
+    // workspace never declared — the silent direction this test goes red for.
+    const { server, sent } = session({
+      readOptions: () => {
+        throw new Error(
+          "lattice: lattice.json at /fixture holds its boundaryConfig inline, as a policy object " +
+            "rather than a filename",
+        );
+      },
+    });
+    await server.handle(initialize());
+    await server.handle(didOpen());
+
+    const [publish] = published(sent);
+    expect(publish.diagnostics).toHaveLength(1);
+    expect(publish.diagnostics[0].message).toContain("holds its boundaryConfig inline");
+    expect(diagnoseDocument).not.toHaveBeenCalled();
+  });
+
   it("publishes a failure rather than an empty list when the index cannot be built", async () => {
     const { server, sent } = session({
       buildIndex: () => {

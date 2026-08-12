@@ -120,6 +120,15 @@ The same two options an Nx-registered workspace states in
 options"). `--config` on the command line still overrides `boundaryConfig`
 for one run either way.
 
+`boundaryConfig` takes a second shape besides a filename: an object, holding
+the boundary law inline rather than pointing at a separate file. Its three
+keys are exactly `depConstraints`, `moduleBoundaryOptions` and
+`boundarySuppressions` — [policy-file.md](policy-file.md) is the reference for
+what each one holds — validated by the same check a `.mjs` or `.json` boundary
+file goes through, so a malformed row is rejected here, at `lattice.json`
+load, the same way it would be rejected in a separate file. `tsConfig` has no
+such second shape; it stays a filename.
+
 ## Declaring vs. inferring projects
 
 Two ways to get a project onto the list, and they compose rather than
