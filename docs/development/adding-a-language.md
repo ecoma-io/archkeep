@@ -70,7 +70,7 @@ drive the analyzer from an in-memory string. `workspace` is
 `{ root, projects, filesOf, readFile }`.
 
 The record shape is frozen in
-[`src/analysis/contract.md`](../../packages/nx-polyglot-graph/src/analysis/contract.md)
+[`src/analysis/contract.md`](../../packages/lattice/src/analysis/contract.md)
 and reproduced as JSDoc types in `analyze.mjs`; the two are edited together.
 Analyzers are meant to be written in parallel, and that only works if none of
 them gets to reinterpret the shape.
@@ -159,7 +159,7 @@ Two things to get right, both learned the hard way in Python:
 
 ### 5. Route it to the editor
 
-`packages/nx-polyglot-graph/.claude-plugin/plugin.json`, under
+`packages/lattice/.claude-plugin/plugin.json`, under
 `lspServers.*.extensionToLanguage`.
 
 A JSON manifest cannot import anything, so this list is a second copy of
@@ -186,7 +186,7 @@ when the two drift.
 ### 6. If you need a parser dependency
 
 Read the allow-list in
-[`src/conformance/boundary.test.mjs`](../../packages/nx-polyglot-graph/src/conformance/)
+[`src/conformance/boundary.test.mjs`](../../packages/lattice/src/conformance/)
 first — it is where the list lives, one entry per package with the reason it
 earns, and adding a dependency means adding it there in the same diff. The list
 is deliberately not restated in prose anywhere: it used to be, it drifted, and
@@ -241,7 +241,7 @@ Four files, and none of them optional:
 | -------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | [`docs/usage/languages.md`](../usage/languages.md) | A section: identity, what the analyzer reads, every limit, what the record leaves null  |
 | [`docs/north-star.md`](../north-star.md)           | A row in the state table — and it must be honest about which of the four cells are real |
-| `packages/nx-polyglot-graph/README.md`             | The npm landing page mentions the language set; it must stand alone                     |
+| `packages/lattice/README.md`                       | The npm landing page mentions the language set; it must stand alone                     |
 | `packages/lattice-vscode/README.md`                | The marketplace page names the routed extensions one by one                             |
 
 ## The definition of done

@@ -7,7 +7,7 @@ crosses a boundary your tags forbid is underlined where you wrote it — judged 
 the same `module-boundaries.config.mjs` your pipeline reads, by the same engine.
 
 This extension is a client and nothing else. All the analysis lives in
-[`@ecoma-io/nx-polyglot-graph`](../nx-polyglot-graph/README.md), which ships a
+[`@ecoma-io/lattice`](../lattice/README.md), which ships a
 language server; what is here starts that server, tells it where the workspace
 root is, and shows you whether it is running.
 
@@ -16,12 +16,12 @@ root is, and shows you whether it is running.
 - **VS Code 1.100 or newer.** The extension is ESM, and the Node extension host
   has loaded ESM extensions since that release. On an older version it does not
   load at all.
-- **`@ecoma-io/nx-polyglot-graph` installed in the workspace you are editing.**
+- **`@ecoma-io/lattice` installed in the workspace you are editing.**
   Not bundled here — see below.
 - **An `nx.json`** at or above the folder you opened.
 
 ```bash
-pnpm add -D @ecoma-io/nx-polyglot-graph
+pnpm add -D @ecoma-io/lattice
 ```
 
 ## The server is the workspace's, not the extension's

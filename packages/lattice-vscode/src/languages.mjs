@@ -2,7 +2,7 @@
  * Which files this extension asks the server about.
  *
  * The list is the extension's copy of `LANGUAGE_BY_EXTENSION` in
- * `@ecoma-io/nx-polyglot-graph`, and it is a copy for the same reason the Claude
+ * `@ecoma-io/lattice`, and it is a copy for the same reason the Claude
  * Code plugin manifest is one: a client has to name the file types it routes
  * before any server is running, so it cannot ask the server what they are.
  * `routed-extensions.integration.test.mjs` holds this list to that manifest and

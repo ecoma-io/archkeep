@@ -117,7 +117,7 @@ jobs:
       - name: Check this repository's own module boundaries
         env:
           NX_DAEMON: "false"
-        run: node packages/nx-polyglot-graph/cli.mjs check
+        run: node packages/lattice/cli.mjs check
 
       # The extension's own artifact, built on every pull request so a change
       # that breaks packaging turns THIS build red instead of the release lane
@@ -159,7 +159,7 @@ jobs:
       # `pnpm install` against the registry — and everything above narrows the
       # cause before this reports.
       - name: Prove the packed artifact works outside this workspace
-        run: node scripts/verify-package.mjs packages/nx-polyglot-graph
+        run: node scripts/verify-package.mjs packages/lattice
 
   ci-gate:
     name: ci-gate

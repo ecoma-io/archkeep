@@ -4,7 +4,7 @@ import { planSession } from "./session.mjs";
 
 /** @type {import("./server-module.mjs").ServerLocation} */
 const FOUND = {
-  path: "/repo/node_modules/@ecoma-io/nx-polyglot-graph/lsp.mjs",
+  path: "/repo/node_modules/@ecoma-io/lattice/lsp.mjs",
   source: "workspace",
   searched: [],
 };
@@ -51,7 +51,7 @@ describe("planSession", () => {
       locateServer: () => ({
         path: null,
         source: null,
-        searched: ["/repo/node_modules/@ecoma-io/nx-polyglot-graph/lsp.mjs"],
+        searched: ["/repo/node_modules/@ecoma-io/lattice/lsp.mjs"],
         reason: "not installed",
       }),
     });
@@ -60,7 +60,7 @@ describe("planSession", () => {
       state: "blocked",
       root: "/repo",
       reason: "not installed",
-      searched: ["/repo/node_modules/@ecoma-io/nx-polyglot-graph/lsp.mjs"],
+      searched: ["/repo/node_modules/@ecoma-io/lattice/lsp.mjs"],
     });
   });
 

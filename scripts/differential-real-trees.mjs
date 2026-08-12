@@ -2,7 +2,7 @@
 // Runs the conformance differential — this repository's boundary engine against
 // the real `@nx/enforce-module-boundaries` — over REAL public Nx workspaces,
 // pinned at fixed commits. The fixture suite in
-// `packages/nx-polyglot-graph/src/conformance/` proves the two engines agree
+// `packages/lattice/src/conformance/` proves the two engines agree
 // about the situations someone thought to build; this script is the third
 // condition its README names: agreement measured on trees nobody here built,
 // under constraint tables and tag vocabularies this repository had no hand in.
@@ -22,7 +22,7 @@
 //   5. classifies every difference against the ledger below, and checks the
 //      empty-verdict claim for trees measured to contain violations.
 //
-// Exit codes mirror `packages/nx-polyglot-graph/cli.mjs`: 0 clean, 1 findings
+// Exit codes mirror `packages/lattice/cli.mjs`: 0 clean, 1 findings
 // (an unexplained difference, a stale ledger entry, or an empty verdict set
 // where violations are known to exist), 2 usage, 3 infrastructure (clone,
 // install, graph or child failure — a run that could not look must never read
@@ -45,11 +45,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 
-import { environmentForTree } from "../packages/nx-polyglot-graph/src/workspace.mjs";
+import { environmentForTree } from "../packages/lattice/src/workspace.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Same meanings as the CLI's exit contract (`packages/nx-polyglot-graph/cli.mjs`). */
+/** Same meanings as the CLI's exit contract (`packages/lattice/cli.mjs`). */
 export const EXIT = Object.freeze({ ok: 0, findings: 1, usage: 2, error: 3 });
 
 /**

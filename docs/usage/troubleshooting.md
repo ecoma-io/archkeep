@@ -47,7 +47,7 @@ runs. Empty `allow` and re-run to test.
 config for a `path` glob broader than intended. Every entry carries a mandatory
 `reason` precisely so this is auditable.
 
-**You scoped the run.** `nx-polyglot-graph check <path>` restricts the file set,
+**You scoped the run.** `lattice check <path>` restricts the file set,
 and the cycle and lazy-load rules judge the file graph as a whole. Re-run without
 paths.
 

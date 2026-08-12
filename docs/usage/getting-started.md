@@ -20,7 +20,7 @@ lint-only CI runner.
 ## 1. Install
 
 ```shell
-pnpm add -D @ecoma-io/nx-polyglot-graph
+pnpm add -D @ecoma-io/lattice
 ```
 
 ## 2. Register the plugin
@@ -29,7 +29,7 @@ In `nx.json`:
 
 ```json
 {
-  "plugins": ["@ecoma-io/nx-polyglot-graph"]
+  "plugins": ["@ecoma-io/lattice/nx"]
 }
 ```
 
@@ -40,7 +40,7 @@ file the plugin reads, say so:
 {
   "plugins": [
     {
-      "plugin": "@ecoma-io/nx-polyglot-graph",
+      "plugin": "@ecoma-io/lattice/nx",
       "options": {
         "boundaryConfig": "module-boundaries.config.mjs",
         "tsConfig": "tsconfig.base.json"
@@ -157,13 +157,13 @@ export default [
 Keep running it. It stays authoritative for JavaScript, TypeScript and Vue; this
 tool is for the languages it cannot parse. The conditions under which you could
 eventually drop it are enumerated in
-[`src/conformance/`](../../packages/nx-polyglot-graph/src/conformance/README.md),
+[`src/conformance/`](../../packages/lattice/src/conformance/README.md),
 and one of the three is not met yet.
 
 ## 5. Run the check
 
 ```shell
-pnpm exec nx-polyglot-graph check
+pnpm exec lattice check
 ```
 
 A clean tree prints what it inspected, not just that it found nothing:
@@ -196,7 +196,7 @@ The full list of message ids and what resolves each one is
 ## 6. Put it in CI
 
 ```shell
-pnpm exec nx-polyglot-graph check
+pnpm exec lattice check
 ```
 
 Exit 0 is clean, 1 is findings — boundary violations, go.work drift, or dead

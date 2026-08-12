@@ -35,21 +35,21 @@
 ## Install
 
 ```bash
-pnpm add -D @ecoma-io/nx-polyglot-graph
+pnpm add -D @ecoma-io/lattice
 ```
 
 Register it in `nx.json` and it starts adding the missing edges:
 
 ```json
 {
-  "plugins": ["@ecoma-io/nx-polyglot-graph"]
+  "plugins": ["@ecoma-io/lattice/nx"]
 }
 ```
 
 Then check the boundaries those edges cross:
 
 ```bash
-pnpm exec nx-polyglot-graph check
+pnpm exec lattice check
 ```
 
 ```text
@@ -86,10 +86,10 @@ inferred-target plugin were both the wrong answer.
 
 ## What is here
 
-| Package                                                                   |                                                                                                                                                                                                                         |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [**`@ecoma-io/nx-polyglot-graph`**](packages/nx-polyglot-graph/README.md) | Reads Go, Rust and Python manifests into the Nx project graph, then judges imports against tag-based boundary rules — the `@nx/enforce-module-boundaries` contract, for the languages it cannot reach.                  |
-| [**`lattice-vscode`**](packages/lattice-vscode/README.md)                 | The VS Code client for that server: the same verdicts, at the edit. It runs the server your workspace installed rather than one of its own, so the buffer and the pipeline cannot disagree. Not on the marketplace yet. |
+| Package                                                   |                                                                                                                                                                                                                         |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [**`@ecoma-io/lattice`**](packages/lattice/README.md)     | Reads Go, Rust and Python manifests into the Nx project graph, then judges imports against tag-based boundary rules — the `@nx/enforce-module-boundaries` contract, for the languages it cannot reach.                  |
+| [**`lattice-vscode`**](packages/lattice-vscode/README.md) | The VS Code client for that server: the same verdicts, at the edit. It runs the server your workspace installed rather than one of its own, so the buffer and the pipeline cannot disagree. Not on the marketplace yet. |
 
 Fifteen violation types, eight options, and the same `messageId`s ESLint reports
 — so the two enforcers can be compared rather than merely both being red. Five
@@ -123,7 +123,7 @@ refusals that follow from it, are in [**docs/north-star.md**](docs/north-star.md
 
 Full index: [**docs/**](docs/README.md). The package's own reference, which
 stands alone as the npm landing page, is
-[here](packages/nx-polyglot-graph/README.md).
+[here](packages/lattice/README.md).
 
 ## Built for Ecoma — a labor operating system for humans and AI agents
 

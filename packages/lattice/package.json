@@ -1,0 +1,70 @@
+{
+  "name": "@ecoma-io/lattice",
+  "version": "0.0.0",
+  "description": "Polyglot module-boundary enforcement for an Nx workspace: cross-project graph edges for Go, Rust and Python, and boundary checking across every language its analyzers read",
+  "keywords": [
+    "nx",
+    "nx-plugin",
+    "monorepo",
+    "module-boundaries",
+    "dependency-graph",
+    "polyglot",
+    "golang",
+    "rust",
+    "python",
+    "typescript",
+    "language-server",
+    "static-analysis"
+  ],
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "lattice": "cli.mjs",
+    "lattice-lsp": "lsp.mjs"
+  },
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./nx": "./nx.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "nx.mjs",
+    "cli.mjs",
+    "lsp.mjs",
+    "src/",
+    "!src/**/*.test.mjs",
+    "!src/conformance/",
+    "LICENSE",
+    "README.md"
+  ],
+  "dependencies": {
+    "smol-toml": "1.7.1"
+  },
+  "peerDependencies": {
+    "nx": ">=21",
+    "typescript": ">=5 <7",
+    "vue": ">=3"
+  },
+  "peerDependenciesMeta": {
+    "nx": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "homepage": "https://github.com/ecoma-io/lattice/tree/main/packages/lattice#readme",
+  "bugs": {
+    "url": "https://github.com/ecoma-io/lattice/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ecoma-io/lattice.git",
+    "directory": "packages/lattice"
+  }
+}

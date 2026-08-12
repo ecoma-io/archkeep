@@ -123,10 +123,18 @@ function fixtureFiles(packageName, peers, packageManager) {
       null,
       2,
     )}\n`,
+    // `${packageName}/nx`, not the bare package name: the root export is the
+    // engine (`index.mjs`), whose only Nx-shaped export is a
+    // `createDependencies` that throws, naming this exact misregistration —
+    // only the `./nx` subpath is the working Nx-plugin face Nx is meant to
+    // load (`packages/lattice/nx.mjs`).
     "nx.json": `${JSON.stringify(
       {
         plugins: [
-          { plugin: packageName, options: { boundaryConfig: "module-boundaries.config.mjs" } },
+          {
+            plugin: `${packageName}/nx`,
+            options: { boundaryConfig: "module-boundaries.config.mjs" },
+          },
         ],
       },
       null,
@@ -326,7 +334,7 @@ try {
   //    never committed, `git ls-files` returned nothing, and the checker
   //    truthfully reported "no violations (0 imports in 0 files)" — which a
   //    `/\d+ import/` test passes.
-  const clean = run("pnpm", ["exec", "nx-polyglot-graph", "check"], consumer);
+  const clean = run("pnpm", ["exec", "lattice", "check"], consumer);
   check(
     "the checker exits 0 on a clean tree",
     clean.status === 0,
@@ -344,7 +352,7 @@ try {
   write(consumer, VIOLATING_FILES);
   commit("core reaches up into app");
   run("pnpm", ["exec", "nx", "reset"], consumer);
-  const dirty = run("pnpm", ["exec", "nx-polyglot-graph", "check"], consumer);
+  const dirty = run("pnpm", ["exec", "lattice", "check"], consumer);
   const dirtyOutput = `${dirty.stdout ?? ""}${dirty.stderr ?? ""}`;
   check(
     "the checker exits 1 on a violating tree",

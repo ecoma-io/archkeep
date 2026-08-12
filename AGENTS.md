@@ -13,7 +13,7 @@ for the other three both go quiet, and quiet is the problem — an under-selecti
 `affected` and an absent boundary rule look exactly like a clean workspace.
 
 **The repository holds the toolchain and the engine it exists to ship.**
-`packages/nx-polyglot-graph/` is that engine — an Nx plugin plus a boundary
+`packages/lattice/` is that engine — an Nx plugin plus a boundary
 checker and a language server, one analysis behind three faces.
 `packages/lattice-vscode/` is a client of it and holds no analysis at all; it
 ships to a marketplace rather than to npm, and it deliberately does not bundle
@@ -60,13 +60,13 @@ scripts/
   check-packages.mjs       the gate that makes a green build mean something
   check-packages.test.mjs
 packages/
-  nx-polyglot-graph/       the plugin, the checker, the language server
+  lattice/                 the plugin, the checker, the language server
   lattice-vscode/          the VS Code client for that server
 module-boundaries.config.mjs   this repository's own boundary law
 coverage.config.json           the coverage floor both packages read
 ```
 
-`nx-polyglot-graph` carries its own `CLAUDE.md` for everything below this level —
+`lattice` carries its own `CLAUDE.md` for everything below this level —
 the layer split, the per-language parse limits, the modelling assumptions. It
 loads when the work happens inside that directory, which is why none of it is
 here. `lattice-vscode` has none: it is a client whose every decision is a pure
@@ -84,14 +84,13 @@ function under `src/`, and its README says what it refuses and why.
   its verdict names the targets each package actually runs:
 
   ```text
-  ok   nx-polyglot-graph — lint, test, typecheck (no build)
+  ok   lattice — lint, test, typecheck (no build)
   ```
 
-  A partial set is the expected answer, not a finding. `nx-polyglot-graph` ships
-  as `.mjs` and has nothing to build; declaring an empty `build` that exits 0 to
-  make that line read fuller is exactly the placeholder-green the script exists
-  to catch. Do not weaken it, and do not "fix" a failure from it by adding a
-  target.
+  A partial set is the expected answer, not a finding. `lattice` ships as `.mjs` and
+  has nothing to build; declaring an empty `build` that exits 0 to make that line
+  read fuller is exactly the placeholder-green the script exists to catch. Do not
+  weaken it, and do not "fix" a failure from it by adding a target.
 
 - **`check-packages.mjs` derives its target list from `ci.yml`.** It parses the
   `nx run-many -t …` line rather than holding a copy, because CI is where "green"
@@ -125,7 +124,7 @@ function under `src/`, and its README says what it refuses and why.
   at the same time.
 - **A comment may only cite a document in this repository, and only by a path
   that resolves from where it is written.** This file and
-  `packages/nx-polyglot-graph/CLAUDE.md` are the two that exist; there is no
+  `packages/lattice/CLAUDE.md` are the two that exist; there is no
   numbered rule list anywhere here, so a citation of the form "Rule 14" or "root
   `CLAUDE.md`" points at nothing a reader can open. The extraction arrived
   carrying thirty of them, plus prose justifying real behaviour with mechanisms
@@ -164,7 +163,7 @@ another.
   without touching repository settings. It fails on any needed job that is
   `skipped` or `cancelled`, because `needs` alone only blocks on `failure`.
 - **The repository's own module boundaries** — the final CI step runs
-  `packages/nx-polyglot-graph/cli.mjs check` against `module-boundaries.config.mjs`
+  `packages/lattice/cli.mjs check` against `module-boundaries.config.mjs`
   at this root. Every step before it proves the code correct against fixtures it
   built itself; this is the only one where the enforcer meets real source under a
   tag vocabulary (`type:package`, `scope:nx`) that nothing in `src/` knows about.
@@ -246,12 +245,12 @@ pnpm test               # node --test over scripts/*.test.mjs — the gate scrip
 pnpm typecheck          # tsc --noEmit over scripts/ — each package has its own target
 pnpm check-packages     # every packages/* directory, and which CI targets it runs
 pnpm exec nx run-many -t lint test build typecheck   # each package's own suite
-node packages/nx-polyglot-graph/cli.mjs check        # this tree's own boundaries
+node packages/lattice/cli.mjs check        # this tree's own boundaries
 ```
 
 `pnpm test` and `nx run-many` are not the same suite and neither covers the other:
 the first is `node --test` over `scripts/`, the second is each package's own
-`test` target — which for `nx-polyglot-graph` is Vitest, including the
+`test` target — which for `lattice` is Vitest, including the
 differential against a real `@nx/enforce-module-boundaries`.
 
 Semgrep the way CI runs it, needing Docker but no local install:
@@ -267,11 +266,11 @@ pull request.
 
 ## Commits
 
-Conventional Commits, commitlint-enforced. Scopes: `graph`, `vscode`,
-`workspace`, `docs`, `deps`, `ci`. The first two are listed before their
-directories exist so the commit that creates a package is not also the commit
-that has to edit `commitlint.config.mjs` to describe itself. `deps` and `ci`
-exist because Renovate writes them.
+Conventional Commits, commitlint-enforced. Scopes: `lattice`, `vscode`,
+`workspace`, `docs`, `deps`, `ci`. `vscode` is listed before its own directory
+existed, so the commit that creates a package is not also the commit that has
+to edit `commitlint.config.mjs` to describe itself. `deps` and `ci` exist
+because Renovate writes them.
 
 A change to what is reported on an unchanged workspace is a **breaking change**
 even when no API moved — a consumer's CI turns red on code they did not touch.

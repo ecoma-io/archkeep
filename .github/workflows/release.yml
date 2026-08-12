@@ -68,8 +68,8 @@ jobs:
       # that decides it; the two must be read together, and a rename there that
       # is not made here fails loudly by publishing nothing rather than quietly
       # by publishing the wrong tree.
-      released: ${{ steps.release.outputs['packages/nx-polyglot-graph--release_created'] }}
-      tag: ${{ steps.release.outputs['packages/nx-polyglot-graph--tag_name'] }}
+      released: ${{ steps.release.outputs['packages/lattice--release_created'] }}
+      tag: ${{ steps.release.outputs['packages/lattice--tag_name'] }}
       # The extension's pair, same prefix rule, steered on by `publish-vsix`.
       vsix_released: ${{ steps.release.outputs['packages/lattice-vscode--release_created'] }}
       vsix_tag: ${{ steps.release.outputs['packages/lattice-vscode--tag_name'] }}
@@ -120,7 +120,7 @@ jobs:
       - name: Fail if a release was cut that a publish job cannot see
         env:
           PATHS_RELEASED: ${{ steps.release.outputs.paths_released }}
-          GRAPH_RELEASED: ${{ steps.release.outputs['packages/nx-polyglot-graph--release_created'] }}
+          GRAPH_RELEASED: ${{ steps.release.outputs['packages/lattice--release_created'] }}
           VSIX_RELEASED: ${{ steps.release.outputs['packages/lattice-vscode--release_created'] }}
         run: |
           status=0
@@ -138,7 +138,7 @@ jobs:
               status=1
             fi
           }
-          check "packages/nx-polyglot-graph" "$GRAPH_RELEASED"
+          check "packages/lattice" "$GRAPH_RELEASED"
           check "packages/lattice-vscode" "$VSIX_RELEASED"
           exit "$status"
 
@@ -189,7 +189,7 @@ jobs:
       # It runs before publish, not after, because a package that resolves
       # nothing at install time cannot be unpublished away.
       - name: Prove the packed artifact works outside this workspace
-        run: node scripts/verify-package.mjs packages/nx-polyglot-graph
+        run: node scripts/verify-package.mjs packages/lattice
 
       # `npm publish`, not `pnpm publish`: provenance is an npm CLI feature and
       # this is the client that implements it. That choice has a consequence the
@@ -204,11 +204,11 @@ jobs:
       # `NODE_AUTH_TOKEN` rather than OIDC trusted publishing, and only because
       # of an ordering rule: trusted publishing cannot create a package that
       # does not exist yet, so the first version of a name has to go through a
-      # token. Once `@ecoma-io/nx-polyglot-graph` exists on the registry, bind
+      # token. Once `@ecoma-io/lattice` exists on the registry, bind
       # this workflow as a trusted publisher there and delete the `env:` block —
       # the `id-token: write` above is already what that mode needs.
       - name: Publish
-        working-directory: packages/nx-polyglot-graph
+        working-directory: packages/lattice
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
         run: npm publish --provenance --access public

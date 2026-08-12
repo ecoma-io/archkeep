@@ -19,12 +19,12 @@ describe("describeStatus", () => {
     const status = describeStatus({
       state: "blocked",
       root: "/repo",
-      reason: "@ecoma-io/nx-polyglot-graph is not installed in /repo",
+      reason: "@ecoma-io/lattice is not installed in /repo",
       searched: [],
     });
 
     expect(status.severity).toBe("error");
-    expect(status.detail).toBe("@ecoma-io/nx-polyglot-graph is not installed in /repo");
+    expect(status.detail).toBe("@ecoma-io/lattice is not installed in /repo");
   });
 
   it("renders a folder that is not an Nx workspace as information", () => {
