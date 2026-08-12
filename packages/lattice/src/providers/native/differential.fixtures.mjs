@@ -773,7 +773,15 @@ export function unknownLabelRows(ledger, knownLabels) {
 // Fixture-tree builders
 // ---------------------------------------------------------------------------
 
-const SIMPLE_BOUNDARY_CONFIG = `export const depConstraints = [
+// Exported (not just module-private) so `../../config-spelling.integration.test.mjs`
+// — the config-spelling differential — can build its own dialect spellings
+// (`.mjs`, `.json`, an ESLint flat config, an inline `lattice.json` object)
+// of this EXACT law and prove they agree, rather than writing a byte-for-byte
+// second copy of the same table: this module's own header already commits to
+// staying importable and spawn-free at import time for exactly that reuse,
+// and a second copy here is the drift `../../../../../AGENTS.md`'s "never
+// state a rule twice" rule exists to catch.
+export const SIMPLE_BOUNDARY_CONFIG = `export const depConstraints = [
   { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
   { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
 ];
@@ -791,8 +799,9 @@ export const moduleBoundaryOptions = {
 
 // One physical shape, written byte-identical into both trees below: two Go
 // modules, tagged opposite the layer axis, with one import that crosses it
-// the wrong way (`domain` reaching into `adapter`).
-const SIMPLE_GO_FILES = {
+// the wrong way (`domain` reaching into `adapter`). Exported for the same
+// reuse reason as `SIMPLE_BOUNDARY_CONFIG` above.
+export const SIMPLE_GO_FILES = {
   "libs/domain/go.mod": "module example.com/domain\n\ngo 1.24\n",
   "libs/adapter/go.mod": "module example.com/adapter\n\ngo 1.24\n",
   "libs/adapter/adapter.go": 'package adapter\n\nvar Name = "adapter"\n',

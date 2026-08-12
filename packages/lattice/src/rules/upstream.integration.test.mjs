@@ -88,4 +88,25 @@ describe("the copied halves of @nx/enforce-module-boundaries", () => {
       ).toEqual([`moduleBoundaryOptions.${name}: missing — every option is stated explicitly`]);
     }
   });
+
+  it("pins the DEFAULT VALUES upstream states for each option — a failure here means upstream changed a default, which is a breaking change for every ESLint-dialect consumer and must ship as one, not be silently absorbed", () => {
+    // The test above pins the option NAMES upstream requires; it says nothing
+    // about what upstream defaults each one TO. `../config-spelling.integration.test.mjs`'s
+    // A5 axis reads that default LIVE off the installed plugin on both sides of
+    // its comparison, so a real upstream default change moves both sides
+    // together there, silently — this is the one place a changed default is
+    // compared against a literal instead, so that change is loud.
+    const [upstreamDefaults] = literalAt(pluginSource(), "defaultOptions:", "[", "]");
+    const { depConstraints: _depConstraintsDefault, ...values } = upstreamDefaults;
+    expect(values).toEqual({
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies: false,
+      checkNestedExternalImports: false,
+    });
+  });
 });
