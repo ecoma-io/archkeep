@@ -38,7 +38,12 @@ import {
   createUpstreamRunner,
   isUpstreamReadable,
 } from "../packages/lattice/src/conformance/engines.mjs";
-import { extractBoundaryRule } from "./differential-real-trees.mjs";
+import { nativeProvider } from "../packages/lattice/src/providers/native/index.mjs";
+import {
+  deriveNativeModel,
+  extractBoundaryRule,
+  nodeFieldDifferences,
+} from "./differential-real-trees.mjs";
 
 const [treeRoot, configFile, graphPath, resultPath] = process.argv.slice(2);
 if (!treeRoot || !configFile || !graphPath || !resultPath) {
@@ -161,6 +166,133 @@ for (const file of new Set([...upstreamByFile.keys(), ...toolByFile.keys()])) {
   for (const row of comparison.weaker) differences.push({ direction: "weaker", ...row });
 }
 
+// The native leg: does the native provider's edge construction — which
+// DERIVES `dependencies` from import sites rather than receiving them —
+// reproduce Nx's own edges, given a project model equivalent to what Nx
+// already computed for this SAME tree? The model is derived mechanically
+// (`deriveNativeModel`, in `./differential-real-trees.mjs`) from the graph
+// JSON already on disk, never hand-authored, so this measures the provider's
+// discovery-plus-graph pipeline on source nobody here wrote, which is the one
+// thing the fixture suite under `packages/lattice/src/providers/native/`
+// cannot answer — its fixtures were built by someone who knew the answer.
+//
+// Isolated in its own try/catch: a defect in the derived model or the
+// provider must not crash the upstream-vs-tool comparison above, which is
+// unrelated infrastructure. `native.infrastructureError` is promoted to a
+// tree-level infrastructure verdict by `reportNativeLeg` in
+// `./differential-real-trees.mjs`, so it is still loud rather than swallowed.
+let native;
+try {
+  const derivedModel = deriveNativeModel(graph);
+  // `nativeProvider.discover` reads `lattice.json` through the injected
+  // `readFile` — intercepted here rather than written to disk, so the derived
+  // model never becomes a tracked file the tree's own tooling could trip on.
+  const nativeReadFile = (path) =>
+    path === "lattice.json" ? `${JSON.stringify(derivedModel, null, 2)}\n` : readTree(path);
+  const discovered = nativeProvider.discover({ root: treeRoot, files, readFile: nativeReadFile });
+  const nativeGraph = nativeProvider.buildGraph({ discovered, importSites: analysis.imports });
+  // The same fail-closed annotations the Nx-graph-based run gets above —
+  // without them every project would look MFE-remote-free and package-less,
+  // drowning the comparison in self-inflicted differences rather than real
+  // provider ones.
+  annotateMFERemotes(nativeGraph.nodes, readTree);
+  annotatePackageFacts(nativeGraph.nodes, readTree);
+  const nativeViolations = evaluate(analysis.imports, nativeGraph, {
+    depConstraints,
+    options,
+    suppressions: [],
+  });
+
+  const nxNodeNames = new Set(Object.keys(graph.nodes));
+  const nativeNodeNames = new Set(Object.keys(nativeGraph.nodes));
+  const edgeKey = (source, target) => `${source}->${target}`;
+  const nxEdges = new Set();
+  for (const [source, deps] of Object.entries(graph.dependencies ?? {})) {
+    for (const dep of deps) nxEdges.add(edgeKey(source, dep.target));
+  }
+  const nativeEdges = new Set();
+  for (const [source, deps] of Object.entries(nativeGraph.dependencies ?? {})) {
+    for (const dep of deps) nativeEdges.add(edgeKey(source, dep.target));
+  }
+  const asVerdict = (violation) => ({
+    messageId: violation.messageId,
+    site: `${violation.sourceFile}:${violation.line}:${violation.column}`,
+  });
+  const toolVerdictList = toolViolations.map(asVerdict);
+  const nativeVerdictList = nativeViolations.map(asVerdict);
+  const verdictKey = (v) => `${v.messageId}@${v.site}`;
+  const toolVerdictKeys = new Set(toolVerdictList.map(verdictKey));
+  const nativeVerdictKeys = new Set(nativeVerdictList.map(verdictKey));
+
+  // The name-only diff above only sees a node that exists on one side and not
+  // the other; a name present on BOTH sides can still carry a `root`, `type`
+  // or `tags` the native leg reproduced wrong — invisible to a set-of-names
+  // comparison. `nodeFieldDifferences` (`./differential-real-trees.mjs`) does
+  // the actual comparison, pure and unit-tested there; this loop only feeds
+  // it each shared project name's fields, renormalising the Nx side's root
+  // the same way `deriveNativeModel` already does — Nx spells the
+  // workspace-root project's root `"."`, and reporting that translation back
+  // as a provider defect would be reporting a config-dialect difference the
+  // provider had no hand in.
+  const fieldDifferences = [];
+  for (const name of nxNodeNames) {
+    if (!nativeNodeNames.has(name)) continue; // covered by the native-missing node row above
+    const nxNode = graph.nodes[name];
+    const nativeNode = nativeGraph.nodes[name];
+    const nxRoot = nxNode.data.root === "." ? "" : nxNode.data.root;
+    fieldDifferences.push(
+      ...nodeFieldDifferences(
+        name,
+        { root: nxRoot, type: nxNode.type, tags: nxNode.data.tags },
+        { root: nativeNode.data.root, type: nativeNode.type, tags: nativeNode.data.tags },
+      ),
+    );
+  }
+
+  // One combined list, in the exact `{direction, messageId, site}` shape
+  // `classifyDifferences` already consumes — a node/edge difference's
+  // `messageId` is the literal string `"node"`/`"edge"` and its `site` is the
+  // node name or the `source->target` edge key rather than a
+  // `file:line:column` position. Named `nativeDifferences` rather than
+  // `differences` — the outer scope already binds that name to the
+  // upstream-vs-tool list above, and shadowing it here read as though this
+  // list replaced that one rather than being a second, unrelated list.
+  const nativeDifferences = [
+    ...[...nativeNodeNames]
+      .filter((name) => !nxNodeNames.has(name))
+      .map((site) => ({ direction: "native-extra", messageId: "node", site })),
+    ...[...nxNodeNames]
+      .filter((name) => !nativeNodeNames.has(name))
+      .map((site) => ({ direction: "native-missing", messageId: "node", site })),
+    ...[...nativeEdges]
+      .filter((edge) => !nxEdges.has(edge))
+      .map((site) => ({ direction: "native-extra", messageId: "edge", site })),
+    ...[...nxEdges]
+      .filter((edge) => !nativeEdges.has(edge))
+      .map((site) => ({ direction: "native-missing", messageId: "edge", site })),
+    ...fieldDifferences,
+    ...nativeVerdictList
+      .filter((v) => !toolVerdictKeys.has(verdictKey(v)))
+      .map((v) => ({ direction: "native-extra", messageId: v.messageId, site: v.site })),
+    ...toolVerdictList
+      .filter((v) => !nativeVerdictKeys.has(verdictKey(v)))
+      .map((v) => ({ direction: "native-missing", messageId: v.messageId, site: v.site })),
+  ];
+
+  native = {
+    derivedProjectCount: derivedModel.projects.declared.length,
+    discoveryFailureCount: discovered.failures.length,
+    counts: {
+      nodes: nativeNodeNames.size,
+      edges: nativeEdges.size,
+      verdicts: nativeViolations.length,
+    },
+    differences: nativeDifferences,
+  };
+} catch (error) {
+  native = { infrastructureError: String(error?.message ?? error) };
+}
+
 const pluginManifest = createRequire(import.meta.url)("@nx/eslint-plugin/package.json");
 const eslintManifest = createRequire(import.meta.url)("eslint/package.json");
 let upstreamVerdictTotal = 0;
@@ -199,6 +331,7 @@ writeFileSync(
       })),
       agreements,
       differences,
+      native,
     },
     null,
     2,
