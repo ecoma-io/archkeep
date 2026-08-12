@@ -295,29 +295,46 @@ and the two would disagree the day one changed.
 `src/config.mjs` validates shape only. Whether `layer:adapter` may reach
 `layer:domain` is the workspace's decision, argued in that config's comments.
 
-The file that name resolves to may be an `.mjs`/`.js` module (`import()`ed) or
-a `.json` file (`JSON.parse`d, never JSONC — `../../docs/usage/policy-file.md`
-is the dialect reference). `src/config.mjs`'s dispatch is by extension, and
-both dialects hand their data to the one `findBoundaryConfigViolations`
-function above — never a second copy of what a constraint row or an option may
-hold. A native workspace's `lattice.json` accepts a third spelling for the
-same field: the policy inline, as an object rather than a filename
-(`src/providers/native/model.mjs`), validated by that same function before
-`cli.mjs`'s native branch ever reads it.
+The file that name resolves to may be an `.mjs`/`.js` module (`import()`ed), a
+`.json` file (`JSON.parse`d, never JSONC), or an ESLint flat config named by
+basename (`eslint.config.*`) rather than extension —
+[`docs/usage/policy-file.md`](../../docs/usage/policy-file.md) is the dialect
+reference for all three. `src/config.mjs`'s `loadBoundaryConfigFile` is the
+one dispatch site, and it tests basename STRICTLY BEFORE extension: an
+`eslint.config.*` name always reaches `src/eslint-config.mjs`, and a legacy
+`.eslintrc*` name is always refused by name, before either one's usually
+`.mjs`/`.js` extension can reach the module dialect and half-succeed on a
+config that was never meant to be read as one. Only once neither basename
+matches does the extension decide between the `.mjs`/`.js` module dialect and
+the `.json` file dialect. `src/eslint-config.mjs` reads the constraint table
+off that file's own `@nx/enforce-module-boundaries` entry rather than a
+second, hand-kept copy, and refuses loudly on every shape it cannot map onto
+one. All three dialects hand their data to the one `findBoundaryConfigViolations`
+function above, through the shared `policyFrom` tail — never a second copy of
+what a constraint row or an option may hold. A native workspace's
+`lattice.json` accepts a fourth spelling for the same field: the policy
+inline, as an object rather than a filename (`src/providers/native/model.mjs`),
+validated by that same function before `cli.mjs`'s native branch ever reads it.
 
-All three faces read both file dialects. `src/lsp/boundary-config.mjs`
-dispatches on extension a second time rather than calling
-`loadBoundaryConfigFile` — it needs the `.mjs`/`.js` arm's `import()` to carry
-a revision the module cache would otherwise ignore across edits, which
-`loadBoundaryConfigFile` has no reason to do for a process that loads a config
-once and exits — but shares the same `policyKeyViolations`/`policyFrom`
-validators, so a `.json` `boundaryConfig` reaches the identical verdict from
-the language server as it does from `cli.mjs` and the Nx hook. Only the third
-spelling stays out of reach there: `src/lsp/server.mjs`'s `readWorkspaceOptions`
-refuses to start over a native root whose `boundaryConfig` is the inline-object
-form, loudly, because this server only ever watches and re-reads a policy
-_file_ — `../../docs/usage/policy-file.md`'s "An inline policy, for
-`lattice.json`" names that limitation on the consumer-facing side.
+Not every face reads every dialect. `src/lsp/boundary-config.mjs` dispatches
+basename-then-extension a second time rather than calling
+`loadBoundaryConfigFile` — for the `.mjs`/`.js` and `.json` dialects it does
+read, it needs the `.mjs`/`.js` arm's `import()` to carry a revision the
+module cache would otherwise ignore across edits, which `loadBoundaryConfigFile`
+has no reason to do for a process that loads a config once and exits — but it
+shares the same `policyKeyViolations`/`policyFrom` validators, so a `.json`
+`boundaryConfig` reaches the identical verdict from the language server as it
+does from `cli.mjs` and the Nx hook. Two spellings stay out of its reach: the
+ESLint flat-config dialect is refused by the same basename check, by name,
+before any `import()` runs — this server was not built against either of that
+dialect's two mechanisms (`@nx/eslint-plugin` resolution, revision-suffixed
+import), and reusing it without working through both would be a guess dressed
+as support; and `src/lsp/server.mjs`'s `readWorkspaceOptions` refuses to start
+over a native root whose `boundaryConfig` is the inline-object form, loudly,
+because this server only ever watches and re-reads a policy _file_ —
+`../../docs/usage/policy-file.md`'s "An inline policy, for `lattice.json`"
+names that limitation on the consumer-facing side, and its ESLint-dialect
+section names the language-server gap on the other.
 
 ## What is a stub, and how each one says so
 

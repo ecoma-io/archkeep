@@ -64,6 +64,18 @@ const SHIPPED_PACKAGES = new Map([
       "resolve raises rather than falling back to JSON.parse, which would quietly restore the " +
       "blind spot it was added to end",
   ],
+  [
+    "@nx/eslint-plugin",
+    "the ESLint boundaryConfig dialect (`../eslint-config.mjs`) reads enforce-module-boundaries' " +
+      "own unstated option defaults off the workspace's own installed copy of the plugin, so a " +
+      "workspace naming an eslint.config.* as its boundaryConfig does not also need a second, " +
+      "hand-kept table of the same defaults. Resolved lazily via createRequire anchored at the " +
+      "workspace's own ESLint config path, never at this package's own location, and never " +
+      "loaded at all in a workspace that never names this dialect — the same lazy-and-optional " +
+      "shape `vue/compiler-sfc` and `nx/src/utils/json.js` already have above, for the same " +
+      "reason: a missing peer here must not break Go, Rust or Python analysis in a workspace " +
+      "with no ESLint at all",
+  ],
 ]);
 
 /**

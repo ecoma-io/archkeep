@@ -9,6 +9,11 @@ import { afterAll, describe, expect, it } from "vitest";
 import { check, EXIT, parseCheckArgs, runCli } from "../cli.mjs";
 
 const CLI = fileURLToPath(new URL("../cli.mjs", import.meta.url));
+// This package's own directory — the one ancestor whose `node_modules` a
+// `mkdtemp` fixture can walk up to and actually reach a real, hoisted
+// `@nx/eslint-plugin` install. Only used by the ESLint boundaryConfig dialect
+// fixture below; every other fixture in this file needs no such plugin.
+const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 
 /** Runs the real executable, the way a shell, a hook, or CI would. */
 const run = (args) => spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8" });
@@ -1664,6 +1669,68 @@ describe("the exit contract", () => {
     const streams = { ...env(), listFiles: () => [...files, "libs/domain/absent.go"] };
     expect(await runCli(["check"], streams)).toBe(EXIT.violations);
     expect(streams.lines.out.join("\n")).toContain("could not be analyzed at all");
+  });
+});
+
+describe("surfacing an ESLint boundaryConfig dialect's note on the coverage line (S2)", () => {
+  // A `mkdtemp` directory INSIDE this package, not under the OS tmpdir — the
+  // same reason `eslint-config.integration.test.mjs`'s `fixtureRoot()` picks
+  // its location: `@nx/eslint-plugin` resolves by walking a file's own
+  // ancestor directories, and only an ancestor of this package's own
+  // `node_modules` reaches this workspace's real, hoisted install.
+  const eslintRoot = mkdtempSync(join(packageRoot, ".cli-eslint-config-fixture-"));
+  afterAll(() => rmSync(eslintRoot, { recursive: true, force: true }));
+
+  const writeEslint = (relativePath, text) => {
+    mkdirSync(join(eslintRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(eslintRoot, relativePath), text);
+  };
+
+  writeEslint("nx.json", "{}\n");
+  // The canonical `nx g @nx/eslint` shape (B1): every glob a bare
+  // source-extension pattern, no directory component — accepted tree-wide,
+  // with a note this test exists to see rendered.
+  writeEslint(
+    "eslint.config.mjs",
+    `export default [
+  {
+    files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+    rules: {
+      "@nx/enforce-module-boundaries": [
+        "error",
+        { depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }] },
+      ],
+    },
+  },
+];
+`,
+  );
+  writeEslint("libs/store/go.mod", "module example.com/store\n\ngo 1.24\n");
+  writeEslint("libs/store/store.go", "package store\n");
+
+  const eslintContext = {
+    cwd: eslintRoot,
+    readGraph: () => ({
+      nodes: {
+        store: { name: "store", type: "lib", data: { root: "libs/store", tags: ["layer:domain"] } },
+      },
+      dependencies: { store: [] },
+    }),
+    listFiles: () => ["nx.json", "eslint.config.mjs", "libs/store/go.mod", "libs/store/store.go"],
+  };
+
+  it("renders the note on the report's coverage line, next to what was inspected", async () => {
+    const { report, violations } = await check(
+      { format: "text", config: join(eslintRoot, "eslint.config.mjs"), paths: [] },
+      eslintContext,
+    );
+    expect(violations).toBe(0);
+    // The claim of no violations must sit beside the coverage sentence, and
+    // the coverage sentence must carry the note — a note computed and never
+    // shown would be the silent direction with extra steps.
+    expect(report).toContain("✔ no boundary violations");
+    expect(report).toContain("scopes @nx/enforce-module-boundaries under files");
+    expect(report).toContain("applied the table tree-wide");
   });
 });
 

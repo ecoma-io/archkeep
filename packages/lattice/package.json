@@ -43,11 +43,15 @@
     "smol-toml": "1.7.1"
   },
   "peerDependencies": {
+    "@nx/eslint-plugin": ">=21",
     "nx": ">=21",
     "typescript": ">=5 <7",
     "vue": ">=3"
   },
   "peerDependenciesMeta": {
+    "@nx/eslint-plugin": {
+      "optional": true
+    },
     "nx": {
       "optional": true
     },

@@ -20,12 +20,30 @@
  * moment it is called, with no module cache in the way — so `revision` is
  * accepted for both dialects (one entry point, one signature) but only spent
  * on the one that needs it.
+ *
+ * A THIRD dialect exists — `../config.mjs`'s ESLint flat-config reader
+ * (`../eslint-config.mjs`), which the CLI and Nx-plugin faces both read
+ * (`docs/usage/policy-file.md`) — and this server does not read it yet. That
+ * reader resolves the workspace's own installed `@nx/eslint-plugin` and has
+ * no notion of a revisioned `import()` to defeat this process's module cache
+ * across edits; wiring both mechanisms together belongs to the milestone that
+ * actually adds live ESLint-dialect support to the editor, not to this one.
+ * Until then, an `eslint.config.*` or legacy `.eslintrc*` `boundaryConfig` is
+ * refused BY NAME below — on basename, before the extension dispatch ever
+ * runs — rather than reaching `readModulePolicy`'s bare `import()` and
+ * failing on an unrelated "not a module object" a reader could not connect
+ * back to "this is an ESLint config".
  */
 import { readFile as readFileFromDisk } from "node:fs/promises";
-import { extname } from "node:path";
+import { basename, extname } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { policyFrom, policyKeyViolations } from "../config.mjs";
+import {
+  ESLINT_FLAT_CONFIG_BASENAME,
+  LEGACY_ESLINTRC_BASENAME,
+  policyFrom,
+  policyKeyViolations,
+} from "../config.mjs";
 
 /**
  * Loads and validates the `.mjs`/`.js` dialect through a revisioned `import()`
@@ -81,17 +99,25 @@ async function readJsonPolicy(path, readFile) {
 /**
  * Loads and validates the boundary config at `workspaceRoot`.
  *
- * Dispatches on the path's extension exactly as `../config.mjs`'s
- * `loadBoundaryConfigFile` does — `.mjs`/`.js` through `readModulePolicy`,
- * `.json` through `readJsonPolicy`, anything else refused by name, in a
- * message that does not contain the words "cannot load": a `boundaryConfig`
- * misspelt to a `.yaml` or `.toml` extension is a naming mistake, not a
- * missing or unreadable file, and the two must read as different problems.
- * This server used to only ever recognise the `.mjs`/`.js` spelling — a `.json`
+ * Basename is tested FIRST, exactly the same two patterns and the same order
+ * `../config.mjs`'s `loadBoundaryConfigFile` uses, and for the identical
+ * reason: both an `eslint.config.*` name and a legacy `.eslintrc*` name are
+ * `.mjs`/`.js`-extensioned (or extensionless) often enough that reaching the
+ * extension dispatch first would either half-work or fail on a message that
+ * never mentions ESLint. Only once neither basename matches does the
+ * extension decide between `.mjs`/`.js` (`readModulePolicy`) and `.json`
+ * (`readJsonPolicy`); anything else is refused by name, in a message that
+ * does not contain the words "cannot load" — a `boundaryConfig` misspelt to a
+ * `.yaml` or `.toml` extension is a naming mistake, not a missing or
+ * unreadable file, and the two must read as different problems. This server
+ * used to only ever recognise the `.mjs`/`.js` spelling — a `.json`
  * `boundaryConfig` reached `readModulePolicy`'s bare `import()`, which Node
  * refuses for JSON with `ERR_IMPORT_ATTRIBUTE_MISSING`, a message that names
  * an import-attributes problem rather than the missing dialect support that
  * was the real cause.
+ *
+ * The ESLint dialect itself is refused rather than read — see this module's
+ * header for why this server does not (yet) reuse `../eslint-config.mjs`.
  *
  * @param {string} workspaceRoot Absolute path of the tree being judged — never
  *   derived from this file's own location, for the reason `../config.mjs`
@@ -106,10 +132,12 @@ async function readJsonPolicy(path, readFile) {
  *   `node:fs/promises`'s `readFile`.
  * @returns {Promise<{depConstraints: object[], options: object, suppressions: object[]}>}
  *   `suppressions` is `[]` when the config declares none.
- * @throws {Error} when the file is missing, unloadable, or malformed, or names
- *   an extension neither dialect reads — the same contract
- *   `loadBoundaryConfigFile` has, for the same reason: an enforcer that
- *   starts with no rules enforces nothing and says nothing.
+ * @throws {Error} when `boundaryConfig` names the ESLint flat-config dialect
+ *   or a legacy `.eslintrc*` file (this reader does not read either yet — see
+ *   above), or — for a dialect it does read — when the file is missing,
+ *   unloadable, or malformed, or names an extension neither dialect reads —
+ *   the same contract `loadBoundaryConfigFile` has, for the same reason: an
+ *   enforcer that starts with no rules enforces nothing and says nothing.
  */
 export async function readBoundaryConfig(
   workspaceRoot,
@@ -118,6 +146,16 @@ export async function readBoundaryConfig(
   { readFile = readFileFromDisk } = {},
 ) {
   const path = `${workspaceRoot.replace(/\/$/, "")}/${boundaryConfig}`;
+  const name = basename(path);
+  if (ESLINT_FLAT_CONFIG_BASENAME.test(name) || LEGACY_ESLINTRC_BASENAME.test(name)) {
+    throw new Error(
+      `lattice: ${path} names an ESLint config (${name}) as boundaryConfig — the language ` +
+        "server reads only the .mjs/.js and .json policy-file dialects for now, not ESLint's " +
+        "flat-config dialect the CLI and Nx-plugin faces also read " +
+        "(../../../../docs/usage/policy-file.md). Point boundaryConfig at an .mjs, .js, or .json " +
+        "boundary-law file to use it from the editor.",
+    );
+  }
   const extension = extname(path);
   if (extension === ".mjs" || extension === ".js") return readModulePolicy(path, revision);
   if (extension === ".json") return readJsonPolicy(path, readFile);

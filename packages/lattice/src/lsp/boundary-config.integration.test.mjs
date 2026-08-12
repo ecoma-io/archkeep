@@ -111,6 +111,28 @@ describe("reading a boundary config that outlives the process reading it", () =>
       rmSync(empty, { recursive: true, force: true });
     }
   });
+
+  it("refuses an ESLint flat-config boundaryConfig by name, before ever importing it", async () => {
+    // `../eslint-config.mjs` reads this dialect for the CLI and Nx-plugin
+    // faces, but this reader was not built against either of its two
+    // mechanisms (`@nx/eslint-plugin` resolution, revision-suffixed import) —
+    // see this module's header. A workspace naming `eslint.config.mjs` here
+    // must get a named refusal, not the misleading "not a module object" that
+    // importing the flat-config array as a plain module would otherwise throw.
+    writeFileSync(join(root, "eslint.config.mjs"), "export default [];", "utf8");
+
+    await expect(readBoundaryConfig(root, 0, "eslint.config.mjs")).rejects.toThrow(
+      /names an ESLint config .*eslint\.config\.mjs.* as boundaryConfig.*policy-file\.md/su,
+    );
+  });
+
+  it("refuses a legacy .eslintrc boundaryConfig by name, same as the ESLint flat-config dialect", async () => {
+    writeFileSync(join(root, ".eslintrc.json"), "{}", "utf8");
+
+    await expect(readBoundaryConfig(root, 0, ".eslintrc.json")).rejects.toThrow(
+      /names an ESLint config .*\.eslintrc\.json.* as boundaryConfig/su,
+    );
+  });
 });
 
 describe("the .json dialect, which this server used to be unable to load at all", () => {
