@@ -201,4 +201,22 @@ describe("reading the project graph", () => {
       /^lattice: nx is not installed/,
     );
   });
+
+  it("lets a resolver failure that is not MODULE_NOT_FOUND surface as itself", () => {
+    // An installed nx whose `exports` map stopped exposing `./package.json`
+    // fails resolution with a different code. Calling that "nx is not
+    // installed" would send the reader to install a package they already
+    // have — the wrapper claims only the absent-package case.
+    const resolveNx = () => {
+      throw Object.assign(new Error("Package subpath './package.json' is not defined by exports"), {
+        code: "ERR_PACKAGE_PATH_NOT_EXPORTED",
+      });
+    };
+    const run = () => {
+      throw new Error("run should not have been called — nx resolution must fail first");
+    };
+    expect(() => readProjectGraph(root, { run, resolveNx })).toThrow(
+      /^Package subpath '\.\/package\.json' is not defined by exports/,
+    );
+  });
 });

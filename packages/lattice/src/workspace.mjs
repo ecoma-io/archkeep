@@ -175,6 +175,11 @@ function nxCli({ resolveNx = () => require.resolve("nx/package.json") } = {}) {
   try {
     manifest = resolveNx();
   } catch (cause) {
+    // Only an absent package earns the "not installed" story. Any other
+    // resolver failure — say, an installed nx whose `exports` stopped exposing
+    // `./package.json` — is a different fact, and renaming it here would send
+    // the reader to install a package they already have.
+    if (/** @type {{code?: string}} */ (cause)?.code !== "MODULE_NOT_FOUND") throw cause;
     throw new Error(
       "lattice: nx is not installed — `nx` is an optional peer dependency, needed only for " +
         "`lattice check`'s project-graph discovery (`nx graph`). Install it in this workspace, " +

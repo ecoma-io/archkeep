@@ -110,11 +110,12 @@ describe("readPluginOptions", () => {
   });
 
   it("defaults on the bare engine specifier, since that entry never loaded a plugin", () => {
-    // `@ecoma-io/lattice` (no `/nx`) resolves to the engine entry, which
-    // exports neither `name` nor `createDependencies` — Nx would not have run
-    // this plugin at all. Matching it here would read options for a plugin
-    // that was never registered, which is a different silent failure than the
-    // one the unknown-key check refuses.
+    // `@ecoma-io/lattice` (no `/nx`) resolves to the engine entry, whose
+    // `createDependencies` only throws (`index.mjs`) — Nx loads it and fails
+    // loudly at the first graph computation, so this plugin never ran.
+    // Matching it here would read options for a plugin that was never
+    // registered, which is a different silent failure than the one the
+    // unknown-key check refuses.
     expect(
       readPluginOptions(
         "/w",
