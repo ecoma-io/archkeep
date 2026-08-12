@@ -18,7 +18,7 @@ that a workspace running the native path has no reason to install.
 
 ## Declared limits
 
-Five things this provider does not attempt, each because reaching further would
+Six things this provider does not attempt, each because reaching further would
 either duplicate a fact this package derives elsewhere or answer a question
 nobody asked it:
 
@@ -51,6 +51,23 @@ ls-files`; a tree with no git repository has no file list to discover
    can declare or infer any string as a tag; whether `layer:adapter` is a tag
    this workspace's boundary config actually constrains is a `module-boundaries.config.mjs`
    question, judged by `../../rules/`, never by this provider.
+6. **No tag is ever inferred from `package.json`.** Nx's own built-in
+   js/package-json plugin synthesises `npm:public`/`npm:private` from a
+   directory's `package.json` `private` field the moment that file exists,
+   with no opt-in — this provider does not replicate that inference, by
+   design: `discover.mjs` reads a `package.json` only for its `name`, never
+   its `private` field, so a native tree gets no tag from `package.json` it did
+   not declare or that a `projectRules` row did not add explicitly. The silent
+   direction this refusal creates: a workspace migrating from Nx to
+   `lattice.json`, carrying `depConstraints` rows keyed on `npm:public` or
+   `npm:private`, will see those constraints stop matching anything the moment
+   the tree drops `nx.json` — not because the projects changed, but because
+   the tag that used to appear automatically no longer does. The fix is one
+   line per affected project: add the matching tag to that project's
+   `projects.declared` row or to a `projectRules` row that matches it, the
+   same way `differential.fixtures.mjs`'s `composite` fixture states
+   `npm:private` on `pkgnamed` explicitly rather than relying on inference
+   that does not happen here.
 
 ## Two failure classes, both loud
 
@@ -79,6 +96,51 @@ resolve this repository's own `node_modules` for the Nx side of that
 comparison. Neither is what a real consumer does: `pnpm pack`, `pnpm install`
 the tarball into a workspace this repository never built, and run the bin
 entries as installed.
+
+`differential.integration.test.mjs`'s Oracle 1 covers seven axes across three
+fixture pairs, not one pair per axis — the cost driver is the real `nx graph
+--file=` spawn, so the axes are packed to hold the file to three spawns total.
+The shared machinery it drives — the fixture builders, `diffGraphs`, `LEDGER`,
+and the breach checks — lives in `./differential.fixtures.mjs`, a plain module
+with no `vitest` import, so a future differential can reuse it without running
+this suite's own cases as a side effect of the import.
+
+`simple` (unchanged) stays the minimal, single-violation pair a failure is
+diagnosable from without reading a diff row. `composite` packs six
+identity/topology axes into one tree — name precedence (a declared name, a
+`package.json` name, and a bare `basename(root)` fallback), project type (the
+`-e2e` suffix rule), the workspace root itself as a project (`root: ""`), tag
+union across all THREE sources at once on one project (a declared row, a
+`projectRules` row, and its own `project.json`, all on `parent`), implicit
+dependencies (a literal project name spelled on a declared row, a literal name
+spelled in `project.json`, and a `tag:`-pattern entry), and a project nested
+inside another project's own directory — and asserts each axis by name via
+`diffGraphs`, a per-node/per-edge/per-verdict comparison, rather than one
+`deepEqual` over two whole graphs. `layout` isolates `workspaceLayout` alone,
+because it is workspace-global rather than per-project and folding it into
+`composite` would move every other axis's expected shape at once; it is also
+the one pair the two providers are expected to disagree on; `readProjectGraph`
+in `../nx.mjs` returns `nx graph --file=`'s output verbatim, which carries no
+`workspaceLayout` at all (that function's own header), so the Nx side always
+falls back to the rule engine's default layout while the native side reads
+`lattice.json`'s own `workspaceLayout` field — a real, ledgered gap
+(https://github.com/ecoma-io/lattice/issues/31), not a fixture bug, and the
+test asserts the ledger explains exactly that one difference and nothing else.
+
+Only ONE direction is ledgerable, and it is enforced structurally rather than
+by convention: a `LedgerRow` now carries a `direction` field
+(`differential.fixtures.mjs`'s `LEDGER_DIRECTIONS`), and its only member is
+`"native-only"` — native reporting something Nx does not. `classifyDifferences`
+throws, unconditionally, on any verdict-count difference where Nx's count
+exceeds native's, before it ever checks whether a `LEDGER` row matches that
+difference's subject and field — no row, however its `reason` is worded, gets
+a vote on that direction. `emptyVerdictBreaches` catches the aggregate shape of
+the same failure (an engine reporting zero violations on a pair built to
+contain one) and `perMessageBreaches` catches it per `messageId` even when
+neither side's total is literally zero (`{nx: 3, native: 1}` on one rule is a
+breach exactly as much as `{nx: 1, native: 0}` is); both take no `ledger`
+parameter at all, so the suppression is not just untested, it has nowhere to be
+written.
 
 `../../../../../scripts/verify-package.mjs` closes that gap for both providers,
 not only Nx. It packs the real tarball once and installs it into TWO throwaway
