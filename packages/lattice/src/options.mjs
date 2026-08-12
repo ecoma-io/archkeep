@@ -304,6 +304,39 @@ export function requireCompleteWorkspaceLayout(declared) {
   );
 }
 
+/**
+ * Whether `workspaceRoot`'s `nx.json` registers THIS plugin — the other half
+ * of the unregistered-plugin gap `./workspace.mjs`'s `polyglotManifests`
+ * names the manifests for. A workspace can carry a tracked `go.mod` and never
+ * have told Nx to look, and that tree's `nx affected` under-selects with no
+ * warning at all — measured, the same silence `AGENTS.md`'s empty-result
+ * invariant refuses. This function only answers the yes/no; it is exported
+ * and tested on its own, and it is not currently consulted by `check`'s
+ * refusal logic — a later caller wires the two facts together.
+ *
+ * Shares `readPluginOptions`'s reader convention deliberately: `readFile`
+ * takes an absolute path and answers `null` for a file that is not there, the
+ * same default as that function, so a caller that already has one reader for
+ * this workspace's `nx.json` uses it for both calls.
+ *
+ * @param {string} workspaceRoot Absolute path of the tree being judged.
+ * @param {{readFile?: (path: string) => string|null}} [io]
+ * @returns {boolean} `false` for no `nx.json`, no `plugins` array, or no
+ *   entry naming this plugin — the same three no-registration states
+ *   `readPluginOptions` treats as "use the defaults". `true` for either form
+ *   `namesThisPlugin` accepts: a bare string, or `{plugin, options}`.
+ * @throws {Error} when `nx.json` exists but cannot be parsed — the same
+ *   posture as `readPluginOptions`: a tool that could not read its own
+ *   configuration must not answer as though it had.
+ */
+export function pluginIsRegistered(workspaceRoot, { readFile = readFileOrNull } = {}) {
+  const nxJson = readNxJsonOrNull(workspaceRoot, readFile);
+  if (nxJson === null) return false;
+
+  const plugins = Array.isArray(nxJson?.plugins) ? nxJson.plugins : [];
+  return plugins.some(namesThisPlugin);
+}
+
 /** A file's contents, or `null` when it does not exist or cannot be read. */
 function readFileOrNull(path) {
   try {

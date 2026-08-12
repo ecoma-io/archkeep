@@ -19,6 +19,18 @@ payload:
   non-empty `message.text`, and a repository-relative `uri` with a 1-based
   `startLine`/`startColumn`.
 
+`json.mjs` is not a formatter in that sense — it does not turn violations into
+output. `jsonEnvelope` wraps whatever result object a command already computed
+(`../../cli.mjs`'s `check` builds its own `result.violations`/`result.goWork`/
+`result.tsconfigPaths`) in one versioned envelope every `--format json`
+consumer shares, and enforces in code the three consistency rules
+`docs/usage/json-output.md` documents in prose: `status: "ok"` never rides
+incomplete coverage, `status` and `exitCode` never disagree, and
+`coverage.complete` never disagrees with whether `coverage.notAnalyzed` is
+empty. It throws rather than degrade on any of the three, because a mismatch
+there is a bug in the command that built the envelope, not a fact about the
+workspace being judged.
+
 ## Where the LSP conversion lives, and why not here
 
 Not here. Language Server Protocol positions are 0-based and the analysis
