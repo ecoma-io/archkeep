@@ -499,3 +499,43 @@ export function analyzeWorkspace(workspace, files, { analyze = analyzeFile } = {
   }
   return { imports, failures, analyzed: analyzedFiles.length, analyzedFiles };
 }
+
+/** The three polyglot manifests `polyglotManifests` looks for. */
+const POLYGLOT_MANIFEST_NAMES = ["go.mod", "Cargo.toml", "pyproject.toml"];
+
+/**
+ * Tracked Go, Rust and Python manifests that sit under some project's root —
+ * the fact the unregistered-Nx-plugin gap turns on
+ * (`./commands/context.mjs`'s `pluginGap.manifests` is where a caller reads
+ * it, and `./options.mjs`'s `pluginIsRegistered` is the other half of that
+ * gap). A workspace running under Nx draws no edge for any of these three
+ * languages unless this plugin is registered in `nx.json` — Nx parses only
+ * TypeScript imports natively (`../../../AGENTS.md`, "for the other three both
+ * go quiet") — so a tracked manifest with no registered plugin is exactly the
+ * silent hole that invariant refuses. This function only names the manifests;
+ * it does not decide whether the plugin is registered, and it is not
+ * currently consulted by `check`'s own refusal logic — it is exported and
+ * tested on its own so a later caller can wire it in without redoing the
+ * matching.
+ *
+ * Root matching mirrors `projectOwning`'s longest-prefix attribution of a
+ * source file: a project rooted at the workspace root (`root: ""` or `"."`)
+ * matches every tracked file, and a project rooted elsewhere matches only its
+ * own directory or a path beneath it — never a sibling that merely shares a
+ * prefix (`apps/foo-bar/go.mod` does not match a project rooted at
+ * `apps/foo`).
+ *
+ * @param {string[]} tracked Every tracked file, workspace-relative.
+ * @param {{name: string, root: string}[]} projects
+ * @returns {string[]} The matching manifest paths, in `tracked`'s order.
+ */
+export function polyglotManifests(tracked, projects) {
+  const roots = projects.map((project) => project.root);
+  return tracked.filter((file) => {
+    const base = file.slice(file.lastIndexOf("/") + 1);
+    if (!POLYGLOT_MANIFEST_NAMES.includes(base)) return false;
+    return roots.some(
+      (root) => root === "" || root === "." || file === root || file.startsWith(`${root}/`),
+    );
+  });
+}

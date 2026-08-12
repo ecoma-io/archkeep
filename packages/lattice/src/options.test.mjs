@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_OPTIONS,
+  pluginIsRegistered,
   readPluginOptions,
   readWorkspaceLayout,
   requireCompleteWorkspaceLayout,
@@ -259,5 +260,48 @@ describe("requireCompleteWorkspaceLayout", () => {
     expect(() => requireCompleteWorkspaceLayout({ appsDir: "applications" })).toThrow(
       /workspaceLayout declares appsDir but is missing libsDir/,
     );
+  });
+});
+
+describe("pluginIsRegistered", () => {
+  it("is true for the bare-string form", () => {
+    expect(
+      pluginIsRegistered("/w", treeWith({ "/w/nx.json": '{"plugins":["@ecoma-io/lattice/nx"]}' })),
+    ).toBe(true);
+  });
+
+  it("is true for the {plugin, options} object form", () => {
+    const nxJson = JSON.stringify({
+      plugins: [{ plugin: "@ecoma-io/lattice/nx", options: { tsConfig: "tsconfig.root.json" } }],
+    });
+    expect(pluginIsRegistered("/w", treeWith({ "/w/nx.json": nxJson }))).toBe(true);
+  });
+
+  it("is true for an in-repo path ending '/nx', with or without the extension", () => {
+    for (const specifier of ["./packages/lattice/nx.mjs", "./packages/lattice/nx"]) {
+      const nxJson = JSON.stringify({ plugins: [specifier] });
+      expect(pluginIsRegistered("/w", treeWith({ "/w/nx.json": nxJson })), specifier).toBe(true);
+    }
+  });
+
+  it("is false on the bare engine specifier — that entry never loaded a plugin", () => {
+    // The silent-direction case this function exists to catch: a workspace
+    // that typed "@ecoma-io/lattice" (missing "/nx") registered nothing, and
+    // `nx affected` under-selects Go/Rust/Python with no warning at all. A
+    // weaker test that only checked the true cases would pass just as well if
+    // this predicate matched every string containing "lattice".
+    const nxJson = JSON.stringify({ plugins: ["@ecoma-io/lattice"] });
+    expect(pluginIsRegistered("/w", treeWith({ "/w/nx.json": nxJson }))).toBe(false);
+  });
+
+  it("is false when nx.json has no plugins key, or no nx.json at all", () => {
+    expect(pluginIsRegistered("/w", treeWith({ "/w/nx.json": "{}" }))).toBe(false);
+    expect(pluginIsRegistered("/w", treeWith({}))).toBe(false);
+  });
+
+  it("throws on an nx.json neither parser can read — the same posture as readPluginOptions", () => {
+    expect(() =>
+      pluginIsRegistered("/w", treeWith({ "/w/nx.json": "{ this is not json" })),
+    ).toThrow(/cannot read \/w\/nx\.json/);
   });
 });

@@ -168,6 +168,71 @@ describe("checking a real tree", () => {
     });
   });
 
+  it("renders the same verdict in the JSON envelope, with goWork and tsconfigPaths named null", async () => {
+    // The silent-direction pair for a workspace with neither manifest: `check`
+    // must say so by naming absence explicitly (`null`), never by omitting
+    // the field or defaulting it to an empty "checked" object a reader could
+    // mistake for "checked, and clean". The checked-and-clean half of each
+    // pair lives beside its own manifest's dedicated fixture, further down
+    // this file.
+    const { report, violations } = await check(
+      { format: "json", config: null, paths: [] },
+      context,
+    );
+    const envelope = JSON.parse(report);
+    expect(violations).toBe(1);
+    expect(envelope.status).toBe("findings");
+    expect(envelope.exitCode).toBe(1);
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.coverage.imports).toBeGreaterThan(0);
+    expect(envelope.result.violations).toHaveLength(1);
+    expect(envelope.result.violations[0]).toMatchObject({
+      sourceFile: "libs/domain/doc.go",
+      line: 5,
+      column: 2,
+      messageId: "onlyTagsConstraintViolation",
+    });
+    expect(envelope.result.goWork).toBeNull();
+    expect(envelope.result.tsconfigPaths).toBeNull();
+  });
+
+  it("renders the exact byte sequence for the violating fixture — a golden pin against silent format drift", async () => {
+    // Every other assertion in this describe block checks a substring; this
+    // one checks the whole thing, so a change that reorders a line or drops a
+    // space between two of them — invisible to `toContain` — still goes red.
+    const { report } = await check({ format: "text", config: null, paths: [] }, context);
+    expect(report).toBe(
+      [
+        "libs/domain/doc.go:5:2  onlyTagsConstraintViolation",
+        '    A project tagged with "layer:domain" can only depend on libs tagged with "layer:domain"',
+        '  import      "example.com/adapter" (static)  domain → adapter',
+        "  constraint  sourceTag layer:domain → onlyDependOnLibsWithTags [layer:domain]",
+        "",
+        "✖ 1 boundary violation in 1 file (1 import in 2 files across 2 projects)",
+      ].join("\n"),
+    );
+  });
+
+  it("agrees on the same verdict across text, sarif and json — one computation, three renderings", async () => {
+    const formats = ["text", "sarif", "json"];
+    const results = await Promise.all(
+      formats.map((format) => check({ format, config: null, paths: [] }, context)),
+    );
+    for (const result of results) {
+      expect(result.violations).toBe(1);
+      expect(result.goWorkDrift).toBe(0);
+      expect(result.tsconfigPathsDead).toBe(0);
+      expect(result.unchecked).toBe(0);
+    }
+    const streamsPerFormat = formats.map(() => env());
+    const exitCodes = await Promise.all(
+      formats.map((format, index) =>
+        runCli(["check", "--format", format], streamsPerFormat[index]),
+      ),
+    );
+    expect(exitCodes).toEqual([EXIT.violations, EXIT.violations, EXIT.violations]);
+  });
+
   it("reads the boundary law from --config, whose location is not the tree being judged", async () => {
     // The law's location and the tree being judged are two facts. Pointing at a
     // table that permits the import must clear it without moving which
@@ -187,6 +252,28 @@ describe("checking a real tree", () => {
     expect(violations).toBe(0);
     expect(analyzed).toBe(2);
     expect(report).toContain("✔ no boundary violations");
+  });
+
+  it("renders a clean JSON envelope, still counting the now-permitted import", async () => {
+    // The other half of the pair above: `status: "ok"` requires more than
+    // zero violations — it requires the coverage that earned it. A clean
+    // envelope over zero analyzed imports would be indistinguishable from one
+    // that skipped analysis entirely.
+    const permissive = join(root, "permissive.config.mjs");
+    writeFileSync(
+      permissive,
+      readFileSync(join(root, "module-boundaries.config.mjs"), "utf8").replace(
+        '{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }',
+        '{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] }',
+      ),
+    );
+    const { report } = await check({ format: "json", config: permissive, paths: [] }, context);
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("ok");
+    expect(envelope.exitCode).toBe(0);
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.coverage.imports).toBeGreaterThan(0);
+    expect(envelope.result.violations).toEqual([]);
   });
 
   it("scopes to the paths it is given, and finds nothing in the clean half", async () => {
@@ -431,6 +518,21 @@ export const moduleBoundaryOptions = {
     );
   });
 
+  it("carries the clean agreement into the JSON envelope as goWork.checked with no findings", async () => {
+    // The checked-and-clean half of the null/checked pair: a workspace WITH a
+    // go.work that agrees with the graph must say `checked: true, findings:
+    // []` — never `null`, which is reserved for "no go.work at all"
+    // (`checking a real tree` above pins that half).
+    writeWork("go.work", "go 1.24\n\nuse (\n\t./libs/store\n\t./libs/pricing\n)\n");
+    const { report, goWorkDrift } = await check(
+      { format: "json", config: null, paths: [] },
+      workContext,
+    );
+    expect(goWorkDrift).toBe(0);
+    const envelope = JSON.parse(report);
+    expect(envelope.result.goWork).toEqual({ checked: true, findings: [] });
+  });
+
   it("exits 3 on a go.work it cannot parse — a malformed file must never read as 'no drift'", async () => {
     // The silent direction, end to end: an unclosed block truncates the use
     // list, and a parser that shrugged would hand the comparison an empty one,
@@ -568,6 +670,21 @@ export const moduleBoundaryOptions = {
     expect(streams.lines.out.join("\n")).toContain(
       "✔ no dead tsconfig path aliases (1 alias judged in tsconfig.base.json)",
     );
+  });
+
+  it("carries the alive alias into the JSON envelope as tsconfigPaths.checked with no findings", async () => {
+    // The checked-and-clean half of the null/checked pair: a workspace with a
+    // `paths` table whose every alias resolves must say `checked: true,
+    // findings: []` — never `null`, which is reserved for "no `paths` table
+    // at all" (`checking a real tree` above pins that half).
+    writeAlias("tsconfig.base.json", tsconfig({ paths: { "@shop/store/*": ["libs/store/*"] } }));
+    const { report, tsconfigPathsDead } = await check(
+      { format: "json", config: null, paths: [] },
+      aliasContext,
+    );
+    expect(tsconfigPathsDead).toBe(0);
+    const envelope = JSON.parse(report);
+    expect(envelope.result.tsconfigPaths).toEqual({ checked: true, findings: [] });
   });
 
   it("says nothing when the tsconfig declares no paths — a table that does not exist makes no claim", async () => {
@@ -1714,6 +1831,23 @@ describe("the exit contract", () => {
     expect(bare.stderr).toContain("no command given");
   });
 
+  it("refuses a command name inherited from Object.prototype the same way it refuses any other unknown command", () => {
+    // `COMMANDS[commandName]` with no own-property guard would answer
+    // `toString`/`__proto__`/`constructor` from `Object.prototype` instead of
+    // `undefined`, pass the `!command` check, and crash on `command.run` —
+    // a TypeError and exit 1, not the usage error every other unregistered
+    // command word gets. Exit code has to be checked as IS 2, not merely
+    // "not 0", or a regression back to the TypeError's exit 1 would slip
+    // through a looser assertion.
+    const toStringResult = run(["toString"]);
+    expect(toStringResult.status).toBe(EXIT.usage);
+    expect(toStringResult.stderr).toContain("unknown command 'toString'");
+
+    const protoResult = run(["__proto__"]);
+    expect(protoResult.status).toBe(EXIT.usage);
+    expect(protoResult.stderr).toContain("unknown command '__proto__'");
+  });
+
   it("rejects a mistyped option instead of reading it as a path that selects nothing", () => {
     // `--fromat sarif` read as two paths would select no files and report a
     // clean tree: a green run that inspected nothing.
@@ -1771,6 +1905,27 @@ describe("the exit contract", () => {
     expect(report).toContain("✔ no boundary violations");
     expect(report).toContain("1 file could not be analyzed at all");
     expect(report).toContain("libs/adapter/absent.go  could not be read");
+  });
+
+  it("reports status no-verdict in the JSON envelope over the same unreadable file, never status ok", async () => {
+    // The JSON twin of the case above: a caller branching on `status` alone
+    // must see the same refusal a caller branching on the exit code sees —
+    // `jsonEnvelope` (`src/report/json.mjs`) would throw before shipping
+    // `status: "ok"` here, but this pins the whole path end to end rather
+    // than only the throw.
+    const streams = {
+      ...env(),
+      listFiles: () => [...files, "libs/adapter/absent.go"],
+    };
+    const exitCode = await runCli(["check", "libs/adapter", "--format", "json"], streams);
+    expect(exitCode).toBe(EXIT.error);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      { file: "libs/adapter/absent.go", reason: expect.stringContaining("could not be read") },
+    ]);
   });
 
   it("still exits 1 when the tree is dirty AND a file could not be analyzed, since that verdict is certain", async () => {
@@ -1872,6 +2027,33 @@ describe("the option surface", () => {
     expect(JSON.parse(readFileSync(target, "utf8")).version).toBe("2.1.0");
     expect(streams.lines.err.join("\n")).toContain("1 violation over 2 analyzed files");
   });
+
+  it("writes --format json's envelope to --output silently, and still says on stderr what the run found", async () => {
+    const target = join(root, "boundaries.json");
+    const streams = env();
+    expect(await runCli(["check", "--format", "json", "--output", target], streams)).toBe(
+      EXIT.violations,
+    );
+    // "Silently" means stdout carries nothing — the envelope went to the
+    // file, and printing it a second time would be a second, competing
+    // rendering of the same run.
+    expect(streams.lines.out).toEqual([]);
+    const envelope = JSON.parse(readFileSync(target, "utf8"));
+    expect(envelope.status).toBe("findings");
+    expect(envelope.exitCode).toBe(1);
+    expect(streams.lines.err.join("\n")).toContain("1 violation over 2 analyzed files");
+  });
+
+  it("exits 3 when --output cannot be written, naming the path — a report that never lands must not read as success", async () => {
+    // The report exists in memory but no consumer will ever see it, which is
+    // exactly a silent success if this returned 0 or 1 instead — named as a
+    // no-verdict run, the same as every other "could not complete" condition.
+    const target = join(root, "does-not-exist", "boundaries.json");
+    const streams = env();
+    expect(await runCli(["check", "--output", target], streams)).toBe(EXIT.error);
+    expect(streams.lines.out).toEqual([]);
+    expect(streams.lines.err.join("\n")).toContain(`could not write --output '${target}'`);
+  });
 });
 
 describe("the usage message", () => {
@@ -1882,5 +2064,122 @@ describe("the usage message", () => {
     expect(result.stdout).toContain("module-boundaries.config.mjs");
     expect(result.stdout).toContain("--format text|sarif");
     expect(result.stdout).toContain("1 findings (violations, go.work drift, dead path aliases)");
+  });
+});
+
+describe("the bare-path dispatcher", () => {
+  // `lattice <path>` with no command word at all has to keep working the way
+  // it always did, now that a command word is a real option `runCli` has to
+  // resolve first. Its own describe block because the two directions —an
+  // existing path, and a word that is neither a command nor a path — are the
+  // whole point of the ordering `runCli`'s header argues.
+  it("runs check when the first argument is an existing path, with no command word at all", async () => {
+    const withCommand = env();
+    const bare = env();
+    expect(await runCli(["check", "libs/adapter"], withCommand)).toBe(EXIT.ok);
+    expect(await runCli(["libs/adapter"], bare)).toBe(EXIT.ok);
+    // Not just "both exit 0" — the same report, because the bare form is
+    // required to be indistinguishable from typing `check` explicitly.
+    expect(bare.lines.out).toEqual(withCommand.lines.out);
+  });
+
+  it("exits 2 on a first argument that is neither a registered command nor an existing path", async () => {
+    const streams = env();
+    expect(await runCli(["notacommand"], streams)).toBe(EXIT.usage);
+    expect(streams.lines.err.join("\n")).toContain("unknown command 'notacommand'");
+    // The distinct failure mode this is not: read as a path, it would select
+    // no files and report a clean tree rather than refuse to run at all.
+    expect(streams.lines.err.join("\n")).not.toContain("outside the workspace");
+  });
+
+  it("exits 2 on an empty-string first argument, rather than reading it as the workspace root", async () => {
+    // `join(cwd, "")` is `cwd` itself, which always exists — without the
+    // `maybeCommand !== ""` guard, `lattice ""` reads as a path and runs a
+    // whole-workspace check instead of the unknown-command refusal every
+    // other non-command, non-path word gets.
+    const streams = env();
+    expect(await runCli([""], streams)).toBe(EXIT.usage);
+    expect(streams.lines.err.join("\n")).toContain("unknown command ''");
+    expect(streams.lines.err.join("\n")).not.toContain("outside the workspace");
+  });
+});
+
+describe("a Rust brace-group use, one blind spot the JSON envelope must carry too", () => {
+  // Its own fixture: none of the Go-only fixtures above exercise a second
+  // language, and the blind-spot half of `coverage` — a file that WAS
+  // analyzed, with one site whose target is not statically knowable — needs a
+  // real case to render rather than an empty array to trivially pass.
+  const rustRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-rust-blind-"));
+  afterAll(() => rmSync(rustRoot, { recursive: true, force: true }));
+
+  const writeRust = (relativePath, text) => {
+    mkdirSync(join(rustRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(rustRoot, relativePath), text);
+  };
+
+  writeRust("nx.json", "{}\n");
+  writeRust(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeRust("libs/widget/Cargo.toml", '[package]\nname = "widget"\nversion = "0.1.0"\n');
+  // A `use` opening with a brace group names no crate to resolve
+  // (`../src/analysis/rust.mjs`'s `parseRustUseSites`) — the file is
+  // analyzed, this one site is not, and that is a blind spot rather than a
+  // whole-file failure: `coverage.complete` must stay true over it.
+  writeRust("libs/widget/src/lib.rs", "use {a::b, c::d};\n");
+
+  const rustContext = {
+    cwd: rustRoot,
+    readGraph: () => ({
+      nodes: {
+        widget: {
+          name: "widget",
+          type: "lib",
+          data: { root: "libs/widget", tags: ["layer:domain"] },
+        },
+      },
+      dependencies: { widget: [] },
+    }),
+    listFiles: () => [
+      "nx.json",
+      "module-boundaries.config.mjs",
+      "libs/widget/Cargo.toml",
+      "libs/widget/src/lib.rs",
+    ],
+  };
+
+  it("names the brace-group site in coverage.blindSpots, and leaves coverage.complete true", async () => {
+    const { report, violations, unchecked } = await check(
+      { format: "json", config: null, paths: [] },
+      rustContext,
+    );
+    expect(violations).toBe(0);
+    expect(unchecked).toBe(0);
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("ok");
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.coverage.notAnalyzed).toEqual([]);
+    expect(envelope.coverage.blindSpots).toEqual([
+      {
+        file: "libs/widget/src/lib.rs",
+        line: 1,
+        column: 5,
+        reason: "'use {a::b, c::d}' opens with a brace group, so it names no crate to resolve",
+      },
+    ]);
   });
 });

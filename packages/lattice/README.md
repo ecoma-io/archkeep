@@ -102,8 +102,17 @@ developer can act on:
 ```shell
 pnpm exec lattice check
 pnpm exec lattice check --format sarif --output boundaries.sarif
+pnpm exec lattice check --format json --output boundaries.json
 pnpm exec lattice check --config boundaries.custom.mjs
 ```
+
+`--format json` wraps the same verdict `text` and `sarif` already compute in a
+versioned envelope — every field name and `schemaVersion` are a public
+contract from this release on, documented in full at
+[docs/usage/json-output.md](../../docs/usage/json-output.md). It changes no
+exit code and no byte of the other two formats; it is a third rendering of a
+verdict every format already carries, for a caller that wants to script
+against the result rather than parse a terminal report or a SARIF log.
 
 Four exit codes, and the distinction that matters is **3** against **0**:
 

@@ -22,6 +22,7 @@ import {
   declaredPackages,
   listTrackedFiles,
   packageEntryPoints,
+  polyglotManifests,
   projectIsMFERemote,
   runProcess,
   selectFiles,
@@ -557,5 +558,48 @@ describe("reading the tree's own answers", () => {
     expect(() => runProcess("definitely-not-a-program", ["--x"], process.cwd())).toThrow(
       /`definitely-not-a-program --x` failed/,
     );
+  });
+});
+
+describe("naming the polyglot manifests the unregistered-plugin gap turns on", () => {
+  const projects = [
+    { name: "gadgets", root: "libs/gadgets" },
+    { name: "widgets", root: "apps/widgets" },
+  ];
+
+  it("finds a manifest under a project's own root", () => {
+    expect(polyglotManifests(["libs/gadgets/go.mod", "libs/gadgets/main.go"], projects)).toEqual([
+      "libs/gadgets/go.mod",
+    ]);
+  });
+
+  it("returns [] for a manifest that sits outside every project root", () => {
+    // The silent-direction case: a tracked go.mod nobody's project claims must
+    // not be reported as covered — a caller wiring this into the gate reads []
+    // as "nothing to warn about", so a manifest this misses is a manifest the
+    // gate would silently clear.
+    expect(polyglotManifests(["tools/scratch/go.mod"], projects)).toEqual([]);
+  });
+
+  it("does not match a sibling directory that merely shares a prefix", () => {
+    // `apps/widgets-extra/go.mod` must not count as under `apps/widgets`.
+    expect(polyglotManifests(["apps/widgets-extra/go.mod"], projects)).toEqual([]);
+  });
+
+  it("finds Cargo.toml and pyproject.toml too, each under its own project", () => {
+    expect(
+      polyglotManifests(
+        ["libs/gadgets/Cargo.toml", "apps/widgets/pyproject.toml", "apps/widgets/README.md"],
+        projects,
+      ),
+    ).toEqual(["libs/gadgets/Cargo.toml", "apps/widgets/pyproject.toml"]);
+  });
+
+  it("matches every manifest when a project is rooted at the workspace root", () => {
+    const rootProject = [{ name: "root", root: "" }];
+    expect(polyglotManifests(["go.mod", "nested/Cargo.toml"], rootProject)).toEqual([
+      "go.mod",
+      "nested/Cargo.toml",
+    ]);
   });
 });

@@ -20,7 +20,9 @@ called out where they apply and nowhere else on this page.
 lattice check [<path>...]   Check imports against the boundary rules
 lattice --help              Show this message
 
-  --format text|sarif   Terminal report (default), or SARIF 2.1.0 for GitHub code scanning
+  --format text|sarif|json   Terminal report (default), SARIF 2.1.0 for GitHub
+                        code scanning, or the versioned JSON envelope
+                        (see "Consuming --format json" below)
   --output <file>       Write the report to a file instead of stdout
   --config <file>       Read the boundary law from here instead of
                         <workspace root>/module-boundaries.config.mjs
@@ -197,6 +199,47 @@ That last point has a consequence worth stating plainly: **the SARIF upload does
 not carry the exit-3 signal.** Code scanning will show you violations, not
 coverage loss — which is why the gate in the recipe above is the plain `check`
 step and never the upload.
+
+## Consuming `--format json`
+
+The plain `check` step above is still the gate — the exit code is what fails
+the build, exactly as everywhere else on this page. `--format json` is a third
+rendering of the same verdict `text` and SARIF already carry, for a step that
+wants to script against the result instead of scraping a report:
+
+```yaml
+- name: Check module boundaries
+  env:
+    NX_DAEMON: "false"
+  run: pnpm exec lattice check --format json --output boundaries.json
+
+- name: Post a summary from the JSON envelope
+  if: ${{ !cancelled() }}
+  run: |
+    jq -r '"\(.status): \(.result.violations | length) violation(s) over \(.coverage.analyzedFiles) files"' \
+      boundaries.json
+```
+
+Every field name and `schemaVersion` are a public contract from this release
+on — [json-output.md](json-output.md) is the full reference: every field, the
+three `status` values, and the stability promise a consumer's own parser can
+rely on. Two things worth stating here rather than only there:
+
+- **It changes no exit code.** The step above still fails the job exactly when
+  the plain-text `check` would — `--format json` never softens or hardens the
+  gate, it only adds a machine-readable rendering beside it.
+- **`status: "ok"` never rides incomplete coverage — but the envelope has to
+  exist for that promise to reach you.** A run that could not fully read the
+  tree, yet still got far enough to build one, writes `status: "no-verdict"`,
+  never `"ok"` with a caveat buried in `coverage`. A run that exits 3 before it
+  ever reaches that point — no workspace root, both markers present, a
+  malformed boundary config, `nx graph` or `git` itself failing — writes no
+  envelope at all: nothing on stdout, and under `--output` no file either,
+  which means the recipe above's `boundaries.json` is left exactly as the
+  previous run wrote it. **Branch on the exit code first, not on `status`
+  alone**, and treat "exit 3 with no parseable envelope on stdout, or a
+  `--output` file whose contents you cannot trust as fresh" as the same
+  no-verdict result `status: "no-verdict"` names when an envelope does exist.
 
 ## Running both enforcers
 

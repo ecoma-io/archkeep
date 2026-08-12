@@ -50,8 +50,11 @@ src/graph/             analysis reduced to Nx dependency records
 src/config.mjs         loads + validates the workspace boundary config
 src/workspace.mjs      which projects and files a run covers, and their analysis
 src/providers/         where the graph `evaluate()` judges comes from
+src/commands/          the preamble a CLI command shares — workspace, provider,
+                       files, graph, analysis — composed from the layers above
 src/rules/             the boundary rules — `evaluate(sites, graph, config)`
-src/report/            rendering violations as text and as SARIF
+src/report/            rendering violations as text, SARIF, and the versioned
+                       JSON envelope
 src/lsp/               the language server: lifecycle, index, diagnostics
 src/conformance/       the differential against ESLint, and this package's
                        checks on its own declarations
@@ -367,7 +370,15 @@ at the repository root. Concretely:
   strings, is the 3-class for the same reason: read as "no aliases" it would
   silence the paths check exactly where the table is most broken.
   `check` also states what it inspected — imports, files, projects — beside
-  every verdict, because "no violations" is a claim about coverage too.
+  every verdict, because "no violations" is a claim about coverage too. `check`
+  is, so far, the only command `cli.mjs`'s `COMMANDS` table holds — exit 1 is
+  its exit code alone, and every verb the table might grow later only ever
+  reads, so a future command that finds something reports it without claiming
+  the boundary-violation exit code that means specifically this.
+  `--format json` (`check` only, for now) wraps the same verdict in the
+  versioned envelope `src/report/json.mjs` builds and `docs/usage/json-output.md`
+  documents — a third rendering, changing no exit code and no byte of the text
+  or SARIF report.
 - `lsp.mjs` advertises `textDocumentSync` because it now serves it. What it
   still does not advertise is everything else: no hover, no definition, no
   incremental sync. A capability is a promise, and incremental sync in
