@@ -4,7 +4,7 @@
 // once per tree, never called twice in one process, because `@nx/devkit`
 // freezes its `workspaceRoot` at first load from `NX_WORKSPACE_ROOT_PATH` —
 // the same one-root-per-process constraint
-// `packages/nx-polyglot-graph/src/conformance/fixture.mjs` documents for the
+// `packages/lattice/src/conformance/fixture.mjs` documents for the
 // fixture suite. The parent sets that variable and the working directory
 // before this file's imports run; both are asserted below rather than trusted,
 // because a wrong root here would lint one tree against another tree's graph
@@ -31,13 +31,13 @@ import {
   annotatePackageFacts,
   createWorkspace,
   listTrackedFiles,
-} from "../packages/nx-polyglot-graph/src/workspace.mjs";
-import { evaluate } from "../packages/nx-polyglot-graph/src/rules/index.mjs";
-import { compareFile } from "../packages/nx-polyglot-graph/src/conformance/differential.mjs";
+} from "../packages/lattice/src/workspace.mjs";
+import { evaluate } from "../packages/lattice/src/rules/index.mjs";
+import { compareFile } from "../packages/lattice/src/conformance/differential.mjs";
 import {
   createUpstreamRunner,
   isUpstreamReadable,
-} from "../packages/nx-polyglot-graph/src/conformance/engines.mjs";
+} from "../packages/lattice/src/conformance/engines.mjs";
 import { extractBoundaryRule } from "./differential-real-trees.mjs";
 
 const [treeRoot, configFile, graphPath, resultPath] = process.argv.slice(2);

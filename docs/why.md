@@ -99,7 +99,7 @@ That third route has one property the other two lack: because the rules are the
 upstream rules rather than an approximation, they can be **differentially tested
 against real ESLint** on the same workspace, and the places the two disagree can
 be enumerated rather than hoped about.
-[`src/conformance/`](../packages/nx-polyglot-graph/src/conformance/README.md)
+[`src/conformance/`](../packages/lattice/src/conformance/README.md)
 is that comparison — 46 fixture workspaces, 116 probes, and a ledger of every
 known difference with the reason for each.
 

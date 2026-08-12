@@ -95,7 +95,7 @@ pnpm exec nx run-many -t lint test build typecheck
 And the tool on the tree that ships it, which is the last thing CI does:
 
 ```bash
-node packages/nx-polyglot-graph/cli.mjs check
+node packages/lattice/cli.mjs check
 ```
 
 And, last of all, the packed artifact driven from somewhere that is not this
@@ -104,7 +104,7 @@ one command worth skipping locally unless you touched the package's manifest,
 its entry points, or anything it imports:
 
 ```bash
-node scripts/verify-package.mjs packages/nx-polyglot-graph
+node scripts/verify-package.mjs packages/lattice
 ```
 
 Everything above runs where the tool's dependencies already exist, so none of it
@@ -145,12 +145,12 @@ runs only some of the targets is reported as exactly that, and it is the expecte
 answer rather than a finding:
 
 ```text
-ok   nx-polyglot-graph — lint, test, typecheck (no build)
+ok   lattice — lint, test, typecheck (no build)
 ```
 
-`nx-polyglot-graph` ships as `.mjs` and has nothing to build. Adding an empty
-`build` target to make that line read fuller is the placeholder-green the script
-exists to catch, so do not.
+`lattice` ships as `.mjs` and has nothing to build. Adding an empty `build` target
+to make that line read fuller is the placeholder-green the script exists to catch,
+so do not.
 
 It reads the list of targets out of the `nx run-many -t …` line in
 `.github/workflows/ci.yml` rather than holding a copy: CI is where "green" is
@@ -191,17 +191,15 @@ commitlint.
 `ci`, `chore`, `revert`.
 
 **Scope is optional**, and when used it names which package the change lands in:
-`graph`, `vscode`, `workspace`, `docs`, `deps`, `ci`. The first two are listed
-before their directories exist, so the commit that creates a package is not also
-the commit that has to edit `commitlint.config.mjs` to describe itself.
+`lattice`, `vscode`, `workspace`, `docs`, `deps`, `ci`.
 
 `deps` and `ci` are on that list because Renovate writes them: it opens
 `chore(deps):` and `chore(ci):` pull requests, and a scope list without them
 would fail commitlint on every dependency update.
 
 ```
-feat(graph): read go.mod requires into the project graph
-fix(graph): report a replace directive pointing outside the workspace
+feat(lattice): read go.mod requires into the project graph
+fix(lattice): report a replace directive pointing outside the workspace
 chore(deps): update dependency nx to v23.1.2
 ```
 
@@ -331,7 +329,7 @@ you will see open on `main` that nobody wrote.
 Conventional Commit subjects since the last tag and keeps one pull request open
 holding the next version and the changelog it derived. **That pull request is the
 release proposal**: merging it tags, and the tag publishes
-`@ecoma-io/nx-polyglot-graph` to npm. So the subject line you write is what
+`@ecoma-io/lattice` to npm. So the subject line you write is what
 decides the next version number — `feat:` moves the minor, `fix:` the patch, and
 a `!` or a `BREAKING CHANGE:` footer the major.
 

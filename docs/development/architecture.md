@@ -3,9 +3,9 @@
 One `check` run, end to end, and why the cuts between layers are where they are.
 
 This page owns the **flow**. What each layer is _allowed to know_ is owned by
-[`packages/nx-polyglot-graph/CLAUDE.md`](../../packages/nx-polyglot-graph/CLAUDE.md),
+[`packages/lattice/CLAUDE.md`](../../packages/lattice/CLAUDE.md),
 and the record passed between them is frozen in
-[`src/analysis/contract.md`](../../packages/nx-polyglot-graph/src/analysis/contract.md).
+[`src/analysis/contract.md`](../../packages/lattice/src/analysis/contract.md).
 Those two bind; this page explains how they fit together.
 
 ## The two halves
@@ -147,7 +147,7 @@ share one verdict, and what lets all fifteen rules be driven from fixtures with
 no workspace at all. A rule that reached for a file would become a second, weaker
 analyzer.
 
-Read [`src/rules/README.md`](../../packages/nx-polyglot-graph/src/rules/README.md)
+Read [`src/rules/README.md`](../../packages/lattice/src/rules/README.md)
 before touching anything in here. It carries the five upstream semantics a
 reimplementation gets backwards — starting with _no matching constraint is an
 error, not a pass_ — and every place this engine is deliberately stricter than
@@ -272,7 +272,7 @@ either convention would answer confidently about a workspace it had misread.
   approximations.
 - **A dependency on any sibling package**, or a third-party package outside the
   short allow-list that
-  [`src/conformance/boundary.test.mjs`](../../packages/nx-polyglot-graph/src/conformance/)
+  [`src/conformance/boundary.test.mjs`](../../packages/lattice/src/conformance/)
   holds. A consumer installs one package and gets a working tool.
 - **Any workspace's project names, areas or tag values** — this repository's
   included. Fixtures too.

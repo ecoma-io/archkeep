@@ -19,7 +19,7 @@
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 /** The package that ships the server. */
-export const SERVER_PACKAGE = "@ecoma-io/nx-polyglot-graph";
+export const SERVER_PACKAGE = "@ecoma-io/lattice";
 
 /**
  * The server entry point inside that package.

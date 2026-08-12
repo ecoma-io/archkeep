@@ -29,7 +29,7 @@ One-time install, from this repository's marketplace:
 
 ```shell
 claude plugin marketplace add ecoma-io/lattice
-claude plugin install nx-polyglot-graph@lattice
+claude plugin install lattice@lattice
 ```
 
 After that, a session editing a `.go`, `.rs`, `.py` or `.vue` file gets boundary
@@ -53,7 +53,7 @@ The server is a plain stdio LSP executable. Everything a client needs:
 
 |                         |                                                                                              |
 | ----------------------- | -------------------------------------------------------------------------------------------- |
-| command                 | `node <workspace>/node_modules/@ecoma-io/nx-polyglot-graph/lsp.mjs`                          |
+| command                 | `node <workspace>/node_modules/@ecoma-io/lattice/lsp.mjs`                                    |
 | transport               | stdio                                                                                        |
 | `initializationOptions` | `{ "workspaceRoot": "<workspace>" }` — only when the editor's root is not the workspace root |
 | watched files           | the boundary config, `**/nx.json`, and `**/project.json`                                     |
@@ -102,7 +102,7 @@ Two things about it are worth knowing before you install it, because both are
 refusals rather than omissions:
 
 - **It does not bundle the server.** It resolves
-  `@ecoma-io/nx-polyglot-graph` out of the workspace, so the verdict in your
+  `@ecoma-io/lattice` out of the workspace, so the verdict in your
   buffer comes from the version your pipeline runs. A bundled copy pinned to a
   marketplace release could disagree with CI about the same import, and both
   would report confidently.

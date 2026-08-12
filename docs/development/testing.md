@@ -34,7 +34,7 @@ broken gate reports nothing rather than reporting a failure. They run first in C
 for exactly that reason.
 
 **`nx run-many -t test`** is each package's own target — Vitest in both packages.
-For `nx-polyglot-graph` that includes the differential against a real
+For `lattice` that includes the differential against a real
 `@nx/enforce-module-boundaries`; for `lattice-vscode` it is every decision the
 extension makes, driven as pure functions with no editor running.
 
@@ -97,7 +97,7 @@ real pair.
 
 ### Conformance — the differential against ESLint
 
-[`src/conformance/`](../../packages/nx-polyglot-graph/src/conformance/README.md)
+[`src/conformance/`](../../packages/lattice/src/conformance/README.md)
 is the only thing in the repository that puts this engine's verdict beside real
 ESLint's on the same code. **46 fixture workspaces, 116 probes, 94 projects**, and
 80 of the 116 probes are near-misses where ESLint must report nothing.

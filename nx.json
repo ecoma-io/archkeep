@@ -8,7 +8,7 @@
   },
   "plugins": [
     {
-      "plugin": "./packages/nx-polyglot-graph/index.mjs",
+      "plugin": "./packages/lattice/nx.mjs",
       "options": {
         "boundaryConfig": "module-boundaries.config.mjs"
       }

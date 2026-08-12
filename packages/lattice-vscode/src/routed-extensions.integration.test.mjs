@@ -2,11 +2,13 @@
  * The extension's routed file types, checked against the server's own manifest.
  *
  * `ROUTED_EXTENSIONS` is the third copy of one fact. `LANGUAGE_BY_EXTENSION` in
- * `@ecoma-io/nx-polyglot-graph` owns it, the Claude Code plugin manifest repeats
+ * `@ecoma-io/lattice` owns it, the Claude Code plugin manifest repeats
  * it because JSON cannot import, and this package repeats it because a client
- * has to name what it routes before any server is running. Rule 14 allows a copy
- * only when something keeps it honest; for the second copy that is
- * `src/lsp/editor-config.integration.test.mjs`, and for this one it is this file.
+ * has to name what it routes before any server is running. A copy is allowed
+ * only when a test keeps it honest — see
+ * `../../../docs/development/adding-a-language.md` ("Route it to the editor");
+ * for the second copy that is `src/lsp/editor-config.integration.test.mjs`,
+ * and for this one it is this file.
  *
  * The manifest is read rather than imported, and the distinction is not
  * cosmetic: an import would be a cross-project module edge, which this package's
@@ -25,10 +27,7 @@ import { describe, expect, it } from "vitest";
 
 import { ROUTED_EXTENSIONS } from "./languages.mjs";
 
-const MANIFEST_PATH = new URL(
-  "../../nx-polyglot-graph/.claude-plugin/plugin.json",
-  import.meta.url,
-);
+const MANIFEST_PATH = new URL("../../lattice/.claude-plugin/plugin.json", import.meta.url);
 
 describe("the file types this extension routes", () => {
   it("are exactly the ones the server package's own editor manifest routes", () => {

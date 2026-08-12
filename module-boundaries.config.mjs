@@ -6,7 +6,7 @@
  * The first is that `lattice` is an Nx workspace like any other, and a workspace
  * that ships a boundary enforcer and does not state its own boundaries is
  * asking every consumer to trust a claim it never tested on itself.
- * `packages/nx-polyglot-graph/cli.mjs check` runs over this tree in CI, reads
+ * `packages/lattice/cli.mjs check` runs over this tree in CI, reads
  * this file, and either finds nothing or fails the build — so the tool's own
  * repository is its first consumer.
  *
@@ -16,14 +16,14 @@
  * no overlap with the tags of the workspace the tool was extracted from. If any
  * project name, area, or tag value from that workspace had survived in the
  * source, this table would be the thing that fails, because none of those names
- * appear here to be found. `packages/nx-polyglot-graph/src/conformance/boundary.test.mjs`
+ * appear here to be found. `packages/lattice/src/conformance/boundary.test.mjs`
  * states that constraint as a rule; this file is what exercises it.
  *
  * Shape is `@nx/enforce-module-boundaries`' own option object, and that is a
  * deliberate commitment rather than a convenience: the enforcer reproduces that
  * plugin's semantics for the languages ESLint cannot read, so the vocabulary a
  * reader has to learn is the plugin's documented one and not a local dialect.
- * `packages/nx-polyglot-graph/src/config.mjs` validates the shape on load, so a
+ * `packages/lattice/src/config.mjs` validates the shape on load, so a
  * malformed row fails where it is read rather than as a rule that silently
  * matches nothing — a constraint matching nothing does not error, it approves.
  *
@@ -73,7 +73,7 @@ export const depConstraints = [
   // not bundle the boundary server; it resolves the server out of the workspace
   // being edited and speaks to it over stdio, so the diagnostics in the buffer
   // come from the same version that workspace's pipeline runs. An `import` of
-  // `@ecoma-io/nx-polyglot-graph` from there would be that decision quietly
+  // `@ecoma-io/lattice` from there would be that decision quietly
   // reversed — a second, marketplace-pinned analyzer, free to disagree with CI
   // about the same import while both report confidently.
   //
@@ -88,9 +88,9 @@ export const depConstraints = [
   //     so it never reaches this table.
   //   - By package name, with the server linked in as a workspace dependency:
   //     resolves, but to the pnpm link path
-  //     (`packages/lattice-vscode/node_modules/@ecoma-io/nx-polyglot-graph/index.mjs`),
+  //     (`packages/lattice-vscode/node_modules/@ecoma-io/lattice/index.mjs`),
   //     which classifies `external` — and an external target never reaches the
-  //     tag block. `packages/nx-polyglot-graph/src/analysis/typescript.mjs`
+  //     tag block. `packages/lattice/src/analysis/typescript.mjs`
   //     states why in its header — it does not call `realpath`, so a pnpm
   //     workspace link resolves to its link path instead of naming the project
   //     behind it. The tsconfig changed nothing here: `nodenext` resolution
@@ -102,7 +102,7 @@ export const depConstraints = [
   // anyway for the same reason the eight options below are written out at their
   // defaults: it is the value a second reader cannot recover from silence. What
   // makes it decide is a `paths` alias, not the tsconfig's mere existence:
-  // mapping `@ecoma-io/nx-polyglot-graph` onto the project's own source in
+  // mapping `@ecoma-io/lattice` onto the project's own source in
   // `tsconfig.base.json` made the probe import resolve inside the workspace,
   // reach this table, and trip this row (`emptyOnlyTagsConstraintViolation`,
   // exit 1 — measured, then reverted). This tree's tsconfig carries no `paths`,
@@ -133,7 +133,7 @@ export const depConstraints = [
  *     by `enforceBuildableLibDependency`. Nx's own default name.
  *   enforceBuildableLibDependency — off, and it follows from what is here rather
  *     than from taste: nothing in this repository is built. Nx loads a plugin's
- *     entry point directly, so `packages/nx-polyglot-graph` has no `build`
+ *     entry point directly, so `packages/lattice` has no `build`
  *     target at all (its `project.json` declares `lint` and `test` and nothing
  *     else, deliberately) and the check would have nothing true to say.
  *   allowCircularSelfDependency — off: a file reaching its own project through
@@ -173,7 +173,7 @@ export const moduleBoundaryOptions = {
  *
  * Empty, and worth keeping as an empty declaration rather than deleting: the
  * list is where an accepted violation goes, and `reason` is mandatory —
- * `packages/nx-polyglot-graph/src/config.mjs` rejects an entry without one at
+ * `packages/lattice/src/config.mjs` rejects an entry without one at
  * load. An unexplained suppression is indistinguishable from a boundary that
  * quietly stopped being enforced, and nobody can tell later whether it still
  * applies. An empty list is that rule satisfied; an absent list is the rule

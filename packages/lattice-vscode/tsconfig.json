@@ -1,5 +1,5 @@
 // The `typecheck` target's program, same shape and same reasons as
-// ../nx-polyglot-graph/tsconfig.json — the argument for each option lives
+// ../lattice/tsconfig.json — the argument for each option lives
 // there once rather than twice.
 {
   "extends": "../../tsconfig.base.json",

@@ -40,21 +40,21 @@ This repository states a rule once and links to it from everywhere else, so the
 useful question is usually not "where is this documented" but "which file is
 allowed to say it". That table:
 
-| file                                                                              | owns                                                                                                  |
-| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [`README.md`](../README.md)                                                       | The pitch: what Lattice is in one breath, and the way in                                              |
-| [`docs/why.md`](why.md)                                                           | The gap, and the evidence that it is real                                                             |
-| [`docs/north-star.md`](north-star.md)                                             | The direction, what "finished" means per language, and the refusals                                   |
-| `docs/usage/`                                                                     | How a consumer runs it and reads its answers                                                          |
-| `docs/development/`                                                               | How it works inside, and how to extend it                                                             |
-| [`CONTRIBUTING.md`](../CONTRIBUTING.md)                                           | The contribution bar, the commands, hooks, commits, review, release                                   |
-| [`SECURITY.md`](../SECURITY.md)                                                   | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/` |
-| [`AGENTS.md`](../AGENTS.md)                                                       | The rules a diff is rejected for violating, for humans and agents alike                               |
-| [`packages/nx-polyglot-graph/README.md`](../packages/nx-polyglot-graph/README.md) | The package's own reference — it is the npm landing page and must stand alone                         |
-| [`packages/lattice-vscode/README.md`](../packages/lattice-vscode/README.md)       | The VS Code client: what it requires, the two settings it has, and the two it refuses                 |
-| `packages/nx-polyglot-graph/CLAUDE.md`                                            | Layer mechanics: what each layer may know                                                             |
-| `packages/nx-polyglot-graph/src/*/README.md`                                      | Each layer's own semantics — rules, report, conformance                                               |
-| `packages/nx-polyglot-graph/src/analysis/contract.md`                             | The frozen record every analyzer returns                                                              |
+| file                                                                        | owns                                                                                                  |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| [`README.md`](../README.md)                                                 | The pitch: what Lattice is in one breath, and the way in                                              |
+| [`docs/why.md`](why.md)                                                     | The gap, and the evidence that it is real                                                             |
+| [`docs/north-star.md`](north-star.md)                                       | The direction, what "finished" means per language, and the refusals                                   |
+| `docs/usage/`                                                               | How a consumer runs it and reads its answers                                                          |
+| `docs/development/`                                                         | How it works inside, and how to extend it                                                             |
+| [`CONTRIBUTING.md`](../CONTRIBUTING.md)                                     | The contribution bar, the commands, hooks, commits, review, release                                   |
+| [`SECURITY.md`](../SECURITY.md)                                             | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/` |
+| [`AGENTS.md`](../AGENTS.md)                                                 | The rules a diff is rejected for violating, for humans and agents alike                               |
+| [`packages/lattice/README.md`](../packages/lattice/README.md)               | The package's own reference — it is the npm landing page and must stand alone                         |
+| [`packages/lattice-vscode/README.md`](../packages/lattice-vscode/README.md) | The VS Code client: what it requires, the two settings it has, and the two it refuses                 |
+| `packages/lattice/CLAUDE.md`                                                | Layer mechanics: what each layer may know                                                             |
+| `packages/lattice/src/*/README.md`                                          | Each layer's own semantics — rules, report, conformance                                               |
+| `packages/lattice/src/analysis/contract.md`                                 | The frozen record every analyzer returns                                                              |
 
 Two of those rows overlap on purpose, and it is worth knowing which way:
 

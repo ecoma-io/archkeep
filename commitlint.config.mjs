@@ -13,10 +13,10 @@ export default {
       "always",
       [
         // One entry per package under `packages/`, plus the three that name a
-        // change owning no package. `graph` and `vscode` are listed before the
-        // directories exist so the first commit that creates one is not also
-        // the commit that has to edit this file to describe itself.
-        "graph",
+        // change owning no package. `vscode` is listed before its directory
+        // exists so the commit that creates it is not also the commit that
+        // has to edit this file to describe itself.
+        "lattice",
         "vscode",
         "workspace",
         "docs",

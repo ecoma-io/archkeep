@@ -3,14 +3,14 @@
 The whole job is one command and one rule about how to read its exit code.
 
 ```shell
-pnpm exec nx-polyglot-graph check
+pnpm exec lattice check
 ```
 
 ## The command
 
 ```text
-nx-polyglot-graph check [<path>...]   Check imports against the boundary rules
-nx-polyglot-graph --help              Show this message
+lattice check [<path>...]   Check imports against the boundary rules
+lattice --help              Show this message
 
   --format text|sarif   Terminal report (default), or SARIF 2.1.0 for GitHub code scanning
   --output <file>       Write the report to a file instead of stdout
@@ -56,13 +56,13 @@ code alike, which is fine — the failure is visible. What is not fine is:
 
 ```shell
 # Wrong: turns "could not look" into "looked and found nothing"
-nx-polyglot-graph check || true
+lattice check || true
 ```
 
 If you need to distinguish, distinguish explicitly:
 
 ```shell
-nx-polyglot-graph check
+lattice check
 case $? in
   0) echo "clean" ;;
   1) echo "boundary violations, go.work drift, or dead tsconfig aliases"; exit 1 ;;
@@ -97,7 +97,7 @@ The minimal version:
 - name: Check module boundaries
   env:
     NX_DAEMON: "false"
-  run: pnpm exec nx-polyglot-graph check
+  run: pnpm exec lattice check
 ```
 
 `NX_DAEMON: "false"` is worth setting. The daemon is a long-lived process that
@@ -121,7 +121,7 @@ scanning tracks new-versus-base. Two steps, in that order:
 - name: Check module boundaries
   env:
     NX_DAEMON: "false"
-  run: pnpm exec nx-polyglot-graph check
+  run: pnpm exec lattice check
 
 # The presentation. Runs even when the gate just failed — the annotations
 # matter most on a red run — and its own exit code decides nothing, because
@@ -130,7 +130,7 @@ scanning tracks new-versus-base. Two steps, in that order:
   if: ${{ !cancelled() }}
   env:
     NX_DAEMON: "false"
-  run: pnpm exec nx-polyglot-graph check --format sarif --output boundaries.sarif
+  run: pnpm exec lattice check --format sarif --output boundaries.sarif
   continue-on-error: true
 
 - uses: github/codeql-action/upload-sarif@v3
@@ -190,7 +190,7 @@ rather than two that drift — see
 
 The conditions under which you could eventually drop the ESLint rule are
 enumerated in
-[`src/conformance/`](../../packages/nx-polyglot-graph/src/conformance/README.md).
+[`src/conformance/`](../../packages/lattice/src/conformance/README.md).
 One of the three is not met — agreement measured on real trees — and it is not
 about correctness on the fixtures.
 
@@ -200,7 +200,7 @@ A scoped run over the changed files is a reasonable hook, as long as everyone
 understands it is a pre-check and not the gate:
 
 ```shell
-nx-polyglot-graph check $(git diff --cached --name-only --diff-filter=ACM)
+lattice check $(git diff --cached --name-only --diff-filter=ACM)
 ```
 
 The cycle and lazy-load rules will not see what a whole-workspace run sees, so a
