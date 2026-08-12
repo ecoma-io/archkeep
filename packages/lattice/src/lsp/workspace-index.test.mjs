@@ -26,6 +26,16 @@ vi.mock("../rules/match.mjs", () => ({
   // module transitively. `null` means "no problem with this pattern", the same
   // permissive answer the real function gives every non-glob pattern.
   projectPatternError: () => null,
+  // `../config.mjs` imports these three alongside `projectPatternError` above,
+  // and `model.mjs` now imports `../../config.mjs` for
+  // `findBoundaryConfigViolations` (the one shared validator both the
+  // `boundaryConfig` file dialects and an inline policy object route through)
+  // — so loading `model.mjs` at all pulls `../rules/match.mjs`'s whole
+  // export surface in, not just the one name this suite used to need. Same
+  // permissive "no problem" stub as `projectPatternError` above.
+  importPatternError: () => null,
+  globPatternError: () => null,
+  tagPatternError: () => null,
 }));
 
 const analyzeFile = vi.mocked((await import("../analysis/analyze.mjs")).analyzeFile);

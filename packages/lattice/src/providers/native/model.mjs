@@ -7,8 +7,8 @@
  * own parser is to give a config Nx ALSO reads (`nx.json`, `project.json`)
  * the exact JSONC leniency Nx gives it — there is no such thing to match
  * here, because Nx never opens `lattice.json` at all; a workspace that has
- * one has no `nx.json` (`../../../docs/usage/lattice-json.md`, "This page is
- * for a workspace with no Nx at all"). Routing it through `parseNxJson`
+ * one has no `nx.json` (`../../../../../docs/usage/lattice-json.md`, "This
+ * page is for a workspace with no Nx at all"). Routing it through `parseNxJson`
  * anyway meant its JSONC tolerance — the trailing comma or `//` comment this
  * very module's header used to advertise as accepted — silently depended on
  * `nx` being resolvable from `node_modules`, which is exactly the dependency
@@ -47,6 +47,7 @@ import { posix } from "node:path";
 
 import { projectPatternError } from "../../rules/match.mjs";
 import { resolveOptions } from "../../options.mjs";
+import { findBoundaryConfigViolations, policyKeyViolations } from "../../config.mjs";
 
 /** The file this provider treats as a workspace root marker and its model. */
 export const LATTICE_MODEL_FILE = "lattice.json";
@@ -471,10 +472,23 @@ const TOP_LEVEL_KEYS = [
  * disk — the same contract `../../config.mjs`'s `findBoundaryConfigViolations`
  * keeps.
  *
- * `boundaryConfig` and `tsConfig` are deliberately NOT checked here: they are
- * validated by `resolveOptions` (`../../options.mjs`) inside `loadNativeModel`
- * below, so there is one validator and one default table for that pair rather
- * than a second copy of `DEFAULT_OPTIONS`'s rules.
+ * `boundaryConfig` and `tsConfig` are deliberately NOT checked here when
+ * `boundaryConfig` is a string: both are then validated by `resolveOptions`
+ * (`../../options.mjs`) inside `loadNativeModel` below, so there is one
+ * validator and one default table for that pair rather than a second copy of
+ * `DEFAULT_OPTIONS`'s rules. A `boundaryConfig` that is an OBJECT instead of a
+ * string — the inline policy this file's own doc names as a second accepted
+ * shape (`../../../../../docs/usage/lattice-json.md`, "boundaryConfig") —
+ * bypasses `resolveOptions` entirely, since that function's whole contract is
+ * "every value is a non-empty string", so its check is inline below, and it
+ * reuses `../../config.mjs`'s own `findBoundaryConfigViolations` AND
+ * `policyKeyViolations` rather than a second copy of what a policy object may
+ * hold: the same pair `../../config.mjs`'s own `.json` dialect calls, with
+ * `allowSchema: false` — an inline policy has no separate file for an editor
+ * to validate against, so `$schema` states no rule here either and is
+ * rejected by name like any other key the three real ones do not cover,
+ * rather than carved out (`../../../../../docs/usage/policy-file.md`, "An
+ * inline policy, for `lattice.json`").
  *
  * @param {unknown} raw The parsed `lattice.json`.
  * @returns {string[]}
@@ -484,6 +498,31 @@ export function findNativeModelViolations(raw) {
 
   const violations = [];
   const { projects, projectRules, coverage, workspaceLayout } = raw;
+
+  // An inline policy is validated by the exact function every other route to
+  // a boundary law runs through, so a malformed inline `depConstraints` row
+  // is caught here rather than surfacing later as a rule that matches
+  // nothing. A `boundaryConfig` that is a string is left alone here — see
+  // this function's own doc comment for where that string is validated
+  // instead — and one that is neither a string nor an object gets its own
+  // message rather than silently falling through to "not checked here".
+  if ("boundaryConfig" in raw) {
+    if (isPlainObject(raw.boundaryConfig)) {
+      violations.push(
+        ...findBoundaryConfigViolations(raw.boundaryConfig).map(
+          (message) => `boundaryConfig.${message}`,
+        ),
+        ...policyKeyViolations(raw.boundaryConfig, { allowSchema: false }).map(
+          (message) => `boundaryConfig.${message}`,
+        ),
+      );
+    } else if (typeof raw.boundaryConfig !== "string") {
+      violations.push(
+        `boundaryConfig: must be a string (a filename) or an object (an inline policy), got ` +
+          `${describe(raw.boundaryConfig)}`,
+      );
+    }
+  }
 
   // `projects` is optional the same way every other top-level key here is —
   // `docs/usage/lattice-json.md`'s "The shape, field by field" names a bare
@@ -568,6 +607,13 @@ export function findNativeModelViolations(raw) {
  * place that ever applies the default. A second default here could disagree
  * with that one the day either changes.
  *
+ * `boundaryConfig` rides through untouched when `raw.boundaryConfig` is an
+ * inline object — `resolveOptions` never sees it, since its whole contract is
+ * "every value is a non-empty string" and an inline policy is neither. It has
+ * already passed `findNativeModelViolations`' own check by the time this runs
+ * (`loadNativeModel` validates before normalizing), so nothing here re-checks
+ * its shape.
+ *
  * @param {Record<string, unknown>} raw Already validated by `findNativeModelViolations`.
  * @returns {object} `NativeModel` — see `./index.mjs`.
  */
@@ -579,10 +625,13 @@ export function normalizeNativeModel(raw) {
   const declared = /** @type {unknown[]} */ (projects.declared) ?? [];
   const rawInfer = /** @type {Record<string, unknown>|undefined} */ (projects.infer);
 
+  const inlineBoundaryConfig = isPlainObject(raw.boundaryConfig) ? raw.boundaryConfig : undefined;
   const resolvedOptions = resolveOptions(
-    "boundaryConfig" in raw || "tsConfig" in raw
+    ("boundaryConfig" in raw && inlineBoundaryConfig === undefined) || "tsConfig" in raw
       ? {
-          ...("boundaryConfig" in raw ? { boundaryConfig: raw.boundaryConfig } : {}),
+          ...("boundaryConfig" in raw && inlineBoundaryConfig === undefined
+            ? { boundaryConfig: raw.boundaryConfig }
+            : {}),
           ...("tsConfig" in raw ? { tsConfig: raw.tsConfig } : {}),
         }
       : undefined,
@@ -634,7 +683,7 @@ export function normalizeNativeModel(raw) {
     workspaceLayout: /** @type {{appsDir: string, libsDir: string}|undefined} */ (
       raw.workspaceLayout
     ),
-    boundaryConfig: resolvedOptions.boundaryConfig,
+    boundaryConfig: inlineBoundaryConfig ?? resolvedOptions.boundaryConfig,
     tsConfig: resolvedOptions.tsConfig,
   };
 }

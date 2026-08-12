@@ -113,10 +113,23 @@ function markersAt(root) {
  * judge against is a decision nobody made, not one this server can make for
  * them by picking a provider.
  *
+ * `boundaryConfig` can also be an inline policy OBJECT rather than a filename
+ * (`../providers/native/model.mjs`'s doc comment on `findNativeModelViolations`,
+ * "boundaryConfig"; `../../docs/usage/policy-file.md`, "An inline policy, for
+ * lattice.json") — a form this server does not yet read. Without the check
+ * below, that object would flow into `watchedFilesFor` (`**\/[object Object]`,
+ * a glob that matches nothing) and then into `./boundary-config.mjs`, which
+ * treats it as a filename and fails with "cannot load
+ * .../[object Object]" — a message that reads like a missing file rather
+ * than an unsupported form. Refusing here, by name, is louder and closer to
+ * the truth: an inline policy is real and valid (`cli.mjs` reads it), the
+ * language server just cannot follow it yet.
+ *
  * @param {string} root
  * @returns {{boundaryConfig: string, tsConfig: string}}
- * @throws {Error} when both markers are present, or the marker present is
- *   unreadable or malformed.
+ * @throws {Error} when both markers are present, the marker present is
+ *   unreadable or malformed, or a native root's `boundaryConfig` is the
+ *   inline-object form this server cannot yet read.
  */
 export function readWorkspaceOptions(root) {
   const { hasNx, hasNative } = markersAt(root);
@@ -131,6 +144,16 @@ export function readWorkspaceOptions(root) {
   }
   if (hasNative) {
     const model = loadNativeModel(root, { readFile: (path) => readWorkspaceFile(root, path) });
+    if (typeof model.boundaryConfig !== "string") {
+      throw new Error(
+        `lattice: ${LATTICE_MODEL_FILE} at ${root} holds its boundaryConfig inline, as a policy ` +
+          `object rather than a filename — a valid form (../../cli.mjs's check reads it fine), ` +
+          `but not one this language server can load yet: it only ever reads a policy FILE, and ` +
+          `has no filename here to watch or parse. Move the policy into its own .mjs or .json ` +
+          `file and point boundaryConfig at that instead — see ` +
+          `../../../../docs/usage/policy-file.md, "An inline policy, for lattice.json".`,
+      );
+    }
     return { boundaryConfig: model.boundaryConfig, tsConfig: model.tsConfig };
   }
   return readPluginOptions(root);

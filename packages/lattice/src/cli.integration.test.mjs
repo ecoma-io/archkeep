@@ -973,6 +973,399 @@ var _ = adapter.Name
   });
 });
 
+describe("the .json boundaryConfig dialect, end to end through the native provider", () => {
+  // A third, independent tmpdir: same two-project layer-crossing shape as the
+  // native `lattice.json` block above, but `boundaryConfig` names a `.json`
+  // file instead of `.mjs` — unlike `.mjs`, `.json` is not an analyzable
+  // extension (`LANGUAGE_BY_EXTENSION` in `../src/analysis/registry.mjs`), so
+  // this fixture needs no coverage waiver for its own policy file.
+  const jsonRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-json-"));
+  afterAll(() => rmSync(jsonRoot, { recursive: true, force: true }));
+
+  const writeJson = (relativePath, text) => {
+    mkdirSync(join(jsonRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(jsonRoot, relativePath), text);
+  };
+
+  const wellFormedPolicy = () => ({
+    depConstraints: [
+      { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+      { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+    ],
+    moduleBoundaryOptions: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies: false,
+      checkNestedExternalImports: false,
+    },
+  });
+
+  writeJson(
+    "lattice.json",
+    JSON.stringify({
+      boundaryConfig: "policy.json",
+      projects: {
+        declared: [
+          { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+          { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+        ],
+      },
+    }),
+  );
+  writeJson("policy.json", JSON.stringify(wellFormedPolicy()));
+  writeJson("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeJson("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writeJson("libs/adapter/adapter.go", "package adapter\n");
+  // Same crossing as the `.mjs`-dialect native fixture above, so the two
+  // blocks prove the same rule fires whichever dialect wrote the policy.
+  writeJson(
+    "libs/domain/doc.go",
+    `// Package domain is the layer everything else points at.
+package domain
+
+import (
+	"example.com/adapter"
+)
+
+var _ = adapter.Name
+`,
+  );
+
+  const jsonFiles = [
+    "lattice.json",
+    "policy.json",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "libs/adapter/go.mod",
+    "libs/adapter/adapter.go",
+  ];
+  const jsonContext = { cwd: jsonRoot, listFiles: () => jsonFiles };
+  const jsonEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      ...jsonContext,
+    };
+  };
+
+  it("finds the same layer-crossing Go import through a .json policy file as the .mjs dialect finds", async () => {
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: [] },
+      jsonContext,
+    );
+    expect(violations).toBe(1);
+    expect(report).toContain("libs/domain/doc.go:5:2  onlyTagsConstraintViolation");
+  });
+
+  // The red-direction case: an empty constraint table is well-formed, and the
+  // report must still state what it inspected — a missing coverage line here
+  // would be indistinguishable from a run that silently checked nothing.
+  it("still states what it inspected when the .json policy's constraint table is empty", async () => {
+    const emptyRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-json-empty-"));
+    try {
+      const writeEmpty = (relativePath, text) => {
+        mkdirSync(join(emptyRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(emptyRoot, relativePath), text);
+      };
+      writeEmpty(
+        "lattice.json",
+        JSON.stringify({
+          boundaryConfig: "policy.json",
+          projects: { declared: [{ root: "libs/only", name: "only", tags: [] }] },
+        }),
+      );
+      writeEmpty("policy.json", JSON.stringify({ ...wellFormedPolicy(), depConstraints: [] }));
+      writeEmpty("libs/only/go.mod", "module example.com/only\n\ngo 1.24\n");
+      writeEmpty("libs/only/doc.go", "package only\n");
+      const streams = {
+        ...jsonEnv(),
+        cwd: emptyRoot,
+        listFiles: () => ["lattice.json", "policy.json", "libs/only/go.mod", "libs/only/doc.go"],
+      };
+      expect(await runCli(["check"], streams)).toBe(EXIT.ok);
+      expect(streams.lines.out.join("\n")).toContain(
+        "✔ no boundary violations (0 imports in 1 file across 1 project)",
+      );
+    } finally {
+      rmSync(emptyRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reads a --config pointed at a .json file, relative to cwd", async () => {
+    const streams = jsonEnv();
+    expect(await runCli(["check", "--config", "policy.json"], streams)).toBe(EXIT.violations);
+    expect(streams.lines.out.join("\n")).toContain(
+      "libs/domain/doc.go:5:2  onlyTagsConstraintViolation",
+    );
+  });
+
+  it("reads a --config pointed at a .json file by absolute path", async () => {
+    const streams = jsonEnv();
+    expect(await runCli(["check", "--config", join(jsonRoot, "policy.json")], streams)).toBe(
+      EXIT.violations,
+    );
+    expect(streams.lines.out.join("\n")).toContain(
+      "libs/domain/doc.go:5:2  onlyTagsConstraintViolation",
+    );
+  });
+
+  it("exits 3 and names the key when a --config .json file carries an unrecognised top-level key", async () => {
+    const badRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-json-bad-key-"));
+    try {
+      const writeBad = (relativePath, text) => {
+        mkdirSync(join(badRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(badRoot, relativePath), text);
+      };
+      writeBad(
+        "lattice.json",
+        JSON.stringify({ projects: { declared: [{ root: "libs/only", name: "only", tags: [] }] } }),
+      );
+      writeBad("bad.json", JSON.stringify({ ...wellFormedPolicy(), depConstraint: [] }));
+      writeBad("libs/only/go.mod", "module example.com/only\n\ngo 1.24\n");
+      const streams = {
+        ...jsonEnv(),
+        cwd: badRoot,
+        listFiles: () => ["lattice.json", "bad.json", "libs/only/go.mod"],
+      };
+      expect(await runCli(["check", "--config", "bad.json"], streams)).toBe(EXIT.error);
+      expect(streams.lines.err.join("\n")).toContain(
+        "depConstraint: not a recognised top-level key",
+      );
+    } finally {
+      rmSync(badRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("an Nx-tree workspace with a .json boundaryConfig, driven through the CLI", () => {
+  // Everything above named ".json boundaryConfig" so far runs it through
+  // `nativeProvider` — a workspace with no `nx.json` at all. `readPluginOptions`
+  // (`../src/options.mjs`) is the OTHER route to a `boundaryConfig` filename,
+  // reached only from a real `nx.json` on disk (`check()`'s non-native branch
+  // reads it directly, never injected), so this fixture needs a real one —
+  // `env()`/`context` above inject `readGraph` instead of an `nx` binary, but
+  // `nx.json` itself still has to exist for `readPluginOptions` to find the
+  // plugin's `options.boundaryConfig` entry at all. This is the case
+  // `boundary-config.mjs`'s extension dispatch (the LSP face) and
+  // `loadBoundaryConfigFile`'s (the CLI/Nx face) both exist to reach, and
+  // until this test existed neither an Nx tree's `.json` verdict nor its
+  // report text was pinned anywhere — only the native path's was.
+  const nxJsonRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-nx-json-"));
+  afterAll(() => rmSync(nxJsonRoot, { recursive: true, force: true }));
+
+  const writeNxJson = (relativePath, text) => {
+    mkdirSync(join(nxJsonRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(nxJsonRoot, relativePath), text);
+  };
+
+  writeNxJson(
+    "nx.json",
+    JSON.stringify({
+      plugins: [{ plugin: "@ecoma-io/lattice/nx", options: { boundaryConfig: "policy.json" } }],
+    }),
+  );
+  writeNxJson(
+    "policy.json",
+    JSON.stringify({
+      depConstraints: [
+        { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+        {
+          sourceTag: "layer:adapter",
+          onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"],
+        },
+      ],
+      moduleBoundaryOptions: {
+        allow: [],
+        buildTargets: ["build"],
+        enforceBuildableLibDependency: false,
+        allowCircularSelfDependency: false,
+        checkDynamicDependenciesExceptions: [],
+        ignoredCircularDependencies: [],
+        banTransitiveDependencies: false,
+        checkNestedExternalImports: false,
+      },
+    }),
+  );
+  writeNxJson("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeNxJson("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writeNxJson("libs/adapter/adapter.go", "package adapter\n");
+  // Same crossing as the top fixture's `.mjs` config, so the two prove the
+  // same rule fires whichever dialect the workspace's `nx.json` names.
+  writeNxJson(
+    "libs/domain/doc.go",
+    `// Package domain is the layer everything else points at.
+package domain
+
+import (
+	"example.com/adapter"
+)
+
+var _ = adapter.Name
+`,
+  );
+
+  const nxJsonGraph = {
+    nodes: {
+      domain: {
+        name: "domain",
+        type: "lib",
+        data: { root: "libs/domain", tags: ["layer:domain"] },
+      },
+      adapter: {
+        name: "adapter",
+        type: "lib",
+        data: { root: "libs/adapter", tags: ["layer:adapter"] },
+      },
+    },
+    dependencies: { domain: [], adapter: [] },
+  };
+  const nxJsonFiles = [
+    "nx.json",
+    "policy.json",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "libs/adapter/go.mod",
+    "libs/adapter/adapter.go",
+  ];
+  const nxJsonContext = {
+    cwd: nxJsonRoot,
+    readGraph: () => nxJsonGraph,
+    listFiles: () => nxJsonFiles,
+  };
+
+  it("pins the verdict, not just the exit code: same violation, same position, same message as the .mjs dialect", async () => {
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: [] },
+      nxJsonContext,
+    );
+    expect(violations).toBe(1);
+    expect(report).toContain("libs/domain/doc.go:5:2  onlyTagsConstraintViolation");
+    expect(report).toContain(
+      'A project tagged with "layer:domain" can only depend on libs tagged with "layer:domain"',
+    );
+    expect(report).toContain('import      "example.com/adapter" (static)  domain → adapter');
+  });
+});
+
+describe("boundaryConfig as an inline policy object in lattice.json, end to end", () => {
+  const wellFormedPolicy = () => ({
+    depConstraints: [
+      { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+      { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+    ],
+    moduleBoundaryOptions: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies: false,
+      checkNestedExternalImports: false,
+    },
+  });
+
+  /** Builds a fresh tmpdir workspace carrying the given inline `boundaryConfig` value. */
+  const buildInlineWorkspace = (boundaryConfig) => {
+    const inlineRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-inline-"));
+    const writeInline = (relativePath, text) => {
+      mkdirSync(join(inlineRoot, relativePath, ".."), { recursive: true });
+      writeFileSync(join(inlineRoot, relativePath), text);
+    };
+    writeInline(
+      "lattice.json",
+      JSON.stringify({
+        boundaryConfig,
+        projects: {
+          declared: [
+            { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+            { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+          ],
+        },
+      }),
+    );
+    writeInline("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+    writeInline("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+    writeInline("libs/adapter/adapter.go", "package adapter\n");
+    writeInline(
+      "libs/domain/doc.go",
+      `// Package domain is the layer everything else points at.
+package domain
+
+import (
+	"example.com/adapter"
+)
+
+var _ = adapter.Name
+`,
+    );
+    const files = [
+      "lattice.json",
+      "libs/domain/go.mod",
+      "libs/domain/doc.go",
+      "libs/adapter/go.mod",
+      "libs/adapter/adapter.go",
+    ];
+    const out = [];
+    const err = [];
+    return {
+      root: inlineRoot,
+      streams: {
+        out: (text) => out.push(text),
+        err: (text) => err.push(text),
+        lines: { out, err },
+        cwd: inlineRoot,
+        listFiles: () => files,
+      },
+    };
+  };
+
+  it("finds a real violation from a policy inlined in lattice.json, with no separate config file at all", async () => {
+    const { root: inlineRoot, streams } = buildInlineWorkspace(wellFormedPolicy());
+    try {
+      expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+      expect(streams.lines.out.join("\n")).toContain(
+        "libs/domain/doc.go:5:2  onlyTagsConstraintViolation",
+      );
+    } finally {
+      rmSync(inlineRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("exits 3 and names the offending row when an inline policy's constraint table is malformed", async () => {
+    const policy = {
+      ...wellFormedPolicy(),
+      depConstraints: [{ onlyDependOnLibsWithTags: ["layer:domain"] }],
+    };
+    const { root: inlineRoot, streams } = buildInlineWorkspace(policy);
+    try {
+      expect(await runCli(["check"], streams)).toBe(EXIT.error);
+      expect(streams.lines.err.join("\n")).toContain("boundaryConfig.depConstraints[0]");
+    } finally {
+      rmSync(inlineRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("exits 3 with the exact message when boundaryConfig is neither a string nor an object", async () => {
+    const { root: inlineRoot, streams } = buildInlineWorkspace(42);
+    try {
+      expect(await runCli(["check"], streams)).toBe(EXIT.error);
+      expect(streams.lines.err.join("\n")).toContain(
+        "boundaryConfig: must be a string (a filename) or an object (an inline policy), got number (42)",
+      );
+    } finally {
+      rmSync(inlineRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("scoping a native check must not narrow the graph it is judged against", () => {
   // The silent-direction bug this guards: on the native path `graph.dependencies`
   // is DERIVED from analyzed import sites (`./src/providers/native/graph.mjs`),

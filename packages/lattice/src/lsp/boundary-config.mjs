@@ -2,54 +2,127 @@
  * The workspace's boundary law, read by a process that outlives edits to it.
  *
  * `../config.mjs` already loads and validates that file, and this module reuses
- * its validation. What it does NOT reuse is `loadBoundaryConfig`, and the reason
- * is one line of ESM semantics: `import()` memoises a module URL for the life of
- * the process. A CLI run imports the config once and exits, so memoisation is
- * invisible there. A language server runs for hours across edits to that very
- * file, and a second `import()` of the same URL would hand back the constraint
- * table as it was when the editor opened — the editor would then re-diagnose
- * every file against a config that no longer exists, which is precisely the
- * failure re-diagnosing on a config change is meant to prevent.
+ * its pure validators (`policyKeyViolations`, `policyFrom`) rather than
+ * restating what a well-formed policy looks like — one answer to "is this
+ * table well-formed", shared by every dialect and every face. What it does NOT
+ * reuse is `loadBoundaryConfig`/`loadBoundaryConfigFile` themselves, and for
+ * the `.mjs`/`.js` dialect the reason is one line of ESM semantics: `import()`
+ * memoises a module URL for the life of the process. A CLI run imports the
+ * config once and exits, so memoisation is invisible there. A language server
+ * runs for hours across edits to that very file, and a second `import()` of
+ * the same URL would hand back the constraint table as it was when the editor
+ * opened — the editor would then re-diagnose every file against a config that
+ * no longer exists, which is precisely the failure re-diagnosing on a config
+ * change is meant to prevent.
  *
- * So the URL carries a revision the caller controls. Reusing the validation
- * rather than restating it keeps one answer to "is this table well-formed"; the
- * revision is the only thing added.
+ * So the `.mjs`/`.js` URL carries a revision the caller controls. The `.json`
+ * dialect needs no such trick — `readFile` reads whatever is on disk at the
+ * moment it is called, with no module cache in the way — so `revision` is
+ * accepted for both dialects (one entry point, one signature) but only spent
+ * on the one that needs it.
  */
+import { readFile as readFileFromDisk } from "node:fs/promises";
+import { extname } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { findBoundaryConfigViolations } from "../config.mjs";
+import { policyFrom, policyKeyViolations } from "../config.mjs";
+
+/**
+ * Loads and validates the `.mjs`/`.js` dialect through a revisioned `import()`
+ * — see this module's header for why the revision exists.
+ *
+ * @param {string} path Absolute path of the config file.
+ * @param {string|number} revision Busts the ESM module cache across edits.
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
+ * @throws {Error} when the file is missing, unloadable, or malformed.
+ */
+async function readModulePolicy(path, revision) {
+  const url = `${pathToFileURL(path).href}?revision=${encodeURIComponent(String(revision))}`;
+  let module;
+  try {
+    module = await import(url);
+  } catch (cause) {
+    throw new Error(`lattice: cannot load ${path}: ${cause?.message ?? cause}`, { cause });
+  }
+  return policyFrom(module, path);
+}
+
+/**
+ * Loads and validates the `.json` dialect: plain `JSON.parse`, never JSONC —
+ * `../config.mjs`'s `loadJsonPolicy` documents why, and this is the same
+ * check, reached through the same two exported validators rather than a
+ * second copy of either.
+ *
+ * @param {string} path Absolute path of the config file.
+ * @param {(path: string, encoding: "utf8") => Promise<string>} readFile
+ *   Injected so a test can drive this without a real file — see
+ *   `readBoundaryConfig` below.
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
+ * @throws {Error} when the file is missing, unreadable, not valid JSON, or
+ *   malformed — either by `../config.mjs`'s `findBoundaryConfigViolations` or
+ *   by carrying a top-level key none of those rules knows about.
+ */
+async function readJsonPolicy(path, readFile) {
+  let text;
+  try {
+    text = await readFile(path, "utf8");
+  } catch (cause) {
+    throw new Error(`lattice: cannot load ${path}: ${cause?.message ?? cause}`, { cause });
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (cause) {
+    throw new Error(`lattice: cannot load ${path}: ${cause?.message ?? cause}`, { cause });
+  }
+  return policyFrom(parsed, path, policyKeyViolations(parsed, { allowSchema: true }));
+}
 
 /**
  * Loads and validates the boundary config at `workspaceRoot`.
+ *
+ * Dispatches on the path's extension exactly as `../config.mjs`'s
+ * `loadBoundaryConfigFile` does — `.mjs`/`.js` through `readModulePolicy`,
+ * `.json` through `readJsonPolicy`, anything else refused by name, in a
+ * message that does not contain the words "cannot load": a `boundaryConfig`
+ * misspelt to a `.yaml` or `.toml` extension is a naming mistake, not a
+ * missing or unreadable file, and the two must read as different problems.
+ * This server used to only ever recognise the `.mjs`/`.js` spelling — a `.json`
+ * `boundaryConfig` reached `readModulePolicy`'s bare `import()`, which Node
+ * refuses for JSON with `ERR_IMPORT_ATTRIBUTE_MISSING`, a message that names
+ * an import-attributes problem rather than the missing dialect support that
+ * was the real cause.
  *
  * @param {string} workspaceRoot Absolute path of the tree being judged — never
  *   derived from this file's own location, for the reason `../config.mjs`
  *   states: pointed at a consumer's tree, the tool's own directory and the
  *   workspace's root are in different trees.
  * @param {string|number} revision Anything that changes when the file should be
- *   re-read. Two calls with the same revision return the same module; two with
- *   different revisions re-execute the file.
+ *   re-read. Spent only by the `.mjs`/`.js` arm — see this module's header.
  * @param {string} boundaryConfig The config's filename in this workspace,
  *   resolved from the plugin's options by the server that owns the session.
- * @returns {Promise<{depConstraints: object[], options: object}>}
- * @throws {Error} when the file is missing, unloadable, or malformed — the same
- *   contract `loadBoundaryConfig` has, for the same reason: an enforcer that
+ * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
+ *   Injectable read, used only by the `.json` dialect, defaulting to
+ *   `node:fs/promises`'s `readFile`.
+ * @returns {Promise<{depConstraints: object[], options: object, suppressions: object[]}>}
+ *   `suppressions` is `[]` when the config declares none.
+ * @throws {Error} when the file is missing, unloadable, or malformed, or names
+ *   an extension neither dialect reads — the same contract
+ *   `loadBoundaryConfigFile` has, for the same reason: an enforcer that
  *   starts with no rules enforces nothing and says nothing.
  */
-export async function readBoundaryConfig(workspaceRoot, revision, boundaryConfig) {
+export async function readBoundaryConfig(
+  workspaceRoot,
+  revision,
+  boundaryConfig,
+  { readFile = readFileFromDisk } = {},
+) {
   const path = `${workspaceRoot.replace(/\/$/, "")}/${boundaryConfig}`;
-  const url = `${pathToFileURL(path).href}?revision=${encodeURIComponent(String(revision))}`;
-  let module;
-  try {
-    module = await import(url);
-  } catch (cause) {
-    throw new Error(`lattice: cannot load ${path}: ${cause?.message ?? cause}`, {
-      cause,
-    });
-  }
-  const violations = findBoundaryConfigViolations(module);
-  if (violations.length > 0) {
-    throw new Error(`lattice: ${path} is malformed:\n  ${violations.join("\n  ")}`);
-  }
-  return { depConstraints: module.depConstraints, options: module.moduleBoundaryOptions };
+  const extension = extname(path);
+  if (extension === ".mjs" || extension === ".js") return readModulePolicy(path, revision);
+  if (extension === ".json") return readJsonPolicy(path, readFile);
+  throw new Error(
+    `lattice: ${path} names an unsupported boundaryConfig extension '${extension || "(none)"}' — ` +
+      `expected .mjs, .js, or .json`,
+  );
 }
