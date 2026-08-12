@@ -157,3 +157,44 @@ pull request (`../../../../../.github/workflows/ci.yml`'s "Prove the packed
 artifact works outside this workspace" step already invoked it for the Nx
 path; the native path rides the same invocation, no separate CI step needed)
 and again in the release lane before `npm publish`.
+
+`verify-package.mjs` still proves the provider only against fixtures someone
+here built, even installed for real — the checker exits the right code on a
+tree this repository authored to exit that code. Two more things close the gap
+`verify-package.mjs` cannot: source nobody here wrote, and this repository's
+own tree.
+
+`../../../../../scripts/differential-real-trees.mjs`'s native leg answers "does
+this provider's discovery-plus-graph pipeline reproduce a real tool's own
+answer, on a tree neither of us built." It derives a `lattice.json`-equivalent
+model mechanically from a real Nx workspace's own `nx graph --file=` output
+(`deriveNativeModel`, one `projects.declared` row per node) — never
+hand-authored, so the model is a measurement of the real tree rather than a
+fixture this package's author already knew the answer to — runs
+`nativeProvider.discover`/`buildGraph` over it, and compares the node set, edge
+set, and rule verdicts against the same tree's real Nx-graph-based run,
+classified through the differential's existing ledger. The first real run
+(2026-08-12, against `code-pushup` at its pinned commit) found a populated
+ledger, not an empty one — the expected outcome, argued in that file's own
+`LEDGER` doc comment — and every row traces to a real, investigated cause
+rather than an unknown: Nx's own root-project spelling (`root: "."`) needing
+renormalisation before it reaches `lattice.json`'s dialect (which rejects that
+exact spelling by name), and two narrower, pre-existing gaps in the shared
+analysis pipeline that this leg surfaced but does not own fixing (a root-"."
+project's own files going unowned by `createWorkspace`, and a TypeScript
+import-type query the analyzer's AST walk does not visit) — both logged in
+`LEDGER` with the reason, and both out of scope for this provider to change:
+either fix moves what every consumer's boundary check reports on an unchanged
+workspace, which is a breaking change on its own, argued separately from this
+provider's own correctness.
+
+`../../../../../.github/workflows/ci.yml`'s "Check this repository's own
+module boundaries (native provider)" step answers the other half: does this
+provider meet THIS repository's own real source, under a tag vocabulary
+(`type:package`, `scope:nx`) nothing under `src/` has any knowledge of — the
+same argument the Nx-based self-check step just above it makes for that path.
+That step's own comment carries the full account of why this repository
+cannot carry a root `lattice.json` alongside its own `nx.json`, and how the
+throwaway copy the step runs against is built and proved to share this
+repository's real `module-boundaries.config.mjs` — read it there rather than
+here, so the mechanism has one description instead of two that could drift.
