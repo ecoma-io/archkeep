@@ -49,6 +49,7 @@ src/analysis/          which import is written where, and what it resolves to
 src/graph/             analysis reduced to Nx dependency records
 src/config.mjs         loads + validates the workspace boundary config
 src/workspace.mjs      which projects and files a run covers, and their analysis
+src/providers/         where the graph `evaluate()` judges comes from
 src/rules/             the boundary rules — `evaluate(sites, graph, config)`
 src/report/            rendering violations as text and as SARIF
 src/lsp/               the language server: lifecycle, index, diagnostics
@@ -79,13 +80,25 @@ src/conformance/       the differential against ESLint, and this package's
   deliberately stricter than ESLint — read it before touching a rule.
 - **`src/workspace.mjs` is the only layer allowed to answer "which files".**
   An analyzer is handed one file and a rule is handed records, so the question
-  lands here — with the two spawns that come with it. Projects and tags come
-  from `nx graph --file=` (never a second walk of `project.json` files, which
-  would disagree with Nx wherever a plugin contributes an edge); files come
-  from `git ls-files`, because the graph JSON carries no file map and a tree
-  walk would need ignore rules that drift from `.gitignore`. Both are
-  injectable, which is what lets a test drive the whole pipeline with neither
-  Nx nor git present.
+  lands here — with the git spawn that comes with it: files come from
+  `git ls-files`, because the graph JSON carries no file map and a tree walk
+  would need ignore rules that drift from `.gitignore`. Projects and tags are a
+  different question, answered by a `src/providers/` provider rather than a
+  second walk of `project.json` files, which would disagree with Nx wherever a
+  plugin contributes an edge. The git spawn here and the Nx spawn in
+  `src/providers/nx.mjs` are both injectable, which is what lets a test drive
+  the whole pipeline with neither Nx nor git present.
+- **`src/providers/` is the layer that supplies a graph to `evaluate()`.**
+  `evaluate` is pure and takes a graph it does not build; the Nx path gets it
+  from `src/providers/nx.mjs`'s `readProjectGraph`, which asks
+  `nx graph --file=` for it — the only place the package resolves and spawns
+  the Nx CLI. (Not the only place it resolves `nx` at all: `src/nx-json.mjs`
+  separately resolves Nx's own JSONC parser to read commented `nx.json`
+  files, and is reached from `src/options.mjs` before any provider runs.) It
+  is the `ProjectModelProvider` seam's first implementation, not
+  its only planned one: a `lattice.json`-driven native model is meant to
+  implement the same contract beside it, without `cli.mjs` or `src/lsp/`
+  needing to know which provider they are holding.
 - **`src/report/` renders, and decides nothing.** A formatter that filtered
   would be a rule wearing a formatter's name.
 - **`src/options.mjs` is the only layer allowed to know what a workspace named
@@ -97,12 +110,15 @@ src/conformance/       the differential against ESLint, and this package's
   the `workspace` object. Its header argues both the promotions and the one
   refusal — there is no `languages` option, because switching a language off is
   indistinguishable in every report from that language having no violations.
-- **`src/lsp/` is the only layer allowed to build a graph.** `evaluate` is
-  pure and takes a graph it does not build; under Nx that graph comes from Nx,
-  and a language server has no Nx. `src/lsp/workspace-index.mjs` builds the
-  same shape from the tracked `project.json` files, reproducing Nx's own
-  `getProjectType` (including the `-e2e` suffix rule) rather than inventing a
-  second answer. `lsp.mjs` itself holds only the stdio wiring.
+- **`src/lsp/` is the layer that still builds its own graph, and that is a gap
+  `src/providers/` has not closed yet.** A language server has no Nx, so it
+  cannot go through `src/providers/nx.mjs`; `src/lsp/workspace-index.mjs`
+  builds the same shape by hand from the tracked `project.json` files,
+  reproducing Nx's own `getProjectType` (including the `-e2e` suffix rule)
+  rather than inventing a second answer. That construction is scheduled to
+  move into a second `src/providers/` implementation — this sentence describes
+  today's split, not a permanent one. `lsp.mjs` itself holds only the stdio
+  wiring.
 
 ## The three consumers of the options, and why the seam is `nx.json`
 

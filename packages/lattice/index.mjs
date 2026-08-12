@@ -29,10 +29,11 @@ export {
   listTrackedFiles,
   packageEntryPoints,
   projectIsMFERemote,
-  readProjectGraph,
   runProcess,
   selectFiles,
 } from "./src/workspace.mjs";
+
+export { nxProvider, readProjectGraph } from "./src/providers/nx.mjs";
 
 export {
   analyzeFile,
