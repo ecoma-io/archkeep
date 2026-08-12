@@ -96,6 +96,13 @@ graph --file=` for it — the only place the package resolves and spawns the
   Nx CLI. (Not the only place it resolves `nx` at all: `src/nx-json.mjs`
   separately resolves Nx's own JSONC parser to read commented `nx.json`
   files, and is reached from `src/options.mjs` before any provider runs.)
+  `readProjectGraph` also merges `nx.json`'s own `workspaceLayout` onto that
+  graph — `src/options.mjs`'s `readWorkspaceLayout` reads it,
+  `requireCompleteWorkspaceLayout` refuses a partial declaration rather than
+  merging it onto the default — so a workspace naming a custom `libsDir`/
+  `appsDir` is judged against the layout it actually declared instead of
+  Nx's default `libs`/`apps`, the same fact `src/providers/native/model.mjs`
+  already required all-or-nothing from `lattice.json`.
   `src/providers/native/` implements the same `ProjectModelProvider` seam
   from `lattice.json` plus the tracked tree, with no Nx installed, so
   `cli.mjs` and `src/lsp/` never need to know which provider they are

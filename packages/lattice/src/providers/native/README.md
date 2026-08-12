@@ -118,14 +118,18 @@ inside another project's own directory — and asserts each axis by name via
 `diffGraphs`, a per-node/per-edge/per-verdict comparison, rather than one
 `deepEqual` over two whole graphs. `layout` isolates `workspaceLayout` alone,
 because it is workspace-global rather than per-project and folding it into
-`composite` would move every other axis's expected shape at once; it is also
-the one pair the two providers are expected to disagree on; `readProjectGraph`
-in `../nx.mjs` returns `nx graph --file=`'s output verbatim, which carries no
-`workspaceLayout` at all (that function's own header), so the Nx side always
-falls back to the rule engine's default layout while the native side reads
-`lattice.json`'s own `workspaceLayout` field — a real, ledgered gap
-(https://github.com/ecoma-io/lattice/issues/31), not a fixture bug, and the
-test asserts the ledger explains exactly that one difference and nothing else.
+`composite` would move every other axis's expected shape at once. The two
+providers now AGREE on this pair — both report the same two violations —
+because `readProjectGraph` in `../nx.mjs` merges `nx.json`'s own
+`workspaceLayout` back onto the graph `nx graph --file=` returns (that
+function's own header), so the Nx side reads the identical non-default
+`libsDir`/`appsDir` the native side already read from `lattice.json`. `LEDGER`
+is empty and frozen for this pair — the one row it ever carried
+(https://github.com/ecoma-io/lattice/issues/31) retired with that merge — and
+the ledger's stale-row check (`classifyDifferences`'s `stale` return,
+asserted in `differential.integration.test.mjs`'s "the ledger's stale-row
+rule") is what keeps that claim honest: a row reintroduced here without a
+matching difference to explain would fail the suite rather than sit unread.
 
 Only ONE direction is ledgerable, and it is enforced structurally rather than
 by convention: a `LedgerRow` now carries a `direction` field

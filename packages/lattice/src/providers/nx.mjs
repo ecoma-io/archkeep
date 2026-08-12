@@ -20,11 +20,15 @@
  *   The workspace root, plus whatever spawns/reads this provider needs
  *   injected for a test — and back comes the graph half of the shape
  *   `evaluate()` consumes: `{nodes, dependencies}`, plus `externalNodes` and
- *   `workspaceLayout` when the provider's source of truth carries them (this
- *   one's does not — `nx graph --file=` emits neither, see `readProjectGraph`
- *   below). Everything the source DOES emit must travel inside that one
- *   object, because a provider that dropped a field its source supplied would
- *   force a second call to the same source outside the seam. Three node facts
+ *   `workspaceLayout` when the provider's source of truth carries them.
+ *   `nx graph --file=` itself emits neither (see `readProjectGraph` below) —
+ *   `externalNodes` stays absent, deliberately (`../../CLAUDE.md` argues that
+ *   refusal), but `workspaceLayout` is merged back in from `nx.json` by
+ *   `readProjectGraph` itself, because that command's own output is not the
+ *   whole of what the workspace declared. Everything the source DOES emit
+ *   must travel inside that one object, because a provider that dropped a
+ *   field its source supplied would force a second call to the same source
+ *   outside the seam. Three node facts
  *   deliberately do NOT come from the provider: `mfeRemote`, `entryPoints`
  *   and `declaredPackages` are annotated onto `graph.nodes` by the caller
  *   afterwards (`../../cli.mjs`, via `annotateMFERemotes` and
@@ -38,6 +42,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { runProcess } from "../process.mjs";
+import { readWorkspaceLayout, requireCompleteWorkspaceLayout } from "../options.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -108,12 +113,38 @@ function nxCli({ resolveNx = () => require.resolve("nx/package.json") } = {}) {
  * instead, which is what makes `bannedExternalImports` reachable for crates and
  * Go modules at all (`../rules/index.mjs` → `externalNodeFor`).
  *
+ * The command also emits no `workspaceLayout` — measured, the same way — so
+ * this function reads `nx.json`'s own `workspaceLayout` key separately
+ * (`../options.mjs`'s `readWorkspaceLayout`) and merges it onto the graph
+ * before returning: without this, `../rules/index.mjs`'s
+ * `graph.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT` fallback would apply the
+ * DEFAULT layout to every Nx workspace regardless of what `nx.json` declares,
+ * silencing `noRelativeOrAbsoluteImportsAcrossLibraries` on exactly the
+ * workspaces that set a non-default `appsDir`/`libsDir` (issue #31). The key
+ * is merged in only when something was declared and is complete
+ * (`requireCompleteWorkspaceLayout`) — absent when nothing was declared,
+ * exactly as `../providers/native/graph.mjs` already does for `lattice.json`,
+ * which is what keeps `graph.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT`
+ * working unchanged and keeps the two providers structurally identical here.
+ * A declared-but-incomplete layout throws rather than being silently dropped
+ * or silently completed — the same refusal
+ * `../providers/native/model.mjs`'s `workspaceLayoutViolations` already
+ * applies to `lattice.json`'s identically-shaped field, so the two providers
+ * agree on the same declared object rather than one merging onto a default
+ * the other would have refused.
+ *
  * @param {string} workspaceRoot
- * @param {{ run?: typeof runProcess, resolveNx?: () => string }} [io]
- *   Injectable spawn, and injectable Nx resolution (see `nxCli`).
- * @returns {object} `{ nodes, dependencies }`.
+ * @param {{ run?: typeof runProcess, resolveNx?: () => string,
+ *   readLayout?: typeof readWorkspaceLayout }} [io]
+ *   Injectable spawn, injectable Nx resolution (see `nxCli`), and injectable
+ *   `workspaceLayout` read (see `../options.mjs`).
+ * @returns {object} `{ nodes, dependencies }`, plus `workspaceLayout` when
+ *   `nx.json` declares a complete one.
  */
-export function readProjectGraph(workspaceRoot, { run = runProcess, resolveNx } = {}) {
+export function readProjectGraph(
+  workspaceRoot,
+  { run = runProcess, resolveNx, readLayout = readWorkspaceLayout } = {},
+) {
   const dir = mkdtempSync(join(tmpdir(), "lattice-"));
   const file = join(dir, "graph.json");
   try {
@@ -125,7 +156,8 @@ export function readProjectGraph(workspaceRoot, { run = runProcess, resolveNx } 
           `nothing can be judged against a graph with no projects in it`,
       );
     }
-    return graph;
+    const workspaceLayout = requireCompleteWorkspaceLayout(readLayout(workspaceRoot));
+    return workspaceLayout === null ? graph : { ...graph, workspaceLayout };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

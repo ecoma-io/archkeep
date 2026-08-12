@@ -143,6 +143,33 @@ function namesThisPlugin(entry) {
 }
 
 /**
+ * `nx.json`'s parsed contents, or `null` when the workspace has none.
+ *
+ * The one place this file spawns a read and a parse, so `readPluginOptions`
+ * and `readWorkspaceLayout` below — two independent readers of the same file
+ * — cannot disagree about whether it is readable: both go through here, and
+ * both therefore throw the identical `cannot read <path>` message on the same
+ * malformed input rather than each carrying its own copy that could drift.
+ *
+ * @param {string} workspaceRoot
+ * @param {(path: string) => string|null} readFile
+ * @returns {object|null}
+ * @throws {Error} when the file exists but `parseNxJson` cannot read it.
+ */
+function readNxJsonOrNull(workspaceRoot, readFile) {
+  const path = `${String(workspaceRoot).replace(/\/$/u, "")}/${NX_CONFIG_FILE}`;
+  const text = readFile(path);
+  if (text === null) return null;
+  try {
+    return parseNxJson(text);
+  } catch (cause) {
+    throw new Error(`lattice: cannot read ${path}: ${cause?.message ?? cause}`, {
+      cause,
+    });
+  }
+}
+
+/**
  * The resolved options a workspace root declares.
  *
  * The read is injectable, which is what keeps the one filesystem-touching
@@ -169,23 +196,112 @@ function namesThisPlugin(entry) {
  *   could not read its own configuration must not answer as though it had.
  */
 export function readPluginOptions(workspaceRoot, { readFile = readFileOrNull } = {}) {
-  const path = `${String(workspaceRoot).replace(/\/$/u, "")}/${NX_CONFIG_FILE}`;
-  const text = readFile(path);
-  if (text === null) return { ...DEFAULT_OPTIONS };
-
-  let nxJson;
-  try {
-    nxJson = parseNxJson(text);
-  } catch (cause) {
-    throw new Error(`lattice: cannot read ${path}: ${cause?.message ?? cause}`, {
-      cause,
-    });
-  }
+  const nxJson = readNxJsonOrNull(workspaceRoot, readFile);
+  if (nxJson === null) return { ...DEFAULT_OPTIONS };
 
   const plugins = Array.isArray(nxJson?.plugins) ? nxJson.plugins : [];
   const entry = plugins.find(namesThisPlugin);
   if (entry === undefined) return { ...DEFAULT_OPTIONS };
   return resolveOptions(typeof entry === "string" ? undefined : entry.options);
+}
+
+/**
+ * The two keys `nx.json`'s `workspaceLayout` may carry — the same pair
+ * `./providers/native/model.mjs`'s `WORKSPACE_LAYOUT_KEYS` validates for
+ * `lattice.json`'s identically-named field, kept as two separate constants
+ * because the two files sit on opposite sides of the layer boundary
+ * `packages/lattice/CLAUDE.md` draws (`src/options.mjs` owns what a workspace
+ * may tell this tool about ITSELF via Nx's own config; `src/providers/native/`
+ * owns the `lattice.json` dialect) — a shared constant would import one layer
+ * into the other for two frozen strings.
+ */
+const WORKSPACE_LAYOUT_KEYS = Object.freeze(["appsDir", "libsDir"]);
+
+/**
+ * `nx.json`'s `workspaceLayout`, exactly as declared — never merged with a
+ * default and never required to be complete. A caller downstream has to be
+ * able to tell "declared nothing" from "declared the default", which is why
+ * this returns `null` for the former and the declared object verbatim
+ * (partial or not) for the latter, rather than folding either case into
+ * `./rules/specifiers.mjs`'s `DEFAULT_WORKSPACE_LAYOUT`. Whether a PARTIAL
+ * declaration is usable is a different, narrower question — this reader only
+ * answers "is what's here well-formed" — and `requireCompleteWorkspaceLayout`
+ * below answers the narrower one for the two callers that need it.
+ *
+ * @param {string} workspaceRoot
+ * @param {{readFile?: (path: string) => string|null}} [io]
+ * @returns {{appsDir?: string, libsDir?: string}|null} `null` when the
+ *   workspace has no `nx.json`, or its `nx.json` declares no `workspaceLayout`
+ *   key.
+ * @throws {Error} when `workspaceLayout` is present but is not a plain
+ *   object, names a key other than `appsDir`/`libsDir`, or gives either key a
+ *   non-string or empty-string value. Reading any of those as "no layout
+ *   declared" would silence `noRelativeOrAbsoluteImportsAcrossLibraries` on
+ *   exactly the workspace whose configuration is broken — the same reasoning
+ *   `./providers/native/model.mjs`'s `workspaceLayoutViolations` already
+ *   applies to `lattice.json`'s identically-shaped field.
+ */
+export function readWorkspaceLayout(workspaceRoot, { readFile = readFileOrNull } = {}) {
+  const nxJson = readNxJsonOrNull(workspaceRoot, readFile);
+  if (nxJson === null) return null;
+  const declared = /** @type {{workspaceLayout?: unknown}} */ (nxJson)?.workspaceLayout;
+  if (declared === undefined) return null;
+  if (typeof declared !== "object" || declared === null || Array.isArray(declared)) {
+    throw new Error(
+      `lattice: nx.json's workspaceLayout must be an object, got ` +
+        `${Array.isArray(declared) ? "an array" : typeof declared}`,
+    );
+  }
+  for (const key of Object.keys(declared)) {
+    if (!WORKSPACE_LAYOUT_KEYS.includes(key)) {
+      throw new Error(
+        `lattice: nx.json's workspaceLayout.${key} is not a workspaceLayout field — expected ` +
+          `one of ${WORKSPACE_LAYOUT_KEYS.join(", ")}`,
+      );
+    }
+    const value = /** @type {Record<string, unknown>} */ (declared)[key];
+    if (typeof value !== "string" || value === "") {
+      throw new Error(
+        `lattice: nx.json's workspaceLayout.${key} must be a non-empty string, got ` +
+          `${value === "" ? "an empty string" : typeof value}`,
+      );
+    }
+  }
+  return /** @type {{appsDir?: string, libsDir?: string}} */ (declared);
+}
+
+/**
+ * Narrows a `readWorkspaceLayout` result to "usable by the rule engine":
+ * either nothing declared (`null`, unchanged) or BOTH `appsDir` and `libsDir`
+ * present. `./rules/specifiers.mjs`'s `isAbsoluteImportIntoAnotherProject`
+ * reads both keys off one object with no per-key fallback — a workspace
+ * declaring only `libsDir` would silently evaluate `appsDir` as `undefined`
+ * and never match a real `apps/` import, the exact silent degradation
+ * `AGENTS.md`'s invariant rules out.
+ *
+ * This is also the parity point between the two providers:
+ * `./providers/native/model.mjs`'s `workspaceLayoutViolations` already
+ * refuses an incomplete `workspaceLayout` for `lattice.json` — it never
+ * merges a partial declaration onto a default, it rejects the whole file — so
+ * `./providers/nx.mjs` and `./lsp/workspace-index.mjs` both call this
+ * function rather than each deciding independently, and the same declared
+ * object is accepted or refused identically by both.
+ *
+ * @param {{appsDir?: string, libsDir?: string}|null} declared
+ * @returns {{appsDir: string, libsDir: string}|null}
+ * @throws {Error} when `declared` is non-null but missing `appsDir` or
+ *   `libsDir`.
+ */
+export function requireCompleteWorkspaceLayout(declared) {
+  if (declared === null) return null;
+  const missing = WORKSPACE_LAYOUT_KEYS.filter((key) => !(key in declared));
+  if (missing.length === 0) {
+    return /** @type {{appsDir: string, libsDir: string}} */ (declared);
+  }
+  throw new Error(
+    `lattice: nx.json's workspaceLayout declares ${Object.keys(declared).join(", ") || "nothing"} ` +
+      `but is missing ${missing.join(", ")} — declare both appsDir and libsDir, or neither.`,
+  );
 }
 
 /** A file's contents, or `null` when it does not exist or cannot be read. */

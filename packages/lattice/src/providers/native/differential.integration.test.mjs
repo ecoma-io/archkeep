@@ -100,7 +100,6 @@ import {
   diffGraphs,
   emptyVerdictBreaches,
   LEDGER,
-  namespaced,
   PAIR_LABELS,
   pairProblems,
   perMessageBreaches,
@@ -208,7 +207,17 @@ describe("the Nx and native providers agree over one physical workspace", () => 
     assertPairAgrees("composite", result);
   }, 30_000);
 
-  it("layout: workspaceLayout reaches the rule engine's defaults, and the resulting disagreement is exactly the ledgered one", async () => {
+  it("layout: nx.json's workspaceLayout reaches the rule engine the same way lattice.json's does, and the two providers agree", async () => {
+    // Before issue #31 was fixed, this pair was the one place the two
+    // providers were EXPECTED to disagree: `../nx.mjs`'s `readProjectGraph`
+    // dropped `nx.json`'s `workspaceLayout` entirely, so the Nx side always
+    // fell back to the default `appsDir`/`libsDir` regardless of what the
+    // tree declared, while the native side read `lattice.json`'s identical
+    // field and used it. That divergence is what the retired `LEDGER` row
+    // (see `./differential.fixtures.mjs`'s header comment above `LEDGER`)
+    // used to explain. Fixed, this pair needs no special-casing at all — it
+    // asserts through `assertPairAgrees` exactly like `simple` and
+    // `composite` above.
     const nxRoot = mkRoot(".oracle-layout-nx-");
     const nativeRoot = mkRoot(".oracle-layout-native-");
     const nxFiles = buildLayoutNxTree(nxRoot);
@@ -222,55 +231,23 @@ describe("the Nx and native providers agree over one physical workspace", () => 
       io: countingIo,
     });
 
-    // The node/dependency shapes still agree — only the verdict differs,
-    // which is the whole point of this fixture (see the comment above
-    // `LAYOUT_GO_FILES` in `./differential.fixtures.mjs`).
     expect(result.nx.nodes).toEqual(result.native.nodes);
     expect(result.nx.dependencies).toEqual(result.native.dependencies);
 
-    // Both engines find the `thing`→`blocked` layer-tag violation identically
-    // (the control) — that is the ONE the fixture needs to keep `nx`'s count
-    // off zero, so this pair is not itself the empty-verdict breach the last
-    // assertion below checks for. Native additionally flags the
-    // `workspaceLayout`-triggered crossing import that Nx's graph cannot see.
-    expect(result.nx.violations).toHaveLength(1);
+    // Both engines find the `thing`→`blocked` layer-tag violation (the
+    // control, unrelated to `workspaceLayout`) AND the `workspaceLayout`-
+    // triggered crossing import — two violations each, identically, which is
+    // what proves the fix rather than merely a fixture that happens to match.
+    expect(result.nx.violations).toHaveLength(2);
     expect(result.native.violations).toHaveLength(2);
-    expect(result.nx.violationStrings[0]).toMatch(/^onlyTagsConstraintViolation /);
-    expect(result.native.violationStrings).toEqual(
-      expect.arrayContaining(result.nx.violationStrings),
-    );
+    expect(result.native.violationStrings).toEqual(result.nx.violationStrings);
     expect(
-      result.native.violationStrings.some((s) =>
+      result.nx.violationStrings.some((s) =>
         s.startsWith("noRelativeOrAbsoluteImportsAcrossLibraries "),
       ),
     ).toBe(true);
 
-    // Not `assertPairAgrees`: this pair's whole purpose is to exercise the
-    // one difference `LEDGER` documents, so assert THAT shape directly —
-    // explained by the ledger, nothing left unexplained, and (proving the
-    // ledger row is not stale) it actually fired. The control violation has
-    // EQUAL counts and IDENTICAL locations on both sides, so it produces no
-    // `diffGraphs` row at all — only the layout-specific messageId's count
-    // differs.
-    const rows = namespaced(diffGraphs(result.nx, result.native), "layout");
-    const { explained, unexplained, stale } = classifyDifferences(rows, LEDGER);
-    expect(unexplained).toEqual([]);
-    expect(stale.filter((row) => row.subject.startsWith("layout:"))).toEqual([]);
-    expect(explained).toHaveLength(1);
-    expect(explained[0].difference.field).toBe("count");
-
-    // And this pair is NOT a breach — both engines report at least the
-    // control violation; native reports one MORE than Nx on top of it, not
-    // fewer, which is the direction the invariant tolerates.
-    expect(
-      emptyVerdictBreaches("layout", {
-        nx: result.nx.violations.length,
-        native: result.native.violations.length,
-      }),
-    ).toEqual([]);
-    expect(perMessageBreaches("layout", result.nx.violations, result.native.violations)).toEqual(
-      [],
-    );
+    assertPairAgrees("layout", result);
   }, 30_000);
 
   it("ran exactly three nx graph spawns, and finished within this file's own budget", () => {

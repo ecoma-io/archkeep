@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_OPTIONS, readPluginOptions, resolveOptions } from "./options.mjs";
+import {
+  DEFAULT_OPTIONS,
+  readPluginOptions,
+  readWorkspaceLayout,
+  requireCompleteWorkspaceLayout,
+  resolveOptions,
+} from "./options.mjs";
 
 /** An `nx.json` reader over an in-memory tree, in `readPluginOptions`'s shape. */
 const treeWith = (files) => ({ readFile: (path) => files[path] ?? null });
@@ -163,6 +169,95 @@ describe("readPluginOptions", () => {
     });
     expect(() => readPluginOptions("/w", treeWith({ "/w/nx.json": nxJson }))).toThrow(
       /unknown plugin option 'tsconfigBase'/,
+    );
+  });
+});
+
+describe("readWorkspaceLayout", () => {
+  it("returns a partial declaration verbatim, never merged with a default", () => {
+    // The caller has to be able to tell "declared the default" from
+    // "declared nothing" — merging here would destroy that distinction.
+    expect(
+      readWorkspaceLayout(
+        "/w",
+        treeWith({ "/w/nx.json": '{"workspaceLayout":{"libsDir":"packages"}}' }),
+      ),
+    ).toEqual({ libsDir: "packages" });
+  });
+
+  it("returns null when nx.json declares no workspaceLayout key", () => {
+    expect(readWorkspaceLayout("/w", treeWith({ "/w/nx.json": "{}" }))).toBeNull();
+  });
+
+  it("returns null when the tree has no nx.json at all", () => {
+    expect(readWorkspaceLayout("/w", treeWith({}))).toBeNull();
+  });
+
+  it("throws when workspaceLayout is not an object", () => {
+    // Silent direction: reading a malformed value as "no layout declared"
+    // would drop the rule back to the default layout on exactly the
+    // workspace whose configuration is wrong.
+    expect(() =>
+      readWorkspaceLayout("/w", treeWith({ "/w/nx.json": '{"workspaceLayout":"packages"}' })),
+    ).toThrow(/workspaceLayout must be an object/);
+  });
+
+  it("throws on a non-string workspaceLayout value", () => {
+    expect(() =>
+      readWorkspaceLayout("/w", treeWith({ "/w/nx.json": '{"workspaceLayout":{"libsDir":5}}' })),
+    ).toThrow(/workspaceLayout\.libsDir must be a non-empty string/);
+  });
+
+  it("throws on an empty-string workspaceLayout value", () => {
+    expect(() =>
+      readWorkspaceLayout("/w", treeWith({ "/w/nx.json": '{"workspaceLayout":{"libsDir":""}}' })),
+    ).toThrow(/workspaceLayout\.libsDir must be a non-empty string/);
+  });
+
+  it("throws on a workspaceLayout key this tool does not know, rather than ignoring it", () => {
+    // Parity with `./providers/native/model.mjs`'s `workspaceLayoutViolations`,
+    // which refuses the identical shape for `lattice.json`.
+    expect(() =>
+      readWorkspaceLayout("/w", treeWith({ "/w/nx.json": '{"workspaceLayout":{"srcDir":"src"}}' })),
+    ).toThrow(/workspaceLayout\.srcDir is not a workspaceLayout field/);
+  });
+
+  it("reads through an nx.json Nx accepts but JSON.parse does not", () => {
+    const nxJson = '{\n// a comment\n"workspaceLayout":{"libsDir":"packages","appsDir":"apps"},\n}';
+    expect(readWorkspaceLayout("/w", treeWith({ "/w/nx.json": nxJson }))).toEqual({
+      libsDir: "packages",
+      appsDir: "apps",
+    });
+  });
+
+  it("throws on an nx.json neither parser can read — the same message shape readPluginOptions produces", () => {
+    expect(() =>
+      readWorkspaceLayout("/w", treeWith({ "/w/nx.json": "{ this is not json" })),
+    ).toThrow(/cannot read \/w\/nx\.json/);
+  });
+});
+
+describe("requireCompleteWorkspaceLayout", () => {
+  it("passes null through unchanged", () => {
+    expect(requireCompleteWorkspaceLayout(null)).toBeNull();
+  });
+
+  it("passes a complete declaration through unchanged", () => {
+    const declared = { appsDir: "applications", libsDir: "packages" };
+    expect(requireCompleteWorkspaceLayout(declared)).toEqual(declared);
+  });
+
+  it("throws on a partial declaration, naming what is present and what is missing", () => {
+    // The parity refusal: `./providers/native/model.mjs` never merges a
+    // partial `lattice.json` workspaceLayout onto a default either — it
+    // refuses the whole file. A caller here defaulting the missing key would
+    // let the Nx path disagree with the native path on the same declared
+    // object, which is exactly what this function exists to rule out.
+    expect(() => requireCompleteWorkspaceLayout({ libsDir: "packages" })).toThrow(
+      /workspaceLayout declares libsDir but is missing appsDir/,
+    );
+    expect(() => requireCompleteWorkspaceLayout({ appsDir: "applications" })).toThrow(
+      /workspaceLayout declares appsDir but is missing libsDir/,
     );
   });
 });

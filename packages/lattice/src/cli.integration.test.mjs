@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { check, EXIT, parseCheckArgs, runCli } from "../cli.mjs";
+import { readProjectGraph } from "./providers/nx.mjs";
 
 const CLI = fileURLToPath(new URL("../cli.mjs", import.meta.url));
 // This package's own directory — the one ancestor whose `node_modules` a
@@ -1580,6 +1581,117 @@ var _ = b.Name
     const { violations } = await check(
       { format: "text", config: null, paths: [] },
       { cwd: layoutRoot, listFiles: () => [...layoutFiles, "lattice.json"] },
+    );
+    expect(violations).toBe(0);
+  });
+});
+
+describe("an Nx-tree workspaceLayout must reach the rule engine the same way lattice.json's does", () => {
+  // The Nx-side counterpart to the native block above: `nx.json`'s
+  // `workspaceLayout` used to be read nowhere in this package —
+  // `readProjectGraph` (`./providers/nx.mjs`) merged nothing from disk onto
+  // the graph `evaluate()` reads, so a workspace with a custom `libsDir`
+  // still had its boundary rules judged against the Nx DEFAULT layout
+  // (`libs`/`apps`). `check()`'s `readGraph` context seam is injected with the
+  // real `readProjectGraph`, faking only the `nx graph` subprocess spawn
+  // (`run`), so the real `nx.json` merge logic in `./providers/nx.mjs` runs
+  // against a real file on disk — the same thing `findWorkspaceRoot` and
+  // `readPluginOptions` inside `check()` do unconditionally and cannot be
+  // injected around.
+  const nxLayoutRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-nx-layout-"));
+  afterAll(() => rmSync(nxLayoutRoot, { recursive: true, force: true }));
+
+  const writeNxLayout = (relativePath, text) => {
+    mkdirSync(join(nxLayoutRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(nxLayoutRoot, relativePath), text);
+  };
+
+  writeNxLayout(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeNxLayout("packages/a/go.mod", "module example.com/a\n\ngo 1.24\n");
+  writeNxLayout(
+    "packages/a/doc.go",
+    `// Package a reaches b by an absolute-looking specifier.
+package a
+
+import (
+	"packages/b"
+)
+
+var _ = b.Name
+`,
+  );
+  writeNxLayout("packages/b/go.mod", "module example.com/b\n\ngo 1.24\n");
+
+  const nxLayoutFiles = [
+    "nx.json",
+    "module-boundaries.config.mjs",
+    "packages/a/go.mod",
+    "packages/a/doc.go",
+    "packages/b/go.mod",
+  ];
+
+  // Stands in for the `nx graph` subprocess spawn only — the graph shape a
+  // real `nx graph --file=` write produces for this tree, with no
+  // `workspaceLayout` key of its own, so the only source of that fact is the
+  // real `readProjectGraph` merge this test exists to exercise.
+  const fakeNxGraphRun = (_file, args) => {
+    const fileArg = args.find((arg) => arg.startsWith("--file="));
+    const target = fileArg.slice("--file=".length);
+    writeFileSync(
+      target,
+      JSON.stringify({
+        graph: {
+          nodes: {
+            a: { name: "a", type: "lib", data: { root: "packages/a" } },
+            b: { name: "b", type: "lib", data: { root: "packages/b" } },
+          },
+          dependencies: {},
+        },
+      }),
+    );
+    return "";
+  };
+
+  it("with a custom libsDir declared in nx.json, catches the absolute import into another library", async () => {
+    writeNxLayout(
+      "nx.json",
+      JSON.stringify({ workspaceLayout: { appsDir: "applications", libsDir: "packages" } }),
+    );
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: [] },
+      {
+        cwd: nxLayoutRoot,
+        readGraph: (root) => readProjectGraph(root, { run: fakeNxGraphRun }),
+        listFiles: () => nxLayoutFiles,
+      },
+    );
+    expect(violations).toBe(1);
+    expect(report).toContain("noRelativeOrAbsoluteImportsAcrossLibraries");
+  });
+
+  it("without workspaceLayout declared, the default libs/apps layout misses it — the exact gap the declared layout must close", async () => {
+    writeNxLayout("nx.json", JSON.stringify({}));
+    const { violations } = await check(
+      { format: "text", config: null, paths: [] },
+      {
+        cwd: nxLayoutRoot,
+        readGraph: (root) => readProjectGraph(root, { run: fakeNxGraphRun }),
+        listFiles: () => nxLayoutFiles,
+      },
     );
     expect(violations).toBe(0);
   });
