@@ -80,13 +80,14 @@
  * chance to explain one away). That asymmetry is `AGENTS.md`'s invariant
  * applied to two providers instead of one rule path.
  */
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterAll, describe, expect, it } from "vitest";
 
 import {
+  assertNoAnalysisFailures,
   assertPairAgrees,
   buildCompositeNativeTree,
   buildCompositeNxTree,
@@ -95,6 +96,7 @@ import {
   buildSimpleNativeTree,
   buildSimpleNxTree,
   classifyDifferences,
+  dependencyShape,
   diffGraphs,
   emptyVerdictBreaches,
   LEDGER,
@@ -105,6 +107,7 @@ import {
   runBothProviders,
   runNxGraphSpawn,
   unknownLabelRows,
+  writeIn,
 } from "./differential.fixtures.mjs";
 
 // `packages/lattice/`, three levels above this file (`native/` → `providers/`
@@ -330,8 +333,8 @@ describe("diffGraphs is not vacuous", () => {
       kind: "node",
       subject: "a",
       field: "tags",
-      nx: "layer:a",
-      native: "layer:different",
+      nx: JSON.stringify(["layer:a"]),
+      native: JSON.stringify(["layer:different"]),
     });
   });
 
@@ -675,5 +678,201 @@ describe("a ledger row may never cover an Nx-finds-more breach, in either direct
     expect(() => pairProblems("pair", { nx, native }, [])).toThrow(
       /never explain away|refuses to explain/,
     );
+  });
+});
+
+describe("a ledger row only excuses a difference running its own declared direction", () => {
+  it("does NOT explain an nx-only difference sharing a native-only row's subject and field", () => {
+    // Red without the fix: matching on `subject`/`field` alone (with no
+    // direction check) would find this row and call the difference
+    // "explained" — a native-provider REGRESSION (native missing a project nx
+    // has) wearing the same subject/field as a ledgered native-only row, which
+    // is exactly the silent shape `../../../../../AGENTS.md`'s invariant
+    // forbids: a real disagreement reading as a documented, accepted one.
+    const ledger = Object.freeze([
+      Object.freeze({
+        subject: "pair:someProject",
+        field: "presence",
+        direction: "native-only",
+        reason: "a native-only row, on purpose, for this test",
+        issue: "https://github.com/ecoma-io/lattice/issues/31",
+      }),
+    ]);
+    const differences = [
+      {
+        kind: "node",
+        subject: "pair:someProject",
+        field: "presence",
+        nx: "present",
+        native: "absent",
+      },
+    ];
+    const { explained, unexplained } = classifyDifferences(differences, ledger);
+    expect(explained).toEqual([]);
+    expect(unexplained).toHaveLength(1);
+  });
+
+  it("still explains the matching subject/field when the difference's direction is the row's own", () => {
+    // The positive control for the test above: the identical subject/field,
+    // but the native-only shape the row actually declares, still fires.
+    const ledger = Object.freeze([
+      Object.freeze({
+        subject: "pair:someProject",
+        field: "presence",
+        direction: "native-only",
+        reason: "a native-only row, on purpose, for this test",
+        issue: "https://github.com/ecoma-io/lattice/issues/31",
+      }),
+    ]);
+    const differences = [
+      {
+        kind: "node",
+        subject: "pair:someProject",
+        field: "presence",
+        nx: "absent",
+        native: "present",
+      },
+    ];
+    const { explained, unexplained } = classifyDifferences(differences, ledger);
+    expect(explained).toHaveLength(1);
+    expect(unexplained).toEqual([]);
+  });
+});
+
+describe("runBothProviders refuses to compare two partial scans", () => {
+  it("throws, naming the file, when the nx-side analysis reported a read/parse failure", () => {
+    // Red without the fix: `runBothProviders` used to build both graphs
+    // straight off `analyze()`'s `imports`, never looking at `failures` — a
+    // source file that failed to read yields a shorter import list on that
+    // side alone, and a shorter list can still equal the other side's list,
+    // which is an incomplete scan reading as provider agreement.
+    expect(() =>
+      assertNoAnalysisFailures(
+        [{ sourceFile: "libs/domain/broken.go", reason: "could not be read" }],
+        [],
+      ),
+    ).toThrow(/libs\/domain\/broken\.go/);
+  });
+
+  it("throws when the native-side analysis reported the failure instead — either side is enough", () => {
+    expect(() =>
+      assertNoAnalysisFailures(
+        [],
+        [{ sourceFile: "libs/adapter/broken.go", reason: "could not be read" }],
+      ),
+    ).toThrow(/libs\/adapter\/broken\.go/);
+  });
+
+  it("does not throw when both analyses are clean", () => {
+    expect(() => assertNoAnalysisFailures([], [])).not.toThrow();
+  });
+
+  it("proves the guard is wired into runBothProviders itself, not just correct in isolation", async () => {
+    // The three cases above call `assertNoAnalysisFailures` directly — they
+    // pin the function's own behaviour but would stay green even if the call
+    // site inside `runBothProviders` were ever deleted (reintroducing the
+    // exact bug this describe block is named for). This one drives
+    // `runBothProviders` end to end, over a native project that DECLARES a
+    // file it never writes to disk, so `readFileFrom` (this module) answers
+    // `null` for it and `analyzeWorkspace` (`../../workspace.mjs`) records a
+    // "could not be read" failure the way a real unreadable source file
+    // would. No real `nx graph` spawn: `io.run` below writes the graph file
+    // straight to the `--file=` path `readProjectGraph` (`../nx.mjs`) passed
+    // it, so this test adds nothing to the suite's spawn budget.
+    const nxRoot = mkdtempSync(join(packageRoot, ".oracle-partial-scan-nx-"));
+    const nativeRoot = mkdtempSync(join(packageRoot, ".oracle-partial-scan-native-"));
+    try {
+      writeIn(nativeRoot)(
+        "lattice.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "libs/a", name: "a", tags: [] }] },
+        }),
+      );
+      /** @type {typeof runNxGraphSpawn} */
+      const fakeNxRun = (_file, args) => {
+        const target = args.find((a) => a.startsWith("--file=")).slice("--file=".length);
+        writeFileSync(target, JSON.stringify({ graph: { nodes: {}, dependencies: {} } }));
+        return "";
+      };
+
+      await expect(
+        runBothProviders({
+          nxRoot,
+          nxFiles: [],
+          nativeRoot,
+          // Declared but never written — the unreadable file the guard
+          // exists to catch.
+          nativeFiles: ["lattice.json", "libs/a/broken.go"],
+          io: { run: fakeNxRun },
+        }),
+      ).rejects.toThrow(/libs\/a\/broken\.go/);
+    } finally {
+      rmSync(nxRoot, { recursive: true, force: true });
+      rmSync(nativeRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("node tag comparison does not collapse two distinct tag lists into one string", () => {
+  it("tag lists differing only in comma placement are still reported as a difference", () => {
+    // Red without the fix: `["a,b"].sort().join(",")` and
+    // `["a", "b"].sort().join(",")` both produce the string `"a,b"`, so a
+    // comma-joined comparison would call these two distinct tag lists equal
+    // and `diffGraphs` would report nothing — a real disagreement reading as
+    // agreement.
+    const nx = {
+      nodes: { a: { root: "libs/a", type: "lib", tags: ["a,b"] } },
+      dependencies: [],
+      violations: [],
+    };
+    const native = {
+      nodes: { a: { root: "libs/a", type: "lib", tags: ["a", "b"] } },
+      dependencies: [],
+      violations: [],
+    };
+    const rows = diffGraphs(nx, native);
+    expect(rows).toContainEqual({
+      kind: "node",
+      subject: "a",
+      field: "tags",
+      nx: JSON.stringify(["a,b"]),
+      native: JSON.stringify(["a", "b"]),
+    });
+  });
+});
+
+describe("dependencyShape does not collapse two distinct edges into one string", () => {
+  it("edges differing only in where a space falls between source and target are still reported as a difference", () => {
+    // Red without the fix: `` `${source} ${target} ${type}` `` joins
+    // `{source: "a b", target: "c"}` and `{source: "a", target: "b c"}` to
+    // the identical string `"a b c static"` — two distinct edges collapsing
+    // onto one, which `diffGraphs` (fed the collapsed strings) would then see
+    // as perfect agreement between engines that actually disagree.
+    const nxDeps = dependencyShape({
+      g: [{ source: "a b", target: "c", type: "static" }],
+    });
+    const nativeDeps = dependencyShape({
+      g: [{ source: "a", target: "b c", type: "static" }],
+    });
+    expect(nxDeps).not.toEqual(nativeDeps);
+
+    const rows = diffGraphs(
+      { nodes: {}, dependencies: nxDeps, violations: [] },
+      { nodes: {}, dependencies: nativeDeps, violations: [] },
+    );
+    expect(rows).toContainEqual({
+      kind: "dependency",
+      subject: JSON.stringify(["a b", "c", "static"]),
+      field: "presence",
+      nx: "present",
+      native: "absent",
+    });
+    expect(rows).toContainEqual({
+      kind: "dependency",
+      subject: JSON.stringify(["a", "b c", "static"]),
+      field: "presence",
+      nx: "absent",
+      native: "present",
+    });
   });
 });

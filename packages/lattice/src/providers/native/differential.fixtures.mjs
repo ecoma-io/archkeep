@@ -87,15 +87,27 @@ export const nodeShape = (nodes) =>
     ]),
   );
 
-/** `["source target type", ...]`, sorted so build order cannot matter. Kept as
- * a MULTISET (repeats survive), not deduplicated — `diffGraphs` below relies
- * on that: a duplicate edge on one side and not the other is a real
- * disagreement, and collapsing repeats here would erase it before `diffGraphs`
- * ever saw it. */
+/** `[JSON.stringify([source, target, type]), ...]`, sorted so build order
+ * cannot matter. Kept as a MULTISET (repeats survive), not deduplicated —
+ * `diffGraphs` below relies on that: a duplicate edge on one side and not the
+ * other is a real disagreement, and collapsing repeats here would erase it
+ * before `diffGraphs` ever saw it.
+ *
+ * Canonicalised with `JSON.stringify` rather than a space-joined
+ * `` `${source} ${target} ${type}` `` — a project name or file path
+ * containing a space would let two distinct edges collapse onto the same
+ * string (`source: "a b", target: "c"` and `source: "a", target: "b c"` both
+ * join to `"a b c static"`), which is exactly the silent shape
+ * `../../../../../AGENTS.md`'s invariant forbids: two real disagreements
+ * reading as one agreement. The provider this differential compares already
+ * dedups its own edges with a `JSON.stringify` key for the identical reason
+ * (`./graph.mjs`'s `buildDependencies`), so this keeps the differential's own
+ * canonicalisation consistent with the code under test rather than a weaker
+ * copy of it. */
 export const dependencyShape = (dependencies) =>
   Object.values(dependencies)
     .flat()
-    .map(({ source, target, type }) => `${source} ${target} ${type}`)
+    .map(({ source, target, type }) => JSON.stringify([source, target, type]))
     .sort();
 
 /** `["messageId sourceFile:line:column", ...]`, sorted the same way. */
@@ -123,6 +135,37 @@ export function runNxGraphSpawn(file, args, cwd) {
   } finally {
     if (previous === undefined) delete process.env.NX_DAEMON;
     else process.env.NX_DAEMON = previous;
+  }
+}
+
+/**
+ * Refuses to let `runBothProviders` build either provider's graph on top of a
+ * partial scan. `analyzeWorkspace` (`../../workspace.mjs`) records a failure
+ * rather than throwing when a file cannot be read or parsed — one bad file
+ * must not blank a whole analysis run — but that leaves the CALLER
+ * responsible for noticing one happened: a file either `readFile` cannot
+ * read yields a shorter import list on that side alone, and two shorter
+ * lists can still compare equal to each other by coincidence, which reads as
+ * "the providers agree" when what actually happened is "neither provider
+ * finished looking" — the exact silent shape `../../../../../AGENTS.md`'s
+ * invariant forbids, applied to this harness's own inputs rather than to the
+ * tool it drives. Called after both analyses and before either graph is
+ * built, so a fixture never gets far enough to diff two incomplete scans.
+ *
+ * @param {{sourceFile: string, reason: string}[]} nxFailures
+ * @param {{sourceFile: string, reason: string}[]} nativeFailures
+ * @throws {Error} naming every failing file, when either list is non-empty.
+ */
+export function assertNoAnalysisFailures(nxFailures, nativeFailures) {
+  const named = [
+    ...nxFailures.map((f) => `nx:${f.sourceFile} (${f.reason})`),
+    ...nativeFailures.map((f) => `native:${f.sourceFile} (${f.reason})`),
+  ];
+  if (named.length > 0) {
+    throw new Error(
+      `runBothProviders refuses to compare two partial scans: ${named.length} file(s) failed to ` +
+        `read or parse before either provider's graph was built — ${named.join(", ")}`,
+    );
   }
 }
 
@@ -172,6 +215,7 @@ export async function runBothProviders({
     ),
   };
   const nativeAnalysis = analyze(nativeRoot, preGraph, nativeFiles, discovered.model.tsConfig);
+  assertNoAnalysisFailures(nxAnalysis.failures, nativeAnalysis.failures);
   const nativeGraph = nativeProvider.buildGraph({
     discovered,
     importSites: nativeAnalysis.imports,
@@ -277,8 +321,14 @@ export function diffGraphs(nxSide, nativeSide) {
         });
       }
     }
-    const nxTags = [...nxNode.tags].sort().join(",");
-    const nativeTags = [...nativeNode.tags].sort().join(",");
+    // `JSON.stringify` of the sorted array, not a comma-joined string — a tag
+    // containing a comma (nothing in `./model.mjs`'s tag validation forbids
+    // one) would let two distinct tag lists collapse onto the same string:
+    // `["a,b"]` and `["a", "b"]` both join to `"a,b"`, and the second list's
+    // real difference from the first would vanish before this function ever
+    // returned a row for it.
+    const nxTags = JSON.stringify([...nxNode.tags].sort());
+    const nativeTags = JSON.stringify([...nativeNode.tags].sort());
     if (nxTags !== nativeTags) {
       rows.push({ kind: "node", subject: name, field: "tags", nx: nxTags, native: nativeTags });
     }
@@ -448,6 +498,37 @@ export const LEDGER = Object.freeze([
 export const PAIR_LABELS = Object.freeze(["simple", "composite", "layout"]);
 
 /**
+ * The direction a `diffGraphs` row itself claims, in `LedgerRow.direction`'s
+ * own vocabulary plus its one unledgerable opposite: `"native-only"` when
+ * native reports something nx does not (a `presence` row with nx absent, or a
+ * `count` row where native's number is the larger one), `"nx-only"` for the
+ * mirror shape — the direction `LEDGER_DIRECTIONS` has no member for, because
+ * a `LedgerRow` may only ever excuse native reporting more — and `null` for
+ * every other field (`root`, `type`, `tags`, a verdict's `location`): those
+ * are two-sided value mismatches, not one side reporting more than the other,
+ * so they carry no direction a ledger row could ever share.
+ *
+ * @param {{field: string, nx?: unknown, native?: unknown}} difference
+ * @returns {"native-only" | "nx-only" | null}
+ */
+function differenceDirection(difference) {
+  if (difference.field === "presence") {
+    if (difference.nx === "absent" && difference.native === "present") return "native-only";
+    if (difference.nx === "present" && difference.native === "absent") return "nx-only";
+    return null;
+  }
+  if (
+    difference.field === "count" &&
+    typeof difference.nx === "number" &&
+    typeof difference.native === "number"
+  ) {
+    if (difference.native > difference.nx) return "native-only";
+    if (difference.nx > difference.native) return "nx-only";
+  }
+  return null;
+}
+
+/**
  * Splits `diffGraphs` rows into explained (a `ledger` row covers it),
  * unexplained (nothing does — a finding), and stale ledger rows (they cover
  * nothing that fired — also a finding, from the other side). Mirrors
@@ -469,6 +550,16 @@ export const PAIR_LABELS = Object.freeze(["simple", "composite", "layout"]);
  * `LedgerRow` matching that difference's `subject`/`field` used to be enough
  * to explain it away regardless of what the row's `reason` said — this is
  * the fix: no reason, however worded, gets a vote on that direction.
+ *
+ * A row's `subject`/`field` matching a difference is not enough on its own,
+ * either: `LEDGER` rows only ever declare `direction: "native-only"`, and
+ * matching by `subject`/`field` alone would let such a row explain away a
+ * difference running the opposite way — native missing something nx has,
+ * which is a native-provider regression, not the loud/self-correcting
+ * shape the ledger exists to record. `differenceDirection` above answers
+ * which way a given row actually runs; a row only fires when that answer
+ * equals `row.direction`, so a matching `subject`/`field` whose direction
+ * disagrees lands in `unexplained` instead.
  *
  * @param {{kind?: string, subject: string, field: string, nx?: unknown, native?: unknown}[]} differences
  * @param {readonly LedgerRow[]} ledger
@@ -514,7 +605,10 @@ export function classifyDifferences(differences, ledger) {
       );
     }
     const row = ledger.find(
-      (r) => r.subject === difference.subject && r.field === difference.field,
+      (r) =>
+        r.subject === difference.subject &&
+        r.field === difference.field &&
+        r.direction === differenceDirection(difference),
     );
     if (row) {
       fired.add(row);
