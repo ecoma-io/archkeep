@@ -5,6 +5,15 @@ way. This document owns the direction. It owns no mechanism — where a claim he
 has a mechanism behind it, the file that owns the mechanism is linked, and that
 file is the one that binds.
 
+The direction is wider than it was when this document was written. Lattice is
+becoming a standalone architecture-enforcement engine — any repository, with or
+without Nx — and [roadmap.md](roadmap.md) owns that staged path and the thesis
+behind it. What this document says below remains true of the engine inside that
+path: the sentence, the finish line per language, the refusals. Where it says
+"an Nx workspace", the pivot reads "a repository", and the Nx-specific
+mechanics it cites are becoming one provider among the integrations rather
+than the foundation.
+
 ## The sentence
 
 **Every language in an Nx workspace should have the same architectural

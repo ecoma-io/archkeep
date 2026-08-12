@@ -5,10 +5,11 @@ Two doors. Take the one that matches what you are here to do.
 - **I want to use it** → [usage/getting-started.md](usage/getting-started.md)
 - **I want to change it** → [development/architecture.md](development/architecture.md)
 
-And two documents that are neither, but decide what the rest say:
+And three documents that are neither, but decide what the rest say:
 [why.md](why.md) — the problem this exists for, with the measurement behind it —
-and [north-star.md](north-star.md) — where it is going and what it will refuse
-on the way.
+[north-star.md](north-star.md) — where it is going and what it will refuse on
+the way — and [roadmap.md](roadmap.md) — the staged path there, by major
+version.
 
 ## Usage
 
@@ -45,6 +46,7 @@ allowed to say it". That table:
 | [`README.md`](../README.md)                                                 | The pitch: what Lattice is in one breath, and the way in                                              |
 | [`docs/why.md`](why.md)                                                     | The gap, and the evidence that it is real                                                             |
 | [`docs/north-star.md`](north-star.md)                                       | The direction, what "finished" means per language, and the refusals                                   |
+| [`docs/roadmap.md`](roadmap.md)                                             | The staged path: which capabilities belong to which major version, and in what order                  |
 | `docs/usage/`                                                               | How a consumer runs it and reads its answers                                                          |
 | `docs/development/`                                                         | How it works inside, and how to extend it                                                             |
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md)                                     | The contribution bar, the commands, hooks, commits, review, release                                   |
