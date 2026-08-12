@@ -30,6 +30,17 @@
  *   one. Those two callee forms are exactly the ones upstream's
  *   `getImportFromRequireCall` admits, and `isRequireCallee` below matches its
  *   shape node kind for node kind rather than widening it.
+ * - **`import("typescript")` in a type position (`ImportTypeNode`) is read as a
+ *   `type-only` import.** The form `type X = import("typescript").Foo` and
+ *   `const x: typeof import("typescript") = ...` both introduce a dependency on
+ *   `typescript` that is erased at runtime, so they carry `kind: "type-only"` —
+ *   the same classification `import type { X } from "typescript"` receives. The
+ *   argument is the `LiteralType` child of the `ImportTypeNode`; a
+ *   non-string-literal argument (a type reference, a template type) is
+ *   recorded as unresolvable rather than dropped, following the same loud/skip
+ *   discipline dynamic `import()` already applies. `typeof import("typescript")`
+ *   wraps the same `ImportTypeNode` inside a `TypeQueryNode`; the walk visits
+ *   the `ImportTypeNode` once and produces exactly one site, not a duplicate.
  *
  * ## One `kind` per import site, and how a mixed statement is judged
  *
@@ -461,6 +472,22 @@ function importSitesIn(sourceFile) {
           "static",
           ts.isIdentifier(node.expression) ? "require" : "require.resolve",
         );
+      }
+    } else if (ts.isImportTypeNode(node)) {
+      // ImportType is always type-only — it is a type query, erased at runtime.
+      // `typeof import("typescript")` wraps the same ImportTypeNode inside a
+      // TypeQueryNode; `ts.forEachChild` descends into the TypeQueryNode and
+      // reaches this branch once, producing exactly one site, not a duplicate.
+      // The argument is a LiteralType wrapping a StringLiteral for string-literal
+      // arguments. Non-literal arguments (type references, template types) are
+      // recorded as unresolvable following the same loud/skip discipline dynamic
+      // import() already applies.
+      const arg = node.argument;
+      if (ts.isLiteralTypeNode(arg) && ts.isStringLiteralLike(arg.literal)) {
+        push(arg.literal, "type-only");
+      } else {
+        // Non-literal argument: the site is real, the target is not knowable.
+        push(arg, "type-only", "import");
       }
     }
     ts.forEachChild(node, visit);

@@ -1254,6 +1254,8 @@ export const CONFORMANCE_CASES = [
             'const where = require.resolve("@forms/target");\nmodule.exports = { where };\n',
           "src/import-equals.ts":
             'import target = require("@forms/target");\nexport const value = target;\n',
+          "src/import-type.ts":
+            'type Refused = import("@forms/target").Refused;\nexport type Alias = Refused;\n',
         },
       },
       {
@@ -1289,6 +1291,16 @@ export const CONFORMANCE_CASES = [
           direction: "stricter",
           reason:
             "`import x = require(...)` is a TSImportEqualsDeclaration, which is in none of upstream's five visitors; the analyzer records it as a static import",
+        },
+      },
+      {
+        file: "libs/forms-source/src/import-type.ts",
+        upstream: [],
+        tool: ["onlyTagsConstraintViolation"],
+        divergence: {
+          direction: "stricter",
+          reason:
+            "`import('pkg').Foo` in a type position (TSImportType) is visited by this analyzer but has no corresponding visitor in @nx/enforce-module-boundaries",
         },
       },
     ],
