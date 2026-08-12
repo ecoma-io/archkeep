@@ -5,18 +5,55 @@
  *
  * Every other test of `../nx.mjs` and `./index.mjs` proves each provider
  * correct against its own fixtures; none puts them side by side. That is
- * this file's one job: build one physical shape (two Go modules, one crossing
- * import, one boundary rule) twice, feed the SAME rule engine both providers'
- * output, and assert the node set, the dependency set, and the verdict list
- * come out identical. A provider that silently disagreed with the other on a
- * tag, a root spelling, or an edge would be a native workspace whose `check`
- * result depends on which project model it happened to run under — exactly
- * the drift `../../../../../AGENTS.md`'s invariant exists to rule out.
+ * this file's one job: build a physical shape twice, feed the SAME rule
+ * engine both providers' output, and assert the node set, the dependency
+ * set, and the verdict list come out identical. A provider that silently
+ * disagreed with the other on a tag, a root spelling, or an edge would be a
+ * native workspace whose `check` result depends on which project model it
+ * happened to run under — exactly the drift `../../../../../AGENTS.md`'s
+ * invariant exists to rule out.
+ *
+ * The shared machinery — the six fixture-tree builders, `diffGraphs`,
+ * `LEDGER`, `classifyDifferences`, `emptyVerdictBreaches`/
+ * `perMessageBreaches`, and `pairProblems`/`assertPairAgrees` — lives in
+ * `./differential.fixtures.mjs`, a plain module with no `vitest` import, so a
+ * config-spelling differential (a future test covering this package's
+ * `boundaryConfig`/`tsConfig` option spelling) can import it without running
+ * this file's own 19 cases and 3 `nx graph` spawns as a side effect of the
+ * import. This file is the vitest glue alone: `describe`/`it`/`expect`, the
+ * three fixture pairs, and the red-direction tests that prove the shared
+ * machinery's own guards actually guard.
+ *
+ * **Three fixture pairs, three `nx graph` spawns — not more, and each spawn
+ * runs with `NX_DAEMON=false`.** The spawn is the cost driver (a subprocess
+ * Node start, a plugin load, a graph write to a tmp file); disabling the
+ * daemon avoids a background process binding to one of this file's throwaway
+ * roots and outliving the `afterAll` cleanup that deletes it. This file's own
+ * budget is three spawns and under two minutes, asserted below by an
+ * injectable spawn counter and the suite's own measured wall time:
+ *
+ * 1. `simple` — one crossing import, one boundary rule. Kept minimal on
+ *    purpose: it is the pair a failure here is diagnosable from without
+ *    reading a diff row.
+ * 2. `composite` — packs six project-identity/topology axes into one tree
+ *    (name precedence, project type, the root project, tag union across all
+ *    three tag sources, implicit dependencies via both a literal name and a
+ *    declared-row spelling, and a project nested inside another project's own
+ *    directory). Diagnosability is paid back by `diffGraphs`: every assertion
+ *    below is a per-node/per-edge/per-verdict row naming the subject and the
+ *    field that differs, never a single `deepEqual` over two 200-line graphs.
+ * 3. `layout` — `workspaceLayout` alone, because it is workspace-global and
+ *    folding it into `composite` would change every other axis's expected
+ *    node/edge shape at once.
+ *
+ * If a future axis needs its own tree, it earns that the way `layout` did —
+ * by being workspace-global, not by convenience. Otherwise it goes into
+ * `composite`.
  *
  * `../nx.mjs`'s `readProjectGraph` spawns the real `nx` CLI resolved from
  * THIS repository's own `node_modules` (its own header explains why: `nx` is
  * a peer dependency resolved from the caller, never bundled). For that
- * resolution to succeed with no `pnpm install` run inside the fixture, the
+ * resolution to succeed with no `pnpm install` run inside the fixture, every
  * fixture directory is created UNDER `packages/lattice/` itself — not the
  * system tmpdir every other integration test uses — so Node's own directory
  * walk-up finds this package's already-installed `node_modules/nx`. Verified
@@ -24,7 +61,7 @@
  * against a bare system-tmpdir fails with `NX Could not find Nx modules`,
  * and succeeds once nested here with no other change.
  *
- * The Nx fixture's `nx.json` registers `../nx.mjs` — this package's own
+ * Every Nx fixture's `nx.json` registers `../nx.mjs` — this package's own
  * plugin — as a LOCAL plugin, by relative path rather than by package name:
  * `nx graph` cannot draw a Go import edge on its own (`../../../../../AGENTS.md`'s
  * "what this repository is" — Nx reads TypeScript and stays quiet on
@@ -33,234 +70,610 @@
  * prove nothing. This is the plugin under test, so registering it here is
  * the same self-check `node packages/lattice/cli.mjs check` already runs
  * over this repository's OWN boundaries, aimed at a throwaway tree instead.
+ *
+ * A native-vs-Nx disagreement surfaced by one of these axes is either a real
+ * difference (native reports something Nx does not — loud, self-correcting,
+ * ledgerable in `./differential.fixtures.mjs`'s `LEDGER`) or a breach (Nx
+ * reports something native does not, either in aggregate or on one
+ * `messageId` — silent, never ledgerable, always fails the run, and refused
+ * structurally: `classifyDifferences` throws before a ledger row ever gets a
+ * chance to explain one away). That asymmetry is `AGENTS.md`'s invariant
+ * applied to two providers instead of one rule path.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { normalizeProjectRoot } from "../../rules/specifiers.mjs";
-import { evaluate } from "../../rules/index.mjs";
-import { loadBoundaryConfig } from "../../config.mjs";
-import { analyzeWorkspace, createWorkspace, selectFiles } from "../../workspace.mjs";
-import { readProjectGraph } from "../nx.mjs";
-import { nativeProvider } from "./index.mjs";
+import {
+  assertPairAgrees,
+  buildCompositeNativeTree,
+  buildCompositeNxTree,
+  buildLayoutNativeTree,
+  buildLayoutNxTree,
+  buildSimpleNativeTree,
+  buildSimpleNxTree,
+  classifyDifferences,
+  diffGraphs,
+  emptyVerdictBreaches,
+  LEDGER,
+  namespaced,
+  PAIR_LABELS,
+  pairProblems,
+  perMessageBreaches,
+  runBothProviders,
+  runNxGraphSpawn,
+  unknownLabelRows,
+} from "./differential.fixtures.mjs";
 
 // `packages/lattice/`, three levels above this file (`native/` → `providers/`
-// → `src/` → the package root) — see the header for why the Nx fixture must
-// live under here rather than the system tmpdir.
+// → `src/` → the package root) — see the header for why every Nx fixture
+// must live under here rather than the system tmpdir.
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
-const BOUNDARY_CONFIG = `export const depConstraints = [
-  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
-  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
-];
-export const moduleBoundaryOptions = {
-  allow: [],
-  buildTargets: ["build"],
-  enforceBuildableLibDependency: false,
-  allowCircularSelfDependency: false,
-  checkDynamicDependenciesExceptions: [],
-  ignoredCircularDependencies: [],
-  banTransitiveDependencies: false,
-  checkNestedExternalImports: false,
-};
-`;
-
-// One physical shape, written byte-identical into both trees below: two Go
-// modules, tagged opposite the layer axis, with one import that crosses it
-// the wrong way (`domain` reaching into `adapter`).
-const GO_FILES = {
-  "libs/domain/go.mod": "module example.com/domain\n\ngo 1.24\n",
-  "libs/adapter/go.mod": "module example.com/adapter\n\ngo 1.24\n",
-  "libs/adapter/adapter.go": 'package adapter\n\nvar Name = "adapter"\n',
-  "libs/domain/doc.go": `// Package domain is the layer everything else points at.
-package domain
-
-import (
-	"example.com/adapter"
-)
-
-var _ = adapter.Name
-`,
-};
-
-/** @param {(path: string, text: string) => void} write */
-function writeGoFiles(write) {
-  for (const [path, text] of Object.entries(GO_FILES)) write(path, text);
-}
+// ---------------------------------------------------------------------------
+// The three fixture pairs
+// ---------------------------------------------------------------------------
 
 describe("the Nx and native providers agree over one physical workspace", () => {
-  const nxRoot = mkdtempSync(join(packageRoot, ".oracle-nx-"));
-  const nativeRoot = mkdtempSync(join(packageRoot, ".oracle-native-"));
+  const roots = [];
+  /** @param {string} prefix */
+  function mkRoot(prefix) {
+    const root = mkdtempSync(join(packageRoot, prefix));
+    roots.push(root);
+    return root;
+  }
   afterAll(() => {
-    rmSync(nxRoot, { recursive: true, force: true });
-    rmSync(nativeRoot, { recursive: true, force: true });
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
   });
 
-  const writeIn = (root) => (relativePath, text) => {
-    mkdirSync(join(root, relativePath, ".."), { recursive: true });
-    writeFileSync(join(root, relativePath), text);
+  // Every `nx graph` spawn in this suite goes through this counting wrapper
+  // rather than the bare `runNxGraphSpawn` default, so the "three spawns
+  // total" claim in the header is asserted, not just stated — see the
+  // `expect(nxSpawnCount)` at the bottom of this describe block.
+  let nxSpawnCount = 0;
+  const countingIo = {
+    run: (file, args, cwd) => {
+      nxSpawnCount += 1;
+      return runNxGraphSpawn(file, args, cwd);
+    },
   };
 
-  // --- the Nx tree: nx.json, project.json per project, this package's own
-  // plugin registered by relative path so a real `nx graph` draws the Go edge.
-  const writeNx = writeIn(nxRoot);
-  writeNx(
-    "nx.json",
-    JSON.stringify({
-      plugins: [
-        {
-          plugin: "../nx.mjs",
-          options: { boundaryConfig: "module-boundaries.config.mjs" },
-        },
-      ],
-    }),
-  );
-  writeNx("module-boundaries.config.mjs", BOUNDARY_CONFIG);
-  writeNx("libs/domain/project.json", JSON.stringify({ name: "domain", tags: ["layer:domain"] }));
-  writeNx(
-    "libs/adapter/project.json",
-    JSON.stringify({ name: "adapter", tags: ["layer:adapter"] }),
-  );
-  writeGoFiles(writeNx);
-  const nxFiles = [
-    "nx.json",
-    "module-boundaries.config.mjs",
-    "libs/domain/project.json",
-    "libs/domain/go.mod",
-    "libs/domain/doc.go",
-    "libs/adapter/project.json",
-    "libs/adapter/go.mod",
-    "libs/adapter/adapter.go",
-  ];
-
-  // --- the native tree: lattice.json declares the identical two projects,
-  // same names, same tags, same roots — no nx.json, no project.json, no `nx`
-  // reachable from here at all.
-  const writeNative = writeIn(nativeRoot);
-  writeNative(
-    "lattice.json",
-    JSON.stringify({
-      projects: {
-        declared: [
-          { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
-          { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
-        ],
-      },
-      coverage: {
-        exempt: [
-          {
-            path: "module-boundaries.config.mjs",
-            reason: "workspace tooling config at the root, not itself a project",
-          },
-        ],
-      },
-    }),
-  );
-  writeNative("module-boundaries.config.mjs", BOUNDARY_CONFIG);
-  writeGoFiles(writeNative);
-  const nativeFiles = [
-    "lattice.json",
-    "module-boundaries.config.mjs",
-    "libs/domain/go.mod",
-    "libs/domain/doc.go",
-    "libs/adapter/go.mod",
-    "libs/adapter/adapter.go",
-  ];
-
-  const readFileFrom = (root) => (path) => {
-    try {
-      return readFileSync(join(root, path), "utf8");
-    } catch {
-      return null;
-    }
-  };
-
-  /** Builds `{workspace, imports}` from an already-resolved graph and file list. */
-  function analyze(root, graph, files, tsConfig) {
-    const { workspace, owned } = createWorkspace({ root, graph, files, tsConfig });
-    const selected = selectFiles(
-      owned.map(({ file }) => file),
-      [],
-      { root, cwd: root },
-    );
-    return { workspace, ...analyzeWorkspace(workspace, selected) };
-  }
-
-  /** `{name → {root, type, tags}}`, comparable whichever provider produced it. */
-  const nodeShape = (nodes) =>
-    Object.fromEntries(
-      Object.entries(nodes).map(([name, node]) => [
-        name,
-        {
-          root: normalizeProjectRoot(node.data.root),
-          type: node.type,
-          tags: [...(node.data.tags ?? [])].sort(),
-        },
-      ]),
-    );
-
-  /** `["source target type", ...]`, sorted so build order cannot matter. */
-  const dependencyShape = (dependencies) =>
-    Object.values(dependencies)
-      .flat()
-      .map(({ source, target, type }) => `${source} ${target} ${type}`)
-      .sort();
-
-  /** `["messageId sourceFile:line:column", ...]`, sorted the same way. */
-  const verdictShape = (violations) =>
-    violations.map((v) => `${v.messageId} ${v.sourceFile}:${v.line}:${v.column}`).sort();
+  const suiteStartedAt = Date.now();
 
   // Spawning the real Nx CLI is slow relative to every other test here (a
   // subprocess Node start, a plugin load, a graph write to a tmp file) — this
   // test's own timeout is generous rather than the vitest default, so a
   // loaded CI runner does not flake a passing graph into a timeout.
-  it("resolves the same node set, dependency set, and verdict from a real nx graph and from lattice.json", async () => {
-    // The real Nx CLI, resolved from this repo's own node_modules — no fake
-    // `readGraph`, unlike every other test in this package.
-    const nxGraph = readProjectGraph(nxRoot);
-    const nxAnalysis = analyze(nxRoot, nxGraph, nxFiles, undefined);
+  it("simple: resolves the same node set, dependency set, and verdict from a real nx graph and from lattice.json", async () => {
+    const nxRoot = mkRoot(".oracle-simple-nx-");
+    const nativeRoot = mkRoot(".oracle-simple-native-");
+    const nxFiles = buildSimpleNxTree(nxRoot);
+    const nativeFiles = buildSimpleNativeTree(nativeRoot);
 
-    const readFile = readFileFrom(nativeRoot);
-    const discovered = nativeProvider.discover({ root: nativeRoot, files: nativeFiles, readFile });
-    expect(discovered.failures).toEqual([]);
-    const preGraph = {
-      nodes: Object.fromEntries(
-        discovered.projects.map((project) => [
-          project.name,
-          { name: project.name, data: { root: project.root } },
-        ]),
-      ),
-    };
-    const nativeAnalysis = analyze(nativeRoot, preGraph, nativeFiles, discovered.model.tsConfig);
-    const nativeGraph = nativeProvider.buildGraph({
-      discovered,
-      importSites: nativeAnalysis.imports,
+    const result = await runBothProviders({
+      nxRoot,
+      nxFiles,
+      nativeRoot,
+      nativeFiles,
+      io: countingIo,
     });
 
-    // 1. The node sets agree — same names, same roots (modulo Nx's own `''`
-    // vs `'.'` normalization), same types, same tags.
-    expect(nodeShape(nativeGraph.nodes)).toEqual(nodeShape(nxGraph.nodes));
-
-    // 2. The dependency sets agree — the plugin registered in the Nx
-    // fixture's `nx.json` and `./graph.mjs`'s `buildDependencies` both had to
-    // find the SAME crossing import from the SAME Go source.
-    expect(dependencyShape(nativeGraph.dependencies)).toEqual(
-      dependencyShape(nxGraph.dependencies),
-    );
-
-    // 3. The rule engine, given each side's own graph and its own import
-    // sites over the same boundary config, reaches the same verdict:
-    // `domain` importing `adapter` violates `onlyDependOnLibsWithTags`, once,
-    // wherever the graph came from.
-    const nxConfig = await loadBoundaryConfig(nxRoot, "module-boundaries.config.mjs");
-    const nativeConfig = await loadBoundaryConfig(nativeRoot, "module-boundaries.config.mjs");
-    const nxViolations = evaluate(nxAnalysis.imports, nxGraph, nxConfig);
-    const nativeViolations = evaluate(nativeAnalysis.imports, nativeGraph, nativeConfig);
-
-    expect(nxViolations).toHaveLength(1);
-    expect(verdictShape(nativeViolations)).toEqual(verdictShape(nxViolations));
+    expect(result.nx.violations).toHaveLength(1);
+    expect(result.native.violationStrings).toEqual(result.nx.violationStrings);
+    assertPairAgrees("simple", result);
   }, 30_000);
+
+  it("composite: axes 1-6 (name precedence, project type, root project, tag union, implicit deps, nested projects) agree", async () => {
+    const nxRoot = mkRoot(".oracle-composite-nx-");
+    const nativeRoot = mkRoot(".oracle-composite-native-");
+    const nxFiles = buildCompositeNxTree(nxRoot);
+    const nativeFiles = buildCompositeNativeTree(nativeRoot);
+
+    const result = await runBothProviders({
+      nxRoot,
+      nxFiles,
+      nativeRoot,
+      nativeFiles,
+      io: countingIo,
+    });
+
+    // Named per-axis, so a future regression fails on the axis it broke
+    // rather than on "toEqual" alone.
+    expect(Object.keys(result.nx.nodes).sort()).toEqual(Object.keys(result.native.nodes).sort());
+    expect(result.nx.nodes["declared-only"]).toEqual(result.native.nodes["declared-only"]); // axis 1: declared row
+    expect(result.nx.nodes["pkg-named-project"]).toEqual(result.native.nodes["pkg-named-project"]); // axis 1 + 4
+    expect(result.nx.nodes["basenamed"]).toEqual(result.native.nodes["basenamed"]); // axis 1: basename fallback
+    expect(result.nx.nodes["workspace-root"]).toEqual(result.native.nodes["workspace-root"]); // axis 3
+    expect(result.nx.nodes["e2eish-e2e"]).toEqual(result.native.nodes["e2eish-e2e"]); // axis 2
+    expect(result.nx.nodes["e2eish-e2e"].type).toBe("e2e");
+    expect(result.nx.nodes["nested-child"]).toEqual(result.native.nodes["nested-child"]); // axis 6
+    expect(result.nx.dependencies).toEqual(result.native.dependencies); // axis 5 (implicit, both a literal-name and a tag-pattern entry) rides in here
+
+    // Axis 4: `parent` draws tags from all three sources (a declared row, a
+    // `projectRules` row, and its own `project.json`) — assert the UNION,
+    // not merely that the two engines agree with each other (they could both
+    // agree on a partial set and this axis would still be unexercised).
+    expect(result.native.nodes["parent"].tags).toEqual(
+      ["layer:parent", "union:declared", "union:projectRules"].sort(),
+    );
+    expect(result.nx.nodes["parent"]).toEqual(result.native.nodes["parent"]);
+
+    expect(result.nx.violations).toHaveLength(1);
+    expect(result.native.violationStrings).toEqual(result.nx.violationStrings);
+    assertPairAgrees("composite", result);
+  }, 30_000);
+
+  it("layout: workspaceLayout reaches the rule engine's defaults, and the resulting disagreement is exactly the ledgered one", async () => {
+    const nxRoot = mkRoot(".oracle-layout-nx-");
+    const nativeRoot = mkRoot(".oracle-layout-native-");
+    const nxFiles = buildLayoutNxTree(nxRoot);
+    const nativeFiles = buildLayoutNativeTree(nativeRoot);
+
+    const result = await runBothProviders({
+      nxRoot,
+      nxFiles,
+      nativeRoot,
+      nativeFiles,
+      io: countingIo,
+    });
+
+    // The node/dependency shapes still agree — only the verdict differs,
+    // which is the whole point of this fixture (see the comment above
+    // `LAYOUT_GO_FILES` in `./differential.fixtures.mjs`).
+    expect(result.nx.nodes).toEqual(result.native.nodes);
+    expect(result.nx.dependencies).toEqual(result.native.dependencies);
+
+    // Both engines find the `thing`→`blocked` layer-tag violation identically
+    // (the control) — that is the ONE the fixture needs to keep `nx`'s count
+    // off zero, so this pair is not itself the empty-verdict breach the last
+    // assertion below checks for. Native additionally flags the
+    // `workspaceLayout`-triggered crossing import that Nx's graph cannot see.
+    expect(result.nx.violations).toHaveLength(1);
+    expect(result.native.violations).toHaveLength(2);
+    expect(result.nx.violationStrings[0]).toMatch(/^onlyTagsConstraintViolation /);
+    expect(result.native.violationStrings).toEqual(
+      expect.arrayContaining(result.nx.violationStrings),
+    );
+    expect(
+      result.native.violationStrings.some((s) =>
+        s.startsWith("noRelativeOrAbsoluteImportsAcrossLibraries "),
+      ),
+    ).toBe(true);
+
+    // Not `assertPairAgrees`: this pair's whole purpose is to exercise the
+    // one difference `LEDGER` documents, so assert THAT shape directly —
+    // explained by the ledger, nothing left unexplained, and (proving the
+    // ledger row is not stale) it actually fired. The control violation has
+    // EQUAL counts and IDENTICAL locations on both sides, so it produces no
+    // `diffGraphs` row at all — only the layout-specific messageId's count
+    // differs.
+    const rows = namespaced(diffGraphs(result.nx, result.native), "layout");
+    const { explained, unexplained, stale } = classifyDifferences(rows, LEDGER);
+    expect(unexplained).toEqual([]);
+    expect(stale.filter((row) => row.subject.startsWith("layout:"))).toEqual([]);
+    expect(explained).toHaveLength(1);
+    expect(explained[0].difference.field).toBe("count");
+
+    // And this pair is NOT a breach — both engines report at least the
+    // control violation; native reports one MORE than Nx on top of it, not
+    // fewer, which is the direction the invariant tolerates.
+    expect(
+      emptyVerdictBreaches("layout", {
+        nx: result.nx.violations.length,
+        native: result.native.violations.length,
+      }),
+    ).toEqual([]);
+    expect(perMessageBreaches("layout", result.nx.violations, result.native.violations)).toEqual(
+      [],
+    );
+  }, 30_000);
+
+  it("ran exactly three nx graph spawns, and finished within this file's own budget", () => {
+    expect(nxSpawnCount).toBe(3);
+    expect(Date.now() - suiteStartedAt).toBeLessThan(120_000);
+  });
+
+  it("every LEDGER row's subject is scoped to a pair this file actually runs", () => {
+    // The positive half of S1's own guard: with the real `LEDGER`, nothing is
+    // orphaned. `unknownLabelRows`'s red-direction case (below, in the
+    // "ledger's stale-row rule" describe block) constructs the typo'd
+    // opposite and requires it to be caught.
+    expect(unknownLabelRows(LEDGER, PAIR_LABELS)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Red-direction tests — each one proves a guard actually guards, by
+// constructing the exact silent failure it exists to catch and requiring the
+// harness to go red on it (`AGENTS.md`'s invariant, applied to this file's
+// own machinery rather than to the tool under test).
+// ---------------------------------------------------------------------------
+
+describe("diffGraphs is not vacuous", () => {
+  const base = {
+    nodes: { a: { root: "libs/a", type: "lib", tags: ["layer:a"] } },
+    dependencies: ["a b static"],
+    violations: [
+      {
+        messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+        sourceFile: "a/x.go",
+        line: 1,
+        column: 1,
+      },
+    ],
+  };
+
+  it("reports nothing when both sides are identical", () => {
+    expect(diffGraphs(base, structuredClone(base))).toEqual([]);
+  });
+
+  it("catches a node missing entirely on the native side", () => {
+    const mutated = structuredClone(base);
+    delete mutated.nodes.a;
+    const rows = diffGraphs(base, mutated);
+    expect(rows).toContainEqual({
+      kind: "node",
+      subject: "a",
+      field: "presence",
+      nx: "present",
+      native: "absent",
+    });
+  });
+
+  it("catches a tag divergence on a node both sides have", () => {
+    const mutated = structuredClone(base);
+    mutated.nodes.a.tags = ["layer:different"];
+    const rows = diffGraphs(base, mutated);
+    expect(rows).toContainEqual({
+      kind: "node",
+      subject: "a",
+      field: "tags",
+      nx: "layer:a",
+      native: "layer:different",
+    });
+  });
+
+  it("catches a dependency edge present on only one side", () => {
+    const mutated = structuredClone(base);
+    mutated.dependencies = [];
+    const rows = diffGraphs(base, mutated);
+    expect(rows).toContainEqual({
+      kind: "dependency",
+      subject: "a b static",
+      field: "presence",
+      nx: "present",
+      native: "absent",
+    });
+  });
+
+  it("catches a duplicate dependency edge on only one side, not just its presence", () => {
+    // Both sides have the SAME edge string at least once — a `new Set`-based
+    // comparison would call this identical. It is not: nx counted the edge
+    // twice (two import sites resolving to the same triple) and native
+    // counted it once, which is a real disagreement about how many import
+    // sites produced that edge.
+    const nx = { ...base, dependencies: ["a b static", "a b static"] };
+    const native = { ...base, dependencies: ["a b static"] };
+    const rows = diffGraphs(nx, native);
+    expect(rows).toContainEqual({
+      kind: "dependency",
+      subject: "a b static",
+      field: "count",
+      nx: 2,
+      native: 1,
+    });
+  });
+
+  it("catches a verdict count divergence", () => {
+    const mutated = structuredClone(base);
+    mutated.violations = [];
+    const rows = diffGraphs(base, mutated);
+    expect(rows).toContainEqual({
+      kind: "verdict",
+      subject: "noRelativeOrAbsoluteImportsAcrossLibraries",
+      field: "count",
+      nx: 1,
+      native: 0,
+    });
+  });
+
+  it("catches a verdict LOCATION divergence when the counts already match", () => {
+    // Same messageId, same count on both sides, but pointing at different
+    // files — a count-only comparison would call this identical, and it is
+    // exactly the shape "two engines agree on how many, disagree on where"
+    // that a developer cannot act on as if it were agreement.
+    const nx = {
+      ...base,
+      violations: [
+        {
+          messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+          sourceFile: "a/x.go",
+          line: 1,
+          column: 1,
+        },
+      ],
+    };
+    const native = {
+      ...base,
+      violations: [
+        {
+          messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+          sourceFile: "a/y.go",
+          line: 9,
+          column: 3,
+        },
+      ],
+    };
+    const rows = diffGraphs(nx, native);
+    expect(rows).toContainEqual({
+      kind: "verdict",
+      subject: "noRelativeOrAbsoluteImportsAcrossLibraries",
+      field: "location",
+      nx: "a/x.go:1:1",
+      native: "a/y.go:9:3",
+    });
+  });
+});
+
+describe("node-set equality is asserted in both directions", () => {
+  it("a native side missing a project entirely fails, not merely differs on a field", () => {
+    const nx = {
+      a: { root: "libs/a", type: "lib", tags: [] },
+      b: { root: "libs/b", type: "lib", tags: [] },
+    };
+    const native = { a: { root: "libs/a", type: "lib", tags: [] } };
+    const nxNames = new Set(Object.keys(nx));
+    const nativeNames = new Set(Object.keys(native));
+    const onlyOnNx = [...nxNames].filter((n) => !nativeNames.has(n));
+    const onlyOnNative = [...nativeNames].filter((n) => !nxNames.has(n));
+    expect(onlyOnNx, "native is missing a project nx has").toEqual(["b"]);
+    expect(onlyOnNative, "nx is missing a project native has").toEqual([]);
+  });
+
+  it("a project present only on the native side is caught too", () => {
+    const rows = diffGraphs(
+      { nodes: {}, dependencies: [], violations: [] },
+      {
+        nodes: { extra: { root: "libs/extra", type: "lib", tags: [] } },
+        dependencies: [],
+        violations: [],
+      },
+    );
+    expect(rows).toContainEqual({
+      kind: "node",
+      subject: "extra",
+      field: "presence",
+      nx: "absent",
+      native: "present",
+    });
+  });
+});
+
+describe("empty verdicts on both sides is a failure, not a pass", () => {
+  it("zero violations on the Nx side is a breach when the pair was built to have one", () => {
+    expect(emptyVerdictBreaches("pair", { nx: 0, native: 1 })).toHaveLength(1);
+  });
+
+  it("zero violations on the native side is a breach too — the same direction the invariant forbids", () => {
+    expect(emptyVerdictBreaches("pair", { nx: 1, native: 0 })).toHaveLength(1);
+  });
+
+  it("zero on BOTH sides is still a breach — agreement on nothing proves nothing", () => {
+    const breaches = emptyVerdictBreaches("pair", { nx: 0, native: 0 });
+    expect(breaches).toHaveLength(2);
+  });
+
+  it("at least one violation on both sides is not a breach", () => {
+    expect(emptyVerdictBreaches("pair", { nx: 1, native: 1 })).toEqual([]);
+  });
+});
+
+describe("native under-reporting on one messageId is a breach even when neither total is zero", () => {
+  it("nx finding MORE of one messageId than native is a breach, at any nonzero count", () => {
+    const nx = [{ messageId: "x" }, { messageId: "x" }, { messageId: "x" }];
+    const native = [{ messageId: "x" }];
+    expect(perMessageBreaches("pair", nx, native)).toHaveLength(1);
+  });
+
+  it("nx and native agreeing on every messageId's count is not a breach", () => {
+    const nx = [{ messageId: "x" }, { messageId: "y" }];
+    const native = [{ messageId: "x" }, { messageId: "y" }];
+    expect(perMessageBreaches("pair", nx, native)).toEqual([]);
+  });
+
+  it("native reporting MORE of one messageId than nx is not a breach — that direction is loud, not silent", () => {
+    const nx = [{ messageId: "x" }];
+    const native = [{ messageId: "x" }, { messageId: "x" }];
+    expect(perMessageBreaches("pair", nx, native)).toEqual([]);
+  });
+});
+
+describe("the ledger's stale-row rule", () => {
+  it("a row that matches nothing fails the run", () => {
+    const ledger = Object.freeze([
+      Object.freeze({
+        subject: "nowhere:nothing",
+        field: "count",
+        direction: "native-only",
+        reason: "a row that will never fire, on purpose, for this test",
+        issue: "https://github.com/ecoma-io/lattice/issues/31",
+      }),
+    ]);
+    const { stale, unexplained } = classifyDifferences([], ledger);
+    expect(stale).toHaveLength(1);
+    expect(unexplained).toEqual([]);
+  });
+
+  it("a row with an empty reason fails the run before any matching happens", () => {
+    const ledger = Object.freeze([
+      Object.freeze({
+        subject: "x:y",
+        field: "count",
+        direction: "native-only",
+        reason: "",
+        issue: "https://github.com/ecoma-io/lattice/issues/31",
+      }),
+    ]);
+    expect(() => classifyDifferences([], ledger)).toThrow(/empty reason/);
+  });
+
+  it("a row with no linked issue fails the run before any matching happens", () => {
+    const ledger = Object.freeze([
+      Object.freeze({
+        subject: "x:y",
+        field: "count",
+        direction: "native-only",
+        reason: "a real reason",
+        issue: "",
+      }),
+    ]);
+    expect(() => classifyDifferences([], ledger)).toThrow(/no linked issue/);
+  });
+
+  it("a row with an invalid direction fails the run before any matching happens", () => {
+    // `direction` is deliberately wrong here — `"nx-only"` is not a member of
+    // `LEDGER_DIRECTIONS` — so the cast below is the point of the test, not a
+    // workaround: a real `LedgerRow` can never hold this value, only a
+    // malformed one reaching `classifyDifferences` at runtime can.
+    const ledger = /** @type {readonly import("./differential.fixtures.mjs").LedgerRow[]} */ (
+      /** @type {unknown} */ (
+        Object.freeze([
+          Object.freeze({
+            subject: "x:y",
+            field: "count",
+            direction: "nx-only",
+            reason: "a real reason",
+            issue: "https://github.com/ecoma-io/lattice/issues/31",
+          }),
+        ])
+      )
+    );
+    expect(() => classifyDifferences([], ledger)).toThrow(/invalid direction/);
+  });
+
+  it("a row that DOES match is not stale", () => {
+    const ledger = Object.freeze([
+      Object.freeze({
+        subject: "x:y",
+        field: "count",
+        direction: "native-only",
+        reason: "a real reason",
+        issue: "https://github.com/ecoma-io/lattice/issues/31",
+      }),
+    ]);
+    const { stale, explained, unexplained } = classifyDifferences(
+      [{ kind: "verdict", subject: "x:y", field: "count", nx: 0, native: 1 }],
+      ledger,
+    );
+    expect(stale).toEqual([]);
+    expect(unexplained).toEqual([]);
+    expect(explained).toHaveLength(1);
+  });
+
+  it("a mislabeled row (a typo'd pair prefix) is invisible to that pair's own stale check — unknownLabelRows is what catches it", () => {
+    // S1's own red-direction case: `layuot:` is a typo of `layout:`. Every
+    // real pair's `pairProblems` only filters `stale` down to rows whose
+    // subject starts with ITS OWN label, so a row prefixed `layuot:` is
+    // filtered out of `layout`'s own stale check (it does not start with
+    // "layout:") and filtered out of every other pair's check too (it does
+    // not start with theirs either) — invisible everywhere, which is exactly
+    // what `unknownLabelRows` must therefore catch.
+    const ledger = Object.freeze([
+      Object.freeze({
+        subject: "layuot:someRule",
+        field: "count",
+        direction: "native-only",
+        reason: "a mislabeled row, on purpose, for this test",
+        issue: "https://github.com/ecoma-io/lattice/issues/31",
+      }),
+    ]);
+    expect(unknownLabelRows(ledger, PAIR_LABELS)).toHaveLength(1);
+  });
+
+  it("a correctly labeled row is not flagged by unknownLabelRows", () => {
+    const ledger = Object.freeze([
+      Object.freeze({
+        subject: "layout:someRule",
+        field: "count",
+        direction: "native-only",
+        reason: "a correctly labeled row",
+        issue: "https://github.com/ecoma-io/lattice/issues/31",
+      }),
+    ]);
+    expect(unknownLabelRows(ledger, PAIR_LABELS)).toEqual([]);
+  });
+});
+
+describe("a ledger row may never cover an Nx-finds-more breach, in either direction of check", () => {
+  it("classifyDifferences THROWS on a verdict-count row where nx > native, even with a matching ledger row", () => {
+    // The GENERAL shape, not just the literal-zero one: nx found 2, native
+    // found 1 — neither count is zero, so this is not `emptyVerdictBreaches`'
+    // own case, and it is exactly the shape a naive "does a ledger row match
+    // this subject/field" check would have let through before B1/B2. Red
+    // without the fix: with the pre-fix `classifyDifferences`, this matching
+    // ledger row would have classified the difference as `explained` and the
+    // run would have stayed green.
+    const differences = [
+      { kind: "verdict", subject: "pair:someRule", field: "count", nx: 2, native: 1 },
+    ];
+    const ledgerThatWouldMatchIfConsulted = Object.freeze([
+      Object.freeze({
+        subject: "pair:someRule",
+        field: "count",
+        direction: "native-only",
+        reason: "an attempt to explain away nx finding more than native — must not work",
+        issue: "https://github.com/ecoma-io/lattice/issues/31",
+      }),
+    ]);
+    expect(() => classifyDifferences(differences, ledgerThatWouldMatchIfConsulted)).toThrow(
+      /never explain away|refuses to explain/,
+    );
+  });
+
+  it("emptyVerdictBreaches never consults a ledger — its own signature has nowhere to pass one in", () => {
+    const breaches = emptyVerdictBreaches("pair", { nx: 1, native: 0 });
+    expect(breaches).toHaveLength(1);
+  });
+
+  it("pairProblems catches an Nx-finds-more split across two messageIds, even though each side's TOTAL agrees", () => {
+    // nx {x:2, y:0}, native {x:1, y:1} — both total 2, so a check that only
+    // looked at each side's aggregate violation count (as `emptyVerdictBreaches`
+    // deliberately does, and as decision (c)'s literal-zero case alone would)
+    // would see nothing wrong. But native under-reports `x` by one relative to
+    // nx, which is the breach: `diffGraphs`'s per-messageId comparison (S5)
+    // produces a `count` row for `x` (nx 2, native 1), and `classifyDifferences`
+    // (B1/B2) throws on it before `pairProblems` can return a problem list —
+    // proving the two fixes compose into exactly the per-messageId coverage
+    // decision (c) asked for, without a third, separate mechanism.
+    const violation = (messageId, sourceFile) => ({
+      sourceFile,
+      line: 1,
+      column: 1,
+      specifier: "irrelevant",
+      kind: "static",
+      messageId,
+      message: "irrelevant",
+      sourceProject: null,
+      targetProject: null,
+      constraint: null,
+      data: {},
+    });
+    const nx = {
+      nodes: {},
+      dependencies: [],
+      violations: [violation("x", "a"), violation("x", "b")],
+      violationStrings: [],
+    };
+    const native = {
+      nodes: {},
+      dependencies: [],
+      violations: [violation("x", "a"), violation("y", "c")],
+      violationStrings: [],
+    };
+    expect(() => pairProblems("pair", { nx, native }, [])).toThrow(
+      /never explain away|refuses to explain/,
+    );
+  });
 });

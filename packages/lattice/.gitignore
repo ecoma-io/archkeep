@@ -2,5 +2,10 @@
 # creates directly under this package (not the system tmpdir — see that
 # file's header for why), so a run that crashes before its own `afterAll`
 # cleanup runs leaves one of these behind instead of vanishing with `/tmp`.
-.oracle-nx-*
-.oracle-native-*
+# One stable prefix for every fixture pair's root, present and future
+# (`.oracle-<label>-nx-*`, `.oracle-<label>-native-*`, …) — a per-pair prefix
+# here would need editing every time a pair is added or renamed, and a stale
+# entry left after a rename is a crashed run's leftovers this file no longer
+# recognises, which is exactly what `nx show projects` would then see as a
+# phantom project in this repository's own tree.
+.oracle-*
