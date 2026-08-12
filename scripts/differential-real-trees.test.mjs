@@ -128,7 +128,7 @@ test("extractBoundaryRule refuses a config without the rule, and one with it off
   );
   assert.throws(
     () => extractBoundaryRule([{ rules: { "@nx/enforce-module-boundaries": "off" } }]),
-    /switched off or without options/u,
+    /switched off/u,
   );
 });
 

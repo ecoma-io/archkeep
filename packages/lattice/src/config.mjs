@@ -46,18 +46,40 @@
  * exists to keep single. Validation is where the mandatory reason is enforced,
  * loudly, at load — see `suppressionRowViolations`.
  *
- * ## Two dialects, one validator
+ * ## Three dialects, one validator, one dispatch
  *
  * `boundaryConfig` may name a `.mjs`/`.js` module (`import()`ed, as above and
- * always) or a `.json` file (`JSON.parse`d — never JSONC, never `import()`ed,
- * so a `.json` boundary law carries no more parser leniency than the language
- * it is written in promises). `loadBoundaryConfigFile` dispatches on the
- * extension; both dialects hand their parsed data to the same
- * `findBoundaryConfigViolations` above, so a constraint row is validated
- * identically regardless of which file held it — the alternative is a second
- * copy of these rules that drifts from this one the first time either changes.
+ * always), a `.json` file (`JSON.parse`d — never JSONC, never `import()`ed, so
+ * a `.json` boundary law carries no more parser leniency than the language it
+ * is written in promises), or an ESLint flat config (`./eslint-config.mjs`
+ * reads the workspace's own `@nx/enforce-module-boundaries` rule entry off
+ * it, rather than a second, hand-kept copy of the same table —
+ * `docs/usage/policy-file.md` is the dialect reference for what that reader
+ * can and cannot see). `loadBoundaryConfigFile` is the one place that
+ * dispatches between them, on **basename first, extension second**: a name
+ * matching `eslint.config.*` (`ESLINT_FLAT_CONFIG_BASENAME`) always reaches
+ * the ESLint dialect and a legacy `.eslintrc*` name
+ * (`LEGACY_ESLINTRC_BASENAME`) is always refused by name, before either one's
+ * extension — `.mjs`, `.js`, or none at all for a bare `.eslintrc` — ever
+ * reaches the extension dispatch below. Basename has to run first: both
+ * shapes are `.mjs`/`.js`-extensioned far more often than not, and reaching
+ * the module dialect's bare `import()` first would either half-work (a
+ * flat-config array is a valid ES module, so it would "load" and then fail on
+ * `findBoundaryConfigViolations` with a message that never mentions ESLint)
+ * or, for a `.eslintrc.json`, land in the `.json` dialect's
+ * unrecognised-top-level-key refusal — neither reads as what actually went
+ * wrong: this is an ESLint config, of the wrong dialect or shape, not a
+ * malformed lattice policy file. Only once both basenames are ruled out does
+ * the extension decide between the `.mjs`/`.js` module dialect and the
+ * `.json` file dialect.
  *
- * The two dialects are NOT symmetric on one point: an ES module may export
+ * All three dialects hand their parsed data to the same
+ * `findBoundaryConfigViolations` above (through the shared `policyFrom` tail
+ * — see there), so a constraint row is validated identically regardless of
+ * which file held it — the alternative is a second copy of these rules that
+ * drifts from this one the first time any of them changes.
+ *
+ * The three dialects are NOT symmetric on one point: an ES module may export
  * whatever else it likes alongside the three keys this file reads (a helper, a
  * shared constant), because ESM exports are a legitimate namespace and this
  * loader only ever reads three names out of it. A JSON object has no such
@@ -68,12 +90,16 @@
  * top-level key beyond `depConstraints`, `moduleBoundaryOptions` and
  * `boundarySuppressions` by name, with one carve-out: `$schema`, which editors
  * write into a JSON file unasked for IDE validation and which states no rule
- * of its own.
+ * of its own. The ESLint dialect has no `boundarySuppressions` counterpart at
+ * all — ESLint has its own `eslint-disable` convention for that, with no
+ * equivalent this reader can read back — so it always reports an empty
+ * suppression list; see `loadBoundaryConfigFile`'s ESLint branch.
  */
-import { extname, posix } from "node:path";
+import { basename, extname, posix } from "node:path";
 import { readFile as readFileFromDisk } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
+import { loadEslintBoundaryConfig } from "./eslint-config.mjs";
 import {
   globPatternError,
   importPatternError,
@@ -81,6 +107,36 @@ import {
   tagPatternError,
 } from "./rules/match.mjs";
 import { MESSAGE_IDS } from "./rules/messages.mjs";
+
+/**
+ * The basename that selects the ESLint flat-config dialect
+ * (`./eslint-config.mjs`) — an explicit opt-in, matched on basename rather
+ * than extension so `eslint.config.mjs`, `.cjs`, `.js`, `.ts`, `.mts` and
+ * `.cts` all reach the dispatch below. The DISPATCH matches all of them;
+ * whether importing one of the TypeScript-extension spellings then actually
+ * loads is a separate question this dispatch has no opinion on — it is the
+ * runtime's own TS support that decides, and it disagrees across the
+ * versions this package supports: Node 24 strips types before running the
+ * file, Node 20 and 22 error on the `import()` before this module ever sees
+ * it (`.node-version` pins the version CI itself runs). Nothing shorter than
+ * this literal prefix is accepted: a workspace's own boundary law living in a
+ * file that merely CONTAINS "eslint" somewhere in its name must not be
+ * silently routed through a reader built for a different shape. Exported so
+ * `src/lsp/boundary-config.mjs` can refuse the same basenames by name rather
+ * than repeating the two patterns — `AGENTS.md`'s "never state a rule twice".
+ */
+export const ESLINT_FLAT_CONFIG_BASENAME = /^eslint\.config\./u;
+
+/**
+ * A legacy (pre-flat-config) ESLint config basename. `@nx/enforce-module-boundaries`
+ * itself requires ESLint 9's flat config, so a `boundaryConfig` naming one of
+ * these can never have meant "read my ESLint rule entry" — it is refused by
+ * name, immediately, rather than falling through to the `.mjs`-module dialect
+ * and failing on an unrelated "not a module object" a reader would have no way
+ * to connect back to "this is an ESLint config, and the wrong kind of one".
+ * Exported for the same reuse reason as `ESLINT_FLAT_CONFIG_BASENAME` above.
+ */
+export const LEGACY_ESLINTRC_BASENAME = /^\.eslintrc(\.|$)/u;
 
 /**
  * The filename the config has when a workspace has not said otherwise lives in
@@ -480,7 +536,10 @@ export function policyKeyViolations(parsed, { allowSchema }) {
  * that had to be kept in agreement across every future change to either
  * `findBoundaryConfigViolations` or this return shape, with nothing that
  * would fail if one of them drifted. `./lsp/boundary-config.mjs`'s `.json`
- * arm calls this too, for the identical reason.
+ * arm calls this too, for the identical reason — as does this module's own
+ * ESLint-dialect branch of `loadBoundaryConfigFile` below, so a malformed
+ * `depConstraints` row is refused identically whether it arrived through an
+ * ES module, a JSON file, or an ESLint flat config's rule entry.
  *
  * @param {any} parsed The dialect's parsed data — a module's exports, a
  *   parsed JSON object, or a native workspace's inline policy object. Typed
@@ -587,13 +646,62 @@ async function loadJsonPolicy(path, { readFile = readFileFromDisk } = {}) {
  * @param {string} path Absolute path of the config file.
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Injectable read, used only by the `.json` dialect — see `loadJsonPolicy`.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
- *   `suppressions` is `[]` when the config declares none.
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }>}
+ *   `suppressions` is `[]` when the config declares none. `notes` is present
+ *   only under the ESLint dialect, and only when `./eslint-config.mjs` has
+ *   something worth telling a reader about which entry it bound — see
+ *   `extractBoundaryRule`'s own `@returns`. `cli.mjs`'s `check` surfaces it on
+ *   the report's coverage line, next to what was inspected, rather than
+ *   computing it and dropping it: a fact worth noting and never shown is the
+ *   silent direction with extra steps.
  * @throws {Error} when the file is missing, unloadable, or malformed. Loud on
  *   purpose: an enforcer that starts with no rules enforces nothing and says
  *   nothing, which is the failure this whole tool exists to end.
  */
 export async function loadBoundaryConfigFile(path, io = {}) {
+  // Basename tests run STRICTLY BEFORE the extension dispatch below — both
+  // `eslint.config.*` and `.eslintrc*` are `.mjs`/`.js`-extensioned far more
+  // often than not, and reaching the module dialect's bare `import()` first
+  // would either half-work (a flat-config array is a valid ES module, so
+  // `.mjs` would "load" it and then fail on `findBoundaryConfigViolations`
+  // with a message that never mentions ESLint) or fail on a `.eslintrc.json`
+  // with the `.json` dialect's unrecognised-top-level-key refusal — neither
+  // reads as what actually went wrong: this is an ESLint config, of the wrong
+  // dialect or shape, not a malformed lattice policy file.
+  const name = basename(path);
+
+  if (LEGACY_ESLINTRC_BASENAME.test(name)) {
+    throw new Error(
+      `lattice: ${path} names a legacy ESLint config (${name}) as boundaryConfig — ` +
+        "@nx/enforce-module-boundaries itself only runs under ESLint's flat config, so lattice's " +
+        "ESLint dialect reads only a file named eslint.config.* exporting a flat-config array. " +
+        "Point boundaryConfig at that file once the workspace has migrated, or at an .mjs " +
+        "boundary-law module directly.",
+    );
+  }
+
+  if (ESLINT_FLAT_CONFIG_BASENAME.test(name)) {
+    const { depConstraints, options, note } = await loadEslintBoundaryConfig(path);
+    // The ESLint dialect's assembled data goes through the same
+    // validate-then-reshape tail every other dialect uses — `policyFrom`
+    // reads `depConstraints`/`moduleBoundaryOptions` by the identical names
+    // `findBoundaryConfigViolations` checks, so a malformed constraint row is
+    // refused the same way regardless of which dialect produced it. `notes`
+    // has no counterpart in that shared shape (no other dialect produces
+    // one), so it is folded back in afterwards rather than taught to
+    // `policyFrom` itself.
+    const policy = policyFrom({ depConstraints, moduleBoundaryOptions: options }, path);
+    return {
+      ...policy,
+      // The ESLint dialect has no counterpart for `boundarySuppressions`: it
+      // is this tool's own concept, with nothing for ESLint to read it back
+      // from (see this module's header). Never populated under this dialect —
+      // `policyFrom` already resolves that to `[]` since the object above
+      // states no `boundarySuppressions` key.
+      ...(note !== undefined ? { notes: [note] } : {}),
+    };
+  }
+
   const extension = extname(path);
   if (extension === ".mjs" || extension === ".js") return loadModulePolicy(path);
   if (extension === ".json") return loadJsonPolicy(path, io);
@@ -617,7 +725,7 @@ export async function loadBoundaryConfigFile(path, io = {}) {
  *   misconfigured tool.
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Forwarded to `loadBoundaryConfigFile` — see there.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }>}
  * @throws {Error} as `loadBoundaryConfigFile`.
  */
 export async function loadBoundaryConfig(workspaceRoot, boundaryConfig, io = {}) {

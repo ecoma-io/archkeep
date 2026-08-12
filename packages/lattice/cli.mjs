@@ -306,6 +306,15 @@ export async function check(
   let graph;
   let workspace;
   let owned;
+  // Typed explicitly because the three branches below assign it — two calls
+  // into `./src/config.mjs`'s `loadBoundaryConfig`/`loadBoundaryConfigFile`
+  // (both typed with the optional `notes`) and one direct call to
+  // `policyFrom` for a native workspace's inline `boundaryConfig` (typed
+  // without it, since `policyFrom` itself never produces one — only the
+  // ESLint dialect's caller folds it back in after). Left inferred, `tsc`
+  // narrows the union to `policyFrom`'s own return shape wherever the three
+  // disagree, and then refuses the `notes` read below on that narrower type.
+  /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }} */
   let config;
   let discoveredFailures = [];
   let imports;
@@ -522,6 +531,14 @@ export async function check(
       projects: Object.keys(graph.nodes).length,
       goWork,
       tsconfigPaths,
+      // Only the ESLint boundaryConfig dialect ever produces one (see
+      // `./src/eslint-config.mjs`'s `extractBoundaryRule`) — which entry it
+      // bound when more than one configured the rule, or that the winning
+      // entry was files-scoped under the accepted TS/JS shape. Computing it
+      // and never showing it would be the silent direction with extra steps,
+      // so it rides the same coverage line every other "what was inspected"
+      // fact does (`src/report/text.mjs`'s `formatReport`).
+      notes: config.notes ?? [],
     }),
     violations: violations.length,
     goWorkDrift: goWork === null ? 0 : goWork.findings.length,

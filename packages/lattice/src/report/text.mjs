@@ -236,7 +236,7 @@ export function formatTsconfigPaths(tsconfigPaths) {
  * that indistinguishability is the defect this whole tool exists to end
  * (`../../CLAUDE.md`).
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, notes?: string[]}} run
  * @returns {string}
  */
 export function formatReport({
@@ -247,10 +247,16 @@ export function formatReport({
   imports,
   goWork,
   tsconfigPaths,
+  notes = [],
 }) {
   const inspected =
     `${imports} import${imports === 1 ? "" : "s"} in ${analyzed} file${analyzed === 1 ? "" : "s"} ` +
-    `across ${projects} project${projects === 1 ? "" : "s"}`;
+    `across ${projects} project${projects === 1 ? "" : "s"}` +
+    // `boundaryConfig`-dialect facts a reader needs alongside the count —
+    // today only the ESLint flat-config dialect ever populates this
+    // (`../eslint-config.mjs`'s `extractBoundaryRule`), e.g. which entry
+    // among several configuring the rule was binding.
+    (notes.length > 0 ? `; ${notes.join("; ")}` : "");
   const sections = [];
 
   if (violations.length > 0) {

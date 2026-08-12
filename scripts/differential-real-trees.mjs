@@ -133,41 +133,15 @@ export const LEDGER = Object.freeze([
 
 /**
  * Reads the `@nx/enforce-module-boundaries` entry off a tree's own flat ESLint
- * config, exactly as ESLint would bind it: the LAST entry that configures the
- * rule wins. Pure — the caller imports the config file and hands the array in.
- *
- * @param {object[]} flatConfig The tree's flat-config array.
- * @returns {{depConstraints: object[], options: object}} The constraint table
- *   and the remaining rule options, still the tree's own spelling.
+ * config, exactly as ESLint would bind it: the LAST unscoped entry that
+ * configures the rule wins. Moved to `packages/lattice/src/eslint-config.mjs`
+ * — the shipped `boundaryConfig` dialect that reads an ESLint flat config
+ * parses the identical shape, and a second copy of that parser here would be
+ * exactly the drift `AGENTS.md`'s "never state a rule twice" rule exists to
+ * catch. Re-exported so this script and its child
+ * (`differential-real-trees-child.mjs`) need no import changes.
  */
-export function extractBoundaryRule(flatConfig) {
-  if (!Array.isArray(flatConfig)) {
-    throw new Error(
-      "differential-real-trees: the tree's ESLint config default export is not a flat-config " +
-        "array, so the boundary options cannot be read from it.",
-    );
-  }
-  let entry;
-  for (const item of flatConfig) {
-    const value = item?.rules?.["@nx/enforce-module-boundaries"];
-    if (value !== undefined) entry = value;
-  }
-  if (entry === undefined) {
-    throw new Error(
-      "differential-real-trees: no @nx/enforce-module-boundaries entry in the tree's ESLint " +
-        "config — the tree no longer qualifies for this differential.",
-    );
-  }
-  if (!Array.isArray(entry) || entry[0] === "off" || entry[0] === 0) {
-    throw new Error(
-      "differential-real-trees: the tree configures @nx/enforce-module-boundaries as " +
-        `${JSON.stringify(entry)} — switched off or without options, there is no constraint ` +
-        "table to compare against.",
-    );
-  }
-  const { depConstraints = [], ...options } = entry[1] ?? {};
-  return { depConstraints, options };
-}
+export { extractBoundaryRule } from "../packages/lattice/src/eslint-config.mjs";
 
 /**
  * Splits a tree's differences into explained (a ledger entry covers it),
