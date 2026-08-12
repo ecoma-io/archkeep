@@ -248,8 +248,12 @@ function connect(server = SERVER) {
   };
 }
 
-/** A connected, initialized client rooted at the fixture. */
-async function connected(server = SERVER) {
+/**
+ * A connected, initialized client rooted at the fixture — or at
+ * `atRoot`, for a suite driving a second, unrelated tree through the same
+ * spawned-process machinery (the native `lattice.json` suite below).
+ */
+async function connected(server = SERVER, atRoot = root) {
   const client = connect(server);
   client.send({
     jsonrpc: "2.0",
@@ -257,8 +261,8 @@ async function connected(server = SERVER) {
     method: "initialize",
     params: {
       processId: process.pid,
-      rootUri: pathToFileURL(root).href,
-      workspaceFolders: [{ uri: pathToFileURL(root).href, name: "fixture" }],
+      rootUri: pathToFileURL(atRoot).href,
+      workspaceFolders: [{ uri: pathToFileURL(atRoot).href, name: "fixture" }],
       capabilities: { workspace: { didChangeWatchedFiles: { dynamicRegistration: true } } },
     },
   });
@@ -539,15 +543,15 @@ describe("a real editor session against a real workspace", () => {
   it("registers a file watcher for every file a verdict depends on", async () => {
     // Four, and the third and fourth are the ones worth naming. The boundary
     // table and every `project.json` are the inputs to a verdict; `nx.json` is
-    // where the options that say WHICH file the boundary table is live.
-    // `lattice.json` is watched too even though this server discovers projects
-    // from `project.json` on its own and does not read one yet (`./src/lsp/server.mjs`'s
-    // `watchedFilesFor`) — a server watching only the files the CURRENT project
-    // model reads would keep watching a shape the workspace had already moved
-    // away from. A server watching only the files the options currently name
-    // would keep watching a filename the workspace had renamed — the editor
-    // would go on painting verdicts from a config it no longer reads, which
-    // looks exactly like a clean tree.
+    // where the options live for an Nx-shaped root, and `lattice.json` is
+    // both the marker AND the options for a native one — this fixture is
+    // Nx-shaped, so it carries no `lattice.json` of its own, but the glob is
+    // still registered so a workspace that adds one later does not need the
+    // server restarted before the watcher notices it (`./src/lsp/server.mjs`'s
+    // `watchedFilesFor`). A server watching only the files the options
+    // currently name would keep watching a filename the workspace had
+    // renamed — the editor would go on painting verdicts from a config it no
+    // longer reads, which looks exactly like a clean tree.
     const { client } = await connected();
 
     const registration = await client.waitFor(
@@ -646,5 +650,88 @@ describe("a real editor session against a real workspace", () => {
     // The server does log — it says which root it took — and every line of it
     // went to stderr, which is the half of the contract worth pinning.
     expect(client.stderr).toContain("language server initialized for");
+  }, 30_000);
+});
+
+// C1 (cubic): a `lattice.json` root, driven through the real subprocess. The
+// unit and index-level tiers next door prove the graph and the diagnosis; what
+// only a real process proves is `./src/lsp/server.mjs`'s `readWorkspaceOptions`
+// — that `initialize` actually resolves `boundaryConfig`/`tsConfig` from
+// `lattice.json` itself rather than from `nx.json` (which this root does not
+// have) or from the hardcoded defaults, and that the SAME custom filename this
+// fixture declares is the one `readBoundaryConfig` is asked to load.
+describe("a real editor session against a native lattice.json workspace", () => {
+  let nativeRoot;
+  const INNER_GO = [
+    "package inner",
+    "",
+    'import "native.test/outer"',
+    "",
+    'func Use() string { return "" }',
+    "",
+  ].join("\n");
+
+  const nativeWrite = (relativePath, text) => {
+    const absolute = join(nativeRoot, relativePath);
+    mkdirSync(dirname(absolute), { recursive: true });
+    writeFileSync(absolute, text, "utf8");
+  };
+
+  beforeAll(() => {
+    nativeRoot = realpathSync(mkdtempSync(join(tmpdir(), "lattice-lsp-native-")));
+    // `boundaryConfig` names a file this fixture does NOT put at the Nx
+    // convention's default path (`module-boundaries.config.mjs`) — the one
+    // thing that can only be proven by actually reading it back through a
+    // real `initialize`, since a hardcoded default would ALSO find a file
+    // sitting at its own name by coincidence.
+    nativeWrite(
+      "lattice.json",
+      JSON.stringify({
+        projects: {
+          declared: [
+            { root: "apps/inner", tags: ["zone:inner"] },
+            { root: "apps/outer", tags: ["zone:outer"] },
+          ],
+        },
+        boundaryConfig: "native-boundary.config.mjs",
+      }),
+    );
+    nativeWrite("native-boundary.config.mjs", boundaryConfig(false));
+    // Neither declared project carries a `project.json` — the case that used
+    // to be silently absent from the graph entirely (`./src/lsp/workspace-index.mjs`'s
+    // header).
+    nativeWrite("apps/inner/go.mod", "module native.test/inner\n\ngo 1.23\n");
+    nativeWrite("apps/inner/main.go", INNER_GO);
+    nativeWrite("apps/outer/go.mod", "module native.test/outer\n\ngo 1.23\n");
+    nativeWrite("apps/outer/outer.go", "package outer\n");
+    execFileSync("git", ["init", "-q"], { cwd: nativeRoot, env: environmentForTree() });
+  });
+
+  afterAll(() => {
+    if (nativeRoot) rmSync(nativeRoot, { recursive: true, force: true });
+  });
+
+  it("resolves boundaryConfig from lattice.json and diagnoses a real violation", async () => {
+    const { client } = await connected(SERVER, nativeRoot);
+    const uri = pathToFileURL(join(nativeRoot, "apps/inner/main.go")).href;
+
+    client.send({
+      jsonrpc: "2.0",
+      method: "textDocument/didOpen",
+      params: { textDocument: { uri, languageId: "go", version: 1, text: INNER_GO } },
+    });
+
+    const diagnostics = await client.diagnosticsFor(uri);
+    const violation = diagnostics.find((d) => d.code === "onlyTagsConstraintViolation");
+
+    // The red-direction proof: before `readWorkspaceOptions` existed, the
+    // default reader only ever looked at `nx.json` — absent here — so the
+    // options stayed the DEFAULTS, `readConfig` looked for
+    // `module-boundaries.config.mjs`, found nothing, and the whole session
+    // failed closed onto `analysisFailure` rather than ever reaching this
+    // violation.
+    expect(violation, `no tag violation among ${JSON.stringify(diagnostics)}`).toBeDefined();
+
+    client.kill();
   }, 30_000);
 });

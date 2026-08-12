@@ -32,16 +32,17 @@
  * list, and `publishDiagnostics` re-checks the invariant rather than trusting
  * the caller of `diagnoseDocument` to have honoured it.
  */
-import { isAbsolute, posix, relative, sep } from "node:path";
+import { existsSync } from "node:fs";
+import { isAbsolute, join, posix, relative, sep } from "node:path";
 
 import { DEFAULT_OPTIONS, NX_CONFIG_FILE, readPluginOptions } from "../options.mjs";
-import { LATTICE_MODEL_FILE } from "../providers/native/model.mjs";
+import { LATTICE_MODEL_FILE, loadNativeModel } from "../providers/native/model.mjs";
 
 import { readBoundaryConfig } from "./boundary-config.mjs";
 import { analysisFailedDiagnostic, documentLines } from "./diagnostics.mjs";
 import { diagnoseDocument } from "./diagnose.mjs";
 import { ERROR_CODES, SERVER_INFO, TEXT_DOCUMENT_SYNC_KIND, uriToPath } from "./protocol.mjs";
-import { buildWorkspaceIndex, PROJECT_CONFIG_FILE } from "./workspace-index.mjs";
+import { buildWorkspaceIndex, PROJECT_CONFIG_FILE, readWorkspaceFile } from "./workspace-index.mjs";
 
 /**
  * The files whose content changes the verdict for files that did not change,
@@ -58,11 +59,11 @@ import { buildWorkspaceIndex, PROJECT_CONFIG_FILE } from "./workspace-index.mjs"
  * `nx.json` is here for the same reason one step further out: it is where the
  * options themselves live, so a change to it can rename the config file. A
  * server watching only the file the OLD options named would go on watching a
- * filename the workspace stopped using. `lattice.json` is watched for the same
- * reason on the native side, even though this server does not read one yet
- * (`./workspace-index.mjs` still discovers projects from tracked `project.json`
- * files rather than through `../providers/native/`): a workspace that adds one
- * later must not need the server restarted before the watcher notices it.
+ * filename the workspace stopped using. `lattice.json` is watched for the
+ * same reason on the native side: `readWorkspaceOptions` below reads its
+ * `boundaryConfig`/`tsConfig` fields directly (`../providers/native/model.mjs`
+ * — a native root has no `nx.json` `plugins` table to nest them under), so an
+ * edit to either can rename the config the same way an `nx.json` edit can.
  *
  * @param {{boundaryConfig: string}} options The session's resolved options.
  * @returns {readonly string[]}
@@ -74,6 +75,65 @@ export function watchedFilesFor(options) {
     NX_CONFIG_FILE,
     LATTICE_MODEL_FILE,
   ]);
+}
+
+/**
+ * The two facts that decide which project-model provider a workspace root's
+ * options are read from: does it carry `nx.json`, `lattice.json`, or — a
+ * state `readWorkspaceOptions` below refuses — both.
+ *
+ * Mirrors `../../cli.mjs`'s own `markersAt`, not imported from it: that
+ * module is an executable entry point, not a library this one may depend on,
+ * and the check itself is two `existsSync` calls — cheap enough that a
+ * second, independent copy costs less than a new coupling between the two
+ * faces would.
+ *
+ * @param {string} root
+ * @returns {{hasNx: boolean, hasNative: boolean}}
+ */
+function markersAt(root) {
+  return {
+    hasNx: existsSync(join(root, NX_CONFIG_FILE)),
+    hasNative: existsSync(join(root, LATTICE_MODEL_FILE)),
+  };
+}
+
+/**
+ * The resolved options for a workspace root, read from whichever marker file
+ * it actually carries — the same choice `../../cli.mjs`'s `check` makes, so
+ * the CLI and the editor never disagree about which config filenames a given
+ * workspace uses.
+ *
+ * A native root's `boundaryConfig`/`tsConfig` live on `lattice.json` itself
+ * (`../providers/native/model.mjs`'s `loadNativeModel`) rather than under an
+ * `nx.json` `plugins` table it does not have, so `readPluginOptions` — which
+ * only ever reads `nx.json` — would silently return the defaults for a
+ * native workspace that renamed either file. A root carrying both markers is
+ * refused outright, the same refusal `check` makes: which project model to
+ * judge against is a decision nobody made, not one this server can make for
+ * them by picking a provider.
+ *
+ * @param {string} root
+ * @returns {{boundaryConfig: string, tsConfig: string}}
+ * @throws {Error} when both markers are present, or the marker present is
+ *   unreadable or malformed.
+ */
+export function readWorkspaceOptions(root) {
+  const { hasNx, hasNative } = markersAt(root);
+  if (hasNx && hasNative) {
+    throw new Error(
+      `lattice: ${root} declares both nx.json and lattice.json — this server judges a ` +
+        `workspace against exactly one project model, the same refusal ../../cli.mjs's check ` +
+        `makes, and a tree carrying both is a decision nobody made rather than one this tool ` +
+        `can make for them. Remove whichever one is not the workspace's real source of truth ` +
+        `for projects and tags.`,
+    );
+  }
+  if (hasNative) {
+    const model = loadNativeModel(root, { readFile: (path) => readWorkspaceFile(root, path) });
+    return { boundaryConfig: model.boundaryConfig, tsConfig: model.tsConfig };
+  }
+  return readPluginOptions(root);
 }
 
 /**
@@ -134,7 +194,7 @@ export function createServer({
   log = () => {},
   buildIndex = buildWorkspaceIndex,
   readConfig = readBoundaryConfig,
-  readOptions = readPluginOptions,
+  readOptions = readWorkspaceOptions,
 }) {
   /** `starting` → `running` → `shuttingDown`. `exit` ends it from any of them. */
   let phase = "starting";

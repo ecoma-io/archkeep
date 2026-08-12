@@ -5,41 +5,53 @@
  * `evaluate(sites, graph, config)` is pure and takes a graph it does not build
  * (`../rules/README.md`). Under Nx that graph arrives from Nx. A language
  * server has no Nx — it is spawned by an editor, in a directory, with nothing
- * else — so this module builds the same shape from the same source of truth Nx
- * reads: the tracked `project.json` files.
+ * else — so this module builds the same shape from whichever source of truth
+ * the root actually carries: the tracked `project.json` files when there is no
+ * `lattice.json` at the root, and `../providers/native/`'s own `discover()`/
+ * `buildGraph()` when there is (`buildNativeWorkspaceIndex` below).
  *
  * `nodeTypeOf`, `PROJECT_CONFIG_FILE` and `buildDependencies` are imported
  * from `../providers/native/`, not defined here — that package is where a
  * `project.json`-shaped graph is built for BOTH the Nx-less native provider
- * and this server, so the two stopped growing separate copies of Nx's own
+ * and this server, so the two do not grow separate copies of Nx's own
  * `getProjectType` rule and its implicit-dependency expansion
  * (`../../CLAUDE.md`, "`src/providers/` is the only layer allowed to build a
- * graph"). What stays here is `discoverProjects` and `buildNodes`: this
- * server still reads `project.json` on its own rather than running the
- * native provider's own `discover()` over `lattice.json`'s declared∪inferred
- * model.
+ * graph"). `discoverProjects` and `buildNodes` below are the Nx-shaped
+ * branch's own project discovery — reading `project.json` is correct THERE,
+ * because a root with no `lattice.json` has no other source of truth to read.
  *
- * That gap is real, not cosmetic: a native workspace can declare or infer a
- * project with no `project.json` at all — the whole point of `lattice.json`
- * is not needing one — and `discoverProjects` below finds nothing there. A
- * silently missing project is indistinguishable from a project that
- * legitimately has no boundary violations, which is exactly the hole
- * `../../../../AGENTS.md`'s invariant refuses ("An empty result is a claim,
- * not a shrug"). Rather than reimplement or partially wire the native model
- * into an index shape it was not designed for, `buildWorkspaceIndex` below
- * takes the loud alternative: a root carrying `LATTICE_MODEL_FILE` always
- * reports an index gap, through the same `indexGaps` mechanism a skipped
- * `project.json` uses, so `./diagnose.mjs` never calls a document in that
- * workspace `analyzed` and no editor draws "clean" over a tree this module
- * cannot actually see the project model of.
+ * ## Why the native branch cannot reuse `discoverProjects`
+ *
+ * A native workspace can declare or infer a project with no `project.json` at
+ * all — the whole point of `lattice.json` is not needing one — and
+ * `discoverProjects` below finds nothing there. A silently missing project is
+ * indistinguishable from a project that legitimately has no boundary
+ * violations, which is exactly the hole `../../../../AGENTS.md`'s invariant
+ * refuses ("An empty result is a claim, not a shrug"). So a root carrying
+ * `LATTICE_MODEL_FILE` runs `buildNativeWorkspaceIndex` instead: it drives
+ * `../providers/native/`'s own `discover()` (declared∪inferred projects, the
+ * files none of them own) and `buildGraph()` (nodes and dependencies from the
+ * import sites this module still analyzes itself — provider-agnostic, and
+ * unchanged either way).
+ *
+ * A `discover()` throw — a malformed `lattice.json`, a declared root with no
+ * tracked file under it, a `projectRules` row matching no project, a stale
+ * `coverage.exempt` entry — is caught rather than left to blank the whole
+ * session: it becomes `nativeModelFailure` on the returned index, which
+ * `indexGaps` turns into a diagnostic naming the defect, on an index that is
+ * otherwise a valid, empty `workspace`/`graph` shape every caller downstream
+ * can still iterate over. `lattice.json` is a watched file (`./server.mjs`),
+ * so fixing it clears the gap the same way fixing a broken `project.json`
+ * clears a `skippedProjects` one.
  *
  * ## What it may assume about the tree, which is nothing
  *
  * No project name, no directory layout, no tag vocabulary (`../../CLAUDE.md` —
  * the tool is installed into workspaces it has never seen). Everything below is
- * derived: projects from the `project.json`
- * files that exist, node types from `projectType` by Nx's own rule, tags from
- * each project's own list, edges from the imports the analyzers actually find.
+ * derived: projects from the `project.json` files that exist (Nx-shaped
+ * branch) or from `lattice.json`'s declared∪inferred model (native branch),
+ * node types from `projectType` by Nx's own rule either way, tags from each
+ * project's own list, edges from the imports the analyzers actually find.
  *
  * ## Why the file list comes from git
  *
@@ -75,6 +87,7 @@ import { annotateMFERemotes, annotatePackageFacts, environmentForTree } from "..
 import { buildDependencies } from "../providers/native/graph.mjs";
 import { nodeTypeOf, PROJECT_CONFIG_FILE } from "../providers/native/discover.mjs";
 import { LATTICE_MODEL_FILE } from "../providers/native/model.mjs";
+import { nativeProvider } from "../providers/native/index.mjs";
 
 export { PROJECT_CONFIG_FILE, nodeTypeOf, buildDependencies };
 
@@ -225,7 +238,7 @@ export function buildNodes(projects) {
  * one.
  *
  * @param {{root: string, tsConfig?: string, listFiles?: (root: string) => string[], readFileAt?: (root: string, path: string) => string|null}} options
- * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], nativeMarker: boolean}}
+ * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], nativeMarker: boolean, nativeModelFailure: string|null}}
  * @throws {Error} when the file list cannot be obtained. Loud on purpose: an
  *   index built from no files would put every file in no project, and a file in
  *   no project has no boundary to cross — a clean report, produced by not
@@ -239,13 +252,13 @@ export function buildWorkspaceIndex({
 }) {
   const files = listFiles(root);
   const readFile = (path) => readFileAt(root, path);
-  // See this module's header: this server discovers projects from tracked
-  // `project.json` files only, never from `lattice.json`'s declared∪inferred
-  // model, so a root carrying that marker means the project list below may
-  // be missing projects `discoverProjects` has no way to find. `nativeMarker`
-  // carries that fact to `indexGaps`, which is what keeps it from reading as
-  // a clean, fully-seen tree.
-  const nativeMarker = files.includes(LATTICE_MODEL_FILE);
+  // A root carrying LATTICE_MODEL_FILE has a project model this module does
+  // not read from `project.json` at all — see this file's header — so it is
+  // handed to the native branch below rather than to `discoverProjects`.
+  if (files.includes(LATTICE_MODEL_FILE)) {
+    return buildNativeWorkspaceIndex({ root, files, readFile, tsConfig });
+  }
+
   const { projects, skipped } = discoverProjects({ files, readFile });
   const nodes = buildNodes(projects);
   // The same Module Federation fact the CLI path computes, from the same
@@ -285,6 +298,31 @@ export function buildWorkspaceIndex({
     tsConfig,
   };
 
+  const { importSites, fileFailures } = analyzeTrackedFiles({ files, readFile, workspace });
+
+  return {
+    root,
+    files,
+    workspace,
+    graph: { nodes, dependencies: buildDependencies({ importSites, nodes, projectOf }) },
+    skippedProjects: skipped,
+    fileFailures,
+    nativeMarker: false,
+    nativeModelFailure: null,
+  };
+}
+
+/**
+ * Every import site the tracked, analyzable files yield, and what could not be
+ * read or analyzed along the way — shared between the Nx-shaped branch above
+ * and the native branch below, because the question ("what does this file
+ * import, and what stopped it from answering") does not depend on which
+ * provider found the project list.
+ *
+ * @param {{files: string[], readFile: (path: string) => string|null, workspace: object}} args
+ * @returns {{importSites: object[], fileFailures: {sourceFile: string, reason: string}[]}}
+ */
+function analyzeTrackedFiles({ files, readFile, workspace }) {
   const importSites = [];
   const fileFailures = [];
   for (const file of files) {
@@ -304,15 +342,93 @@ export function buildWorkspaceIndex({
       fileFailures.push({ sourceFile: file, reason: cause?.message ?? String(cause) });
     }
   }
+  return { importSites, fileFailures };
+}
+
+/**
+ * The native branch of `buildWorkspaceIndex`: drives `../providers/native/`'s
+ * two-call contract (`discover()` then `buildGraph()`) instead of
+ * `discoverProjects`/`buildNodes`, because a `lattice.json` project can have no
+ * `project.json` at all — see this module's header.
+ *
+ * @param {{root: string, files: string[], readFile: (path: string) => string|null, tsConfig?: string}} args
+ * @returns {ReturnType<typeof buildWorkspaceIndex>}
+ */
+function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
+  let discovered;
+  try {
+    discovered = nativeProvider.discover({ root, files, readFile });
+  } catch (cause) {
+    // A model defect — malformed JSON, a declared root with no tracked file
+    // under it, a `projectRules` row matching nothing, a stale
+    // `coverage.exempt` entry (`../providers/native/index.mjs`'s `discover`) —
+    // is not thrown onward: one broken `lattice.json` must not take the whole
+    // session down. It still has to be LOUD (`../../../../AGENTS.md`), so it
+    // becomes `nativeModelFailure` on an index that is otherwise a valid,
+    // empty shape rather than a missing one.
+    const workspace = { root, projects: [], filesOf: () => [], readFile, tsConfig };
+    return {
+      root,
+      files,
+      workspace,
+      graph: { nodes: {}, dependencies: {} },
+      skippedProjects: [],
+      fileFailures: [],
+      nativeMarker: true,
+      nativeModelFailure: cause?.message ?? String(cause),
+    };
+  }
+
+  const projects = discovered.projects.map(({ name, root: projectRoot }) => ({
+    name,
+    root: projectRoot,
+  }));
+  const filesByProject = new Map(projects.map(({ name }) => [name, []]));
+  for (const file of files) {
+    const owner = discovered.projectOf(file);
+    if (owner !== undefined) filesByProject.get(owner).push(file);
+  }
+
+  const workspace = {
+    root,
+    projects,
+    filesOf: (name) => filesByProject.get(name) ?? [],
+    readFile,
+    tsConfig,
+  };
+
+  const { importSites, fileFailures: analysisFailures } = analyzeTrackedFiles({
+    files,
+    readFile,
+    workspace,
+  });
+  // `discovered.failures` — an unparseable `project.json`/`package.json`
+  // (`../providers/native/discover.mjs`) and a tracked file none of the
+  // discovered projects own (`../providers/native/coverage.mjs`) — are the
+  // SAME whole-file `fileFailure` shape `analyzeTrackedFiles` above produces
+  // for a file it could not read, so they fold into one list `indexGaps`
+  // reports the same way: an unowned file is analyzed by nothing and judged
+  // by nothing, which is exactly the hole `../providers/native/coverage.mjs`'s
+  // own header names.
+  const fileFailures = [...discovered.failures, ...analysisFailures];
+
+  const graph = nativeProvider.buildGraph({ discovered, importSites });
+  // The same Module Federation and `package.json` facts the Nx branch and
+  // `../../cli.mjs`'s native branch both compute, from the same shared
+  // functions (`../workspace.mjs`) — a CLI verdict and an editor verdict on
+  // the same import must match.
+  annotateMFERemotes(graph.nodes, readFile);
+  annotatePackageFacts(graph.nodes, readFile);
 
   return {
     root,
     files,
     workspace,
-    graph: { nodes, dependencies: buildDependencies({ importSites, nodes, projectOf }) },
-    skippedProjects: skipped,
+    graph,
+    skippedProjects: [],
     fileFailures,
-    nativeMarker,
+    nativeMarker: true,
+    nativeModelFailure: null,
   };
 }
 
@@ -348,28 +464,32 @@ export function buildWorkspaceIndex({
  *   walking out of, not one they work in. It also **clears itself**:
  *   `project.json` is already a watched file (`./server.mjs`), so the fix
  *   republishes every open document without any editor action.
- * - **The `nativeMarker` gap is different on both counts, on purpose.** It is
- *   present on every root carrying `LATTICE_MODEL_FILE`, whether or not
- *   `nx graph` would also be broken there — there usually is no `nx` at all
- *   on that path — and nothing about the tree can clear it, because it names
- *   a limit of this module (see this file's header), not a defect in the
- *   tree. It stays until `buildWorkspaceIndex` actually reads `lattice.json`.
+ * - **A `nativeModelFailure` gap behaves like the other two, not like the
+ *   permanent one this replaced.** It is present only while
+ *   `../providers/native/index.mjs`'s `discover()` actually threw — a
+ *   defect in `lattice.json` or the tree it describes, not merely the fact
+ *   that the root carries one — and it **clears itself** the same way:
+ *   `lattice.json` is already a watched file (`./server.mjs`), so fixing it
+ *   republishes every open document without any editor action.
  *
  * Each sentence names a path, so the diagnostic says which file to open.
  *
- * @param {{skippedProjects?: {file: string, reason: string}[], fileFailures?: {sourceFile: string, reason: string}[], nativeMarker?: boolean}} index
+ * @param {{skippedProjects?: {file: string, reason: string}[], fileFailures?: {sourceFile: string, reason: string}[], nativeModelFailure?: string|null}} index
  * @returns {string[]}
  */
-export function indexGaps({ skippedProjects = [], fileFailures = [], nativeMarker = false } = {}) {
+export function indexGaps({
+  skippedProjects = [],
+  fileFailures = [],
+  nativeModelFailure = null,
+} = {}) {
   return [
-    ...(nativeMarker
-      ? [
-          `${LATTICE_MODEL_FILE} at the workspace root declares a native project model, but this ` +
-            `language server still discovers projects from tracked project.json files only — any ` +
-            `project lattice.json declares or infers with no project.json of its own is missing ` +
-            `from the graph entirely`,
-        ]
-      : []),
+    ...(nativeModelFailure === null
+      ? []
+      : [
+          `${LATTICE_MODEL_FILE} at the workspace root could not be turned into a project model ` +
+            `(${firstLine(nativeModelFailure)}), so every project it declares or infers is ` +
+            `missing from the graph entirely`,
+        ]),
     ...skippedProjects.map(
       ({ file, reason }) =>
         `${file} ${firstLine(reason)}, so that project is missing from the graph entirely`,

@@ -100,12 +100,13 @@ graph --file=` for it — the only place the package resolves and spawns the
   from `lattice.json` plus the tracked tree, with no Nx installed, so
   `cli.mjs` and `src/lsp/` never need to know which provider they are
   holding. `src/lsp/workspace-index.mjs` is a **consumer** of the native
-  provider rather than a second implementation of it: it still discovers
-  projects from tracked `project.json` files on its own (`discoverProjects`,
-  `buildNodes` — a language server has no `lattice.json` root marker to read
-  one from), but `nodeTypeOf` and `buildDependencies` are imported from
-  `src/providers/native/discover.mjs` and `src/providers/native/graph.mjs`,
-  not defined a second time. `lsp.mjs` itself holds only the stdio wiring.
+  provider rather than a second implementation of it: on a tree whose
+  tracked files include `lattice.json` it indexes through
+  `nativeProvider.discover`/`buildGraph` (a model that will not load becomes
+  a named, self-clearing index gap, never a silently empty index), on an Nx
+  tree it discovers from tracked `project.json` files (`discoverProjects`,
+  `buildNodes`), and in both shapes `nodeTypeOf` and `buildDependencies`
+  come from `src/providers/native/`, not defined a second time. `lsp.mjs` itself holds only the stdio wiring.
 - **`src/report/` renders, and decides nothing.** A formatter that filtered
   would be a rule wearing a formatter's name.
 - **`src/options.mjs` is the only layer allowed to know what a workspace named

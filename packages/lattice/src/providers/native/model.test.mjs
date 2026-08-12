@@ -16,6 +16,16 @@ describe("findNativeModelViolations", () => {
     expect(findNativeModelViolations(wellFormed())).toEqual([]);
   });
 
+  // `../../../docs/usage/lattice-json.md`: "Every field below is optional; an
+  // empty `{}` is a valid `lattice.json`". Requiring `projects` to already be
+  // a plain object made bare `{}` fail shape validation before
+  // `./discover.mjs` ever got a chance to report the zero-projects case the
+  // docs describe, contradicting the docs on the minimal example they lead
+  // with.
+  it("accepts a bare {} — every field, including projects, is optional", () => {
+    expect(findNativeModelViolations({})).toEqual([]);
+  });
+
   it("accepts every documented top-level key at once", () => {
     expect(
       findNativeModelViolations({
@@ -71,6 +81,26 @@ describe("findNativeModelViolations", () => {
         projects: { declared: [{ root: "apps/a", owner: "team-a" }] },
       });
       expect(violations[0]).toMatch(/projects\.declared\[0\]\.owner: not a declared-project field/);
+    });
+
+    // The matcher's own reason, reported against the ROW that named the bad
+    // pattern, before a graph is ever built — `./discover.mjs`'s own tests
+    // pin the manifest-sourced half of this (a `project.json`'s
+    // `implicitDependencies`); this is the declared half, and until now
+    // nothing pinned it: `declaredProjectViolations` calls
+    // `stringListViolations(row.implicitDependencies, …, projectPatternError)`
+    // at model.mjs:305-311, but no test exercised a row that actually fails
+    // it, so a change that quietly stopped passing `projectPatternError`
+    // through (reporting only "must be an array of strings" cases and
+    // letting `libs/*` sail through as shape-valid) would have gone green
+    // here.
+    it("rejects a declared row's implicitDependencies entry the matcher cannot expand", () => {
+      const violations = findNativeModelViolations({
+        projects: { declared: [{ root: "apps/a", implicitDependencies: ["libs/*"] }] },
+      });
+      expect(violations[0]).toMatch(
+        /projects\.declared\[0\]\.implicitDependencies\[0\]: 'libs\/\*' uses glob syntax this engine does not reproduce/,
+      );
     });
   });
 
@@ -267,6 +297,55 @@ describe("loadNativeModel", () => {
 
   it("throws with the parse failure when the file is not valid JSON", () => {
     expect(() => loadNativeModel("/repo", io({ "lattice.json": "{not json" }))).toThrow(
+      /lattice: cannot load \/repo\/lattice\.json:/,
+    );
+  });
+
+  // `lattice.json` is never a file Nx itself reads (a workspace that has one
+  // has no `nx.json` — `../../../docs/usage/lattice-json.md`), so it must
+  // parse JSONC on its own rather than through `../../nx-json.mjs`'s
+  // Nx-reaching parser: that parser's fallback, when `nx` cannot be resolved,
+  // throws asking for it, and `../../../CLAUDE.md` promises the engine runs
+  // with no `nx` installed at all. `./model.mjs` no longer imports
+  // `../../nx-json.mjs` at all (removed by this change — grep confirms), so
+  // there is no `nx` resolution left on this path to fail: these prove it by
+  // behaviour, parsing exactly the two JSONC forms this module's own header
+  // documents (a comment, a trailing comma) without any `nx` in play.
+  it("accepts a lattice.json with a line comment and a trailing comma — no nx needed", () => {
+    const text = `{
+      // native, no Nx at all
+      "projects": { "declared": [{ "root": "apps/a", "name": "a" }] },
+    }`;
+    const model = loadNativeModel("/repo", io({ "lattice.json": text }));
+    expect(model.projects.declared[0].name).toBe("a");
+  });
+
+  it("accepts a lattice.json with a block comment", () => {
+    const text = `{
+      /* native workspace */
+      "projects": { "declared": [] }
+    }`;
+    expect(loadNativeModel("/repo", io({ "lattice.json": text })).projects.declared).toEqual([]);
+  });
+
+  // A comment-looking or comma-looking substring INSIDE a string value must
+  // survive: the stripper is string-aware, not a regex over the raw text.
+  it("does not mistake `//` or a trailing comma inside a string value for JSONC syntax", () => {
+    const text = JSON.stringify({
+      projects: { declared: [] },
+      coverage: {
+        exempt: [{ path: "x", reason: "see http://example.com and a trailing, } note" }],
+      },
+    });
+    const model = loadNativeModel("/repo", io({ "lattice.json": text }));
+    expect(model.coverage.exempt[0].reason).toBe("see http://example.com and a trailing, } note");
+  });
+
+  // A file broken for a reason that has nothing to do with comments or
+  // trailing commas must still fail loudly, not be swallowed by the JSONC
+  // retry.
+  it("still throws on a lattice.json that is not valid JSON even once stripped", () => {
+    expect(() => loadNativeModel("/repo", io({ "lattice.json": "{ /* unterminated" }))).toThrow(
       /lattice: cannot load \/repo\/lattice\.json:/,
     );
   });

@@ -2,11 +2,32 @@
  * `lattice.json`: the native project-and-tag model, for a workspace with no
  * Nx at all.
  *
- * Read the same JSONC-tolerant way every other config in this package is read
- * (`../../nx-json.mjs`), and never `import()`ed — unlike
- * `module-boundaries.config.mjs`, this file describes data rather than code,
- * so there is nothing here that needs a module loader and nothing here that
- * could carry a side effect.
+ * JSONC-tolerant, like every other config in this package, but NOT read
+ * through `../../nx-json.mjs`: that module's whole reason to reach for Nx's
+ * own parser is to give a config Nx ALSO reads (`nx.json`, `project.json`)
+ * the exact JSONC leniency Nx gives it — there is no such thing to match
+ * here, because Nx never opens `lattice.json` at all; a workspace that has
+ * one has no `nx.json` (`../../../docs/usage/lattice-json.md`, "This page is
+ * for a workspace with no Nx at all"). Routing it through `parseNxJson`
+ * anyway meant its JSONC tolerance — the trailing comma or `//` comment this
+ * very module's header used to advertise as accepted — silently depended on
+ * `nx` being resolvable from `node_modules`, which is exactly the dependency
+ * a native, no-Nx workspace is promised it does not need
+ * (`../../../CLAUDE.md`, "the engine and the CLI run without it"). A
+ * workspace with no `nx` installed and a commented `lattice.json` — its OWN
+ * root marker, the one file this provider cannot proceed without — would
+ * fail before discovery ever ran, on a form this module's own docs call
+ * valid. `stripJsonComments`/`stripTrailingCommas` below are the minimal,
+ * in-repo, dependency-free fix: they handle only the two JSONC forms
+ * documented here (`//` and `/* *\/` comments, one trailing comma before a
+ * closing `}`/`]`), the same restraint `../../rules/match.mjs` argues for
+ * not reimplementing minimatch — a stripper that guessed at more of JSON5
+ * would silently mis-parse rather than visibly refuse an input it does not
+ * actually understand.
+ *
+ * Never `import()`ed — unlike `module-boundaries.config.mjs`, this file
+ * describes data rather than code, so there is nothing here that needs a
+ * module loader and nothing here that could carry a side effect.
  *
  * This module validates SHAPE only: is `projects.declared[3].root` a string,
  * does a `coverage.exempt` row carry a `reason`. Whether a declared root
@@ -24,12 +45,144 @@
  */
 import { posix } from "node:path";
 
-import { parseNxJson } from "../../nx-json.mjs";
 import { projectPatternError } from "../../rules/match.mjs";
 import { resolveOptions } from "../../options.mjs";
 
 /** The file this provider treats as a workspace root marker and its model. */
 export const LATTICE_MODEL_FILE = "lattice.json";
+
+/**
+ * Copies every character of `text` to `out` up to and including the closing
+ * quote of the string literal starting at `text[start]`, honouring `\"` so a
+ * quote escaped inside the string does not end it early.
+ *
+ * Shared by `stripJsonComments` and `stripTrailingCommas` below so both scans
+ * treat a `//`, `/*`, or `,` sitting inside a JSON string value as ordinary
+ * text rather than syntax — a `lattice.json` string that happens to contain
+ * `"see a//b"` or `"waived, }"` must survive unmodified.
+ *
+ * @param {string} text
+ * @param {number} start Index of the opening `"`.
+ * @returns {{out: string, next: number}} The copied text and the index just
+ *   past the closing quote (`text.length` if the string never closes).
+ */
+function copyStringLiteral(text, start) {
+  let out = text[start];
+  let i = start + 1;
+  while (i < text.length) {
+    const c = text[i];
+    out += c;
+    i++;
+    if (c === "\\" && i < text.length) {
+      out += text[i];
+      i++;
+      continue;
+    }
+    if (c === '"') break;
+  }
+  return { out, next: i };
+}
+
+/**
+ * Strips `//` line comments and `/* *\/` block comments from `text`, leaving
+ * every string literal untouched.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function stripJsonComments(text) {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === '"') {
+      const copied = copyStringLiteral(text, i);
+      out += copied.out;
+      i = copied.next;
+      continue;
+    }
+    if (ch === "/" && text[i + 1] === "/") {
+      while (i < text.length && text[i] !== "\n") i++;
+      continue;
+    }
+    if (ch === "/" && text[i + 1] === "*") {
+      i += 2;
+      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++;
+      i += 2;
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
+/**
+ * Drops one trailing comma before a closing `}` or `]` — the comma, and only
+ * the comma, so `{"a": 1,}` and `[1, 2,]` read as strict JSON afterward.
+ * String literals are copied verbatim, so a comma inside one is never
+ * mistaken for JSON structure (unlike a `,(\s*[}\]])` regex run AFTER
+ * comments are stripped, which cannot tell a real trailing comma from the
+ * same two characters inside a string value).
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function stripTrailingCommas(text) {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === '"') {
+      const copied = copyStringLiteral(text, i);
+      out += copied.out;
+      i = copied.next;
+      continue;
+    }
+    if (ch === ",") {
+      let j = i + 1;
+      while (j < text.length && /\s/.test(text[j])) j++;
+      if (text[j] === "}" || text[j] === "]") {
+        i++;
+        continue;
+      }
+    }
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
+/**
+ * Parses `lattice.json` itself — JSONC-tolerant on its own, with no
+ * dependency on `nx` being installed. See this module's header for why
+ * `../../nx-json.mjs`'s Nx-reaching parser is the wrong reader for this one
+ * file: `readFile`'s JSON.parse runs first, exactly as `../../nx-json.mjs`
+ * runs it first, so the common case (strict JSON, no comment, no trailing
+ * comma) pays for none of the stripping below; only a file that failed the
+ * first parse pays for a second pass.
+ *
+ * A file that still fails to parse after stripping throws the ORIGINAL
+ * `JSON.parse` error, not one from the stripped text — the stripped text's
+ * character offsets have shifted from the file on disk, so an error pointing
+ * into it would send a reader to the wrong line.
+ *
+ * @param {string} text
+ * @returns {object} Whatever the JSON describes.
+ * @throws {Error} when `text` is not valid JSON even once comments and one
+ *   trailing comma per closing bracket are stripped.
+ */
+function parseLatticeJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch (plain) {
+    try {
+      return JSON.parse(stripTrailingCommas(stripJsonComments(text)));
+    } catch {
+      throw plain;
+    }
+  }
+}
 
 /**
  * The manifest basenames `projects.infer` looks for when a workspace does not
@@ -332,20 +485,30 @@ export function findNativeModelViolations(raw) {
   const violations = [];
   const { projects, projectRules, coverage, workspaceLayout } = raw;
 
-  if (!isPlainObject(projects)) {
+  // `projects` is optional the same way every other top-level key here is —
+  // `docs/usage/lattice-json.md`'s "The shape, field by field" names a bare
+  // `{}` a valid `lattice.json`, and an absent `projects` means exactly what
+  // `projects: {}` already validated as: zero declared rows, no inference.
+  // Rejecting `undefined` here (as this used to) contradicted that documented
+  // minimal form outright — the loader could not read the one example the
+  // page opens with. `discoverNativeProjects` (`./discover.mjs`) is still the
+  // one that turns "zero projects" into a loud failure once the tree is
+  // known; this validator's job stops at shape.
+  if (projects !== undefined && !isPlainObject(projects)) {
     violations.push(`projects: must be an object, got ${describe(projects)}`);
   } else {
-    if ("declared" in projects && !Array.isArray(projects.declared)) {
+    const declaredProjects = /** @type {Record<string, unknown>} */ (projects ?? {});
+    if ("declared" in declaredProjects && !Array.isArray(declaredProjects.declared)) {
       violations.push(
-        `projects.declared: must be an array when present, got ${describe(projects.declared)}`,
+        `projects.declared: must be an array when present, got ${describe(declaredProjects.declared)}`,
       );
     } else {
-      /** @type {unknown[]} */ (projects.declared ?? []).forEach((row, index) =>
+      /** @type {unknown[]} */ (declaredProjects.declared ?? []).forEach((row, index) =>
         violations.push(...declaredProjectViolations(row, index)),
       );
     }
-    violations.push(...inferViolations(projects.infer));
-    for (const key of Object.keys(projects)) {
+    violations.push(...inferViolations(declaredProjects.infer));
+    for (const key of Object.keys(declaredProjects)) {
       if (key !== "declared" && key !== "infer") {
         violations.push(`projects.${key}: not a projects field — expected one of declared, infer`);
       }
@@ -409,7 +572,10 @@ export function findNativeModelViolations(raw) {
  * @returns {object} `NativeModel` — see `./index.mjs`.
  */
 export function normalizeNativeModel(raw) {
-  const projects = /** @type {Record<string, unknown>} */ (raw.projects);
+  // `raw.projects` may be absent — `findNativeModelViolations` above validates
+  // that shape the same way it validates `projects: {}`, so this has to read
+  // it back the same way rather than assume the key is always present.
+  const projects = /** @type {Record<string, unknown>} */ (raw.projects ?? {});
   const declared = /** @type {unknown[]} */ (projects.declared) ?? [];
   const rawInfer = /** @type {Record<string, unknown>|undefined} */ (projects.infer);
 
@@ -496,7 +662,7 @@ export function loadNativeModel(root, { readFile }) {
   }
   let raw;
   try {
-    raw = parseNxJson(text);
+    raw = parseLatticeJson(text);
   } catch (cause) {
     throw new Error(`lattice: cannot load ${path}: ${cause?.message ?? cause}`, { cause });
   }

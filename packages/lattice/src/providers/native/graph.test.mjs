@@ -117,6 +117,30 @@ describe("buildNativeGraph", () => {
     });
     expect("workspaceLayout" in graph).toBe(false);
   });
+
+  // A project literally named `__proto__` is not a hypothetical — the name
+  // comes straight from `lattice.json` or a tracked manifest, both
+  // attacker-supplied. The silent-direction bug this pins: `nodes[project.name]
+  // = …` against a plain `{}` repoints the object's OWN [[Prototype]] instead
+  // of adding an entry, so the project vanishes from every
+  // `Object.keys`/`Object.entries` walk in this module and in `../../rules/`
+  // while `nodes["__proto__"]` still reads back truthy — a workspace with a
+  // `__proto__` project would read as one with fewer projects than it
+  // declared, with no diagnostic naming why.
+  // `Object.prototype.hasOwnProperty` is the direct proof of a real own
+  // property, as distinct from an inherited one.
+  it("keeps a project named __proto__ as a real, own entry — not a repointed prototype", () => {
+    const { nodes } = buildNativeGraph({
+      projects: [project({ name: "__proto__", root: "libs/weird" })],
+      importSites: [],
+      projectOf: () => undefined,
+    });
+    expect(Object.prototype.hasOwnProperty.call(nodes, "__proto__")).toBe(true);
+    expect(Object.keys(nodes)).toEqual(["__proto__"]);
+    expect(Object.entries(nodes)).toHaveLength(1);
+    expect(nodes["__proto__"].name).toBe("__proto__");
+    expect(nodes["__proto__"].data.root).toBe("libs/weird");
+  });
 });
 
 describe("buildDependencies", () => {
@@ -191,21 +215,77 @@ describe("buildDependencies", () => {
   });
 
   // A pattern the matcher rejects (glob syntax it deliberately does not
-  // reproduce, `../../rules/match.mjs`'s `projectPatternError`) is caught and
-  // the edge is skipped rather than propagated. `./discover.mjs` validates
-  // every native `implicitDependencies` entry before a graph is ever built
-  // from it, so a native workspace never reaches this branch with a bad
-  // pattern — the catch exists for `../../lsp/workspace-index.mjs`'s
-  // unvalidated `project.json` data, and this proves it fails closed rather
-  // than crashing the whole graph build over one bad row.
-  it("does not throw when an implicitDependencies pattern is one the matcher rejects", () => {
+  // reproduce, `../../rules/match.mjs`'s `projectPatternError`) is a
+  // project-definition problem, and `findMatchingProjects` throws naming it.
+  // This now propagates rather than being caught and dropped: the old
+  // `catch { continue }` here silently skipped the bad row's implicit edges
+  // and kept building, which read exactly like a workspace where every
+  // implicit dependency really did resolve cleanly — the silent-direction
+  // failure `../../../AGENTS.md`'s invariant refuses. `./discover.mjs`
+  // validates every native `implicitDependencies` entry before a graph is
+  // ever built, so this is dead code on the native path either way; the only
+  // question was which failure mode the LSP's unvalidated `project.json` data
+  // gets if it ever reaches here, and `../../lsp/server.mjs`'s existing
+  // `.catch()` around the whole index build already turns a thrown error into
+  // a loud "could not analyze" state, so propagating is safe there too.
+  it("throws, naming the pattern, when an implicitDependencies pattern is one the matcher rejects", () => {
     const withBadPattern = {
       ...nodes,
       a: { ...nodes.a, data: { ...nodes.a.data, implicitDependencies: ["libs/*"] } },
     };
     const build = () =>
       buildDependencies({ importSites: [], nodes: withBadPattern, projectOf: () => undefined });
-    expect(build).not.toThrow();
-    expect(build().a ?? []).toEqual([]);
+    expect(build).toThrow(/libs\/\*/);
+  });
+
+  // A project name may legally contain a space — neither `./model.mjs`'s
+  // `declaredProjectViolations` nor `./discover.mjs`'s manifest-sourced name
+  // resolution reject one, only non-empty is required. The silent-direction
+  // bug this pins: the old dedup key `${source} ${target} ${type}` collided
+  // whenever a space crossed the join — source `"a b"` target `"c"` and
+  // source `"a"` target `"b c"` both hashed to `"a b c static"` — so the
+  // second edge was dropped as a false duplicate of the first, and the
+  // dependency it represented read as absent.
+  it("keeps two distinct edges whose source/target names contain spaces — not collided by a space-joined key", () => {
+    const spacedNodes = {
+      ...nodes,
+      "a b": { name: "a b", data: { root: "a b", tags: [], implicitDependencies: [] } },
+      "b c": { name: "b c", data: { root: "b c", tags: [], implicitDependencies: [] } },
+    };
+    const dependencies = buildDependencies({
+      importSites: [importSite("a b/x.ts", "c"), importSite("a/x.ts", "b c")],
+      nodes: spacedNodes,
+      projectOf: (file) => (file.startsWith("a b/") ? "a b" : "a"),
+    });
+    expect(dependencies["a b"]).toEqual([{ source: "a b", target: "c", type: "static" }]);
+    expect(dependencies["a"]).toEqual([{ source: "a", target: "b c", type: "static" }]);
+  });
+
+  // Same class of bug as `buildNativeGraph`'s own `__proto__` test above, from
+  // the other side: a project named `__proto__` must still be a valid EDGE
+  // endpoint — both as the target of an import (`nodes[target]` must see it)
+  // and as the source of an implicit edge (`Object.entries(nodes)` must walk
+  // it, and `dependencies["__proto__"]` must be a real own array rather than
+  // a repointed prototype the very next `.push` throws against).
+  it("builds edges into and out of a project named __proto__ without crashing", () => {
+    const protoNodes = Object.create(null);
+    Object.assign(protoNodes, nodes);
+    protoNodes["__proto__"] = {
+      name: "__proto__",
+      data: { root: "weird", tags: [], implicitDependencies: ["a"] },
+    };
+    const dependencies = buildDependencies({
+      importSites: [importSite("a/x.ts", "__proto__")],
+      nodes: protoNodes,
+      projectOf: () => "a",
+    });
+    expect(Object.prototype.hasOwnProperty.call(dependencies, "a")).toBe(true);
+    expect(dependencies.a).toEqual(
+      expect.arrayContaining([{ source: "a", target: "__proto__", type: "static" }]),
+    );
+    expect(Object.prototype.hasOwnProperty.call(dependencies, "__proto__")).toBe(true);
+    expect(dependencies["__proto__"]).toEqual([
+      { source: "__proto__", target: "a", type: "implicit" },
+    ]);
   });
 });

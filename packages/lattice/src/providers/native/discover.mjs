@@ -114,22 +114,49 @@ function readProjectManifest(root, readFile) {
 }
 
 /**
- * `package.json`'s `name` at `root`, or `undefined` — the second rung of the
- * name-precedence ladder, read the same defensive way `project.json` is.
+ * `package.json`'s `name` at `root` — the second rung of the name-precedence
+ * ladder — read the same JSONC-tolerant way `project.json` is
+ * (`readProjectManifest` above), not with a bare `JSON.parse`.
+ *
+ * This is not a formality: Nx itself resolves a `package.json` project node's
+ * name through `readJsonFile` → `parseJson` — measured against the installed
+ * `nx`, `dist/plugins/package-json.js`'s `createNodeFromPackageJson` reads
+ * every tracked `package.json` that way, the same `jsonc-parser` Nx reads
+ * `nx.json` and `project.json` with — even though `npm install` itself is
+ * strict JSON about the same file. `../../lsp/workspace-index.mjs`'s
+ * `discoverProjects`, the oracle this module's own header cites for name
+ * precedence, reads `package.json` through that same reader
+ * (`parseProjectJson`, its local name for `parseNxJson`) for exactly that
+ * reason. A bare `JSON.parse` here would read a `package.json` carrying a
+ * trailing comma or a `//` comment as unparseable while Nx reads it fine,
+ * naming the project differently than Nx does for a config Nx accepts.
+ *
+ * A `package.json` that will not parse even with that reader is surfaced as a
+ * `fileFailure`, never swallowed into "no name": falling back to the
+ * directory basename here would cost the project its real identity with
+ * nothing anywhere naming why — an import that targets it by name would
+ * resolve as external rather than cross-project, unnoticed. The same silent
+ * hole `readProjectManifest`'s own header describes for `project.json`.
  *
  * @param {string} root
  * @param {(path: string) => string|null} readFile
- * @returns {string|undefined}
+ * @returns {{name: string|undefined, failure: object|undefined}}
  */
 function readPackageName(root, readFile) {
   const path = root === "" ? "package.json" : `${root}/package.json`;
   const text = readFile(path);
-  if (text === null) return undefined;
+  if (text === null) return { name: undefined, failure: undefined };
   try {
-    const parsed = JSON.parse(text);
-    return typeof parsed?.name === "string" ? parsed.name : undefined;
-  } catch {
-    return undefined;
+    const parsed = parseNxJson(text);
+    return {
+      name: typeof parsed?.name === "string" ? parsed.name : undefined,
+      failure: undefined,
+    };
+  } catch (cause) {
+    return {
+      name: undefined,
+      failure: fileFailure(path, `could not be parsed as JSON: ${cause?.message ?? cause}`),
+    };
   }
 }
 
@@ -210,7 +237,17 @@ export function discoverNativeProjects({ root, files, readFile, model }) {
     const declared = declaredByRoot.get(projectRoot);
     const { manifest, failure } = readProjectManifest(projectRoot, readFile);
     if (failure) failures.push(failure);
-    const packageName = manifest ? undefined : readPackageName(projectRoot, readFile);
+    // Read unconditionally, not only when `project.json` is absent: a
+    // `project.json` that EXISTS but omits `name` is still a truthy
+    // `manifest`, and `manifest?.name` alone is `undefined` in that case —
+    // gating this read on `manifest` being falsy skipped `package.json`
+    // entirely for that project, landing straight on the directory basename
+    // and skipping the middle rung of the precedence chain below.
+    // `../../lsp/workspace-index.mjs`'s `discoverProjects` — the oracle this
+    // module's own header names for this exact precedence — reads
+    // `package.json` the same unconditional way for the same reason.
+    const { name: packageName, failure: packageFailure } = readPackageName(projectRoot, readFile);
+    if (packageFailure) failures.push(packageFailure);
     // Nx's own precedence, reproduced exactly (`../../lsp/workspace-index.mjs`,
     // `discoverProjects`): a declared name, then `project.json`'s, then
     // `package.json`'s, then the directory basename.

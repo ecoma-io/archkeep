@@ -69,6 +69,28 @@ describe("discoverNativeProjects", () => {
       expect(projects.map((p) => p.name)).toEqual(["from-package-json"]);
     });
 
+    // The bug this pins: `readPackageName` used to be called only when
+    // `manifest` was falsy (`!manifest`), but a `project.json` that EXISTS
+    // and simply omits `name` is still a truthy manifest — that guard skipped
+    // `package.json` entirely and fell straight to the directory basename,
+    // one rung early. `../../lsp/workspace-index.mjs`'s `discoverProjects`,
+    // the oracle this precedence reproduces, reads `package.json`
+    // unconditionally; this project.json-present-but-nameless case is the one
+    // that told the two implementations apart.
+    it("falls through project.json's name to package.json's when project.json omits name", () => {
+      const model = modelOf({ projects: { declared: [], infer: {} } });
+      const { projects } = discoverNativeProjects({
+        root: "/repo",
+        files: ["libs/a/project.json", "libs/a/package.json"],
+        readFile: filesOf({
+          "libs/a/project.json": JSON.stringify({ tags: ["scope:a"] }),
+          "libs/a/package.json": JSON.stringify({ name: "from-package-json" }),
+        }),
+        model,
+      });
+      expect(projects.map((p) => p.name)).toEqual(["from-package-json"]);
+    });
+
     it("falls back to the directory basename when neither manifest names the project", () => {
       const model = modelOf({ projects: { declared: [], infer: {} } });
       const { projects } = discoverNativeProjects({
@@ -367,6 +389,51 @@ describe("discoverNativeProjects", () => {
     });
     expect(failures).toEqual([]);
     expect(projects[0].tags).toEqual(["scope:a"]);
+  });
+
+  // The `package.json` half of the same fix, in `readPackageName`: it used to
+  // read with a bare `JSON.parse`, so a JSONC `package.json` — a form Nx
+  // itself accepts (measured against the installed `nx`,
+  // `dist/plugins/package-json.js`'s `createNodeFromPackageJson`) — silently
+  // lost its `name` and fell through to the directory basename instead,
+  // naming the project differently than Nx would for a config Nx reads fine.
+  it("reads a package.json with a trailing comma, the same JSONC form Nx itself accepts", () => {
+    const model = modelOf({ projects: { declared: [], infer: {} } });
+    const { projects, failures } = discoverNativeProjects({
+      root: "/repo",
+      files: ["libs/a/package.json"],
+      readFile: filesOf({
+        "libs/a/package.json": '{\n  "name": "from-package-json",\n}\n',
+      }),
+      model,
+    });
+    expect(failures).toEqual([]);
+    expect(projects.map((p) => p.name)).toEqual(["from-package-json"]);
+  });
+
+  // Silent-direction: an unparseable `package.json` must not quietly fall
+  // back to the directory basename — that would cost the project its real
+  // identity (an import that targets it by name resolves as external rather
+  // than cross-project) with nothing anywhere naming why. It must surface as
+  // a `fileFailure`, the same as an unparseable `project.json` does above.
+  it("keeps a declared project whose package.json is unparseable, and surfaces the parse failure loudly", () => {
+    const model = modelOf({ projects: { declared: [{ root: "apps/a" }] } });
+    const { projects, failures } = discoverNativeProjects({
+      root: "/repo",
+      files: ["apps/a/package.json"],
+      readFile: filesOf({ "apps/a/package.json": "{not json" }),
+      model,
+    });
+    expect(projects).toHaveLength(1);
+    expect(projects[0].root).toBe("apps/a");
+    // No project.json and an unparseable package.json: the name falls all
+    // the way to the directory basename, but the parse failure is still
+    // reported — the basename fallback and a silently-swallowed parse error
+    // are not the same outcome.
+    expect(projects[0].name).toBe("a");
+    expect(failures).toHaveLength(1);
+    expect(failures[0].sourceFile).toBe("apps/a/package.json");
+    expect(failures[0].line).toBeNull();
   });
 
   // "discovery / nesting": a crate nested inside another project's directory

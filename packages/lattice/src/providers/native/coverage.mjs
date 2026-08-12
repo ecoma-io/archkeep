@@ -19,7 +19,7 @@
  * to report it: `formatFailures` already splits whole-file holes from
  * site-level ones (`isWholeFileFailure`, `failure.line === null`).
  */
-import { languageOf } from "../../analysis/analyze.mjs";
+import { languageOf } from "../../analysis/registry.mjs";
 import { fileFailure } from "../../analysis/source-util.mjs";
 import { matchesGlob } from "./model.mjs";
 
