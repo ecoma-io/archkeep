@@ -130,6 +130,27 @@ the README's catalogue sizes to the catalogue, and
 `plugin-catalogue.integration.test.mjs` holds the Claude Code plugin manifests to
 each other.
 
+The same script carries a second, native-provider leg over the same pinned
+trees — never a second clone, never a second script. It derives a
+`lattice.json`-equivalent model mechanically from the graph JSON the upstream
+leg already fetched (`deriveNativeModel`), runs `nativeProvider.discover`/
+`buildGraph` over it, and compares the node set, edge set, and rule verdicts
+against that same tree's real Nx-graph-based run — reusing `LEDGER` and
+`classifyDifferences` with its own `"native-extra"`/`"native-missing"`
+direction pair rather than a parallel mechanism
+(`packages/lattice/src/providers/native/README.md`'s "What proves this
+provider against a tree it was not tested on" has the fuller account,
+including what the first real run against `code-pushup` found and why a
+populated ledger there is the expected outcome, not a regression). The tool
+run on this tree, described just below, has a native-provider twin too:
+`.github/workflows/ci.yml`'s "Check this repository's own module boundaries
+(native provider)" step runs the checker against a throwaway copy of this
+same tracked tree with `nx.json` swapped for a tracked
+`.github/native-selfcheck/lattice.json`, and asserts that copy reads the
+byte-identical `module-boundaries.config.mjs` the Nx-based step just above it
+judged — so a disagreement between the two is a provider defect, never two
+copies of the law drifting apart.
+
 ### The gates that are not tests
 
 Three things in CI prove something no unit test can, and they are worth knowing

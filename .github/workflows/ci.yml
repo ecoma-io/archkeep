@@ -119,6 +119,93 @@ jobs:
           NX_DAEMON: "false"
         run: node packages/lattice/cli.mjs check
 
+      # The step above proves the Nx provider against real source. This repository
+      # cannot ALSO carry a root `lattice.json` to prove the native one the same
+      # way: `cli.mjs` refuses a root holding both markers (this repository needs
+      # `nx.json` — it registers the plugin, states targets, and `nx run-many`
+      # above is half of CI), so a root `lattice.json` would break that step, the
+      # plugin registration, and `nx run-many` all at once. The way around it is
+      # a throwaway COPY of the tracked tree with `nx.json` removed and a
+      # `lattice.json` written in — `.github/native-selfcheck/lattice.json`,
+      # tracked and reviewable, describing the same two projects under the same
+      # tags this repository's own law already uses.
+      #
+      # Two properties make this worth a step of its own rather than a curiosity:
+      #   - The `diff -q` below proves the copy reads the exact same
+      #     `module-boundaries.config.mjs` the step above just ran — the same
+      #     bytes, not a second copy that could quietly drift — so a disagreement
+      #     between the two steps is a provider defect and nothing else.
+      #   - It is the only place the native provider meets this repository's real
+      #     source under a tag vocabulary `packages/lattice/src/` has no
+      #     knowledge of, the same argument the step above makes for the Nx path.
+      #
+      # `git archive HEAD` (tracked files only — what `git ls-files` inside the
+      # copy will also see) into a fresh git repo, because the native provider's
+      # own discovery reads `git ls-files`, not a directory walk: a tree with
+      # nothing committed is an empty workspace to it, same as the Nx provider's
+      # `git ls-files` call in `src/workspace.mjs`. `packages/lattice/cli.mjs`
+      # itself is run from OUTSIDE the copy, with its `cwd` pointed inside it —
+      # every relative path `check()` reads (the workspace root, the boundary
+      # config, `git ls-files`) resolves from `cwd`, while `import ts from
+      # "typescript"` and friends resolve from the running file's own location,
+      # so the copy needs none of this repository's `node_modules` and `git
+      # archive` never has to carry a gitignored tree that is not in HEAD.
+      #
+      # Red-direction proof, done twice and both by hand rather than pinned in a
+      # fixture — a second copy of this tree's own tests would drift from what
+      # this step actually runs, which is the opposite of what red-direction
+      # coverage is for:
+      #   - Manually verified 2026-08-12: removing the `.claude/**` row from
+      #     `.github/native-selfcheck/lattice.json` and re-running this exact
+      #     sequence exits 3, naming both `.claude/hooks/*.mjs` files as
+      #     unclaimed — the coverage claim below is live, not vacuously
+      #     satisfied by an exempt list wide enough to hide a real gap.
+      #   - Manually verified 2026-08-12: committing a relative import from
+      #     `packages/lattice-vscode` into `packages/lattice` into the copy and
+      #     re-running exits 1, naming `noRelativeOrAbsoluteImportsAcrossLibraries`
+      #     — the same rule engine the step above runs, reached through the other
+      #     provider.
+      - name: Check this repository's own module boundaries (native provider)
+        run: |
+          set -euo pipefail
+          law="$PWD/module-boundaries.config.mjs"
+          cli="$PWD/packages/lattice/cli.mjs"
+          dir="$(mktemp -d)"
+          git archive HEAD | tar -x -C "$dir"
+          rm "$dir/nx.json"
+          cp .github/native-selfcheck/lattice.json "$dir/lattice.json"
+          diff -q "$law" "$dir/module-boundaries.config.mjs"
+          # Symlinked in, not copied and not installed fresh: the step above
+          # (`Check this repository's own module boundaries`) runs against
+          # this SAME checkout, `node_modules` and all, so the two steps are
+          # meant to differ in exactly one variable — the provider. Without
+          # this, `packages/lattice/src/analysis/typescript.mjs`'s resolver
+          # (`resolveSpecifier`'s "TypeScript cannot resolve" branch) fails to
+          # resolve every bare-package import in the copy for a reason that
+          # has nothing to do with the native provider — an absent
+          # `node_modules`, not a boundary the provider got wrong — which
+          # would report a pile of could-not-resolve failures the Nx-based
+          # step never sees and make a real disagreement between the two
+          # providers indistinguishable from this one. pnpm gives each
+          # workspace package (`packages/*`) its OWN `node_modules`, holding
+          # symlinks into the shared store for that package's private
+          # dependencies (e.g. `packages/lattice-vscode/node_modules`'s own
+          # `vscode-languageclient`) — the root `node_modules` alone does not
+          # contain them — so every such directory needs linking, not just
+          # the root one.
+          ln -s "$PWD/node_modules" "$dir/node_modules"
+          for pkg_node_modules in packages/*/node_modules; do
+            [ -d "$pkg_node_modules" ] || continue
+            ln -s "$PWD/$pkg_node_modules" "$dir/$pkg_node_modules"
+          done
+          git -C "$dir" init -q
+          git -C "$dir" add -A
+          git -C "$dir" -c user.name=lattice-native-selfcheck \
+            -c user.email=lattice-native-selfcheck@invalid -c commit.gpgsign=false \
+            commit -q -m "native self-check tree"
+          (cd "$dir" && node "$cli" check)
+          rm -rf "$dir"
+
       # The extension's own artifact, built on every pull request so a change
       # that breaks packaging turns THIS build red instead of the release lane
       # weeks later. It cannot run where the tests above ran: vsce walks

@@ -12,13 +12,19 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  DIRECTIONS,
   EXIT,
   LEDGER,
   TREES,
   classifyDifferences,
+  deriveNativeModel,
   emptyVerdictBreaches,
   extractBoundaryRule,
+  nativeProjectCountBreach,
+  nodeFieldDifferences,
   overallExit,
+  reportNativeLeg,
+  scopeLedgerToDirections,
   treeVerdict,
 } from "./differential-real-trees.mjs";
 
@@ -165,10 +171,281 @@ test("the trees table stays pinned, licensed, and non-trivial", () => {
 
 test("every ledger entry names a pinned tree and a real direction", () => {
   const names = new Set(TREES.map((tree) => tree.name));
+  // Derived from `DIRECTIONS` rather than typed out a second time here — the
+  // whole reason that constant exists (its own doc comment tells the story):
+  // this test's own copy was one of the three that used to drift silently.
+  const realDirections = [...DIRECTIONS.upstream, ...DIRECTIONS.native];
   for (const item of LEDGER) {
     assert.ok(names.has(item.tree), `ledger entry for unknown tree '${item.tree}'`);
-    assert.ok(["stricter", "weaker"].includes(item.direction));
+    assert.ok(realDirections.includes(item.direction), `unknown direction '${item.direction}'`);
     assert.ok(item.reason.length > 0, "an unexplained explanation is not one");
     new RegExp(item.sitePattern, "u");
   }
+});
+
+test("the trees table pins a native-project floor for every tree", () => {
+  for (const tree of TREES) {
+    assert.ok(
+      Number.isInteger(tree.expectedNativeProjects) && tree.expectedNativeProjects > 0,
+      `${tree.name} must pin a positive expectedNativeProjects, the same "measured fact about ` +
+        'the pinned commit" treatment expectViolations gets',
+    );
+  }
+});
+
+// --- The native leg's own pure functions ---------------------------------
+//
+// The cases to read first are the SILENT-direction ones, same discipline as
+// the rest of this file: a derivation that produced zero projects, a breach
+// that a stray ledger entry could silence, and a stale row using the native
+// leg's own direction vocabulary rather than the upstream one — proving the
+// SAME classifier handles both, not a parallel mechanism nobody tests.
+
+const nxNode = (name, overrides = {}) => ({
+  name,
+  data: { root: `packages/${name}`, projectType: "library", tags: [`scope:${name}`], ...overrides },
+});
+
+test("deriveNativeModel is not trivially empty over a real-shaped graph", () => {
+  const graph = {
+    nodes: {
+      core: nxNode("core"),
+      cli: nxNode("cli", { projectType: "application" }),
+      "cli-e2e": nxNode("cli-e2e", { projectType: "application" }),
+    },
+  };
+  const model = deriveNativeModel(graph);
+  // The silent failure this derivation must not have: a graph with real nodes
+  // producing an empty or partial declared list, which would make every
+  // later node/edge/verdict comparison in the native leg vacuously agree.
+  assert.equal(model.projects.declared.length, 3);
+  const byName = new Map(model.projects.declared.map((p) => [p.name, p]));
+  assert.equal(byName.get("core").type, "lib", "no projectType stated as 'library' maps to lib");
+  assert.equal(byName.get("cli").type, "app", "application, no -e2e suffix, maps to app");
+  assert.equal(byName.get("cli-e2e").type, "e2e", "the -e2e suffix rule, reproduced from Nx");
+  assert.deepEqual(byName.get("core").tags, ["scope:core"]);
+  // No projects.infer, no projectRules — the declared list must be exhaustive
+  // on its own, per docs/usage/lattice-json.md's "omitting this key means the
+  // declared list is exhaustive."
+  assert.equal("infer" in model.projects, false);
+  assert.equal("projectRules" in model, false);
+});
+
+test("deriveNativeModel on an empty graph produces an empty declared list — the exact shape the floor below exists to catch", () => {
+  const model = deriveNativeModel({ nodes: {} });
+  assert.deepEqual(model.projects.declared, []);
+});
+
+test("nativeProjectCountBreach fires below the pinned floor, never at or above it", () => {
+  const tree = { name: "code-pushup", sha: "abc", expectedNativeProjects: 5 };
+  assert.equal(nativeProjectCountBreach(tree, 4).length, 1);
+  assert.match(nativeProjectCountBreach(tree, 4)[0], /only 4 project/u);
+  assert.equal(nativeProjectCountBreach(tree, 5).length, 0);
+  assert.equal(nativeProjectCountBreach(tree, 6).length, 0);
+  // Silent-direction check: a derivation that produced ZERO projects on a
+  // tree known to have real ones must breach, not read as "nothing to
+  // report."
+  assert.equal(nativeProjectCountBreach(tree, 0).length, 1);
+});
+
+test("a breach cannot be ledgered — for the native leg specifically", () => {
+  const tree = { name: "ng-doc", sha: "abc", expectViolations: true, expectedNativeProjects: 1 };
+  // A ledger row that would "explain away" a native-extra/native-missing
+  // difference has no bearing on the empty-verdict claim: `emptyVerdictBreaches`
+  // and `nativeProjectCountBreach` take no ledger argument at all, so a row
+  // naming this tree cannot silence either. Asserted here for the native
+  // engine key specifically, not the upstream one the existing tests already
+  // cover.
+  assert.equal(emptyVerdictBreaches(tree, { native: 0, tool: 8 }).length, 1);
+  assert.match(emptyVerdictBreaches(tree, { native: 0, tool: 8 })[0], /native reported ZERO/u);
+  assert.equal(nativeProjectCountBreach(tree, 0).length, 1);
+});
+
+test("a stale native-leg ledger row fails — the same classifier, not a second one", () => {
+  const nativeEntry = {
+    tree: "code-pushup",
+    direction: "native-extra",
+    messageId: "node",
+    sitePattern: "^some-removed-project$",
+    reason: "test entry using the native leg's own direction vocabulary",
+  };
+  const { stale, explained } = classifyDifferences("code-pushup", [], [nativeEntry]);
+  assert.equal(stale.length, 1);
+  assert.equal(explained.length, 0);
+
+  const matchingDifference = {
+    direction: "native-extra",
+    messageId: "node",
+    site: "some-removed-project",
+  };
+  const fired = classifyDifferences("code-pushup", [matchingDifference], [nativeEntry]);
+  assert.equal(fired.stale.length, 0);
+  assert.equal(fired.explained.length, 1);
+});
+
+test("deriveNativeModel renormalises Nx's root-project root '.' to lattice.json's '' — root: '.' is otherwise rejected by name", () => {
+  const graph = {
+    nodes: {
+      workspace: nxNode("workspace", { root: ".", projectType: "library" }),
+      utils: nxNode("utils"),
+    },
+  };
+  const model = deriveNativeModel(graph);
+  const byName = new Map(model.projects.declared.map((p) => [p.name, p]));
+  // The silent failure this normalisation guards: an unrenormalised "."
+  // reaches `nativeProvider.discover`, which loads through `model.mjs`'s
+  // `declaredProjectViolations` — that rejects root: "." BY NAME (only ""
+  // names the workspace root in `lattice.json`'s own dialect), turning what
+  // should be a real fidelity measurement into an infrastructure failure that
+  // reads as "could not look," not "found nothing." Measured against a real
+  // tree carrying exactly this shape (code-pushup's own root-level project,
+  // this file's `deriveNativeModel` doc comment).
+  assert.equal(byName.get("workspace").root, "");
+  // A non-"." root is untouched — this is a normalisation of the one
+  // spelling the two dialects disagree on, not a blanket rewrite.
+  assert.equal(byName.get("utils").root, "packages/utils");
+});
+
+test("scopeLedgerToDirections keeps a ledger entry's staleness scoped to its own leg — silent-direction proof of a real bug this file shipped and fixed", () => {
+  // One ledger holding a row for each leg, the exact shape `LEDGER` carries
+  // for real: an upstream-vs-tool row and a native-leg row for the same tree.
+  const ledger = [
+    entry({ direction: "stricter", sitePattern: "^packages/cli/" }),
+    entry({ direction: "native-missing", messageId: "edge", sitePattern: "^workspace->utils$" }),
+  ];
+  // Only the native difference fired this run — the shape a real native leg
+  // produces when the upstream-vs-tool comparison agrees perfectly.
+  const nativeDifference = {
+    direction: "native-missing",
+    messageId: "edge",
+    site: "workspace->utils",
+  };
+
+  // SILENT-direction proof: classifying with the FULL, unscoped ledger against
+  // ONLY the native difference reports the unrelated "stricter" entry stale —
+  // wrong, and exactly the defect a real run against code-pushup surfaced
+  // (2026-08-12): the same entry printed both `explained` on the native side
+  // and `STALE` on the upstream-vs-tool side in one run, because each side
+  // classified against the SAME full `LEDGER` rather than its own directions.
+  const unscoped = classifyDifferences("code-pushup", [nativeDifference], ledger);
+  assert.equal(unscoped.stale.length, 1, "the bug this test pins: an unrelated entry reads stale");
+  assert.equal(unscoped.stale[0].direction, "stricter");
+
+  // The fix: scope the ledger to the calling leg's own directions first.
+  // Once scoped, the "stricter" row is not a candidate at all — not fired,
+  // not stale, invisible to this call, exactly as an entry belonging to a
+  // leg that did not run this classification should be.
+  const nativeScoped = scopeLedgerToDirections(ledger, ["native-extra", "native-missing"]);
+  const scoped = classifyDifferences("code-pushup", [nativeDifference], nativeScoped);
+  assert.equal(scoped.stale.length, 0);
+  assert.equal(scoped.explained.length, 1);
+
+  // And the mirror: scoping to the upstream-vs-tool directions excludes the
+  // native row from candidacy entirely — it is not a mismatched, stale entry
+  // on this side, it simply is not IN the list this side classifies against.
+  const upstreamScoped = scopeLedgerToDirections(ledger, ["stricter", "weaker"]);
+  assert.equal(upstreamScoped.length, 1, "the native-missing row must not survive this scope");
+  const matchingUpstreamDifference = {
+    direction: "stricter",
+    messageId: "onlyTagsConstraintViolation",
+    site: "packages/cli/src/index.ts:3:1",
+  };
+  const upstreamResult = classifyDifferences(
+    "code-pushup",
+    [matchingUpstreamDifference],
+    upstreamScoped,
+  );
+  assert.equal(upstreamResult.stale.length, 0);
+  assert.equal(upstreamResult.explained.length, 1);
+});
+
+// --- Silent-direction proofs added for the M4c adversarial-review findings ---
+
+test("reportNativeLeg on a report with no native field is an infrastructure verdict, never a silent skip", () => {
+  // A real `TREES` entry, not a partial literal — `reportNativeLeg` takes the
+  // full pinned-tree shape, and this only needs its `name` to appear in the
+  // infrastructure message.
+  const tree = TREES.find((t) => t.name === "code-pushup");
+  assert.ok(tree, "code-pushup must stay in TREES for this test to mean anything");
+  // The exact shape a malformed or crashed-before-writing child report takes:
+  // no `native` key at all — not `native: undefined` written out, simply
+  // absent, the same as `JSON.parse` on a report a child process never
+  // finished. Before this fix `reportNativeLeg` answered
+  // `{unexplained: [], stale: [], breaches: []}` here — a clean-looking leg —
+  // justified by a doc-comment sentence naming a test caller that did not
+  // exist. A missing `native` field must read as "the native leg did not
+  // run," not as "the native leg ran and found nothing."
+  const outcome = reportNativeLeg(tree, undefined, 8);
+  assert.equal(treeVerdict(outcome), "infrastructure");
+  assert.match(outcome.infrastructure, /no "native" field/u);
+  assert.deepEqual(outcome.unexplained, []);
+  assert.deepEqual(outcome.stale, []);
+  assert.deepEqual(outcome.breaches, []);
+});
+
+test("classifyDifferences refuses a native-missing ledger row whose messageId is a real rule id", () => {
+  // Verified against a real run: a row carrying
+  // `messageId: "noRelativeOrAbsoluteImportsAcrossLibraries"` explained away a
+  // genuinely silenced verdict difference — a ledger row silencing a MISSED
+  // boundary violation, exactly what `AGENTS.md`'s invariant refuses. The
+  // refusal is a throw, not a filtered-out row, because a row that merely
+  // never matches is indistinguishable from one that was never written.
+  const badEntry = entry({
+    direction: "native-missing",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+  });
+  assert.throws(
+    () => classifyDifferences("code-pushup", [], [badEntry]),
+    /may only cover a missing "node" or "edge"/u,
+  );
+});
+
+test("classifyDifferences accepts a native-missing row whose messageId is literally node or edge", () => {
+  for (const messageId of ["node", "edge"]) {
+    const okEntry = entry({ direction: "native-missing", messageId, sitePattern: "^x$" });
+    assert.doesNotThrow(() => classifyDifferences("code-pushup", [], [okEntry]));
+  }
+});
+
+test("scopeLedgerToDirections refuses a ledger row with an unrecognised direction, rather than silently dropping it", () => {
+  // The silent shape this refusal replaces: before `DIRECTIONS` existed, an
+  // unscoped or typo'd direction matched no leg's `scopeLedgerToDirections`
+  // call, so the row never fired, never went stale, and was never reported —
+  // dead on arrival with nothing to say so.
+  const typoEntry = entry({ direction: "stricster" });
+  assert.throws(
+    () => scopeLedgerToDirections([typoEntry], DIRECTIONS.upstream),
+    /unrecognised direction/u,
+  );
+});
+
+test("nodeFieldDifferences reports each diverging field once, and nothing for an identical pair", () => {
+  const nx = { root: "packages/core", type: "lib", tags: ["scope:core", "type:lib"] };
+  assert.deepEqual(nodeFieldDifferences("core", nx, { ...nx }), []);
+  assert.deepEqual(nodeFieldDifferences("core", nx, { ...nx, root: "libs/core" }), [
+    { direction: "native-extra", messageId: "node", site: "core#root" },
+  ]);
+  assert.deepEqual(nodeFieldDifferences("core", nx, { ...nx, type: "app" }), [
+    { direction: "native-extra", messageId: "node", site: "core#type" },
+  ]);
+  // Silent-direction proof: a native leg that reproduced every field WRONG
+  // must report all three, not stop at the first — otherwise a real
+  // regression in `root` would silence a real regression in `type` reported
+  // alongside it.
+  assert.deepEqual(
+    nodeFieldDifferences("core", nx, { root: "libs/core", type: "app", tags: ["scope:other"] }),
+    [
+      { direction: "native-extra", messageId: "node", site: "core#root" },
+      { direction: "native-extra", messageId: "node", site: "core#type" },
+      { direction: "native-extra", messageId: "node", site: "core#tags" },
+    ],
+  );
+});
+
+test("nodeFieldDifferences compares tags as a set, not an order — array order is not a real divergence", () => {
+  const nx = { root: "packages/core", type: "lib", tags: ["a", "b"] };
+  assert.deepEqual(nodeFieldDifferences("core", nx, { ...nx, tags: ["b", "a"] }), []);
+  assert.deepEqual(nodeFieldDifferences("core", nx, { ...nx, tags: ["a", "b", "c"] }), [
+    { direction: "native-extra", messageId: "node", site: "core#tags" },
+  ]);
 });
