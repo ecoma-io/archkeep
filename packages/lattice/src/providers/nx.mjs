@@ -37,7 +37,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { runProcess } from "../workspace.mjs";
+import { runProcess } from "../process.mjs";
 
 const require = createRequire(import.meta.url);
 

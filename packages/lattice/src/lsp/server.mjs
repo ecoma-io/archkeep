@@ -35,6 +35,7 @@
 import { isAbsolute, posix, relative, sep } from "node:path";
 
 import { DEFAULT_OPTIONS, NX_CONFIG_FILE, readPluginOptions } from "../options.mjs";
+import { LATTICE_MODEL_FILE } from "../providers/native/model.mjs";
 
 import { readBoundaryConfig } from "./boundary-config.mjs";
 import { analysisFailedDiagnostic, documentLines } from "./diagnostics.mjs";
@@ -57,13 +58,22 @@ import { buildWorkspaceIndex, PROJECT_CONFIG_FILE } from "./workspace-index.mjs"
  * `nx.json` is here for the same reason one step further out: it is where the
  * options themselves live, so a change to it can rename the config file. A
  * server watching only the file the OLD options named would go on watching a
- * filename the workspace stopped using.
+ * filename the workspace stopped using. `lattice.json` is watched for the same
+ * reason on the native side, even though this server does not read one yet
+ * (`./workspace-index.mjs` still discovers projects from tracked `project.json`
+ * files rather than through `../providers/native/`): a workspace that adds one
+ * later must not need the server restarted before the watcher notices it.
  *
  * @param {{boundaryConfig: string}} options The session's resolved options.
  * @returns {readonly string[]}
  */
 export function watchedFilesFor(options) {
-  return Object.freeze([options.boundaryConfig, PROJECT_CONFIG_FILE, NX_CONFIG_FILE]);
+  return Object.freeze([
+    options.boundaryConfig,
+    PROJECT_CONFIG_FILE,
+    NX_CONFIG_FILE,
+    LATTICE_MODEL_FILE,
+  ]);
 }
 
 /**

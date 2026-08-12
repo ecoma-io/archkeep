@@ -1,0 +1,6 @@
+# Scratch fixtures `src/providers/native/differential.integration.test.mjs`
+# creates directly under this package (not the system tmpdir — see that
+# file's header for why), so a run that crashes before its own `afterAll`
+# cleanup runs leaves one of these behind instead of vanishing with `/tmp`.
+.oracle-nx-*
+.oracle-native-*

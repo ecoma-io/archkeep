@@ -88,17 +88,24 @@ src/conformance/       the differential against ESLint, and this package's
   plugin contributes an edge. The git spawn here and the Nx spawn in
   `src/providers/nx.mjs` are both injectable, which is what lets a test drive
   the whole pipeline with neither Nx nor git present.
-- **`src/providers/` is the layer that supplies a graph to `evaluate()`.**
-  `evaluate` is pure and takes a graph it does not build; the Nx path gets it
-  from `src/providers/nx.mjs`'s `readProjectGraph`, which asks
-  `nx graph --file=` for it — the only place the package resolves and spawns
-  the Nx CLI. (Not the only place it resolves `nx` at all: `src/nx-json.mjs`
+- **`src/providers/` is the only layer allowed to build a graph.**
+  `evaluate()` is pure and takes a graph it does not build, so every node and
+  edge it judges has to come from somewhere that isn't `src/rules/` itself.
+  `src/providers/nx.mjs` gets one from `readProjectGraph`, which asks `nx
+graph --file=` for it — the only place the package resolves and spawns the
+  Nx CLI. (Not the only place it resolves `nx` at all: `src/nx-json.mjs`
   separately resolves Nx's own JSONC parser to read commented `nx.json`
-  files, and is reached from `src/options.mjs` before any provider runs.) It
-  is the `ProjectModelProvider` seam's first implementation, not
-  its only planned one: a `lattice.json`-driven native model is meant to
-  implement the same contract beside it, without `cli.mjs` or `src/lsp/`
-  needing to know which provider they are holding.
+  files, and is reached from `src/options.mjs` before any provider runs.)
+  `src/providers/native/` implements the same `ProjectModelProvider` seam
+  from `lattice.json` plus the tracked tree, with no Nx installed, so
+  `cli.mjs` and `src/lsp/` never need to know which provider they are
+  holding. `src/lsp/workspace-index.mjs` is a **consumer** of the native
+  provider rather than a second implementation of it: it still discovers
+  projects from tracked `project.json` files on its own (`discoverProjects`,
+  `buildNodes` — a language server has no `lattice.json` root marker to read
+  one from), but `nodeTypeOf` and `buildDependencies` are imported from
+  `src/providers/native/discover.mjs` and `src/providers/native/graph.mjs`,
+  not defined a second time. `lsp.mjs` itself holds only the stdio wiring.
 - **`src/report/` renders, and decides nothing.** A formatter that filtered
   would be a rule wearing a formatter's name.
 - **`src/options.mjs` is the only layer allowed to know what a workspace named
@@ -110,15 +117,6 @@ src/conformance/       the differential against ESLint, and this package's
   the `workspace` object. Its header argues both the promotions and the one
   refusal — there is no `languages` option, because switching a language off is
   indistinguishable in every report from that language having no violations.
-- **`src/lsp/` is the layer that still builds its own graph, and that is a gap
-  `src/providers/` has not closed yet.** A language server has no Nx, so it
-  cannot go through `src/providers/nx.mjs`; `src/lsp/workspace-index.mjs`
-  builds the same shape by hand from the tracked `project.json` files,
-  reproducing Nx's own `getProjectType` (including the `-e2e` suffix rule)
-  rather than inventing a second answer. That construction is scheduled to
-  move into a second `src/providers/` implementation — this sentence describes
-  today's split, not a permanent one. `lsp.mjs` itself holds only the stdio
-  wiring.
 
 ## The three consumers of the options, and why the seam is `nx.json`
 
@@ -126,6 +124,12 @@ src/conformance/       the differential against ESLint, and this package's
 this plugin, and Nx threads it into every hook. So the configuration is derived
 from a table the consumer already maintains rather than from a new config file —
 and a new config file would have needed its own filename option to find itself.
+A workspace with no `nx.json` — `lattice.json` at its root instead — states the
+same two keys directly on that file's own `boundaryConfig`/`tsConfig` fields
+(`src/providers/native/model.mjs`), because there is no `plugins[].options`
+table to nest them under; `cli.mjs`'s `optionsForUsage` and `check` are the two
+places that read either shape, chosen by which marker file the workspace root
+carries.
 
 ```json
 "plugins": [

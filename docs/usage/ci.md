@@ -6,6 +6,14 @@ The whole job is one command and one rule about how to read its exit code.
 pnpm exec lattice check
 ```
 
+Everything on this page holds unchanged for a workspace with no Nx at all — a
+`lattice.json` root instead of an `nx.json` one. The command, the flags, the
+exit codes and what a clean run prints are all provider-agnostic; `check`
+resolves the root from whichever marker is present and the rest of this page
+does not need to know which one it found. The two places that name Nx
+specifically — `NX_DAEMON` and ordering the step after `nx run-many` — are
+called out where they apply and nowhere else on this page.
+
 ## The command
 
 ```text
@@ -46,10 +54,15 @@ this tool's design turns on, and a CI step that treats "no verdict" as success
 converts an outage into a green build.
 
 Note what 3 covers: not only a total failure (no workspace, malformed config,
-`nx graph` or `git` failing) but a **partial** one. An unreadable file, a file
-with no analyzer, or a `tsconfig` that will not load each leaves a file the
-summary counted but no rule ever judged, and that is enough to withhold the
-verdict.
+`nx graph` or `git` failing — or, on a `lattice.json` workspace, a model
+defect: a declared root with no tracked file, two projects colliding on one
+name, a stale `coverage.exempt` waiver) but a **partial** one. An unreadable
+file, a file with no analyzer, or a `tsconfig` that will not load each leaves
+a file the summary counted but no rule ever judged, and that is enough to
+withhold the verdict. A `lattice.json` workspace has one partial-failure case
+the Nx path does not: a tracked, analyzable file no discovered project owns
+is also exit 3, for the same reason — [`../../packages/lattice/src/providers/native/README.md`](../../packages/lattice/src/providers/native/README.md)'s
+"Two failure classes, both loud" owns that distinction.
 
 Shell scripts get this wrong in a specific way. `set -e` treats every non-zero
 code alike, which is fine — the failure is visible. What is not fine is:
@@ -100,13 +113,19 @@ The minimal version:
   run: pnpm exec lattice check
 ```
 
-`NX_DAEMON: "false"` is worth setting. The daemon is a long-lived process that
-caches the graph between invocations; a single-shot runner has no second
-invocation to reuse it for, and it outlives the step that started it.
+`NX_DAEMON: "false"` is worth setting — **on an Nx-registered workspace only.**
+The daemon is a long-lived process that caches the graph between invocations; a
+single-shot runner has no second invocation to reuse it for, and it outlives
+the step that started it. A `lattice.json` workspace has no Nx daemon to
+disable — `check` reads the tree fresh from `git ls-files` on every run, so
+the variable does nothing there and naming it is harmless rather than wrong.
 
-**Order it late in the job.** This step spawns `nx graph`, so a plugin that broke
-graph computation fails an earlier `nx run-many` with a clearer message than this
-step could give. That is the order this repository's own CI uses on itself.
+**Order it late in the job, if the workspace also runs `nx run-many`.** This
+step spawns `nx graph` on an Nx-registered workspace, so a plugin that broke
+graph computation fails an earlier `nx run-many` with a clearer message than
+this step could give. That is the order this repository's own CI uses on
+itself. A `lattice.json` workspace has no `nx run-many` step to order after —
+there is nothing Nx-shaped in its pipeline for this step to spawn.
 
 ## SARIF and GitHub code scanning
 

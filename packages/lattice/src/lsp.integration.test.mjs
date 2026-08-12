@@ -537,12 +537,17 @@ describe("a real editor session against a real workspace", () => {
   }, 30_000);
 
   it("registers a file watcher for every file a verdict depends on", async () => {
-    // Three, and the third is the one worth naming. The boundary table and every
-    // `project.json` are the inputs to a verdict; `nx.json` is where the options
-    // that say WHICH file the boundary table is live. A server watching only the
-    // two files the options currently name would keep watching a filename the
-    // workspace had renamed — the editor would go on painting verdicts from a
-    // config it no longer reads, which looks exactly like a clean tree.
+    // Four, and the third and fourth are the ones worth naming. The boundary
+    // table and every `project.json` are the inputs to a verdict; `nx.json` is
+    // where the options that say WHICH file the boundary table is live.
+    // `lattice.json` is watched too even though this server discovers projects
+    // from `project.json` on its own and does not read one yet (`./src/lsp/server.mjs`'s
+    // `watchedFilesFor`) — a server watching only the files the CURRENT project
+    // model reads would keep watching a shape the workspace had already moved
+    // away from. A server watching only the files the options currently name
+    // would keep watching a filename the workspace had renamed — the editor
+    // would go on painting verdicts from a config it no longer reads, which
+    // looks exactly like a clean tree.
     const { client } = await connected();
 
     const registration = await client.waitFor(
@@ -555,7 +560,12 @@ describe("a real editor session against a real workspace", () => {
       registration.params.registrations[0].registerOptions.watchers
         .map((w) => w.globPattern)
         .sort(),
-    ).toEqual(["**/module-boundaries.config.mjs", "**/nx.json", "**/project.json"]);
+    ).toEqual([
+      "**/lattice.json",
+      "**/module-boundaries.config.mjs",
+      "**/nx.json",
+      "**/project.json",
+    ]);
 
     client.kill();
   }, 30_000);

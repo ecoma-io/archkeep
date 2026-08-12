@@ -1,0 +1,513 @@
+/**
+ * `lattice.json`: the native project-and-tag model, for a workspace with no
+ * Nx at all.
+ *
+ * Read the same JSONC-tolerant way every other config in this package is read
+ * (`../../nx-json.mjs`), and never `import()`ed — unlike
+ * `module-boundaries.config.mjs`, this file describes data rather than code,
+ * so there is nothing here that needs a module loader and nothing here that
+ * could carry a side effect.
+ *
+ * This module validates SHAPE only: is `projects.declared[3].root` a string,
+ * does a `coverage.exempt` row carry a `reason`. Whether a declared root
+ * exists in the tree, whether two projects collide on one name, whether a
+ * `projectRules` row matches anything — those are questions about the tree
+ * this file describes, not about this file's own shape, and they are
+ * `./discover.mjs`'s to answer, the same split `../../config.mjs` draws
+ * between a malformed config and a config whose values do not hold up.
+ *
+ * `findNativeModelViolations`/`loadNativeModel` copy `../../config.mjs`'s own
+ * split: a pure `(raw) -> string[]` validator, and a thin loader that reads,
+ * parses, validates and throws — one error naming every violation at once,
+ * because a reader fixing one typo at a time against a tool that only ever
+ * shows the first is the slower way to get to a working config.
+ */
+import { posix } from "node:path";
+
+import { parseNxJson } from "../../nx-json.mjs";
+import { projectPatternError } from "../../rules/match.mjs";
+import { resolveOptions } from "../../options.mjs";
+
+/** The file this provider treats as a workspace root marker and its model. */
+export const LATTICE_MODEL_FILE = "lattice.json";
+
+/**
+ * The manifest basenames `projects.infer` looks for when a workspace does not
+ * say otherwise — one per language this package's analyzers cover
+ * (`../../analysis/analyze.mjs`'s `LANGUAGE_BY_EXTENSION`), plus `project.json`
+ * for a tree that kept Nx-shaped project boundaries without keeping Nx.
+ */
+export const DEFAULT_MANIFEST_NAMES = Object.freeze([
+  "project.json",
+  "package.json",
+  "go.mod",
+  "Cargo.toml",
+  "pyproject.toml",
+]);
+
+const PROJECT_TYPES = ["app", "lib", "e2e"];
+
+/** @type {(value: unknown) => value is Record<string, unknown>} */
+const isPlainObject = (value) =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** @type {(value: unknown) => value is string[]} */
+const isStringArray = (value) =>
+  Array.isArray(value) && value.every((item) => typeof item === "string");
+
+/** A value's type, for an error message that shows what was actually there. */
+function describe(value) {
+  if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
+  if (value === null) return "null";
+  return `${typeof value} (${JSON.stringify(value) ?? String(value)})`;
+}
+
+/**
+ * A non-empty-string list's problems, each message naming the entry's own
+ * index. `patternError`, when given, is the same-shaped check
+ * `../../config.mjs`'s `listEntryViolations` runs — an entry that will not
+ * compile against the matcher it is fed to throws later, mid-run, with no
+ * idea which row of `lattice.json` produced it.
+ *
+ * @param {unknown} value
+ * @param {string} at
+ * @param {((pattern: string) => string|null)|undefined} [patternError]
+ * @returns {string[]}
+ */
+function stringListViolations(value, at, patternError) {
+  if (value === undefined) return [];
+  if (!isStringArray(value)) return [`${at}: must be an array of strings, got ${describe(value)}`];
+  const violations = [];
+  value.forEach((entry, index) => {
+    if (entry === "") {
+      violations.push(`${at}[${index}]: must not be empty`);
+      return;
+    }
+    const problem = patternError?.(entry);
+    if (problem) violations.push(`${at}[${index}]: '${entry}' ${problem}`);
+  });
+  return violations;
+}
+
+const DECLARED_KEYS = ["name", "root", "type", "tags", "implicitDependencies", "targets"];
+
+/** One `projects.declared` row's problems, prefixed with its index. */
+function declaredProjectViolations(row, index) {
+  const at = `projects.declared[${index}]`;
+  if (!isPlainObject(row)) return [`${at}: must be an object, got ${describe(row)}`];
+
+  const violations = [];
+  // Canonical form only, checked in full before anything downstream ever
+  // compares this string against a tracked file: `./discover.mjs`'s `hasFile`
+  // matches by exact prefix (`${root}/`), so any of these forms would either
+  // match nothing a reader expects or match by coincidence, and the
+  // leading/trailing-slash message below is not the right explanation for any
+  // of them — a `'.'` root needs to be told to write `''` instead, not told
+  // about slashes it does not have.
+  if (typeof row.root !== "string") {
+    violations.push(`${at}.root: must be a string, got ${describe(row.root)}`);
+  } else if (row.root === ".") {
+    violations.push(`${at}.root: '.' is not valid — write '' to name the workspace root itself`);
+  } else if (row.root !== "") {
+    if (row.root.includes("\\")) {
+      violations.push(
+        `${at}.root: '${row.root}' must use forward slashes — this tool matches paths ` +
+          `posix-style regardless of the platform the tree is checked out on`,
+      );
+    } else if (row.root.startsWith("/") || row.root.endsWith("/")) {
+      violations.push(
+        `${at}.root: '${row.root}' must be workspace-relative with no leading or trailing ` +
+          `slash — '' names the workspace root itself`,
+      );
+    } else if (row.root.split("/").some((segment) => segment === "." || segment === "..")) {
+      violations.push(
+        `${at}.root: '${row.root}' must be a canonical path — no '.' or '..' segment`,
+      );
+    }
+  }
+  if ("name" in row && (typeof row.name !== "string" || row.name === "")) {
+    violations.push(
+      `${at}.name: must be a non-empty string when present, got ${describe(row.name)}`,
+    );
+  }
+  if ("type" in row && !PROJECT_TYPES.includes(/** @type {string} */ (row.type))) {
+    violations.push(
+      `${at}.type: must be one of ${PROJECT_TYPES.join(", ")}, got ${describe(row.type)}`,
+    );
+  }
+  // Tag VALUES are not matched against anything — a project either carries a
+  // tag or it does not — so the only requirement is the one every string list
+  // here already enforces: non-empty (spec M8). `tagPatternError` belongs to
+  // `depConstraints.sourceTag`/`onlyDependOnLibsWithTags`, a different
+  // vocabulary this validator must not borrow.
+  violations.push(...stringListViolations(row.tags, `${at}.tags`));
+  // `implicitDependencies` is expanded by `../../rules/match.mjs`'s
+  // `findMatchingProjects` — the exact function `./graph.mjs`'s promoted
+  // `buildDependencies` already calls — so an entry it cannot resolve is
+  // rejected here with the matcher's own reason (`projectPatternError`,
+  // the validator `findMatchingProjects` itself is never given a chance to
+  // run without) rather than at graph-build time, where it would name no row
+  // of this file at all and `buildDependencies`'s own catch would just drop
+  // the edge in silence.
+  violations.push(
+    ...stringListViolations(
+      row.implicitDependencies,
+      `${at}.implicitDependencies`,
+      projectPatternError,
+    ),
+  );
+  violations.push(...stringListViolations(row.targets, `${at}.targets`));
+  for (const key of Object.keys(row)) {
+    if (!DECLARED_KEYS.includes(key)) {
+      violations.push(
+        `${at}.${key}: not a declared-project field — expected one of ${DECLARED_KEYS.join(", ")}`,
+      );
+    }
+  }
+  return violations;
+}
+
+const INFER_KEYS = ["manifests", "include", "exclude"];
+
+/** `projects.infer`'s problems, or `[]` when the key is absent — absent means "use the defaults", not "malformed". */
+function inferViolations(value) {
+  if (value === undefined) return [];
+  if (!isPlainObject(value)) return [`projects.infer: must be an object, got ${describe(value)}`];
+  const violations = [
+    ...stringListViolations(value.manifests, "projects.infer.manifests"),
+    ...stringListViolations(value.include, "projects.infer.include"),
+    ...stringListViolations(value.exclude, "projects.infer.exclude"),
+  ];
+  // `[]` and "omit the key" both validate against `stringListViolations` above
+  // — a list is still a list at length zero — but they must not mean the same
+  // thing. Omitting `projects.infer` means "use the defaults" (see this
+  // function's own doc comment); an explicit `[]` for `manifests` or
+  // `include` matches no manifest and no path, which silently claims zero
+  // projects by inference rather than the all/defaults an author reaching for
+  // `[]` almost certainly wants. `exclude: []` is exempt: it already means
+  // "exclude nothing," which is a real, useful, non-silent setting.
+  for (const key of /** @type {const} */ (["manifests", "include"])) {
+    if (Array.isArray(value[key]) && value[key].length === 0) {
+      violations.push(
+        `projects.infer.${key}: must not be empty — an empty list matches nothing and silently ` +
+          `disables inference; omit 'projects.infer' entirely to disable it instead`,
+      );
+    }
+  }
+  for (const key of Object.keys(value)) {
+    if (!INFER_KEYS.includes(key)) {
+      violations.push(
+        `projects.infer.${key}: not an infer field — expected one of ${INFER_KEYS.join(", ")}`,
+      );
+    }
+  }
+  return violations;
+}
+
+const PROJECT_RULE_KEYS = ["match", "tags", "type"];
+
+/** One `projectRules` row's problems, prefixed with its index. */
+function projectRuleViolations(row, index) {
+  const at = `projectRules[${index}]`;
+  if (!isPlainObject(row)) return [`${at}: must be an object, got ${describe(row)}`];
+
+  const violations = [];
+  if (typeof row.match !== "string" || row.match === "") {
+    violations.push(
+      `${at}.match: must be a non-empty glob over a project's root — matched with ` +
+        `\`path.posix.matchesGlob\`, got ${describe(row.match)}`,
+    );
+  }
+  if (!("tags" in row) && !("type" in row)) {
+    violations.push(
+      `${at}: must set 'tags', 'type', or both — a row that sets neither matches ` +
+        `projects and changes nothing about them`,
+    );
+  }
+  // Same non-empty-string-only bar as `declaredProjectViolations` applies to
+  // tag values — see the comment there.
+  violations.push(...stringListViolations(row.tags, `${at}.tags`));
+  if ("type" in row && !PROJECT_TYPES.includes(/** @type {string} */ (row.type))) {
+    violations.push(
+      `${at}.type: must be one of ${PROJECT_TYPES.join(", ")}, got ${describe(row.type)}`,
+    );
+  }
+  for (const key of Object.keys(row)) {
+    if (!PROJECT_RULE_KEYS.includes(key)) {
+      violations.push(
+        `${at}.${key}: not a projectRules field — expected one of ${PROJECT_RULE_KEYS.join(", ")}`,
+      );
+    }
+  }
+  return violations;
+}
+
+const EXEMPT_KEYS = ["path", "reason"];
+
+/**
+ * One `coverage.exempt` row's problems, prefixed with its index.
+ *
+ * The mandatory `reason` copies `../../config.mjs`'s `suppressionRowViolations`
+ * exactly: a waiver with no reason written down is indistinguishable from
+ * coverage that quietly stopped being enforced, which is the one state this
+ * whole tool exists to make loud instead of silent.
+ */
+function exemptRowViolations(row, index) {
+  const at = `coverage.exempt[${index}]`;
+  if (!isPlainObject(row)) return [`${at}: must be an object, got ${describe(row)}`];
+
+  const violations = [];
+  if (typeof row.path !== "string" || row.path === "") {
+    violations.push(
+      `${at}.path: must be a non-empty glob over a workspace-relative path, matched with ` +
+        `\`path.posix.matchesGlob\`, got ${describe(row.path)}`,
+    );
+  }
+  if (typeof row.reason !== "string" || row.reason.trim() === "") {
+    violations.push(
+      `${at}.reason: must be a non-empty string — a waiver is a coverage hole someone decided ` +
+        `to accept, and one with no reason written down reads as coverage that is still enforced`,
+    );
+  }
+  for (const key of Object.keys(row)) {
+    if (!EXEMPT_KEYS.includes(key)) {
+      violations.push(
+        `${at}.${key}: not an exempt field — expected one of ${EXEMPT_KEYS.join(", ")}`,
+      );
+    }
+  }
+  return violations;
+}
+
+const WORKSPACE_LAYOUT_KEYS = ["appsDir", "libsDir"];
+
+/** `workspaceLayout`'s problems, or `[]` when the key is absent — absent, never inferred. */
+function workspaceLayoutViolations(value) {
+  if (value === undefined) return [];
+  if (!isPlainObject(value)) return [`workspaceLayout: must be an object, got ${describe(value)}`];
+  const violations = [];
+  for (const key of WORKSPACE_LAYOUT_KEYS) {
+    if (typeof value[key] !== "string" || value[key] === "") {
+      violations.push(
+        `workspaceLayout.${key}: must be a non-empty string, got ${describe(value[key])}`,
+      );
+    }
+  }
+  for (const key of Object.keys(value)) {
+    if (!WORKSPACE_LAYOUT_KEYS.includes(key)) {
+      violations.push(
+        `workspaceLayout.${key}: not a workspaceLayout field — expected one of ${WORKSPACE_LAYOUT_KEYS.join(", ")}`,
+      );
+    }
+  }
+  return violations;
+}
+
+const TOP_LEVEL_KEYS = [
+  "projects",
+  "projectRules",
+  "coverage",
+  "workspaceLayout",
+  "boundaryConfig",
+  "tsConfig",
+];
+
+/**
+ * Everything wrong with the SHAPE of a loaded `lattice.json`, as messages;
+ * empty when it is well-formed. Pure, so a test drives it without a file on
+ * disk — the same contract `../../config.mjs`'s `findBoundaryConfigViolations`
+ * keeps.
+ *
+ * `boundaryConfig` and `tsConfig` are deliberately NOT checked here: they are
+ * validated by `resolveOptions` (`../../options.mjs`) inside `loadNativeModel`
+ * below, so there is one validator and one default table for that pair rather
+ * than a second copy of `DEFAULT_OPTIONS`'s rules.
+ *
+ * @param {unknown} raw The parsed `lattice.json`.
+ * @returns {string[]}
+ */
+export function findNativeModelViolations(raw) {
+  if (!isPlainObject(raw)) return [`lattice.json: expected an object, got ${describe(raw)}`];
+
+  const violations = [];
+  const { projects, projectRules, coverage, workspaceLayout } = raw;
+
+  if (!isPlainObject(projects)) {
+    violations.push(`projects: must be an object, got ${describe(projects)}`);
+  } else {
+    if ("declared" in projects && !Array.isArray(projects.declared)) {
+      violations.push(
+        `projects.declared: must be an array when present, got ${describe(projects.declared)}`,
+      );
+    } else {
+      /** @type {unknown[]} */ (projects.declared ?? []).forEach((row, index) =>
+        violations.push(...declaredProjectViolations(row, index)),
+      );
+    }
+    violations.push(...inferViolations(projects.infer));
+    for (const key of Object.keys(projects)) {
+      if (key !== "declared" && key !== "infer") {
+        violations.push(`projects.${key}: not a projects field — expected one of declared, infer`);
+      }
+    }
+  }
+
+  if (projectRules !== undefined) {
+    if (!Array.isArray(projectRules)) {
+      violations.push(`projectRules: must be an array when present, got ${describe(projectRules)}`);
+    } else {
+      projectRules.forEach((row, index) => violations.push(...projectRuleViolations(row, index)));
+    }
+  }
+
+  if (coverage !== undefined) {
+    if (!isPlainObject(coverage)) {
+      violations.push(`coverage: must be an object when present, got ${describe(coverage)}`);
+    } else {
+      if ("exempt" in coverage && !Array.isArray(coverage.exempt)) {
+        violations.push(
+          `coverage.exempt: must be an array when present, got ${describe(coverage.exempt)}`,
+        );
+      } else {
+        /** @type {unknown[]} */ (coverage.exempt ?? []).forEach((row, index) =>
+          violations.push(...exemptRowViolations(row, index)),
+        );
+      }
+      for (const key of Object.keys(coverage)) {
+        if (key !== "exempt")
+          violations.push(`coverage.${key}: not a coverage field — expected 'exempt'`);
+      }
+    }
+  }
+
+  violations.push(...workspaceLayoutViolations(workspaceLayout));
+
+  for (const key of Object.keys(raw)) {
+    if (!TOP_LEVEL_KEYS.includes(key)) {
+      violations.push(
+        `${key}: not a lattice.json field — expected one of ${TOP_LEVEL_KEYS.join(", ")}`,
+      );
+    }
+  }
+  return violations;
+}
+
+/**
+ * A validated `lattice.json`, with every default applied so nothing downstream
+ * re-derives one: `projects.infer`'s three lists, `coverage.exempt`'s empty
+ * array, `boundaryConfig`/`tsConfig` through `resolveOptions`.
+ *
+ * `workspaceLayout` is the one field intentionally NOT defaulted here — it
+ * stays `undefined` when `lattice.json` does not declare it, exactly as an
+ * absent `nx.json` `workspaceLayout` leaves `graph.workspaceLayout` unset for
+ * the Nx provider, so `../../rules/index.mjs`'s own
+ * `graph.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT` fallback is the only
+ * place that ever applies the default. A second default here could disagree
+ * with that one the day either changes.
+ *
+ * @param {Record<string, unknown>} raw Already validated by `findNativeModelViolations`.
+ * @returns {object} `NativeModel` — see `./index.mjs`.
+ */
+export function normalizeNativeModel(raw) {
+  const projects = /** @type {Record<string, unknown>} */ (raw.projects);
+  const declared = /** @type {unknown[]} */ (projects.declared) ?? [];
+  const rawInfer = /** @type {Record<string, unknown>|undefined} */ (projects.infer);
+
+  const resolvedOptions = resolveOptions(
+    "boundaryConfig" in raw || "tsConfig" in raw
+      ? {
+          ...("boundaryConfig" in raw ? { boundaryConfig: raw.boundaryConfig } : {}),
+          ...("tsConfig" in raw ? { tsConfig: raw.tsConfig } : {}),
+        }
+      : undefined,
+  );
+
+  return {
+    projects: {
+      declared: declared.map((row) => {
+        const r = /** @type {Record<string, unknown>} */ (row);
+        return {
+          name: typeof r.name === "string" ? r.name : undefined,
+          root: /** @type {string} */ (r.root),
+          type: typeof r.type === "string" ? r.type : undefined,
+          tags: /** @type {string[]} */ (r.tags) ?? [],
+          implicitDependencies: /** @type {string[]} */ (r.implicitDependencies) ?? [],
+          targets: /** @type {string[]} */ (r.targets) ?? [],
+        };
+      }),
+      // Spec §3.1: an absent `projects.infer` key means the declared list is
+      // exhaustive — no inference at all — not "infer with every default."
+      // `./discover.mjs`'s `model.projects.infer ? inferProjectRoots(...) : []`
+      // already reads it that way; filling this in regardless (as this object
+      // used to) made that ternary always truthy and inference always ran,
+      // silently claiming a vendored `package.json` as a project no
+      // `lattice.json` author asked for. Only a *present* `projects.infer` gets
+      // its own three lists defaulted, key by key.
+      infer:
+        rawInfer === undefined
+          ? undefined
+          : {
+              manifests: rawInfer.manifests ?? DEFAULT_MANIFEST_NAMES,
+              include: rawInfer.include ?? ["**"],
+              exclude: rawInfer.exclude ?? [],
+            },
+    },
+    projectRules: /** @type {unknown[]} */ (raw.projectRules ?? []).map((row) => {
+      const r = /** @type {Record<string, unknown>} */ (row);
+      return {
+        match: /** @type {string} */ (r.match),
+        tags: /** @type {string[]} */ (r.tags) ?? [],
+        type: typeof r.type === "string" ? r.type : undefined,
+      };
+    }),
+    coverage: {
+      exempt: /** @type {unknown[]} */ (
+        /** @type {Record<string, unknown>|undefined} */ (raw.coverage)?.exempt ?? []
+      ).map((row) => /** @type {{path: string, reason: string}} */ (row)),
+    },
+    workspaceLayout: /** @type {{appsDir: string, libsDir: string}|undefined} */ (
+      raw.workspaceLayout
+    ),
+    boundaryConfig: resolvedOptions.boundaryConfig,
+    tsConfig: resolvedOptions.tsConfig,
+  };
+}
+
+/**
+ * Loads and validates the `lattice.json` at a workspace root.
+ *
+ * The path-taking, throw-on-malformed shape mirrors `../../config.mjs`'s
+ * `loadBoundaryConfigFile` exactly, down to the two message shapes: every
+ * shape violation reported at once, or a wrapped read failure. That parity is
+ * deliberate — a defect in the project's own model is a "could not reach a
+ * verdict" failure exactly like a defect in the boundary law is, and both
+ * exit the same way (`../../../cli.mjs`, `EXIT.error`).
+ *
+ * @param {string} root Absolute workspace root.
+ * @param {{readFile: (path: string) => string|null}} io
+ * @returns {object} `NativeModel` — see `./index.mjs`.
+ * @throws {Error} when the file is missing, unreadable, or malformed.
+ */
+export function loadNativeModel(root, { readFile }) {
+  const text = readFile(LATTICE_MODEL_FILE);
+  const path = `${root}/${LATTICE_MODEL_FILE}`;
+  if (text === null) {
+    throw new Error(`lattice: cannot load ${path}: no such file`);
+  }
+  let raw;
+  try {
+    raw = parseNxJson(text);
+  } catch (cause) {
+    throw new Error(`lattice: cannot load ${path}: ${cause?.message ?? cause}`, { cause });
+  }
+  const violations = findNativeModelViolations(raw);
+  if (violations.length > 0) {
+    throw new Error(`lattice: ${path} is malformed:\n  ${violations.join("\n  ")}`);
+  }
+  return normalizeNativeModel(raw);
+}
+
+// Re-exported so a caller matching a project root against a glob (discovery,
+// coverage) reaches for the one matcher `lattice.json` uses throughout,
+// rather than importing `node:path` a second time for the same job.
+export const matchesGlob = posix.matchesGlob;

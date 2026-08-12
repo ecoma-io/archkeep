@@ -493,6 +493,26 @@ describe("analyzing the selection", () => {
     expect(read).toHaveBeenCalledTimes(1);
     expect(analyze).toHaveBeenCalledTimes(1);
     expect(result.analyzed).toBe(1);
+    expect(result.analyzedFiles).toEqual(["a.go"]);
+  });
+
+  // `analyzed` is a count derived from `analyzedFiles`, not tracked
+  // separately — a caller that re-scopes AFTER a wider analysis (the native
+  // provider's whole-tree pass, filtered down for a scoped `check <path>` run
+  // in `cli.mjs`) needs the list, not just the count, to recompute a
+  // scope-correct number without analyzing the tree twice. The silent-
+  // direction risk this guards: `analyzed` and `analyzedFiles.length`
+  // silently drifting apart, which would make a filtered recount wrong in a
+  // way no test over `analyzed` alone would ever catch.
+  it("keeps analyzed and analyzedFiles.length in agreement, including over an unreadable file", () => {
+    const analyze = vi.fn(() => ({ imports: [], failures: [] }));
+    const result = analyzeWorkspace(
+      { readFile: (path) => (path === "b.go" ? null : "package main") },
+      ["a.go", "b.go", "c.go"],
+      { analyze },
+    );
+    expect(result.analyzedFiles).toEqual(["a.go", "c.go"]);
+    expect(result.analyzed).toBe(result.analyzedFiles.length);
   });
 
   it("records an unreadable file as a failure and keeps going, rather than blanking the run", () => {

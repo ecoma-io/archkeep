@@ -37,16 +37,25 @@ reading top to bottom — every step is a decision.
 
 ### 1. Find the workspace root
 
-`findWorkspaceRoot(cwd)` walks up for an `nx.json`, **from the working directory
-and never from this tool's own location**. Installed from a registry, the tool
-sits inside `node_modules` while the tree it judges is above it — and under a
-pinned harness clone the two are different trees entirely.
+`findWorkspaceRoot(cwd, [NX_CONFIG_FILE, LATTICE_MODEL_FILE])` walks up for
+either marker — an `nx.json` or a `lattice.json` — **from the working
+directory and never from this tool's own location**. Installed from a
+registry, the tool sits inside `node_modules` while the tree it judges is
+above it — and under a pinned harness clone the two are different trees
+entirely. Which marker is present decides which provider the rest of this run
+uses; a root carrying both is a usage error rather than a guess at which one
+was meant.
 
 ### 2. Read the plugin options
 
-`readPluginOptions(root)` reads `nx.json → plugins[].options` for the two
-filenames a workspace may have renamed. This happens _before_ the config is
-loaded, because it decides _which_ config.
+On an Nx-registered workspace, `readPluginOptions(root)` reads
+`nx.json → plugins[].options` for the two filenames a workspace may have
+renamed. A `lattice.json` workspace has no `plugins[].options` table to nest
+those under, so it states the same two keys — `boundaryConfig` and
+`tsConfig` — directly on `lattice.json` itself
+([`packages/lattice/CLAUDE.md`](../../packages/lattice/CLAUDE.md)'s "The three
+consumers of the options" owns the exact shape). Either way this happens
+_before_ the config is loaded, because it decides _which_ config.
 
 An unknown key throws here, at every one of the three doors that read options —
 the Nx hook, the CLI, and the language server. A `tsconfigBase` typed for
@@ -68,20 +77,29 @@ config's location and the tree being judged are separate facts.
 
 ### 4. Read the graph, and the file list
 
-Two spawns, and they are the only two things in this pipeline that reach outside
-the process:
+The graph comes from whichever `ProjectModelProvider` the marker found in step 1
+selected — `src/providers/nx.mjs` on an `nx.json` root, `src/providers/native/`
+on a `lattice.json` one — and `packages/lattice/CLAUDE.md`'s "`src/providers/`
+is the only layer allowed to build a graph" is the rule that keeps `cli.mjs`
+and `src/lsp/` from needing to know which one they are holding.
 
-- **`readGraph(root)`** — `src/providers/nx.mjs`'s `readProjectGraph`, which
-  asks `nx graph --file=`. Never a second walk of `project.json` files, which
-  would disagree with Nx wherever a plugin contributes an edge.
-- **`listFiles(root)`** — `git ls-files`, in `src/workspace.mjs`. The graph
-  JSON carries no file map, and a tree walk would need ignore rules that drift
-  from `.gitignore`.
+- **The Nx path** spawns `nx graph --file=` (`readProjectGraph`) — never a
+  second walk of `project.json` files, which would disagree with Nx wherever a
+  plugin contributes an edge — and this is the only spawn in this pipeline
+  that reaches a real toolchain.
+- **The native path** has no graph to ask for: `discover()` reads
+  `lattice.json`'s declared∪inferred project list against the tracked tree,
+  and `buildGraph()` reduces that plus the analysis records from step 7 into
+  the same `{nodes, dependencies}` shape the Nx path builds from a real
+  `nx graph`. [`packages/lattice/src/providers/native/README.md`](../../packages/lattice/src/providers/native/README.md)
+  owns this path's own semantics and declared limits.
 
-Both are **injectable parameters**, which is what lets a test drive the real
-analysis, the real rules and the real report over a fixture tree — pinning the
-exact `file:line:column` a developer would act on — with neither Nx nor git
-present.
+Both providers, and `listFiles(root)` (`git ls-files`, in `src/workspace.mjs`
+— the graph JSON carries no file map, and a tree walk would need ignore rules
+that drift from `.gitignore`), reach outside the process only through
+**injectable parameters**, which is what lets a test drive the real analysis,
+the real rules and the real report over a fixture tree — pinning the exact
+`file:line:column` a developer would act on — with neither Nx nor git present.
 
 ### 5. Build the workspace view
 
@@ -210,14 +228,32 @@ than on whichever later CLI run happens to notice.
 `lsp.mjs` holds only stdio wiring; everything with a decision in it lives under
 `src/lsp/`, where coverage can see it.
 
-The one structural difference from the CLI: the CLI's graph comes from
-`src/providers/` (today, `src/providers/nx.mjs` reading it from Nx); the
-language server has none, so `src/lsp/workspace-index.mjs` still builds the
-same shape by hand from the tracked `project.json` files, reproducing Nx's own
-`getProjectType` — including the `-e2e` suffix rule — rather than inventing a
-second answer. `evaluate` is pure and takes a graph it does not build either
-way. Which layers may build one is `packages/lattice/CLAUDE.md`'s rule, not
-this page's.
+The one structural difference from the CLI: the CLI's graph comes from a
+`src/providers/` provider — `src/providers/nx.mjs` reading it from Nx, or
+`src/providers/native/` reading `lattice.json` — while the language server has
+no provider at all. It is spawned by an editor in a directory, with nothing
+else, so `src/lsp/workspace-index.mjs` still builds the same shape by hand from
+the tracked `project.json` files: `discoverProjects` and `buildNodes` read
+those files on their own, but the node-typing and edge-shaping underneath —
+`nodeTypeOf`, `PROJECT_CONFIG_FILE`, `buildDependencies` — are imported from
+`src/providers/native/discover.mjs` and `src/providers/native/graph.mjs`
+rather than reproduced a second time, so the native provider and the language
+server share one copy of Nx's own `getProjectType` rule (including the `-e2e`
+suffix rule) and its implicit-dependency expansion. `evaluate` is pure and
+takes a graph it does not build either way. Which layers may build one is
+`packages/lattice/CLAUDE.md`'s rule, not this page's.
+
+That reuse has a gap the language server does not paper over: it still
+discovers projects from `project.json` files, never from `lattice.json`'s own
+declared∪inferred model, so a native workspace's project with no
+`project.json` (the case `lattice.json` exists to allow) is invisible to
+`discoverProjects`. Rather than reimplement or half-wire the native model into
+an index shape not built for it, a root carrying `lattice.json` gets the loud
+alternative: `buildWorkspaceIndex` reports a permanent index gap for it, the
+same `indexGaps` mechanism a skipped `project.json` uses, so no editor ever
+draws "clean" over a native tree this server cannot actually see the project
+model of — the invariant above, applied to a case the server chose not to
+solve.
 
 The server's invariant is the CLI's, sharpened: **an empty diagnostic list must
 mean "no violation", and nothing else.** Two guards enforce it —
@@ -288,4 +324,6 @@ either convention would answer confidently about a workspace it had misread.
 
 - Adding a language → [adding-a-language.md](adding-a-language.md)
 - Which suite proves what → [testing.md](testing.md)
+- The native provider's own declared limits → [`packages/lattice/src/providers/native/README.md`](../../packages/lattice/src/providers/native/README.md)
+- `lattice.json`'s fields → [../usage/lattice-json.md](../usage/lattice-json.md)
 - The direction all of this serves → [../north-star.md](../north-star.md)

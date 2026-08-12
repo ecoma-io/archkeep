@@ -413,4 +413,62 @@ describe("what the index could not read, as something a caller can publish", () 
     expect(gaps[0]).not.toContain("\n");
     expect(gaps[0]).toContain("InvalidSymbol in JSON at 1:3");
   });
+
+  // S12: this server discovers projects from tracked `project.json` files
+  // only (this module's own header explains why), so a `lattice.json` root
+  // with a project that has no `project.json` of its own is invisible to it
+  // — every file in that project would read as belonging to no project,
+  // which the rule engine treats as "outside the boundary system entirely"
+  // (`./diagnose.mjs`'s header, the one legitimate empty-and-clean case).
+  // Silently missing a whole project produces the EXACT SAME shape as that
+  // legitimate case: an empty gap list, `analyzed: true`, no diagnostics.
+  // `nativeMarker` is what tells the two apart.
+  it("reports a gap for a lattice.json root even with zero skippedProjects or fileFailures", () => {
+    const gaps = indexGaps({ skippedProjects: [], fileFailures: [], nativeMarker: true });
+
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]).toContain("lattice.json");
+    expect(gaps[0]).toContain("missing from the graph");
+  });
+
+  it("stays silent when nativeMarker is false, same as an absent lattice.json", () => {
+    expect(indexGaps({ skippedProjects: [], fileFailures: [], nativeMarker: false })).toEqual([]);
+  });
+});
+
+describe("the nativeMarker fact buildWorkspaceIndex attaches", () => {
+  const files = {
+    "lattice.json": '{"projects":{"declared":[{"root":"apps/a"}]}}',
+    "apps/a/main.go": "package a\n",
+  };
+  const options = {
+    root: "/fixture",
+    listFiles: () => Object.keys(files),
+    readFileAt: (_root, path) => files[path] ?? null,
+  };
+
+  // The red-direction case this whole mechanism exists for: `apps/a` is
+  // declared in `lattice.json`, has no `project.json`, so `discoverProjects`
+  // finds ZERO projects here — a tree this server cannot actually see the
+  // shape of, not a tree with nothing in it. Without `nativeMarker`,
+  // `indexGaps` on this index would be `[]` and every open file would read as
+  // fully analyzed and boundary-free: a silent false "clean".
+  it("sets nativeMarker true for a root carrying lattice.json, even with no project.json anywhere", () => {
+    const index = buildWorkspaceIndex(options);
+
+    expect(index.nativeMarker).toBe(true);
+    expect(Object.keys(index.graph.nodes)).toEqual([]);
+    expect(indexGaps(index).some((gap) => gap.includes("lattice.json"))).toBe(true);
+  });
+
+  it("leaves nativeMarker false for a tree with no lattice.json at its root", () => {
+    const index = buildWorkspaceIndex({
+      root: "/fixture",
+      listFiles: () => ["apps/a/main.go"],
+      readFileAt: (_root, path) => (path === "apps/a/main.go" ? "package a\n" : null),
+    });
+
+    expect(index.nativeMarker).toBe(false);
+    expect(indexGaps(index)).toEqual([]);
+  });
 });

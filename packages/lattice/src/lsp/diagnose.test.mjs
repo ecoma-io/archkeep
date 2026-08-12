@@ -166,6 +166,27 @@ describe("an empty diagnostic list means no violation, and nothing else", () => 
     expect(diagnostics[1].message).toContain("no elvish import analyzer");
   });
 
+  // S12: a `lattice.json` root with a project the tracked `project.json` scan
+  // cannot see (`./workspace-index.mjs`'s header) must not read the same as a
+  // tree read whole. Before `nativeMarker` existed, this exact index shape —
+  // real analysis, real rules, everything returning normally — was
+  // `analyzed: true` with an empty diagnostics list: the silent-clean case
+  // this whole mechanism exists to close.
+  it("refuses to call a document analyzed on a lattice.json root, even with an otherwise complete index", () => {
+    analyzeFile.mockReturnValue({ imports: [], failures: [] });
+    evaluate.mockReturnValue([]);
+
+    const { analyzed, diagnostics } = diagnoseDocument({
+      ...REQUEST,
+      index: { ...REQUEST.index, nativeMarker: true },
+    });
+
+    expect(analyzed).toBe(false);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].message).toContain("lattice.json");
+    expect(diagnostics[0].message).toContain("INCOMPLETE");
+  });
+
   it("refuses a verdict the engine returned about a different file", () => {
     // The engine is handed only this document's sites, so this cannot happen
     // unless the two disagree about which file they are discussing — at which
