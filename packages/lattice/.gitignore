@@ -9,3 +9,11 @@
 # recognises, which is exactly what `nx show projects` would then see as a
 # phantom project in this repository's own tree.
 .oracle-*
+
+# `config-spelling.integration.test.mjs`'s A4/A5 ESLint-dialect fixtures need
+# the same "under this package, not the system tmpdir" placement, for the same
+# `@nx/eslint-plugin` resolution reason — but a different prefix, since they
+# do not go through `.oracle-*`'s builders and a crashed run's leftovers would
+# otherwise fall through this file unrecognised.
+.config-spelling-a4-eslint-*
+.config-spelling-a5-eslint-*
