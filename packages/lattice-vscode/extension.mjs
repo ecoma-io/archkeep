@@ -152,8 +152,8 @@ async function openSession(folder) {
       documentSelector: documentSelector(),
       workspaceFolder: folder,
       // The server takes its root from here first and never walks upward to
-      // find one, so this is the whole reason the client resolved `nx.json`
-      // before starting: a folder opened below the workspace root would
+      // find one, so this is the whole reason the client resolved the workspace
+      // marker before starting: a folder opened below the workspace root would
       // otherwise be analyzed as if it were the root, and find nothing.
       initializationOptions: { workspaceRoot: plan.root },
       outputChannel: output ?? undefined,

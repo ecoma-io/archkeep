@@ -27,7 +27,7 @@ describe("planSession", () => {
     });
   });
 
-  it("goes idle without looking for a server when there is no Nx workspace", () => {
+  it("goes idle without looking for a server when there is no workspace", () => {
     const locateServer = vi.fn();
 
     const plan = planSession({

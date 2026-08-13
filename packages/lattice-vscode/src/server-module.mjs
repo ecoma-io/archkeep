@@ -45,7 +45,7 @@ export const SERVER_ENTRY = "lsp.mjs";
  * Locate the server for one workspace root.
  *
  * @param {object} input
- * @param {string} input.nxRoot absolute path of the Nx workspace root
+ * @param {string} input.nxRoot absolute path of the workspace root
  * @param {string} [input.configuredPath] the `lattice.server.path` setting
  * @param {(path: string) => boolean} input.exists filesystem predicate
  * @param {(fromDirectory: string) => string | null} input.resolvePackageJson

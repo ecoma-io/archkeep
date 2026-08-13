@@ -27,8 +27,11 @@ describe("describeStatus", () => {
     expect(status.detail).toBe("@ecoma-io/lattice is not installed in /repo");
   });
 
-  it("renders a folder that is not an Nx workspace as information", () => {
-    const status = describeStatus({ state: "idle", reason: "No nx.json above /elsewhere." });
+  it("renders a folder that is not a workspace as information", () => {
+    const status = describeStatus({
+      state: "idle",
+      reason: "No workspace marker above /elsewhere.",
+    });
 
     expect(status.severity).toBe("information");
   });

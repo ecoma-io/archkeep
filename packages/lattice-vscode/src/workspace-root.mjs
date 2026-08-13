@@ -1,5 +1,5 @@
 /**
- * Finding the Nx workspace root above an open folder.
+ * Finding the workspace root above an open folder.
  *
  * This exists because **the server does not do it.** `src/lsp/server.mjs` takes
  * its root from `initializationOptions.workspaceRoot`, then the first workspace
@@ -10,17 +10,21 @@
  *
  * The case it is for is ordinary: someone opens `apps/api` rather than the
  * repository root. Without the walk the server would be handed `apps/api`, find
- * no `nx.json`, and report nothing — for a directory whose files really are
- * under boundary rules.
+ * no workspace marker, and report nothing — for a directory whose files really
+ * are under boundary rules.
+ *
+ * Two markers are recognised: `nx.json` (an Nx workspace) and `lattice.json`
+ * (a native Lattice workspace). Both activate the server; which provider it uses
+ * is the server's own decision, not the client's.
  */
 
 import { dirname, join, resolve } from "node:path";
 
-/** The file whose presence defines an Nx workspace root. */
-export const NX_CONFIG_FILE = "nx.json";
+/** The files whose presence defines a workspace root. */
+export const WORKSPACE_MARKERS = Object.freeze(["nx.json", "lattice.json"]);
 
 /**
- * Walk up from a directory to the nearest Nx workspace root.
+ * Walk up from a directory to the nearest workspace root.
  *
  * `exists` is injected rather than imported so this stays a pure function of its
  * inputs, and so a test drives it over a described tree instead of a temporary
@@ -34,7 +38,7 @@ export function findNxRoot(startDirectory, exists) {
   let current = resolve(startDirectory);
 
   for (;;) {
-    if (exists(join(current, NX_CONFIG_FILE))) {
+    if (WORKSPACE_MARKERS.some((marker) => exists(join(current, marker)))) {
       return current;
     }
 

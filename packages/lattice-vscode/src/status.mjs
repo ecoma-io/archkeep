@@ -36,7 +36,7 @@ export function describeStatus(plan) {
 
     case "idle":
       return {
-        text: "Lattice: no Nx workspace",
+        text: "Lattice: no workspace",
         detail: plan.reason,
         severity: "information",
       };
