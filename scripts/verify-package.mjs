@@ -266,7 +266,124 @@ function fixtureFilesNative(packageName, peers, packageManager) {
   };
 }
 
-/** The file that makes the tree dirty: `core` reaching up into `app`. */
+/**
+ * The same two-project shape as `fixtureFiles`, described as a Moon workspace
+ * instead: `.moon/workspace.yml` at the root, per-project `moon.yml` files,
+ * and `@moonrepo/cli` as a dev dependency — no `nx.json`, no `project.json`.
+ *
+ * Moon tags use dash separators (`layer-core`) rather than colons because
+ * Moon's tag validation rejects colons. The boundary config uses the same
+ * dash format the Moon provider emits verbatim from `moon.yml` tags.
+ *
+ * The `@moonrepo/cli` version is pinned so the Moon provider can find the
+ * binary via the consumer's `node_modules/.bin/moon`. A TypeScript
+ * `tsconfig.base.json` provides the path aliases Lattice resolves against.
+ *
+ * @param {string} packageName the name to depend on, read from the manifest
+ * @param {Record<string, string>} peers the package's declared peer ranges
+ * @param {string} packageManager this repository's own pnpm pin, so the fixture
+ *   installs under the version CI installs under rather than whatever is ambient
+ * @returns {Record<string, string>} relative path to contents
+ */
+function fixtureFilesMoon(packageName, peers, packageManager) {
+  // Moon tags cannot contain colons — use dash separators.
+  const boundaryConfigMoon = `export const depConstraints = [
+  { sourceTag: "layer-core", onlyDependOnLibsWithTags: ["layer-core"] },
+  { sourceTag: "layer-app", onlyDependOnLibsWithTags: ["layer-app", "layer-core"] },
+];
+
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+
+export const boundarySuppressions = [];
+`;
+
+  return {
+    "package.json": `${JSON.stringify(
+      {
+        name: "consumer-moon",
+        private: true,
+        type: "module",
+        packageManager,
+        // No `nx` — Moon is the workspace tool, not Nx.
+        devDependencies: {
+          [packageName]: "*",
+          typescript: peers.typescript,
+          "@moonrepo/cli": "2.4.6",
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "pnpm-workspace.yaml": "packages:\n  - 'libs/*'\nallowBuilds:\n  lefthook: false\n",
+    ".moon/workspace.yml":
+      "projects:\n" +
+      "  core: 'libs/core'\n" +
+      "  app: 'libs/app'\n" +
+      "vcs:\n" +
+      "  provider: other\n",
+    "module-boundaries.config.mjs": boundaryConfigMoon,
+    "tsconfig.base.json": `${JSON.stringify(
+      {
+        compilerOptions: {
+          module: "nodenext",
+          moduleResolution: "nodenext",
+          paths: {
+            "@acme/core": ["./libs/core/src/index.ts"],
+            "@acme/app": ["./libs/app/src/index.ts"],
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    ".gitignore": "node_modules/\n.moon/cache/\n",
+    "libs/core/moon.yml":
+      "id: core\n" +
+      "language: typescript\n" +
+      "layer: library\n" +
+      "stack: backend\n" +
+      "tags:\n" +
+      "  - layer-core\n",
+    "libs/core/src/index.ts": 'export const core = "core";\n',
+    "libs/core/go.mod": "module example.test/core\n\ngo 1.22\n",
+    "libs/core/core.go": 'package core\n\nconst Name = "core"\n',
+    "libs/app/moon.yml":
+      "id: app\n" +
+      "language: typescript\n" +
+      "layer: library\n" +
+      "stack: backend\n" +
+      "tags:\n" +
+      "  - layer-app\n" +
+      "dependsOn:\n" +
+      "  - core\n",
+    "libs/app/src/index.ts": 'import { core } from "@acme/core";\n\nexport const app = core;\n',
+    "libs/app/go.mod":
+      "module example.test/app\n\ngo 1.22\n\nrequire example.test/core v0.0.0\n\n" +
+      "replace example.test/core => ../core\n",
+    "libs/app/app.go": 'package app\n\nimport "example.test/core"\n\nvar _ = core.Name\n',
+  };
+}
+
+/** The file that makes the Moon tree dirty: `core` reaching up into `app`. */
+const VIOLATING_FILES_MOON = {
+  "libs/core/src/index.ts": 'import { app } from "@acme/app";\n\nexport const core = app;\n',
+  "libs/core/go.mod":
+    "module example.test/core\n\ngo 1.22\n\nrequire example.test/app v0.0.0\n\n" +
+    "replace example.test/app => ../app\n",
+  "libs/core/violate.go": 'package core\n\nimport "example.test/app"\n\nvar _ = app.Thing\n',
+  "libs/app/app.go": 'package app\n\nconst Thing = "app"\n',
+};
+
+/** The file that makes the Nx/native tree dirty: `core` reaching up into `app`. */
 const VIOLATING_FILES = {
   "libs/core/go.mod":
     "module example.test/core\n\ngo 1.22\n\nrequire example.test/app v0.0.0\n\n" +
@@ -410,9 +527,14 @@ function verifyCleanAndLspChecks(consumer, label, packageName) {
  *   committed but before the checker sees it — the Nx consumer uses this to
  *   reset Nx's own cache, which the native provider has none of.
  */
-function verifyViolatingCheck(consumer, label, afterViolatingCommit) {
+function verifyViolatingCheck(
+  consumer,
+  label,
+  afterViolatingCommit,
+  violatingFiles = VIOLATING_FILES,
+) {
   // 7. And exits 1 on a violating one, naming the rule and the position.
-  write(consumer, VIOLATING_FILES);
+  write(consumer, violatingFiles);
   commitTree(consumer, "core reaches up into app", false);
   afterViolatingCommit?.();
   const dirty = run("pnpm", ["exec", "lattice", "check"], consumer);
@@ -658,6 +780,47 @@ try {
 
   // 7. The checker exits 1 on a violating tree (native path).
   verifyViolatingCheck(consumerNative, "native path");
+
+  // --- the Moon consumer: `.moon/workspace.yml` at the root, per-project
+  // `moon.yml` files, `@moonrepo/cli` as a dev dependency — no `nx.json`,
+  // no `project.json`. This is the third provider face the package ships,
+  // and these checks prove it works against a real `pnpm pack` tarball
+  // installed into a tree with Moon as the workspace orchestrator.
+  const consumerMoon = join(workdir, "consumer-moon");
+  mkdirSync(consumerMoon);
+
+  const filesMoon = fixtureFilesMoon(packageName, peers, packageManager);
+  filesMoon["package.json"] = filesMoon["package.json"].replace('"*"', tarballRef);
+  write(consumerMoon, filesMoon);
+  commitTree(consumerMoon, "the clean tree", true);
+
+  const installedMoon = run("pnpm", ["install", "--no-frozen-lockfile"], consumerMoon);
+  if (installedMoon.status !== 0) {
+    console.error(installedMoon.stdout ?? "");
+    console.error(installedMoon.stderr ?? "");
+    console.error("the packed tarball could not be installed into a fresh workspace (Moon path).");
+    process.exit(1);
+  }
+  note(`installed into ${consumerMoon}`);
+
+  // The Moon provider finds the `moon` binary through the consumer's own
+  // `node_modules/.bin/moon`, so `@moonrepo/cli` must resolve.
+  const moonBin = existsSync(join(consumerMoon, "node_modules", ".bin", "moon"));
+  check(
+    "the moon CLI binary is present in the Moon consumer's node_modules/.bin",
+    moonBin,
+    `node_modules/.bin/moon ${moonBin ? "exists" : "missing"}`,
+  );
+
+  verifyCleanAndLspChecks(consumerMoon, "Moon path", packageName);
+
+  // `graph` and `diff` from a clean Moon consumer — the same checks the
+  // native path runs, proving the commands work against a Moon workspace.
+  verifyGraphDiffChecks(consumerMoon, "Moon path");
+
+  // The checker exits 1 on a violating Moon tree, using the Moon-violating
+  // files (which include a TypeScript violation the Nx/native files lack).
+  verifyViolatingCheck(consumerMoon, "Moon path", undefined, VIOLATING_FILES_MOON);
 } finally {
   rmSync(workdir, { recursive: true, force: true });
 }

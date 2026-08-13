@@ -95,7 +95,7 @@ jobs:
       - run: pnpm check-packages
 
       - name: Run every project's targets
-        run: moon run ...:lint ...:test ...:typecheck
+        run: pnpm exec moon run ...:lint ...:test ...:typecheck
 
       # The tool, run on the tree that ships it. Everything above proves the
       # code is correct against fixtures it built itself; this is the only step
