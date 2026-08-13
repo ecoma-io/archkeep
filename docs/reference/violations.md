@@ -80,7 +80,7 @@ into `node_modules`, a stale path after a move, or a file that is not tracked.
 
 **Fix:** import the package by name; or, if the path was meant to reach
 something real, find out why it does not resolve —
-[troubleshooting.md](troubleshooting.md) covers the "it should have resolved"
+[troubleshooting.md](../usage/troubleshooting.md) covers the "it should have resolved"
 case.
 
 ### 3. `noSelfCircularDependencies`
@@ -107,7 +107,7 @@ A `bannedExternalImports` pattern on a matching row matched the specifier.
 
 **Note the matcher**: every run of `*` becomes `.*` and the result is anchored,
 but other regex metacharacters survive — `.` still means any character. See
-[designing-boundaries.md](designing-boundaries.md) § _Patterns are not globs_.
+[boundaries.md](../concepts/boundaries.md) § _Patterns are not globs_.
 
 **Fix:** stop importing it, or move the ban to a narrower `sourceTag`.
 
@@ -326,4 +326,4 @@ exit 1 exactly as a violation does. [languages.md](languages.md) owns each
 check's semantics.
 
 All three, including what fixes each finding, are explained in
-[troubleshooting.md](troubleshooting.md).
+[troubleshooting.md](../usage/troubleshooting.md).

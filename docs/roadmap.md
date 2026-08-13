@@ -5,7 +5,7 @@ which capabilities belong to which major version, and in what order the project
 earns them. It deliberately owns nothing finer than that: individual features,
 their design and their sequencing live in GitHub issues and milestones, because
 a roadmap that lists fifty features is a backlog wearing a roadmap's name, and
-it is stale the day the first one ships. [north-star.md](north-star.md) owns
+it is stale the day the first one ships. [north-star.md](doctrine/north-star.md) owns
 what "finished" means for the capabilities named here and the refusals that
 hold on the way; when a claim in this file needs a finish line, that file is
 the one that binds.

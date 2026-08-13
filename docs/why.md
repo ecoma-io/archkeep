@@ -126,7 +126,7 @@ two named places, and why the issue tracker has a
 [dedicated form for a missed violation](../.github/ISSUE_TEMPLATE/missed_violation.yml)
 separate from the ordinary bug form.
 
-[north-star.md](north-star.md) is where that stops being a defensive posture and
+[north-star.md](doctrine/north-star.md) is where that stops being a defensive posture and
 becomes the thing that makes breadth possible.
 
 ## Where it came from

@@ -24,9 +24,9 @@
 </p>
 
 <p align="center">
-  <a href="docs/usage/getting-started.md"><strong>Get&nbsp;started&nbsp;→</strong></a> ·
+  <a href="docs/getting-started/installation.md"><strong>Get&nbsp;started&nbsp;→</strong></a> ·
   <a href="docs/why.md">Why&nbsp;it&nbsp;exists</a> ·
-  <a href="docs/north-star.md">Where&nbsp;it&nbsp;is&nbsp;going</a> ·
+  <a href="docs/doctrine/north-star.md">Where&nbsp;it&nbsp;is&nbsp;going</a> ·
   <a href="docs/roadmap.md">Roadmap</a> ·
   <a href="https://ecoma.io">About&nbsp;Ecoma</a>
 </p>
@@ -58,7 +58,7 @@ pnpm exec lattice check
 ```
 
 Ten minutes end to end, most of it spent deciding what your tags mean:
-[**Getting started →**](docs/usage/getting-started.md)
+[**Getting started →**](docs/getting-started/installation.md)
 
 ## The idea in one picture
 
@@ -94,7 +94,7 @@ inferred-target plugin were both the wrong answer.
 
 Fifteen violation types, eight options, and the same `messageId`s ESLint reports
 — so the two enforcers can be compared rather than merely both being red. Five
-languages today; [more is the direction](docs/north-star.md).
+languages today; [more is the direction](docs/doctrine/north-star.md).
 
 ## The one commitment behind all of it
 
@@ -109,17 +109,17 @@ separate from the ordinary bug form.
 
 A tool that replaced a known gap with an unknown one, wearing a green checkmark,
 would be worse than the silence it replaced. The rest of the reasoning, and the
-refusals that follow from it, are in [**docs/north-star.md**](docs/north-star.md).
+refusals that follow from it, are in [**docs/doctrine/north-star.md**](docs/doctrine/north-star.md).
 
 ## Documentation
 
 |                                                                                                                                                        |                                                                          |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| [**Getting started**](docs/usage/getting-started.md)                                                                                                   | Install, configure, first violation                                      |
-| [Designing boundaries](docs/usage/designing-boundaries.md)                                                                                             | The constraint table, and the five semantics that surprise people        |
-| [The fifteen violations](docs/usage/violations.md)                                                                                                     | What each `messageId` means, and what fixes it                           |
-| [What each language sees](docs/usage/languages.md)                                                                                                     | Per-language coverage and every declared parse limit                     |
-| [CI](docs/usage/ci.md) · [Editors](docs/usage/editors.md) · [Troubleshooting](docs/usage/troubleshooting.md)                                           | Exit codes, SARIF, LSP setup, and what to check when it reported nothing |
+| [**Getting started**](docs/getting-started/installation.md)                                                                                            | Install, configure, first violation                                      |
+| [Designing boundaries](docs/concepts/boundaries.md)                                                                                                    | The constraint table, and the five semantics that surprise people        |
+| [The fifteen violations](docs/reference/violations.md)                                                                                                 | What each `messageId` means, and what fixes it                           |
+| [What each language sees](docs/reference/languages.md)                                                                                                 | Per-language coverage and every declared parse limit                     |
+| [CI](docs/usage/ci.md) · [VS Code](docs/integrations/vscode.md) · [Troubleshooting](docs/usage/troubleshooting.md)                                     | Exit codes, SARIF, LSP setup, and what to check when it reported nothing |
 | [Architecture](docs/development/architecture.md) · [Adding a language](docs/development/adding-a-language.md) · [Testing](docs/development/testing.md) | For contributors                                                         |
 
 Full index: [**docs/**](docs/README.md). The package's own reference, which

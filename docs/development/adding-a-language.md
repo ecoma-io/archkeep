@@ -5,7 +5,7 @@ language in an Nx workspace getting the same enforcement TypeScript already has,
 and this page is the path from "not supported" to "supported" without the
 intermediate state that would quietly make the tool untrustworthy.
 
-Read [../north-star.md](../north-star.md) § _How the next language earns its
+Read [../doctrine/north-star.md](../doctrine/north-star.md) § _How the next language earns its
 place_ first. The single most important rule here is not technical:
 
 > **A language ships complete or not at all.** Edges without enforcement is the
@@ -237,12 +237,12 @@ analyzer:
 
 Four files, and none of them optional:
 
-| file                                               | what to add                                                                             |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| [`docs/usage/languages.md`](../usage/languages.md) | A section: identity, what the analyzer reads, every limit, what the record leaves null  |
-| [`docs/north-star.md`](../north-star.md)           | A row in the state table — and it must be honest about which of the four cells are real |
-| `packages/lattice/README.md`                       | The npm landing page mentions the language set; it must stand alone                     |
-| `packages/lattice-vscode/README.md`                | The marketplace page names the routed extensions one by one                             |
+| file                                                       | what to add                                                                             |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| [`docs/reference/languages.md`](../reference/languages.md) | A section: identity, what the analyzer reads, every limit, what the record leaves null  |
+| [`docs/doctrine/north-star.md`](../doctrine/north-star.md) | A row in the state table — and it must be honest about which of the four cells are real |
+| `packages/lattice/README.md`                               | The npm landing page mentions the language set; it must stand alone                     |
+| `packages/lattice-vscode/README.md`                        | The marketplace page names the routed extensions one by one                             |
 
 ## The definition of done
 

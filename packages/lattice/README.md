@@ -139,7 +139,7 @@ depends on which boundary law is in effect. It is descriptive and never exits 1.
 `--format json` wraps the same verdict `text` and `sarif` already compute in a
 versioned envelope — every field name and `schemaVersion` are a public
 contract from this release on, documented in full at
-[docs/usage/json-output.md](../../docs/usage/json-output.md). It changes no
+[docs/reference/json-output.md](../../docs/reference/json-output.md). It changes no
 exit code and no byte of the other two formats; it is a third rendering of a
 verdict every format already carries, for a caller that wants to script
 against the result rather than parse a terminal report or a SARIF log.
@@ -183,7 +183,7 @@ resolves no import — the build breaks on it, or it silently resolves to an
 installed package of the same name — and is a finding, exit 1. The table is
 read from the same parsed tsconfig the import resolver uses and no specifier is
 ever re-resolved; the exact rule and its limits are in
-[docs/usage/languages.md](../../docs/usage/languages.md). A tsconfig that will
+[docs/reference/languages.md](../../docs/reference/languages.md). A tsconfig that will
 not load, or a `paths` value that is not an array of strings, fails the run
 with exit 3 rather than being read as "no aliases". A workspace whose tsconfig
 declares no `paths` pays nothing and hears nothing, and this check too runs on
