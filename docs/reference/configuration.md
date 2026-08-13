@@ -66,7 +66,7 @@ enforced.
 
 Never inferred from directory names. A declaration naming only one of the two
 keys is refused. An Nx-registered workspace states the same fact in `nx.json`'s
-own top-level `workspaceLayout` field; the plugin reads it from there directly.
+own top-level `workspaceLayout` field; the Nx integration reads it from there directly.
 
 ### `boundaryConfig`
 

@@ -24,7 +24,7 @@ holds" is a verdict a pipeline computes rather than a belief a reviewer holds.
 
 Lattice began as an Nx plugin closing one instance of that gap — module
 boundaries for the languages ESLint cannot parse. The engine underneath was
-always bigger than the plugin around it, and the roadmap below is the path
+always bigger than the integration around it, and the roadmap below is the path
 from that plugin to the engine standing on its own.
 
 ## 1.x — Universal Architecture Enforcement
@@ -34,8 +34,8 @@ repository, deterministically, with no build system as a precondition.
 
 - **A core independent of Nx and of monorepos.** The engine discovers projects,
   builds the dependency graph and judges boundaries from its own model; Nx
-  becomes one provider of that model rather than its foundation. Single-repo,
-  monorepo and polyrepo layouts are all first-class.
+  becomes one provider of that model rather than its foundation. Single-repo and
+  monorepo layouts are first-class.
 - **A multi-language dependency graph read from source.** Go, Rust, Python and
   TypeScript imports and manifests, statically — nothing invokes a toolchain
   to answer a question about imports.

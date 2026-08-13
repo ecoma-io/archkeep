@@ -19,7 +19,7 @@ than the foundation.
 
 ## The sentence
 
-**Every language in an Nx workspace should have the same architectural
+**Every language in a repository should have the same architectural
 enforcement as the TypeScript in it.**
 
 Not similar enforcement. The same: the same fifteen violation types, the same
@@ -111,7 +111,7 @@ A language is how Lattice reads a workspace; a surface is how a person reaches
 the verdict. The surfaces are deliberately few, and each exists because a
 different reader needs the answer at a different moment.
 
-- **The Nx plugin** — the graph, computed on every `nx` invocation. It is the
+- **The Nx integration** — the graph, computed on every `nx` invocation. It is the
   one surface with no user interface at all, and the one everything else depends
   on being cheap.
 - **The CLI** — the verdict as an exit code, which is the only form CI can read.
@@ -169,7 +169,7 @@ four languages.
 **Edges only — never nodes, never targets.** Projects stay declared by
 hand-written `project.json`, and no target is ever inferred. The community
 plugins that solve the edge problem also infer targets, and rejecting that is
-this plugin's reason to exist: what a target does keeps one source of truth.
+this tool's reason to exist: what a target does keeps one source of truth.
 
 **TypeScript stays with `@nx/eslint-plugin`.** Lattice does not replace a rule
 that already works.

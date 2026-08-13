@@ -120,7 +120,7 @@ notices. What each finding asks for — the four ids and their semantics are in
 [languages.md](languages.md) § _go.work is checked against the graph_:
 
 - **`goWorkMissingUse`** — add the named `use` entry (the message spells it),
-  or, if the module really should not be built locally, ask why it is an Nx
+  or, if the module really should not be built locally, ask why it is a
   project at all.
 - **`goWorkStaleUse`** — remove the entry, or track the `go.mod` it points at:
   the file set is `git ls-files`, so an untracked module reads as absent.
@@ -174,7 +174,7 @@ a distinct outcome from both 0 and 1, and it should fail your build.
 
 | symptom                       | cause                                                                                                   |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------- |
-| no workspace found            | not run from inside an Nx workspace                                                                     |
+| no workspace found            | not run from inside a repository with a workspace marker (`lattice.json` or `nx.json`)                  |
 | config errors, naming the row | the boundary config is malformed — every problem is listed rather than the first                        |
 | `nx graph` failed             | a plugin threw during graph computation; run `nx graph --file=graph.json` directly for the real message |
 | `git` failed                  | not a git repository, or `git ls-files` is unavailable                                                  |
@@ -247,7 +247,7 @@ is declared.
 pnpm exec nx graph --file=graph.json
 ```
 
-If the plugin is not contributing anything at all, confirm it is registered in
+If the integration is not contributing anything at all, confirm it is registered in
 `nx.json` and that no option key is misspelled — an unknown key throws at the
 first graph computation rather than falling back to a default.
 

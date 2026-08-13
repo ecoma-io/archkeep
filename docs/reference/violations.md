@@ -54,7 +54,7 @@ package.
 ## Decided on how the import is written
 
 These five are judged on the specifier's own text. The projects can be entirely
-correct and the spelling still be the violation — which is why an Nx graph edge
+correct and the spelling still be the violation — which is why a graph edge
 alone could never serve them.
 
 ### 1. `noRelativeOrAbsoluteImportsAcrossLibraries`

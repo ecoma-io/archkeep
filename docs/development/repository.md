@@ -9,7 +9,7 @@ The workspace that holds Lattice, and how its moving parts relate.
 | `packages/lattice`        | the engine         | npm                 | yes                   |
 | `packages/lattice-vscode` | the VS Code client | VS Code marketplace | no                    |
 
-`lattice` is the engine — the Nx plugin, the boundary checker, and the language
+`lattice` is the engine — the Nx integration, the boundary checker, and the language
 server behind one analysis. `lattice-vscode` is a client of it and holds no
 analysis at all; it ships to a marketplace rather than to npm, and it
 deliberately does not bundle the server.

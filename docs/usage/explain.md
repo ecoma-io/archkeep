@@ -46,7 +46,7 @@ given instead of a project or constraint answer.
 ## The unregistered-plugin refusal
 
 Same as `graph` and `diff`: on an Nx workspace whose `nx.json` does not
-register this plugin but whose tracked files include polyglot manifests under
+register the Nx integration but whose tracked files include polyglot manifests under
 project roots, `explain` refuses loudly rather than explaining a judgment from
 a graph whose edges silently under-represent the real architecture.
 

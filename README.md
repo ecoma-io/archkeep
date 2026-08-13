@@ -4,22 +4,23 @@
   <a href="https://scorecard.dev/viewer/?uri=github.com/ecoma-io/lattice"><img src="https://api.scorecard.dev/projects/github.com/ecoma-io/lattice/badge" alt="OpenSSF Scorecard" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg" alt="Node >= 24" />
-  <img src="https://img.shields.io/badge/nx-23-143055.svg" alt="Nx 23" />
   <img src="https://img.shields.io/badge/languages-Go%20%C2%B7%20Rust%20%C2%B7%20Python%20%C2%B7%20TypeScript%20%C2%B7%20Vue-335170.svg" alt="Go, Rust, Python, TypeScript, Vue" />
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-9B4D2C.svg" alt="Pull requests welcome" /></a>
 </p>
 
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Lattice — Nx tooling that makes a polyglot workspace's dependency graph and module boundaries real" width="100%" />
+  <img src=".github/assets/banner.png" alt="Lattice — architecture enforcement for polyglot repositories: dependency graphs and module boundaries for the languages ESLint cannot read" width="100%" />
 </p>
 
 <h1 align="center">Lattice</h1>
 
 <p align="center">
   <strong>Module boundaries for the languages ESLint cannot read.</strong><br />
-  Nx sees the dependency graph of a TypeScript workspace and enforces its architecture.
-  Add Go, Rust or Python and both halves go quiet — not wrong, quiet.
-  Lattice is what makes them speak again.<br />
+  Architecture enforcement that works in any repository, deterministically, with no
+  build system as a precondition. Go, Rust, Python — the languages where
+  <code>layer:</code> and <code>scope:</code> tags have no mechanism behind them —
+  get the same fifteen violation types and the same constraint table that TypeScript
+  already has. Nx is a first-class integration, not a dependency.<br />
   <em>A rule that reports nothing looks exactly like a rule with nothing to report.</em>
 </p>
 
@@ -39,22 +40,33 @@
 pnpm add -D @ecoma-io/lattice
 ```
 
-Register it in `nx.json` and it starts adding the missing edges:
+Create a `lattice.json` at the repository root and it starts discovering projects
+and their dependencies:
 
 ```json
 {
-  "plugins": ["@ecoma-io/lattice/nx"]
+  "projects": {
+    "declared": [
+      { "name": "billing-core", "root": "libs/billing/core" },
+      { "name": "billing-api", "root": "libs/billing/api" }
+    ]
+  }
 }
 ```
 
-Then check the boundaries those edges cross:
+Then check the boundaries:
 
 ```bash
 pnpm exec lattice check
 ```
 
-```text
-✔ no boundary violations (264 imports in 78 files across 12 projects)
+A workspace that already has Nx can register the integration instead and reuse
+the project graph Nx already computes:
+
+```json
+{
+  "plugins": ["@ecoma-io/lattice/nx"]
+}
 ```
 
 Ten minutes end to end, most of it spent deciding what your tags mean:
@@ -77,19 +89,22 @@ one you see depends on what you are: **structure** if you are being held,
 
 ## Why it exists
 
-`nx affected` under-selects and `@nx/enforce-module-boundaries` never sees the
-file — so a Go project's `layer:` and `scope:` tags are a declaration with no
-mechanism behind them. Neither failure announces itself.
+In a polyglot repository, the languages ESLint cannot parse have `layer:`,
+`scope:` and `license:` tags with no mechanism behind them — a Go import that
+crosses a boundary passes lint because ESLint answers "File ignored because no
+matching configuration was supplied" for `.go`. The boundary is a declaration
+with no enforcer, and the declaration drifts in silence.
 
-That claim was measured rather than assumed, and the measurement is in
-[**docs/why.md**](docs/why.md), along with why an ESLint parser and an
-inferred-target plugin were both the wrong answer.
+That was the gap Lattice was extracted from, measured rather than assumed. The
+measurement is in [**docs/why.md**](docs/why.md), along with why an ESLint parser
+and an inferred-target plugin were both the wrong answer. Lattice now serves any
+repository — Nx is one provider of the project graph, not the only one.
 
 ## What is here
 
 | Package                                                   |                                                                                                                                                                                                                         |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [**`@ecoma-io/lattice`**](packages/lattice/README.md)     | Reads Go, Rust and Python manifests into the Nx project graph, then judges imports against tag-based boundary rules — the `@nx/enforce-module-boundaries` contract, for the languages it cannot reach.                  |
+| [**`@ecoma-io/lattice`**](packages/lattice/README.md)     | Architecture enforcement for polyglot repositories — dependency graphs and module boundaries for Go, Rust, Python, TypeScript and Vue, with Nx as a first-class integration.                                            |
 | [**`lattice-vscode`**](packages/lattice-vscode/README.md) | The VS Code client for that server: the same verdicts, at the edit. It runs the server your workspace installed rather than one of its own, so the buffer and the pipeline cannot disagree. Not on the marketplace yet. |
 
 Fifteen violation types, eight options, and the same `messageId`s ESLint reports

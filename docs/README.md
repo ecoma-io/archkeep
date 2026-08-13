@@ -45,10 +45,10 @@ version.
 
 ## Integrations
 
-| page                                | what it answers                                                         |
-| ----------------------------------- | ----------------------------------------------------------------------- |
-| [nx.md](integrations/nx.md)         | Nx plugin registration, options, graph edges, affected, workspaceLayout |
-| [vscode.md](integrations/vscode.md) | VS Code extension: settings, routing, installation                      |
+| page                                | what it answers                                                              |
+| ----------------------------------- | ---------------------------------------------------------------------------- |
+| [nx.md](integrations/nx.md)         | Nx integration registration, options, graph edges, affected, workspaceLayout |
+| [vscode.md](integrations/vscode.md) | VS Code extension: settings, routing, installation                           |
 
 ## Reference
 
@@ -101,7 +101,7 @@ allowed to say it". That table:
 | `docs/getting-started/`                                                     | Installation, first project, first policy                                                             |
 | `docs/concepts/`                                                            | The model: architecture, graph, boundaries, policies, projects, integrations                          |
 | `docs/usage/`                                                               | How a consumer runs it and reads its answers                                                          |
-| `docs/integrations/`                                                        | Nx plugin and VS Code extension — the two surfaces at the edge                                        |
+| `docs/integrations/`                                                        | Nx integration and VS Code extension — the two surfaces at the edge                                   |
 | `docs/reference/`                                                           | Schemas, exit codes, language limits, violation catalogue                                             |
 | `docs/development/`                                                         | How it works inside, and how to extend it                                                             |
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md)                                     | The contribution bar, the commands, hooks, commits, review, release                                   |

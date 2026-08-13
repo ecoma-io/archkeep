@@ -46,7 +46,7 @@ test that documents it.
 
 ## Go
 
-**Identity:** one Go module per Nx project, at `<projectRoot>/go.mod`. The module
+**Identity:** one Go module per project, at `<projectRoot>/go.mod`. The module
 path is the project's identity, and an import of another project's module path
 (exact, or `<modulePath>/...`) is an edge.
 
@@ -98,7 +98,7 @@ findings, and either direction fails the run with exit 1:
   while CI — which never reads `go.work` — stays green.
 - **`goWorkUnmodeledUse`** — a `use` entry whose `go.mod` exists but is not at
   an Nx project root: nested inside a project, or inside no project. It builds
-  locally while `nx affected` and the boundary check never see it.
+  locally while the boundary check never sees it.
 - **`goWorkOutsideUse`** — a `use` path above the workspace root, which no run
   over this workspace can cover.
 
@@ -127,7 +127,7 @@ open would put the report where its fix is not.
 
 ## Rust
 
-**Identity:** one crate per Nx project, at `<projectRoot>/Cargo.toml`. Edges come
+**Identity:** one crate per project, at `<projectRoot>/Cargo.toml`. Edges come
 from `{ path = "…" }` dependencies and from `{ workspace = true }` entries
 resolved through the nearest ancestor manifest carrying `[workspace]` — whose own
 entry must itself be a path dependency to point at a project. Registry
@@ -173,7 +173,7 @@ modelling limit surfacing, not a bug in either.
 
 ## Python
 
-**Identity:** one package per Nx project, at `<projectRoot>/pyproject.toml`,
+**Identity:** one package per project, at `<projectRoot>/pyproject.toml`,
 named by `[project].name`. An edge exists only where the manifest **explicitly
 wires a dependency to a workspace path** — each tool's documented semantics, not
 string matching. A name that merely coincides with a sibling package draws no

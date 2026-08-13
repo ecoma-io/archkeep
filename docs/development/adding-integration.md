@@ -40,7 +40,7 @@ Three rules that follow:
 
 ## The two integrations today
 
-### Nx plugin
+### Nx integration
 
 `packages/lattice/nx.mjs` is the entry Nx loads. It is a re-export only — no
 logic, because Nx loads it on every `nx` invocation and logic here would slow

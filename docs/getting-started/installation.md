@@ -16,7 +16,7 @@ lint-only CI runner.
 
 Nx is a peer dependency, but an optional one -- the engine and the CLI run
 without it. A workspace with no `nx` installed uses the native provider
-([first-project.md](first-project.md)); a workspace that has Nx uses the plugin
+([first-project.md](first-project.md)); a workspace that has Nx uses the integration
 integration ([../../docs/integrations/nx.md](../integrations/nx.md)).
 
 ## Install
@@ -29,17 +29,17 @@ That is the only install step. What you do next depends on how your workspace is
 structured:
 
 - No Nx -- the native provider walks the tree itself: [first-project.md](first-project.md)
-- Nx workspace -- register the plugin in `nx.json`: [../integrations/nx.md](../integrations/nx.md)
+- Nx workspace -- register the integration in `nx.json`: [../integrations/nx.md](../integrations/nx.md)
 
 ## What the package provides
 
 Three entry points, one engine behind them:
 
-| entry                  | how it runs                | what it does                                                  |
-| ---------------------- | -------------------------- | ------------------------------------------------------------- |
-| `lattice check`        | CLI                        | Analyze the tree, report violations, exit 0/1/2/3             |
-| `lattice-lsp`          | Language server over stdio | Diagnostics at the edit, in any LSP client                    |
-| `@ecoma-io/lattice/nx` | Nx plugin, in `nx.json`    | Polyglot edges in the project graph, on every `nx` invocation |
+| entry                  | how it runs                  | what it does                                                  |
+| ---------------------- | ---------------------------- | ------------------------------------------------------------- |
+| `lattice check`        | CLI                          | Analyze the tree, report violations, exit 0/1/2/3             |
+| `lattice-lsp`          | Language server over stdio   | Diagnostics at the edit, in any LSP client                    |
+| `@ecoma-io/lattice/nx` | Nx integration, in `nx.json` | Polyglot edges in the project graph, on every `nx` invocation |
 
 The CLI commands -- `check`, `graph`, `diff`, `impact`, `explain` -- are
 documented individually under [../usage/](../usage/). This page covers getting

@@ -53,8 +53,8 @@ this diff would silently misread.
 
 ## The unregistered-plugin refusal
 
-Same as `graph`: on an Nx workspace whose `nx.json` does not register this
-plugin but whose tracked files include polyglot manifests under project roots,
+Same as `graph`: on an Nx workspace whose `nx.json` does not register the Nx
+integration but whose tracked files include polyglot manifests under project roots,
 `diff` refuses loudly rather than computing a diff against a head whose edges
 silently under-represent the real architecture.
 

@@ -1,7 +1,9 @@
 # Why this exists
 
 The short version: in a polyglot Nx workspace, two of Nx's best features stop
-working, and neither of them tells you.
+working, and neither of them tells you. That was the gap Lattice was extracted
+from. Today Lattice serves any repository — Nx is a first-class integration,
+not the foundation.
 
 The rest of this page is the evidence for that, because the claim is easy to make
 and the whole project rests on it being true.

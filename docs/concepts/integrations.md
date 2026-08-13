@@ -30,10 +30,10 @@ the engine work in both contexts — with or without the Nx integration.
 
 | integration | supplies                                               | runs when                        |
 | ----------- | ------------------------------------------------------ | -------------------------------- |
-| Nx plugin   | project graph edges from the `createDependencies` hook | every graph computation          |
+| Nx          | project graph edges from the `createDependencies` hook | every graph computation          |
 | VS Code     | the language server hosted in an editor                | on an edit, in the editor window |
 
-The Nx plugin is the only integration that contributes to the project graph. It
+The Nx integration is the only integration that contributes to the project graph. It
 does not judge — it reduces analysis to the edge shape the graph carries, and
 the graph discards everything else. The enforcement verdict comes from the same
 `evaluate` function the CLI uses, operating on the same constraint table.

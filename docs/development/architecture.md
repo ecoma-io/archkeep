@@ -266,8 +266,8 @@ around.
 ### The editor client
 
 `packages/lattice-vscode` is a client of that server, and the only part of this
-project outside the engine package. It contains no analysis: it finds the Nx
-workspace root, finds
+project outside the engine package. It contains no analysis: it finds the workspace
+root, finds
 the server the workspace installed, starts it over stdio, and shows whether it is
 running.
 
