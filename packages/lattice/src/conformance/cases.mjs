@@ -107,6 +107,50 @@ export const CONFORMANCE_CASES = [
     ],
   },
   {
+    id: "absolute-imports-with-non-default-workspace-layout",
+    intent:
+      "A workspace that renames its libs directory rewrites which absolute spellings cross a project boundary — the rule reads the declared layout, not a hardcoded default.",
+    workspaceLayout: { libsDir: "packages", appsDir: "apps" },
+    projects: [
+      {
+        name: "pkg-source",
+        root: "packages/pkg-source",
+        files: {
+          "src/absolute-into-lib-dir.ts":
+            'import { target } from "packages/pkg-target/src/index";\nexport const a = target;\n',
+          "src/spells-default-dir.ts":
+            'import { target } from "libs/pkg-target/src/index";\nexport const b = target;\n',
+          "src/relative.ts":
+            'import { target } from "../../pkg-target/src/index";\nexport const c = target;\n',
+        },
+      },
+      {
+        name: "pkg-target",
+        root: "packages/pkg-target",
+        files: { "src/index.ts": barrel("target") },
+      },
+    ],
+    unresolvable: ["packages/pkg-target/src/index", "libs/pkg-target/src/index"],
+    probes: [
+      {
+        file: "packages/pkg-source/src/absolute-into-lib-dir.ts",
+        upstream: ["noRelativeOrAbsoluteImportsAcrossLibraries"],
+      },
+      {
+        // "libs/..." is not the declared libsDir, so it does not match the
+        // absolute-into-another-project rule — but it also does not resolve
+        // to any project (the tree has no libs/ directory), so both engines
+        // report it as an unresolved import rather than a boundary violation.
+        file: "packages/pkg-source/src/spells-default-dir.ts",
+        upstream: [],
+      },
+      {
+        file: "packages/pkg-source/src/relative.ts",
+        upstream: ["noRelativeOrAbsoluteImportsAcrossLibraries"],
+      },
+    ],
+  },
+  {
     id: "an-exemption-both-enforcers-were-told-about",
     intent:
       "A violation the workspace decided to accept. ESLint is told with its directive comment, this engine with a `boundarySuppressions` entry carrying the same reason — the two mechanisms are different because a comment convention is JavaScript's and this tool judges four other languages. Both must go quiet, and the identical import one file over, told to neither, must still be reported by both. Because the mechanisms are different, telling only ONE of them is a configuration a workspace can reach by accident, and each half is probed rather than described: it is the only place the catalogue measures what the two mechanisms cost when they drift apart.",
