@@ -114,7 +114,13 @@ export function listTrackedFiles(workspaceRoot, { run = runProcess } = {}) {
 export function createWorkspace({ root, graph, files, tsConfig, read }) {
   const projects = Object.values(graph.nodes).map((node) => ({
     name: node.name,
-    root: node.data.root,
+    // Nx spells a root-level project's root as the literal string ".",
+    // but `projectOwning` only treats "" as "matches every path" — a root
+    // of "." fails both `path !== root` and `path.startsWith("./")` for every
+    // real tracked path, so every root-level file would be silently unowned.
+    // Normalise here, at the data-ingestion boundary, so the predicate stays
+    // pure and both the Nx and native paths are fixed. cf. #32
+    root: node.data.root === "." ? "" : node.data.root,
   }));
   const filesByProject = new Map(projects.map((project) => [project.name, []]));
   const owned = [];

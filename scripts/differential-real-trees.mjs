@@ -195,51 +195,6 @@ export const LEDGER = Object.freeze([
   // { tree: "…", direction: "stricter"|"weaker"|"native-extra"|"native-missing",
   //   messageId: "…", sitePattern: "^…", reason: "…" }
 
-  // Root-caused by running this leg against code-pushup rather than guessed at:
-  // `analysis.imports` — the one input BOTH engines build their graph from —
-  // never contained an import record for the source in question, for a reason
-  // that has nothing to do with the native provider.
-  // `graph.dependencies["workspace"]` on the real Nx graph carries these nine
-  // edges because Nx's own graph plugin scans imports independently of this
-  // package; this package's own pipeline never saw them, in the Nx-graph-based
-  // run OR the native one, because
-  // `../packages/lattice/src/workspace.mjs`'s `createWorkspace` builds its
-  // project list straight from `node.data.root` with no renormalisation —
-  // unlike `deriveNativeModel` above, which learned the hard way (its own doc
-  // comment) that Nx spells a root-level project's root `"."`. Verified
-  // directly: `projectOwning([{name:"workspace",root:"."}], "code-
-  // pushup.config.ts")` returns `null`, because `projectOwning`'s prefix
-  // check (`../packages/lattice/src/analysis/source-util.mjs`) only treats
-  // literal `""` as "matches every path" — `"."` fails both `path !== root`
-  // and the `startsWith(root + "/")` test, so no project ever owns a
-  // root-level file when Nx spells that project's root the conventional way.
-  // Every relative import written in `code-pushup.config.ts` and
-  // `code-pushup.preset.ts` (root-level files owned only by the `workspace`
-  // project) is therefore invisible to `analyzeWorkspace` — a pre-existing,
-  // non-native-specific gap in the shared ownership/ file-attribution layer,
-  // not something this chunk's native leg introduced or may fix here: fixing
-  // it changes what `evaluate()` reports on any real Nx workspace carrying a
-  // literal `root: "."` project, which is a BREAKING change on an unchanged
-  // workspace (`../AGENTS.md`, Commits) and belongs in its own labelled
-  // change, not folded into a "not breaking" chunk.
-  {
-    tree: "code-pushup",
-    direction: "native-missing",
-    messageId: "edge",
-    sitePattern:
-      "^workspace->(utils|models|plugin-axe|plugin-coverage|plugin-eslint|plugin-js-packages|plugin-jsdocs|plugin-lighthouse|plugin-typescript)$",
-    reason:
-      "createWorkspace (src/workspace.mjs) passes Nx's root-project root ('.') straight through " +
-      "to projectOwning (src/analysis/source-util.mjs), which only treats '' as an all-matching " +
-      "root — so every root-level file in this tree (code-pushup.config.ts, code-pushup.preset.ts) " +
-      "is unowned by analyzeWorkspace and its relative imports never become import-site records " +
-      "for EITHER engine. Nx's own graph plugin draws these nine edges independently of this " +
-      "tool's analysis. Pre-existing, not native-specific — verified by calling projectOwning " +
-      "directly with a root:'.' project. Out of scope to fix here: the fix changes reported " +
-      "output on an unchanged Nx workspace, a separate labelled BREAKING change. Tracked at " +
-      "https://github.com/ecoma-io/lattice/issues/32 — this row is retired in the same PR.",
-  },
-
   // A field-level divergence, surfaced by `nodeFieldDifferences` (above) the
   // first time it ran against a real tree: `workspace`'s root `project.json`
   // (root '.') declares no `projectType` at all — verified by reading it at
