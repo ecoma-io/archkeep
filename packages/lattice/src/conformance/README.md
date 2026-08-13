@@ -11,8 +11,8 @@ replaces. Today ESLint is right about JavaScript, TypeScript and Vue and silent
 about Go, Rust and Python — and silence you know about beats a green light you
 cannot trust.
 
-**46 fixture workspaces, 117 probes, 94 projects.** Every one of upstream's
-fifteen message ids is triggered by at least one probe, and 81 of the 117 probes
+**47 fixture workspaces, 120 probes, 96 projects.** Every one of upstream's
+fifteen message ids is triggered by at least one probe, and 82 of the 120 probes
 are near-misses where ESLint must report nothing.
 
 ## How it runs
@@ -451,7 +451,7 @@ holding them rather than a plan.
 
 The honest position is still the one the tool already takes: run **both**.
 ESLint stays authoritative for JavaScript, TypeScript and Vue, where it is
-correct and where agreement is measured on the 37 fixture workspaces ESLint can
+correct and where agreement is measured on the 38 fixture workspaces ESLint can
 read plus the two pinned real trees above — evidence that grows with the tree
 table, not a proof over every workspace shape. This tool covers Go,
 Rust and Python, where

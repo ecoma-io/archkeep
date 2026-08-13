@@ -89,7 +89,7 @@ export async function createUpstreamRunner(root) {
       materialized.graph.nodes,
       materialized.graph.externalNodes,
     );
-    globalThis.workspaceLayout = undefined;
+    globalThis.workspaceLayout = materialized.workspaceLayout ?? undefined;
     globalThis.projectPath = root;
 
     const eslint = new ESLint({

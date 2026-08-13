@@ -264,7 +264,9 @@ function buildGraph(spec) {
       type: edge.type ?? "static",
     });
   }
-  return { nodes, externalNodes, dependencies };
+  const graph = { nodes, externalNodes, dependencies };
+  if (spec.workspaceLayout !== undefined) graph.workspaceLayout = spec.workspaceLayout;
+  return graph;
 }
 
 /**
@@ -357,6 +359,7 @@ export function materialize(root, cases, defaultOptions) {
         name: project.name,
         root: `${spec.id}/${project.root}`,
       })),
+      workspaceLayout: spec.workspaceLayout,
     });
   }
   return materialized;
