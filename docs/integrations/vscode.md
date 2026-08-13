@@ -7,6 +7,20 @@ wrote it — judged by the same boundary config your pipeline reads, by the same
 engine. Same fifteen message ids, same constraint table; for anything decided at
 an import site, the only difference from the CLI is when you find out.
 
+## The one guarantee
+
+**An empty diagnostic list from this server always means "no violation", never
+"not checked".**
+
+An editor draws nothing for `[]`, and a developer reads nothing as "checked,
+clean". So a file the server could not analyze gets a diagnostic saying exactly
+that. There are only two places an empty list is ever published — a completed
+analysis that found nothing, and the moment a document closes — and both are
+named in the code.
+
+This is why the server is worth running even where you also run the CLI: it is
+the surface where silence would be most convincing and least examined.
+
 ## What the extension provides
 
 | surface              | what it gives you                                                     |
@@ -18,7 +32,7 @@ an import site, the only difference from the CLI is when you find out.
 What the server deliberately does not publish are the CLI's two workspace-level
 checks — go.work drift and dead tsconfig path aliases — because a finding that
 describes the workspace stays out of whichever file happens to be open.
-[languages.md](../usage/languages.md) owns both and the reasoning.
+[languages.md](../concepts/languages.md) owns both and the reasoning.
 
 ## How it works
 
@@ -170,11 +184,22 @@ editors allow several servers per buffer, unlike Claude Code, so routing `.ts`
 alongside your TypeScript server is a supported thing to do — it just
 duplicates what `@nx/enforce-module-boundaries` already tells you.
 
+## What it does not do
+
+- **No quick fixes, no code actions.** A boundary violation's fix is a design
+  decision — re-tag, restructure, or widen a row — and an editor offering to
+  apply one of those would be guessing which.
+- **No workspace-wide scan on startup.** Diagnostics are per open document. The
+  whole-tree verdict is the CLI's job, and a scoped view is exactly why
+  the CLI's exit codes distinguish _no verdict_ from _clean_.
+- **No rules of its own.** Every constraint comes from the workspace's config
+  and boundary table, so the editor and CI cannot disagree about what is
+  allowed. The extension has settings, but neither of them can change a verdict
+  — only which server answers and how loudly it logs.
+
 ---
 
-- The language server's guarantee and the one rule it exists to hold:
-  [editors.md](../usage/editors.md)
-- What each analyzer reads, and the shapes it cannot:
-  [languages.md](../usage/languages.md)
-- The VS Code extension's own reference:
-  [`packages/lattice-vscode/README.md`](../../packages/lattice-vscode/README.md)
+- The principles that govern integrations → [../concepts/integrations.md](../concepts/integrations.md)
+- What each analyzer reads → [../concepts/languages.md](../concepts/languages.md)
+- The Nx integration → [nx.md](nx.md)
+- The VS Code extension's own reference → [`packages/lattice-vscode/README.md`](../../packages/lattice-vscode/README.md)

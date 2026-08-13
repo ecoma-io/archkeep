@@ -151,7 +151,7 @@ Two checks that read no import: when a tracked `go.work` exists at the root,
 its `use` list is compared against every project's `go.mod`; and when the
 workspace tsconfig declares a `paths` table, each alias is judged for life.
 `src/go-work.mjs` and `src/tsconfig-paths.mjs` own the rules and their limits;
-[languages.md](../usage/languages.md) is the reader's view. Both ignore any
+[languages.md](../concepts/languages.md) is the reader's view. Both ignore any
 paths named on the command line — a workspace fact is judged, not files
 analyzed — and both run on the CLI only, because their findings describe the
 workspace rather than any open file. A `go.work` or tsconfig the tool cannot
@@ -325,5 +325,5 @@ either convention would answer confidently about a workspace it had misread.
 - Adding a language → [adding-a-language.md](adding-a-language.md)
 - Which suite proves what → [testing.md](testing.md)
 - The native provider's own declared limits → [`packages/lattice/src/providers/native/README.md`](../../packages/lattice/src/providers/native/README.md)
-- `lattice.json`'s fields → [../usage/lattice-json.md](../usage/lattice-json.md)
-- The direction all of this serves → [../north-star.md](../north-star.md)
+- `lattice.json`'s fields → [../reference/configuration.md](../reference/configuration.md)
+- The direction all of this serves → [../doctrine/north-star.md](../doctrine/north-star.md)

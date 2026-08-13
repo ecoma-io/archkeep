@@ -221,7 +221,7 @@ wants to script against the result instead of scraping a report:
 ```
 
 Every field name and `schemaVersion` are a public contract from this release
-on — [json-output.md](json-output.md) is the full reference: every field, the
+on — [json-output.md](../reference/json-output.md) is the full reference: every field, the
 three `status` values, and the stability promise a consumer's own parser can
 rely on. Two things worth stating here rather than only there:
 

@@ -33,7 +33,7 @@ pnpm exec nx show projects
 ```
 
 **The language is not one of the five.** See
-[languages.md](languages.md). A file with an unrecognised extension is a no-op —
+[languages.md](../concepts/languages.md). A file with an unrecognised extension is a no-op —
 the dispatcher is pointed at every tracked file and `README.md` is not an error.
 
 **An `allow` entry is matching more than you think.** This is the most common
@@ -52,7 +52,7 @@ and the cycle and lazy-load rules judge the file graph as a whole. Re-run withou
 paths.
 
 **The rule genuinely fires later in the sequence.** Most sites produce at most
-one violation, and the order is the semantics — see [violations.md](violations.md)
+one violation, and the order is the semantics — see [violations.md](../reference/violations.md)
 § _The order matters_. An `allow` match, a missing source project, or an external
 target returning early each stop the checks below them.
 
@@ -259,7 +259,7 @@ first graph computation rather than falling back to a default.
 extension to the server, and that the server's workspace root is your workspace
 root rather than a subdirectory — the root decides which boundary config is read.
 Pass it explicitly through `initializationOptions` if in doubt. See
-[editors.md](editors.md).
+[vscode.md](../integrations/vscode.md).
 
 **Stale after editing the boundary config.** The server asks the client to watch
 the boundary config, `**/nx.json` and `**/project.json`. A client that cannot

@@ -107,7 +107,7 @@ A `bannedExternalImports` pattern on a matching row matched the specifier.
 
 **Note the matcher**: every run of `*` becomes `.*` and the result is anchored,
 but other regex metacharacters survive — `.` still means any character. See
-[designing-boundaries.md](designing-boundaries.md) § _Patterns are not globs_.
+[boundaries.md](../concepts/boundaries.md) § _Patterns are not globs_.
 
 **Fix:** stop importing it, or move the ban to a narrower `sourceTag`.
 
