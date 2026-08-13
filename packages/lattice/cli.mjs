@@ -80,6 +80,7 @@ import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/co
 import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { graphCommand } from "./src/commands/graph.mjs";
+import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
@@ -877,6 +878,85 @@ async function runImpact(options, { cwd, env }) {
 }
 
 /**
+ * `explain`'s `run`: resolves the command context, loads the boundary config,
+ * drives `explainCommand`, writes the report, and returns the exit code.
+ *
+ * The site argument is the single positional argument (a `file:line:column`
+ * string). `--config` is accepted, same as `check`, because the judgment
+ * depends on which boundary law is in effect.
+ *
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runExplain(options, { cwd, env }) {
+  if (options.paths.length !== 1) {
+    env.err(
+      `lattice: explain takes exactly one positional argument (the site <file:line:column>); ` +
+        `got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  const site = options.paths[0];
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    // The config's location is a separate fact from the workspace root.
+    // Same loading logic as `check` — a `--config` overrides the workspace's
+    // own `boundaryConfig`.
+    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }} */
+    const config = options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : typeof commandContext.options.boundaryConfig === "string"
+        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
+        : policyFrom(
+            commandContext.options.boundaryConfig,
+            `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+          );
+
+    result = explainCommand(site, commandContext, config);
+  } catch (error) {
+    const usageError =
+      /is outside the workspace/.test(error?.message ?? "") ||
+      /is not a valid site/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(`lattice: explain complete → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // Descriptive: 0 for answered, 3 for incomplete coverage.
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
+}
+
+/**
  * `check`'s own flags, described once — `usage()` renders this straight into
  * the Options block, and `flags` below (what `parseArgs` needs) is derived
  * from it rather than kept as a second list that could name a flag `--help`
@@ -985,6 +1065,41 @@ const IMPACT_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `explain`'s flags: text or JSON envelope, optional file output.
+ * The site argument is positional. `--config` overrides the boundary law,
+ * same as `check`, because the judgment depends on which rules are in effect.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const EXPLAIN_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/usage/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: ({ boundaryConfig, inline }) =>
+      Object.freeze([
+        "Read the boundary law from here instead of",
+        inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
+      ]),
+  }),
+]);
+
+/**
  * The command table `usage()` and `runCli` both read from — a command added
  * later is a new entry here, not a new branch in either. `args` is the
  * placeholder `usage()` prints after the command name; `flagHelp` is the
@@ -1032,6 +1147,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runImpact,
+  }),
+  explain: Object.freeze({
+    name: "explain",
+    args: "<file:line:column>",
+    summary: "Explain the judgment for one import site",
+    flagHelp: EXPLAIN_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(EXPLAIN_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runExplain,
   }),
 });
 

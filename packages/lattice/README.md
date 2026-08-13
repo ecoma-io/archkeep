@@ -109,6 +109,8 @@ pnpm exec lattice graph --format json --output snapshot.json
 pnpm exec lattice diff snapshot.json
 pnpm exec lattice impact billing-core
 pnpm exec lattice impact billing-core --format json
+pnpm exec lattice explain libs/billing/main.go:10:5
+pnpm exec lattice explain libs/billing/main.go:10:5 --format json
 ```
 
 `graph` prints the project graph as a deterministic snapshot: two sorted arrays,
@@ -126,6 +128,13 @@ on it — the set a developer needs to consider before changing that project. It
 separates direct from transitive dependents and refuses incomplete coverage. An
 empty `dependents` list is a claim ("nothing depends on this"), not a shrug. It
 is descriptive and never exits 1.
+
+`explain` takes a `file:line:column` site and explains the judgment for that
+one import: which constraint row matched, which tags applied, whether it is a
+violation and why. A site that could not be resolved statically (a dynamic
+`import()` with a non-literal argument) gets an `UNRESOLVABLE` verdict with
+the reason. `explain` accepts `--config` (same as `check`) because the judgment
+depends on which boundary law is in effect. It is descriptive and never exits 1.
 
 `--format json` wraps the same verdict `text` and `sarif` already compute in a
 versioned envelope — every field name and `schemaVersion` are a public
