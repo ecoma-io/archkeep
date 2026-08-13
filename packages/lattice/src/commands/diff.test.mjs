@@ -1,0 +1,444 @@
+import { describe, expect, it } from "vitest";
+
+import { computeDiff, diffCommand, parseBaseline } from "./diff.mjs";
+import { SCHEMA_VERSION } from "../report/json.mjs";
+
+/**
+ * What `diff` guarantees: a complete, honest comparison between two graph
+ * snapshots, refusing to run when either side is incomplete (because every
+ * "removed" or "added" entry would then be ambiguous between a real change
+ * and a coverage gap).
+ *
+ * The "empty result is a claim" invariant is tested here: a diff that
+ * reports "no changes" must be comparing two complete graphs, and a diff
+ * that cannot must refuse loudly rather than silently under-report.
+ */
+
+// ---------------------------------------------------------------------------
+// parseBaseline
+// ---------------------------------------------------------------------------
+
+describe("parseBaseline", () => {
+  function validEnvelope(overrides = {}) {
+    return JSON.stringify({
+      schemaVersion: SCHEMA_VERSION,
+      command: "graph",
+      coverage: { complete: true, projects: 2, analyzedFiles: 4, imports: 3, notAnalyzed: [] },
+      result: {
+        projects: [{ name: "a", root: "libs/a", tags: [] }],
+        dependencies: [{ source: "a", target: "b", type: "static" }],
+      },
+      ...overrides,
+    });
+  }
+
+  it("returns the projects, dependencies, and coverage from a valid envelope", () => {
+    const { projects, dependencies, coverage } = parseBaseline(validEnvelope(), "/baseline.json");
+    expect(projects).toEqual([{ name: "a", root: "libs/a", tags: [] }]);
+    expect(dependencies).toEqual([{ source: "a", target: "b", type: "static" }]);
+    expect(coverage.complete).toBe(true);
+  });
+
+  it("throws when the text is not valid JSON", () => {
+    expect(() => parseBaseline("not json", "/bad.json")).toThrow(/not valid JSON/);
+  });
+
+  it("throws when the envelope has no schemaVersion", () => {
+    const envelope = JSON.stringify({ command: "graph", coverage: { complete: true } });
+    expect(() => parseBaseline(envelope, "/no-version.json")).toThrow(/no schemaVersion field/);
+  });
+
+  it("throws when the schemaVersion does not match the tool's current version", () => {
+    const envelope = validEnvelope({ schemaVersion: 999 });
+    expect(() => parseBaseline(envelope, "/wrong-version.json")).toThrow(
+      new RegExp(
+        `schemaVersion 999.*but this build only understands schemaVersion ${SCHEMA_VERSION}`,
+      ),
+    );
+  });
+
+  it("throws when the envelope is not a 'graph' command", () => {
+    const envelope = validEnvelope({ command: "check" });
+    expect(() => parseBaseline(envelope, "/not-graph.json")).toThrow(/not a 'graph' envelope/);
+  });
+
+  it("throws when the baseline has incomplete coverage", () => {
+    const envelope = validEnvelope({
+      coverage: {
+        complete: false,
+        projects: 2,
+        analyzedFiles: 2,
+        imports: 1,
+        notAnalyzed: [{ file: "x.go", reason: "err" }],
+      },
+    });
+    expect(() => parseBaseline(envelope, "/incomplete.json")).toThrow(/incomplete coverage/);
+  });
+
+  it("throws when the baseline has no result.projects array", () => {
+    const envelope = JSON.stringify({
+      schemaVersion: SCHEMA_VERSION,
+      command: "graph",
+      coverage: { complete: true, projects: 0, analyzedFiles: 0, imports: 0, notAnalyzed: [] },
+      result: { dependencies: [] },
+    });
+    expect(() => parseBaseline(envelope, "/no-projects.json")).toThrow(/no result\.projects array/);
+  });
+
+  it("throws when the top-level value is null", () => {
+    expect(() => parseBaseline("null", "/null.json")).toThrow(/not a JSON object/);
+  });
+
+  it("throws when the top-level value is an array", () => {
+    expect(() => parseBaseline("[]", "/array.json")).toThrow(/not a JSON object/);
+  });
+
+  it("throws when the top-level value is a primitive", () => {
+    expect(() => parseBaseline("42", "/number.json")).toThrow(/not a JSON object/);
+  });
+
+  it("throws when the baseline has no result.dependencies array", () => {
+    const envelope = JSON.stringify({
+      schemaVersion: SCHEMA_VERSION,
+      command: "graph",
+      coverage: { complete: true, projects: 1, analyzedFiles: 1, imports: 0, notAnalyzed: [] },
+      result: { projects: [{ name: "a", root: "libs/a" }] },
+    });
+    expect(() => parseBaseline(envelope, "/no-deps.json")).toThrow(/no result\.dependencies array/);
+  });
+
+  it("throws when a project record is missing 'name'", () => {
+    const envelope = validEnvelope({
+      result: {
+        projects: [{ root: "libs/a", tags: [] }],
+        dependencies: [],
+      },
+    });
+    expect(() => parseBaseline(envelope, "/bad-project.json")).toThrow(
+      /result\.projects\[0\].*missing 'name' or 'root'/,
+    );
+  });
+
+  it("throws when a project record is missing 'root'", () => {
+    const envelope = validEnvelope({
+      result: {
+        projects: [{ name: "a", tags: [] }],
+        dependencies: [],
+      },
+    });
+    expect(() => parseBaseline(envelope, "/bad-project.json")).toThrow(
+      /result\.projects\[0\].*missing 'name' or 'root'/,
+    );
+  });
+
+  it("throws when a dependency record is missing 'source'", () => {
+    const envelope = validEnvelope({
+      result: {
+        projects: [{ name: "a", root: "libs/a", tags: [] }],
+        dependencies: [{ target: "b", type: "static" }],
+      },
+    });
+    expect(() => parseBaseline(envelope, "/bad-dep.json")).toThrow(
+      /result\.dependencies\[0\].*missing 'source', 'target', or 'type'/,
+    );
+  });
+
+  it("throws when a dependency record is missing 'type'", () => {
+    const envelope = validEnvelope({
+      result: {
+        projects: [{ name: "a", root: "libs/a", tags: [] }],
+        dependencies: [{ source: "a", target: "b" }],
+      },
+    });
+    expect(() => parseBaseline(envelope, "/bad-dep.json")).toThrow(
+      /result\.dependencies\[0\].*missing 'source', 'target', or 'type'/,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeDiff
+// ---------------------------------------------------------------------------
+
+describe("computeDiff", () => {
+  it("reports no changes when baseline and head are identical", () => {
+    const snapshot = {
+      projects: [{ name: "a", root: "libs/a", tags: [] }],
+      dependencies: [{ source: "a", target: "b", type: "static" }],
+    };
+    const diff = computeDiff(snapshot, snapshot);
+    expect(diff.addedProjects).toEqual([]);
+    expect(diff.removedProjects).toEqual([]);
+    expect(diff.addedEdges).toEqual([]);
+    expect(diff.removedEdges).toEqual([]);
+  });
+
+  it("detects added and removed projects", () => {
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a", tags: [] }],
+      dependencies: [],
+    };
+    const head = {
+      projects: [
+        { name: "a", root: "libs/a", tags: [] },
+        { name: "b", root: "libs/b", tags: ["layer:domain"] },
+      ],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.addedProjects).toEqual([{ name: "b", root: "libs/b", tags: ["layer:domain"] }]);
+    expect(diff.removedProjects).toEqual([]);
+  });
+
+  it("detects removed projects", () => {
+    const baseline = {
+      projects: [
+        { name: "a", root: "libs/a", tags: [] },
+        { name: "b", root: "libs/b", tags: [] },
+      ],
+      dependencies: [],
+    };
+    const head = {
+      projects: [{ name: "a", root: "libs/a", tags: [] }],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.addedProjects).toEqual([]);
+    expect(diff.removedProjects).toEqual([{ name: "b", root: "libs/b", tags: [] }]);
+  });
+
+  it("detects added and removed edges", () => {
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a", tags: [] }],
+      dependencies: [{ source: "a", target: "b", type: "static" }],
+    };
+    const head = {
+      projects: [{ name: "a", root: "libs/a", tags: [] }],
+      dependencies: [{ source: "a", target: "c", type: "static" }],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.addedEdges).toEqual([{ source: "a", target: "c", type: "static" }]);
+    expect(diff.removedEdges).toEqual([{ source: "a", target: "b", type: "static" }]);
+  });
+
+  it("treats a type change as an added edge under the new type and a removed edge under the old", () => {
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a", tags: [] }],
+      dependencies: [{ source: "a", target: "b", type: "static" }],
+    };
+    const head = {
+      projects: [{ name: "a", root: "libs/a", tags: [] }],
+      dependencies: [{ source: "a", target: "b", type: "dynamic" }],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.addedEdges).toEqual([{ source: "a", target: "b", type: "dynamic" }]);
+    expect(diff.removedEdges).toEqual([{ source: "a", target: "b", type: "static" }]);
+  });
+
+  it("sorts all result arrays deterministically by plain string comparison", () => {
+    const baseline = {
+      projects: [],
+      dependencies: [],
+    };
+    const head = {
+      projects: [
+        { name: "z", root: "libs/z", tags: [] },
+        { name: "a", root: "libs/a", tags: [] },
+      ],
+      dependencies: [
+        { source: "z", target: "a", type: "static" },
+        { source: "a", target: "z", type: "dynamic" },
+      ],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.addedProjects.map((p) => p.name)).toEqual(["a", "z"]);
+    expect(diff.addedEdges[0].source).toBe("a");
+    expect(diff.addedEdges[1].source).toBe("z");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// diffCommand
+// ---------------------------------------------------------------------------
+
+describe("diffCommand", () => {
+  /** Build a valid baseline envelope for the injectable reader. */
+  function baselineEnvelope(overrides = {}) {
+    return {
+      projects: [{ name: "alpha", root: "libs/alpha", tags: ["layer:domain"] }],
+      dependencies: [{ source: "alpha", target: "beta", type: "static" }],
+      coverage: { complete: true, projects: 1, analyzedFiles: 2, imports: 1, notAnalyzed: [] },
+      ...overrides,
+    };
+  }
+
+  /** Minimal command context for the head. */
+  function commandContext(overrides = {}) {
+    return {
+      root: "/workspace",
+      provider: "native",
+      marker: "lattice.json",
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha" },
+            tags: ["layer:domain"],
+          },
+          beta: {
+            name: "beta",
+            type: "lib",
+            data: { root: "libs/beta" },
+            tags: [],
+          },
+        },
+        dependencies: {
+          alpha: [{ target: "beta", type: "static" }],
+        },
+      },
+      analysis: {
+        analyzed: 4,
+        imports: [{ sourceFile: "libs/alpha/a.go", specifier: "beta", line: 1, column: 1 }],
+        failures: [],
+      },
+      pluginGap: { registered: true, manifests: [] },
+      ...overrides,
+    };
+  }
+
+  it("returns 'ok' status and a diff between two complete snapshots", () => {
+    const result = diffCommand("/baseline.json", commandContext(), {
+      readBaseline: () => baselineEnvelope(),
+    });
+    expect(result.status).toBe("ok");
+    expect(result.diff.baseline.projects).toBe(1);
+    expect(result.diff.head.projects).toBe(2);
+    expect(result.diff.addedProjects).toEqual([
+      { name: "beta", root: "libs/beta", type: "lib", tags: [] },
+    ]);
+    expect(result.diff.removedProjects).toEqual([]);
+    expect(result.diff.addedEdges).toEqual([]);
+    expect(result.diff.removedEdges).toEqual([]);
+  });
+
+  it("reports added and removed edges", () => {
+    const baseline = baselineEnvelope({
+      dependencies: [
+        { source: "alpha", target: "beta", type: "static" },
+        { source: "alpha", target: "gamma", type: "dynamic" },
+      ],
+    });
+    // Head drops the alpha→gamma dynamic edge, adds alpha→beta dynamic.
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha" },
+            tags: ["layer:domain"],
+          },
+          beta: { name: "beta", type: "lib", data: { root: "libs/beta" }, tags: [] },
+        },
+        dependencies: {
+          alpha: [
+            { target: "beta", type: "static" },
+            { target: "beta", type: "dynamic" },
+          ],
+        },
+      },
+    });
+    const result = diffCommand("/baseline.json", ctx, { readBaseline: () => baseline });
+    expect(result.diff.addedEdges).toEqual([{ source: "alpha", target: "beta", type: "dynamic" }]);
+    expect(result.diff.removedEdges).toEqual([
+      { source: "alpha", target: "gamma", type: "dynamic" },
+    ]);
+  });
+
+  it("throws when the plugin is unregistered on a polyglot Nx workspace", () => {
+    expect(() =>
+      diffCommand(
+        "/baseline.json",
+        commandContext({
+          provider: "nx",
+          pluginGap: { registered: false, manifests: ["libs/alpha/go.mod"] },
+        }),
+        { readBaseline: () => baselineEnvelope() },
+      ),
+    ).toThrow(/refusing to compute a diff/);
+  });
+
+  it("throws when the head has incomplete coverage (whole-file failures)", () => {
+    expect(() =>
+      diffCommand(
+        "/baseline.json",
+        commandContext({
+          analysis: {
+            analyzed: 3,
+            imports: [],
+            failures: [
+              {
+                sourceFile: "libs/beta/broken.go",
+                line: null,
+                column: null,
+                reason: "parse error",
+              },
+            ],
+          },
+        }),
+        { readBaseline: () => baselineEnvelope() },
+      ),
+    ).toThrow(/head graph has incomplete coverage/);
+  });
+
+  it("produces both text and JSON report renderings", () => {
+    const result = diffCommand("/baseline.json", commandContext(), {
+      readBaseline: () => baselineEnvelope(),
+    });
+    expect(result.report.text).toContain("baseline");
+    expect(result.report.text).toContain("head");
+    expect(result.report.json).toContain('"schemaVersion"');
+    expect(result.report.json).toContain('"command": "diff"');
+  });
+
+  it("never exits 1 — diff is descriptive, not a finding", () => {
+    const result = diffCommand("/baseline.json", commandContext(), {
+      readBaseline: () => baselineEnvelope(),
+    });
+    expect(result.status).toBe("ok");
+  });
+
+  it("throws when readBaseline fails (baseline cannot be read)", () => {
+    expect(() =>
+      diffCommand("/missing.json", commandContext(), {
+        readBaseline: () => {
+          throw new Error(
+            "lattice: cannot read the baseline snapshot from '/missing.json': ENOENT",
+          );
+        },
+      }),
+    ).toThrow(/cannot read the baseline snapshot/);
+  });
+
+  it("includes blind spots in coverage from non-whole-file failures", () => {
+    const result = diffCommand(
+      "/baseline.json",
+      commandContext({
+        analysis: {
+          analyzed: 4,
+          imports: [],
+          failures: [
+            { sourceFile: "libs/alpha/a.go", line: 7, column: 2, reason: "unresolvable specifier" },
+          ],
+        },
+      }),
+      { readBaseline: () => baselineEnvelope() },
+    );
+    expect(result.coverage.blindSpots).toEqual([
+      { file: "libs/alpha/a.go", line: 7, column: 2, reason: "unresolvable specifier" },
+    ]);
+    // Not a whole-file failure, so coverage is still "complete" and the diff can run.
+    expect(result.coverage.complete).toBe(true);
+  });
+});

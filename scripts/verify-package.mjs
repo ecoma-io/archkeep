@@ -17,26 +17,36 @@
 // refuse, and it survived every existing test because they all drive the source
 // tree or a generated bin shim, both of which hand Node the resolved path.
 //
-// So the checks below are the four questions a consumer's first hour asks, in
+// So the checks below are the questions a consumer's first hour asks, in
 // the order they get asked, against a real `pnpm pack` tarball installed into a
 // throwaway workspace with a tag vocabulary nothing in `src/` knows about:
 //
 //   1. Nx loads the plugin and draws an edge Nx cannot infer on its own.
 //   2. The checker exits 0 on a clean tree, and says what it inspected.
-//   3. The checker exits 1 on a violating one — a gate only proves it runs when
-//      it can go red, so the clean direction alone would prove nothing.
-//   4. The language server answers an `initialize` frame when launched through
+//   3. The language server answers an `initialize` frame when launched through
 //      the symlinked path an installed plugin is launched by.
+//   4. `graph` exits 0 on a clean tree and states project and edge counts.
+//   5. `graph --format json` produces a valid JSON envelope with the correct
+//      command name and schema version.
+//   6. `diff` against a self-baseline exits 0 and reports no changes.
+//   7. The checker exits 1 on a violating tree — a gate only proves it runs when
+//      it can go red, so the clean direction alone would prove nothing.
 //
-// A second, native-provider workspace runs the SAME questions 2-4 again,
-// against a `lattice.json` root instead of an `nx.json` one, with no `nx`
-// package installed at all. Before this addition, the native provider added
+// Checks 4-6 run before check 7 so that graph/diff prove the clean installed
+// artifact. A boundary violation is not a graph or diff finding, so the
+// commands would exit 0 either way — but checking the clean tree first is what
+// makes the assertion meaningful: "graph works" is strongest when the tree is
+// known to be clean, not merely when it happens to still produce output.
+//
+// A second, native-provider workspace runs the SAME questions 2, 4-6, 7, 3
+// again, against a `lattice.json` root instead of an `nx.json` one, with no
+// `nx` package installed at all. Before this addition, the native provider added
 // by this package's M2 had been proven correct only against fixtures this
 // tool's own tests built — a synthetic tree constructed in-process
 // (`../packages/lattice/src/providers/native/discover.test.mjs` and friends)
 // or co-located under the package itself
 // (`../packages/lattice/src/providers/native/differential.integration.test.mjs`).
-// None of that is what question 2-4 above actually answer for the Nx path: a
+// None of that is what questions 2-3 above actually answer for the Nx path: a
 // real `pnpm pack` tarball, installed into a workspace this repository never
 // built, with a tag vocabulary nothing in `src/` has seen. The native
 // consumer below is that same real proof, aimed at the provider Oracle 1 does
@@ -329,24 +339,15 @@ function commitTree(consumer, message, fresh) {
 }
 
 /**
- * Checks 2-4 from the header, run against ONE already-installed consumer
- * workspace. Shared between the Nx and the native consumer on purpose: a
- * consumer that trusts `lattice check` and the language server has no reason
- * to know which provider is underneath — that is the whole point of the
- * `ProjectModelProvider` seam
- * (`../packages/lattice/CLAUDE.md`'s "`src/providers/` is the only layer
- * allowed to build a graph") — so these checks cannot tell the two apart,
- * and are not allowed to.
+ * Checks 2 and 3 from the header: clean-tree verdict and language server
+ * handshake. Run while the tree is still clean, before graph/diff checks
+ * (4-6) and before the violating mutation (7).
  *
  * @param {string} consumer absolute path to the installed consumer workspace
- * @param {string} label appended to each check's message, naming which
- *   consumer a failure came from
+ * @param {string} label appended to each check's message
  * @param {string} packageName read from the tarball's own manifest
- * @param {() => void} [afterViolatingCommit] run after the violating tree is
- *   committed but before the checker sees it — the Nx consumer uses this to
- *   reset Nx's own cache, which the native provider has none of.
  */
-function verifyConsumerChecks(consumer, label, packageName, afterViolatingCommit) {
+function verifyCleanAndLspChecks(consumer, label, packageName) {
   // 2. The checker exits 0 on the clean tree, and states what it inspected —
   //    "no violations" is a claim about coverage too, so a 0 that inspected
   //    nothing is the same silence as no check at all. The counts are matched
@@ -368,25 +369,7 @@ function verifyConsumerChecks(consumer, label, packageName, afterViolatingCommit
     `stdout: ${clean.stdout ?? "(empty)"}`,
   );
 
-  // 3. And exits 1 on a violating one, naming the rule and the position.
-  write(consumer, VIOLATING_FILES);
-  commitTree(consumer, "core reaches up into app", false);
-  afterViolatingCommit?.();
-  const dirty = run("pnpm", ["exec", "lattice", "check"], consumer);
-  const dirtyOutput = `${dirty.stdout ?? ""}${dirty.stderr ?? ""}`;
-  check(
-    `the checker exits 1 on a violating tree (${label})`,
-    dirty.status === 1,
-    `exit ${dirty.status}\n${dirtyOutput}`,
-  );
-  check(
-    `the violation names its rule and its file:line:column (${label})`,
-    dirtyOutput.includes("onlyTagsConstraintViolation") &&
-      /libs\/core\/violate\.go:\d+:\d+/.test(dirtyOutput),
-    dirtyOutput || "(no output)",
-  );
-
-  // 4. The language server answers when launched through the symlinked path.
+  // 3. The language server answers when launched through the symlinked path.
   //    `node_modules/<name>` is a symlink into `node_modules/.pnpm/…`, and the
   //    Claude Code plugin manifest launches `${CLAUDE_PLUGIN_ROOT}/lsp.mjs` by
   //    path with no bin shim in between to resolve it. This is the spelling that
@@ -414,6 +397,113 @@ function verifyConsumerChecks(consumer, label, packageName, afterViolatingCommit
     `exit ${lsp.status}\nstdout: ${lsp.stdout || "(empty)"}\nstderr: ${lsp.stderr || "(empty)"}` +
       `\n\nAn empty stdout here is the defect this check exists for: the process started, ` +
       `read nothing, and exited 0. See src/entry-point.mjs.`,
+  );
+}
+
+/**
+ * Check 7 from the header: the checker exits 1 on a violating tree.
+ * Run AFTER graph/diff checks (4-6) so those proved the clean artifact first.
+ *
+ * @param {string} consumer absolute path to the installed consumer workspace
+ * @param {string} label appended to each check's message
+ * @param {() => void} [afterViolatingCommit] run after the violating tree is
+ *   committed but before the checker sees it — the Nx consumer uses this to
+ *   reset Nx's own cache, which the native provider has none of.
+ */
+function verifyViolatingCheck(consumer, label, afterViolatingCommit) {
+  // 7. And exits 1 on a violating one, naming the rule and the position.
+  write(consumer, VIOLATING_FILES);
+  commitTree(consumer, "core reaches up into app", false);
+  afterViolatingCommit?.();
+  const dirty = run("pnpm", ["exec", "lattice", "check"], consumer);
+  const dirtyOutput = `${dirty.stdout ?? ""}${dirty.stderr ?? ""}`;
+  check(
+    `the checker exits 1 on a violating tree (${label})`,
+    dirty.status === 1,
+    `exit ${dirty.status}\n${dirtyOutput}`,
+  );
+  check(
+    `the violation names its rule and its file:line:column (${label})`,
+    dirtyOutput.includes("onlyTagsConstraintViolation") &&
+      /libs\/core\/violate\.go:\d+:\d+/.test(dirtyOutput),
+    dirtyOutput || "(no output)",
+  );
+}
+
+/**
+ * Checks 4-6: `graph` and `diff` verification. These run while the tree is
+ * still clean — before check 7 introduces violating files — so that the
+ * assertions prove the clean installed artifact, not merely that the commands
+ * still produce output on a dirty tree. A boundary violation is not a graph
+ * or diff finding, so the commands would exit 0 either way, but checking the
+ * clean tree first is what makes the assertion meaningful.
+ *
+ * Per `SPEC-m5b-graph-and-diff.md` §6, these checks live on the native path
+ * because that is the only place in this repository where the new commands are
+ * driven from a real `pnpm pack` tarball installed into a tree this repository
+ * never built, with no Nx present to fall back on — the same reason the native
+ * consumer exists at all. The Nx path's check 1 already proves the plugin
+ * loads; graph/diff add no new Nx-specific surface.
+ *
+ * @param {string} consumer absolute path to the native consumer workspace
+ * @param {string} label appended to each check's message
+ */
+function verifyGraphDiffChecks(consumer, label) {
+  // 4. `graph` exits 0 on a clean tree and states the project and edge counts.
+  const graphClean = run("pnpm", ["exec", "lattice", "graph"], consumer);
+  check(
+    `graph exits 0 on a clean tree (${label})`,
+    graphClean.status === 0,
+    `exit ${graphClean.status}\n${graphClean.stdout ?? ""}${graphClean.stderr ?? ""}`,
+  );
+  check(
+    `graph states project and edge counts on a clean tree (${label})`,
+    /[1-9]\d* project/.test(graphClean.stdout ?? "") &&
+      /[1-9]\d* edge/.test(graphClean.stdout ?? ""),
+    `stdout: ${graphClean.stdout ?? "(empty)"}`,
+  );
+
+  // 5. `graph --format json` produces a valid JSON envelope with command "graph".
+  const graphJson = run("pnpm", ["exec", "lattice", "graph", "--format", "json"], consumer);
+  let graphEnvelope = null;
+  try {
+    graphEnvelope = JSON.parse(graphJson.stdout ?? "");
+  } catch {
+    // Will fail the check below.
+  }
+  check(
+    `graph --format json produces a valid JSON envelope (${label})`,
+    graphEnvelope !== null &&
+      graphEnvelope.command === "graph" &&
+      graphEnvelope.schemaVersion === 1 &&
+      Array.isArray(graphEnvelope.result?.projects) &&
+      Array.isArray(graphEnvelope.result?.dependencies),
+    `exit ${graphJson.status}\nstdout: ${graphJson.stdout ?? "(empty)"}`,
+  );
+
+  // 6. `diff` against the same tree (self-baseline) exits 0 and reports no changes.
+  //    First, capture a baseline snapshot with `graph --format json --output`.
+  const baselineFile = join(consumer, "baseline-snapshot.json");
+  const graphOutput = run(
+    "pnpm",
+    ["exec", "lattice", "graph", "--format", "json", "--output", baselineFile],
+    consumer,
+  );
+  check(
+    `graph --output writes a baseline file for diff (${label})`,
+    graphOutput.status === 0 && existsSync(baselineFile),
+    `exit ${graphOutput.status}\nstderr: ${graphOutput.stderr ?? "(empty)"}`,
+  );
+  const diffSelf = run("pnpm", ["exec", "lattice", "diff", baselineFile], consumer);
+  check(
+    `diff against a self-baseline exits 0 (${label})`,
+    diffSelf.status === 0,
+    `exit ${diffSelf.status}\n${diffSelf.stdout ?? ""}${diffSelf.stderr ?? ""}`,
+  );
+  check(
+    `diff against a self-baseline reports no changes (${label})`,
+    (diffSelf.stdout ?? "").includes("no changes"),
+    `stdout: ${diffSelf.stdout ?? "(empty)"}`,
   );
 }
 
@@ -517,9 +607,8 @@ try {
     `dependencies: ${edges}`,
   );
 
-  verifyConsumerChecks(consumer, "Nx path", packageName, () =>
-    run("pnpm", ["exec", "nx", "reset"], consumer),
-  );
+  verifyCleanAndLspChecks(consumer, "Nx path", packageName);
+  verifyViolatingCheck(consumer, "Nx path", () => run("pnpm", ["exec", "nx", "reset"], consumer));
 
   // --- the native consumer: same physical shape, `lattice.json` instead of
   // `nx.json`, no `nx` requested at all. See this file's header for why this
@@ -558,7 +647,17 @@ try {
     `node_modules entries: ${nativeModules.join(", ") || "(none)"}`,
   );
 
-  verifyConsumerChecks(consumerNative, "native path", packageName);
+  verifyCleanAndLspChecks(consumerNative, "native path", packageName);
+
+  // 4-6. `graph` and `diff` from a clean installed tarball — native path only.
+  // Per SPEC-m5b-graph-and-diff.md §6, these checks prove the commands work
+  // against a real `pnpm pack` tarball installed into a tree this repository
+  // never built, with no Nx present to fall back on. They run before the
+  // violating mutation (check 7) so the assertions prove the clean artifact.
+  verifyGraphDiffChecks(consumerNative, "native path");
+
+  // 7. The checker exits 1 on a violating tree (native path).
+  verifyViolatingCheck(consumerNative, "native path");
 } finally {
   rmSync(workdir, { recursive: true, force: true });
 }

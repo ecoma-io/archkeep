@@ -34,7 +34,17 @@ const write = (relativePath, text) => {
   writeFileSync(join(root, relativePath), text);
 };
 
-write("nx.json", "{}\n");
+write(
+  "nx.json",
+  `${JSON.stringify({
+    plugins: [
+      {
+        plugin: "@ecoma-io/lattice/nx",
+        options: { boundaryConfig: "module-boundaries.config.mjs" },
+      },
+    ],
+  })}\n`,
+);
 write(
   "module-boundaries.config.mjs",
   `export const depConstraints = [
@@ -2181,5 +2191,387 @@ export const moduleBoundaryOptions = {
         reason: "'use {a::b, c::d}' opens with a brace group, so it names no crate to resolve",
       },
     ]);
+  });
+});
+
+describe("`graph` on the Nx fixture", () => {
+  it("exits 0 and names every fixture project in text output", async () => {
+    const streams = env();
+    expect(await runCli(["graph"], streams)).toBe(EXIT.ok);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("domain");
+    expect(report).toContain("adapter");
+  });
+
+  it("produces a valid JSON envelope with command graph, complete coverage, sorted projects", async () => {
+    const streams = env();
+    expect(await runCli(["graph", "--format", "json"], streams)).toBe(EXIT.ok);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.command).toBe("graph");
+    expect(envelope.schemaVersion).toBe(1);
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.result.projects.map((p) => p.name)).toEqual(
+      envelope.result.projects
+        .map((p) => p.name)
+        .slice()
+        .sort(),
+    );
+  });
+
+  it("never exits 1, even on the violating fixture where check does", async () => {
+    // Silent direction: a graph that exits 1 over a boundary violation makes
+    // the exit code ambiguous between "the graph is broken" and "the tree is
+    // dirty" — the exact confusion check's distinct exit codes exist to avoid.
+    const streams = env();
+    const code = await runCli(["graph"], streams);
+    expect(code).not.toBe(EXIT.violations);
+    expect(code).toBe(EXIT.ok);
+  });
+
+  it("produces byte-identical JSON across two consecutive runs", async () => {
+    const first = env();
+    const second = env();
+    await runCli(["graph", "--format", "json"], first);
+    await runCli(["graph", "--format", "json"], second);
+    expect(first.lines.out.join("\n")).toBe(second.lines.out.join("\n"));
+  });
+});
+
+describe("`graph` on a native fixture with no nx resolvable", () => {
+  const nativeGraphRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-graph-"));
+  afterAll(() => rmSync(nativeGraphRoot, { recursive: true, force: true }));
+
+  const writeNativeGraph = (relativePath, text) => {
+    mkdirSync(join(nativeGraphRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(nativeGraphRoot, relativePath), text);
+  };
+
+  writeNativeGraph(
+    "lattice.json",
+    JSON.stringify({
+      boundaryConfig: "module-boundaries.config.mjs",
+      projects: {
+        declared: [
+          { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+          { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+        ],
+      },
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "workspace tooling config at the root, not itself a project",
+          },
+        ],
+      },
+    }),
+  );
+  writeNativeGraph(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeNativeGraph("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeNativeGraph("libs/domain/doc.go", "package domain\n");
+  writeNativeGraph("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writeNativeGraph("libs/adapter/adapter.go", "package adapter\n");
+
+  const nativeGraphFiles = [
+    "lattice.json",
+    "module-boundaries.config.mjs",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "libs/adapter/go.mod",
+    "libs/adapter/adapter.go",
+  ];
+
+  const nativeGraphEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      cwd: nativeGraphRoot,
+      listFiles: () => nativeGraphFiles,
+    };
+  };
+
+  it("exits 0 with the same payload shape as the Nx path", async () => {
+    const streams = nativeGraphEnv();
+    expect(await runCli(["graph", "--format", "json"], streams)).toBe(EXIT.ok);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.command).toBe("graph");
+    expect(envelope.workspace.provider).toBe("native");
+    expect(envelope.coverage.complete).toBe(true);
+    expect(Array.isArray(envelope.result.projects)).toBe(true);
+    expect(envelope.result.projects.length).toBeGreaterThan(0);
+    expect(Array.isArray(envelope.result.dependencies)).toBe(true);
+  });
+});
+
+describe("`graph` refuses when the plugin is unregistered but polyglot manifests exist", () => {
+  // Silent direction: a graph printed with no Go edges and exit 0 — the exact
+  // failure AGENTS.md's opening paragraph describes.
+  const unregisteredRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-unregistered-"));
+  afterAll(() => rmSync(unregisteredRoot, { recursive: true, force: true }));
+
+  const writeUnreg = (relativePath, text) => {
+    mkdirSync(join(unregisteredRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(unregisteredRoot, relativePath), text);
+  };
+
+  writeUnreg(
+    "nx.json",
+    JSON.stringify({}), // No plugins entry — the plugin is not registered.
+  );
+  writeUnreg(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeUnreg("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeUnreg("libs/domain/doc.go", "package domain\n");
+
+  const unregGraph = {
+    nodes: {
+      domain: {
+        name: "domain",
+        type: "lib",
+        data: { root: "libs/domain", tags: [] },
+      },
+    },
+    dependencies: { domain: [] },
+  };
+  const unregFiles = [
+    "nx.json",
+    "module-boundaries.config.mjs",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+  ];
+
+  it("exits 3 and names the go.mod and the plugins entry", async () => {
+    const out = [];
+    const err = [];
+    const streams = {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      cwd: unregisteredRoot,
+      readGraph: () => unregGraph,
+      listFiles: () => unregFiles,
+    };
+    expect(await runCli(["graph"], streams)).toBe(EXIT.error);
+    const report = out.join("\n") + err.join("\n");
+    expect(report).toContain("go.mod");
+    expect(report).toContain("plugins");
+  });
+
+  it("exits 0 when the same fixture registers the plugin", async () => {
+    // The complement: registering the plugin removes the refusal.
+    writeUnreg(
+      "nx.json",
+      JSON.stringify({
+        plugins: [
+          {
+            plugin: "@ecoma-io/lattice/nx",
+            options: { boundaryConfig: "module-boundaries.config.mjs" },
+          },
+        ],
+      }),
+    );
+    const out = [];
+    const err = [];
+    const streams = {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      cwd: unregisteredRoot,
+      readGraph: () => unregGraph,
+      listFiles: () => unregFiles,
+    };
+    expect(await runCli(["graph"], streams)).toBe(EXIT.ok);
+  });
+});
+
+describe("`diff` round trip against the Nx fixture", () => {
+  it("graph --output then diff on the unchanged tree exits 0 and reports no changes", async () => {
+    const baselineFile = join(root, "round-trip-baseline.json");
+    const graphStreams = env();
+    expect(
+      await runCli(["graph", "--format", "json", "--output", baselineFile], graphStreams),
+    ).toBe(EXIT.ok);
+    const diffStreams = env();
+    expect(await runCli(["diff", baselineFile], diffStreams)).toBe(EXIT.ok);
+    expect(diffStreams.lines.out.join("\n")).toContain("no changes");
+    // Clean up.
+    try {
+      rmSync(baselineFile, { force: true });
+    } catch {
+      // Already gone.
+    }
+  });
+
+  it("adding a project between runs shows the added project in diff", async () => {
+    // Capture baseline from the current fixture.
+    const baselineFile = join(root, "added-project-baseline.json");
+    const graphStreams = env();
+    expect(
+      await runCli(["graph", "--format", "json", "--output", baselineFile], graphStreams),
+    ).toBe(EXIT.ok);
+
+    // Add a third project to the fixture.
+    const addedRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-added-"));
+    afterAll(() => rmSync(addedRoot, { recursive: true, force: true }));
+    const writeAdded = (relativePath, text) => {
+      mkdirSync(join(addedRoot, relativePath, ".."), { recursive: true });
+      writeFileSync(join(addedRoot, relativePath), text);
+    };
+    writeAdded(
+      "nx.json",
+      `${JSON.stringify({
+        plugins: [
+          {
+            plugin: "@ecoma-io/lattice/nx",
+            options: { boundaryConfig: "module-boundaries.config.mjs" },
+          },
+        ],
+      })}\n`,
+    );
+    writeAdded(
+      "module-boundaries.config.mjs",
+      `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+    );
+    writeAdded("libs/a/go.mod", "module example.com/a\n\ngo 1.24\n");
+    writeAdded("libs/a/a.go", "package a\n");
+    writeAdded("libs/b/go.mod", "module example.com/b\n\ngo 1.24\n");
+    writeAdded("libs/b/b.go", "package b\n");
+    // The new project.
+    writeAdded("libs/c/go.mod", "module example.com/c\n\ngo 1.24\n");
+    writeAdded("libs/c/c.go", "package c\n");
+
+    const addedGraph = {
+      nodes: {
+        a: { name: "a", type: "lib", data: { root: "libs/a", tags: [] } },
+        b: { name: "b", type: "lib", data: { root: "libs/b", tags: [] } },
+        c: { name: "c", type: "lib", data: { root: "libs/c", tags: [] } },
+      },
+      dependencies: { a: [], b: [], c: [] },
+    };
+    const addedFiles = [
+      "nx.json",
+      "module-boundaries.config.mjs",
+      "libs/a/go.mod",
+      "libs/a/a.go",
+      "libs/b/go.mod",
+      "libs/b/b.go",
+      "libs/c/go.mod",
+      "libs/c/c.go",
+    ];
+    const out = [];
+    const err = [];
+    const diffStreams = {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      cwd: addedRoot,
+      readGraph: () => addedGraph,
+      listFiles: () => addedFiles,
+    };
+    const diffResult = await runCli(["diff", baselineFile, "--format", "json"], diffStreams);
+    expect(diffResult).toBe(EXIT.ok);
+    const envelope = JSON.parse(out.join("\n"));
+    expect(envelope.result.addedProjects.map((p) => p.name)).toContain("c");
+    // Clean up.
+    try {
+      rmSync(baselineFile, { force: true });
+    } catch {
+      // Already gone.
+    }
+  });
+});
+
+describe("`diff` argument and baseline validation", () => {
+  it("exits 2 with no argument — diff requires exactly one baseline file", async () => {
+    const streams = env();
+    expect(await runCli(["diff"], streams)).toBe(EXIT.usage);
+    expect(streams.lines.err.join("\n")).toContain("exactly one positional argument");
+  });
+
+  it("exits 3 on a nonexistent baseline file, naming the path", async () => {
+    const streams = env();
+    expect(await runCli(["diff", "/nonexistent/path/baseline.json"], streams)).toBe(EXIT.error);
+    const errText = streams.lines.err.join("\n");
+    // The error comes from either the file-read failure or parseBaseline.
+    expect(errText).toContain("/nonexistent/path/baseline.json");
+  });
+
+  it("exits 3 on a check --format json envelope, saying it is a check report", async () => {
+    // A check report envelope has command "check", not "graph" — diff must
+    // refuse it rather than silently misreading its shape.
+    const checkEnvelopeFile = join(root, "check-envelope.json");
+    writeFileSync(
+      checkEnvelopeFile,
+      JSON.stringify({
+        schemaVersion: 1,
+        command: "check",
+        status: "ok",
+        exitCode: 0,
+        coverage: {
+          complete: true,
+          projects: 2,
+          analyzedFiles: 2,
+          imports: 1,
+          notAnalyzed: [],
+          blindSpots: [],
+          notes: [],
+        },
+        result: { violations: [], goWork: null, tsconfigPaths: null },
+      }),
+    );
+    const streams = env();
+    expect(await runCli(["diff", checkEnvelopeFile], streams)).toBe(EXIT.error);
+    const errText = streams.lines.err.join("\n");
+    expect(errText).toContain("check");
+    // Clean up.
+    try {
+      rmSync(checkEnvelopeFile, { force: true });
+    } catch {
+      // Already gone.
+    }
   });
 });

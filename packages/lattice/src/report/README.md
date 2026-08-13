@@ -1,10 +1,9 @@
-# `src/report/` — rendering violations
+# `src/report/` — rendering violations and descriptive payloads
 
-The formatters that turn violations into output, one per surface, sharing one
-input. Each is a pure function from violation records to text or to a protocol
-payload:
+The formatters that turn command output into text or protocol payloads, one per
+surface, sharing one input. Each is a pure function from records to output:
 
-- `text.mjs` — the terminal report for `../../cli.mjs`, in the
+- `text.mjs` — the terminal report for `../../cli.mjs`'s `check`, in the
   `file:line:column` shape an editor and a terminal both make clickable — which
   is why the analysis record carries 1-based positions
   (`../analysis/contract.md`);
@@ -18,6 +17,14 @@ payload:
   `version`, `tool.driver.name`, a `ruleId` that resolves in the catalogue, a
   non-empty `message.text`, and a repository-relative `uri` with a 1-based
   `startLine`/`startColumn`.
+- `graph-text.mjs` — the terminal report for `../../cli.mjs`'s `graph` command:
+  projects with their outgoing edges listed beneath each one, `(no
+dependencies)` for projects with no edges, and a coverage claim above the
+  listing. Renders the same payload `json.mjs` wraps; decides nothing.
+- `diff-text.mjs` — the terminal report for `../../cli.mjs`'s `diff` command:
+  baseline/head summaries, added/removed sections, and a change count. Empty
+  sections are omitted so "no changes" and "0 added, 0 removed" never look
+  identical. Renders the same payload `json.mjs` wraps; decides nothing.
 
 `json.mjs` is not a formatter in that sense — it does not turn violations into
 output. `jsonEnvelope` wraps whatever result object a command already computed
