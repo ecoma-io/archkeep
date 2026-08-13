@@ -48,7 +48,7 @@ const EXIT_CODE_FOR_STATUS = Object.freeze({ ok: 0, findings: 1, "no-verdict": 3
  * Builds the envelope, asserting the three invariants that keep it from ever
  * claiming more than a run actually established.
  *
- * @param {{command: string, context: {root: string, provider: "nx"|"native", marker: string},
+ * @param {{command: string, context: {root: string, provider: "nx"|"native"|"moon", marker: string},
  *   status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3,
  *   coverage: {complete: boolean, projects: number, analyzedFiles: number, imports: number,
  *     notAnalyzed: object[], blindSpots: object[], notes: string[], coverageGaps?: object[]},

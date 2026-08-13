@@ -93,15 +93,26 @@ plus tags to apply to every match:
 }
 ```
 
-**In each project's `project.json`**, if it has one:
+**In each project's manifest**, if it has one — `project.json` for Nx,
+`moon.yml` for Moon:
 
 ```jsonc
-// libs/billing-core/project.json
+// Nx: libs/billing-core/project.json
 {
   "name": "billing-core",
   "tags": ["layer:domain", "scope:billing"],
 }
+
+// Moon: libs/billing-core/moon.yml
+id: billing-core
+tags:
+  - layer-domain
+  - scope-billing
 ```
+
+Note that Moon tags use dash separators (`layer-domain`) because Moon's
+validation rejects colons. The boundary config must match the tag format
+your workspace tool emits.
 
 Tags from all sources are merged as a union -- never a precedence.
 

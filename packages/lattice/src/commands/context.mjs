@@ -33,6 +33,7 @@ import {
 } from "../options.mjs";
 import { readProjectGraph } from "../providers/nx.mjs";
 import { LATTICE_MODEL_FILE } from "../providers/native/model.mjs";
+import { MOON_DIR, moonProvider } from "../providers/moon.mjs";
 import { nativeProvider } from "../providers/native/index.mjs";
 import {
   analyzeWorkspace,
@@ -85,26 +86,27 @@ function readFileAbsolute(path) {
 }
 
 /**
- * The two facts that decide which project-model provider judges a workspace:
- * does `root` carry `nx.json`, `lattice.json`, or — a state every command
- * refuses — both.
+ * The three facts that decide which project-model provider judges a workspace:
+ * does `root` carry `nx.json`, `lattice.json`, `.moon/`, or — a state every
+ * command refuses — more than one.
  *
  * @param {string} root
- * @returns {{hasNx: boolean, hasNative: boolean}}
+ * @returns {{hasNx: boolean, hasNative: boolean, hasMoon: boolean}}
  */
 export function markersAt(root) {
   return {
     hasNx: existsSync(join(root, NX_CONFIG_FILE)),
     hasNative: existsSync(join(root, LATTICE_MODEL_FILE)),
+    hasMoon: existsSync(join(root, MOON_DIR)),
   };
 }
 
 /**
  * @typedef {object} CommandContext
  * @property {string} root Absolute workspace root.
- * @property {"nx"|"native"} provider Which project-model provider answered.
- * @property {string} marker `nx.json` or `lattice.json` — whichever `root`
- *   carries, and the one this run's provider came from.
+ * @property {"nx"|"native"|"moon"} provider Which project-model provider answered.
+ * @property {string} marker `nx.json`, `lattice.json`, or `.moon` — whichever
+ *   `root` carries, and the one this run's provider came from.
  * @property {object} graph `{nodes, dependencies}`, from `readProjectGraph`
  *   or `nativeProvider.buildGraph`.
  * @property {object} workspace The `Workspace` `../workspace.mjs`'s
@@ -112,8 +114,8 @@ export function markersAt(root) {
  * @property {string[]} tracked Every tracked file, from `listFiles(root)`.
  * @property {{imports: object[], failures: object[], analyzed: number,
  *   analyzedFiles: string[]}} analysis The whole-tree-then-scoped (native) or
- *   scoped-then-analyzed (nx) result — see the branches below for why the
- *   order is not the same on both.
+ *   scoped-then-analyzed (nx/moon) result — see the branches below for why the
+ *   order is not the same on all three.
  * @property {{boundaryConfig: string|object, tsConfig: object|undefined,
  *   inline?: boolean}} options What this workspace names its boundary law and
  *   its shared tsconfig — `check`'s `--config` flag, if given, still wins over
@@ -122,8 +124,8 @@ export function markersAt(root) {
  * @property {{registered: boolean, manifests: string[]}} pluginGap Whether
  *   this workspace's own provider is the one Nx would actually run, and which
  *   tracked polyglot manifests sit under a project root either way. Always
- *   `{registered: true, manifests: []}` on a native workspace: there is no Nx
- *   plugin registration to be missing, because there is no `nx.json`.
+ *   `{registered: true, manifests: []}` on a native or Moon workspace: there
+ *   is no Nx plugin registration to be missing, because there is no `nx.json`.
  *   Computed and returned, but not consulted by `check`'s refusal logic —
  *   `../../../../docs/usage/` names the gap this fills and the issue tracking it
  *   wiring it in.
@@ -154,24 +156,40 @@ export function markersAt(root) {
  */
 export function resolveCommandContext(
   { cwd, paths = [] },
-  { readGraph = readProjectGraph, listFiles = listTrackedFiles, readFile = readFileAbsolute } = {},
+  { readGraph, listFiles = listTrackedFiles, readFile = readFileAbsolute } = {},
 ) {
-  // Both markers in one walk (`../workspace.mjs`'s `findWorkspaceRoot`), so a
+  // All three markers in one walk (`../workspace.mjs`'s `findWorkspaceRoot`), so a
   // native root nested under an unrelated Nx tree — or vice versa — is found
   // from the working directory the same way either alone would be. Which
   // marker(s) the returned directory actually carries is then read back
   // below, because a walk that STOPPED at the first marker it saw could never
   // tell "only lattice.json here" from "both, one level up".
-  const root = findWorkspaceRoot(cwd, [NX_CONFIG_FILE, LATTICE_MODEL_FILE]);
+  const root = findWorkspaceRoot(cwd, [NX_CONFIG_FILE, LATTICE_MODEL_FILE, MOON_DIR]);
   if (root === null) {
     throw new Error(
-      `lattice: no workspace root above ${cwd} — looked for an nx.json or a lattice.json in ` +
-        `every parent. The tree to judge is found from the working directory, never from this ` +
-        `tool's own location: installed from the registry, this tool lives under the consumer's ` +
-        `node_modules and the two are always different trees.`,
+      `lattice: no workspace root above ${cwd} — looked for an nx.json, a lattice.json, or a ` +
+        `.moon directory in every parent. The tree to judge is found from the working directory, ` +
+        `never from this tool's own location: installed from the registry, this tool lives under ` +
+        `the consumer's node_modules and the two are always different trees.`,
     );
   }
-  const { hasNx, hasNative } = markersAt(root);
+  const { hasNx, hasNative, hasMoon } = markersAt(root);
+  if (hasMoon && hasNx) {
+    throw new Error(
+      `lattice: ${root} declares both .moon and nx.json — this tool judges a workspace ` +
+        `against exactly one project model, and a tree carrying both is a decision nobody made ` +
+        `rather than one this tool can make for them. Remove whichever one is not the ` +
+        `workspace's real source of truth for projects and tags.`,
+    );
+  }
+  if (hasMoon && hasNative) {
+    throw new Error(
+      `lattice: ${root} declares both .moon and lattice.json — this tool judges a workspace ` +
+        `against exactly one project model, and a tree carrying both is a decision nobody made ` +
+        `rather than one this tool can make for them. Remove whichever one is not the ` +
+        `workspace's real source of truth for projects and tags.`,
+    );
+  }
   if (hasNx && hasNative) {
     throw new Error(
       `lattice: ${root} declares both nx.json and lattice.json — this tool judges a workspace ` +
@@ -180,6 +198,13 @@ export function resolveCommandContext(
         `workspace's real source of truth for projects and tags.`,
     );
   }
+
+  // Resolve the default graph reader based on provider: Moon workspaces read
+  // their graph from `moon project-graph --json`, Nx workspaces from
+  // `nx graph --file=`. The native provider uses a two-call discover/buildGraph
+  // contract instead, so it never goes through `readGraph` at all.
+  const defaultReadGraph = hasMoon ? moonProvider.readProjectGraph : readProjectGraph;
+  const effectiveReadGraph = readGraph ?? defaultReadGraph;
 
   const tracked = listFiles(root);
   let graph;
@@ -270,6 +295,37 @@ export function resolveCommandContext(
     // There is no Nx plugin registration to be missing on a workspace that
     // has no `nx.json` at all.
     pluginGap = { registered: true, manifests: [] };
+  } else if (hasMoon) {
+    // Moon provider — reads graph from `moon project-graph --json`, the same
+    // one-call contract as the Nx path: Moon already resolved projects, tags
+    // and edges before this package ever asked. Options from defaults (no
+    // `nx.json` to carry a plugins table, no `lattice.json` for inline
+    // options); a Moon workspace names the same two files by convention.
+    options = {
+      boundaryConfig: DEFAULT_OPTIONS.boundaryConfig,
+      tsConfig: DEFAULT_OPTIONS.tsConfig,
+    };
+
+    graph = effectiveReadGraph(root);
+    ({ workspace, owned } = createWorkspace({
+      root,
+      graph,
+      files: tracked,
+      tsConfig: options.tsConfig,
+    }));
+    annotateMFERemotes(graph.nodes, workspace.readFile);
+    annotatePackageFacts(graph.nodes, workspace.readFile);
+
+    const selected = selectFiles(
+      owned.map(({ file }) => file),
+      paths,
+      { root, cwd },
+    );
+    ({ imports, failures, analyzed, analyzedFiles } = analyzeWorkspace(workspace, selected));
+
+    // There is no Nx plugin registration to be missing on a workspace that
+    // has no `nx.json` at all.
+    pluginGap = { registered: true, manifests: [] };
   } else {
     // What this workspace calls the two files whose names are conventions
     // rather than contracts. Read before the graph, because it decides which
@@ -277,7 +333,7 @@ export function resolveCommandContext(
     const pluginOptions = readPluginOptions(root);
     options = { boundaryConfig: pluginOptions.boundaryConfig, tsConfig: pluginOptions.tsConfig };
 
-    graph = readGraph(root);
+    graph = effectiveReadGraph(root);
     ({ workspace, owned } = createWorkspace({
       root,
       graph,
@@ -308,8 +364,8 @@ export function resolveCommandContext(
 
   return {
     root,
-    provider: hasNative ? "native" : "nx",
-    marker: hasNative ? LATTICE_MODEL_FILE : NX_CONFIG_FILE,
+    provider: hasMoon ? "moon" : hasNative ? "native" : "nx",
+    marker: hasMoon ? MOON_DIR : hasNative ? LATTICE_MODEL_FILE : NX_CONFIG_FILE,
     graph,
     workspace,
     tracked,

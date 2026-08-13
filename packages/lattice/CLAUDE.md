@@ -2,7 +2,7 @@
 
 Directory-scoped mechanics only — principles live in `AGENTS.md` at the
 repository root.
-Nx project name `lattice` (tags `type:package`, `scope:nx`), published
+Nx project name `lattice` (tags `type-package`, `scope-nx`), published
 as `@ecoma-io/lattice`. Plain-ESM `.mjs` with no build; `typecheck`
 is `tsc --noEmit` over the JSDoc (`AGENTS.md`, "No TypeScript here, and why").
 The package publishes two entries: the root export (`index.mjs`) is the engine
@@ -109,7 +109,12 @@ graph --file=` for it — the only place the package resolves and spawns the
   `src/providers/native/` implements the same `ProjectModelProvider` seam
   from `lattice.json` plus the tracked tree, with no Nx installed, so
   `cli.mjs` and `src/lsp/` never need to know which provider they are
-  holding. `src/lsp/workspace-index.mjs` is a **consumer** of the native
+  holding. `src/providers/moon.mjs` implements the same seam for a Moonrepo
+  workspace, reading the project graph from `moon project-graph --json` and
+  normalising Moon's integer-indexed format into the same project-model shape.
+  It resolves the `moon` binary from the workspace's `node_modules/.bin`,
+  adding that directory to PATH so the CLI and language server find it without
+  `pnpm exec`. `src/lsp/workspace-index.mjs` is a **consumer** of the native
   provider rather than a second implementation of it: on a tree whose
   tracked files include `lattice.json` it indexes through
   `nativeProvider.discover`/`buildGraph` (a model that will not load becomes
@@ -138,9 +143,11 @@ and a new config file would have needed its own filename option to find itself.
 A workspace with no `nx.json` — `lattice.json` at its root instead — states the
 same two keys directly on that file's own `boundaryConfig`/`tsConfig` fields
 (`src/providers/native/model.mjs`), because there is no `plugins[].options`
-table to nest them under; `cli.mjs`'s `optionsForUsage` and `check` are the two
-places that read either shape, chosen by which marker file the workspace root
-carries.
+table to nest them under; a Moon workspace (`.moon/` directory present, no
+`nx.json`) reads those same keys from `lattice.json` too, because Moon's own
+configuration does not carry a plugin-options table. `cli.mjs`'s
+`optionsForUsage` and `check` are the two places that read either shape, chosen
+by which marker file the workspace root carries.
 
 ```json
 "plugins": [
@@ -258,7 +265,7 @@ which stays unresolved on purpose because resolving it would mean applying
   why `loadBoundaryConfig` takes a workspace root rather than walking up from its
   own location, and why every filename it reads is an argument rather than a
   constant. This repository's own boundary config exercises that in CI: its
-  vocabulary is `type:package`/`scope:nx` and nothing in `src/` mentions either.
+  vocabulary is `type-package`/`scope-nx` and nothing in `src/` mentions either.
 - **One module/crate/package per project root** is the modeling assumption for
   `src/graph/`: identity is `<projectRoot>/go.mod` · `Cargo.toml [package]` ·
   `pyproject.toml [project]`. A nested second manifest inside one project

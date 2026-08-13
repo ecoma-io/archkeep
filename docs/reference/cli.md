@@ -89,12 +89,12 @@ non-literal argument) gets an `UNRESOLVABLE` verdict with the reason.
 
 ## Exit codes
 
-| code | meaning                                                                       | when                                                                                                                            |
-| ---- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | clean -- and every selected file was analyzed                                 | No findings and no coverage gaps.                                                                                               |
-| 1    | findings -- boundary violations, go.work drift, or dead tsconfig path aliases | `check` only. No other command exits 1.                                                                                         |
-| 2    | usage error                                                                   | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                 |
-| 3    | no verdict -- the run could not start, or a selected file could not be read   | No workspace, malformed config, `nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load. |
+| code | meaning                                                                       | when                                                                                                                                                 |
+| ---- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | clean -- and every selected file was analyzed                                 | No findings and no coverage gaps.                                                                                                                    |
+| 1    | findings -- boundary violations, go.work drift, or dead tsconfig path aliases | `check` only. No other command exits 1.                                                                                                              |
+| 2    | usage error                                                                   | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                      |
+| 3    | no verdict -- the run could not start, or a selected file could not be read   | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load. |
 
 **Do not collapse 3 into 0.** A checker that could not look must never be
 mistaken for one that looked and found nothing. Both 1 and 3 must fail a CI

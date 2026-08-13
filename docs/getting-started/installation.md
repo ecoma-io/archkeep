@@ -16,8 +16,10 @@ lint-only CI runner.
 
 Nx is a peer dependency, but an optional one -- the engine and the CLI run
 without it. A workspace with no `nx` installed uses the native provider
-([first-project.md](first-project.md)); a workspace that has Nx uses the integration
-integration ([../../docs/integrations/nx.md](../integrations/nx.md)).
+([first-project.md](first-project.md)); a workspace that has Nx uses the
+integration ([../integrations/nx.md](../integrations/nx.md)). A Moonrepo
+workspace uses the Moon integration
+([../integrations/moon.md](../integrations/moon.md)) instead.
 
 ## Install
 
@@ -28,8 +30,9 @@ pnpm add -D @ecoma-io/lattice
 That is the only install step. What you do next depends on how your workspace is
 structured:
 
-- No Nx -- the native provider walks the tree itself: [first-project.md](first-project.md)
+- No workspace tool -- the native provider walks the tree itself: [first-project.md](first-project.md)
 - Nx workspace -- register the integration in `nx.json`: [../integrations/nx.md](../integrations/nx.md)
+- Moonrepo workspace -- configure `lattice.json` at the root: [../integrations/moon.md](../integrations/moon.md)
 
 ## What the package provides
 
@@ -47,5 +50,5 @@ the package onto your machine; the next two pages cover using it.
 
 ## Next
 
-- Set up a workspace with no Nx: [first-project.md](first-project.md)
+- Set up a workspace with no workspace tool: [first-project.md](first-project.md)
 - Write and run your first constraint table: [first-policy.md](first-policy.md)

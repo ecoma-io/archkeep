@@ -48,19 +48,20 @@ version.
 | page                                | what it answers                                                              |
 | ----------------------------------- | ---------------------------------------------------------------------------- |
 | [nx.md](integrations/nx.md)         | Nx integration registration, options, graph edges, affected, workspaceLayout |
+| [moon.md](integrations/moon.md)     | Moon integration: workspace detection, graph reading, tag format             |
 | [vscode.md](integrations/vscode.md) | VS Code extension: settings, routing, installation                           |
 
 ## Reference
 
-| page                                           | what it answers                                                              |
-| ---------------------------------------------- | ---------------------------------------------------------------------------- |
-| [configuration.md](reference/configuration.md) | `lattice.json` fields, `nx.json` options, inline boundary config             |
-| [policy-schema.md](reference/policy-schema.md) | Constraint table schema: every key, every value                              |
-| [cli.md](reference/cli.md)                     | All commands, all flags, all exit codes                                      |
-| [exit-codes.md](reference/exit-codes.md)       | The four exit codes with exact meaning                                       |
-| [json-output.md](reference/json-output.md)     | `--format json`'s versioned envelope: every field, and the stability promise |
-| [languages.md](reference/languages.md)         | What each analyzer reads, the shapes it cannot, and the two workspace checks |
-| [violations.md](reference/violations.md)       | Each of the fifteen violations: what it means, and what fixes it             |
+| page                                           | what it answers                                                                |
+| ---------------------------------------------- | ------------------------------------------------------------------------------ |
+| [configuration.md](reference/configuration.md) | `lattice.json` fields, `nx.json` options, Moon options, inline boundary config |
+| [policy-schema.md](reference/policy-schema.md) | Constraint table schema: every key, every value                                |
+| [cli.md](reference/cli.md)                     | All commands, all flags, all exit codes                                        |
+| [exit-codes.md](reference/exit-codes.md)       | The four exit codes with exact meaning                                         |
+| [json-output.md](reference/json-output.md)     | `--format json`'s versioned envelope: every field, and the stability promise   |
+| [languages.md](reference/languages.md)         | What each analyzer reads, the shapes it cannot, and the two workspace checks   |
+| [violations.md](reference/violations.md)       | Each of the fifteen violations: what it means, and what fixes it               |
 
 ## Doctrine
 

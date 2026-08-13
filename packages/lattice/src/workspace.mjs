@@ -63,7 +63,9 @@ export { environmentForTree, runProcess };
  * directory actually carries.
  *
  * @param {string} from Absolute directory to start at.
- * @param {string[]} [markers] Filenames whose presence marks a workspace root.
+ * @param {string[]} [markers] Filenames or directory names whose presence
+ *   marks a workspace root. `existsSync` works for both — a directory name
+ *   like `.moon` is detected the same way a filename like `nx.json` is.
  * @returns {string|null} Absolute path, or `null` when no ancestor has one.
  */
 export function findWorkspaceRoot(from, markers = [NX_CONFIG_FILE]) {

@@ -2,7 +2,7 @@
 
 Every surface Lattice reads, and where each option lives.
 
-Two providers, two config shapes, one engine. The engine reads the same
+Three providers, three config shapes, one engine. The engine reads the same
 boundary law and produces the same verdicts either way; configuration decides
 which provider runs and what filenames it reads.
 
@@ -10,13 +10,14 @@ which provider runs and what filenames it reads.
 
 A marker file at the workspace root decides:
 
-| marker         | provider | project model from              |
-| -------------- | -------- | ------------------------------- |
-| `nx.json`      | Nx       | Nx's project graph (`nx graph`) |
-| `lattice.json` | native   | `lattice.json` + tracked tree   |
+| marker         | provider | project model from                          |
+| -------------- | -------- | ------------------------------------------- |
+| `nx.json`      | Nx       | Nx's project graph (`nx graph`)             |
+| `.moon/`       | Moon     | Moon's project graph (`moon project-graph`) |
+| `lattice.json` | native   | `lattice.json` + tracked tree               |
 
-Both present is a usage error — the engine refuses to guess. Neither present
-exits 3, naming what it looked for.
+More than one marker present is a usage error — the engine refuses to guess.
+Neither present exits 3, naming what it looked for.
 
 The rest of this page covers the options each provider accepts. The boundary
 law itself — `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`
@@ -52,6 +53,33 @@ back — a `tsconfigBase` typed for `tsConfig` that quietly used the default
 would give you a full green run against a rule nobody wrote.
 
 `--config` on the command line overrides `boundaryConfig` for one run.
+
+## Moon provider options
+
+A Moon workspace carries a `.moon/` directory at the root. Because Moon's
+configuration does not provide a plugin-options table the way `nx.json`'s
+`plugins[].options` does, the options sit on `lattice.json` at the root — the
+same file the native provider reads. See [moon.md](../integrations/moon.md) for
+the integration guide.
+
+```jsonc
+// lattice.json
+{
+  "boundaryConfig": "module-boundaries.config.mjs",
+  "tsConfig": "tsconfig.base.json",
+}
+```
+
+| option           | default                        | meaning                                                                                 |
+| ---------------- | ------------------------------ | --------------------------------------------------------------------------------------- |
+| `boundaryConfig` | `module-boundaries.config.mjs` | Path (workspace-relative) to the boundary law. Read by the CLI and the language server. |
+| `tsConfig`       | `tsconfig.base.json`           | Path to the shared TypeScript config for import resolution.                             |
+
+Both default to the Moon convention. An unknown key **throws** — the same
+guarantee the Nx provider makes.
+
+`boundaryConfig` can also be an **inline object** — see the native provider
+section below for the caveat about the inline form.
 
 ## Native provider options
 

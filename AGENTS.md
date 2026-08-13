@@ -76,12 +76,12 @@ function under `src/`, and its README says what it refuses and why.
 
 - **A package that runs no target is indistinguishable from no package at all.**
   Three different states of `packages/` produce an identical `exit 0` from
-  `nx run-many` — measured against nx 23.1.1 by running it, not by reading
-  docs: nothing there (`No tasks were run`); a project there declaring none of
-  the targets (**skipped in silence**, no warning line at all); a directory with
-  sources but no `package.json` or `project.json` (**invisible** to
-  `nx show projects`). `scripts/check-packages.mjs` splits those three apart, and
-  its verdict names the targets each package actually runs:
+  `moon run` — measured by running it: nothing there (`no projects found`);
+  a project there declaring none of the targets (**skipped in silence**, no
+  warning line at all); a directory with sources but no `moon.yml`
+  (**invisible** to `moon projects`). `scripts/check-packages.mjs` splits
+  those three apart, and its verdict names the targets each package actually
+  runs:
 
   ```text
   ok   lattice — lint, test, typecheck (no build)
@@ -93,9 +93,9 @@ function under `src/`, and its README says what it refuses and why.
   weaken it, and do not "fix" a failure from it by adding a target.
 
 - **`check-packages.mjs` derives its target list from `ci.yml`.** It parses the
-  `nx run-many -t …` line rather than holding a copy, because CI is where "green"
-  is defined and a second copy agrees with the first only until someone edits
-  one of them. That is the drift the script exists to catch, so it must not
+  `moon run ...:<target>` line rather than holding a copy, because CI is where
+  "green" is defined and a second copy agrees with the first only until someone
+  edits one of them. That is the drift the script exists to catch, so it must not
   contain an instance of it. If you add a target to CI, the script picks it up;
   if you are tempted to add a constant listing targets, you have re-introduced
   the bug.
@@ -103,11 +103,11 @@ function under `src/`, and its README says what it refuses and why.
   text, `evaluate` gets records. That is why the tests need no filesystem and no
   mocking library — not a preference, a consequence. A function that reads a
   file _and_ decides something must be split before it can be tested, and the
-  split is the improvement. Only `readNxProjects` touches the outside world, and
+  split is the improvement. Only `readMoonProjects` touches the outside world, and
   it is deliberately untested: a test that stubbed the answer would pin the stub.
 - **Child process calls pass an argument array, never a built string.** Every
   value in play here comes from the package tree — directory names, manifest
-  fields, project names from `nx show projects` — and all of those are
+  fields, project names from `moon projects` — and all of those are
   attacker-supplied the moment a pull request adds a directory. A directory named
   `a;rm -rf .` stops being a name and becomes two commands. Semgrep enforces
   this (`.github/semgrep/scripts.yaml`); `cubic.yaml` carries a custom rule for
@@ -157,7 +157,7 @@ Six things, and they own different halves of "correct". None substitutes for
 another.
 
 - **CI (`ci.yml`)** — Prettier, ESLint, `node --test`, `check-packages`, then
-  `nx run-many`, the tool itself run on this tree, and last the packed artifact
+  `moon run`, the tool itself run on this tree, and last the packed artifact
   driven from outside the workspace. `ci-gate` is the only
   check name the branch ruleset requires, so a job added later tightens the gate
   without touching repository settings. It fails on any needed job that is
@@ -166,7 +166,7 @@ another.
   `packages/lattice/cli.mjs check` against `module-boundaries.config.mjs`
   at this root. Every step before it proves the code correct against fixtures it
   built itself; this is the only one where the enforcer meets real source under a
-  tag vocabulary (`type:package`, `scope:nx`) that nothing in `src/` knows about.
+  tag vocabulary (`type-package`, `scope-nx`) that nothing in `src/` knows about.
   A repository shipping an enforcer it did not run on itself would be answering a
   consumer's first question with a promise.
 - **The packed artifact, installed somewhere else** —
@@ -176,7 +176,7 @@ another.
   **1** on a violating one, and the language server answers `initialize` through
   the symlinked path an installed plugin is launched by. It then repeats the
   clean/violating/language-server three of those four against a SECOND
-  throwaway workspace — `lattice.json` at its root instead of `nx.json`, and no
+  throwaway workspace — `lattice.json` at its root instead of `.moon/`, and no
   `nx` package requested at all — because those three questions are exactly the
   ones the package's fixture-only tests (`packages/lattice/src/providers/native/`)
   cannot answer: a real `pnpm pack` tarball, installed into a tree this
@@ -253,11 +253,11 @@ pnpm lint               # ESLint, zero warnings
 pnpm test               # node --test over scripts/*.test.mjs — the gate scripts only
 pnpm typecheck          # tsc --noEmit over scripts/ — each package has its own target
 pnpm check-packages     # every packages/* directory, and which CI targets it runs
-pnpm exec nx run-many -t lint test build typecheck   # each package's own suite
+moon run ...:lint ...:test ...:typecheck   # each package's own suite
 node packages/lattice/cli.mjs check        # this tree's own boundaries
 ```
 
-`pnpm test` and `nx run-many` are not the same suite and neither covers the other:
+`pnpm test` and `moon run` are not the same suite and neither covers the other:
 the first is `node --test` over `scripts/`, the second is each package's own
 `test` target — which for `lattice` is Vitest, including the
 differential against a real `@nx/enforce-module-boundaries`.

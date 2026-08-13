@@ -104,11 +104,12 @@ that looked and found nothing.
 
 ## The three faces
 
-| face           | when it runs                       | what it reads the graph from                   |
-| -------------- | ---------------------------------- | ---------------------------------------------- |
-| CLI            | on demand                          | a provider (Nx or native)                      |
-| LSP            | on an edit, in any LSP client      | the native provider's discovery                |
-| Nx integration | on every project-graph computation | the Nx integration's `createDependencies` hook |
+| face             | when it runs                       | what it reads the graph from                   |
+| ---------------- | ---------------------------------- | ---------------------------------------------- |
+| CLI              | on demand                          | a provider (Nx, Moon, or native)               |
+| LSP              | on an edit, in any LSP client      | the native provider's discovery                |
+| Nx integration   | on every project-graph computation | the Nx integration's `createDependencies` hook |
+| Moon integration | on demand (CLI, language server)   | `moon project-graph --json`                    |
 
 The Nx integration is a lossy view of the analysis — an edge is `{ source, target,
 sourceFile, type }`, and everything else is discarded. That is why the graph

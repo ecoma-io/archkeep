@@ -88,7 +88,7 @@ import { NX_CONFIG_FILE, readPluginOptions } from "./src/options.mjs";
 import { jsonEnvelope, renderJson } from "./src/report/json.mjs";
 import { formatSarif } from "./src/report/sarif.mjs";
 import { formatReport } from "./src/report/text.mjs";
-import { readProjectGraph } from "./src/providers/nx.mjs";
+
 import { LATTICE_MODEL_FILE, loadNativeModel } from "./src/providers/native/model.mjs";
 import { evaluate } from "./src/rules/index.mjs";
 import { judgeTsconfigPaths } from "./src/tsconfig-paths.mjs";
@@ -429,10 +429,7 @@ function verdictFor({ violations, goWorkDrift, tsconfigPathsDead, unchecked }) {
  * @returns {Promise<{report: string, violations: number, goWorkDrift: number,
  *   tsconfigPathsDead: number, analyzed: number, unchecked: number}>}
  */
-export async function check(
-  options,
-  { cwd, readGraph = readProjectGraph, listFiles = listTrackedFiles },
-) {
+export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
   const commandContext = resolveCommandContext(
     { cwd, paths: options.paths },
     { readGraph, listFiles },

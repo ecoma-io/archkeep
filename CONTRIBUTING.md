@@ -76,20 +76,20 @@ runs in CI and in the Git hooks.
 
 ## The commands
 
-| Command               | What it does                                                                  |
-| --------------------- | ----------------------------------------------------------------------------- |
-| `pnpm format`         | Prettier, in place                                                            |
-| `pnpm format:check`   | Prettier, read-only — what CI runs                                            |
-| `pnpm lint`           | ESLint, zero warnings tolerated                                               |
-| `pnpm test`           | `node --test` over `scripts/*.test.mjs` — the gate scripts, nothing else      |
-| `pnpm typecheck`      | `tsc --noEmit` over the gate scripts' JSDoc — each package has its own target |
-| `pnpm check-packages` | Asserts every `packages/*` directory is a project Nx can see, with CI targets |
+| Command               | What it does                                                                    |
+| --------------------- | ------------------------------------------------------------------------------- |
+| `pnpm format`         | Prettier, in place                                                              |
+| `pnpm format:check`   | Prettier, read-only — what CI runs                                              |
+| `pnpm lint`           | ESLint, zero warnings tolerated                                                 |
+| `pnpm test`           | `node --test` over `scripts/*.test.mjs` — the gate scripts, nothing else        |
+| `pnpm typecheck`      | `tsc --noEmit` over the gate scripts' JSDoc — each package has its own target   |
+| `pnpm check-packages` | Asserts every `packages/*` directory is a project Moon can see, with CI targets |
 
 Plus every project's own targets — a different suite, not a superset of the one
 above:
 
 ```bash
-pnpm exec nx run-many -t lint test build typecheck
+moon run ...:lint ...:test ...:typecheck
 ```
 
 And the tool on the tree that ships it, which is the last thing CI does:
@@ -113,7 +113,8 @@ the first `import`. That was this package's real state once — manifest declari
 no dependencies, suite fully green, working only because pnpm hoisted the root's
 copies and Node walked up to find them. The script packs the tarball, installs it
 into a throwaway workspace with a tag vocabulary nothing in `src/` knows about,
-and checks that Nx draws a Go edge, that the checker exits 0 on a clean tree
+and checks that the Nx plugin draws a Go edge (Nx is a peer dependency;
+the artifact must still work inside Nx workspaces), that the checker exits 0 on a clean tree
 **and 1 on a violating one**, and that the language server answers when launched
 through a symlinked path. A gate only proves it runs when it can go red.
 
@@ -125,16 +126,15 @@ pull request.
 This is worth reading once, because it is the least obvious thing in the
 repository and it is the reason a green build here means something.
 
-Measured against nx 23.1.1 — by running it, not by reading the docs — three
+Measured against Moon — by running it, not by reading the docs — three
 different states of `packages/` produce an identical exit code 0:
 
-1. **Nothing is there.** `nx run-many -t lint test build typecheck` prints
-   `No tasks were run` and exits 0.
+1. **Nothing is there.** `moon run` prints nothing to run and exits 0.
 2. **A project is there but declares none of those targets.** It is skipped in
    silence. No warning, no line in the summary, exit 0.
-3. **A directory is there with sources but no `package.json` or
-   `project.json`.** It is invisible to `nx show projects` entirely — nothing is
-   even skipped, because as far as Nx is concerned nothing exists.
+3. **A directory is there with sources but no `moon.yml`.** It is invisible
+   to `moon projects` entirely — nothing is even skipped, because as far as
+   Moon is concerned nothing exists.
 
 State 2 and 3 are the ones that cost you: the build stays green and nobody is
 told a package is not being checked.
@@ -152,23 +152,23 @@ ok   lattice — lint, test, typecheck (no build)
 to make that line read fuller is the placeholder-green the script exists to catch,
 so do not.
 
-It reads the list of targets out of the `nx run-many -t …` line in
+It reads the list of targets out of the `moon run ...:…` line in
 `.github/workflows/ci.yml` rather than holding a copy: CI is where "green" is
 defined, and a second copy would agree with it only until someone edited one of
 them. That is exactly the drift the script exists to catch, so it must not
 contain an instance of it.
 
 If you add a package, you will meet this check. It is not in your way — it is
-telling you Nx cannot see what you just added.
+telling you Moon cannot see what you just added.
 
 ## What the hooks do
 
 - **pre-commit** — Prettier formats the staged files and re-stages what it
   rewrote, then ESLint runs over them, then `check-packages`.
 - **commit-msg** — commitlint checks the message shape.
-- **pre-push** — `pnpm test`, and `nx show projects` to prove the graph still
-  computes. A plugin that throws while the graph is being built breaks every
-  `nx` command at once, including the ones that would report the error.
+- **pre-push** — `pnpm test`, and `moon projects` to prove the graph still
+  computes. A provider that throws while the graph is being built breaks every
+  `moon` command at once, including the ones that would report the error.
 
 If you are working with an AI coding agent, `.claude/` configures format and lint
 to run the moment a file is written, so problems surface while the edit is still

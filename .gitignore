@@ -7,6 +7,9 @@ coverage/
 # mode a cache must not have.
 .nx/
 
+# Moon's local cache — same reasoning as `.nx/` above.
+.moon/cache/
+
 # Editors / OS
 .DS_Store
 *.local
@@ -21,3 +24,4 @@ pnpm-debug.log*
 
 # Claude Code local overrides — the shared settings.json IS tracked.
 .claude/settings.local.json
+.claude/plans/

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { jsonEnvelope, renderJson, SCHEMA_VERSION } from "./json.mjs";
 
-/** @type {{root: string, provider: "nx"|"native", marker: string}} */
+/** @type {{root: string, provider: "nx"|"native"|"moon", marker: string}} */
 const context = { root: "/w", provider: "nx", marker: "nx.json" };
 
 const cleanCoverage = () => ({

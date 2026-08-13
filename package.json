@@ -59,6 +59,7 @@
     "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^10.0.1",
     "@fast-check/vitest": "^0.4.1",
+    "@moonrepo/cli": "^2.4.6",
     "@nx/eslint-plugin": "23.1.1",
     "@types/node": "^26.1.2",
     "@vitest/coverage-v8": "^4.1.10",

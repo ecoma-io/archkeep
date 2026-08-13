@@ -8,6 +8,8 @@ reference:
 
 - [Nx integration](../integrations/nx.md) — the project-graph plugin and its
   `createDependencies` hook
+- [Moon integration](../integrations/moon.md) — the Moonrepo workspace provider
+  that reads from `moon project-graph`
 - [VS Code integration](../integrations/vscode.md) — the editor extension that
   hosts the language server
 
@@ -21,6 +23,8 @@ provider is active depends on the marker file at the workspace root:
   graph that the project-graph computation already produces.
 - A `lattice.json` root activates the native provider, which discovers projects
   from the tracked tree and their manifests, with no external tool installed.
+- A `.moon/` directory activates the Moon provider, which reads the project
+  graph from `moon project-graph --json`.
 
 The provider is chosen once, at the start of a run, and neither the CLI nor the
 language server needs to know which one it is holding. That seam is what makes
@@ -31,12 +35,13 @@ the engine work in both contexts — with or without the Nx integration.
 | integration | supplies                                               | runs when                        |
 | ----------- | ------------------------------------------------------ | -------------------------------- |
 | Nx          | project graph edges from the `createDependencies` hook | every graph computation          |
+| Moon        | project graph from `moon project-graph --json`         | on demand (CLI, language server) |
 | VS Code     | the language server hosted in an editor                | on an edit, in the editor window |
 
-The Nx integration is the only integration that contributes to the project graph. It
-does not judge — it reduces analysis to the edge shape the graph carries, and
-the graph discards everything else. The enforcement verdict comes from the same
-`evaluate` function the CLI uses, operating on the same constraint table.
+The Nx integration is the only integration that contributes to the project graph
+at computation time. The Moon integration reads the graph after Moon has computed
+it. Neither judges — the enforcement verdict comes from the same `evaluate`
+function the CLI uses, operating on the same constraint table.
 
 The VS Code extension is a client of the language server, not of the engine
 directly. It finds the workspace root, locates the server the workspace

@@ -11,7 +11,7 @@ Those two bind; this page explains how they fit together.
 ## The two halves
 
 The project closes one gap with two independent mechanisms, and they are wired to
-different parts of Nx:
+different parts of the workspace tool:
 
 ```
                    ┌─ src/graph/     → Nx's createDependencies hook → nx affected
@@ -21,9 +21,12 @@ reading a workspace┤
                      src/workspace.mjs  src/config.mjs
 ```
 
-The **edges** half runs inside every `nx` invocation, contributed through the
-plugin entry point. The **enforcement** half runs when someone asks — from the
-CLI, or from the language server on an edit.
+The **edges** half runs inside every `nx` invocation (on an Nx workspace),
+contributed through the plugin entry point. The **enforcement** half runs when
+someone asks — from the CLI, or from the language server on an edit. A Moon
+workspace reads the project graph from `moon project-graph --json` instead of
+contributing edges into the graph computation; the enforcement half is the same
+either way.
 
 They read different things on purpose. Edges come from manifests, because that is
 what a dependency _declaration_ is. Verdicts come from sources, because a
@@ -37,14 +40,14 @@ reading top to bottom — every step is a decision.
 
 ### 1. Find the workspace root
 
-`findWorkspaceRoot(cwd, [NX_CONFIG_FILE, LATTICE_MODEL_FILE])` walks up for
-either marker — an `nx.json` or a `lattice.json` — **from the working
+`findWorkspaceRoot(cwd, [NX_CONFIG_FILE, MOON_DIR, LATTICE_MODEL_FILE])` walks up
+for a marker — `nx.json`, `.moon/`, or `lattice.json` — **from the working
 directory and never from this tool's own location**. Installed from a
 registry, the tool sits inside `node_modules` while the tree it judges is
 above it — and under a pinned harness clone the two are different trees
 entirely. Which marker is present decides which provider the rest of this run
-uses; a root carrying both is a usage error rather than a guess at which one
-was meant.
+uses; a root carrying more than one is a usage error rather than a guess at
+which one was meant.
 
 ### 2. Read the plugin options
 
@@ -78,20 +81,25 @@ config's location and the tree being judged are separate facts.
 ### 4. Read the graph, and the file list
 
 The graph comes from whichever `ProjectModelProvider` the marker found in step 1
-selected — `src/providers/nx.mjs` on an `nx.json` root, `src/providers/native/`
-on a `lattice.json` one — and `packages/lattice/CLAUDE.md`'s "`src/providers/`
-is the only layer allowed to build a graph" is the rule that keeps `cli.mjs`
-and `src/lsp/` from needing to know which one they are holding.
+selected — `src/providers/nx.mjs` on an `nx.json` root, `src/providers/moon.mjs`
+on a `.moon/` root, `src/providers/native/` on a `lattice.json` one — and
+`packages/lattice/CLAUDE.md`'s "`src/providers/` is the only layer allowed to
+build a graph" is the rule that keeps `cli.mjs` and `src/lsp/` from needing to
+know which one they are holding.
 
 - **The Nx path** spawns `nx graph --file=` (`readProjectGraph`) — never a
   second walk of `project.json` files, which would disagree with Nx wherever a
   plugin contributes an edge — and this is the only spawn in this pipeline
   that reaches a real toolchain.
+- **The Moon path** spawns `moon project-graph --json` (`readProjectGraph`),
+  normalising Moon's integer-indexed graph into the same `{nodes, dependencies}`
+  shape. The provider resolves the `moon` binary from the workspace's own
+  `node_modules/.bin`.
 - **The native path** has no graph to ask for: `discover()` reads
   `lattice.json`'s declared∪inferred project list against the tracked tree,
   and `buildGraph()` reduces that plus the analysis records from step 7 into
-  the same `{nodes, dependencies}` shape the Nx path builds from a real
-  `nx graph`. [`packages/lattice/src/providers/native/README.md`](../../packages/lattice/src/providers/native/README.md)
+  the same `{nodes, dependencies}` shape the Nx and Moon paths build from a
+  real `nx graph` or `moon project-graph`. [`packages/lattice/src/providers/native/README.md`](../../packages/lattice/src/providers/native/README.md)
   owns this path's own semantics and declared limits.
 
 Both providers, and `listFiles(root)` (`git ls-files`, in `src/workspace.mjs`

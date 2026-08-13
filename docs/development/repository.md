@@ -9,17 +9,18 @@ The workspace that holds Lattice, and how its moving parts relate.
 | `packages/lattice`        | the engine         | npm                 | yes                   |
 | `packages/lattice-vscode` | the VS Code client | VS Code marketplace | no                    |
 
-`lattice` is the engine — the Nx integration, the boundary checker, and the language
-server behind one analysis. `lattice-vscode` is a client of it and holds no
-analysis at all; it ships to a marketplace rather than to npm, and it
-deliberately does not bundle the server.
+`lattice` is the engine — the Nx and Moon integrations, the boundary checker,
+and the language server behind one analysis. `lattice-vscode` is a client of it
+and holds no analysis at all; it ships to a marketplace rather than to npm, and
+it deliberately does not bundle the server.
 
 Everything else in this repository is the apparatus that keeps them honest.
 
 ## Plain ESM, no build
 
 Both packages ship as `.mjs` with JSDoc. Nx loads a plugin's entry point
-directly in the process that runs every `nx` invocation, so the shipped artefact
+directly in the process that runs every `nx` invocation, and Moon's integration
+reads the project graph via `moon project-graph --json`, so the shipped artefact
 has to be loadable with no build step in the way. That is why neither package
 declares a `build` target — there is nothing to emit.
 
@@ -31,13 +32,14 @@ program and writes nothing.
 
 `scripts/` holds the gates that make a green build mean something:
 
-- `check-packages.mjs` — asserts every `packages/*` directory is a project Nx
+- `check-packages.mjs` — asserts every `packages/*` directory is a project Moon
   can see, declaring at least one CI target. [CONTRIBUTING.md](../../CONTRIBUTING.md)
   explains why it exists and what it would catch.
 - `verify-package.mjs` — packs the real tarball, installs it into a throwaway
   workspace, and drives what a consumer actually buys. Also runs against a
-  second workspace with no Nx at all, proving the native provider works from a
-  real install.
+  second workspace with no Moon at all, proving the native provider works from a
+  real install, and a third with a Moon workspace, proving the Moon provider
+  works from a real install.
 - `differential-real-trees.mjs` — drives both this engine and real ESLint over
   public Nx workspaces, comparing verdicts.
 
@@ -58,7 +60,7 @@ job that is `skipped` or `cancelled`, because `needs` alone only blocks on
 ## The boundary law
 
 `module-boundaries.config.mjs` at the repository root is this workspace's own
-constraint table, with the tag vocabulary `type:package`/`scope:nx`. CI runs
+constraint table, with the tag vocabulary `type-package`/`scope-nx`. CI runs
 `lattice check` against it — the enforcer runs on itself.
 
 ## What owns what

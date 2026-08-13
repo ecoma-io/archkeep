@@ -47,3 +47,23 @@ export const moduleBoundaryOptions = {
 
 export const boundarySuppressions = [];
 `;
+
+/** Boundary law for the Moon consumer fixture. */
+export const MOON_BOUNDARY_CONFIG = `export const depConstraints = [
+  { sourceTag: "type-app", onlyDependOnLibsWithTags: ["type-lib"] },
+  { sourceTag: "type-lib", onlyDependOnLibsWithTags: ["type-lib"] },
+];
+
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+
+export const boundarySuppressions = [];
+`;
