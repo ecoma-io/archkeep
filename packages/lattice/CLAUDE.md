@@ -2,7 +2,7 @@
 
 Directory-scoped mechanics only — principles live in `AGENTS.md` at the
 repository root.
-Nx project name `lattice` (tags `type:package`, `scope:nx`), published
+Nx project name `lattice` (tags `type-package`, `scope-nx`), published
 as `@ecoma-io/lattice`. Plain-ESM `.mjs` with no build; `typecheck`
 is `tsc --noEmit` over the JSDoc (`AGENTS.md`, "No TypeScript here, and why").
 The package publishes two entries: the root export (`index.mjs`) is the engine
@@ -258,7 +258,7 @@ which stays unresolved on purpose because resolving it would mean applying
   why `loadBoundaryConfig` takes a workspace root rather than walking up from its
   own location, and why every filename it reads is an argument rather than a
   constant. This repository's own boundary config exercises that in CI: its
-  vocabulary is `type:package`/`scope:nx` and nothing in `src/` mentions either.
+  vocabulary is `type-package`/`scope-nx` and nothing in `src/` mentions either.
 - **One module/crate/package per project root** is the modeling assumption for
   `src/graph/`: identity is `<projectRoot>/go.mod` · `Cargo.toml [package]` ·
   `pyproject.toml [project]`. A nested second manifest inside one project

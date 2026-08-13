@@ -3,7 +3,7 @@
 // `evaluate` and `parseCiTargets` take every fact they need as an argument, so
 // these run with no workspace, no filesystem and no mocking framework — the
 // logic already sits at the isolation boundary. What is deliberately NOT tested
-// here is `readNxProjects`: it exists to ask Nx a question, and a test that
+// here is `readMoonProjects`: it exists to ask Moon a question, and a test that
 // stubbed the answer would only pin the stub. The real thing is exercised by
 // `pnpm check-packages` in CI, against the real graph.
 //
@@ -16,61 +16,61 @@ import assert from "node:assert/strict";
 
 import { evaluate, parseCiTargets } from "./check-packages.mjs";
 
-test("reads the target list out of the workflow's run-many invocation", () => {
+test("reads the target list out of the workflow's moon run ...: invocation", () => {
   const workflow = `
 jobs:
   verify:
     steps:
       - run: pnpm check-packages
-      - run: pnpm exec nx run-many -t lint test build typecheck
+      - run: moon run ...:lint ...:test ...:typecheck
 `;
-  assert.deepEqual(parseCiTargets(workflow), ["lint", "test", "build", "typecheck"]);
+  assert.deepEqual(parseCiTargets(workflow), ["lint", "test", "typecheck"]);
+});
+
+test("strips the ...: prefix Moon uses for all-projects targets", () => {
+  const workflow = `- run: moon run ...:lint ...:test ...:typecheck\n`;
+  assert.deepEqual(parseCiTargets(workflow), ["lint", "test", "typecheck"]);
 });
 
 test("stops at the first token that is not a target name", () => {
-  const workflow = `- run: pnpm exec nx run-many -t lint test --parallel=3 --verbose\n`;
+  const workflow = `- run: moon run ...:lint ...:test --log=debug\n`;
   assert.deepEqual(parseCiTargets(workflow), ["lint", "test"]);
-});
-
-test("accepts the long spelling of the targets flag", () => {
-  assert.deepEqual(parseCiTargets(`- run: nx run-many --targets=lint test\n`), ["lint", "test"]);
-  assert.deepEqual(parseCiTargets(`- run: nx run-many --targets lint test\n`), ["lint", "test"]);
 });
 
 test("reports no targets when the workflow does not run the workspace's targets", () => {
   // The caller treats this as a hard failure rather than as "nothing to check":
-  // a workflow with no run-many means this script no longer knows what green is.
+  // a workflow with no moon run means this script no longer knows what green is.
   assert.deepEqual(parseCiTargets(`jobs:\n  verify:\n    steps:\n      - run: pnpm lint\n`), []);
 });
 
 test("an empty packages directory is declared rather than passed in silence", () => {
   const { lines, failures } = evaluate({
     packageDirs: [],
-    nxProjects: [],
+    projects: [],
     ciTargets: ["lint", "test"],
   });
   assert.deepEqual(failures, []);
   assert.equal(lines[0], "0 packages — declared empty");
   // The point of the state is that a reader is told, so the output has to say so
-  // in words rather than merely exit 0 the way `nx run-many` already does.
+  // in words rather than merely exit 0 the way the workspace tool already does.
   assert.match(lines.join("\n"), /runs nothing/);
 });
 
 test("a directory with no manifest fails instead of being skipped as invisible", () => {
   const { failures } = evaluate({
     packageDirs: ["orphan"],
-    nxProjects: [],
+    projects: [],
     ciTargets: ["lint", "test"],
   });
   assert.equal(failures.length, 1);
   assert.match(failures[0], /packages\/orphan/);
-  assert.match(failures[0], /no `package\.json` or `project\.json`/);
+  assert.match(failures[0], /no manifest/);
 });
 
 test("a project declaring none of the CI targets fails instead of being skipped", () => {
   const { failures } = evaluate({
     packageDirs: ["noscript"],
-    nxProjects: [{ name: "noscript", root: "packages/noscript", targets: ["serve"] }],
+    projects: [{ name: "noscript", root: "packages/noscript", targets: ["serve"] }],
     ciTargets: ["lint", "test"],
   });
   assert.equal(failures.length, 1);
@@ -80,7 +80,7 @@ test("a project declaring none of the CI targets fails instead of being skipped"
 test("a project declaring every CI target passes", () => {
   const { lines, failures } = evaluate({
     packageDirs: ["graph"],
-    nxProjects: [{ name: "graph", root: "packages/graph", targets: ["lint", "test"] }],
+    projects: [{ name: "graph", root: "packages/graph", targets: ["lint", "test"] }],
     ciTargets: ["lint", "test"],
   });
   assert.deepEqual(failures, []);
@@ -93,7 +93,7 @@ test("a project declaring some CI targets passes, and the log names the gap", ()
   // between "buildless on purpose" and "forgot the build target" is invisible.
   const { lines, failures } = evaluate({
     packageDirs: ["graph"],
-    nxProjects: [{ name: "graph", root: "packages/graph", targets: ["lint", "test"] }],
+    projects: [{ name: "graph", root: "packages/graph", targets: ["lint", "test"] }],
     ciTargets: ["lint", "test", "build"],
   });
   assert.deepEqual(failures, []);
@@ -101,22 +101,22 @@ test("a project declaring some CI targets passes, and the log names the gap", ()
 });
 
 test("a project whose root is not the directory it sits in does not vouch for it", () => {
-  // Nx names a project freely, so identity has to be matched on root. Matching
-  // on name would let a project called `orphan` elsewhere in the tree satisfy
-  // the check for `packages/orphan`.
+  // The workspace tool names a project freely, so identity has to be matched on
+  // root. Matching on name would let a project called `orphan` elsewhere in the
+  // tree satisfy the check for `packages/orphan`.
   const { failures } = evaluate({
     packageDirs: ["orphan"],
-    nxProjects: [{ name: "orphan", root: "tools/orphan", targets: ["lint", "test"] }],
+    projects: [{ name: "orphan", root: "tools/orphan", targets: ["lint", "test"] }],
     ciTargets: ["lint", "test"],
   });
   assert.equal(failures.length, 1);
-  assert.match(failures[0], /invisible|no `package\.json`/);
+  assert.match(failures[0], /invisible|no manifest/);
 });
 
 test("every package directory is judged, not just the first", () => {
   const { failures } = evaluate({
     packageDirs: ["good", "orphan", "noscript"],
-    nxProjects: [
+    projects: [
       { name: "good", root: "packages/good", targets: ["lint", "test"] },
       { name: "noscript", root: "packages/noscript", targets: ["serve"] },
     ],

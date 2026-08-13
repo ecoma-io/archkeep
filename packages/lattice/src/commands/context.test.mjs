@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resolveCommandContext } from "./context.mjs";
+import { markersAt, resolveCommandContext } from "./context.mjs";
 
 /** Every tmpdir this file creates, cleaned up after each test that made one. */
 const roots = [];
@@ -212,5 +212,101 @@ describe("resolveCommandContext — pluginGap", () => {
       },
     );
     expect(context.pluginGap).toEqual({ registered: true, manifests: ["libs/a/go.mod"] });
+  });
+});
+
+describe("markersAt — detects all three workspace markers", () => {
+  it("detects a .moon directory as a Moon marker", () => {
+    const { root, write } = fixture("context-markers-moon-");
+    write(".moon/tool.yml", " "); // .moon/ directory with any content
+    const markers = markersAt(root);
+    expect(markers.hasMoon).toBe(true);
+    expect(markers.hasNx).toBe(false);
+    expect(markers.hasNative).toBe(false);
+  });
+
+  it("detects nx.json as an Nx marker", () => {
+    const { root, write } = fixture("context-markers-nx-");
+    write("nx.json", "{}\n");
+    const markers = markersAt(root);
+    expect(markers.hasNx).toBe(true);
+    expect(markers.hasNative).toBe(false);
+    expect(markers.hasMoon).toBe(false);
+  });
+
+  it("detects lattice.json as a native marker", () => {
+    const { root, write } = fixture("context-markers-native-");
+    write("lattice.json", "{}\n");
+    const markers = markersAt(root);
+    expect(markers.hasNative).toBe(true);
+    expect(markers.hasNx).toBe(false);
+    expect(markers.hasMoon).toBe(false);
+  });
+
+  it("returns all three false when no marker is present", () => {
+    const { root } = fixture("context-markers-none-");
+    const markers = markersAt(root);
+    expect(markers.hasNx).toBe(false);
+    expect(markers.hasNative).toBe(false);
+    expect(markers.hasMoon).toBe(false);
+  });
+});
+
+describe("resolveCommandContext — Moon ambiguity refusals", () => {
+  it("throws when the root carries both .moon and nx.json", () => {
+    const { root, write } = fixture("context-moon-nx-ambiguity-");
+    write(".moon/tool.yml", " ");
+    write("nx.json", "{}\n");
+
+    expect(() =>
+      resolveCommandContext(
+        { cwd: root },
+        { listFiles: () => [".moon/tool.yml", "nx.json"], readGraph: () => ({ nodes: {} }) },
+      ),
+    ).toThrow(/declares both .moon and nx\.json/);
+  });
+
+  it("throws when the root carries both .moon and lattice.json", () => {
+    const { root, write } = fixture("context-moon-native-ambiguity-");
+    write(".moon/tool.yml", " ");
+    write("lattice.json", "{}\n");
+
+    expect(() =>
+      resolveCommandContext({ cwd: root }, { listFiles: () => [".moon/tool.yml", "lattice.json"] }),
+    ).toThrow(/declares both .moon and lattice\.json/);
+  });
+});
+
+describe("resolveCommandContext — the Moon branch scopes before it analyzes", () => {
+  it("selects the Moon provider when only .moon is present", () => {
+    const { root, write } = fixture("context-moon-provider-");
+    write(".moon/tool.yml", " ");
+    write("libs/x/x.go", "package x\n");
+    write("libs/y/y.go", "package y\n");
+
+    const graph = {
+      nodes: {
+        x: { name: "x", type: "lib", data: { root: "libs/x" } },
+        y: { name: "y", type: "lib", data: { root: "libs/y" } },
+      },
+      dependencies: { x: [], y: [] },
+    };
+
+    const context = resolveCommandContext(
+      { cwd: root, paths: ["libs/y"] },
+      {
+        readGraph: () => graph,
+        listFiles: () => [".moon/tool.yml", "libs/x/x.go", "libs/y/y.go"],
+      },
+    );
+
+    expect(context.provider).toBe("moon");
+    expect(context.marker).toBe(".moon");
+    expect(context.analysis.analyzedFiles).toEqual(["libs/y/y.go"]);
+    // Moon has no Nx plugin registration to be missing.
+    expect(context.pluginGap).toEqual({ registered: true, manifests: [] });
+    // Options come from defaults (no nx.json plugins table, no lattice.json).
+    expect(context.options.boundaryConfig).toBe("module-boundaries.config.mjs");
+    expect(context.options.tsConfig).toBe("tsconfig.base.json");
   });
 });

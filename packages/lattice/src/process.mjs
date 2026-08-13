@@ -68,13 +68,16 @@ export function environmentForTree(env = process.env) {
  * @param {string} file Executable path.
  * @param {string[]} args
  * @param {string} cwd
+ * @param {Record<string, string|undefined>} [env] Optional environment
+ *   override. When omitted, `environmentForTree()` is used — which strips
+ *   ambient git redirects from `process.env`.
  * @returns {string}
  */
-export function runProcess(file, args, cwd) {
+export function runProcess(file, args, cwd, env) {
   try {
     return execFileSync(file, args, {
       cwd,
-      env: environmentForTree(),
+      env: env ?? environmentForTree(),
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
     });

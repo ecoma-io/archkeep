@@ -5,13 +5,13 @@
         "root": "packages/lattice",
         "name": "lattice",
         "type": "lib",
-        "tags": ["type:package", "scope:nx"]
+        "tags": ["type-package", "scope-nx"]
       },
       {
         "root": "packages/lattice-vscode",
         "name": "lattice-vscode",
         "type": "app",
-        "tags": ["type:extension", "scope:nx"]
+        "tags": ["type-extension", "scope-nx"]
       }
     ]
   },

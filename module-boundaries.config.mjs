@@ -12,12 +12,19 @@
  *
  * The second is that this file is the only place where "the tool is universal"
  * stops being a design intention and becomes something a run can disprove. The
- * vocabulary below is `lattice`'s own — `type:package`, `scope:nx` — and it has
+ * vocabulary below is `lattice`'s own — `type-package`, `scope-nx` — and it has
  * no overlap with the tags of the workspace the tool was extracted from. If any
  * project name, area, or tag value from that workspace had survived in the
  * source, this table would be the thing that fails, because none of those names
  * appear here to be found. `packages/lattice/src/conformance/boundary.test.mjs`
  * states that constraint as a rule; this file is what exercises it.
+ *
+ * Tags use dash separators (`type-package`, `scope-nx`) rather than colons
+ * (`type:package`, `scope:nx`) because Moon tags cannot contain colons
+ * (`packages/lattice/src/providers/moon.mjs`, `deriveTags`). The Moon
+ * provider emits Moon's tags verbatim, and the constraint table must match
+ * the provider. Nx- and native-path workspaces may use colons freely; this
+ * repository uses Moon, so its tags follow Moon's syntax.
  *
  * Shape is `@nx/enforce-module-boundaries`' own option object, and that is a
  * deliberate commitment rather than a convenience: the enforcer reproduces that
@@ -52,20 +59,20 @@
  * lands its first project and never in anticipation of one.
  */
 export const depConstraints = [
-  // Type axis. Everything publishable here is a `type:package`: a unit a
+  // Type axis. Everything publishable here is a `type-package`: a unit a
   // consumer installs from npm and runs inside their own `nx` process. The
   // constraint is therefore the strong form — a package may depend on a
   // package, and on nothing else. What it excludes today is a package reaching
   // into `scripts/`, which is this repository's own gate machinery and is not
   // shipped to anyone: a published package that imported it would resolve
   // nothing on a consumer's disk.
-  { sourceTag: "type:package", onlyDependOnLibsWithTags: ["type:package"] },
+  { sourceTag: "type-package", onlyDependOnLibsWithTags: ["type-package"] },
 
-  // `type:extension` is an editor client — today `packages/lattice-vscode`, a
+  // `type-extension` is an editor client — today `packages/lattice-vscode`, a
   // VS Code extension. It depends on the engine package at runtime (resolves
   // and drives the boundary server), and the constraint states that direction
   // as law: an extension may depend on a package, and on nothing else. Combined
-  // with the `type:package` row above (packages may only depend on packages),
+  // with the `type-package` row above (packages may only depend on packages),
   // the enforced directions are:
   //
   //   lattice-vscode → lattice  ✅  allowed (extension depends on package)
@@ -112,13 +119,13 @@ export const depConstraints = [
   // violation, exit 1 — measured, then reverted). This tree's tsconfig carries
   // no `paths`, so until one arrives the row stays a stated law with no case to
   // judge.
-  { sourceTag: "type:extension", onlyDependOnLibsWithTags: ["type:package"] },
+  { sourceTag: "type-extension", onlyDependOnLibsWithTags: ["type-package"] },
 
-  // Scope axis. `scope:nx` is the Nx-toolchain scope — plugins, and the
+  // Scope axis. `scope-nx` is the Nx-toolchain scope — plugins, and the
   // language server and CLI that share their analysis. A second scope arrives
   // with the first package that is not Nx tooling, and this row is what will
   // then keep the two from importing each other by accident.
-  { sourceTag: "scope:nx", onlyDependOnLibsWithTags: ["scope:nx"] },
+  { sourceTag: "scope-nx", onlyDependOnLibsWithTags: ["scope-nx"] },
 ];
 
 /**

@@ -15,7 +15,7 @@ pre-commit:
       run: pnpm exec eslint --no-warn-ignored --max-warnings 0 {staged_files}
     packages:
       # Cheap, and it guards a state no other check can see: a package directory
-      # added without a manifest is invisible to Nx, so `nx run-many` reports
+      # added without a manifest is invisible to Moon, so `moon run` reports
       # success having never looked at it. Runs on every commit rather than on a
       # glob, because the failure is a missing file — there is no staged path to
       # match on.
@@ -27,11 +27,11 @@ pre-push:
     test:
       run: pnpm test
     graph:
-      # Proves the workspace graph still computes. An Nx plugin that throws
-      # while the graph is being built breaks every `nx` command at once,
+      # Proves the workspace graph still computes. A provider that throws
+      # while the graph is being built breaks every `moon` command at once,
       # including the ones that would report the error — so it is worth one
       # second here.
-      run: pnpm exec nx show projects
+      run: pnpm exec moon projects
 
 commit-msg:
   commands:

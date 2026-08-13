@@ -1,0 +1,9 @@
+# Moonrepo workspace configuration for the Lattice repository.
+#
+# Replaces the former nx.json + project.json files. Projects and targets
+# are declared in per-project `moon.yml` files instead.
+projects:
+  lattice: "packages/lattice"
+  lattice-vscode: "packages/lattice-vscode"
+vcs:
+  provider: other

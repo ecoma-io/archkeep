@@ -79,12 +79,12 @@ jobs:
       # that would say so.
       - run: pnpm test
 
-      # The gate scripts' JSDoc, type-checked. `scripts/` is not an Nx project,
-      # so the `nx run-many` step below never reaches it — each package's own
+      # The gate scripts' JSDoc, type-checked. `scripts/` is not a Moon project,
+      # so the `moon run` step below never reaches it — each package's own
       # `typecheck` target covers only that package.
       - run: pnpm typecheck
 
-      # Reads the target list out of THIS FILE — out of the `nx run-many` line
+      # Reads the target list out of THIS FILE — out of the `moon run` line
       # below — and asserts every directory under `packages/` is a project the
       # graph can see which declares at least one of those targets. Without it
       # the next step exits 0 on three different states, only one of which is
@@ -94,13 +94,8 @@ jobs:
       # rather than passing as an absence.
       - run: pnpm check-packages
 
-      # The daemon is a long-lived process that caches the graph between
-      # invocations. A single-shot runner has no second invocation to reuse it
-      # for, and it outlives the step that started it.
       - name: Run every project's targets
-        env:
-          NX_DAEMON: "false"
-        run: pnpm exec nx run-many -t lint test build typecheck
+        run: moon run ...:lint ...:test ...:typecheck
 
       # The tool, run on the tree that ships it. Everything above proves the
       # code is correct against fixtures it built itself; this is the only step
@@ -110,25 +105,24 @@ jobs:
       # it was written in, and a repository that shipped an enforcer it did not
       # run on itself would be answering that question with a promise.
       #
-      # It runs LAST on purpose: it spawns `nx graph`, so a plugin that breaks
-      # graph computation fails the step above with a clearer message than this
-      # one could give. Exit 3 — could not look — is distinct from exit 1, so a
-      # broken run never reads as a clean tree.
+      # It runs LAST on purpose: it spawns `moon project-graph`, so a provider
+      # that breaks graph computation fails the step above with a clearer
+      # message than this one could give. Exit 3 — could not look — is distinct
+      # from exit 1, so a broken run never reads as a clean tree.
       - name: Check this repository's own module boundaries
-        env:
-          NX_DAEMON: "false"
         run: node packages/lattice/cli.mjs check
 
-      # The step above proves the Nx provider against real source. This repository
+      # The step above proves the Moon provider against real source. This repository
       # cannot ALSO carry a root `lattice.json` to prove the native one the same
       # way: `cli.mjs` refuses a root holding both markers (this repository needs
-      # `nx.json` — it registers the plugin, states targets, and `nx run-many`
-      # above is half of CI), so a root `lattice.json` would break that step, the
-      # plugin registration, and `nx run-many` all at once. The way around it is
-      # a throwaway COPY of the tracked tree with `nx.json` removed and a
-      # `lattice.json` written in — `.github/native-selfcheck/lattice.json`,
-      # tracked and reviewable, describing the same two projects under the same
-      # tags this repository's own law already uses.
+      # `.moon/` — it declares projects and targets, and `moon run` above is half
+      # of CI), so a root `lattice.json` would break that step, the Moon project
+      # discovery, and `moon run` all at once. The way around it is a throwaway
+      # COPY of the tracked tree with `.moon/` and per-project `moon.yml` files
+      # removed and a `lattice.json` written in —
+      # `.github/native-selfcheck/lattice.json`, tracked and reviewable, describing
+      # the same two projects under the same tags this repository's own law already
+      # uses.
       #
       # Two properties make this worth a step of its own rather than a curiosity:
       #   - The `diff -q` below proves the copy reads the exact same
@@ -137,7 +131,7 @@ jobs:
       #     between the two steps is a provider defect and nothing else.
       #   - It is the only place the native provider meets this repository's real
       #     source under a tag vocabulary `packages/lattice/src/` has no
-      #     knowledge of, the same argument the step above makes for the Nx path.
+      #     knowledge of, the same argument the step above makes for the Moon path.
       #
       # `git archive HEAD` (tracked files only — what `git ls-files` inside the
       # copy will also see) into a fresh git repo, because the native provider's
@@ -172,7 +166,9 @@ jobs:
           cli="$PWD/packages/lattice/cli.mjs"
           dir="$(mktemp -d)"
           git archive HEAD | tar -x -C "$dir"
-          rm "$dir/nx.json"
+          rm -r "$dir/.moon"
+          rm "$dir/packages/lattice/moon.yml"
+          rm "$dir/packages/lattice-vscode/moon.yml"
           cp .github/native-selfcheck/lattice.json "$dir/lattice.json"
           diff -q "$law" "$dir/module-boundaries.config.mjs"
           # Symlinked in, not copied and not installed fresh: the step above
@@ -184,7 +180,7 @@ jobs:
           # resolve every bare-package import in the copy for a reason that
           # has nothing to do with the native provider — an absent
           # `node_modules`, not a boundary the provider got wrong — which
-          # would report a pile of could-not-resolve failures the Nx-based
+          # would report a pile of could-not-resolve failures the Moon-based
           # step never sees and make a real disagreement between the two
           # providers indistinguishable from this one. pnpm gives each
           # workspace package (`packages/*`) its OWN `node_modules`, holding
@@ -235,7 +231,8 @@ jobs:
       #
       # So this packs the real tarball, installs it into a throwaway workspace
       # with a tag vocabulary nothing in `src/` knows about, and drives what a
-      # consumer buys — the plugin loading inside a real `nx graph`, the checker
+      # consumer buys — the plugin loading inside a real `nx graph` (Nx is a
+      # peer dependency; the artifact must still work inside Nx workspaces),
       # exiting 0 on a clean tree AND 1 on a violating one, and the language
       # server answering through the symlinked path an installed plugin is
       # launched by. The release lane runs the same script before `npm publish`;
@@ -248,9 +245,9 @@ jobs:
       - name: Prove the packed artifact works outside this workspace
         run: node scripts/verify-package.mjs packages/lattice
 
-      # The smoke subset covers the five fastest E2E scenarios (native/Nx
+      # The smoke subset covers the five fastest E2E scenarios (native
       # clean check, native violating check, native graph, native self-baseline
-      # diff). The full suite adds parity, determinism, and extended command
+      # diff). The full suite adds parity, determinism, Moon, and extended command
       # coverage. Both run after verify-package.mjs, which already proves LSP
       # initialization and Nx Go-edge drawing — responsibilities the E2E suite
       # does not duplicate.

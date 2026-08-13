@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// Asserts that every directory under `packages/` is a project Nx can actually
-// see, and that each one declares at least one of the targets CI runs.
+// Asserts that every directory under `packages/` is a project the workspace tool
+// can actually see, and that each one declares at least one of the targets CI runs.
 //
-// WHY this script exists, measured against nx 23.1.1 rather than assumed. Three
-// states produce an identical green `nx run-many` and an identical exit code 0:
+// WHY this script exists. Three states produce an identical green run and an
+// identical exit code 0 whether the workspace tool is Nx or Moon:
 //
-//   1. There is no project at all — `nx run-many -t test build` prints
-//      "No tasks were run" and exits 0.
+//   1. There is no project at all — the tool prints "no projects" or "no tasks
+//      were run" and exits 0.
 //   2. A project exists but declares none of those targets — it is skipped in
-//      silence. No warning, no mention in the summary, exit 0.
-//   3. A directory exists with sources but no `package.json` or `project.json` —
-//      it is invisible to `nx show projects`, so nothing is skipped, because as
-//      far as Nx is concerned nothing is there.
+//      silence. No warning, no mention, exit 0.
+//   3. A directory exists with sources but no manifest — it is invisible to the
+//      tool's project list, so nothing is skipped, because as far as the tool is
+//      concerned nothing is there.
 //
 // `packages/` is empty at this commit, so state 1 is the truth today. What makes
 // that a problem is not today: it is that the gate stays green on the day
@@ -25,11 +25,11 @@
 // reader infers from a command that found nothing to do.
 //
 // The list of targets is READ OUT OF `.github/workflows/ci.yml` — out of the
-// `nx run-many -t …` line itself — never written here a second time. CI is where
-// "green" is defined; a copy of that list in this file would be a second
-// definition, and the two would agree only until someone edited one of them.
-// That is the failure this script is meant to catch, so it must not contain an
-// instance of it.
+// `moon run …` or `nx run-many -t …` line itself — never written here a second
+// time. CI is where "green" is defined; a copy of that list in this file would
+// be a second definition, and the two would agree only until someone edited one
+// of them. That is the failure this script is meant to catch, so it must not
+// contain an instance of it.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
@@ -42,54 +42,60 @@ export const PACKAGES_DIR = "packages";
 export const CI_WORKFLOW = ".github/workflows/ci.yml";
 
 /**
- * The targets CI runs, taken from the `nx run-many -t …` invocation in the
- * workflow. Matches the flag in either spelling (`-t`, `--targets`) and stops at
- * the first thing that is not a bare target name, so a trailing flag or a YAML
- * line continuation does not become a target called `--parallel`.
+ * The targets CI runs, taken from the workspace-tool invocation in the workflow.
+ * Matches `moon run ...:<target>` (the `...` prefix means "all projects"),
+ * stripping the `...:` prefix, and stops at the first token that is not a
+ * project-scoped target, so a trailing flag or a YAML line continuation does
+ * not become a target called `--parallel`.
  *
  * @param {string} workflowText contents of `.github/workflows/ci.yml`
  * @returns {string[]} target names, in the order the workflow names them
  */
 export function parseCiTargets(workflowText) {
-  const match = /nx\s+run-many\s+(?:-t|--targets(?:=|\s+))([^\n]*)/.exec(workflowText);
-  if (!match) return [];
-  const targets = [];
-  for (const word of match[1].trim().split(/[\s,]+/)) {
-    if (!/^[a-z][a-z0-9:-]*$/i.test(word)) break;
-    targets.push(word);
+  // Moon: `moon run ...:lint ...:test ...:typecheck` — `...:target` means all projects.
+  const moonMatch = /moon\s+run\s+([^\n]*)/.exec(workflowText);
+  if (moonMatch) {
+    const targets = [];
+    for (const word of moonMatch[1].trim().split(/[\s,]+/)) {
+      // Strip the `...:` prefix Moon uses for "all projects".
+      const target = word.replace(/^\.{3}:/, "");
+      if (!/^[a-z][a-z0-9:-]*$/i.test(target)) break;
+      targets.push(target);
+    }
+    return targets;
   }
-  return targets;
+  return [];
 }
 
 /**
- * Compares the directories on disk against the projects Nx reports, and against
- * the targets CI runs.
+ * Compares the directories on disk against the projects the workspace tool
+ * reports, and against the targets CI runs.
  *
  * Kept free of IO so it can be tested without a workspace: every fact it needs
- * arrives as an argument. `nxProjects` maps a project name to the root it
+ * arrives as an argument. `projects` maps a project name to the root it
  * declares and the target names it declares.
  *
  * @param {object} input
  * @param {string[]} input.packageDirs directory names directly under `packages/`
- * @param {{name: string, root: string, targets: string[]}[]} input.nxProjects what Nx reports
+ * @param {{name: string, root: string, targets: string[]}[]} input.projects what the workspace tool reports
  * @param {string[]} input.ciTargets targets the CI workflow runs
  * @returns {{lines: string[], failures: string[]}}
  */
-export function evaluate({ packageDirs, nxProjects, ciTargets }) {
+export function evaluate({ packageDirs, projects, ciTargets }) {
   const lines = [];
   const failures = [];
 
   if (packageDirs.length === 0) {
     lines.push(`0 packages — declared empty`);
     lines.push(
-      `${PACKAGES_DIR}/ holds no package yet, so a green run of ` +
-        `\`nx run-many -t ${ciTargets.join(" ")}\` runs nothing. That is stated here ` +
-        `rather than left to be inferred from a command that found no work.`,
+      `${PACKAGES_DIR}/ holds no package yet, so a green CI run runs nothing. That ` +
+        `is stated here rather than left to be inferred from a command that found ` +
+        `no work.`,
     );
     return { lines, failures };
   }
 
-  const byRoot = new Map(nxProjects.map((p) => [p.root, p]));
+  const byRoot = new Map(projects.map((p) => [p.root, p]));
 
   for (const dir of packageDirs) {
     const expectedRoot = `${PACKAGES_DIR}/${dir}`;
@@ -97,9 +103,10 @@ export function evaluate({ packageDirs, nxProjects, ciTargets }) {
 
     if (!project) {
       failures.push(
-        `${expectedRoot} is not a project Nx can see. It has no \`package.json\` or ` +
-          `\`project.json\`, so \`nx show projects\` does not list it and every target ` +
-          `runs over it zero times — while still exiting 0. Add a manifest.`,
+        `${expectedRoot} is not a project the workspace tool can see. It has no ` +
+          `manifest (no \`moon.yml\`, \`package.json\`, or \`project.json\`), so the ` +
+          `project list does not include it and every target runs over it zero times — ` +
+          `while still exiting 0. Add a manifest.`,
       );
       lines.push(`FAIL ${expectedRoot} — invisible to the graph`);
       continue;
@@ -111,8 +118,9 @@ export function evaluate({ packageDirs, nxProjects, ciTargets }) {
     if (declared.length === 0) {
       failures.push(
         `${project.name} (${expectedRoot}) declares none of the targets CI runs ` +
-          `(${ciTargets.join(", ")}). Nx skips a project with no matching target in ` +
-          `silence, so nothing checks this package and the run still exits 0.`,
+          `(${ciTargets.join(", ")}). The workspace tool skips a project with no ` +
+          `matching target in silence, so nothing checks this package and the run ` +
+          `still exits 0.`,
       );
       lines.push(`FAIL ${project.name} — declares no CI target`);
       continue;
@@ -140,51 +148,39 @@ function readPackageDirs(dir) {
 }
 
 /**
- * Asks Nx what projects exist, through its own CLI — the point of the check is
- * what the graph contains, which only Nx can answer. Reading the manifests here
- * instead would re-implement project inference and agree with Nx right up until
+ * Asks Moon what projects exist, through its own CLI — the point of the check is
+ * what the graph contains, which only Moon can answer. Reading the manifests here
+ * instead would re-implement project discovery and agree with Moon right up until
  * it did not.
  */
-function readNxProjects() {
-  const nx = join(root, "node_modules", "nx", "dist", "bin", "nx.js");
-  if (!existsSync(nx)) {
-    console.error(
-      "nx is not installed (node_modules/nx is missing), so the project graph " +
-        "cannot be read. Run `pnpm install` first.",
-    );
-    process.exit(1);
-  }
+function readMoonProjects() {
+  // Moon is installed as a dev dependency; `node_modules/.bin/moon` is the pnpm
+  // shim that resolves to the platform-specific binary. Adding that directory to
+  // PATH makes `moon` findable by `spawnSync` without depending on a global
+  // install — the same convention `npx` uses.
+  const binDir = join(root, "node_modules", ".bin");
+  const pathEnv = process.env.PATH ?? "";
+  const pathWithBin = pathEnv.includes(binDir) ? pathEnv : `${binDir}:${pathEnv}`;
 
-  const run = (args) =>
-    spawnSync(process.execPath, [nx, ...args], {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, NX_DAEMON: "false" },
-    });
-
-  const listed = run(["show", "projects", "--json"]);
-  if (listed.status !== 0) {
-    console.error(listed.stdout ?? "");
-    console.error(listed.stderr ?? "");
-    console.error("`nx show projects` failed, so the graph could not be read.");
-    process.exit(1);
-  }
-
-  const names = JSON.parse(listed.stdout);
-  return names.map((name) => {
-    const shown = run(["show", "project", name, "--json"]);
-    if (shown.status !== 0) {
-      console.error(shown.stderr ?? "");
-      console.error(`\`nx show project ${name}\` failed.`);
-      process.exit(1);
-    }
-    const project = JSON.parse(shown.stdout);
-    return {
-      name,
-      root: project.root,
-      targets: Object.keys(project.targets ?? {}),
-    };
+  const result = spawnSync("moon", ["projects", "--json"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, PATH: pathWithBin },
   });
+
+  if (result.status !== 0) {
+    console.error(result.stdout ?? "");
+    console.error(result.stderr ?? "");
+    console.error("`moon projects --json` failed, so the project list could not be read.");
+    process.exit(1);
+  }
+
+  const projects = JSON.parse(result.stdout);
+  return projects.map((p) => ({
+    name: p.id,
+    root: p.source,
+    targets: Object.keys(p.config?.tasks ?? {}),
+  }));
 }
 
 function main() {
@@ -200,16 +196,17 @@ function main() {
   const ciTargets = parseCiTargets(readFileSync(workflowPath, "utf8"));
   if (ciTargets.length === 0) {
     console.error(
-      `No \`nx run-many -t …\` invocation was found in ${CI_WORKFLOW}. Either CI ` +
-        `stopped running the workspace's targets, or the line moved — both mean this ` +
-        `check no longer knows what green is supposed to mean.`,
+      `No \`moon run …\` invocation was found in ` +
+        `${CI_WORKFLOW}. Either CI stopped running the workspace's targets, or the ` +
+        `line moved — both mean this check no longer knows what green is supposed ` +
+        `to mean.`,
     );
     process.exit(1);
   }
 
   const packageDirs = readPackageDirs(join(root, PACKAGES_DIR));
-  const nxProjects = packageDirs.length > 0 ? readNxProjects() : [];
-  const { lines, failures } = evaluate({ packageDirs, nxProjects, ciTargets });
+  const projects = packageDirs.length > 0 ? readMoonProjects() : [];
+  const { lines, failures } = evaluate({ packageDirs, projects, ciTargets });
 
   for (const line of lines) console.log(line);
 

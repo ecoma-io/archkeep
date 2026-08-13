@@ -26,6 +26,7 @@ import { tmpdir } from "node:os";
 import { nxConsumerFiles } from "../fixtures/nx-consumer.mjs";
 import { nativeConsumerFiles } from "../fixtures/native-consumer.mjs";
 import { nativeMonorepoFiles } from "../fixtures/native-monorepo.mjs";
+import { moonConsumerFiles } from "../fixtures/moon-consumer.mjs";
 import { goLanguageFiles } from "../fixtures/languages/go.mjs";
 import { typescriptLanguageFiles } from "../fixtures/languages/typescript.mjs";
 import { javascriptLanguageFiles } from "../fixtures/languages/javascript.mjs";
@@ -238,6 +239,57 @@ export function createNativeMonorepoConsumer(artifact) {
   if (nativeModules.includes("nx")) {
     rmSync(consumer, { recursive: true, force: true });
     throw new Error(`nx package resolved in native monorepo — peer is not optional in fact.`);
+  }
+
+  return {
+    root: consumer,
+    cleanup() {
+      rmSync(consumer, { recursive: true, force: true });
+    },
+  };
+}
+
+/**
+ * Creates a Moonrepo consumer workspace: three projects (web, api, core)
+ * with `.moon/workspace.yml`, per-project `moon.yml` files, TypeScript and
+ * Go sources, no `nx` dependency. Proves Lattice's Moon provider works
+ * against a real Moon workspace through the installed CLI.
+ *
+ * @param {{ tarballPath: string, peers: Record<string, string>, packageName: string, packageManager: string }} artifact
+ * @returns {ConsumerWorkspace}
+ */
+export function createMoonConsumer(artifact) {
+  const { tarballPath, peers, packageName, packageManager } = artifact;
+  const consumer = realpathSync(mkdtempSync(join(tmpdir(), "lattice-e2e-moon-")));
+
+  const files = moonConsumerFiles(packageName, peers, packageManager);
+  files["package.json"] = files["package.json"].replace(
+    '"*"',
+    JSON.stringify(`file:${tarballPath}`),
+  );
+  write(consumer, files);
+  // The Moon fixture provides its own `pnpm-workspace.yaml` with workspace
+  // packages, so the default one is not written.
+  commitTree(consumer, "the clean tree", true);
+
+  const installed = run("pnpm", ["install", "--no-frozen-lockfile"], consumer);
+  if (installed.status !== 0) {
+    rmSync(consumer, { recursive: true, force: true });
+    throw new Error(
+      `pnpm install failed (Moon consumer):\n${installed.stdout ?? ""}\n${installed.stderr ?? ""}`,
+    );
+  }
+
+  // Assert `nx` does NOT resolve — the peer is optional in fact, not only
+  // in `peerDependenciesMeta`. Same check as `scripts/verify-package.mjs`.
+  const consumerModules = existsSync(join(consumer, "node_modules"))
+    ? readdirSync(join(consumer, "node_modules"))
+    : [];
+  if (consumerModules.includes("nx")) {
+    rmSync(consumer, { recursive: true, force: true });
+    throw new Error(
+      `nx package resolved in Moon consumer — peer is not optional in fact.\nnode_modules: ${consumerModules.join(", ")}`,
+    );
   }
 
   return {

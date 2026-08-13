@@ -31,3 +31,23 @@ export const CORE_REACHES_APP = {
  // This fixture is kept as a placeholder for TypeScript-based relative
  // import testing when a TypeScript fixture is added.
  */
+
+/**
+ * `core` reaches up into a `type-app`-tagged library in the Moon fixture:
+ * violates `onlyTagsConstraintViolation` because `type-lib` may only depend
+ * on `type-lib`, and `cli` carries `type-app` but not `type-lib`.
+ *
+ * Targets the `cli` project (a library tagged `type-app`, not an application):
+ * - Using `web` would create a cycle (`web → api → core → web`), making
+ *   `noCircularDependencies` fire before the tag constraint is checked.
+ * - Using an `application`-layer project would make `noImportsOfApps` fire
+ *   before the tag constraint.
+ * `cli` is a `library`-layer project with `type-app` tag, no `dependsOn`, so
+ * `core → cli` is acyclic, non-app, and the violation is
+ * `onlyTagsConstraintViolation`.
+ *
+ * Replaces `libs/core/src/index.ts` with one that imports `@acme/cli`.
+ */
+export const MOON_LIB_REACHES_APP = {
+  "libs/core/src/index.ts": 'import { cli } from "@acme/cli";\n\nexport const core = cli;\n',
+};
