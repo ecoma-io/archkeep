@@ -35,6 +35,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Moon's VCS layer needs the base branch ref for affected detection.
+          # A shallow clone lacks it, and Moon fails with "fatal: ambiguous
+          # argument 'main'" before --force can skip the check. Full history
+          # is Moon's own recommended CI setup.
+          fetch-depth: 0
 
       # Reads the pnpm version from `packageManager` in package.json, so the
       # runner uses the same pnpm a contributor's Corepack fetches.
