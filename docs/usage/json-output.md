@@ -1,11 +1,11 @@
 # `--format json`
 
-`check --format json`, `graph --format json`, and `diff --format json`
-wrap the same verdict the terminal report and SARIF already carry in one
-versioned envelope. They change no exit code and no byte of the other two
-formats — they are additional renderings of a verdict every format already
-computes, for a script that wants to branch on a field rather than scrape a
-report or walk a SARIF `runs[]` array.
+`check --format json`, `graph --format json`, `diff --format json`, and
+`impact --format json` wrap the same verdict the terminal report and SARIF
+already carry in one versioned envelope. They change no exit code and no byte
+of the other two formats — they are additional renderings of a verdict every
+format already computes, for a script that wants to branch on a field rather
+than scrape a report or walk a SARIF `runs[]` array.
 
 ```shell
 lattice check --format json
@@ -14,6 +14,8 @@ lattice graph --format json
 lattice graph --format json --output snapshot.json
 lattice diff snapshot.json --format json
 lattice diff snapshot.json --format json --output delta.json
+lattice impact billing-core --format json
+lattice impact billing-core --format json --output impact.json
 ```
 
 ## The stability promise
@@ -38,9 +40,9 @@ and no random identifier anywhere in it. That is what makes it diffable in a
 pull request the same way the SARIF output already is.
 
 `command` is the one field that varies by which command produced the envelope —
-`"check"`, `"graph"`, or `"diff"`. `src/report/json.mjs` (the module that builds
-the envelope) and `src/commands/README.md` (the module layout it follows) are
-both written for each command to reuse the same wrapper.
+`"check"`, `"graph"`, `"diff"`, or `"impact"`. `src/report/json.mjs` (the module
+that builds the envelope) and `src/commands/README.md` (the module layout it
+follows) are both written for each command to reuse the same wrapper.
 
 ## Top-level fields
 
@@ -48,7 +50,7 @@ both written for each command to reuse the same wrapper.
 | --------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schemaVersion` | integer                                  | This document's version. Currently `1`.                                                                                                                                 |
 | `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                |
-| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, or `"diff"`.                                                                                                |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, or `"impact"`.                                                                                    |
 | `workspace`     | `{root, provider, marker}`               | `root` is the resolved workspace root (absolute path); `provider` is `"nx"` or `"native"`; `marker` is the root file that decided it (`"nx.json"` or `"lattice.json"`). |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                 |
 | `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                          |
@@ -161,6 +163,19 @@ changes do not make it exit `1`; a completed comparison always exits `0`.
 | `removedProjects` | `{name, root, tags}[]`     | Projects present in the baseline but absent from the current workspace, sorted by `name`.              |
 | `addedEdges`      | `{source, target, type}[]` | Edges present in the current workspace but absent from the baseline, sorted by the full edge identity. |
 | `removedEdges`    | `{source, target, type}[]` | Edges present in the baseline but absent from the current workspace, sorted by the full edge identity. |
+
+## `result` (for `command: "impact"`)
+
+`impact` takes a project name and lists every project that transitively depends
+on it. It is descriptive: it never exits `1`, because a reverse-reachability
+listing is never a finding.
+
+| field        | type       | meaning                                                                                              |
+| ------------ | ---------- | ---------------------------------------------------------------------------------------------------- |
+| `project`    | string     | The project whose impact was queried.                                                                |
+| `direct`     | `string[]` | Projects whose edges point straight at the target, sorted by plain string comparison.                |
+| `transitive` | `string[]` | Projects that reach the target only through another project, sorted by plain string comparison.      |
+| `dependents` | `string[]` | The union of `direct` and `transitive`, sorted by plain string comparison. An empty list is a claim. |
 
 ## A worked example
 
