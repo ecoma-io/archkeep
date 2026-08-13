@@ -1,7 +1,7 @@
 /**
  * What to do about one workspace folder, decided before anything is started.
  *
- * Everything that could go wrong with a folder — it is not an Nx workspace, the
+ * Everything that could go wrong with a folder — it is not a workspace, the
  * server is not installed, the configured path is wrong — is decided here, as
  * data, so that `extension.mjs` has nothing left to judge and the whole decision
  * is reachable from a test without a running editor.
@@ -38,13 +38,13 @@ export function planSession({ folderPath, configuredServerPath = "", findRoot, l
   const root = findRoot(folderPath);
 
   if (root === null) {
-    // Not a failure and not reported as one. A window with no Nx workspace in it
-    // is a window this extension has nothing true to say about, and saying it
-    // quietly is the correct volume — the loud state below is for a workspace
+    // Not a failure and not reported as one. A window with no workspace marker
+    // in it is a window this extension has nothing true to say about, and saying
+    // it quietly is the correct volume — the loud state below is for a workspace
     // that *is* ours and is going unchecked.
     return {
       state: "idle",
-      reason: `No nx.json in ${folderPath} or any directory above it, so this folder is not part of an Nx workspace.`,
+      reason: `No workspace marker (lattice.json or nx.json) in ${folderPath} or any directory above it, so this folder is not part of a workspace Lattice can check.`,
     };
   }
 

@@ -62,25 +62,29 @@ export const depConstraints = [
   { sourceTag: "type:package", onlyDependOnLibsWithTags: ["type:package"] },
 
   // `type:extension` is an editor client — today `packages/lattice-vscode`, a
-  // VS Code extension. The empty list is the strongest form the option has: a
-  // project carrying this tag may depend on no tagged project at all. (The
-  // mechanism, since an empty array reads as vacuous: an empty
-  // `onlyDependOnLibsWithTags` fires on any dependency whose target carries at
-  // least one tag, and every project here is tagged. Third-party packages are
-  // unaffected — an npm target returns before the tag block.)
+  // VS Code extension. It depends on the engine package at runtime (resolves
+  // and drives the boundary server), and the constraint states that direction
+  // as law: an extension may depend on a package, and on nothing else. Combined
+  // with the `type:package` row above (packages may only depend on packages),
+  // the enforced directions are:
   //
-  // It states the extension's central design decision as law. The extension does
-  // not bundle the boundary server; it resolves the server out of the workspace
-  // being edited and speaks to it over stdio, so the diagnostics in the buffer
-  // come from the same version that workspace's pipeline runs. An `import` of
-  // `@ecoma-io/lattice` from there would be that decision quietly
-  // reversed — a second, marketplace-pinned analyzer, free to disagree with CI
-  // about the same import while both report confidently.
+  //   lattice-vscode → lattice  ✅  allowed (extension depends on package)
+  //   lattice → lattice-vscode  ❌  forbidden (package cannot depend on extension)
   //
-  // **What this row does not do is catch that today, and the honest reason is
-  // measured rather than argued.** Every way of writing the import was probed
-  // against this tree after it gained its root `tsconfig.base.json` (module
-  // `nodenext`, no `paths` — its header says why), typescript 5.9.3:
+  // The extension does not bundle the boundary server — it resolves the server
+  // out of the workspace being edited and speaks to it over stdio, so the
+  // diagnostics in the buffer come from the same version that workspace's
+  // pipeline runs. That design decision is about how the dependency is
+  // expressed (runtime resolution, not a bundled copy), not whether it exists.
+  // An `import` of `@ecoma-io/lattice` from the extension would be a
+  // compile-time dependency the architecture allows; a bundled copy would be
+  // one the architecture forbids, because a marketplace-pinned analyzer is free
+  // to disagree with CI about the same import while both report confidently.
+  //
+  // **This row does not fire on this workspace today, and the reason is
+  // measured.** Every way of writing the import was probed against this tree
+  // after it gained its root `tsconfig.base.json` (module `nodenext`, no
+  // `paths` — its header says why), typescript 5.9.3:
   //
   //   - By package name, as the tree stands (the extension declares no
   //     dependency on the engine): the specifier resolves to nothing and is
@@ -98,16 +102,17 @@ export const depConstraints = [
   //   - By relative path: caught, but by `noRelativeOrAbsoluteImportsAcrossLibraries`,
   //     which fires before the constraint table is read at all.
   //
-  // So the row changes no verdict in this workspace as it stands, and it is kept
-  // anyway for the same reason the eight options below are written out at their
-  // defaults: it is the value a second reader cannot recover from silence. What
-  // makes it decide is a `paths` alias, not the tsconfig's mere existence:
+  // So the row changes no verdict in this workspace as it stands, and it is
+  // kept anyway for the same reason the eight options below are written out at
+  // their defaults: it is the value a second reader cannot recover from silence.
+  // What makes it decide is a `paths` alias, not the tsconfig's mere existence:
   // mapping `@ecoma-io/lattice` onto the project's own source in
   // `tsconfig.base.json` made the probe import resolve inside the workspace,
-  // reach this table, and trip this row (`emptyOnlyTagsConstraintViolation`,
-  // exit 1 — measured, then reverted). This tree's tsconfig carries no `paths`,
-  // so until one arrives the row stays a stated law with no case to judge.
-  { sourceTag: "type:extension", onlyDependOnLibsWithTags: [] },
+  // reach this table, and trip the constraint (`onlyDependOnLibsWithTags`
+  // violation, exit 1 — measured, then reverted). This tree's tsconfig carries
+  // no `paths`, so until one arrives the row stays a stated law with no case to
+  // judge.
+  { sourceTag: "type:extension", onlyDependOnLibsWithTags: ["type:package"] },
 
   // Scope axis. `scope:nx` is the Nx-toolchain scope — plugins, and the
   // language server and CLI that share their analysis. A second scope arrives
