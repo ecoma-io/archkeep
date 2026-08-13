@@ -26,6 +26,12 @@ import { tmpdir } from "node:os";
 import { nxConsumerFiles } from "../fixtures/nx-consumer.mjs";
 import { nativeConsumerFiles } from "../fixtures/native-consumer.mjs";
 import { nativeMonorepoFiles } from "../fixtures/native-monorepo.mjs";
+import { goLanguageFiles } from "../fixtures/languages/go.mjs";
+import { typescriptLanguageFiles } from "../fixtures/languages/typescript.mjs";
+import { javascriptLanguageFiles } from "../fixtures/languages/javascript.mjs";
+import { vueLanguageFiles } from "../fixtures/languages/vue.mjs";
+import { rustLanguageFiles } from "../fixtures/languages/rust.mjs";
+import { pythonLanguageFiles } from "../fixtures/languages/python.mjs";
 
 /**
  * Writes a file map into a base directory, creating intermediate directories.
@@ -232,6 +238,92 @@ export function createNativeMonorepoConsumer(artifact) {
   if (nativeModules.includes("nx")) {
     rmSync(consumer, { recursive: true, force: true });
     throw new Error(`nx package resolved in native monorepo — peer is not optional in fact.`);
+  }
+
+  return {
+    root: consumer,
+    cleanup() {
+      rmSync(consumer, { recursive: true, force: true });
+    },
+  };
+}
+
+/**
+ * Lookup from a language name to its fixture function. Each fixture returns
+ * a `Record<string, string>` file map with three projects (domain,
+ * application, api) and language-specific source files.
+ *
+ * @type {Record<string, (packageName: string, peers: Record<string, string>, packageManager: string) => Record<string, string>>}
+ */
+const LANGUAGE_FIXTURES = {
+  go: goLanguageFiles,
+  typescript: typescriptLanguageFiles,
+  javascript: javascriptLanguageFiles,
+  vue: vueLanguageFiles,
+  rust: rustLanguageFiles,
+  python: pythonLanguageFiles,
+};
+
+/**
+ * Creates a native language consumer workspace: three projects described in
+ * `lattice.json`, with source files in the given language, no `nx`
+ * dependency. Proves that Lattice's analysis, graph construction, and
+ * boundary enforcement work for a specific language through the real
+ * installed CLI.
+ *
+ * @param {{ tarballPath: string, peers: Record<string, string>, packageName: string, packageManager: string }} artifact
+ * @param {string|((packageName: string, peers: Record<string, string>, packageManager: string) => Record<string, string>)} languageOrFn
+ *   Either a language name (`"go"`, `"typescript"`, etc.) looked up in
+ *   `LANGUAGE_FIXTURES`, or a fixture function passed directly.
+ * @returns {ConsumerWorkspace}
+ */
+export function createNativeLanguageConsumer(artifact, languageOrFn) {
+  const fixtureFn =
+    typeof languageOrFn === "function" ? languageOrFn : LANGUAGE_FIXTURES[languageOrFn];
+  if (!fixtureFn) {
+    throw new Error(
+      `Unknown language fixture '${languageOrFn}'. ` +
+        `Available: ${Object.keys(LANGUAGE_FIXTURES).join(", ")}`,
+    );
+  }
+
+  const { tarballPath, peers, packageName, packageManager } = artifact;
+  const consumer = realpathSync(mkdtempSync(join(tmpdir(), "lattice-e2e-lang-")));
+
+  const files = fixtureFn(packageName, peers, packageManager);
+  files["package.json"] = files["package.json"].replace(
+    '"*"',
+    JSON.stringify(`file:${tarballPath}`),
+  );
+  write(consumer, files);
+  // Write `pnpm-workspace.yaml` only if the fixture didn't provide one.
+  // Fixtures with pnpm workspace packages (e.g. JavaScript) supply their
+  // own with the correct `packages:` list and `allowBuilds` config.
+  if (!files["pnpm-workspace.yaml"]) {
+    writeFileSync(
+      join(consumer, "pnpm-workspace.yaml"),
+      "packages: []\nallowBuilds:\n  lefthook: false\n",
+      "utf8",
+    );
+  }
+  commitTree(consumer, "the clean tree", true);
+
+  const installed = run("pnpm", ["install", "--no-frozen-lockfile"], consumer);
+  if (installed.status !== 0) {
+    rmSync(consumer, { recursive: true, force: true });
+    throw new Error(
+      `pnpm install failed (${typeof languageOrFn === "string" ? languageOrFn : "custom"} language consumer):\n${installed.stdout ?? ""}\n${installed.stderr ?? ""}`,
+    );
+  }
+
+  const nativeModules = existsSync(join(consumer, "node_modules"))
+    ? readdirSync(join(consumer, "node_modules"))
+    : [];
+  if (nativeModules.includes("nx")) {
+    rmSync(consumer, { recursive: true, force: true });
+    throw new Error(
+      `nx package resolved in ${typeof languageOrFn === "string" ? languageOrFn : "custom"} language consumer — peer is not optional in fact.`,
+    );
   }
 
   return {
