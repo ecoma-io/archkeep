@@ -373,13 +373,26 @@ export const boundarySuppressions = [];
   };
 }
 
-/** The file that makes the Moon tree dirty: `core` reaching up into `app`. */
+/** The file that makes the Moon tree dirty: `core` reaching up into `app`.
+ *  The clean tree has app→core (valid under the tag constraint). To avoid
+ *  creating a cycle that would fire noCircularDependencies before the tag
+ *  constraint, we also replace app's source and manifest so that app no
+ *  longer imports core — only the one-direction core→app violation remains. */
 const VIOLATING_FILES_MOON = {
   "libs/core/src/index.ts": 'import { app } from "@acme/app";\n\nexport const core = app;\n',
   "libs/core/go.mod":
     "module example.test/core\n\ngo 1.22\n\nrequire example.test/app v0.0.0\n\n" +
     "replace example.test/app => ../app\n",
   "libs/core/violate.go": 'package core\n\nimport "example.test/app"\n\nvar _ = app.Thing\n',
+  "libs/app/moon.yml":
+    "id: app\n" +
+    "language: typescript\n" +
+    "layer: library\n" +
+    "stack: backend\n" +
+    "tags:\n" +
+    "  - layer-app\n",
+  "libs/app/src/index.ts": 'export const app = "app";\n',
+  "libs/app/go.mod": "module example.test/app\n\ngo 1.22\n",
   "libs/app/app.go": 'package app\n\nconst Thing = "app"\n',
 };
 
