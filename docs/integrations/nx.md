@@ -197,7 +197,7 @@ that already has one, and the project's position is that
 The boundary checker still analyzes `.ts`, `.js` and `.vue` files — it uses
 `ts.resolveModuleName` to resolve specifiers and reports violations against the
 same constraint table — but the graph edges those projects depend on come from
-Nx, not from this plugin.
+Nx, not from this integration.
 
 ## The misregistration guard
 

@@ -60,7 +60,7 @@ enforcer's reach narrower than the workspace's.
 
 The boundary rules read records and never learn which language produced them; the
 analysis layer reports import sites and never judges them; the report layer
-renders and decides nothing. The Nx plugin, the CLI, and the language server are
+renders and decides nothing. The Nx integration, the CLI, and the language server are
 three faces of the same engine, each composed from the same layers. A layer that
 reaches across its boundary — an analyzer that filters its own output, a
 formatter that decides what counts as a violation — is a rule wearing the wrong

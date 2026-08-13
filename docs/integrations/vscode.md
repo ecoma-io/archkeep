@@ -42,10 +42,10 @@ to a copy of its own.
 
 ## Two settings
 
-| setting                | default | what it does                                                               |
-| ---------------------- | ------- | -------------------------------------------------------------------------- |
-| `lattice.server.path`  | `""`    | Path to an `lsp.mjs`; relative paths resolve against the Nx workspace root |
-| `lattice.trace.server` | `off`   | Logs the LSP conversation to the Lattice output channel                    |
+| setting                | default | what it does                                                            |
+| ---------------------- | ------- | ----------------------------------------------------------------------- |
+| `lattice.server.path`  | `""`    | Path to an `lsp.mjs`; relative paths resolve against the workspace root |
+| `lattice.trace.server` | `off`   | Logs the LSP conversation to the Lattice output channel                 |
 
 `lattice.server.path` overrides the workspace lookup, and exists for people
 working on the server itself. A path that does not resolve is reported rather

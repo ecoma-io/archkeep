@@ -1,27 +1,36 @@
 # lattice
 
+Architecture enforcement for polyglot repositories — dependency graphs and module
+boundaries for Go, Rust, Python, TypeScript and Vue, with Nx as a first-class
+integration.
+
 ## Why it exists
 
-`nx affected` only knows about a dependency if it shows up as an edge in the Nx
-project graph, and Nx's own graph inference has no notion of a Go import, a
-Cargo path dependency, or a `pyproject.toml` path dependency (uv, Poetry or
-PDM). Without this plugin,
-changing a Go library never marks a sibling Go project affected — silently
-defeating `nx affected` for every polyglot project in the workspace. Community
-plugins for this problem (gonx, `@nxlv/python`) solve it by also inferring
-targets from the toolchain. This one deliberately does not: targets stay
-hand-written in each `project.json`, so what a target does has one source of
-truth. This plugin adds the missing edges only.
+In a polyglot repository, the languages ESLint cannot parse have `layer:`,
+`scope:` and `license:` tags with no mechanism behind them — a Go import that
+crosses a boundary passes lint because ESLint answers "File ignored because no
+matching configuration was supplied" for `.go`. The same gap affects the
+dependency graph: `nx affected` only knows about a dependency if it shows up as
+an edge in the project graph, and Nx's own graph inference has no notion of a Go
+import, a Cargo path dependency, or a `pyproject.toml` path dependency (uv,
+Poetry or PDM). Without Lattice, changing a Go library never marks a sibling Go
+project affected — silently defeating `nx affected` for every polyglot project
+in the workspace.
 
-The same gap has a second half. `@nx/enforce-module-boundaries` reads only
-JavaScript, TypeScript and Vue, so in a Go or Rust project the `layer:`,
-`scope:` and `license:` tags are a declaration with no mechanism behind them: a
-`.go` file given an import that violates the layer axis shows the edge in the
-graph and still passes `lint`, because ESLint answers "File ignored because no
-matching configuration was supplied" for `.go`. `src/analysis/` and `src/rules/`
-are where that becomes a real check — all fifteen
-`@nx/enforce-module-boundaries` violation types, under its eight options, over
-analysis records rather than an ESLint AST.
+Community plugins for the edge problem (gonx, `@nxlv/python`) solve it by also
+inferring targets from the toolchain. Lattice deliberately does not: targets stay
+hand-written in each `project.json`, so what a target does has one source of
+truth. This tool adds the missing edges only.
+
+The enforcement gap has its own answer. `@nx/enforce-module-boundaries` reads
+only JavaScript, TypeScript and Vue, so in a Go or Rust project those tags are a
+declaration with no enforcer. `src/analysis/` and `src/rules/` are where that
+becomes a real check — all fifteen `@nx/enforce-module-boundaries` violation
+types, under its eight options, over analysis records rather than an ESLint AST.
+
+Lattice works in any repository — Nx is a first-class integration, not a
+dependency. A workspace that has Nx gets graph reuse and `affected` integration;
+a repository that has never heard of Nx loses nothing.
 
 ## Installing it
 
@@ -29,7 +38,31 @@ analysis records rather than an ESLint AST.
 pnpm add -D @ecoma-io/lattice
 ```
 
-Register it in `nx.json`, and tell it what your workspace named its files:
+### Any repository
+
+Create a `lattice.json` at the repository root declaring your projects:
+
+```json
+{
+  "projects": {
+    "billing-core": { "root": "libs/billing/core" },
+    "billing-api": { "root": "libs/billing/api" }
+  }
+}
+```
+
+The boundary config defaults to `module-boundaries.config.mjs` at the root, and
+the TypeScript config to `tsconfig.base.json`. Both are read rather than assumed,
+because they are conventions a workspace may rename, and a tool that hardcoded
+either would answer confidently about a workspace it had misread. An unknown key
+throws rather than falling back to a default: a `tsconfigBase` typed for
+`tsConfig` that quietly used the default would produce a full green run against a
+rule nobody wrote.
+
+### An Nx workspace
+
+Register the integration in `nx.json` instead, and it reuses the project graph Nx
+already computes:
 
 ```json
 {
@@ -46,20 +79,15 @@ Register it in `nx.json`, and tell it what your workspace named its files:
 ```
 
 Both options default to the values above — the Nx conventions — so a workspace
-that follows them can register the plugin by name alone. Both are read rather
-than assumed because they are conventions a workspace may rename, and a tool
-that hardcoded either would answer confidently about a workspace it had misread.
-An unknown key throws rather than falling back to a default: a `tsconfigBase`
-typed for `tsConfig` that quietly used the default would produce a full green
-run against a rule nobody wrote.
+that follows them can register the integration by name alone. An unknown key
+throws rather than falling back to a default for the same reason as above.
 
 `nx` is a peer dependency, and an optional one: it is resolved from your
-workspace, so the graph this tool reads is the one your own `nx` command
-builds, but nothing here bundles a copy. `lattice check` needs it only for
-project-graph discovery; a workspace that never installed `nx` gets a named
-diagnostic and exit 3 — never a raw module-resolution stack — rather than a
-graph built from a copy this tool shipped, which could disagree with the
-workspace's own.
+workspace, so the graph this tool reads is the one your own `nx` command builds,
+but nothing here bundles a copy. `lattice check` needs it only for project-graph
+discovery; a workspace that never installed `nx` gets a named diagnostic and
+exit 3 — never a raw module-resolution stack — rather than a graph built from a
+copy this tool shipped, which could disagree with the workspace's own.
 
 ## The boundary config
 
@@ -95,9 +123,9 @@ the day one changed.
 
 ## Running it in a terminal
 
-The `lattice` bin reads the Nx graph, analyzes every tracked source
-file a project owns, and reports every violation with a `file:line:column` a
-developer can act on:
+The `lattice` bin reads the project graph from the selected provider,
+analyzes every tracked source file a project owns, and reports every violation
+with a `file:line:column` a developer can act on:
 
 ```shell
 pnpm exec lattice check
@@ -254,7 +282,7 @@ workspace without that language, because resolution is keyed on a manifest that
 is not there.
 
 And nothing here assumes any workspace's project names, areas, or tag values.
-Everything comes from the graph Nx computes and the config the workspace
+Everything comes from the project graph and the config the workspace
 declares — which is what lets this run in trees it has never seen.
 
 ## Status

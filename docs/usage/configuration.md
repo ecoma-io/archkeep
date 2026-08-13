@@ -94,7 +94,7 @@ boundary law is in effect.
   to one whose code in that language is clean — the silence this tool exists to
   end. A workspace already pays nothing for a language it does not have: every
   resolver keys off a manifest that is not there.
-- **Project names or tag values.** Everything comes from the graph Nx computes
+- **Project names or tag values.** Everything comes from the project graph
   and the config the workspace declares.
 - **The exit codes.** 0 clean, 1 findings (check only), 2 usage error, 3 no
   verdict. See [ci.md](ci.md) for the full table.

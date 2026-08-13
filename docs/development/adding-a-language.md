@@ -1,7 +1,7 @@
 # Adding a language
 
 This is the keystone of the project's direction: the north star is _every_
-language in an Nx workspace getting the same enforcement TypeScript already has,
+language in a repository getting the same enforcement TypeScript already has,
 and this page is the path from "not supported" to "supported" without the
 intermediate state that would quietly make the tool untrustworthy.
 
@@ -249,12 +249,12 @@ Four files, and none of them optional:
 All four of these, or the language is _partly_ supported and should say so rather
 than implying otherwise with a checkmark:
 
-|                                                                                                | proved by                                                  |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| **Edges** — changing a project marks its dependents affected                                   | the graph integration test, over a real Nx context         |
-| **Enforcement** — all fifteen violation types reachable                                        | the rules suite, driven from that language's fixtures      |
-| **Editor** — a violation is a diagnostic at the edit                                           | the plugin manifest, held to the analyzer registry by test |
-| **Declared limits** — every unreadable shape written down, all erring toward a spurious record | the analyzer's own header, pinned by tests                 |
+|                                                                                                | proved by                                                       |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **Edges** — changing a project marks its dependents affected                                   | the graph integration test, over a real Nx context              |
+| **Enforcement** — all fifteen violation types reachable                                        | the rules suite, driven from that language's fixtures           |
+| **Editor** — a violation is a diagnostic at the edit                                           | the integration manifest, held to the analyzer registry by test |
+| **Declared limits** — every unreadable shape written down, all erring toward a spurious record | the analyzer's own header, pinned by tests                      |
 
 ## And one thing you will be tempted by
 

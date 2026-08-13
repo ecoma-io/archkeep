@@ -69,7 +69,7 @@ that fact appears in the snapshot rather than being omitted. An edge list that
 silently under-represents the real architecture is the defect this tool's whole
 design exists to prevent.
 
-On a workspace where the plugin is not registered but polyglot manifests exist
+On an Nx workspace where the integration is not registered but polyglot manifests exist
 under project roots, the engine refuses to return a snapshot rather than
 producing one whose edges silently under-represent the real architecture. There
 is no escape flag — an option that makes a check not run is a drift signal.

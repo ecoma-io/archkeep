@@ -78,7 +78,7 @@ rest of the envelope rather than guess.
   language it does not have: every resolver keys off a manifest that is not
   there.
 - **Build targets or inferred targets.** Projects are declared by hand-written
-  `project.json`, and targets are never inferred — that is this plugin's reason
+  `project.json`, and targets are never inferred — that is this tool's reason
   to exist.
 - **A second copy of the constraint table.** It has one home: the file at the
   consumer's workspace root.

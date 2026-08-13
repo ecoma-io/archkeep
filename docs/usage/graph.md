@@ -47,12 +47,12 @@ this tool reads upstream, not facts about the consumer's architecture.
 
 ## The unregistered-plugin refusal
 
-On an Nx workspace whose `nx.json` does not register this plugin but whose
+On an Nx workspace whose `nx.json` does not register the Nx integration but whose
 tracked files include polyglot manifests (Go, Rust, Python) under project
 roots, `graph` refuses loudly rather than returning a snapshot whose edges
 silently under-represent the real architecture. The refusal is narrowed to
 that condition: a pure-TypeScript Nx workspace whose graph is complete without
-this plugin is never refused. There is no escape flag — an option that makes a
+the integration is never refused. There is no escape flag — an option that makes a
 check not run is a drift signal.
 
 ## Snapshot for diff

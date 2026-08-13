@@ -54,6 +54,6 @@ Exit 3, with that sentence in the error message.
 ## The unregistered-plugin refusal
 
 Same as `graph` and `diff`: on an Nx workspace whose `nx.json` does not
-register this plugin but whose tracked files include polyglot manifests under
+register the Nx integration but whose tracked files include polyglot manifests under
 project roots, `impact` refuses loudly rather than returning an impact set whose
 dependents silently under-represent the real architecture.

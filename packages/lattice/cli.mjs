@@ -236,11 +236,11 @@ ${
 from ${boundaryConfig} — an inline policy object on lattice.json's own \`boundaryConfig\`
 field, not a separate file. There is no filename here for ESLint to share and no nx.json
 to change it through; see docs/usage/policy-file.md's "An inline policy" section.`
-    : `Projects and tags come from the Nx project graph; the rules come from
+    : `Projects and tags come from the project graph (lattice.json or Nx); the rules come from
 ${boundaryConfig} at the workspace root — the same table ESLint
-reads, so both enforcers answer from one source. That filename is the Nx
-convention and can be changed per workspace, through the plugin's
-\`boundaryConfig\` option in nx.json.`
+reads, so both enforcers answer from one source. That filename is a
+convention and can be changed per workspace: through lattice.json's
+\`boundaryConfig\` field, or the integration's \`boundaryConfig\` option in nx.json.`
 }
 
 Naming paths scopes the run to those files. That is a fast local pre-check and
