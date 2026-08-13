@@ -1242,6 +1242,32 @@ describe("evaluate", () => {
       });
     });
 
+    it("carries the constraint row that fired on a tag-constraint violation", () => {
+      // The e2e and app violations carry `constraint: null` because they fire
+      // before the tag block. A tag-constraint violation is the most common and
+      // important case — this test pins its full shape, including the non-null
+      // `constraint` and the `data` with `sourceTag`/`onlyDependOnLibsWithTags`.
+      const constraint = { sourceTag: "zone:x", onlyDependOnLibsWithTags: ["zone:y"] };
+      const graph = graphOf([
+        project("alpha", { tags: ["zone:x"] }),
+        project("beta", { tags: ["zone:unrelated"] }),
+      ]);
+      const [violation] = evaluate([site({ line: 5, column: 3 })], graph, config([constraint]));
+      expect(violation).toEqual({
+        sourceFile: "area/alpha/src/index.ts",
+        line: 5,
+        column: 3,
+        specifier: "@fixture/beta",
+        kind: "static",
+        messageId: "onlyTagsConstraintViolation",
+        message: expect.any(String),
+        sourceProject: "alpha",
+        targetProject: "beta",
+        constraint,
+        data: { sourceTag: "zone:x", tags: '"zone:y"' },
+      });
+    });
+
     it("judges every site it is given, in the order they arrive", () => {
       const graph = graphOf([
         project("alpha", { tags: ["zone:x"] }),

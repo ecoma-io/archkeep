@@ -76,6 +76,10 @@ describe("tagMatches", () => {
     expect(tagMatches(["zone:x"], "zone:*")).toBe(true);
     expect(tagMatches(["other:zone:x"], "zone:*")).toBe(false);
   });
+
+  it("returns false when tags are empty and the pattern is not bare star", () => {
+    expect(tagMatches([], "zone:x")).toBe(false);
+  });
 });
 
 describe("pattern validation", () => {
@@ -151,6 +155,10 @@ describe("findMatchingProjects", () => {
 
   it("skips a cross-workspace reference that could never match", () => {
     expect(findMatchingProjects(["nx-cloud:something"], nodes)).toEqual([]);
+  });
+
+  it("returns empty when a tag pattern selects nothing", () => {
+    expect(findMatchingProjects(["tag:zone:nonexistent"], nodes)).toEqual([]);
   });
 
   it("refuses a pattern it cannot reproduce rather than selecting an approximation", () => {

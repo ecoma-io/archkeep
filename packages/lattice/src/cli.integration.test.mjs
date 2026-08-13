@@ -296,6 +296,42 @@ describe("checking a real tree", () => {
     expect(envelope.result.violations).toEqual([]);
   });
 
+  it("pins every field of the violation object in the JSON envelope", async () => {
+    // Five fields — `constraint`, `specifier`, `kind`, `sourceProject`,
+    // `targetProject` — could silently disappear from the JSON output and no
+    // existing test would notice. The text golden test catches format drift in
+    // text; this test catches structural drift in JSON.
+    const { report } = await check({ format: "json", config: null, paths: [] }, context);
+    const envelope = JSON.parse(report);
+    expect(envelope.result.violations).toHaveLength(1);
+    expect(envelope.result.violations[0]).toEqual({
+      sourceFile: "libs/domain/doc.go",
+      line: 5,
+      column: 2,
+      specifier: "example.com/adapter",
+      kind: "static",
+      messageId: "onlyTagsConstraintViolation",
+      message: expect.any(String),
+      sourceProject: "domain",
+      targetProject: "adapter",
+      constraint: { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+      data: expect.any(Object),
+    });
+  });
+
+  it("pins the SARIF property-bag fields that carry project and import metadata", async () => {
+    // SARIF carries `specifier`, `importKind`, `sourceProject`, and
+    // `targetProject` in the `properties` bag — none of the existing SARIF
+    // tests pin these values against the fixture. A formatter change that
+    // dropped them would be invisible.
+    const { report } = await check({ format: "sarif", config: null, paths: [] }, context);
+    const result = JSON.parse(report).runs[0].results[0];
+    expect(result.properties.specifier).toBe("example.com/adapter");
+    expect(result.properties.importKind).toBe("static");
+    expect(result.properties.sourceProject).toBe("domain");
+    expect(result.properties.targetProject).toBe("adapter");
+  });
+
   it("scopes to the paths it is given, and finds nothing in the clean half", async () => {
     const { report, violations } = await check(
       { format: "text", config: null, paths: ["libs/adapter"] },
@@ -2514,6 +2550,53 @@ export const moduleBoundaryOptions = {
       listFiles: () => unregFiles,
     };
     expect(await runCli(["graph"], streams)).toBe(EXIT.ok);
+  });
+
+  it("check proceeds when the Nx plugin is unregistered and polyglot manifests exist", async () => {
+    // `pluginGap` on CommandContext is computed but NOT consulted by `check`'s
+    // refusal logic — only `graph` refuses. This test pins that: if `check`
+    // were accidentally wired to refuse the same way `graph` does, it would
+    // exit 3 instead of 0 or 1, and this test would catch the regression.
+    // Restore the unregistered nx.json in case the test above overwrote it.
+    writeUnreg("nx.json", JSON.stringify({}));
+    const out = [];
+    const err = [];
+    const streams = {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      cwd: unregisteredRoot,
+      readGraph: () => unregGraph,
+      listFiles: () => unregFiles,
+    };
+    // Exit 0 (clean) or 1 (violations), NOT 3 (refusal).
+    const exitCode = await runCli(["check"], streams);
+    expect(exitCode).not.toBe(EXIT.error);
+  });
+
+  it("check notes no coverage gap for an unregistered plugin", async () => {
+    // `pluginGap` is a documented product decision: the gap is known and
+    // tracked separately. `check`'s JSON envelope does not carry a
+    // polyglot-coverage-gap note in `coverage.notes`, because the gap lives
+    // in `graph`'s refusal, not in `check`'s verdict. If wiring lands, this
+    // test fails and gets updated.
+    writeUnreg("nx.json", JSON.stringify({}));
+    const out = [];
+    const err = [];
+    const streams = {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      cwd: unregisteredRoot,
+      readGraph: () => unregGraph,
+      listFiles: () => unregFiles,
+    };
+    await runCli(["check", "--format", "json"], streams);
+    const envelope = JSON.parse(out.join("\n"));
+    const gapNotes = (envelope.coverage.notes ?? []).filter((n) =>
+      /polyglot|plugin.*gap|unregistered/i.test(n),
+    );
+    expect(gapNotes).toEqual([]);
   });
 });
 
