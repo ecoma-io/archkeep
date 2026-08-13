@@ -31,6 +31,12 @@ dependencies)` for projects with no edges, and a coverage claim above the
   A project with no dependents states the 0 count explicitly — an empty
   `dependents` list is a claim, not silence. Renders the same payload
   `json.mjs` wraps; decides nothing.
+- `explain-text.mjs` — the terminal report for `../../cli.mjs`'s `explain`
+  command: the `file:line:column` position unindented (clickable), then the
+  import specifier, source/target projects with tags, matched constraint rows,
+  and the verdict (allowed/VIOLATION/UNRESOLVABLE), each indented. Coverage
+  sits at the bottom, same shape as every other command. Renders the same
+  payload `json.mjs` wraps; decides nothing.
 
 `json.mjs` is not a formatter in that sense — it does not turn violations into
 output. `jsonEnvelope` wraps whatever result object a command already computed

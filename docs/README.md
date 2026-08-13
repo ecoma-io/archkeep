@@ -25,6 +25,7 @@ version.
 | [graph.md](usage/graph.md)                               | The `graph` command: deterministic snapshot of the project graph              |
 | [diff.md](usage/diff.md)                                 | The `diff` command: two graph snapshots compared edge by edge                 |
 | [impact.md](usage/impact.md)                             | The `impact` command: projects that depend on the named project               |
+| [explain.md](usage/explain.md)                           | The `explain` command: the judgment for one import site, explained            |
 | [json-output.md](usage/json-output.md)                   | `--format json`'s versioned envelope: every field, and the stability promise  |
 | [editors.md](usage/editors.md)                           | Diagnostics at the edit, per client                                           |
 | [troubleshooting.md](usage/troubleshooting.md)           | It found nothing · it found too much · it could not look                      |

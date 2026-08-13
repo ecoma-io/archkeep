@@ -34,3 +34,11 @@ commands share rather than a command. It composes `../workspace.mjs`,
   depends on it. Separates direct from transitive dependents. Refuses incomplete
   coverage (whole-file analysis failures). Refuses an Nx workspace with polyglot
   manifests but no plugin registration. Descriptive: never exits 1.
+
+- **`explain`** (`./explain.mjs`'s `explainCommand`) — the judgment for one import
+  site, explained. Takes a `file:line:column` site, finds the matching import
+  record, and explains: which constraint row matched, which tags applied,
+  whether it is a violation and why. Reports an `UNRESOLVABLE` verdict for a
+  site-level failure (dynamic import with non-literal argument). Refuses an Nx
+  workspace with polyglot manifests but no plugin registration. Descriptive:
+  never exits 1.
