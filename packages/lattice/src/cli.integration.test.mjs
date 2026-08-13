@@ -17,7 +17,17 @@ const CLI = fileURLToPath(new URL("../cli.mjs", import.meta.url));
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 
 /** Runs the real executable, the way a shell, a hook, or CI would. */
-const run = (args) => spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8" });
+const run = (args) =>
+  spawnSync(process.execPath, [CLI, ...args], {
+    encoding: "utf8",
+    // A bounded timeout prevents resource contention under full-suite parallel
+    // load from hanging the test: the CLI help/error exits this process exits in
+    // well under a second, so 30 s is generous — and without it, a slow spawn
+    // blocks the thread indefinitely, which vitest's per-test timeout cannot
+    // interrupt (the event loop is stuck inside the syscall). cf. #41
+    timeout: 30_000,
+    killSignal: "SIGKILL",
+  });
 
 /**
  * A workspace with two Go projects on opposite sides of the layer axis, and one
