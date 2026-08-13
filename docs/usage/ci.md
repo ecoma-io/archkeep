@@ -221,7 +221,7 @@ wants to script against the result instead of scraping a report:
 ```
 
 Every field name and `schemaVersion` are a public contract from this release
-on — [json-output.md](json-output.md) is the full reference: every field, the
+on — [json-output.md](../reference/json-output.md) is the full reference: every field, the
 three `status` values, and the stability promise a consumer's own parser can
 rely on. Two things worth stating here rather than only there:
 
@@ -247,7 +247,7 @@ If your workspace already runs `@nx/enforce-module-boundaries`, keep it. It stay
 authoritative for JavaScript, TypeScript and Vue; this tool covers the languages
 ESLint cannot parse. Point both at the same config file so there is one table
 rather than two that drift — see
-[getting-started.md](getting-started.md) § _If you already run
+[getting-started.md](../getting-started/first-policy.md) § _If you already run
 `@nx/enforce-module-boundaries`_.
 
 The conditions under which you could eventually drop the ESLint rule are

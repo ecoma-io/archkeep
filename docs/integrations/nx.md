@@ -7,7 +7,7 @@ makes those edges visible to `nx affected` and to the boundary rules.
 
 What it does **not** do is re-infer what Nx already knows. TypeScript and
 JavaScript edges are Nx's own — Lattice adds Go, Rust and Python, and leaves
-the rest alone ([north-star.md](../north-star.md): _TypeScript stays with
+the rest alone ([north-star.md](../doctrine/north-star.md): _TypeScript stays with
 `@nx/eslint-plugin`_).
 
 ## What the integration provides
@@ -169,7 +169,7 @@ The boundary check catches violations that `nx affected` never will: an
 undeclared Python import that works at runtime, for example, crosses the
 boundary while drawing no graph edge. Edges and analysis answer different
 questions, and both stay —
-[languages.md](../usage/languages.md) owns that distinction per language.
+[languages.md](../reference/languages.md) owns that distinction per language.
 
 ## workspaceLayout
 
@@ -181,10 +181,10 @@ not need to repeat the value anywhere for the boundary rules to see it.
 
 A declared-but-incomplete layout (one key present, the other absent) throws
 rather than being silently completed from the default. The refusal and its
-diagnostic are in [violations.md](../usage/violations.md).
+diagnostic are in [violations.md](../reference/violations.md).
 
 A native workspace (no `nx.json`) states the same fact on `lattice.json`'s own
-`workspaceLayout` field — see [lattice-json.md](../usage/lattice-json.md).
+`workspaceLayout` field — see [configuration.md](../reference/configuration.md).
 
 ## What Nx already does
 
@@ -192,7 +192,7 @@ Nx infers TypeScript and JavaScript edges from import statements. Lattice does
 not re-infer them. A second inference would be a second answer to a question
 that already has one, and the project's position is that
 `@nx/enforce-module-boundaries` should keep running for those languages
-([north-star.md](../north-star.md): _TypeScript stays with `@nx/eslint-plugin`_).
+([north-star.md](../doctrine/north-star.md): _TypeScript stays with `@nx/eslint-plugin`_).
 
 The boundary checker still analyzes `.ts`, `.js` and `.vue` files — it uses
 `ts.resolveModuleName` to resolve specifiers and reports violations against the
@@ -239,9 +239,9 @@ with that case.
 ---
 
 - Install the plugin and write the first boundary table:
-  [getting-started.md](../usage/getting-started.md)
+  [installation.md](../getting-started/installation.md)
 - What each analyzer reads, and the shapes it cannot:
-  [languages.md](../usage/languages.md)
+  [languages.md](../reference/languages.md)
 - The CLI's exit codes and SARIF output: [ci.md](../usage/ci.md)
 - The architecture the integration fits into:
   [architecture.md](../development/architecture.md)

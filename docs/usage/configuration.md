@@ -1,0 +1,100 @@
+# Configuration
+
+Every surface Lattice reads, and where each option lives.
+
+Two providers, two config shapes, one engine. The engine reads the same
+boundary law and produces the same verdicts either way; configuration decides
+which provider runs and what filenames it reads.
+
+## Which provider runs
+
+A marker file at the workspace root decides:
+
+| marker         | provider | project model from              |
+| -------------- | -------- | ------------------------------- |
+| `nx.json`      | Nx       | Nx's project graph (`nx graph`) |
+| `lattice.json` | native   | `lattice.json` + tracked tree   |
+
+Both present is a usage error — the engine refuses to guess. Neither present
+exits 3, naming what it looked for.
+
+The rest of this page covers the options each provider accepts. The boundary
+law itself — `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`
+— is the same table regardless of provider; [policy-file.md](policy-file.md) is
+its reference.
+
+## Nx provider options
+
+On an `nx.json` workspace, the options live in the plugin registration:
+
+```jsonc
+// nx.json
+{
+  "plugins": [
+    {
+      "plugin": "@ecoma-io/lattice/nx",
+      "options": {
+        "boundaryConfig": "module-boundaries.config.mjs",
+        "tsConfig": "tsconfig.base.json",
+      },
+    },
+  ],
+}
+```
+
+| option           | default                        | meaning                                                                                               |
+| ---------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `boundaryConfig` | `module-boundaries.config.mjs` | Path (workspace-relative) to the boundary law. Read by the CLI, the language server, and the Nx hook. |
+| `tsConfig`       | `tsconfig.base.json`           | Path to the shared TypeScript config for import resolution.                                           |
+
+Both default to the Nx convention. An unknown key **throws** rather than falling
+back — a `tsconfigBase` typed for `tsConfig` that quietly used the default
+would give you a full green run against a rule nobody wrote.
+
+`--config` on the command line overrides `boundaryConfig` for one run.
+
+## Native provider options
+
+On a `lattice.json` workspace, the same two options sit directly on the model
+file — there is no `plugins[].options` table to nest them under. The full
+`lattice.json` shape is at [lattice-json.md](lattice-json.md).
+
+```jsonc
+// lattice.json
+{
+  "boundaryConfig": "module-boundaries.config.mjs",
+  "tsConfig": "tsconfig.base.json",
+}
+```
+
+`boundaryConfig` can also be an **inline object** — the boundary law directly,
+rather than a filename pointing at it. Its keys are `depConstraints`,
+`moduleBoundaryOptions`, and `boundarySuppressions`, validated by the same
+check a separate file goes through. The language server does not support the
+inline form: it watches and re-reads a _file_, and an object embedded in
+`lattice.json` does not change independently of the model.
+
+## CLI flags
+
+| flag       | commands that accept it                       | meaning                                                                          |
+| ---------- | --------------------------------------------- | -------------------------------------------------------------------------------- |
+| `--format` | `check`, `graph`, `diff`, `impact`, `explain` | `text` (default), `sarif` (check only), or `json` (versioned envelope)           |
+| `--output` | all commands                                  | Write the report to a file instead of stdout                                     |
+| `--config` | `check`, `explain`                            | Read the boundary law from this file instead of the workspace's `boundaryConfig` |
+
+`--format sarif` is only available for `check`; the descriptive commands
+(`graph`, `diff`, `impact`, `explain`) produce `text` or `json` only. The
+`explain` command accepts `--config` because the judgment depends on which
+boundary law is in effect.
+
+## What is not configurable
+
+- **Which languages are checked.** There is no `languages` option. A workspace
+  that switched a language off would produce a report byte-for-byte identical
+  to one whose code in that language is clean — the silence this tool exists to
+  end. A workspace already pays nothing for a language it does not have: every
+  resolver keys off a manifest that is not there.
+- **Project names or tag values.** Everything comes from the graph Nx computes
+  and the config the workspace declares.
+- **The exit codes.** 0 clean, 1 findings (check only), 2 usage error, 3 no
+  verdict. See [ci.md](ci.md) for the full table.

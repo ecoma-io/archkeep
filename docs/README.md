@@ -2,43 +2,86 @@
 
 Two doors. Take the one that matches what you are here to do.
 
-- **I want to use it** → [usage/getting-started.md](usage/getting-started.md)
+- **I want to use it** → [getting-started/installation.md](getting-started/installation.md)
 - **I want to change it** → [development/architecture.md](development/architecture.md)
 
 And three documents that are neither, but decide what the rest say:
 [why.md](why.md) — the problem this exists for, with the measurement behind it —
-[north-star.md](north-star.md) — where it is going and what it will refuse on
+[north-star.md](doctrine/north-star.md) — where it is going and what it will refuse on
 the way — and [roadmap.md](roadmap.md) — the staged path there, by major
 version.
 
+## Getting started
+
+| page                                                 | what it answers                                             |
+| ---------------------------------------------------- | ----------------------------------------------------------- |
+| [installation.md](getting-started/installation.md)   | Prerequisites, install, and what each entry point provides  |
+| [first-project.md](getting-started/first-project.md) | Create a `lattice.json` workspace, add a project, tag it    |
+| [first-policy.md](getting-started/first-policy.md)   | Write and run your first constraint table, read a violation |
+
+## Concepts
+
+| page                                        | what it answers                                                                |
+| ------------------------------------------- | ------------------------------------------------------------------------------ |
+| [architecture.md](concepts/architecture.md) | The engine, three faces, layer split — technology-neutral                      |
+| [graph.md](concepts/graph.md)               | Project graph, edge identity, deterministic snapshots                          |
+| [boundaries.md](concepts/boundaries.md)     | Layer/scope/license axes, constraint model, tag semantics, what "violation" is |
+| [policies.md](concepts/policies.md)         | Three dialects, one table, stability contract                                  |
+| [projects.md](concepts/projects.md)         | What a project is, discovery, naming                                           |
+| [integrations.md](concepts/integrations.md) | How integrations extend the core                                               |
+
 ## Usage
 
-| page                                                     | what it answers                                                               |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| [getting-started.md](usage/getting-started.md)           | Install, register the plugin, write the first boundary table, see a violation |
-| [lattice-json.md](usage/lattice-json.md)                 | `lattice.json`'s fields, for a workspace with no Nx at all                    |
-| [policy-file.md](usage/policy-file.md)                   | What `boundaryConfig` may point at: the `.mjs`/`.js` and `.json` dialects     |
-| [designing-boundaries.md](usage/designing-boundaries.md) | What to put in the constraint table, and how to pick tags that hold           |
-| [violations.md](usage/violations.md)                     | Each of the fifteen violations: what it means, and what fixes it              |
-| [languages.md](usage/languages.md)                       | What each analyzer reads, the shapes it cannot, and the two workspace checks  |
-| [ci.md](usage/ci.md)                                     | The exit codes in a pipeline, and SARIF into GitHub code scanning             |
-| [graph.md](usage/graph.md)                               | The `graph` command: deterministic snapshot of the project graph              |
-| [diff.md](usage/diff.md)                                 | The `diff` command: two graph snapshots compared edge by edge                 |
-| [impact.md](usage/impact.md)                             | The `impact` command: projects that depend on the named project               |
-| [explain.md](usage/explain.md)                           | The `explain` command: the judgment for one import site, explained            |
-| [json-output.md](usage/json-output.md)                   | `--format json`'s versioned envelope: every field, and the stability promise  |
-| [editors.md](usage/editors.md)                           | Diagnostics at the edit, per client                                           |
-| [troubleshooting.md](usage/troubleshooting.md)           | It found nothing · it found too much · it could not look                      |
+| page                                           | what it answers                                                    |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| [configuration.md](usage/configuration.md)     | Every surface Lattice reads, and where each option lives           |
+| [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                |
+| [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph   |
+| [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared edge by edge      |
+| [impact.md](usage/impact.md)                   | The `impact` command: projects that depend on the named project    |
+| [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained |
+| [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning      |
+| [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look           |
+
+## Integrations
+
+| page                                | what it answers                                                         |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| [nx.md](integrations/nx.md)         | Nx plugin registration, options, graph edges, affected, workspaceLayout |
+| [vscode.md](integrations/vscode.md) | VS Code extension: settings, routing, installation                      |
+
+## Reference
+
+| page                                           | what it answers                                                              |
+| ---------------------------------------------- | ---------------------------------------------------------------------------- |
+| [configuration.md](reference/configuration.md) | `lattice.json` fields, `nx.json` options, inline boundary config             |
+| [policy-schema.md](reference/policy-schema.md) | Constraint table schema: every key, every value                              |
+| [cli.md](reference/cli.md)                     | All commands, all flags, all exit codes                                      |
+| [exit-codes.md](reference/exit-codes.md)       | The four exit codes with exact meaning                                       |
+| [json-output.md](reference/json-output.md)     | `--format json`'s versioned envelope: every field, and the stability promise |
+| [languages.md](reference/languages.md)         | What each analyzer reads, the shapes it cannot, and the two workspace checks |
+| [violations.md](reference/violations.md)       | Each of the fifteen violations: what it means, and what fixes it             |
+
+## Doctrine
+
+| page                                                              | what it answers                                                     |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------- |
+| [north-star.md](doctrine/north-star.md)                           | The direction, what "finished" means per language, and the refusals |
+| [principles.md](doctrine/principles.md)                           | The seven binding principles                                        |
+| [architecture-governance.md](doctrine/architecture-governance.md) | How Lattice practices what it enforces                              |
 
 ## Development
 
-| page                                                     | what it answers                                                     |
-| -------------------------------------------------------- | ------------------------------------------------------------------- |
-| [architecture.md](development/architecture.md)           | One check, end to end, and why the layers are cut where they are    |
-| [adding-a-language.md](development/adding-a-language.md) | The full path for a new language, in the order that keeps it honest |
-| [testing.md](development/testing.md)                     | Which suite proves what, and which failure each tier is for         |
+| page                                                       | what it answers                                                     |
+| ---------------------------------------------------------- | ------------------------------------------------------------------- |
+| [architecture.md](development/architecture.md)             | One check, end to end, and why the layers are cut where they are    |
+| [adding-a-language.md](development/adding-a-language.md)   | The full path for a new language, in the order that keeps it honest |
+| [adding-integration.md](development/adding-integration.md) | How a new integration extends the core, and the contract it holds   |
+| [repository.md](development/repository.md)                 | The two packages, plain ESM, gate scripts, CI                       |
+| [release.md](development/release.md)                       | How a version reaches the people who use it                         |
+| [testing.md](development/testing.md)                       | Which suite proves what, and which failure each tier is for         |
 
-Those three assume you can already build and run the repository. The setup, the
+Those pages assume you can already build and run the repository. The setup, the
 command list, the commit format and how a pull request lands are
 [CONTRIBUTING.md](../CONTRIBUTING.md)'s, and none of it is repeated here.
 
@@ -52,9 +95,14 @@ allowed to say it". That table:
 | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | [`README.md`](../README.md)                                                 | The pitch: what Lattice is in one breath, and the way in                                              |
 | [`docs/why.md`](why.md)                                                     | The gap, and the evidence that it is real                                                             |
-| [`docs/north-star.md`](north-star.md)                                       | The direction, what "finished" means per language, and the refusals                                   |
+| [`docs/doctrine/north-star.md`](doctrine/north-star.md)                     | The direction, what "finished" means per language, and the refusals                                   |
+| [`docs/doctrine/principles.md`](doctrine/principles.md)                     | The seven binding principles                                                                          |
 | [`docs/roadmap.md`](roadmap.md)                                             | The staged path: which capabilities belong to which major version, and in what order                  |
+| `docs/getting-started/`                                                     | Installation, first project, first policy                                                             |
+| `docs/concepts/`                                                            | The model: architecture, graph, boundaries, policies, projects, integrations                          |
 | `docs/usage/`                                                               | How a consumer runs it and reads its answers                                                          |
+| `docs/integrations/`                                                        | Nx plugin and VS Code extension — the two surfaces at the edge                                        |
+| `docs/reference/`                                                           | Schemas, exit codes, language limits, violation catalogue                                             |
 | `docs/development/`                                                         | How it works inside, and how to extend it                                                             |
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md)                                     | The contribution bar, the commands, hooks, commits, review, release                                   |
 | [`SECURITY.md`](../SECURITY.md)                                             | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/` |

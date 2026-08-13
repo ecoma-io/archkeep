@@ -18,7 +18,7 @@ an import site, the only difference from the CLI is when you find out.
 What the server deliberately does not publish are the CLI's two workspace-level
 checks — go.work drift and dead tsconfig path aliases — because a finding that
 describes the workspace stays out of whichever file happens to be open.
-[languages.md](../usage/languages.md) owns both and the reasoning.
+[languages.md](../reference/languages.md) owns both and the reasoning.
 
 ## How it works
 
@@ -173,8 +173,8 @@ duplicates what `@nx/enforce-module-boundaries` already tells you.
 ---
 
 - The language server's guarantee and the one rule it exists to hold:
-  [editors.md](../usage/editors.md)
+  [this page](.)
 - What each analyzer reads, and the shapes it cannot:
-  [languages.md](../usage/languages.md)
+  [languages.md](../reference/languages.md)
 - The VS Code extension's own reference:
   [`packages/lattice-vscode/README.md`](../../packages/lattice-vscode/README.md)
