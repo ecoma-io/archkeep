@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  appIsMFERemote,
   belongsToDifferentEntryPoint,
+  circularViolation,
   createFileDependencyIndex,
   entryPointOf,
   findFilesInCircularPath,
@@ -9,7 +11,9 @@ import {
   hasBuildExecutor,
   hasDynamicImport,
   isDirectDependency,
+  lazyLoadedViolation,
 } from "./topology.mjs";
+import { buildReachability, expandIgnoredCircularDependencies } from "./reachability.mjs";
 
 const project = (name, data = {}) => ({
   name,
@@ -165,5 +169,205 @@ describe("createFileDependencyIndex", () => {
     const index = createFileDependencyIndex(edges);
     expect(findFilesInCircularPath(index, [{ name: "b" }, { name: "a" }])).toEqual([[]]);
     expect(findFilesWithDynamicImports(index, "b", "a")).toEqual([]);
+  });
+});
+
+describe("appIsMFERemote", () => {
+  it("returns true when data.mfeRemote is true", () => {
+    expect(appIsMFERemote(project("a", { mfeRemote: true }))).toBe(true);
+  });
+
+  it("returns false when data.mfeRemote is absent — fails closed", () => {
+    expect(appIsMFERemote(project("a"))).toBe(false);
+  });
+
+  it("returns false when data.mfeRemote is false", () => {
+    expect(appIsMFERemote(project("a", { mfeRemote: false }))).toBe(false);
+  });
+});
+
+describe("circularViolation", () => {
+  const alpha = project("alpha");
+  const beta = project("beta");
+  const graph = {
+    nodes: { alpha, beta },
+    dependencies: {
+      alpha: [{ source: "alpha", target: "beta", type: "static" }],
+      beta: [{ source: "beta", target: "alpha", type: "static" }],
+    },
+  };
+  const reach = buildReachability(graph);
+  const edges = [
+    {
+      sourceFile: "area/alpha/src/index.ts",
+      sourceProject: "alpha",
+      targetProject: "beta",
+      dynamic: false,
+    },
+    {
+      sourceFile: "area/beta/src/index.ts",
+      sourceProject: "beta",
+      targetProject: "alpha",
+      dynamic: false,
+    },
+  ];
+  const fileIndex = createFileDependencyIndex(edges);
+  const noIgnored = new Map();
+
+  it("returns null when there is no cycle", () => {
+    const acyclic = {
+      nodes: { alpha, beta },
+      dependencies: {
+        alpha: [{ source: "alpha", target: "beta", type: "static" }],
+      },
+    };
+    const acyclicReach = buildReachability(acyclic);
+    expect(
+      circularViolation({
+        reach: acyclicReach,
+        graph: acyclic,
+        sourceProject: alpha,
+        targetProject: beta,
+        sourceFile: "area/alpha/src/index.ts",
+        fileIndex,
+        ignored: noIgnored,
+      }),
+    ).toBeNull();
+  });
+
+  it("returns a violation when a cycle exists", () => {
+    const result = circularViolation({
+      reach,
+      graph,
+      sourceProject: alpha,
+      targetProject: beta,
+      sourceFile: "area/alpha/src/index.ts",
+      fileIndex,
+      ignored: noIgnored,
+    });
+    expect(result).not.toBeNull();
+    expect(result.messageId).toBe("noCircularDependencies");
+  });
+
+  it("returns null when the cycle is excused by ignoredCircularDependencies", () => {
+    const ignored = expandIgnoredCircularDependencies([["alpha", "beta"]], graph, () => [
+      "alpha",
+      "beta",
+    ]);
+    expect(
+      circularViolation({
+        reach,
+        graph,
+        sourceProject: alpha,
+        targetProject: beta,
+        sourceFile: "area/alpha/src/index.ts",
+        fileIndex,
+        ignored,
+      }),
+    ).toBeNull();
+  });
+
+  it("carries sourceProjectName, targetProjectName, path and filePaths in data", () => {
+    const result = circularViolation({
+      reach,
+      graph,
+      sourceProject: alpha,
+      targetProject: beta,
+      sourceFile: "area/alpha/src/index.ts",
+      fileIndex,
+      ignored: noIgnored,
+    });
+    expect(result.data).toMatchObject({
+      sourceProjectName: "alpha",
+      targetProjectName: "beta",
+    });
+    expect(result.data.path).toContain("alpha");
+    expect(result.data.path).toContain("beta");
+    expect(typeof result.data.filePaths).toBe("string");
+  });
+});
+
+describe("lazyLoadedViolation", () => {
+  const alpha = project("alpha");
+  const beta = project("beta");
+  const graph = {
+    nodes: { alpha, beta },
+    dependencies: {
+      alpha: [{ source: "alpha", target: "beta", type: "dynamic" }],
+    },
+  };
+  const edges = [
+    {
+      sourceFile: "area/alpha/src/index.ts",
+      sourceProject: "alpha",
+      targetProject: "beta",
+      dynamic: true,
+    },
+  ];
+  const fileIndex = createFileDependencyIndex(edges);
+
+  it("returns null when there is no dynamic import path", () => {
+    const staticGraph = {
+      nodes: { alpha, beta },
+      dependencies: {
+        alpha: [{ source: "alpha", target: "beta", type: "static" }],
+      },
+    };
+    expect(
+      lazyLoadedViolation({
+        graph: staticGraph,
+        sourceProject: alpha,
+        targetProject: beta,
+        resolvedFile: "area/beta/src/index.ts",
+        fileIndex,
+      }),
+    ).toBeNull();
+  });
+
+  it("returns a violation when a static import hits a lazy-loaded lib", () => {
+    const result = lazyLoadedViolation({
+      graph,
+      sourceProject: alpha,
+      targetProject: beta,
+      resolvedFile: "area/beta/src/index.ts",
+      fileIndex,
+    });
+    expect(result).not.toBeNull();
+    expect(result.messageId).toBe("noImportsOfLazyLoadedLibraries");
+  });
+
+  it("returns null when the target has a secondary entry point (exempt)", () => {
+    const withEntryPoint = project("beta", {
+      entryPoints: [{ path: "area/beta/sub", file: "area/beta/sub/index.ts" }],
+    });
+    const graphWithEntry = {
+      nodes: { alpha, beta: withEntryPoint },
+      dependencies: {
+        alpha: [{ source: "alpha", target: "beta", type: "dynamic" }],
+      },
+    };
+    expect(
+      lazyLoadedViolation({
+        graph: graphWithEntry,
+        sourceProject: alpha,
+        targetProject: withEntryPoint,
+        resolvedFile: "area/beta/sub/index.ts",
+        fileIndex,
+      }),
+    ).toBeNull();
+  });
+
+  it("carries targetProjectName and filePaths in data", () => {
+    const result = lazyLoadedViolation({
+      graph,
+      sourceProject: alpha,
+      targetProject: beta,
+      resolvedFile: "area/beta/src/index.ts",
+      fileIndex,
+    });
+    expect(result.data).toMatchObject({
+      targetProjectName: "beta",
+    });
+    expect(typeof result.data.filePaths).toBe("string");
   });
 });

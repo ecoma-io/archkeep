@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { findBoundaryConfigViolations, suppressionCovers } from "./config.mjs";
+import {
+  findBoundaryConfigViolations,
+  loadBoundaryConfigFile,
+  suppressionCovers,
+} from "./config.mjs";
 
 /** A minimal well-formed config; each test bends exactly one thing. */
 const wellFormed = () => ({
@@ -324,5 +328,31 @@ describe("suppressionCovers", () => {
     expect(
       suppressionCovers({ path: "a.js", messageId: "noImportsOfApps" }, violation("a.js")),
     ).toBe(false);
+  });
+});
+
+describe("loadBoundaryConfigFile", () => {
+  it("throws on a legacy .eslintrc basename", async () => {
+    await expect(loadBoundaryConfigFile("/tmp/.eslintrc.json")).rejects.toThrow(
+      /legacy ESLint config/,
+    );
+  });
+
+  it("throws on an unsupported extension", async () => {
+    await expect(loadBoundaryConfigFile("/tmp/config.yaml")).rejects.toThrow(
+      /unsupported boundaryConfig extension '\.yaml'/,
+    );
+  });
+
+  it("throws on a file with no extension", async () => {
+    await expect(loadBoundaryConfigFile("/tmp/config")).rejects.toThrow(
+      /unsupported boundaryConfig extension '\(none\)'/,
+    );
+  });
+
+  it("throws on a nonexistent .mjs file", async () => {
+    await expect(loadBoundaryConfigFile("/tmp/nonexistent-boundary-config.mjs")).rejects.toThrow(
+      /cannot load/,
+    );
   });
 });

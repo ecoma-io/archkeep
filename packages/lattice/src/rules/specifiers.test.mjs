@@ -5,6 +5,8 @@ import {
   findProjectForPath,
   getPackageNameFromImportPath,
   getTargetProjectBasedOnRelativeImport,
+  hasBannedDependencies,
+  hasBannedImport,
   isAbsoluteImportIntoAnotherProject,
   isBuiltinModuleImport,
   isConstraintBanningProject,
@@ -125,5 +127,135 @@ describe("isConstraintBanningProject", () => {
 
   it("is not banned when the constraint carries neither list", () => {
     expect(isConstraintBanningProject(pkg, { sourceTag: "zone:x" }, "@vendor/shell")).toBe(false);
+  });
+
+  it("bans when bannedExternalImports matches the specifier", () => {
+    expect(
+      isConstraintBanningProject(
+        pkg,
+        { bannedExternalImports: ["@vendor/shell"] },
+        "@vendor/shell",
+      ),
+    ).toBe(true);
+  });
+
+  it("bans when bannedExternalImports is a glob that matches", () => {
+    expect(
+      isConstraintBanningProject(pkg, { bannedExternalImports: ["@vendor/*"] }, "@vendor/shell"),
+    ).toBe(true);
+  });
+
+  it("bans when allowedExternalImports is empty — the vacuous-truth trap", () => {
+    // `[].every()` is `true`, so `Boolean(true)` = `true` — an empty
+    // allowlist bans every import of that package. This is a known divergence
+    // from what a reader might expect ("no restrictions"), documented in the
+    // implementation's comment.
+    expect(isConstraintBanningProject(pkg, { allowedExternalImports: [] }, "@vendor/shell")).toBe(
+      true,
+    );
+  });
+
+  it("does not ban when allowedExternalImports contains the import", () => {
+    expect(
+      isConstraintBanningProject(
+        pkg,
+        { allowedExternalImports: ["@vendor/shell"] },
+        "@vendor/shell",
+      ),
+    ).toBe(false);
+  });
+
+  it("bans when allowedExternalImports has entries that do not match", () => {
+    expect(
+      isConstraintBanningProject(
+        pkg,
+        { allowedExternalImports: ["@vendor/other"] },
+        "@vendor/shell",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches a deep path under the package name", () => {
+    expect(
+      isConstraintBanningProject(
+        pkg,
+        { bannedExternalImports: ["@vendor/shell/*"] },
+        "@vendor/shell/sub",
+      ),
+    ).toBe(true);
+    // A specifier that is the package itself, not a deep path, also bans when the glob targets deep paths:
+    // `@vendor/shell` does not match `/^@vendor\/shell\/.*$/`, but `bannedExternalImports: ["*"]` would.
+    expect(isConstraintBanningProject(pkg, { bannedExternalImports: ["*"] }, "@vendor/shell")).toBe(
+      true,
+    );
+  });
+});
+
+describe("hasBannedImport", () => {
+  const sourceProject = {
+    name: "alpha",
+    type: "lib",
+    data: { root: "area/alpha", tags: ["zone:a"] },
+  };
+  const targetProject = {
+    name: "npm:@vendor/shell",
+    type: "npm",
+    data: { packageName: "@vendor/shell" },
+  };
+  const constraint = { sourceTag: "zone:a", bannedExternalImports: ["@vendor/shell"] };
+  const depConstraints = [constraint];
+
+  it("returns the matching constraint when the import is banned", () => {
+    expect(hasBannedImport(sourceProject, targetProject, depConstraints, "@vendor/shell")).toBe(
+      constraint,
+    );
+  });
+
+  it("returns undefined when no constraint matches the source project", () => {
+    const untagged = { name: "beta", type: "lib", data: { root: "area/beta", tags: ["zone:b"] } };
+    expect(
+      hasBannedImport(untagged, targetProject, depConstraints, "@vendor/shell"),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined when depConstraints is empty — every import is approved", () => {
+    expect(hasBannedImport(sourceProject, targetProject, [], "@vendor/shell")).toBeUndefined();
+  });
+});
+
+describe("hasBannedDependencies", () => {
+  const constraint = { sourceTag: "zone:a", bannedExternalImports: ["@vendor/shell"] };
+  const graph = {
+    nodes: {
+      alpha: { name: "alpha", type: "lib", data: { root: "area/alpha" } },
+      beta: { name: "beta", type: "lib", data: { root: "area/beta" } },
+    },
+    externalNodes: {
+      "npm:@vendor/shell": {
+        name: "npm:@vendor/shell",
+        type: "npm",
+        data: { packageName: "@vendor/shell" },
+      },
+    },
+    dependencies: {},
+  };
+  const externalDependencies = [{ source: "alpha", target: "npm:@vendor/shell", type: "static" }];
+
+  it("returns triples for transitively-reachable banned packages", () => {
+    const result = hasBannedDependencies(externalDependencies, graph, constraint, "@vendor/shell");
+    expect(result).toHaveLength(1);
+    expect(result[0][0]).toBe(graph.externalNodes["npm:@vendor/shell"]);
+    expect(result[0][2]).toBe(constraint);
+  });
+
+  it("returns empty when no transitive dependency is banned", () => {
+    const permissive = { sourceTag: "zone:a", allowedExternalImports: ["*"] };
+    expect(hasBannedDependencies(externalDependencies, graph, permissive, "@vendor/shell")).toEqual(
+      [],
+    );
+  });
+
+  it("returns empty when externalDependencies is empty", () => {
+    expect(hasBannedDependencies([], graph, constraint, "@vendor/shell")).toEqual([]);
   });
 });
