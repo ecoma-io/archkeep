@@ -25,6 +25,12 @@ dependencies)` for projects with no edges, and a coverage claim above the
   baseline/head summaries, added/removed sections, and a change count. Empty
   sections are omitted so "no changes" and "0 added, 0 removed" never look
   identical. Renders the same payload `json.mjs` wraps; decides nothing.
+- `impact-text.mjs` — the terminal report for `../../cli.mjs`'s `impact`
+  command: a coverage claim above the listing, the target project header, each
+  dependent on its own line, and a summary line with direct/transitive counts.
+  A project with no dependents states the 0 count explicitly — an empty
+  `dependents` list is a claim, not silence. Renders the same payload
+  `json.mjs` wraps; decides nothing.
 
 `json.mjs` is not a formatter in that sense — it does not turn violations into
 output. `jsonEnvelope` wraps whatever result object a command already computed

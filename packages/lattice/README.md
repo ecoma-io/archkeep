@@ -107,6 +107,8 @@ pnpm exec lattice check --config boundaries.custom.mjs
 pnpm exec lattice graph
 pnpm exec lattice graph --format json --output snapshot.json
 pnpm exec lattice diff snapshot.json
+pnpm exec lattice impact billing-core
+pnpm exec lattice impact billing-core --format json
 ```
 
 `graph` prints the project graph as a deterministic snapshot: two sorted arrays,
@@ -118,6 +120,12 @@ finding — and never exits 1.
 workspace, reporting projects and edges added or removed. It refuses an
 incomplete baseline or head, because every "removed" entry would be ambiguous
 between "gone" and "never seen". It is descriptive and never exits 1.
+
+`impact` takes a project name and lists every project that transitively depends
+on it — the set a developer needs to consider before changing that project. It
+separates direct from transitive dependents and refuses incomplete coverage. An
+empty `dependents` list is a claim ("nothing depends on this"), not a shrug. It
+is descriptive and never exits 1.
 
 `--format json` wraps the same verdict `text` and `sarif` already compute in a
 versioned envelope — every field name and `schemaVersion` are a public

@@ -80,6 +80,7 @@ import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/co
 import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { graphCommand } from "./src/commands/graph.mjs";
+import { impactCommand } from "./src/commands/impact.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
 import { NX_CONFIG_FILE, readPluginOptions } from "./src/options.mjs";
@@ -810,6 +811,72 @@ async function runDiff(options, { cwd, env }) {
 }
 
 /**
+ * `impact`'s `run`: resolves the command context, drives `impactCommand`,
+ * writes the report where it belongs, and returns the process's exit code.
+ *
+ * The project name is the single positional argument.
+ *
+ * @param {{format: string, output: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runImpact(options, { cwd, env }) {
+  if (options.paths.length !== 1) {
+    env.err(
+      `lattice: impact takes exactly one positional argument (the project name); ` +
+        `got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  const projectName = options.paths[0];
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+    result = impactCommand(projectName, commandContext);
+  } catch (error) {
+    const usageError =
+      /is outside the workspace/.test(error?.message ?? "") ||
+      /no project named/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(
+      `lattice: ${result.impact.dependents.length} project` +
+        `${result.impact.dependents.length === 1 ? "" : "s"}` +
+        `${result.impact.dependents.length === 1 ? " depends" : " depend"} on ${projectName} ` +
+        `→ ${options.output}`,
+    );
+  } else {
+    env.out(report);
+  }
+
+  // Impact is descriptive: 0 when it completes, never 1.
+  return EXIT.ok;
+}
+
+/**
  * `check`'s own flags, described once — `usage()` renders this straight into
  * the Options block, and `flags` below (what `parseArgs` needs) is derived
  * from it rather than kept as a second list that could name a flag `--help`
@@ -894,6 +961,30 @@ const DIFF_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `impact`'s flags: text or JSON envelope, optional file output.
+ * The project name is a positional argument.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const IMPACT_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/usage/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+]);
+
+/**
  * The command table `usage()` and `runCli` both read from — a command added
  * later is a new entry here, not a new branch in either. `args` is the
  * placeholder `usage()` prints after the command name; `flagHelp` is the
@@ -931,6 +1022,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runDiff,
+  }),
+  impact: Object.freeze({
+    name: "impact",
+    args: "<project>",
+    summary: "List projects that depend on the named project",
+    flagHelp: IMPACT_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(IMPACT_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runImpact,
   }),
 });
 

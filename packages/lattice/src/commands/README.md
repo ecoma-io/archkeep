@@ -28,3 +28,9 @@ commands share rather than a command. It composes `../workspace.mjs`,
   Refuses an incomplete baseline or head.
   Refuses an Nx workspace with polyglot manifests but no plugin registration.
   Descriptive: never exits 1.
+
+- **`impact`** (`./impact.mjs`'s `impactCommand`) — reverse reachability from
+  the project graph: given a project name, lists every project that transitively
+  depends on it. Separates direct from transitive dependents. Refuses incomplete
+  coverage (whole-file analysis failures). Refuses an Nx workspace with polyglot
+  manifests but no plugin registration. Descriptive: never exits 1.

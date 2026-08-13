@@ -24,6 +24,7 @@ version.
 | [ci.md](usage/ci.md)                                     | The exit codes in a pipeline, and SARIF into GitHub code scanning             |
 | [graph.md](usage/graph.md)                               | The `graph` command: deterministic snapshot of the project graph              |
 | [diff.md](usage/diff.md)                                 | The `diff` command: two graph snapshots compared edge by edge                 |
+| [impact.md](usage/impact.md)                             | The `impact` command: projects that depend on the named project               |
 | [json-output.md](usage/json-output.md)                   | `--format json`'s versioned envelope: every field, and the stability promise  |
 | [editors.md](usage/editors.md)                           | Diagnostics at the edit, per client                                           |
 | [troubleshooting.md](usage/troubleshooting.md)           | It found nothing · it found too much · it could not look                      |
