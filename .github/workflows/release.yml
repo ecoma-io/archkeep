@@ -191,6 +191,12 @@ jobs:
       - name: Prove the packed artifact works outside this workspace
         run: node scripts/verify-package.mjs packages/lattice
 
+      # The full E2E suite, run against the exact tag checkout, same as
+      # verify-package.mjs above. A version that fails E2E cannot be unpublished
+      # away.
+      - name: E2E full tests (pre-publish)
+        run: pnpm e2e
+
       # `npm publish`, not `pnpm publish`: provenance is an npm CLI feature and
       # this is the client that implements it. That choice has a consequence the
       # package carries — npm does not copy the repository-root LICENSE into a

@@ -248,6 +248,18 @@ jobs:
       - name: Prove the packed artifact works outside this workspace
         run: node scripts/verify-package.mjs packages/lattice
 
+      # The smoke subset covers the five fastest E2E scenarios (native/Nx
+      # clean check, native violating check, native graph, native self-baseline
+      # diff). The full suite adds parity, determinism, and extended command
+      # coverage. Both run after verify-package.mjs, which already proves LSP
+      # initialization and Nx Go-edge drawing — responsibilities the E2E suite
+      # does not duplicate.
+      - name: E2E smoke tests
+        run: pnpm e2e:smoke
+
+      - name: E2E full tests
+        run: pnpm e2e
+
   ci-gate:
     name: ci-gate
     # The single check name a branch ruleset requires, on pull requests and in

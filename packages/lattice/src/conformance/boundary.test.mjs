@@ -225,7 +225,7 @@ function specifiersIn(file) {
   return { specifiers, opaque };
 }
 
-const isTestFile = (file) => file.endsWith(".test.mjs");
+const isTestFile = (file) => file.endsWith(".test.mjs") || file.endsWith(".e2e.mjs");
 const isConformance = (file) => file.startsWith(`src${"/"}conformance/`);
 /**
  * The test runner's own configuration is part of the test tier, not of what the
@@ -234,7 +234,11 @@ const isConformance = (file) => file.startsWith(`src${"/"}conformance/`);
  * the config because it is loaded only through that config's `setupFiles`; it
  * imports `@fast-check/vitest`, which nothing shipped may.
  */
-const RUNNER_CONFIG_FILES = new Set(["vitest.config.mjs", "vitest.property-seed.mjs"]);
+const RUNNER_CONFIG_FILES = new Set([
+  "vitest.config.mjs",
+  "vitest.property-seed.mjs",
+  "e2e/vitest.config.mjs",
+]);
 const isRunnerConfig = (file) => RUNNER_CONFIG_FILES.has(file);
 
 describe("what the shipped tool is allowed to depend on", () => {
