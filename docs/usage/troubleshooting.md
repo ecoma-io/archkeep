@@ -24,12 +24,17 @@ run at all. `git status --porcelain` and `git check-ignore -v <file>` settle it.
 directory contains them. A file above every project root is outside the boundary
 system entirely and is skipped without a verdict.
 
-**The project is invisible to Nx.** A directory with sources but no
-`project.json` or `package.json` does not appear in `nx show projects` at all —
-not as a warning, as an absence. Check with:
+**The project is invisible to the workspace tool.** On an Nx workspace, a
+directory with sources but no `project.json` or `package.json` does not appear
+in `nx show projects` at all — not as a warning, as an absence. On a Moon
+workspace, a directory with no `moon.yml` is invisible to `moon projects`.
+Check with:
 
 ```shell
+# Nx
 pnpm exec nx show projects
+# Moon
+pnpm exec moon projects
 ```
 
 **The language is not one of the five.** See

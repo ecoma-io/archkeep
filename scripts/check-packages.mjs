@@ -57,6 +57,10 @@ export function parseCiTargets(workflowText) {
   if (moonMatch) {
     const targets = [];
     for (const word of moonMatch[1].trim().split(/[\s,]+/)) {
+      // Skip flags (e.g. --force) that appear before the target list. Once a
+      // target has been seen, any flag breaks the loop — that is the stop
+      // condition for a trailing flag like --parallel.
+      if (word.startsWith("--") && targets.length === 0) continue;
       // Strip the `...:` prefix Moon uses for "all projects".
       const target = word.replace(/^\.{3}:/, "");
       if (!/^[a-z][a-z0-9:-]*$/i.test(target)) break;

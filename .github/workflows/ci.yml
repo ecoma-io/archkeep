@@ -94,8 +94,11 @@ jobs:
       # rather than passing as an absence.
       - run: pnpm check-packages
 
+      # --force skips Moon's VCS affected detection (which needs full git
+      # history, unavailable in the shallow checkout) and bypasses the local
+      # cache — both correct for CI, where every target must run fresh.
       - name: Run every project's targets
-        run: pnpm exec moon run ...:lint ...:test ...:typecheck
+        run: pnpm exec moon run --force ...:lint ...:test ...:typecheck
 
       # The tool, run on the tree that ships it. Everything above proves the
       # code is correct against fixtures it built itself; this is the only step

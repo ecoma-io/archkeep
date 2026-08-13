@@ -1,15 +1,16 @@
 # Configuration
 
 Every configuration surface in one place: `lattice.json` fields, `nx.json`
-plugin options, and CLI flags. A consumer never needs to look elsewhere for a
-field's definition.
+plugin options, Moon workspace options, and CLI flags. A consumer never needs
+to look elsewhere for a field's definition.
 
 ## `lattice.json`
 
 For a workspace with no Nx at all. `nx.json` and `lattice.json` are
-alternatives -- a root carrying both is a usage error. Every field below is
-optional; an empty `{}` validates but declares zero projects. Six top-level
-keys are recognized; any other key is rejected by name.
+alternatives -- a root carrying both is a usage error. A Moon workspace (`.moon/`
+directory present) also reads from `lattice.json` when no `nx.json` is present.
+Every field below is optional; an empty `{}` validates but declares zero projects.
+Six top-level keys are recognized; any other key is rejected by name.
 
 ### `projects`
 
@@ -17,14 +18,14 @@ keys are recognized; any other key is rejected by name.
 
 An array of project rows, each naming a project outright.
 
-| field                  | required | type                          | default | meaning                                                                                                         |
-| ---------------------- | -------- | ----------------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
-| `root`                 | yes      | string                        | --      | Workspace-relative, posix slashes, no leading/trailing slash, no `.`/`..` segment. `""` names the root itself.  |
-| `name`                 | no       | non-empty string              | derived | Falls back to `package.json`'s `name`, then the root's basename -- same precedence Nx applies.                  |
-| `type`                 | no       | `"app"` \| `"lib"` \| `"e2e"` | `"lib"` | Feeds `nodeTypeOf`'s `-e2e`-suffix rule.                                                                        |
-| `tags`                 | no       | string[]                      | `[]`    | Every entry non-empty. Merged as a **union** with `projectRules` and `project.json` tags -- never a precedence. |
-| `implicitDependencies` | no       | string[]                      | `[]`    | Each entry must resolve against `findMatchingProjects`; unresolvable entries are rejected at load time.         |
-| `targets`              | no       | string[]                      | `[]`    | Names only, never run. Enough to make `hasBuildExecutor` see the project as buildable.                          |
+| field                  | required | type                          | default | meaning                                                                                                           |
+| ---------------------- | -------- | ----------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| `root`                 | yes      | string                        | --      | Workspace-relative, posix slashes, no leading/trailing slash, no `.`/`..` segment. `""` names the root itself.    |
+| `name`                 | no       | non-empty string              | derived | Falls back to `package.json`'s `name`, then the root's basename -- same precedence Nx applies.                    |
+| `type`                 | no       | `"app"` \| `"lib"` \| `"e2e"` | `"lib"` | Feeds `nodeTypeOf`'s `-e2e`-suffix rule.                                                                          |
+| `tags`                 | no       | string[]                      | `[]`    | Every entry non-empty. Merged as a **union** with `projectRules` and project manifest tags -- never a precedence. |
+| `implicitDependencies` | no       | string[]                      | `[]`    | Each entry must resolve against `findMatchingProjects`; unresolvable entries are rejected at load time.           |
+| `targets`              | no       | string[]                      | `[]`    | Names only, never run. Enough to make `hasBuildExecutor` see the project as buildable.                            |
 
 #### `projects.infer`
 
@@ -66,7 +67,9 @@ enforced.
 
 Never inferred from directory names. A declaration naming only one of the two
 keys is refused. An Nx-registered workspace states the same fact in `nx.json`'s
-own top-level `workspaceLayout` field; the Nx integration reads it from there directly.
+own top-level `workspaceLayout` field; the Nx integration reads it from there
+directly. A Moon workspace does not use `workspaceLayout` — project roots are
+declared explicitly in `.moon/workspace.yml`.
 
 ### `boundaryConfig`
 
@@ -88,7 +91,8 @@ from an editor.
 | string | `"tsconfig.base.json"` | Filename of the shared TypeScript config. |
 
 No second shape -- stays a filename. An Nx-registered workspace states this
-under `nx.json -> plugins[].options` instead.
+under `nx.json -> plugins[].options` instead. A Moon workspace states it in
+`lattice.json` alongside the native provider.
 
 ## `nx.json` plugin options
 

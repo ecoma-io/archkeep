@@ -37,6 +37,18 @@ test("stops at the first token that is not a target name", () => {
   assert.deepEqual(parseCiTargets(workflow), ["lint", "test"]);
 });
 
+test("skips flags before the target list", () => {
+  // CI uses --force to bypass Moon's VCS affected detection and local cache.
+  const workflow = `- run: moon run --force ...:lint ...:test ...:typecheck\n`;
+  assert.deepEqual(parseCiTargets(workflow), ["lint", "test", "typecheck"]);
+});
+
+test("a flag after the first target still stops the loop", () => {
+  // Once a target has been seen, a flag is a trailing token — stop there.
+  const workflow = `- run: moon run --force ...:lint --parallel ...:test\n`;
+  assert.deepEqual(parseCiTargets(workflow), ["lint"]);
+});
+
 test("reports no targets when the workflow does not run the workspace's targets", () => {
   // The caller treats this as a hard failure rather than as "nothing to check":
   // a workflow with no moon run means this script no longer knows what green is.
