@@ -228,6 +228,39 @@ export function formatTsconfigPaths(tsconfigPaths) {
 }
 
 /**
+ * The polyglot coverage gap section — rendered only when the Nx graph is known
+ * to be missing polyglot edges that the checker's own analysis did cover.
+ *
+ * `coverageGaps` is `[]` (or absent) when there is no gap, and then this
+ * prints nothing — the same bargain `formatGoWork` and `formatTsconfigPaths`
+ * state: no fact, no claim. When the gap exists, it names the manifests and
+ * says what is missing: `nx affected` will not trace through these edges, and
+ * `@nx/enforce-module-boundaries` does not see them at all.
+ *
+ * This is not a finding (it does not change the exit code) and it is not a
+ * refusal (the checker still judged every import it found). It is a
+ * degraded-coverage note: the checker's verdict is valid, but the Nx graph
+ * those edges were meant for is incomplete, and anyone relying on `nx affected`
+ * or ESLint boundary enforcement for polyglot projects is under-covered.
+ *
+ * @param {object[]} coverageGaps Each entry has `kind` and `manifests`.
+ * @returns {string} Empty exactly when there is no coverage gap to render.
+ */
+export function formatCoverageGaps(coverageGaps) {
+  if (coverageGaps.length === 0) return "";
+  const gap = coverageGaps[0];
+  const count = gap.manifests.length;
+  const label = `${count} polyglot manifest${count === 1 ? "" : "s"}`;
+  const paths = gap.manifests.map((manifest) => `${CONTINUED}${manifest}`).join("\n");
+  return (
+    `⚠ nx.json does not register this plugin but ${label} ` +
+    `found under project roots — nx affected and ` +
+    `@nx/enforce-module-boundaries will not cover these edges\n${paths}\n` +
+    `${DETAIL}register the plugin: "plugins": [{ "plugin": "@ecoma-io/lattice/nx" }]`
+  );
+}
+
+/**
  * The whole report, violations first.
  *
  * The summary states what was inspected and not only what was found, because
@@ -236,7 +269,7 @@ export function formatTsconfigPaths(tsconfigPaths) {
  * that indistinguishability is the defect this whole tool exists to end
  * (`../../CLAUDE.md`).
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, notes?: string[]}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, coverageGaps?: object[], notes?: string[]}} run
  * @returns {string}
  */
 export function formatReport({
@@ -247,6 +280,7 @@ export function formatReport({
   imports,
   goWork,
   tsconfigPaths,
+  coverageGaps = [],
   notes = [],
 }) {
   const inspected =
@@ -275,6 +309,9 @@ export function formatReport({
 
   const tsconfigPathsSection = formatTsconfigPaths(tsconfigPaths);
   if (tsconfigPathsSection !== "") sections.push(tsconfigPathsSection);
+
+  const coverageGapsSection = formatCoverageGaps(coverageGaps);
+  if (coverageGapsSection !== "") sections.push(coverageGapsSection);
 
   const unresolved = formatFailures(failures);
   if (unresolved !== "") sections.push(unresolved);

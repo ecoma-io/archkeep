@@ -552,6 +552,24 @@ export async function check(
   ).size;
   const notes = config.notes ?? [];
 
+  // A polyglot coverage gap: the Nx graph carries no polyglot edges because
+  // the plugin is not registered, but polyglot manifests exist under project
+  // roots. The checker still judged every import it found — this is not a
+  // finding and not a refusal — but `nx affected` and `@nx/enforce-module-boundaries`
+  // are blind to Go, Rust and Python dependencies. Surfaced as a
+  // degraded-coverage note so the silent direction (exit 0 with no mention) is
+  // closed, without changing the exit code or verdict. The condition mirrors
+  // `./src/commands/graph.mjs`'s refusal, which throws for the same state
+  // because a descriptive command's output is the graph itself — here the
+  // checker's own analysis covers what the graph does not, so a note is the
+  // right level. cf. #38
+  const coverageGaps =
+    commandContext.provider === "nx" &&
+    !commandContext.pluginGap.registered &&
+    commandContext.pluginGap.manifests.length > 0
+      ? [{ kind: "unregistered-plugin", manifests: commandContext.pluginGap.manifests }]
+      : [];
+
   const report =
     options.format === "json"
       ? renderJson(
@@ -585,6 +603,7 @@ export async function check(
                   reason,
                 })),
               notes,
+              coverageGaps,
             },
             result: {
               violations,
@@ -610,6 +629,7 @@ export async function check(
           // steps, so it rides the same coverage line every other "what was
           // inspected" fact does (`src/report/text.mjs`'s `formatReport`).
           notes,
+          coverageGaps,
         });
 
   return {

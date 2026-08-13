@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatConstraint,
+  formatCoverageGaps,
   formatFailures,
   formatGoWork,
   formatReport,
@@ -369,5 +370,57 @@ describe("the report as a whole", () => {
   it("never mentions the paths table on a run whose workspace declares none — no table, no claim", () => {
     expect(formatReport(run())).not.toContain("tsconfig");
     expect(formatReport(run({ tsconfigPaths: null }))).not.toContain("tsconfig");
+  });
+
+  it("carries the coverage gap section when polyglot manifests exist but the plugin is unregistered", () => {
+    // Silent direction: a clean exit with no mention of the gap is exactly the
+    // under-coverage this note exists to name (AGENTS.md: an empty result is a
+    // claim). The report must name the manifests and say what is missing.
+    const text = formatReport(
+      run({
+        coverageGaps: [
+          {
+            kind: "unregistered-plugin",
+            manifests: ["libs/domain/go.mod", "libs/adapters/Cargo.toml"],
+          },
+        ],
+      }),
+    );
+    expect(text).toContain("✔ no boundary violations");
+    expect(text).toContain("nx.json does not register this plugin");
+    expect(text).toContain("libs/domain/go.mod");
+    expect(text).toContain("libs/adapters/Cargo.toml");
+    expect(text).toContain("nx affected");
+    expect(text).toContain("@ecoma-io/lattice/nx");
+  });
+
+  it("never mentions a coverage gap on a run with no gap — no gap, no claim", () => {
+    expect(formatReport(run())).not.toContain("coverage gap");
+    expect(formatReport(run({ coverageGaps: [] }))).not.toContain("coverage gap");
+  });
+});
+
+describe("formatCoverageGaps", () => {
+  it("returns empty when there are no coverage gaps", () => {
+    expect(formatCoverageGaps([])).toBe("");
+  });
+
+  it("names the manifests and explains what is missing", () => {
+    const text = formatCoverageGaps([
+      { kind: "unregistered-plugin", manifests: ["libs/a/go.mod", "libs/b/Cargo.toml"] },
+    ]);
+    expect(text).toContain("2 polyglot manifests");
+    expect(text).toContain("libs/a/go.mod");
+    expect(text).toContain("libs/b/Cargo.toml");
+    expect(text).toContain("nx affected");
+    expect(text).toContain("register the plugin");
+  });
+
+  it("uses singular when there is exactly one manifest", () => {
+    const text = formatCoverageGaps([
+      { kind: "unregistered-plugin", manifests: ["libs/a/go.mod"] },
+    ]);
+    expect(text).toContain("1 polyglot manifest");
+    expect(text).not.toContain("1 polyglot manifests");
   });
 });
