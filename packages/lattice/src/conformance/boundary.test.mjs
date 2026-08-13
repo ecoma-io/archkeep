@@ -227,6 +227,8 @@ function specifiersIn(file) {
 
 const isTestFile = (file) => file.endsWith(".test.mjs") || file.endsWith(".e2e.mjs");
 const isConformance = (file) => file.startsWith(`src${"/"}conformance/`);
+/** E2E fixtures and harness are test infrastructure — they do not ship. */
+const isE2eInfrastructure = (file) => file.startsWith("e2e/");
 /**
  * The test runner's own configuration is part of the test tier, not of what the
  * tool ships — `package.json`'s `bin` entries are `cli.mjs` and `lsp.mjs`, and
@@ -243,7 +245,11 @@ const isRunnerConfig = (file) => RUNNER_CONFIG_FILES.has(file);
 
 describe("what the shipped tool is allowed to depend on", () => {
   const sources = projectSources();
-  const isShipped = (file) => !isConformance(file) && !isTestFile(file) && !isRunnerConfig(file);
+  const isShipped = (file) =>
+    !isConformance(file) &&
+    !isTestFile(file) &&
+    !isRunnerConfig(file) &&
+    !isE2eInfrastructure(file);
 
   it("finds the modules it is meant to be checking", () => {
     // A walk that silently returned nothing would make every check below pass.
