@@ -2333,6 +2333,96 @@ export const moduleBoundaryOptions = {
   });
 });
 
+describe("`check` names the polyglot coverage gap when the plugin is unregistered but manifests exist", () => {
+  // The silent direction for #38: an Nx workspace with polyglot manifests but
+  // the plugin unregistered exits 0 and says nothing about the missing edges —
+  // a consumer's `nx affected` and `@nx/enforce-module-boundaries` silently
+  // under-cover Go/Rust/Python. The degraded-coverage note closes that gap
+  // without changing the exit code, because `check`'s own analysis still
+  // covers what the Nx graph does not.
+  const gapRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-coverage-gap-"));
+  afterAll(() => rmSync(gapRoot, { recursive: true, force: true }));
+
+  const writeGap = (relativePath, text) => {
+    mkdirSync(join(gapRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(gapRoot, relativePath), text);
+  };
+
+  // nx.json with NO plugins entry — the plugin is not registered.
+  writeGap("nx.json", JSON.stringify({}));
+  writeGap(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeGap("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeGap("libs/domain/doc.go", "package domain\n");
+
+  const gapGraph = {
+    nodes: {
+      domain: {
+        name: "domain",
+        type: "lib",
+        data: { root: "libs/domain", tags: [] },
+      },
+    },
+    dependencies: { domain: [] },
+  };
+  const gapFiles = [
+    "nx.json",
+    "module-boundaries.config.mjs",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+  ];
+
+  it("mentions the coverage gap and the go.mod in the text report", async () => {
+    const { report } = await check(
+      { format: "text", config: null, paths: [] },
+      { cwd: gapRoot, readGraph: () => gapGraph, listFiles: () => gapFiles },
+    );
+    expect(report).toContain("nx.json does not register this plugin");
+    expect(report).toContain("libs/domain/go.mod");
+    expect(report).toContain("nx affected");
+  });
+
+  it("still exits 0 — the coverage gap is informational, not a finding", async () => {
+    const { violations } = await check(
+      { format: "text", config: null, paths: [] },
+      { cwd: gapRoot, readGraph: () => gapGraph, listFiles: () => gapFiles },
+    );
+    expect(violations).toBe(0);
+  });
+
+  it("carries the coverage gap in the JSON envelope's coverage object", async () => {
+    const { report } = await check(
+      { format: "json", config: null, paths: [] },
+      { cwd: gapRoot, readGraph: () => gapGraph, listFiles: () => gapFiles },
+    );
+    const envelope = JSON.parse(report);
+    expect(envelope.coverage.coverageGaps).toHaveLength(1);
+    expect(envelope.coverage.coverageGaps[0].kind).toBe("unregistered-plugin");
+    expect(envelope.coverage.coverageGaps[0].manifests).toContain("libs/domain/go.mod");
+  });
+
+  it("does not mention the coverage gap when the plugin is registered", async () => {
+    // The complement: registering the plugin removes the gap. Use the main
+    // fixture (which registers the plugin) to confirm the absence.
+    const { report } = await check({ format: "text", config: null, paths: [] }, context);
+    expect(report).not.toContain("coverage gap");
+    expect(report).not.toContain("does not register this plugin");
+  });
+});
+
 describe("`graph` refuses when the plugin is unregistered but polyglot manifests exist", () => {
   // Silent direction: a graph printed with no Go edges and exit 0 — the exact
   // failure AGENTS.md's opening paragraph describes.

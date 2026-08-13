@@ -823,7 +823,7 @@ export function buildSimpleNxTree(root, { boundaryConfig = "module-boundaries.co
   write(
     "nx.json",
     JSON.stringify({
-      plugins: [{ plugin: "../nx.mjs", options: { boundaryConfig } }],
+      plugins: [{ plugin: "@ecoma-io/lattice/nx", options: { boundaryConfig } }],
     }),
   );
   write(boundaryConfig, SIMPLE_BOUNDARY_CONFIG);
@@ -958,7 +958,7 @@ export function buildCompositeNxTree(
   write(
     "nx.json",
     JSON.stringify({
-      plugins: [{ plugin: "../nx.mjs", options: { boundaryConfig } }],
+      plugins: [{ plugin: "@ecoma-io/lattice/nx", options: { boundaryConfig } }],
     }),
   );
   write(boundaryConfig, COMPOSITE_BOUNDARY_CONFIG);
@@ -1211,7 +1211,7 @@ export function buildLayoutNxTree(root, { boundaryConfig = "module-boundaries.co
   write(
     "nx.json",
     JSON.stringify({
-      plugins: [{ plugin: "../nx.mjs", options: { boundaryConfig } }],
+      plugins: [{ plugin: "@ecoma-io/lattice/nx", options: { boundaryConfig } }],
       workspaceLayout: { libsDir: "packages", appsDir: "apps" },
     }),
   );

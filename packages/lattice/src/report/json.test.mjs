@@ -13,6 +13,7 @@ const cleanCoverage = () => ({
   notAnalyzed: [],
   blindSpots: [],
   notes: [],
+  coverageGaps: [],
 });
 
 describe("jsonEnvelope", () => {
@@ -128,6 +129,24 @@ describe("jsonEnvelope", () => {
         result: {},
       }),
     ).not.toThrow();
+  });
+
+  it("carries coverageGaps through the envelope when polyglot manifests exist without the plugin", () => {
+    const coverage = {
+      ...cleanCoverage(),
+      coverageGaps: [{ kind: "unregistered-plugin", manifests: ["libs/a/go.mod"] }],
+    };
+    const envelope = jsonEnvelope({
+      command: "check",
+      context,
+      status: "ok",
+      exitCode: 0,
+      coverage,
+      result: {},
+    });
+    expect(envelope.coverage.coverageGaps).toEqual([
+      { kind: "unregistered-plugin", manifests: ["libs/a/go.mod"] },
+    ]);
   });
 });
 

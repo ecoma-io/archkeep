@@ -51,7 +51,7 @@ const EXIT_CODE_FOR_STATUS = Object.freeze({ ok: 0, findings: 1, "no-verdict": 3
  * @param {{command: string, context: {root: string, provider: "nx"|"native", marker: string},
  *   status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3,
  *   coverage: {complete: boolean, projects: number, analyzedFiles: number, imports: number,
- *     notAnalyzed: object[], blindSpots: object[], notes: string[]},
+ *     notAnalyzed: object[], blindSpots: object[], notes: string[], coverageGaps?: object[]},
  *   result: object}} run
  * @returns {object} The envelope `docs/usage/json-output.md` documents.
  * @throws {Error} when `status` claims `"ok"` over incomplete coverage, when
