@@ -78,6 +78,8 @@ import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs"
 import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/config.mjs";
 import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
+import { diffCommand } from "./src/commands/diff.mjs";
+import { graphCommand } from "./src/commands/graph.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
 import { NX_CONFIG_FILE, readPluginOptions } from "./src/options.mjs";
@@ -124,6 +126,13 @@ const FORMATS = Object.freeze({ text: formatReport, sarif: formatSarif });
 
 /** Every format `check --format` accepts, in the order the help text lists them. */
 const CHECK_FORMATS = Object.freeze(["text", "sarif", "json"]);
+
+/**
+ * Every format the descriptive commands (`graph`, `diff`) accept. Text and the
+ * versioned JSON envelope — no SARIF, because a descriptive command does not
+ * produce findings and SARIF's `results[]` is a findings container.
+ */
+const DESCRIBABLE_FORMATS = Object.freeze(["text", "json"]);
 
 /**
  * Column `usage()`'s Options block aligns flag descriptions to. Matches the
@@ -685,6 +694,122 @@ async function runCheck(options, { cwd, env }) {
 }
 
 /**
+ * `graph`'s `run`: resolves the command context, drives `graphCommand`, writes
+ * the report where it belongs, and returns the process's exit code.
+ *
+ * @param {{format: string, output: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runGraph(options, { cwd, env }) {
+  if (options.paths.length > 0) {
+    env.err(`lattice: graph takes no positional arguments; got ${options.paths.join(", ")}`);
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+    result = graphCommand(commandContext);
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(
+      `lattice: ${result.projects.length} projects, ${result.dependencies.length} edges ` +
+        `→ ${options.output}`,
+    );
+  } else {
+    env.out(report);
+  }
+
+  // Descriptive: 0 for answered, 3 for incomplete coverage.
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
+}
+
+/**
+ * `diff`'s `run`: resolves the command context, reads the baseline, drives
+ * `diffCommand`, writes the report, and returns the exit code.
+ *
+ * The baseline file is the single positional argument (a file, not a git ref).
+ *
+ * @param {{format: string, output: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runDiff(options, { cwd, env }) {
+  if (options.paths.length !== 1) {
+    env.err(
+      `lattice: diff takes exactly one positional argument (the baseline file); ` +
+        `got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  const baselinePath = isAbsolute(options.paths[0])
+    ? options.paths[0]
+    : resolve(cwd, options.paths[0]);
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+    result = diffCommand(baselinePath, commandContext);
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(`lattice: diff complete → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // Diff is descriptive: 0 when it completes, never 1.
+  return EXIT.ok;
+}
+
+/**
  * `check`'s own flags, described once — `usage()` renders this straight into
  * the Options block, and `flags` below (what `parseArgs` needs) is derived
  * from it rather than kept as a second list that could name a flag `--help`
@@ -722,6 +847,53 @@ const CHECK_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `graph`'s flags: text or JSON envelope, optional file output.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const GRAPH_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/usage/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+]);
+
+/**
+ * `diff`'s flags: text or JSON envelope, optional file output.
+ * The baseline file is a positional argument (a file, not a git ref).
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const DIFF_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/usage/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+]);
+
+/**
  * The command table `usage()` and `runCli` both read from — a command added
  * later is a new entry here, not a new branch in either. `args` is the
  * placeholder `usage()` prints after the command name; `flagHelp` is the
@@ -739,6 +911,26 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: CHECK_FORMATS,
     run: runCheck,
+  }),
+  graph: Object.freeze({
+    name: "graph",
+    args: "",
+    summary: "Print the project graph as a deterministic snapshot",
+    flagHelp: GRAPH_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(GRAPH_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runGraph,
+  }),
+  diff: Object.freeze({
+    name: "diff",
+    args: "<baseline>",
+    summary: "Compare two graph snapshots edge by edge",
+    flagHelp: DIFF_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(DIFF_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runDiff,
   }),
 });
 

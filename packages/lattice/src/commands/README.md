@@ -9,3 +9,22 @@ maps it.
 `context.mjs` is the exception in kind, not in rule: it is the preamble the
 commands share rather than a command. It composes `../workspace.mjs`,
 `../providers/` and `../options.mjs`; it does not reimplement any of them.
+
+## Commands
+
+- **`check`** (`../../cli.mjs`'s `runCheck`) — judges every import site against
+  the boundary rules and returns violations, go.work drift, and dead tsconfig
+  path aliases. The only command that exits 1.
+
+- **`graph`** (`./graph.mjs`'s `graphCommand`) — the project graph as a
+  deterministic, serialisable snapshot: projects (with `targets` and `tags`) and
+  dependencies, each as a flat sorted array. Strips internal fields
+  (`mfeRemote`, `entryPoints`, `declaredPackages`). Includes
+  `workspaceLayout`/`workspaceLayoutSource`. Refuses an Nx workspace with
+  polyglot manifests but no plugin registration. Descriptive: never exits 1.
+
+- **`diff`** (`./diff.mjs`'s `diffCommand`) — two graph snapshots compared edge
+  by edge. Takes a baseline file (not a git ref).
+  Refuses an incomplete baseline or head.
+  Refuses an Nx workspace with polyglot manifests but no plugin registration.
+  Descriptive: never exits 1.

@@ -22,6 +22,8 @@ version.
 | [violations.md](usage/violations.md)                     | Each of the fifteen violations: what it means, and what fixes it              |
 | [languages.md](usage/languages.md)                       | What each analyzer reads, the shapes it cannot, and the two workspace checks  |
 | [ci.md](usage/ci.md)                                     | The exit codes in a pipeline, and SARIF into GitHub code scanning             |
+| [graph.md](usage/graph.md)                               | The `graph` command: deterministic snapshot of the project graph              |
+| [diff.md](usage/diff.md)                                 | The `diff` command: two graph snapshots compared edge by edge                 |
 | [json-output.md](usage/json-output.md)                   | `--format json`'s versioned envelope: every field, and the stability promise  |
 | [editors.md](usage/editors.md)                           | Diagnostics at the edit, per client                                           |
 | [troubleshooting.md](usage/troubleshooting.md)           | It found nothing · it found too much · it could not look                      |

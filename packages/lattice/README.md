@@ -104,7 +104,20 @@ pnpm exec lattice check
 pnpm exec lattice check --format sarif --output boundaries.sarif
 pnpm exec lattice check --format json --output boundaries.json
 pnpm exec lattice check --config boundaries.custom.mjs
+pnpm exec lattice graph
+pnpm exec lattice graph --format json --output snapshot.json
+pnpm exec lattice diff snapshot.json
 ```
+
+`graph` prints the project graph as a deterministic snapshot: two sorted arrays,
+one of projects and one of edges, with internal fields stripped and
+`workspaceLayout` included. It is descriptive — a snapshot of what is is never a
+finding — and never exits 1.
+
+`diff` compares that snapshot (a file, not a git ref) with the current
+workspace, reporting projects and edges added or removed. It refuses an
+incomplete baseline or head, because every "removed" entry would be ambiguous
+between "gone" and "never seen". It is descriptive and never exits 1.
 
 `--format json` wraps the same verdict `text` and `sarif` already compute in a
 versioned envelope — every field name and `schemaVersion` are a public
