@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/ecoma-io/lattice/compare/v0.1.0...v0.2.0) (2026-08-14)
+
+
+### Features
+
+* **lattice:** context, diff rule-impact, impact constraint-context, adversarial fixes ([#65](https://github.com/ecoma-io/lattice/issues/65)) ([86f19f6](https://github.com/ecoma-io/lattice/commit/86f19f61e1b8959829eaf476877e2a056ab3c66b))
+
 ## 0.1.0 (2026-08-14)
 
 
