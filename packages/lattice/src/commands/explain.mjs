@@ -28,6 +28,7 @@ import { findConstraintsFor } from "../rules/tags.mjs";
 import { findProjectForPath, createProjectRootMappings } from "../rules/specifiers.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatExplainReport } from "../report/explain-text.mjs";
+import { resolveProvenance } from "./provenance.mjs";
 
 /**
  * Parses a `file:line:column` site string into its components.
@@ -193,7 +194,7 @@ export function explainCommand(site, commandContext, config) {
         reason: siteFailure.reason,
       };
 
-      const context = { root, provider, marker };
+      const context = { root, provider, marker, provenance: resolveProvenance(root) };
       const coverage = {
         complete,
         projects: Object.keys(graph.nodes).length,

@@ -5,12 +5,17 @@
  * implementation that satisfies it. An intent test fails when the intent no
  * longer holds, regardless of which implementation detail changed.
  *
- * Each test is named by contract letter (A–L) and reads the actual source
- * to verify the normative claim — not a mock, not a snapshot, not a
- * hand-kept constant that agrees with the answer until one drifts.
+ * Each test is named by contract letter (A–L). Where feasible, tests import
+ * and call the actual code (behavioral proof). Where that is not practical
+ * (circular imports, process-level tests), tests read source and verify
+ * structural properties (source-evidence) — these are clearly labelled.
+ *
+ * The manifest validation section ensures the manifest's claims are
+ * mechanically grounded: evidence paths exist, evidence types match the
+ * taxonomy, and "proven" status requires executable proof.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,6 +42,121 @@ function stripComments(src) {
   out = out.replace(/\/\/.*$/gm, "");
   return out;
 }
+
+// ── Manifest validation ───────────────────────────────────────────────────
+
+describe("Intent manifest validation", () => {
+  const manifestPath = join(__dirname, "intent-manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+
+  /** Evidence types that count as executable proof. */
+  const EXECUTABLE_TYPES = new Set(["behavioral-test", "e2e-test", "architecture-test"]);
+
+  /** All valid evidence types from the taxonomy. */
+  const VALID_TYPES = new Set([
+    "behavioral-test",
+    "e2e-test",
+    "architecture-test",
+    "static-analysis",
+    "source-evidence",
+    "documentation",
+  ]);
+
+  it("every evidence entry has a valid type from the taxonomy", () => {
+    const violations = [];
+    for (const contract of manifest.contracts) {
+      for (const ev of contract.evidence) {
+        if (!VALID_TYPES.has(ev.type)) {
+          violations.push(`Contract ${contract.id}: unknown evidence type "${ev.type}"`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("every evidence path resolves to an existing file", () => {
+    const violations = [];
+    for (const contract of manifest.contracts) {
+      for (const ev of contract.evidence) {
+        const resolved = join(ROOT, ev.path);
+        if (!existsSync(resolved)) {
+          violations.push(`Contract ${contract.id}: evidence path does not exist: ${ev.path}`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('"proven" contracts have at least one executable proof evidence entry', () => {
+    const violations = [];
+    for (const contract of manifest.contracts) {
+      if (contract.status === "proven") {
+        const hasExecutable = contract.evidence.some((ev) => EXECUTABLE_TYPES.has(ev.type));
+        if (!hasExecutable) {
+          violations.push(
+            `Contract ${contract.id}: status is "proven" but no evidence is an executable proof type`,
+          );
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("contracts without executable proof have status other than 'proven'", () => {
+    const violations = [];
+    for (const contract of manifest.contracts) {
+      const hasExecutable = contract.evidence.some((ev) => EXECUTABLE_TYPES.has(ev.type));
+      if (!hasExecutable && contract.status === "proven") {
+        violations.push(
+          `Contract ${contract.id}: no executable proof but status is "proven" — should be "documented"`,
+        );
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("unprovenIntents count matches contracts without executable proof", () => {
+    const computed = manifest.contracts.filter((c) => c.status !== "proven").length;
+    expect(manifest.unprovenIntents).toBe(computed);
+  });
+
+  it("contract IDs are unique", () => {
+    const ids = manifest.contracts.map((c) => c.id);
+    const seen = new Set();
+    const duplicates = [];
+    for (const id of ids) {
+      if (seen.has(id)) duplicates.push(id);
+      seen.add(id);
+    }
+    expect(duplicates).toEqual([]);
+  });
+
+  it("every evidence entry has a non-empty path", () => {
+    const violations = [];
+    for (const contract of manifest.contracts) {
+      for (const ev of contract.evidence) {
+        if (!ev.path || ev.path.trim() === "") {
+          violations.push(`Contract ${contract.id}: evidence entry has empty path`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("no evidence uses the legacy 'test' or 'source' types without taxonomy qualification", () => {
+    const violations = [];
+    for (const contract of manifest.contracts) {
+      for (const ev of contract.evidence) {
+        if (ev.type === "test" || ev.type === "source") {
+          violations.push(
+            `Contract ${contract.id}: evidence uses legacy type "${ev.type}" — use taxonomy-qualified type`,
+          );
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+});
 
 // ── Contract A: Provider independence ──────────────────────────────────────
 
@@ -68,19 +188,75 @@ describe("Contract A — Provider independence", () => {
 // ── Contract B: Empty result is never silently successful ──────────────────
 
 describe("Contract B — Empty result is never silently successful", () => {
-  it("JSON envelope throws when status=ok over incomplete coverage", () => {
-    // Read the json.mjs source and verify the three assertion blocks exist.
-    const content = readFileSync(join(ROOT, "src", "report", "json.mjs"), "utf-8");
-    // The invariant is enforced by three throw statements in jsonEnvelope.
-    expect(content).toMatch(/status === "ok" && coverage\.complete !== true/);
-    expect(content).toMatch(/throw new Error/);
+  it("jsonEnvelope throws when status=ok over incomplete coverage (behavioral)", async () => {
+    const { jsonEnvelope } = await import("../report/json.mjs");
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context: { root: "/test", provider: "native", marker: "lattice.json" },
+        status: "ok",
+        exitCode: 0,
+        coverage: {
+          complete: false,
+          projects: 1,
+          analyzedFiles: 0,
+          imports: 0,
+          notAnalyzed: [{ file: "a.go", reason: "unreadable" }],
+          blindSpots: [],
+          notes: [],
+        },
+        result: {},
+      }),
+    ).toThrow(/refusing to build a JSON envelope claiming status "ok" over incomplete coverage/);
   });
 
-  it("CLI distinguishes exit 0 (clean), 1 (findings), 3 (cannot look)", () => {
+  it("jsonEnvelope throws when status and exitCode disagree (behavioral)", async () => {
+    const { jsonEnvelope } = await import("../report/json.mjs");
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context: { root: "/test", provider: "native", marker: "lattice.json" },
+        status: "ok",
+        exitCode: 3,
+        coverage: {
+          complete: true,
+          projects: 1,
+          analyzedFiles: 0,
+          imports: 0,
+          notAnalyzed: [],
+          blindSpots: [],
+          notes: [],
+        },
+        result: {},
+      }),
+    ).toThrow(/status.*and exitCode.*disagree/);
+  });
+
+  it("jsonEnvelope throws when coverage.complete and notAnalyzed disagree (behavioral)", async () => {
+    const { jsonEnvelope } = await import("../report/json.mjs");
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context: { root: "/test", provider: "native", marker: "lattice.json" },
+        status: "ok",
+        exitCode: 0,
+        coverage: {
+          complete: true,
+          projects: 1,
+          analyzedFiles: 0,
+          imports: 0,
+          notAnalyzed: [{ file: "a.go", reason: "unreadable" }],
+          blindSpots: [],
+          notes: [],
+        },
+        result: {},
+      }),
+    ).toThrow(/coverage\.complete.*disagrees with coverage\.notAnalyzed/);
+  });
+
+  it("CLI distinguishes exit 0 (clean), 1 (findings), 3 (cannot look) [source-evidence]", () => {
     const content = readFileSync(join(ROOT, "cli.mjs"), "utf-8");
-    // Exit code 1 is for findings only.
     expect(content).toMatch(/EXIT\.violations/);
-    // Exit code 3 is for cannot-look.
     expect(content).toMatch(/EXIT\.error/);
   });
 });
@@ -116,34 +292,115 @@ describe("Contract C — Workspace resolution ≠ source analysis", () => {
   });
 });
 
+// ── Contract D: Architecture snapshot identity ─────────────────────────────
+
+describe("Contract D — Architecture snapshot identity", () => {
+  it("graph.mjs sorts by plain string comparison, never localeCompare", () => {
+    const content = readFileSync(join(ROOT, "src", "commands", "graph.mjs"), "utf-8");
+    const code = stripComments(content);
+    expect(code).not.toMatch(/localeCompare/);
+    // The comment asserting the rule is present in the source (prose).
+    expect(content).toMatch(/never `localeCompare`/);
+  });
+
+  it("internal data fields are stripped from the snapshot", () => {
+    const content = readFileSync(join(ROOT, "src", "commands", "graph.mjs"), "utf-8");
+    expect(content).toMatch(/INTERNAL_DATA_FIELDS/);
+    expect(content).toMatch(/mfeRemote/);
+  });
+
+  it("SCHEMA_VERSION is defined and numeric", () => {
+    const content = readFileSync(join(ROOT, "src", "report", "json.mjs"), "utf-8");
+    const match = content.match(/export const SCHEMA_VERSION = (\d+)/);
+    expect(match).not.toBeNull();
+    expect(Number(match[1])).toBeGreaterThan(0);
+  });
+
+  it("computePolicyFingerprint canonicalizes JSON before hashing (key-order independent)", () => {
+    const content = readFileSync(join(ROOT, "src", "commands", "graph.mjs"), "utf-8");
+    // The fingerprint must sort keys at every depth so that insertion order
+    // does not affect the hash — two semantically identical policy objects
+    // constructed in different key order must produce the same fingerprint.
+    expect(content).toMatch(/Object\.keys\(value\)\s*\.sort\(\)/);
+  });
+
+  it("INTERNAL_DATA_FIELDS covers every node.data field the snapshot strips", () => {
+    const graphContent = readFileSync(join(ROOT, "src", "commands", "graph.mjs"), "utf-8");
+    // Extract the INTERNAL_DATA_FIELDS array entries from graph.mjs.
+    const fieldsMatch = graphContent.match(
+      /INTERNAL_DATA_FIELDS\s*=\s*Object\.freeze\(\[([^\]]*)\]\)/s,
+    );
+    expect(fieldsMatch).not.toBeNull();
+    const strippedFields = fieldsMatch[1]
+      .split(",")
+      .map((s) => s.trim().replace(/['"]/g, ""))
+      .filter(Boolean);
+    // Known internal fields that the engine writes into node.data and that must
+    // not appear in snapshots. If the engine starts writing a new internal
+    // field, it must be added here or it leaks into the snapshot silently.
+    const requiredFields = ["mfeRemote", "entryPoints", "declaredPackages"];
+    for (const field of requiredFields) {
+      expect(strippedFields).toContain(field);
+    }
+  });
+});
+
 // ── Contract E: Snapshot compatibility ──────────────────────────────────────
 
 describe("Contract E — Snapshot compatibility", () => {
-  it("diff parseBaseline validates schemaVersion is a number", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "diff.mjs"), "utf-8");
-    expect(content).toMatch(/typeof envelope\.schemaVersion !== "number"/);
+  it("diff parseBaseline refuses non-numeric schemaVersion (behavioral)", async () => {
+    const { parseBaseline } = await import("../commands/diff.mjs");
+    expect(() =>
+      parseBaseline(
+        JSON.stringify({
+          schemaVersion: "bad",
+          command: "graph",
+          coverage: { complete: true },
+          result: { projects: [], dependencies: [] },
+        }),
+        "test-baseline.json",
+      ),
+    ).toThrow(/no schemaVersion field/);
   });
 
-  it("diff parseBaseline refuses mismatched schemaVersion", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "diff.mjs"), "utf-8");
-    expect(content).toMatch(/envelope\.schemaVersion !== SCHEMA_VERSION/);
-    // The comment asserts the normative rule.
-    expect(content).toMatch(/should refuse/);
+  it("diff parseBaseline refuses mismatched schemaVersion (behavioral)", async () => {
+    const { parseBaseline } = await import("../commands/diff.mjs");
+    expect(() =>
+      parseBaseline(
+        JSON.stringify({
+          schemaVersion: 999,
+          command: "graph",
+          coverage: { complete: true },
+          result: { projects: [], dependencies: [] },
+        }),
+        "test-baseline.json",
+      ),
+    ).toThrow(/schemaVersion 999/);
   });
 });
 
 // ── Contract F: Diff semantics ─────────────────────────────────────────────
 
 describe("Contract F — Diff semantics", () => {
-  it("computeDiff returns structural diff with policyMismatch", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "diff.mjs"), "utf-8");
-    expect(content).toMatch(/export function computeDiff/);
-    expect(content).toMatch(/policyMismatch/);
-  });
-
-  it("computeDiff calls computeRuleImpact for constraint context", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "diff.mjs"), "utf-8");
-    expect(content).toMatch(/computeRuleImpact/);
+  it("computeDiff returns structural diff with added/removed projects and edges (behavioral)", async () => {
+    const { computeDiff } = await import("../commands/diff.mjs");
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a", type: "lib", tags: [] }],
+      dependencies: [{ source: "a", target: "b", type: "static" }],
+    };
+    const head = {
+      projects: [
+        { name: "a", root: "libs/a", type: "lib", tags: [] },
+        { name: "b", root: "libs/b", type: "lib", tags: [] },
+      ],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.removedProjects).toEqual([]);
+    expect(diff.addedProjects.length).toBe(1);
+    expect(diff.addedProjects[0].name).toBe("b");
+    expect(diff.removedEdges.length).toBe(1);
+    expect(diff.removedEdges[0].source).toBe("a");
   });
 });
 
@@ -206,56 +463,25 @@ describe("Contract I — Explain — rule, reason, evidence", () => {
   });
 });
 
-// ── Contract D: Architecture snapshot identity ─────────────────────────────
+// ── Contract J: Check is enforcement authority ──────────────────────────────
 
-describe("Contract D — Architecture snapshot identity", () => {
-  it("graph.mjs sorts by plain string comparison, never localeCompare", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "graph.mjs"), "utf-8");
-    const code = stripComments(content);
-    expect(code).not.toMatch(/localeCompare/);
-    // The comment asserting the rule is present in the source (prose).
-    expect(content).toMatch(/never `localeCompare`/);
+describe("Contract J — Check is enforcement authority", () => {
+  it("context command warns in coverage.notes about depConstraints-only scope", () => {
+    const content = readFileSync(join(ROOT, "src", "commands", "context-command.mjs"), "utf-8");
+    expect(content).toMatch(/depConstraints/);
+    expect(content).toMatch(/check/);
+    // The notes field is populated, not empty.
+    expect(content).toMatch(/notes:\s*\[/);
+    expect(content).not.toMatch(/notes:\s*\[\]/);
   });
 
-  it("internal data fields are stripped from the snapshot", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "graph.mjs"), "utf-8");
-    expect(content).toMatch(/INTERNAL_DATA_FIELDS/);
-    expect(content).toMatch(/mfeRemote/);
-  });
-
-  it("SCHEMA_VERSION is defined and numeric", () => {
-    const content = readFileSync(join(ROOT, "src", "report", "json.mjs"), "utf-8");
-    const match = content.match(/export const SCHEMA_VERSION = (\d+)/);
-    expect(match).not.toBeNull();
-    expect(Number(match[1])).toBeGreaterThan(0);
-  });
-
-  it("computePolicyFingerprint canonicalizes JSON before hashing (key-order independent)", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "graph.mjs"), "utf-8");
-    // The fingerprint must sort keys at every depth so that insertion order
-    // does not affect the hash — two semantically identical policy objects
-    // constructed in different key order must produce the same fingerprint.
-    expect(content).toMatch(/Object\.keys\(value\)\s*\.sort\(\)/);
-  });
-
-  it("INTERNAL_DATA_FIELDS covers every node.data field the snapshot strips", () => {
-    const graphContent = readFileSync(join(ROOT, "src", "commands", "graph.mjs"), "utf-8");
-    // Extract the INTERNAL_DATA_FIELDS array entries from graph.mjs.
-    const fieldsMatch = graphContent.match(
-      /INTERNAL_DATA_FIELDS\s*=\s*Object\.freeze\(\[([^\]]*)\]\)/s,
-    );
-    expect(fieldsMatch).not.toBeNull();
-    const strippedFields = fieldsMatch[1]
-      .split(",")
-      .map((s) => s.trim().replace(/['"]/g, ""))
-      .filter(Boolean);
-    // Known internal fields that the engine writes into node.data and that must
-    // not appear in snapshots. If the engine starts writing a new internal
-    // field, it must be added here or it leaks into the snapshot silently.
-    const requiredFields = ["mfeRemote", "entryPoints", "declaredPackages"];
-    for (const field of requiredFields) {
-      expect(strippedFields).toContain(field);
-    }
+  it("impact command warns in coverage.notes about depConstraints-only scope", () => {
+    const content = readFileSync(join(ROOT, "src", "commands", "impact.mjs"), "utf-8");
+    expect(content).toMatch(/depConstraints/);
+    expect(content).toMatch(/check/);
+    // The notes field is populated, not empty.
+    expect(content).toMatch(/notes:\s*\[/);
+    expect(content).not.toMatch(/notes:\s*\[\]/);
   });
 });
 
@@ -311,27 +537,5 @@ describe("Contract L — Provider parity", () => {
   it("Nx provider uses requireCompleteWorkspaceLayout", () => {
     const content = readFileSync(join(ROOT, "src", "providers", "nx.mjs"), "utf-8");
     expect(content).toMatch(/requireCompleteWorkspaceLayout/);
-  });
-});
-
-// ── Contract J: Check is enforcement authority ──────────────────────────────
-
-describe("Contract J — Check is enforcement authority", () => {
-  it("context command warns in coverage.notes about depConstraints-only scope", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "context-command.mjs"), "utf-8");
-    expect(content).toMatch(/depConstraints/);
-    expect(content).toMatch(/check/);
-    // The notes field is populated, not empty.
-    expect(content).toMatch(/notes:\s*\[/);
-    expect(content).not.toMatch(/notes:\s*\[\]/);
-  });
-
-  it("impact command warns in coverage.notes about depConstraints-only scope", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "impact.mjs"), "utf-8");
-    expect(content).toMatch(/depConstraints/);
-    expect(content).toMatch(/check/);
-    // The notes field is populated, not empty.
-    expect(content).toMatch(/notes:\s*\[/);
-    expect(content).not.toMatch(/notes:\s*\[\]/);
   });
 });

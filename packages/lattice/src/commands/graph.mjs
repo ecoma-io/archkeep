@@ -33,6 +33,7 @@ import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { DEFAULT_WORKSPACE_LAYOUT } from "../rules/specifiers.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatGraphReport } from "../report/graph-text.mjs";
+import { resolveProvenance } from "./provenance.mjs";
 
 /**
  * The fields stripped from every project node before it enters the snapshot.
@@ -77,7 +78,7 @@ export function buildProjects(nodes) {
           name: node.name,
           root: data.root,
           type: node.type,
-          tags: data.tags ?? [],
+          tags: (data.tags ?? []).slice().sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
         };
         // Emit `targets` only when the node declares any. A native project has
         // no target table, and an empty array would falsely assert "zero
@@ -238,7 +239,7 @@ export function graphCommand(commandContext, { config = null } = {}) {
     notes: [],
   };
 
-  const context = { root, provider, marker };
+  const context = { root, provider, marker, provenance: resolveProvenance(root) };
   const result = {
     projects,
     dependencies,
