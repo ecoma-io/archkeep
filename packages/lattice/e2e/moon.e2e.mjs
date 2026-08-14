@@ -148,8 +148,8 @@ describe("Moon (full)", () => {
       expect(result.json.result.import.specifier).toBe("@acme/cli");
       expect(result.json.result.import.sourceProject).toBe("core");
       expect(result.json.result.import.targetProject).toBe("cli");
-      expect(result.json.result.violation).not.toBeNull();
-      expect(result.json.result.violation.messageId).toBe("onlyTagsConstraintViolation");
+      expect(result.json.result.violations).not.toBeNull();
+      expect(result.json.result.violations[0].messageId).toBe("onlyTagsConstraintViolation");
     } finally {
       violator.cleanup();
     }
