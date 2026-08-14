@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/ecoma-io/lattice/compare/v0.2.0...v0.3.0) (2026-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **lattice:** JSON output now uses schemaVersion 2 and includes the expanded result contract.
+
+### Features
+
+* **lattice:** harden command evidence and graph diffs ([#67](https://github.com/ecoma-io/lattice/issues/67)) ([9a0219b](https://github.com/ecoma-io/lattice/commit/9a0219b127fda5444dc4d1d1fab972c1b62c7247))
+
 ## [0.2.0](https://github.com/ecoma-io/lattice/compare/v0.1.0...v0.2.0) (2026-08-14)
 
 
