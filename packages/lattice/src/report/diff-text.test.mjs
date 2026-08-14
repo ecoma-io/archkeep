@@ -158,4 +158,155 @@ describe("formatDiffReport", () => {
     expect(report).toContain("+ 2 added projects");
     expect(report).toContain("+ 2 added edges");
   });
+
+  it("shows boundary violations introduced by the diff", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 2, edges: 0 },
+        head: { projects: 2, edges: 1 },
+        addedProjects: [],
+        removedProjects: [],
+        addedEdges: [{ source: "domain", target: "app", type: "static" }],
+        removedEdges: [],
+        ruleImpact: {
+          introduced: [
+            {
+              messageId: "onlyTagsConstraintViolation",
+              source: "domain",
+              target: "app",
+              constraint: { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+            },
+          ],
+          resolved: [],
+        },
+      },
+      coverage: { imports: 1, analyzedFiles: 1, projects: 2 },
+    });
+    expect(report).toContain("1 boundary violation introduced");
+    expect(report).toContain("domain → app  onlyTagsConstraintViolation  [layer:domain]");
+  });
+
+  it("shows boundary violations resolved by the diff", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 2, edges: 1 },
+        head: { projects: 2, edges: 0 },
+        addedProjects: [],
+        removedProjects: [],
+        addedEdges: [],
+        removedEdges: [{ source: "domain", target: "app", type: "static" }],
+        ruleImpact: {
+          introduced: [],
+          resolved: [
+            {
+              messageId: "onlyTagsConstraintViolation",
+              source: "domain",
+              target: "app",
+              constraint: { sourceTag: "layer:domain" },
+            },
+          ],
+        },
+      },
+      coverage: { imports: 0, analyzedFiles: 0, projects: 2 },
+    });
+    expect(report).toContain("1 boundary violation resolved");
+    expect(report).toContain("domain → app  onlyTagsConstraintViolation  [layer:domain]");
+  });
+
+  it("shows 'no boundary-rule impact' when rule impact exists but found no violations", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 2, edges: 0 },
+        head: { projects: 2, edges: 1 },
+        addedProjects: [],
+        removedProjects: [],
+        addedEdges: [{ source: "domain", target: "util", type: "static" }],
+        removedEdges: [],
+        ruleImpact: { introduced: [], resolved: [] },
+      },
+      coverage: { imports: 1, analyzedFiles: 1, projects: 2 },
+    });
+    expect(report).toContain("no boundary-rule impact");
+  });
+
+  it("omits boundary-rule section when ruleImpact is absent", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 2, edges: 0 },
+        head: { projects: 2, edges: 1 },
+        addedProjects: [],
+        removedProjects: [],
+        addedEdges: [{ source: "a", target: "b", type: "static" }],
+        removedEdges: [],
+      },
+      coverage: { imports: 1, analyzedFiles: 1, projects: 2 },
+    });
+    expect(report).not.toContain("boundary");
+    expect(report).not.toContain("rule impact");
+  });
+
+  it("shows (no matching constraint) for a violation without constraint context", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 2, edges: 0 },
+        head: { projects: 2, edges: 1 },
+        addedProjects: [],
+        removedProjects: [],
+        addedEdges: [{ source: "untagged", target: "domain", type: "static" }],
+        removedEdges: [],
+        ruleImpact: {
+          introduced: [
+            {
+              messageId: "projectWithoutTagsCannotHaveDependencies",
+              source: "untagged",
+              target: "domain",
+              constraint: null,
+            },
+          ],
+          resolved: [],
+        },
+      },
+      coverage: { imports: 1, analyzedFiles: 1, projects: 2 },
+    });
+    expect(report).toContain("(no matching constraint)");
+  });
+
+  it("shows 'no boundary-rule impact' when ruleImpact exists with no structural changes", () => {
+    // Bug 1 regression: the rule-impact section was hidden inside hasChanges,
+    // so a config-provided diff with no structural changes silently omitted
+    // the "no boundary-rule impact" line — indistinguishable from "no config".
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 2, edges: 1 },
+        head: { projects: 2, edges: 1 },
+        addedProjects: [],
+        removedProjects: [],
+        addedEdges: [],
+        removedEdges: [],
+        ruleImpact: { introduced: [], resolved: [] },
+      },
+      coverage: { imports: 1, analyzedFiles: 1, projects: 2 },
+    });
+    expect(report).toContain("no boundary-rule impact");
+    expect(report).toContain("no changes between baseline and head");
+    // The rule-impact section and the "no changes" line both appear —
+    // the reader can tell "config provided, no impact" from "no config".
+  });
+
+  it("omits boundary-rule section when ruleImpact is absent even with structural changes", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 1, edges: 0 },
+        head: { projects: 2, edges: 1 },
+        addedProjects: [{ name: "b", root: "libs/b", tags: [] }],
+        removedProjects: [],
+        addedEdges: [{ source: "a", target: "b", type: "static" }],
+        removedEdges: [],
+      },
+      coverage: { imports: 1, analyzedFiles: 1, projects: 2 },
+    });
+    expect(report).not.toContain("boundary");
+    expect(report).not.toContain("rule impact");
+    expect(report).toContain("2 changes between baseline and head");
+  });
 });

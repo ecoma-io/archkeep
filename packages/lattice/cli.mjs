@@ -78,6 +78,7 @@ import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs"
 import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/config.mjs";
 import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
+import { contextCommand } from "./src/commands/context-command.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { graphCommand } from "./src/commands/graph.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
@@ -773,7 +774,7 @@ async function runGraph(options, { cwd, env }) {
  *
  * The baseline file is the single positional argument (a file, not a git ref).
  *
- * @param {{format: string, output: string|null, paths: string[]}} options
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -796,7 +797,25 @@ async function runDiff(options, { cwd, env }) {
       { cwd },
       { readGraph: env.readGraph, listFiles: env.listFiles },
     );
-    result = diffCommand(baselinePath, commandContext);
+
+    // Load the boundary config when --config is given or when the workspace
+    // declares one, so rule-impact analysis is computed. Without a config,
+    // the diff reports only structural changes — same as before.
+    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }|null} */
+    const config = options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : typeof commandContext.options.boundaryConfig === "string"
+        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
+        : commandContext.options.boundaryConfig
+          ? policyFrom(
+              commandContext.options.boundaryConfig,
+              `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+            )
+          : null;
+
+    result = diffCommand(baselinePath, commandContext, { config });
   } catch (error) {
     const usageError = /is outside the workspace/.test(error?.message ?? "");
     env.err(String(error?.message ?? error));
@@ -834,7 +853,7 @@ async function runDiff(options, { cwd, env }) {
  *
  * The project name is the single positional argument.
  *
- * @param {{format: string, output: string|null, paths: string[]}} options
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -855,7 +874,24 @@ async function runImpact(options, { cwd, env }) {
       { cwd },
       { readGraph: env.readGraph, listFiles: env.listFiles },
     );
-    result = impactCommand(projectName, commandContext);
+
+    // Load the boundary config when --config is given or when the workspace
+    // declares one, so constraint-impact analysis is computed.
+    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }|null} */
+    const config = options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : typeof commandContext.options.boundaryConfig === "string"
+        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
+        : commandContext.options.boundaryConfig
+          ? policyFrom(
+              commandContext.options.boundaryConfig,
+              `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+            )
+          : null;
+
+    result = impactCommand(projectName, commandContext, config);
   } catch (error) {
     const usageError =
       /is outside the workspace/.test(error?.message ?? "") ||
@@ -974,6 +1010,85 @@ async function runExplain(options, { cwd, env }) {
 }
 
 /**
+ * `context`'s `run`: resolves the command context, loads the boundary config,
+ * drives `contextCommand`, writes the report, and returns the exit code.
+ *
+ * The project name is the single positional argument. `--config` is accepted,
+ * same as `check` and `explain`, because the answer depends on which boundary
+ * law is in effect.
+ *
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runContextCommand(options, { cwd, env }) {
+  if (options.paths.length !== 1) {
+    env.err(
+      `lattice: context takes exactly one positional argument (the project name); ` +
+        `got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  const projectName = options.paths[0];
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    // The config's location is a separate fact from the workspace root.
+    // Same loading logic as `check` and `explain` — a `--config` overrides
+    // the workspace's own `boundaryConfig`.
+    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }} */
+    const config = options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : typeof commandContext.options.boundaryConfig === "string"
+        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
+        : policyFrom(
+            commandContext.options.boundaryConfig,
+            `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+          );
+
+    result = contextCommand(projectName, commandContext, config);
+  } catch (error) {
+    const usageError =
+      /is outside the workspace/.test(error?.message ?? "") ||
+      /no project named/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(`lattice: context complete → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // Descriptive: 0 for answered, 3 for incomplete coverage.
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
+}
+
+/**
  * `check`'s own flags, described once — `usage()` renders this straight into
  * the Options block, and `flags` below (what `parseArgs` needs) is derived
  * from it rather than kept as a second list that could name a flag `--help`
@@ -1055,6 +1170,15 @@ const DIFF_FLAG_HELP = Object.freeze([
     arg: "<file>",
     describe: Object.freeze(["Write the report to a file instead of stdout"]),
   }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: Object.freeze([
+      "Read the boundary law from here instead of",
+      "<workspace root>/module-boundaries.config.mjs",
+    ]),
+  }),
 ]);
 
 /**
@@ -1079,6 +1203,15 @@ const IMPACT_FLAG_HELP = Object.freeze([
     arg: "<file>",
     describe: Object.freeze(["Write the report to a file instead of stdout"]),
   }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: Object.freeze([
+      "Read the boundary law from here instead of",
+      "<workspace root>/module-boundaries.config.mjs",
+    ]),
+  }),
 ]);
 
 /**
@@ -1089,6 +1222,42 @@ const IMPACT_FLAG_HELP = Object.freeze([
  * @type {readonly FlagHelp[]}
  */
 const EXPLAIN_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/usage/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: ({ boundaryConfig, inline }) =>
+      Object.freeze([
+        "Read the boundary law from here instead of",
+        inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
+      ]),
+  }),
+]);
+
+/**
+ * `context`'s flags: text or JSON envelope, optional file output.
+ * The project name is a positional argument. `--config` overrides the boundary
+ * law, same as `check` and `explain`, because the answer depends on which
+ * rules are in effect.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const CONTEXT_FLAG_HELP = Object.freeze([
   Object.freeze({
     flag: "--format",
     key: "format",
@@ -1151,7 +1320,7 @@ const COMMANDS = Object.freeze({
     summary: "Compare two graph snapshots edge by edge",
     flagHelp: DIFF_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(DIFF_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null }),
+    defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runDiff,
   }),
@@ -1161,7 +1330,7 @@ const COMMANDS = Object.freeze({
     summary: "List projects that depend on the named project",
     flagHelp: IMPACT_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(IMPACT_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null }),
+    defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runImpact,
   }),
@@ -1174,6 +1343,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runExplain,
+  }),
+  context: Object.freeze({
+    name: "context",
+    args: "<project>",
+    summary: "Show the architecture constraints that apply to a project",
+    flagHelp: CONTEXT_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(CONTEXT_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runContextCommand,
   }),
 });
 

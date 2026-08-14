@@ -118,7 +118,8 @@ repository — Nx and Moon are providers of the project graph, not the only ones
 
 Fifteen violation types, eight options, and the same `messageId`s ESLint reports
 — so the two enforcers can be compared rather than merely both being red. Five
-languages today; [more is the direction](docs/doctrine/north-star.md).
+languages today; six commands — `check`, `graph`, `diff`, `impact`, `explain`,
+`context`; [more is the direction](docs/doctrine/north-star.md).
 
 ## The one commitment behind all of it
 
@@ -143,6 +144,7 @@ refusals that follow from it, are in [**docs/doctrine/north-star.md**](docs/doct
 | [Designing boundaries](docs/concepts/boundaries.md)                                                                                                    | The constraint table, and the five semantics that surprise people        |
 | [The fifteen violations](docs/reference/violations.md)                                                                                                 | What each `messageId` means, and what fixes it                           |
 | [What each language sees](docs/reference/languages.md)                                                                                                 | Per-language coverage and every declared parse limit                     |
+| [Commands](docs/reference/cli.md)                                                                                                                      | `check` · `graph` · `diff` · `impact` · `explain` · `context`            |
 | [CI](docs/usage/ci.md) · [VS Code](docs/integrations/vscode.md) · [Troubleshooting](docs/usage/troubleshooting.md)                                     | Exit codes, SARIF, LSP setup, and what to check when it reported nothing |
 | [Architecture](docs/development/architecture.md) · [Adding a language](docs/development/adding-a-language.md) · [Testing](docs/development/testing.md) | For contributors                                                         |
 

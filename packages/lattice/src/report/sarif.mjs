@@ -157,6 +157,12 @@ export function sarifResult(violation) {
       importKind: violation.kind,
       sourceProject: violation.sourceProject,
       targetProject: violation.targetProject,
+      ...(violation.constraint?.description
+        ? { ruleDescription: violation.constraint.description }
+        : {}),
+      ...(violation.constraint?.remediation
+        ? { remediation: violation.constraint.remediation }
+        : {}),
     },
   };
 }

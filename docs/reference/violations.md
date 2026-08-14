@@ -24,6 +24,14 @@ apps/checkout-api/internal/handler/pay.go:14:2  onlyTagsConstraintViolation
 | the message        | What is wrong, rendered exactly as ESLint would render it                                                            |
 | `import`           | Which specifier, of which kind, and the project pair it crosses                                                      |
 | `constraint`       | **Which row of your config said so** — the line a fix has to agree with                                              |
+| `description`      | (optional) What the constraint row enforces and why                                                                  |
+| `remediation`      | (optional) How to fix a violation of this row                                                                        |
+
+When a constraint row carries `description` or `remediation` fields, those
+appear indented below the constraint line in `explain`, `impact` and `context`
+output. They are optional and do not affect the verdict — they exist so a
+developer can understand and resolve a violation without opening the config
+file.
 
 When the `constraint` line reads _"not driven by a depConstraints row — this
 check fires before the table is read"_, that is not a missing field. Nine of the

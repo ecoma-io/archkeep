@@ -156,20 +156,17 @@ describe("impactCommand", () => {
           alpha: {
             name: "alpha",
             type: "lib",
-            data: { root: "libs/alpha" },
-            tags: ["layer:domain"],
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
           },
           beta: {
             name: "beta",
             type: "lib",
             data: { root: "libs/beta" },
-            tags: [],
           },
           gamma: {
             name: "gamma",
             type: "lib",
             data: { root: "libs/gamma" },
-            tags: [],
           },
         },
         dependencies: {
@@ -305,5 +302,155 @@ describe("impactCommand", () => {
     // A project with no dependents is still "ok", not a finding.
     const empty = impactCommand("gamma", commandContext());
     expect(empty.status).not.toBe("findings");
+  });
+
+  it("includes constraint impact when boundary config is provided", () => {
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+          beta: {
+            name: "beta",
+            type: "lib",
+            data: { root: "libs/beta", tags: ["layer:app"] },
+          },
+          gamma: {
+            name: "gamma",
+            type: "lib",
+            data: { root: "libs/gamma", tags: ["layer:app"] },
+          },
+        },
+        dependencies: {
+          beta: [{ target: "alpha", type: "static" }],
+          gamma: [{ target: "beta", type: "static" }],
+        },
+      },
+    });
+    const config = {
+      depConstraints: [
+        {
+          sourceTag: "layer:app",
+          onlyDependOnLibsWithTags: ["layer:domain", "layer:app"],
+        },
+      ],
+    };
+    const result = impactCommand("alpha", ctx, config);
+
+    expect(result.impact.constraintImpact).toHaveLength(2);
+    // beta depends directly on alpha, and its constraint allows it
+    const betaEntry = result.impact.constraintImpact.find((e) => e.project === "beta");
+    expect(betaEntry.violations).toHaveLength(0);
+    // gamma depends on beta (transitive via alpha's impact set)
+    const gammaEntry = result.impact.constraintImpact.find((e) => e.project === "gamma");
+    expect(gammaEntry.violations).toHaveLength(0);
+
+    expect(result.report.text).toContain("Constraint context");
+    expect(result.report.text).toContain("✔ beta");
+    expect(result.report.text).toContain("✔ gamma");
+
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.result.constraintImpact).toHaveLength(2);
+  });
+
+  it("reports constraint violations for dependents that break boundary rules", () => {
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+          beta: {
+            name: "beta",
+            type: "lib",
+            data: { root: "libs/beta", tags: ["layer:app"] },
+          },
+        },
+        dependencies: {
+          beta: [{ target: "alpha", type: "static" }],
+        },
+      },
+    });
+    const config = {
+      depConstraints: [
+        {
+          sourceTag: "layer:app",
+          onlyDependOnLibsWithTags: ["layer:app"],
+          description: "App isolation",
+          remediation: "Move shared logic to an app-level project",
+        },
+      ],
+    };
+    const result = impactCommand("alpha", ctx, config);
+
+    expect(result.impact.constraintImpact).toHaveLength(1);
+    const entry = result.impact.constraintImpact[0];
+    expect(entry.project).toBe("beta");
+    expect(entry.violations).toHaveLength(1);
+    expect(entry.violations[0].messageId).toBe("onlyTagsConstraintViolation");
+
+    expect(result.report.text).toContain("✖ beta");
+    expect(result.report.text).toContain("App isolation");
+    expect(result.report.text).toContain("Move shared logic to an app-level project");
+  });
+
+  it("omits constraintImpact when no boundary config is provided", () => {
+    const result = impactCommand("alpha", commandContext());
+    expect(result.impact).not.toHaveProperty("constraintImpact");
+  });
+
+  it("includes constraintImpact as empty array when config is provided but no dependents", () => {
+    // Bug 2 regression: the renderer hid the section for empty arrays,
+    // but the command must always produce constraintImpact when a
+    // boundary config is available, so the renderer can show the
+    // "no dependents to judge" line.
+    const result = impactCommand("gamma", commandContext(), {
+      depConstraints: [{ sourceTag: "layer:app", onlyDependOnLibsWithTags: ["layer:domain"] }],
+    });
+    expect(result.impact.constraintImpact).toBeDefined();
+    expect(result.impact.constraintImpact).toEqual([]);
+    expect(result.report.text).toContain("Constraint context");
+    expect(result.report.text).toContain("no dependents to judge against constraint table");
+  });
+
+  it("shows no matching constraint rows for an untagged dependent", () => {
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+          beta: {
+            name: "beta",
+            type: "lib",
+            data: { root: "libs/beta", tags: [] },
+          },
+        },
+        dependencies: {
+          beta: [{ target: "alpha", type: "static" }],
+        },
+      },
+    });
+    const config = {
+      depConstraints: [{ sourceTag: "layer:app", onlyDependOnLibsWithTags: ["layer:domain"] }],
+    };
+    const result = impactCommand("alpha", ctx, config);
+
+    expect(result.impact.constraintImpact).toHaveLength(1);
+    // Untagged beta matches no constraint row, so constraintRows is empty
+    expect(result.impact.constraintImpact[0].constraintRows).toHaveLength(0);
+    // But the untagged-dependent violation is flagged
+    expect(result.impact.constraintImpact[0].violations).toHaveLength(1);
+    expect(result.impact.constraintImpact[0].violations[0].messageId).toBe(
+      "projectWithoutTagsCannotHaveDependencies",
+    );
+    expect(result.report.text).toContain("no matching constraint rows");
   });
 });

@@ -13,6 +13,14 @@
  * shrug, and it is worded that way in the report so a reader never mistakes it
  * for silence.
  *
+ * When a boundary config is provided (via `--config` or the workspace's own
+ * declaration), `impact` also returns the **constraint context** for each
+ * dependent: which `depConstraints` rows govern that edge and whether it
+ * currently violates them. This is narrower than `check` — it checks only
+ * `depConstraints` (tag-based), not npm/circular/lazy-load rules that need
+ * import-site details. A consumer who needs the complete verdict should run
+ * `check`.
+ *
  * What it needs from its caller is a `CommandContext` — the preamble every
  * command shares (`./context.mjs`). What it gives back is a `status`, the
  * payload for both the text and the JSON renderers, and enough coverage
@@ -28,6 +36,7 @@
  * whose dependents silently under-represent the real architecture.
  */
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatImpactReport } from "../report/impact-text.mjs";
 
@@ -109,13 +118,15 @@ export function computeImpact(projectName, graph) {
  *
  * @param {string} projectName The project whose dependents to list.
  * @param {object} commandContext From `resolveCommandContext`.
+ * @param {object} [config] The loaded boundary config. When provided,
+ *   constraint context and violations for each dependent edge are computed.
  * @returns {{status: "ok"|"no-verdict", impact: object, coverage: object,
  *   report: {text: string, json: string}}}
  * @throws {Error} when an Nx workspace has polyglot manifests but the plugin
  *   is not registered, or when the named project does not exist in the graph,
  *   or when the graph has incomplete coverage.
  */
-export function impactCommand(projectName, commandContext) {
+export function impactCommand(projectName, commandContext, config = null) {
   const { root, provider, marker, graph, pluginGap } = commandContext;
 
   // Descriptive commands refuse when the graph is known to be incomplete.
@@ -171,6 +182,21 @@ export function impactCommand(projectName, commandContext) {
     transitive: impact.transitive,
     dependents: impact.dependents,
   };
+
+  // Rule-impact analysis: when the boundary config is available, identify
+  // which constraint rows govern each dependent's edge to the target and
+  // whether the edge currently violates those rows. This is narrower than
+  // the full rule engine: it covers `depConstraints`, not checks that need
+  // import-site details such as npm bans or lazy loading.
+  if (config && config.depConstraints) {
+    result.constraintImpact = computeImpactConstraints(
+      projectName,
+      impact.dependents,
+      graph.nodes,
+      graph.dependencies,
+      config.depConstraints,
+    );
+  }
 
   const envelope = jsonEnvelope({
     command: "impact",

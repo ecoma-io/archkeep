@@ -4,13 +4,14 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 
 ## Commands
 
-| command   | positional args      | summary                                             | finds violations |
-| --------- | -------------------- | --------------------------------------------------- | ---------------- |
-| `check`   | `[<path>...]`        | Check imports against the boundary rules            | yes -- exits 1   |
-| `graph`   | (none)               | Print the project graph as a deterministic snapshot | no               |
-| `diff`    | `<baseline>`         | Compare two graph snapshots edge by edge            | no               |
-| `impact`  | `<project>`          | List projects that depend on the named project      | no               |
-| `explain` | `<file:line:column>` | Explain the judgment for one import site            | no               |
+| command   | positional args      | summary                                                   | finds violations |
+| --------- | -------------------- | --------------------------------------------------------- | ---------------- |
+| `check`   | `[<path>...]`        | Check imports against the boundary rules                  | yes -- exits 1   |
+| `graph`   | (none)               | Print the project graph as a deterministic snapshot       | no               |
+| `diff`    | `<baseline>`         | Compare two graph snapshots edge by edge                  | no               |
+| `impact`  | `<project>`          | List projects that depend on the named project            | no               |
+| `explain` | `<file:line:column>` | Explain the judgment for one import site                  | no               |
+| `context` | `<project>`          | Show the architecture constraints that apply to a project | no               |
 
 `lattice --help` prints the help text and exits 0. An omitted command name is a
 usage error (exit 2). If the first positional argument names a path that exists
@@ -42,24 +43,30 @@ project graph, not the boundary law.
 
 ### `diff`
 
-| flag       | argument       | default | meaning                                         |
-| ---------- | -------------- | ------- | ----------------------------------------------- |
-| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope. |
-| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.   |
+| flag       | argument       | default                  | meaning                                                                                                                                           |
+| ---------- | -------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                                                                                                   |
+| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                                                                                                     |
+| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Rule-impact analysis appears whenever a boundary config is available. |
 
 The baseline file is a positional argument (a file, not a git ref). Both sides
 must be complete; an incomplete baseline or current workspace exits 3 and
-produces no diff.
+produces no diff. When a boundary config is available, the report includes a
+rule-impact section showing boundary violations introduced or resolved by the
+diff.
 
 ### `impact`
 
-| flag       | argument       | default | meaning                                         |
-| ---------- | -------------- | ------- | ----------------------------------------------- |
-| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope. |
-| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.   |
+| flag       | argument       | default                  | meaning                                                                                                                                         |
+| ---------- | -------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                                                                                                 |
+| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                                                                                                   |
+| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Constraint context appears whenever a boundary config is available. |
 
 The project name is a single positional argument. An empty `dependents` list is
-a claim ("nothing depends on this"), not a shrug.
+a claim ("nothing depends on this"), not a shrug. When a boundary config is
+available, the report includes a constraint-context section showing which
+constraint rows govern each dependent's edge and whether it violates them.
 
 ### `explain`
 
@@ -73,6 +80,18 @@ The site argument is a single `file:line:column` string, 1-based. `--config`
 is accepted because the judgment depends on which boundary law is in effect. A
 site whose target is not statically knowable (dynamic `import()` with a
 non-literal argument) gets an `UNRESOLVABLE` verdict with the reason.
+
+### `context`
+
+| flag       | argument       | default                  | meaning                                                                     |
+| ---------- | -------------- | ------------------------ | --------------------------------------------------------------------------- |
+| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                             |
+| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                               |
+| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. |
+
+The project name is a single positional argument. `--config` is accepted because
+the answer depends on which boundary law is in effect — a different constraint
+table produces a different set of matching rows.
 
 ### Shared flag rules
 
@@ -104,9 +123,9 @@ build; they differ in what you go and look at, not in whether you go and look.
 analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
-A descriptive command (`graph`, `diff`, `impact`, `explain`) exits 0 when it
-completes, 3 when coverage is incomplete, and 2 on usage error. None exits 1,
-because a descriptive result is never a finding.
+A descriptive command (`graph`, `diff`, `impact`, `explain`, `context`) exits 0
+when it completes, 3 when coverage is incomplete, and 2 on usage error. None
+exits 1, because a descriptive result is never a finding.
 
 ## What each command does
 
@@ -128,18 +147,31 @@ snapshot of what is is never a finding.
 ### `diff <baseline>`
 
 Compares a `graph --format json` snapshot file with the current workspace,
-reporting projects and edges added or removed. The baseline is a file, not a
-git ref. Both sides must be complete. Descriptive -- changes do not make it
-exit 1.
+reporting projects and edges added or removed. When a boundary config is
+available, also reports which violations the added edges introduce and which
+the removed edges resolve. The baseline is a file, not a git ref. Both sides
+must be complete. Descriptive -- changes do not make it exit 1.
 
 ### `impact <project>`
 
 Lists every project that transitively depends on the named project. Separates
-direct from transitive dependents. Descriptive.
+direct from transitive dependents. When a boundary config is available, also
+shows which constraint rows govern each dependent's edge and whether it
+violates them. Descriptive.
 
 ### `explain <file:line:column>`
 
 Explains the judgment for one import site: which constraint row matched, which
-tags applied, whether it is a violation and why. A site whose target is not
+tags applied, whether it is a violation and why. Constraint rows that carry
+`description` or `remediation` show those fields. A site whose target is not
 statically knowable gets an `UNRESOLVABLE` verdict with the reason.
+Descriptive.
+
+### `context <project>`
+
+Shows the architecture constraints that apply to a project: its tags, which
+`depConstraints` rows match those tags, and what each row allows or bans.
+Constraint rows that carry `description` or `remediation` show those fields.
+Useful before editing a project — the same constraint table `check` judges
+from, rendered as a readable summary rather than as a list of violations.
 Descriptive.

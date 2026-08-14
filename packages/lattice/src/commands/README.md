@@ -24,16 +24,23 @@ commands share rather than a command. It composes `../workspace.mjs`,
   polyglot manifests but no plugin registration. Descriptive: never exits 1.
 
 - **`diff`** (`./diff.mjs`'s `diffCommand`) — two graph snapshots compared edge
-  by edge. Takes a baseline file (not a git ref).
+  by edge. Takes a baseline file (not a git ref). When a boundary config is
+  available (via `--config` or the workspace's declared config), also reports
+  which boundary violations the diff introduces and which it resolves — this
+  is narrower than `check`: it checks only `depConstraints` (tag-based), not
+  npm/circular/lazy-load rules that need import-site details.
   Refuses an incomplete baseline or head.
   Refuses an Nx workspace with polyglot manifests but no plugin registration.
   Descriptive: never exits 1.
 
 - **`impact`** (`./impact.mjs`'s `impactCommand`) — reverse reachability from
   the project graph: given a project name, lists every project that transitively
-  depends on it. Separates direct from transitive dependents. Refuses incomplete
-  coverage (whole-file analysis failures). Refuses an Nx workspace with polyglot
-  manifests but no plugin registration. Descriptive: never exits 1.
+  depends on it. Separates direct from transitive dependents. When a boundary
+  config is available, also shows the constraint context for each dependent:
+  which constraint rows govern its edge and whether that edge violates them.
+  Refuses incomplete coverage (whole-file analysis failures).
+  Refuses an Nx workspace with polyglot manifests but no plugin registration.
+  Descriptive: never exits 1.
 
 - **`explain`** (`./explain.mjs`'s `explainCommand`) — the judgment for one import
   site, explained. Takes a `file:line:column` site, finds the matching import
@@ -42,3 +49,21 @@ commands share rather than a command. It composes `../workspace.mjs`,
   site-level failure (dynamic import with non-literal argument). Refuses an Nx
   workspace with polyglot manifests but no plugin registration. Descriptive:
   never exits 1.
+
+- **`context`** (`./context-command.mjs`'s `contextCommand`) — the architecture
+  constraints that apply to one project. Takes a project name and returns the
+  project's tags plus every matching `depConstraints` row, including optional
+  descriptions and remediation guidance. The filename deliberately avoids
+  colliding with `./context.mjs`, which is the shared command preamble. Refuses
+  an Nx workspace with polyglot manifests but no plugin registration.
+  Descriptive: never exits 1.
+
+## Shared modules
+
+- **`edge-constraints.mjs`** — edge-constraint analysis shared by `diff` and
+  `impact`. Judges a single graph edge against the `depConstraints` table,
+  producing violations with their constraint rows. Checks only tag-based rules
+  (`onlyDependOnLibsWithTags`, `notDependOnLibsWithTags`,
+  `projectWithoutTagsCannotHaveDependencies`); npm/circular/lazy-load rules
+  need import-site details that graph edges do not carry. A consumer who needs
+  the complete verdict should run `check`.

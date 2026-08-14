@@ -45,8 +45,8 @@ repository, deterministically, with no build system as a precondition.
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer.
-- **`check`, `graph`, `impact`, `diff` and `explain`,** each with output a
-  script or an agent can consume without parsing prose.
+- **`check`, `graph`, `impact`, `diff`, `explain` and `context`,** each with
+  output a script or an agent can consume without parsing prose.
 - **Nx as a first-class integration, not a dependency.** A workspace that has
   Nx gets graph reuse and `affected` integration; a repository that has never
   heard of Nx loses nothing.
@@ -64,7 +64,9 @@ is substantially produced by agents.
 - **Fitness functions and richer policies** beyond dependency constraints.
 - **An agent-native interface**: architectural context before a change,
   impact analysis during it, verification after it — machine-readable at
-  every step, because the consumer is a model, not a reader.
+  every step, because the consumer is a model, not a reader. `context` and
+  `impact` already answer the before-change and during-change questions; 2.x
+  extends that reach.
 - **Architecture-aware agent workflows and approval gates**, so an agent's
   diff meets the architecture before it meets a human.
 - **Deeper editor, LSP and forge integrations** (GitHub, GitLab, CI

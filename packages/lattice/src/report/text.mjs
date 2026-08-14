@@ -76,12 +76,19 @@ export function formatViolation(violation) {
     .split("\n")
     .map((line) => (line === "" ? "" : `${CONTINUED}${line}`))
     .join("\n");
-  return [
+  const lines = [
     `${violation.sourceFile}:${violation.line}:${violation.column}  ${violation.messageId}`,
     message,
     `${DETAIL}import      ${JSON.stringify(violation.specifier)} (${violation.kind})  ${formatEdge(violation)}`,
     `${DETAIL}constraint  ${formatConstraint(violation.constraint)}`,
-  ].join("\n");
+  ];
+  if (violation.constraint?.description) {
+    lines.push(`${DETAIL}rule        ${violation.constraint.description}`);
+  }
+  if (violation.constraint?.remediation) {
+    lines.push(`${DETAIL}remediation ${violation.constraint.remediation}`);
+  }
+  return lines.join("\n");
 }
 
 /** One failure as `file` or `file:line:column`, then its reason. */

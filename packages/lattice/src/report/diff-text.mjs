@@ -9,6 +9,15 @@
  * "0 added, 0 removed" would be ambiguous over a partial one
  * (`../../../../AGENTS.md`).
  *
+ * When the diff carries a `ruleImpact` field (computed when a boundary config
+ * was provided), a rule-impact section lists violations introduced and
+ * resolved by the diff, plus a "no boundary-rule impact" line when the config
+ * was provided but no violations changed. This section appears whenever
+ * `ruleImpact` is present — even when there are no structural changes — so a
+ * reader can always tell "config provided, no impact" from "no config". The
+ * section is absent when no config was given, so a diff without `--config` is
+ * unchanged from its prior output.
+ *
  * This module decides nothing. A formatter that filtered would be a rule
  * wearing a formatter's name (`../README.md`).
  */
@@ -32,6 +41,20 @@ function formatProject(project) {
  */
 function formatEdge(edge) {
   return `  ${edge.source} → ${edge.target} (${edge.type})`;
+}
+
+/**
+ * One constraint-impact violation as a line.
+ *
+ * @param {{messageId: string, constraint: object|null, source: string, target: string}} violation
+ * @returns {string}
+ */
+function formatImpactViolation(violation) {
+  const tag =
+    violation.constraint?.sourceTag ??
+    violation.constraint?.allSourceTags?.join("+") ??
+    "(no matching constraint)";
+  return `  ${violation.source} → ${violation.target}  ${violation.messageId}  [${tag}]`;
 }
 
 /**
@@ -87,6 +110,33 @@ export function formatDiffReport({ diff, coverage }) {
       for (const edge of diff.removedEdges) {
         sections.push(formatEdge(edge));
       }
+    }
+  }
+
+  // Rule-impact section: violations introduced or resolved by this diff.
+  // This section appears whenever the boundary config was provided, so a
+  // reader can always tell "config provided, no impact" from "no config".
+  if (diff.ruleImpact) {
+    const { introduced, resolved } = diff.ruleImpact;
+
+    if (introduced.length > 0) {
+      const word = introduced.length === 1 ? "violation" : "violations";
+      sections.push(`⚠ ${introduced.length} boundary ${word} introduced`);
+      for (const v of introduced) {
+        sections.push(formatImpactViolation(v));
+      }
+    }
+
+    if (resolved.length > 0) {
+      const word = resolved.length === 1 ? "violation" : "violations";
+      sections.push(`✔ ${resolved.length} boundary ${word} resolved`);
+      for (const v of resolved) {
+        sections.push(formatImpactViolation(v));
+      }
+    }
+
+    if (introduced.length === 0 && resolved.length === 0) {
+      sections.push("✔ no boundary-rule impact");
     }
   }
 

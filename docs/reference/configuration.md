@@ -158,9 +158,12 @@ truncated file.
 | ---------- | -------- | ------------------------------ | ------------------------------------------------------------------------------- |
 | `--config` | `<file>` | (from `boundaryConfig` option) | Read the boundary law from this file instead of the workspace's configured one. |
 
-Accepted by `check` and `explain` only, because the judgment depends on which
-boundary law is in effect. Does not move the workspace root -- the tree being
-judged is still the consumer's.
+Accepted by `check`, `diff`, `impact`, `explain`, and `context`. The judgment
+(`check`, `explain`), rule-impact analysis (`diff`), constraint context
+(`impact`), and matching rows (`context`) all depend on which boundary law is
+in effect. `graph` takes no `--config` because it describes structure, not
+rules. Does not move the workspace root — the tree being judged is still the
+consumer's.
 
 ## What is deliberately not configurable
 

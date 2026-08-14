@@ -9,6 +9,13 @@
  * descriptive: it never exits 1, because a description of what changed is
  * never a finding (only `check` ever exits 1).
  *
+ * When a boundary config is provided (via `--config` or the workspace's own
+ * declaration), `diff` also computes the rule-impact: which boundary violations
+ * the added edges introduce and which the removed edges resolve. This is
+ * narrower than `check` — it checks only `depConstraints` (tag-based), not
+ * npm/circular/lazy-load rules that need import-site details. A consumer who
+ * needs the complete verdict should run `check`.
+ *
  * `diff` refuses an incomplete baseline or head. If either side could not read
  * part of the tree, every "removed" project and edge is ambiguous between
  * "gone" and "never seen" — reporting the diff anyway would manufacture
@@ -35,6 +42,7 @@ import { readFileSync } from "node:fs";
 
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { buildDependencies, buildProjects } from "./graph.mjs";
+import { computeRuleImpact } from "./edge-constraints.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatDiffReport } from "../report/diff-text.mjs";
@@ -260,9 +268,12 @@ export function computeDiff(baseline, head) {
  *
  * @param {string} baselinePath Absolute path to the baseline JSON file.
  * @param {object} commandContext From `resolveCommandContext`.
- * @param {{readBaseline?: (path: string) => {projects: object[], dependencies: object[], coverage: object}}} [io]
+ * @param {{readBaseline?: (path: string) => {projects: object[], dependencies: object[], coverage: object},
+ *   config?: object}} [io]
  *   Injectable baseline reader, so a test drives the diff without a real file.
- *   When omitted, reads from the real filesystem.
+ *   When omitted, reads from the real filesystem. `config` is the loaded
+ *   boundary config; when provided, rule-impact analysis is computed alongside
+ *   the structural diff.
  * @returns {{status: "ok"|"no-verdict", diff: object, coverage: object,
  *   report: {text: string, json: string}}}
  * @throws {Error} when the baseline cannot be read or is incomplete, when
@@ -272,7 +283,7 @@ export function computeDiff(baseline, head) {
 export function diffCommand(
   baselinePath,
   commandContext,
-  { readBaseline = readBaselineFromDisk } = {},
+  { readBaseline = readBaselineFromDisk, config = null } = {},
 ) {
   const { root, provider, marker, pluginGap } = commandContext;
 
@@ -337,6 +348,27 @@ export function diffCommand(
     addedEdges: diff.addedEdges,
     removedEdges: diff.removedEdges,
   };
+
+  // Rule-impact analysis: when the boundary config is provided, judge each
+  // added/removed edge against the constraint table. This is not the full
+  // `evaluate` pipeline — it checks only the `depConstraints` violations
+  // that depend on project tags (not npm/circular/lazy-load rules, which
+  // need import-site details). A consumer who needs the complete verdict
+  // should run `check`.
+  if (config && config.depConstraints) {
+    const ruleImpact = computeRuleImpact(
+      diff,
+      commandContext.graph.nodes,
+      commandContext.graph.dependencies,
+      baseline.projects,
+      baseline.dependencies,
+      config.depConstraints,
+    );
+    result.ruleImpact = {
+      introduced: ruleImpact.introduced,
+      resolved: ruleImpact.resolved,
+    };
+  }
 
   // Diff is descriptive — always status "ok" when it completes. Even an
   // architecture with many changes is not a "finding" in the boundary-enforcement

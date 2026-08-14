@@ -111,6 +111,24 @@ describe("a result", () => {
     const [result] = log({ violations: [violation()] }).results;
     expect(result.properties.upstreamMessage).toBe("Second rule says no");
   });
+
+  it("includes the constraint's description and remediation in the property bag when present", () => {
+    const v = violation();
+    v.constraint = {
+      sourceTag: "layer:domain",
+      description: "Domain isolation",
+      remediation: "Use an interface",
+    };
+    const [result] = log({ violations: [v] }).results;
+    expect(result.properties.ruleDescription).toBe("Domain isolation");
+    expect(result.properties.remediation).toBe("Use an interface");
+  });
+
+  it("omits description and remediation from the property bag when the constraint carries none", () => {
+    const [result] = log({ violations: [violation()] }).results;
+    expect(result.properties.ruleDescription).toBeUndefined();
+    expect(result.properties.remediation).toBeUndefined();
+  });
 });
 
 describe("a go.work drift finding", () => {

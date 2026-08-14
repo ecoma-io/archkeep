@@ -21,27 +21,30 @@ version.
 
 ## Concepts
 
-| page                                        | what it answers                                                                |
-| ------------------------------------------- | ------------------------------------------------------------------------------ |
-| [architecture.md](concepts/architecture.md) | The engine, three faces, layer split — technology-neutral                      |
-| [graph.md](concepts/graph.md)               | Project graph, edge identity, deterministic snapshots                          |
-| [boundaries.md](concepts/boundaries.md)     | Layer/scope/license axes, constraint model, tag semantics, what "violation" is |
-| [policies.md](concepts/policies.md)         | Three dialects, one table, stability contract                                  |
-| [projects.md](concepts/projects.md)         | What a project is, discovery, naming                                           |
-| [integrations.md](concepts/integrations.md) | How integrations extend the core                                               |
+| page                                                      | what it answers                                                                |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [architecture.md](concepts/architecture.md)               | The engine, three faces, layer split — technology-neutral                      |
+| [graph.md](concepts/graph.md)                             | Project graph, edge identity, deterministic snapshots                          |
+| [boundaries.md](concepts/boundaries.md)                   | Layer/scope/license axes, constraint model, tag semantics, what "violation" is |
+| [policies.md](concepts/policies.md)                       | Three dialects, one table, stability contract                                  |
+| [projects.md](concepts/projects.md)                       | What a project is, discovery, naming                                           |
+| [drift.md](concepts/drift.md)                             | The three drift signals Lattice detects, and why drift is not one command      |
+| [agentic-development.md](concepts/agentic-development.md) | The three questions an agent asks, and the commands that answer them           |
+| [integrations.md](concepts/integrations.md)               | How integrations extend the core                                               |
 
 ## Usage
 
-| page                                           | what it answers                                                    |
-| ---------------------------------------------- | ------------------------------------------------------------------ |
-| [configuration.md](usage/configuration.md)     | Every surface Lattice reads, and where each option lives           |
-| [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                |
-| [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph   |
-| [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared edge by edge      |
-| [impact.md](usage/impact.md)                   | The `impact` command: projects that depend on the named project    |
-| [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained |
-| [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning      |
-| [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look           |
+| page                                           | what it answers                                                             |
+| ---------------------------------------------- | --------------------------------------------------------------------------- |
+| [configuration.md](usage/configuration.md)     | Every surface Lattice reads, and where each option lives                    |
+| [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                         |
+| [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph            |
+| [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis |
+| [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context               |
+| [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained          |
+| [context.md](usage/context.md)                 | The `context` command: architecture constraints for one project             |
+| [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning               |
+| [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look                    |
 
 ## Integrations
 
@@ -92,27 +95,27 @@ This repository states a rule once and links to it from everywhere else, so the
 useful question is usually not "where is this documented" but "which file is
 allowed to say it". That table:
 
-| file                                                                        | owns                                                                                                  |
-| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [`README.md`](../README.md)                                                 | The pitch: what Lattice is in one breath, and the way in                                              |
-| [`docs/why.md`](why.md)                                                     | The gap, and the evidence that it is real                                                             |
-| [`docs/doctrine/north-star.md`](doctrine/north-star.md)                     | The direction, what "finished" means per language, and the refusals                                   |
-| [`docs/doctrine/principles.md`](doctrine/principles.md)                     | The seven binding principles                                                                          |
-| [`docs/roadmap.md`](roadmap.md)                                             | The staged path: which capabilities belong to which major version, and in what order                  |
-| `docs/getting-started/`                                                     | Installation, first project, first policy                                                             |
-| `docs/concepts/`                                                            | The model: architecture, graph, boundaries, policies, projects, integrations                          |
-| `docs/usage/`                                                               | How a consumer runs it and reads its answers                                                          |
-| `docs/integrations/`                                                        | Nx integration and VS Code extension — the two surfaces at the edge                                   |
-| `docs/reference/`                                                           | Schemas, exit codes, language limits, violation catalogue                                             |
-| `docs/development/`                                                         | How it works inside, and how to extend it                                                             |
-| [`CONTRIBUTING.md`](../CONTRIBUTING.md)                                     | The contribution bar, the commands, hooks, commits, review, release                                   |
-| [`SECURITY.md`](../SECURITY.md)                                             | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/` |
-| [`AGENTS.md`](../AGENTS.md)                                                 | The rules a diff is rejected for violating, for humans and agents alike                               |
-| [`packages/lattice/README.md`](../packages/lattice/README.md)               | The package's own reference — it is the npm landing page and must stand alone                         |
-| [`packages/lattice-vscode/README.md`](../packages/lattice-vscode/README.md) | The VS Code client: what it requires, the two settings it has, and the two it refuses                 |
-| `packages/lattice/CLAUDE.md`                                                | Layer mechanics: what each layer may know                                                             |
-| `packages/lattice/src/*/README.md`                                          | Each layer's own semantics — rules, report, conformance                                               |
-| `packages/lattice/src/analysis/contract.md`                                 | The frozen record every analyzer returns                                                              |
+| file                                                                        | owns                                                                                                     |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [`README.md`](../README.md)                                                 | The pitch: what Lattice is in one breath, and the way in                                                 |
+| [`docs/why.md`](why.md)                                                     | The gap, and the evidence that it is real                                                                |
+| [`docs/doctrine/north-star.md`](doctrine/north-star.md)                     | The direction, what "finished" means per language, and the refusals                                      |
+| [`docs/doctrine/principles.md`](doctrine/principles.md)                     | The seven binding principles                                                                             |
+| [`docs/roadmap.md`](roadmap.md)                                             | The staged path: which capabilities belong to which major version, and in what order                     |
+| `docs/getting-started/`                                                     | Installation, first project, first policy                                                                |
+| `docs/concepts/`                                                            | The model: architecture, graph, boundaries, policies, projects, drift, agentic development, integrations |
+| `docs/usage/`                                                               | How a consumer runs it and reads its answers                                                             |
+| `docs/integrations/`                                                        | Nx integration and VS Code extension — the two surfaces at the edge                                      |
+| `docs/reference/`                                                           | Schemas, exit codes, language limits, violation catalogue                                                |
+| `docs/development/`                                                         | How it works inside, and how to extend it                                                                |
+| [`CONTRIBUTING.md`](../CONTRIBUTING.md)                                     | The contribution bar, the commands, hooks, commits, review, release                                      |
+| [`SECURITY.md`](../SECURITY.md)                                             | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/`    |
+| [`AGENTS.md`](../AGENTS.md)                                                 | The rules a diff is rejected for violating, for humans and agents alike                                  |
+| [`packages/lattice/README.md`](../packages/lattice/README.md)               | The package's own reference — it is the npm landing page and must stand alone                            |
+| [`packages/lattice-vscode/README.md`](../packages/lattice-vscode/README.md) | The VS Code client: what it requires, the two settings it has, and the two it refuses                    |
+| `packages/lattice/CLAUDE.md`                                                | Layer mechanics: what each layer may know                                                                |
+| `packages/lattice/src/*/README.md`                                          | Each layer's own semantics — rules, report, conformance                                                  |
+| `packages/lattice/src/analysis/contract.md`                                 | The frozen record every analyzer returns                                                                 |
 
 Two of those rows overlap on purpose, and it is worth knowing which way:
 

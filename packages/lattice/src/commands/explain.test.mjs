@@ -117,13 +117,11 @@ describe("explainCommand", () => {
             name: "alpha",
             type: "lib",
             data: { root: "libs/alpha", tags: ["layer:domain"] },
-            tags: ["layer:domain"],
           },
           beta: {
             name: "beta",
             type: "lib",
             data: { root: "libs/beta", tags: ["layer:util"] },
-            tags: ["layer:util"],
           },
         },
         dependencies: {
@@ -173,13 +171,11 @@ describe("explainCommand", () => {
             name: "alpha",
             type: "lib",
             data: { root: "libs/alpha", tags: ["layer:domain"] },
-            tags: ["layer:domain"],
           },
           beta: {
             name: "beta",
             type: "lib",
             data: { root: "libs/beta", tags: ["layer:app"] },
-            tags: ["layer:app"],
           },
         },
         dependencies: {
@@ -310,13 +306,11 @@ describe("explainCommand", () => {
             name: "alpha",
             type: "lib",
             data: { root: "libs/alpha", tags: ["layer:domain"] },
-            tags: ["layer:domain"],
           },
           beta: {
             name: "beta",
             type: "lib",
             data: { root: "libs/beta", tags: ["layer:app"] },
-            tags: ["layer:app"],
           },
         },
         dependencies: {
@@ -375,13 +369,11 @@ describe("explainCommand", () => {
             name: "alpha",
             type: "lib",
             data: { root: "libs/alpha", tags: ["scope:billing"] },
-            tags: ["scope:billing"],
           },
           beta: {
             name: "beta",
             type: "lib",
             data: { root: "libs/beta" },
-            tags: [],
           },
         },
         dependencies: {
