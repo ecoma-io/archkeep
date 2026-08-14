@@ -25,7 +25,7 @@ Do not hand-edit these. It rewrites both on its next run:
 
 ### The release pull request title
 
-`chore(workspace): release <version>` — not release-please's default. The
+`chore(lattice): release <version>` — not release-please's default. The
 default names the target branch as the scope (`chore(main): …`), and `main` is
 not in `commitlint.config.mjs`'s `scope-enum`, so the default title would fail
 a required check and could never merge.

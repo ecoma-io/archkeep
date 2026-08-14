@@ -339,7 +339,7 @@ Two details that are easy to trip over:
   release-please owns both and rewrites them on the next run. `CHANGELOG.md` is
   in `.prettierignore` for the same reason: its generated layout and Prettier's
   preferred one disagree, and neither yields.
-- **The release pull request's title is `chore(workspace): release <version>`**,
+- **The release pull request's title is `chore(lattice): release <version>`**,
   not release-please's default. The default names the target branch as the scope
   (`chore(main): …`), and `main` is not in `commitlint.config.mjs`'s `scope-enum`
   — the release pull request would fail a required check and could never merge.
