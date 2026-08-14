@@ -6,6 +6,7 @@
     "behavioral-test": "A unit or integration test that imports and calls the code, asserting on runtime behavior (not source text). Proves the intent is regression-protected.",
     "e2e-test": "A CLI subprocess test that exercises the real binary against a consumer workspace. Proves the intent holds end-to-end.",
     "architecture-test": "A test that walks the codebase structure (imports, specifiers, declarations) to verify an architectural constraint. Proves the intent is mechanically enforced.",
+    "static-analysis": "An automated static analysis tool (ESLint, Semgrep, etc.) enforces the property. Proves the intent is mechanically checked, but the check scope is limited to what the tool's rules cover.",
     "source-evidence": "The implementation source contains the property the intent declares. Supports the claim but does not prove it is regression-protected — the property could disappear in a refactor.",
     "documentation": "A document describes the property the intent declares. Supports understanding but proves neither implementation nor protection."
   },
@@ -54,8 +55,13 @@
     {
       "id": "C",
       "name": "Workspace resolution ≠ source analysis",
-      "intent": "Graph edges (from provider) and source analysis (from analyzers) answer different questions. Neither replaces the other.",
+      "intent": "Graph edges (from provider) and source analysis (from analyzers) answer different questions. Neither replaces the other. The analysis layer never judges, filters, or omits imports based on policy.",
       "evidence": [
+        {
+          "type": "behavioral-test",
+          "path": "src/intent/intent.test.mjs",
+          "assertion": "analysis output conforms to the frozen contract schema (no extra verdict/policy fields); analysis output is invariant under project tag changes; analysis source contains no judging vocabulary"
+        },
         {
           "type": "source-evidence",
           "path": "src/analysis/contract.md",
@@ -67,8 +73,7 @@
           "assertion": "src/graph/ is a lossy view of analysis, on purpose; src/analysis/ never judges"
         }
       ],
-      "status": "documented",
-      "statusNote": "No executable proof yet. The analysis-never-judges property is stated in contract.md and CLAUDE.md, but no test verifies that the analysis layer does not filter or judge its output. A behavioral test is needed."
+      "status": "proven"
     },
     {
       "id": "D",
@@ -194,19 +199,9 @@
       "intent": "context/impact/diff/explain must not create different verdicts than check would. The depConstraints-only narrowing in context/impact/diff is disclosed. Where these commands evaluate, their verdicts must agree with check.",
       "evidence": [
         {
-          "type": "source-evidence",
-          "path": "src/commands/context-command.mjs",
-          "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)"
-        },
-        {
-          "type": "source-evidence",
-          "path": "src/commands/impact.mjs",
-          "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)"
-        },
-        {
-          "type": "documentation",
-          "path": "../../docs/concepts/agentic-development.md",
-          "assertion": "Section warns agents: violations:[] means allowed by constraint table, not free of all boundary violations"
+          "type": "behavioral-test",
+          "path": "src/intent/intent.test.mjs",
+          "assertion": "depConstraints verdicts from judgeEdge agree with evaluate; explain includes the same violations as evaluate at a given site; diff warns in coverage.notes when ruleImpact is computed"
         },
         {
           "type": "behavioral-test",
@@ -217,10 +212,29 @@
           "type": "e2e-test",
           "path": "e2e/context.e2e.mjs",
           "assertion": "E2E verifies coverage.notes in JSON envelope"
+        },
+        {
+          "type": "source-evidence",
+          "path": "src/commands/context-command.mjs",
+          "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)"
+        },
+        {
+          "type": "source-evidence",
+          "path": "src/commands/impact.mjs",
+          "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)"
+        },
+        {
+          "type": "source-evidence",
+          "path": "src/commands/diff.mjs",
+          "assertion": "coverage.notes warns when ruleImpact is computed (depConstraints only, 3 of 15)"
+        },
+        {
+          "type": "documentation",
+          "path": "../../docs/concepts/agentic-development.md",
+          "assertion": "Section warns agents: violations:[] means allowed by constraint table, not free of all boundary violations"
         }
       ],
-      "status": "documented",
-      "statusNote": "Disclosure exists but no test verifies that context/impact verdicts actually agree with check on the violations they do report. The contract claims 'must not create different verdicts' but the proof is only that a warning label exists. A behavioral comparison test is needed."
+      "status": "proven"
     },
     {
       "id": "K",
@@ -306,5 +320,5 @@
     }
   ],
   "todoAffectingV1": 0,
-  "unprovenIntents": 2
+  "unprovenIntents": 0
 }
