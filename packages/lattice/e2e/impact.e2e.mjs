@@ -66,3 +66,45 @@ describe("impact (full)", () => {
     expect(result.exitCode).toBe(2);
   });
 });
+
+describe("impact --config (full)", () => {
+  it("impact core on monorepo shows constraint context", () => {
+    // The monorepo declares boundaryConfig in lattice.json, so the
+    // workspace's own config is loaded and constraint context appears.
+    // api depends on core, and the constraint (layer:api → layer:api,
+    // layer:core) allows it, so api shows ✔.
+    const result = lattice(monorepoConsumer.root, ["impact", "core"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Constraint context");
+    expect(result.stdout).toContain("✔ api");
+  });
+
+  it("impact core --format json on monorepo has constraintImpact array", () => {
+    const result = lattice(monorepoConsumer.root, ["impact", "core", "--format", "json"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.json).not.toBeNull();
+    expect(result.json.result.constraintImpact).toBeDefined();
+    expect(result.json.result.constraintImpact.length).toBeGreaterThanOrEqual(1);
+    const apiEntry = result.json.result.constraintImpact.find((e) => e.project === "api");
+    expect(apiEntry).toBeDefined();
+    expect(apiEntry.violations).toEqual([]);
+  });
+
+  it("impact app on monorepo shows explicit empty message when no dependents", () => {
+    // Bug 2 regression: app has no dependents, but the boundary config
+    // was provided, so the constraint context section must appear with
+    // the "no dependents to judge" line — never silently omitted.
+    const result = lattice(monorepoConsumer.root, ["impact", "app"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Constraint context");
+    expect(result.stdout).toContain("no dependents to judge against constraint table");
+  });
+
+  it("impact app --format json on monorepo has empty constraintImpact", () => {
+    const result = lattice(monorepoConsumer.root, ["impact", "app", "--format", "json"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.json).not.toBeNull();
+    expect(result.json.result.constraintImpact).toBeDefined();
+    expect(result.json.result.constraintImpact).toEqual([]);
+  });
+});

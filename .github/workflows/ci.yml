@@ -27,8 +27,8 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    name: Verify
+  verify-core:
+    name: Verify (core)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -247,18 +247,38 @@ jobs:
       # here it fails the change that broke resolution rather than the release
       # weeks later.
       #
-      # Last because it is the slowest step by a wide margin — it runs a full
-      # `pnpm install` against the registry — and everything above narrows the
-      # cause before this reports.
+      # Last in verify-core because it is the slowest step in this job by a
+      # wide margin — it runs a full `pnpm install` against the registry — and
+      # everything above narrows the cause before this reports.
       - name: Prove the packed artifact works outside this workspace
         run: node scripts/verify-package.mjs packages/lattice
 
-      # The smoke subset covers the five fastest E2E scenarios (native
-      # clean check, native violating check, native graph, native self-baseline
-      # diff). The full suite adds parity, determinism, Moon, and extended command
-      # coverage. Both run after verify-package.mjs, which already proves LSP
-      # initialization and Nx Go-edge drawing — responsibilities the E2E suite
-      # does not duplicate.
+  verify-e2e:
+    name: Verify (E2E)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The smoke subset covers the fastest E2E scenarios (native clean check,
+      # native violating check, native graph, native self-baseline diff). The
+      # full suite adds parity, determinism, Moon, and extended command
+      # coverage. verify-core already proves lint, unit tests, typecheck,
+      # self-check, and the packed artifact — the E2E suite does not duplicate
+      # those. It packs its own artifact from source and installs it fresh,
+      # proving the real CLI works as an installed package.
       - name: E2E smoke tests
         run: pnpm e2e:smoke
 
@@ -272,7 +292,7 @@ jobs:
     # while the job list is not: add a job to `needs` and the gate tightens
     # without anyone editing repository settings — and forgetting to add it is
     # the only way to widen what green means, which is visible in this file.
-    needs: [verify]
+    needs: [verify-core, verify-e2e]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
