@@ -7,3 +7,9 @@ projects:
   lattice-vscode: "packages/lattice-vscode"
 vcs:
   provider: other
+  # The repository uses `main`, not the traditional `master`. Without this
+  # Moon defaults to `master` and fails on push events to `main` with
+  # "fatal: ambiguous argument 'master'" — the same VCS initialisation
+  # error that fetch-depth: 0 fixed for PR runs, but here the branch name
+  # itself is wrong rather than merely absent from a shallow clone.
+  defaultBranch: main
