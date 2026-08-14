@@ -305,6 +305,13 @@ describe("contextCommand", () => {
     expect(result.projectContext.constraints[0].sourceTag).toBe("layer:domain");
   });
 
+  it("warns in coverage.notes that per-edge verdicts cover only depConstraints", () => {
+    const result = contextCommand("alpha", commandContext(), config());
+    expect(result.coverage.notes).toHaveLength(1);
+    expect(result.coverage.notes[0]).toContain("depConstraints");
+    expect(result.coverage.notes[0]).toContain("check");
+  });
+
   it("returns 'no-verdict' status when coverage is incomplete", () => {
     const result = contextCommand(
       "alpha",

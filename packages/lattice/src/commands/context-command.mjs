@@ -137,7 +137,12 @@ export function contextCommand(projectName, commandContext, config) {
     blindSpots: commandContext.analysis.failures
       .filter((f) => !isWholeFileFailure(f))
       .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
-    notes: [],
+    notes: [
+      "per-edge violations cover only depConstraints (tag-based rules). " +
+        "A dependency with no violations here may still violate npm-ban, circular-dependency, " +
+        "lazy-load, or other rules that require import-site details. Run `check` for the " +
+        "complete verdict.",
+    ],
   };
 
   const context = { root, provider, marker };

@@ -1,0 +1,301 @@
+{
+  "version": 1,
+  "generatedAt": "v1.0.0-finalization",
+  "description": "Machine-readable manifest proving every v1.0 intent has executable proof. A gap here is a gap in the release.",
+  "contracts": [
+    {
+      "id": "A",
+      "name": "Provider independence",
+      "intent": "Core (rules, analysis, report) must not import provider-specific code (nx, moon, native).",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "src/conformance/boundary.test.mjs",
+          "assertion": "SHIPPED_PACKAGES allow-list prevents unapproved dependencies; no provider import found in core layers"
+        },
+        {
+          "type": "source",
+          "path": "src/commands/context.mjs",
+          "assertion": "Only commands/context.mjs imports providers — the designated orchestration layer"
+        }
+      ],
+      "status": "proven"
+    },
+    {
+      "id": "B",
+      "name": "Empty result is never silently successful",
+      "intent": "An empty diagnostic list must mean 'no violation', and nothing else. Every path that cannot reach a verdict must say so.",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "src/report/json.test.mjs",
+          "assertion": "JSON envelope throws on status=ok + incomplete coverage, status/exitCode disagreement, coverage.complete/notAnalyzed disagreement"
+        },
+        {
+          "type": "source",
+          "path": "src/lsp/diagnose.mjs",
+          "assertion": "analyzed:false on every non-verdict path; empty diagnostic list only from two named places"
+        },
+        {
+          "type": "source",
+          "path": "cli.mjs",
+          "assertion": "Exit codes 0/1/3 distinguish clean/findings/cannot-look"
+        }
+      ],
+      "status": "proven"
+    },
+    {
+      "id": "C",
+      "name": "Workspace resolution ≠ source analysis",
+      "intent": "Graph edges (from provider) and source analysis (from analyzers) answer different questions. Neither replaces the other.",
+      "evidence": [
+        {
+          "type": "source",
+          "path": "src/analysis/contract.md",
+          "assertion": "Analysis record is a superset of a graph edge — 5 of 15 violations decided on raw specifier"
+        },
+        {
+          "type": "source",
+          "path": "CLAUDE.md",
+          "assertion": "src/graph/ is a lossy view of analysis, on purpose; src/analysis/ never judges"
+        }
+      ],
+      "status": "proven"
+    },
+    {
+      "id": "D",
+      "name": "Architecture snapshot identity",
+      "intent": "Two runs over an unchanged tree produce byte-identical JSON. Internal fields are stripped. Schema is versioned.",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "e2e/determinism.e2e.mjs",
+          "assertion": "Graph, check, impact run twice — byte-identical JSON output"
+        },
+        {
+          "type": "source",
+          "path": "src/commands/graph.mjs",
+          "assertion": "Plain string comparison, never localeCompare; INTERNAL_DATA_FIELDS stripped; SCHEMA_VERSION = 2"
+        },
+        {
+          "type": "source",
+          "path": "src/commands/graph.mjs",
+          "assertion": "computePolicyFingerprint produces SHA-256 of canonicalized policy"
+        }
+      ],
+      "status": "proven"
+    },
+    {
+      "id": "E",
+      "name": "Snapshot compatibility",
+      "intent": "diff refuses a baseline with unknown schemaVersion. A consumer that reads a schemaVersion it does not recognise should refuse to parse.",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "e2e/diff.e2e.mjs",
+          "assertion": "Invalid baseline schemaVersion exits 3; incompatible version exits 3"
+        },
+        {
+          "type": "source",
+          "path": "src/commands/diff.mjs",
+          "assertion": "parseBaseline validates schemaVersion; refuses unknown versions"
+        }
+      ],
+      "status": "proven"
+    },
+    {
+      "id": "F",
+      "name": "Diff semantics — structural ≠ policy ≠ rule-impact",
+      "intent": "Graph change ≠ policy impact ≠ violation ≠ drift. Diff separates structural changes, policy mismatch, and rule impact. Refuses incomplete baseline/head.",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "e2e/diff.e2e.mjs",
+          "assertion": "Self-baseline exits 0; added/removed edges reported; policy mismatch warned; rule-impact with config"
+        },
+        {
+          "type": "source",
+          "path": "src/commands/diff.mjs",
+          "assertion": "computeDiff returns structural diff; policyMismatch detected via fingerprint; computeRuleImpact for constraint context"
+        }
+      ],
+      "status": "proven"
+    },
+    {
+      "id": "G",
+      "name": "Impact determinism",
+      "intent": "Given the same graph and project name, impact always returns the same set. BFS, sorted, no localeCompare.",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "e2e/determinism.e2e.mjs",
+          "assertion": "Impact --format json produces identical output on two runs"
+        },
+        {
+          "type": "test",
+          "path": "src/commands/impact.test.mjs",
+          "assertion": "Sorts results using plain string comparison (never localeCompare)"
+        }
+      ],
+      "status": "proven"
+    },
+    {
+      "id": "H",
+      "name": "Context — effective architecture contract",
+      "intent": "context shows the constraint table as it applies to a project's tags, not raw metadata. Per-edge verdicts cover depConstraints only — this narrowing is disclosed.",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "src/commands/context-command.test.mjs",
+          "assertion": "Returns tags, matched constraints, per-edge violations; coverage.notes warns about depConstraints-only scope"
+        },
+        {
+          "type": "test",
+          "path": "e2e/context.e2e.mjs",
+          "assertion": "Native consumer: tags, constraints, coverage.notes verified; Moon consumer: context E2E"
+        },
+        {
+          "type": "source",
+          "path": "../../docs/concepts/agentic-development.md",
+          "assertion": "Section 'What context and impact do not check' warns agents about the semantic gap"
+        }
+      ],
+      "status": "proven"
+    },
+    {
+      "id": "I",
+      "name": "Explain — rule, reason, evidence",
+      "intent": "explain runs full evaluate() and returns ALL violations at the site (not just first). Unresolvable sites are explicit, not silent drops.",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "src/commands/explain.test.mjs",
+          "assertion": "Returns all violations at a site; unresolvable site returns unresolvable:true with reason"
+        },
+        {
+          "type": "test",
+          "path": "e2e/explain.e2e.mjs",
+          "assertion": "Native and Moon consumers: specifier, sourceProject, targetProject, violations verified"
+        }
+      ],
+      "status": "proven"
+    },
+    {
+      "id": "J",
+      "name": "Check is enforcement authority",
+      "intent": "context/impact/diff/explain must not create different verdicts than check would. The depConstraints-only narrowing in context/impact/diff is disclosed.",
+      "evidence": [
+        {
+          "type": "source",
+          "path": "src/commands/context-command.mjs",
+          "assertion": "coverage.notes warns that per-edge verdicts cover only depConstraints"
+        },
+        {
+          "type": "source",
+          "path": "src/commands/impact.mjs",
+          "assertion": "coverage.notes warns that per-edge verdicts cover only depConstraints"
+        },
+        {
+          "type": "source",
+          "path": "../../docs/concepts/agentic-development.md",
+          "assertion": "Section warns agents: violations:[] means allowed by constraint table, not free of all boundary violations"
+        },
+        {
+          "type": "test",
+          "path": "src/commands/context-command.test.mjs",
+          "assertion": "Test verifies coverage.notes contains depConstraints warning"
+        },
+        {
+          "type": "test",
+          "path": "e2e/context.e2e.mjs",
+          "assertion": "E2E verifies coverage.notes in JSON envelope"
+        }
+      ],
+      "status": "proven"
+    },
+    {
+      "id": "K",
+      "name": "Determinism",
+      "intent": "No localeCompare, Date.now, Math.random in production code. Sorts use plain string comparison. Two runs over same tree produce identical output.",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "e2e/determinism.e2e.mjs",
+          "assertion": "Graph, check, impact: two runs produce byte-identical JSON"
+        },
+        {
+          "type": "source",
+          "path": "src/commands/graph.mjs",
+          "assertion": "Plain string comparison throughout; never localeCompare"
+        }
+      ],
+      "status": "proven"
+    },
+    {
+      "id": "L",
+      "name": "Provider parity",
+      "intent": "Same semantics on Nx/Moon/Native: same violation types, same options, same constraint table, same message ids. Partial workspaceLayout rejected.",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "e2e/parity.e2e.mjs",
+          "assertion": "Nx vs Native: project names, edge source/target/type, violation rule IDs, envelope structure"
+        },
+        {
+          "type": "test",
+          "path": "e2e/moon.e2e.mjs",
+          "assertion": "Moon: check, graph, diff, impact, explain, context verified against Moon provider"
+        },
+        {
+          "type": "source",
+          "path": "src/providers/moon.mjs",
+          "assertion": "inferWorkspaceLayout returns null for partial layouts — same all-or-nothing contract as Nx and Native"
+        },
+        {
+          "type": "test",
+          "path": "src/providers/moon.test.mjs",
+          "assertion": "Partial layout (apps-only, libs-only) returns undefined workspaceLayout"
+        }
+      ],
+      "status": "proven"
+    }
+  ],
+  "bugsFixed": [
+    {
+      "id": "moon-partial-workspace-layout",
+      "description": "Moon provider returned partial workspaceLayout (e.g., {appsDir:'apps'} with no libsDir), which silently disabled isAbsoluteImportIntoAnotherProject for the missing axis via 'undefined/' string comparison. Fixed: inferWorkspaceLayout returns null for partial layouts, forcing the DEFAULT_WORKSPACE_LAYOUT fallback.",
+      "evidence": {
+        "source": "src/providers/moon.mjs",
+        "test": "src/providers/moon.test.mjs",
+        "contract": "L"
+      }
+    },
+    {
+      "id": "context-impact-semantic-gap-undisclosed",
+      "description": "context and impact commands used judgeEdge (depConstraints-only) without disclosing to agents that 11 of 15 violation types were not checked. An agent seeing violations:[] could believe an edge was clean when check would still flag it. Fixed: coverage.notes warns about the narrowing; agentic-development.md documents the gap.",
+      "evidence": {
+        "source": ["src/commands/context-command.mjs", "src/commands/impact.mjs"],
+        "docs": "../../docs/concepts/agentic-development.md",
+        "test": [
+          "src/commands/context-command.test.mjs",
+          "src/commands/impact.test.mjs",
+          "e2e/context.e2e.mjs",
+          "e2e/impact.e2e.mjs"
+        ],
+        "contract": "J"
+      }
+    },
+    {
+      "id": "policy-fingerprint-non-canonical",
+      "description": "computePolicyFingerprint used raw JSON.stringify without sorting object keys, so two semantically identical policy objects constructed in different key order could produce different fingerprints. diff would then report a spurious policy change. Fixed: canonicalize JSON by sorting keys at every depth before hashing.",
+      "evidence": {
+        "source": "src/commands/graph.mjs",
+        "test": "src/commands/graph.test.mjs",
+        "intentTest": "src/intent/intent.test.mjs",
+        "contract": "D"
+      }
+    }
+  ],
+  "todoAffectingV1": 0,
+  "unprovenIntents": 0
+}

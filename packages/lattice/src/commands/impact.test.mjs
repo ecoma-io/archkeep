@@ -193,6 +193,13 @@ describe("impactCommand", () => {
     expect(result.impact.dependents).toEqual(["beta", "gamma"]);
   });
 
+  it("warns in coverage.notes that per-edge verdicts cover only depConstraints", () => {
+    const result = impactCommand("alpha", commandContext());
+    expect(result.coverage.notes).toHaveLength(1);
+    expect(result.coverage.notes[0]).toContain("depConstraints");
+    expect(result.coverage.notes[0]).toContain("check");
+  });
+
   it("returns 'ok' status with empty dependents for a project with none", () => {
     const result = impactCommand("gamma", commandContext());
     expect(result.status).toBe("ok");

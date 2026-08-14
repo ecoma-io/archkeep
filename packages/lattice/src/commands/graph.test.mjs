@@ -403,6 +403,21 @@ describe("computePolicyFingerprint", () => {
     const explicit = { depConstraints: [], options: {}, suppressions: [] };
     expect(computePolicyFingerprint(minimal)).toBe(computePolicyFingerprint(explicit));
   });
+
+  it("is key-order independent — same policy with different key order produces same fingerprint", () => {
+    // Two options objects with the same keys but different insertion order.
+    const configA = {
+      depConstraints: [],
+      options: { allow: [], banTransitiveDependencies: false, bannedExternalImports: [] },
+      suppressions: [],
+    };
+    const configB = {
+      depConstraints: [],
+      options: { bannedExternalImports: [], banTransitiveDependencies: false, allow: [] },
+      suppressions: [],
+    };
+    expect(computePolicyFingerprint(configA)).toBe(computePolicyFingerprint(configB));
+  });
 });
 
 // ---------------------------------------------------------------------------

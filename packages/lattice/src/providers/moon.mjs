@@ -179,10 +179,15 @@ function deriveTags(projectNode) {
  *
  * A prefix is "shared" when every project of that layer starts with the same
  * top-level directory. If no consistent prefix exists, that key is omitted
- * from the result. If neither prefix is found, `null` is returned —
- * `../../rules/index.mjs`'s `graph.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT`
- * then applies the default, exactly as it does when the Nx or native provider
- * omits the field.
+ * from the result. If either prefix is found but the other is not, `null` is
+ * returned — a partial layout like `{appsDir: "apps"}` would pass through
+ * `graph.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT` unchanged (the object
+ * is truthy, so `??` does not fire) and `isAbsoluteImportIntoAnotherProject`
+ * would evaluate `${workspaceLayout.libsDir}/` as `"undefined/"`, silently
+ * disabling the absolute-import rule for the missing axis. Returning `null`
+ * forces the `??` fallback, which applies the complete default
+ * `{libsDir: "libs", appsDir: "apps"}`. If neither prefix is found, `null`
+ * is returned for the same reason.
  *
  * @param {object[]} projectNodes Project nodes from Moon's `data` map values.
  * @returns {{appsDir: string, libsDir: string}|null}
@@ -198,11 +203,11 @@ function inferWorkspaceLayout(projectNodes) {
   }
   const appsDir = appDirs.size === 1 ? [...appDirs][0] : undefined;
   const libsDir = libDirs.size === 1 ? [...libDirs][0] : undefined;
-  if (appsDir === undefined && libsDir === undefined) return null;
-  const layout = {};
-  if (appsDir !== undefined) layout.appsDir = appsDir;
-  if (libsDir !== undefined) layout.libsDir = libsDir;
-  return layout;
+  // Both keys must be present, or neither. A partial layout would silently
+  // disable the absolute-import rule for the missing axis — see the header
+  // comment for the mechanism.
+  if (appsDir === undefined || libsDir === undefined) return null;
+  return { appsDir, libsDir };
 }
 
 /**
