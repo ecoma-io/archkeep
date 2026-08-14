@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/ecoma-io/lattice/compare/v0.3.0...v0.4.0) (2026-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **lattice:** JSON envelope workspace now includes provenance field. Tags in graph output are now sorted, which changes the array order for workspaces where tags were not declared alphabetically.
+
+### Features
+
+* **lattice:** harden intent gate, add Contract C/J behavioral proofs ([#72](https://github.com/ecoma-io/lattice/issues/72)) ([7cf3abd](https://github.com/ecoma-io/lattice/commit/7cf3abdb396c0668accb4583a31da34013f03eae))
+* **lattice:** harden intent gate, add Contract C/J behavioral proofs ([#72](https://github.com/ecoma-io/lattice/issues/72)) ([7cf3abd](https://github.com/ecoma-io/lattice/commit/7cf3abdb396c0668accb4583a31da34013f03eae))
+* **lattice:** harden intent proof, snapshot provenance, and terminology ([#71](https://github.com/ecoma-io/lattice/issues/71)) ([a24220f](https://github.com/ecoma-io/lattice/commit/a24220f3d65b8032314d00705e0d8eb7ec90bd9d))
+* **lattice:** v1 intent completeness gate and adversarial fixes ([#69](https://github.com/ecoma-io/lattice/issues/69)) ([8c9526b](https://github.com/ecoma-io/lattice/commit/8c9526b68d6c9ff6e5d7ee4984b40872831dbe97))
+
 ## [0.3.0](https://github.com/ecoma-io/lattice/compare/v0.2.0...v0.3.0) (2026-08-14)
 
 
