@@ -1,0 +1,115 @@
+# Authoring arch-* skills
+
+Conventions for writing new skills in the `arch-*` namespace. These are enforced
+by `scripts/check-skills.mjs` in CI.
+
+## Frontmatter rules
+
+Every `SKILL.md` must begin with YAML frontmatter containing at minimum:
+
+```yaml
+---
+name: arch-skill-name
+description: One-line description of what the skill teaches
+metadata:
+  version: "0.4.0"
+compatibility: Requires @ecoma-io/lattice CLI
+---
+```
+
+### Required fields
+
+- **`name`** — must match the parent directory name. If the skill lives in
+  `skills/arch-review/`, the name must be `arch-review`.
+- **`description`** — one line, human-readable, describing what the skill teaches
+  (not what the agent does).
+
+### Required nested fields
+
+- **`metadata.version`** — must match the Lattice package version
+  (`packages/lattice/package.json`). This is enforced by CI.
+
+### Optional fields
+
+- **`compatibility`** — describes what the skill requires. Should mention
+  `lattice` or `@ecoma-io/lattice` so consumers know the dependency.
+
+### Forbidden fields
+
+The following fields are **host-specific** and must not appear in canonical
+skills:
+
+- `context` — Claude Code extension
+- `model` — Claude Code extension
+- `effort` — Claude Code extension
+- `agent` — Claude Code extension
+- `paths` — Claude Code extension
+
+These belong in the plugin or agent settings, not in the skill. The gate script
+detects them and fails the build.
+
+## Content conventions
+
+### Structure: WHEN / WHY / HOW / FAILURE
+
+Every skill should teach four things:
+
+1. **WHEN** — the situation where the agent should invoke this skill. Be
+   specific: "before modifying code in a Lattice-governed project" is better
+   than "when you need architecture help."
+
+2. **WHY** — the reason the skill exists. What goes wrong when the agent does
+   not follow it? "An agent that does not understand boundary constraints will
+   create violations by default" is the kind of reasoning that helps the agent
+   decide whether to invoke the skill in an edge case.
+
+3. **HOW** — the steps the agent should follow. Each step names a `lattice`
+   command and explains what to do with the output. Use `--format json` for
+   machine-readable output.
+
+4. **FAILURE** — what to do when things go wrong. Exit code 3 is not clean.
+   A project not found is not a green light. An empty scoped check does not
+   mean the workspace is safe globally. These are the failure modes that look
+   like success if the agent does not think about them.
+
+### No `allowed-tools`
+
+Do not add `allowed-tools` to the frontmatter. The agent must request permission
+to run `lattice` commands — this is a safety feature, not a friction. A skill
+that auto-bypasses permission checks is a skill that could silently modify
+boundary policy.
+
+### Skills teach; the CLI decides
+
+Never duplicate enforcement logic in skill content. The skill describes the
+protocol ("run `lattice check` and interpret the exit code"); the CLI provides
+the verdict. If the skill says "check if an import crosses a boundary," it has
+taken a decision away from the engine.
+
+### Name all exit codes
+
+The CLI has four exit codes. A skill that only mentions exit 0 and exit 1 has
+left out the one that matters most: exit 3 means the check could not complete,
+and that is not the same as "clean."
+
+| Exit code | Meaning            | Skill should say                                   |
+| --------- | ------------------ | -------------------------------------------------- |
+| 0         | No violations      | The workspace is compliant.                        |
+| 1         | Violations found   | Read each violation; fix the code, not the policy. |
+| 2         | Usage error        | Check command syntax.                              |
+| 3         | Could not complete | Do NOT assume clean. Investigate the blind spot.   |
+
+## Adding a new skill
+
+1. Create `skills/arch-name/SKILL.md` with valid frontmatter
+2. Add the directory name to `EXPECTED_SKILLS` in `scripts/check-skills.mjs`
+3. Write the content following WHEN/WHY/HOW/FAILURE
+4. Run `node scripts/check-skills.mjs` to validate
+5. Run `node --test scripts/check-skills.test.mjs` and update tests if needed
+6. Update `docs/skills/overview.md` to list the new skill
+
+## Naming
+
+Skills in the `arch-*` namespace deal with architecture boundaries. A skill that
+does not relate to boundary enforcement does not belong in this namespace —
+it belongs in a different namespace or a different repository.

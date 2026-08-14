@@ -99,6 +99,11 @@ jobs:
       # rather than passing as an absence.
       - run: pnpm check-packages
 
+      # Validates the arch-* skill structure: every expected skill exists,
+      # frontmatter is well-formed, versions match the package, and no
+      # host-specific fields have leaked into the canonical skills.
+      - run: node scripts/check-skills.mjs
+
       # --force skips Moon's VCS affected detection (which needs full git
       # history, unavailable in the shallow checkout) and bypasses the local
       # cache — both correct for CI, where every target must run fresh.

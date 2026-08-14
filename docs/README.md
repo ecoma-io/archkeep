@@ -54,6 +54,17 @@ version.
 | [moon.md](integrations/moon.md)     | Moon integration: workspace detection, graph reading, tag format             |
 | [vscode.md](integrations/vscode.md) | VS Code extension: settings, routing, installation                           |
 
+## Agent skills
+
+| page                                            | what it answers                                                  |
+| ----------------------------------------------- | ---------------------------------------------------------------- |
+| [overview.md](skills/overview.md)               | The three-layer architecture, the four skills, host independence |
+| [installation.md](skills/installation.md)       | npx skills add, Claude Code plugin, manual installation          |
+| [supported-hosts.md](skills/supported-hosts.md) | Feature matrix across agent platforms                            |
+| [claude-code.md](skills/claude-code.md)         | Claude Code specific setup and invocation                        |
+| [versioning.md](skills/versioning.md)           | Version sync with Lattice, CI enforcement, release-please        |
+| [authoring.md](skills/authoring.md)             | Conventions for writing new arch-* skills                        |
+
 ## Reference
 
 | page                                           | what it answers                                                                |
@@ -108,6 +119,7 @@ allowed to say it". That table:
 | `docs/integrations/`                                                        | Nx integration and VS Code extension — the two surfaces at the edge                                      |
 | `docs/reference/`                                                           | Schemas, exit codes, language limits, violation catalogue                                                |
 | `docs/development/`                                                         | How it works inside, and how to extend it                                                                |
+| `docs/skills/`                                                              | Agent architecture skills: overview, installation, hosts, authoring, versioning                          |
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md)                                     | The contribution bar, the commands, hooks, commits, review, release                                      |
 | [`SECURITY.md`](../SECURITY.md)                                             | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/`    |
 | [`AGENTS.md`](../AGENTS.md)                                                 | The rules a diff is rejected for violating, for humans and agents alike                                  |
@@ -116,6 +128,7 @@ allowed to say it". That table:
 | `packages/lattice/CLAUDE.md`                                                | Layer mechanics: what each layer may know                                                                |
 | `packages/lattice/src/*/README.md`                                          | Each layer's own semantics — rules, report, conformance                                                  |
 | `packages/lattice/src/analysis/contract.md`                                 | The frozen record every analyzer returns                                                                 |
+| `skills/`                                                                   | Canonical agent architecture skills — the `arch-*` behavioral protocol                                   |
 
 Two of those rows overlap on purpose, and it is worth knowing which way:
 

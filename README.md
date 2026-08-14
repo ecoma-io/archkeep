@@ -121,6 +121,24 @@ Fifteen violation types, eight options, and the same `messageId`s ESLint reports
 languages today; six commands — `check`, `graph`, `diff`, `impact`, `explain`,
 `context`; [more is the direction](docs/doctrine/north-star.md).
 
+## Agent skills
+
+Four `arch-*` skills teach any Agent Skills–compatible coding agent how to
+discover, understand, and respect architecture boundaries before making changes:
+
+- **`arch-context`** — understand constraints before editing
+- **`arch-change`** — architecture-aware coding workflow
+- **`arch-check`** — validate after changes
+- **`arch-review`** — architecture impact for code review
+
+```bash
+npx skills add ecoma-io/lattice
+```
+
+Skills call `lattice` CLI commands — they never duplicate enforcement logic. The
+CLI is the authority; the skills are the teacher.
+See [**docs/skills/**](docs/skills/overview.md).
+
 ## The one commitment behind all of it
 
 **An empty result is a claim, not a shrug.**
@@ -146,6 +164,7 @@ refusals that follow from it, are in [**docs/doctrine/north-star.md**](docs/doct
 | [What each language sees](docs/reference/languages.md)                                                                                                 | Per-language coverage and every declared parse limit                     |
 | [Commands](docs/reference/cli.md)                                                                                                                      | `check` · `graph` · `diff` · `impact` · `explain` · `context`            |
 | [CI](docs/usage/ci.md) · [VS Code](docs/integrations/vscode.md) · [Troubleshooting](docs/usage/troubleshooting.md)                                     | Exit codes, SARIF, LSP setup, and what to check when it reported nothing |
+| [Agent skills](docs/skills/overview.md)                                                                                                                | Architecture-aware agent protocol: four `arch-*` skills                  |
 | [Architecture](docs/development/architecture.md) · [Adding a language](docs/development/adding-a-language.md) · [Testing](docs/development/testing.md) | For contributors                                                         |
 
 Full index: [**docs/**](docs/README.md). The package's own reference, which

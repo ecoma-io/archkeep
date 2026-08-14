@@ -14,12 +14,14 @@
  * is cached per version, so a mismatch is not cosmetic: Claude Code and the
  * catalogue disagree about which build a session is running.
  *
- * What this deliberately does NOT check is the manifest version against the
- * package's `package.json`. They are different facts wearing one word. The
- * manifest version keys Claude Code's plugin cache and moves when the manifest
- * moves; `package.json`'s version is the tool's own and is what the server
- * announces as `serverInfo`. Tying them would force a manifest bump on every
- * release of code the manifest does not contain.
+ * The manifest version is also synchronized with the package's `package.json`.
+ * The three must agree: `plugin.json` version == `marketplace.json` version ==
+ * `package.json` version. This is enforced by the conformance test below and by
+ * release-please's `extra-files` configuration, which bumps the manifest versions
+ * in lockstep with the package release. The sync exists because the plugin now
+ * carries `arch-*` agent skills that must ship at the same version as the tool,
+ * and a mismatch would mean a consumer's skills claim a version the engine does
+ * not match.
  *
  * `../lsp/editor-config.integration.test.mjs` owns the other half — that the
  * routed extensions match the analyzer registry and that the entry point exists.
@@ -61,6 +63,15 @@ describe("the plugin catalogue this repository publishes", () => {
     for (const entry of marketplace.plugins) {
       const manifest = readJson(join(ROOT, entry.source, ".claude-plugin/plugin.json"));
       expect(entry.version, `${entry.name} in marketplace.json`).toBe(manifest.version);
+    }
+  });
+
+  it("synchronizes the manifest version with the package version", () => {
+    const pkg = readJson(join(ROOT, "packages/lattice/package.json"));
+    for (const entry of marketplace.plugins) {
+      const manifest = readJson(join(ROOT, entry.source, ".claude-plugin/plugin.json"));
+      expect(manifest.version, `${entry.name} plugin.json`).toBe(pkg.version);
+      expect(entry.version, `${entry.name} marketplace.json`).toBe(pkg.version);
     }
   });
 
