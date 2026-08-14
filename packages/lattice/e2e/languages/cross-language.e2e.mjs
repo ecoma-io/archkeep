@@ -78,7 +78,7 @@ describe("Cross-language parity (full)", () => {
       const result = lattice(consumers[lang].root, ["check", "--format", "json"]);
       expect(result.exitCode, `${lang} check exit code`).toBe(0);
       expect(result.json.command, `${lang} command`).toBe("check");
-      expect(result.json.schemaVersion, `${lang} schemaVersion`).toBe(1);
+      expect(result.json.schemaVersion, `${lang} schemaVersion`).toBe(2);
       expect(result.json.status, `${lang} status`).toBe("ok");
       expect(result.json.coverage.complete, `${lang} coverage.complete`).toBe(true);
     }

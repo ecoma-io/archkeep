@@ -42,7 +42,7 @@ describe("graph (full)", () => {
     expect(result.exitCode).toBe(0);
     expect(result.json).not.toBeNull();
     expect(result.json.command).toBe("graph");
-    expect(result.json.schemaVersion).toBe(1);
+    expect(result.json.schemaVersion).toBe(2);
     expect(result.json.status).toBe("ok");
     expect(result.json.coverage.complete).toBe(true);
     expect(Array.isArray(result.json.result.projects)).toBe(true);

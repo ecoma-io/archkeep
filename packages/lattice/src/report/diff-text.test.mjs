@@ -309,4 +309,147 @@ describe("formatDiffReport", () => {
     expect(report).not.toContain("rule impact");
     expect(report).toContain("2 changes between baseline and head");
   });
+
+  it("shows changed projects with field-level before → after values", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 1, edges: 0 },
+        head: { projects: 1, edges: 0 },
+        addedProjects: [],
+        removedProjects: [],
+        changedProjects: [
+          {
+            name: "alpha",
+            changes: [{ field: "tags", baseline: ["layer:domain"], head: ["layer:adapter"] }],
+          },
+        ],
+        addedEdges: [],
+        removedEdges: [],
+      },
+      coverage: { imports: 0, analyzedFiles: 0, projects: 1 },
+    });
+    expect(report).toContain("~ 1 changed project");
+    expect(report).toContain("alpha");
+    expect(report).toContain("tags  layer:domain → layer:adapter");
+  });
+
+  it("shows multiple metadata changes on one project", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 1, edges: 0 },
+        head: { projects: 1, edges: 0 },
+        addedProjects: [],
+        removedProjects: [],
+        changedProjects: [
+          {
+            name: "alpha",
+            changes: [
+              { field: "tags", baseline: ["layer:domain"], head: ["layer:adapter"] },
+              { field: "type", baseline: "lib", head: "app" },
+            ],
+          },
+        ],
+        addedEdges: [],
+        removedEdges: [],
+      },
+      coverage: { imports: 0, analyzedFiles: 0, projects: 1 },
+    });
+    expect(report).toContain("~ 1 changed project");
+    expect(report).toContain("tags  layer:domain → layer:adapter");
+    expect(report).toContain("type  lib → app");
+  });
+
+  it("uses plural 'projects' for multiple changed projects", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 2, edges: 0 },
+        head: { projects: 2, edges: 0 },
+        addedProjects: [],
+        removedProjects: [],
+        changedProjects: [
+          { name: "a", changes: [{ field: "tags", baseline: [], head: ["layer:domain"] }] },
+          { name: "b", changes: [{ field: "tags", baseline: [], head: ["layer:adapter"] }] },
+        ],
+        addedEdges: [],
+        removedEdges: [],
+      },
+      coverage: { imports: 0, analyzedFiles: 0, projects: 2 },
+    });
+    expect(report).toContain("~ 2 changed projects");
+  });
+
+  it("omits changed-projects section when there are none", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 1, edges: 0 },
+        head: { projects: 1, edges: 0 },
+        addedProjects: [],
+        removedProjects: [],
+        addedEdges: [],
+        removedEdges: [],
+      },
+      coverage: { imports: 0, analyzedFiles: 0, projects: 1 },
+    });
+    expect(report).not.toContain("changed project");
+  });
+
+  it("counts changed projects in the total changes summary", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 1, edges: 0 },
+        head: { projects: 1, edges: 1 },
+        addedProjects: [],
+        removedProjects: [],
+        changedProjects: [
+          { name: "a", changes: [{ field: "tags", baseline: [], head: ["layer:domain"] }] },
+        ],
+        addedEdges: [{ source: "a", target: "b", type: "static" }],
+        removedEdges: [],
+      },
+      coverage: { imports: 1, analyzedFiles: 1, projects: 1 },
+    });
+    expect(report).toContain("2 changes between baseline and head");
+  });
+
+  it("shows (none) for empty tag arrays in changed project output", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 1, edges: 0 },
+        head: { projects: 1, edges: 0 },
+        addedProjects: [],
+        removedProjects: [],
+        changedProjects: [
+          {
+            name: "alpha",
+            changes: [{ field: "tags", baseline: [], head: ["layer:domain"] }],
+          },
+        ],
+        addedEdges: [],
+        removedEdges: [],
+      },
+      coverage: { imports: 0, analyzedFiles: 0, projects: 1 },
+    });
+    expect(report).toContain("tags  (none) → layer:domain");
+  });
+
+  it("shows (none) for null type values in changed project output", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 1, edges: 0 },
+        head: { projects: 1, edges: 0 },
+        addedProjects: [],
+        removedProjects: [],
+        changedProjects: [
+          {
+            name: "alpha",
+            changes: [{ field: "type", baseline: null, head: "lib" }],
+          },
+        ],
+        addedEdges: [],
+        removedEdges: [],
+      },
+      coverage: { imports: 0, analyzedFiles: 0, projects: 1 },
+    });
+    expect(report).toContain("type  (none) → lib");
+  });
 });

@@ -84,7 +84,7 @@ describe("Moon (full)", () => {
     expect(result.exitCode).toBe(0);
     expect(result.json).not.toBeNull();
     expect(result.json.command).toBe("check");
-    expect(result.json.schemaVersion).toBe(1);
+    expect(result.json.schemaVersion).toBe(2);
     expect(result.json.status).toBe("ok");
     expect(result.json.exitCode).toBe(0);
     expect(result.json.coverage.complete).toBe(true);
@@ -98,7 +98,7 @@ describe("Moon (full)", () => {
     expect(result.exitCode).toBe(0);
     expect(result.json).not.toBeNull();
     expect(result.json.command).toBe("graph");
-    expect(result.json.schemaVersion).toBe(1);
+    expect(result.json.schemaVersion).toBe(2);
     expect(result.json.status).toBe("ok");
     expect(result.json.coverage.complete).toBe(true);
     expect(Array.isArray(result.json.result.projects)).toBe(true);
@@ -148,8 +148,8 @@ describe("Moon (full)", () => {
       expect(result.json.result.import.specifier).toBe("@acme/cli");
       expect(result.json.result.import.sourceProject).toBe("core");
       expect(result.json.result.import.targetProject).toBe("cli");
-      expect(result.json.result.violation).not.toBeNull();
-      expect(result.json.result.violation.messageId).toBe("onlyTagsConstraintViolation");
+      expect(result.json.result.violations).not.toBeNull();
+      expect(result.json.result.violations[0].messageId).toBe("onlyTagsConstraintViolation");
     } finally {
       violator.cleanup();
     }

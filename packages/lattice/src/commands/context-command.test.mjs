@@ -172,6 +172,79 @@ describe("collectProjectContext", () => {
     expect(result.constraints[0].description).toBe("Domain isolation");
     expect(result.constraints[0].remediation).toBe("Depend on an application-owned interface");
   });
+
+  it("includes dependencies with per-edge constraint verdicts", () => {
+    const graph = {
+      nodes: {
+        alpha: { name: "alpha", type: "lib", data: { root: "libs/alpha", tags: ["layer:domain"] } },
+        beta: { name: "beta", type: "lib", data: { root: "libs/beta", tags: ["layer:util"] } },
+        gamma: { name: "gamma", type: "lib", data: { root: "libs/gamma", tags: ["layer:app"] } },
+      },
+      dependencies: {
+        alpha: [
+          { target: "beta", type: "static" },
+          { target: "gamma", type: "static" },
+        ],
+      },
+    };
+    const config = {
+      depConstraints: [
+        { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain", "layer:util"] },
+      ],
+    };
+    const result = collectProjectContext("alpha", graph, config);
+    expect(result.dependencies).toHaveLength(2);
+    // alpha → beta is allowed (beta has layer:util which is in onlyDependOnLibsWithTags).
+    const betaDep = result.dependencies.find((d) => d.target === "beta");
+    expect(betaDep.type).toBe("static");
+    expect(betaDep.violations).toEqual([]);
+    // alpha → gamma is a violation (gamma has layer:app which is not allowed).
+    const gammaDep = result.dependencies.find((d) => d.target === "gamma");
+    expect(gammaDep.type).toBe("static");
+    expect(gammaDep.violations.length).toBeGreaterThan(0);
+    expect(gammaDep.violations[0].messageId).toBe("onlyTagsConstraintViolation");
+  });
+
+  it("lists no dependencies for a project with no outgoing edges", () => {
+    const graph = {
+      nodes: {
+        alpha: { name: "alpha", type: "lib", data: { root: "libs/alpha", tags: ["layer:domain"] } },
+      },
+      dependencies: {},
+    };
+    const config = {
+      depConstraints: [
+        { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain", "layer:util"] },
+      ],
+    };
+    const result = collectProjectContext("alpha", graph, config);
+    expect(result.dependencies).toEqual([]);
+  });
+
+  it("flags a projectWithoutTagsCannotHaveDependencies violation on an edge from an untagged source", () => {
+    const graph = {
+      nodes: {
+        alpha: {
+          name: "alpha",
+          type: "lib",
+          data: { root: "libs/alpha", tags: ["scope:billing"] },
+        },
+        beta: { name: "beta", type: "lib", data: { root: "libs/beta", tags: ["layer:util"] } },
+      },
+      dependencies: {
+        alpha: [{ target: "beta", type: "static" }],
+      },
+    };
+    const config = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+    };
+    const result = collectProjectContext("alpha", graph, config);
+    expect(result.dependencies).toHaveLength(1);
+    expect(result.dependencies[0].violations.length).toBeGreaterThan(0);
+    expect(result.dependencies[0].violations[0].messageId).toBe(
+      "projectWithoutTagsCannotHaveDependencies",
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -342,5 +415,87 @@ describe("contextCommand", () => {
     expect(result.projectContext.constraints[0].remediation).toBe(
       "Depend on an application-owned interface",
     );
+  });
+
+  it("includes dependencies with per-edge verdicts in the result", () => {
+    const result = contextCommand("alpha", commandContext(), config());
+    expect(result.projectContext.dependencies).toHaveLength(1);
+    expect(result.projectContext.dependencies[0].target).toBe("beta");
+    expect(result.projectContext.dependencies[0].type).toBe("static");
+    // alpha→beta is allowed: alpha has layer:domain, beta has layer:util,
+    // and the constraint allows layer:domain to reach layer:util.
+    expect(result.projectContext.dependencies[0].violations).toEqual([]);
+  });
+
+  it("includes a violating edge in the dependencies result", () => {
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+          beta: {
+            name: "beta",
+            type: "lib",
+            data: { root: "libs/beta", tags: ["layer:app"] },
+          },
+        },
+        dependencies: {
+          alpha: [{ target: "beta", type: "static" }],
+        },
+      },
+    });
+    const result = contextCommand("alpha", ctx, config());
+    expect(result.projectContext.dependencies).toHaveLength(1);
+    expect(result.projectContext.dependencies[0].violations.length).toBeGreaterThan(0);
+  });
+
+  it("renders dependencies in the text report", () => {
+    const result = contextCommand("alpha", commandContext(), config());
+    expect(result.report.text).toContain("Dependencies");
+    expect(result.report.text).toContain("beta (static) allowed");
+  });
+
+  it("renders a violating dependency in the text report", () => {
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+          beta: {
+            name: "beta",
+            type: "lib",
+            data: { root: "libs/beta", tags: ["layer:app"] },
+          },
+        },
+        dependencies: {
+          alpha: [{ target: "beta", type: "static" }],
+        },
+      },
+    });
+    const result = contextCommand("alpha", ctx, config());
+    expect(result.report.text).toContain("beta (static) VIOLATION");
+  });
+
+  it("renders (none) when the project has no dependencies", () => {
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+        },
+        dependencies: {},
+      },
+    });
+    const result = contextCommand("alpha", ctx, config());
+    expect(result.report.text).toContain("Dependencies  (none)");
   });
 });

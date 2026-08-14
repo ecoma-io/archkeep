@@ -610,7 +610,7 @@ function verifyGraphDiffChecks(consumer, label) {
     `graph --format json produces a valid JSON envelope (${label})`,
     graphEnvelope !== null &&
       graphEnvelope.command === "graph" &&
-      graphEnvelope.schemaVersion === 1 &&
+      graphEnvelope.schemaVersion === 2 &&
       Array.isArray(graphEnvelope.result?.projects) &&
       Array.isArray(graphEnvelope.result?.dependencies),
     `exit ${graphJson.status}\nstdout: ${graphJson.stdout ?? "(empty)"}`,

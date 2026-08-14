@@ -55,21 +55,21 @@
  * judged, one position in it has no answer, and `src/report/text.mjs` prints
  * the two under separate headings for the same reason they get separate codes.
  *
- * `--format json` (`check` only, for now) wraps the same verdict in the
- * versioned envelope `src/report/json.mjs` builds — `docs/usage/json-output.md`
- * is the published contract. It changes no exit code and no byte of the text
+ * `--format json` wraps the same verdict in the versioned envelope
+ * `src/report/json.mjs` builds — `docs/reference/json-output.md` is the
+ * published contract. It changes no exit code and no byte of the text
  * or SARIF report; it is a third rendering of a verdict every other format
  * already computes.
  *
  * `COMMANDS` below is a table rather than a `switch`, and `parseArgs` is
- * shared rather than hand-rolled per command, so a second command is a new
+ * shared rather than hand-rolled per command, so a new command is a new
  * row rather than a second copy of the dispatch and flag-parsing this file
- * used to own alone. The table is built for a target of five commands, not
- * because that many exist yet — `check` is still the only row — but because
- * three flags shared across all of them (`--format`, `--output`, `--config`),
- * no subcommand nesting, and no shell completion to generate mean a plain
- * table gets there without a framework; reach for one only once a later
- * command needs something this table cannot express.
+ * used to own alone. The table is built for six commands — `check`, `graph`,
+ * `diff`, `impact`, `explain`, `context` — with three flags shared across
+ * all of them (`--format`, `--output`, `--config`). No subcommand nesting,
+ * and no shell completion to generate, mean a plain table gets there without
+ * a framework; reach for one only once a later command needs something this
+ * table cannot express.
  */
 import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
@@ -717,7 +717,7 @@ async function runCheck(options, { cwd, env }) {
  * `graph`'s `run`: resolves the command context, drives `graphCommand`, writes
  * the report where it belongs, and returns the process's exit code.
  *
- * @param {{format: string, output: string|null, paths: string[]}} options
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -733,7 +733,20 @@ async function runGraph(options, { cwd, env }) {
       { cwd },
       { readGraph: env.readGraph, listFiles: env.listFiles },
     );
-    result = graphCommand(commandContext);
+
+    // Load the boundary config when --config is given or when the workspace
+    // declares one, so the snapshot carries a policy fingerprint that `diff`
+    // can use to warn when the policy changed between runs. Without a config,
+    // the snapshot carries no policy identity — the consumer did not provide one.
+    const config = options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : typeof commandContext.options.boundaryConfig === "string"
+        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
+        : null;
+
+    result = graphCommand(commandContext, { config });
   } catch (error) {
     const usageError = /is outside the workspace/.test(error?.message ?? "");
     env.err(String(error?.message ?? error));

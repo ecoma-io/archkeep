@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { computeDiff, diffCommand, parseBaseline } from "./diff.mjs";
+import { computePolicyFingerprint } from "./graph.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
 
 /**
@@ -254,6 +255,119 @@ describe("computeDiff", () => {
     expect(diff.addedProjects.map((p) => p.name)).toEqual(["a", "z"]);
     expect(diff.addedEdges[0].source).toBe("a");
     expect(diff.addedEdges[1].source).toBe("z");
+  });
+
+  it("detects tag changes on a project that exists in both baseline and head", () => {
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a", tags: ["layer:domain"] }],
+      dependencies: [],
+    };
+    const head = {
+      projects: [{ name: "a", root: "libs/a", tags: ["layer:adapter"] }],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.changedProjects).toEqual([
+      {
+        name: "a",
+        changes: [{ field: "tags", baseline: ["layer:domain"], head: ["layer:adapter"] }],
+      },
+    ]);
+    expect(diff.addedProjects).toEqual([]);
+    expect(diff.removedProjects).toEqual([]);
+  });
+
+  it("detects type changes on a project", () => {
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a", type: "lib", tags: [] }],
+      dependencies: [],
+    };
+    const head = {
+      projects: [{ name: "a", root: "libs/a", type: "app", tags: [] }],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.changedProjects).toEqual([
+      { name: "a", changes: [{ field: "type", baseline: "lib", head: "app" }] },
+    ]);
+  });
+
+  it("detects root changes on a project", () => {
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a", tags: [] }],
+      dependencies: [],
+    };
+    const head = {
+      projects: [{ name: "a", root: "packages/a", tags: [] }],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.changedProjects).toEqual([
+      { name: "a", changes: [{ field: "root", baseline: "libs/a", head: "packages/a" }] },
+    ]);
+  });
+
+  it("detects multiple metadata changes on the same project", () => {
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a", type: "lib", tags: ["layer:domain"] }],
+      dependencies: [],
+    };
+    const head = {
+      projects: [{ name: "a", root: "packages/a", type: "app", tags: ["layer:adapter"] }],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.changedProjects).toHaveLength(1);
+    expect(diff.changedProjects[0].name).toBe("a");
+    const fields = diff.changedProjects[0].changes.map((c) => c.field);
+    expect(fields).toEqual(["tags", "type", "root"]);
+  });
+
+  it("does not report a changed project when tags and type are identical", () => {
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a", type: "lib", tags: ["layer:domain"] }],
+      dependencies: [],
+    };
+    const head = {
+      projects: [{ name: "a", root: "libs/a", type: "lib", tags: ["layer:domain"] }],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.changedProjects).toEqual([]);
+  });
+
+  it("treats missing tags as an empty array", () => {
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a" }],
+      dependencies: [],
+    };
+    const head = {
+      projects: [{ name: "a", root: "libs/a", tags: ["layer:domain"] }],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.changedProjects).toEqual([
+      { name: "a", changes: [{ field: "tags", baseline: [], head: ["layer:domain"] }] },
+    ]);
+  });
+
+  it("sorts changed projects by name", () => {
+    const baseline = {
+      projects: [
+        { name: "z", root: "libs/z", tags: ["layer:domain"] },
+        { name: "a", root: "libs/a", tags: ["layer:domain"] },
+      ],
+      dependencies: [],
+    };
+    const head = {
+      projects: [
+        { name: "z", root: "libs/z", tags: ["layer:adapter"] },
+        { name: "a", root: "libs/a", tags: ["layer:adapter"] },
+      ],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.changedProjects.map((p) => p.name)).toEqual(["a", "z"]);
   });
 });
 
@@ -658,5 +772,187 @@ describe("diffCommand", () => {
     expect(introduced.some((v) => v.messageId === "projectWithoutTagsCannotHaveDependencies")).toBe(
       true,
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // Policy mismatch
+  // -------------------------------------------------------------------------
+
+  it("detects a policy mismatch between baseline and head", () => {
+    const baseline = baselineEnvelope({
+      projects: [{ name: "alpha", root: "libs/alpha", tags: ["layer:domain"] }],
+      dependencies: [],
+      policy: {
+        fingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+    });
+    const ctx = commandContext();
+    const config = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+    };
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+      config,
+    });
+    expect(result.diff.policyMismatch).toBeDefined();
+    expect(result.diff.policyMismatch.baseline.fingerprint).toBe(
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    );
+    expect(result.diff.policyMismatch.head.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.report.text).toContain("policy changed between baseline and head");
+  });
+
+  it("does not report a policy mismatch when fingerprints agree", () => {
+    // Use a config that produces a known fingerprint, and put that same
+    // fingerprint in the baseline.
+    const config = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+    };
+    const fingerprint = computePolicyFingerprint(config);
+    const baseline = baselineEnvelope({
+      projects: [{ name: "alpha", root: "libs/alpha", tags: ["layer:domain"] }],
+      dependencies: [],
+      policy: { fingerprint },
+    });
+    const ctx = commandContext();
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+      config,
+    });
+    expect(result.diff.policyMismatch).toBeUndefined();
+    expect(result.report.text).not.toContain("policy changed");
+  });
+
+  it("does not report a policy mismatch when baseline has no policy", () => {
+    const baseline = baselineEnvelope({
+      projects: [{ name: "alpha", root: "libs/alpha", tags: ["layer:domain"] }],
+      dependencies: [],
+    });
+    const ctx = commandContext();
+    const config = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+    };
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+      config,
+    });
+    expect(result.diff.policyMismatch).toBeUndefined();
+  });
+
+  it("does not report a policy mismatch when no config is provided for the head", () => {
+    const baseline = baselineEnvelope({
+      projects: [{ name: "alpha", root: "libs/alpha", tags: ["layer:domain"] }],
+      dependencies: [],
+      policy: {
+        fingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+    });
+    const ctx = commandContext();
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+    });
+    expect(result.diff.policyMismatch).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // changedProjects
+  // -------------------------------------------------------------------------
+
+  it("detects tag changes between baseline and head", () => {
+    const baseline = baselineEnvelope({
+      projects: [{ name: "alpha", root: "libs/alpha", type: "lib", tags: ["layer:domain"] }],
+      dependencies: [],
+    });
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:adapter"] },
+          },
+        },
+        dependencies: {},
+      },
+    });
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+    });
+    expect(result.diff.changedProjects).toEqual([
+      {
+        name: "alpha",
+        changes: [{ field: "tags", baseline: ["layer:domain"], head: ["layer:adapter"] }],
+      },
+    ]);
+    expect(result.report.text).toContain("~ 1 changed project");
+    expect(result.report.text).toContain("tags  layer:domain → layer:adapter");
+  });
+
+  it("detects type changes between baseline and head", () => {
+    const baseline = baselineEnvelope({
+      projects: [{ name: "alpha", root: "libs/alpha", type: "lib", tags: ["layer:domain"] }],
+      dependencies: [],
+    });
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "app",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+        },
+        dependencies: {},
+      },
+    });
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+    });
+    expect(result.diff.changedProjects).toEqual([
+      { name: "alpha", changes: [{ field: "type", baseline: "lib", head: "app" }] },
+    ]);
+  });
+
+  it("does not report changed projects when metadata is identical", () => {
+    // The baseline must match what buildHeadSnapshot produces from the command
+    // context — including the `type` field, because buildProjects includes it.
+    const baseline = baselineEnvelope({
+      projects: [{ name: "alpha", root: "libs/alpha", type: "lib", tags: ["layer:domain"] }],
+    });
+    const ctx = commandContext();
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+    });
+    expect(result.diff.changedProjects).toEqual([]);
+    expect(result.report.text).not.toContain("changed project");
+  });
+
+  it("includes changed projects in the JSON envelope", () => {
+    const baseline = baselineEnvelope({
+      projects: [{ name: "alpha", root: "libs/alpha", type: "lib", tags: ["layer:domain"] }],
+      dependencies: [],
+    });
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:adapter"] },
+          },
+        },
+        dependencies: {},
+      },
+    });
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+    });
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.result.changedProjects).toEqual([
+      {
+        name: "alpha",
+        changes: [{ field: "tags", baseline: ["layer:domain"], head: ["layer:adapter"] }],
+      },
+    ]);
   });
 });

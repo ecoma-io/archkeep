@@ -43,7 +43,7 @@ describe("explain (full)", () => {
     expect(result.json.result.import.targetProject).toBe("core");
     expect(result.json.result.sourceTags).toContain("layer:app");
     expect(result.json.result.targetTags).toContain("layer:core");
-    expect(result.json.result.violation).toBeNull();
+    expect(result.json.result.violations).toBeNull();
   });
 
   it("explains a violating import site", () => {
@@ -59,8 +59,8 @@ describe("explain (full)", () => {
         "json",
       ]);
       expect(result.exitCode).toBe(0);
-      expect(result.json.result.violation).not.toBeNull();
-      expect(result.json.result.violation.messageId).toBe("onlyTagsConstraintViolation");
+      expect(result.json.result.violations).not.toBeNull();
+      expect(result.json.result.violations[0].messageId).toBe("onlyTagsConstraintViolation");
       expect(result.json.result.sourceTags).toContain("layer:core");
     } finally {
       violator.cleanup();

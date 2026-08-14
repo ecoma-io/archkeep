@@ -5,8 +5,8 @@
  * a ref baseline means building a second graph at another commit, a much larger
  * claim about what the tool is allowed to do to a repository) and the head
  * context this run resolves, and computes what changed between them: projects
- * added or removed, and edges added, removed, or changed in type. It is
- * descriptive: it never exits 1, because a description of what changed is
+ * added, removed, or changed in metadata, and edges added, removed, or changed
+ * in type. It is descriptive: it never exits 1, because a description of what changed is
  * never a finding (only `check` ever exits 1).
  *
  * When a boundary config is provided (via `--config` or the workspace's own
@@ -41,7 +41,7 @@
 import { readFileSync } from "node:fs";
 
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
-import { buildDependencies, buildProjects } from "./graph.mjs";
+import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { computeRuleImpact } from "./edge-constraints.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
@@ -57,7 +57,7 @@ import { formatDiffReport } from "../report/diff-text.mjs";
  * "removed" entry would be ambiguous between "gone" and "never seen").
  *
  * @param {string} path Absolute path to the baseline JSON file.
- * @returns {{projects: object[], dependencies: object[], coverage: object}}
+ * @returns {{projects: object[], dependencies: object[], coverage: object, policy: object|null}}
  * @throws {Error}
  */
 function readBaselineFromDisk(path) {
@@ -81,7 +81,7 @@ function readBaselineFromDisk(path) {
  *
  * @param {string} text The raw JSON text of the baseline envelope.
  * @param {string} path The path to name in error messages.
- * @returns {{projects: object[], dependencies: object[], coverage: object}}
+ * @returns {{projects: object[], dependencies: object[], coverage: object, policy: object|null}}
  * @throws {Error}
  */
 export function parseBaseline(text, path) {
@@ -180,6 +180,7 @@ export function parseBaseline(text, path) {
     projects: envelope.result.projects,
     dependencies: envelope.result.dependencies,
     coverage: envelope.coverage,
+    policy: envelope.result.policy ?? null,
   };
 }
 
@@ -210,6 +211,7 @@ function buildHeadSnapshot(commandContext) {
  * @param {{projects: object[], dependencies: object[]}} baseline
  * @param {{projects: object[], dependencies: object[]}} head
  * @returns {{addedProjects: object[], removedProjects: object[],
+ *   changedProjects: {name: string, changes: {field: string, baseline: *, head: *}[]}[],
  *   addedEdges: object[], removedEdges: object[]}}
  */
 export function computeDiff(baseline, head) {
@@ -218,9 +220,43 @@ export function computeDiff(baseline, head) {
 
   const addedProjects = [];
   const removedProjects = [];
+  const changedProjects = [];
 
   for (const [name, project] of headProjects) {
-    if (!baselineProjects.has(name)) addedProjects.push(project);
+    if (!baselineProjects.has(name)) {
+      addedProjects.push(project);
+      continue;
+    }
+    // Project exists in both — detect metadata changes.
+    const baselineProject = baselineProjects.get(name);
+    const changes = [];
+
+    // Tags change: array content differs.
+    const baselineTags = baselineProject.tags ?? [];
+    const headTags = project.tags ?? [];
+    if (baselineTags.length !== headTags.length || baselineTags.some((t, i) => t !== headTags[i])) {
+      changes.push({ field: "tags", baseline: baselineTags, head: headTags });
+    }
+
+    // Type change: one is undefined and the other is not, or both defined but different.
+    const baselineType = baselineProject.type ?? undefined;
+    const headType = project.type ?? undefined;
+    if (baselineType !== headType) {
+      changes.push({
+        field: "type",
+        baseline: baselineType ?? null,
+        head: headType ?? null,
+      });
+    }
+
+    // Root change: project directory moved.
+    if (baselineProject.root !== project.root) {
+      changes.push({ field: "root", baseline: baselineProject.root, head: project.root });
+    }
+
+    if (changes.length > 0) {
+      changedProjects.push({ name, changes });
+    }
   }
   for (const [name, project] of baselineProjects) {
     if (!headProjects.has(name)) removedProjects.push(project);
@@ -228,6 +264,7 @@ export function computeDiff(baseline, head) {
   // Deterministic order — plain string comparison.
   addedProjects.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   removedProjects.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  changedProjects.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
   // Index edges by the (source, target, type) triple — the identity key.
   const baselineEdges = new Map(
@@ -259,7 +296,7 @@ export function computeDiff(baseline, head) {
   addedEdges.sort(edgeSort);
   removedEdges.sort(edgeSort);
 
-  return { addedProjects, removedProjects, addedEdges, removedEdges };
+  return { addedProjects, removedProjects, changedProjects, addedEdges, removedEdges };
 }
 
 /**
@@ -268,7 +305,7 @@ export function computeDiff(baseline, head) {
  *
  * @param {string} baselinePath Absolute path to the baseline JSON file.
  * @param {object} commandContext From `resolveCommandContext`.
- * @param {{readBaseline?: (path: string) => {projects: object[], dependencies: object[], coverage: object},
+ * @param {{readBaseline?: (path: string) => {projects: object[], dependencies: object[], coverage: object, policy?: object|null},
  *   config?: object}} [io]
  *   Injectable baseline reader, so a test drives the diff without a real file.
  *   When omitted, reads from the real filesystem. `config` is the loaded
@@ -345,9 +382,25 @@ export function diffCommand(
     head: { projects: head.projects.length, edges: head.dependencies.length },
     addedProjects: diff.addedProjects,
     removedProjects: diff.removedProjects,
+    changedProjects: diff.changedProjects,
     addedEdges: diff.addedEdges,
     removedEdges: diff.removedEdges,
   };
+
+  // Policy mismatch detection: when both the baseline and the head carry a
+  // policy fingerprint and they disagree, the diff is computed against a
+  // different policy than the one the baseline was judged under. Every
+  // "introduced" or "resolved" violation in the rule-impact analysis may be an
+  // artefact of the policy change, not of a structural change. Record the
+  // mismatch so the consumer knows to interpret the diff with caution.
+  const baselineFingerprint = baseline.policy?.fingerprint ?? null;
+  const headFingerprint = config ? computePolicyFingerprint(config) : null;
+  if (baselineFingerprint && headFingerprint && baselineFingerprint !== headFingerprint) {
+    result.policyMismatch = {
+      baseline: { fingerprint: baselineFingerprint },
+      head: { fingerprint: headFingerprint },
+    };
+  }
 
   // Rule-impact analysis: when the boundary config is provided, judge each
   // added/removed edge against the constraint table. This is not the full

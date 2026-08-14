@@ -1,8 +1,9 @@
 # `--format json`
 
 `check --format json`, `graph --format json`, `diff --format json`,
-`impact --format json`, and `explain --format json` wrap the same verdict the terminal report and SARIF
-already carry in one versioned envelope. They change no exit code and no byte
+`impact --format json`, `explain --format json`, and `context --format json`
+wrap the same verdict the terminal report and SARIF already carry in one
+versioned envelope. They change no exit code and no byte
 of the other two formats — they are additional renderings of a verdict every
 format already computes, for a script that wants to branch on a field rather
 than scrape a report or walk a SARIF `runs[]` array.
@@ -18,6 +19,8 @@ lattice impact billing-core --format json
 lattice impact billing-core --format json --output impact.json
 lattice explain libs/alpha/main.go:10:5 --format json
 lattice explain libs/alpha/main.go:10:5 --format json --output explain.json
+lattice context billing-core --format json
+lattice context billing-core --format json --output context.json
 ```
 
 ## The stability promise
@@ -42,22 +45,22 @@ and no random identifier anywhere in it. That is what makes it diffable in a
 pull request the same way the SARIF output already is.
 
 `command` is the one field that varies by which command produced the envelope —
-`"check"`, `"graph"`, `"diff"`, `"impact"`, or `"explain"`. `src/report/json.mjs` (the module
+`"check"`, `"graph"`, `"diff"`, `"impact"`, `"explain"`, or `"context"`. `src/report/json.mjs` (the module
 that builds the envelope) and `src/commands/README.md` (the module layout it
 follows) are both written for each command to reuse the same wrapper.
 
 ## Top-level fields
 
-| field           | type                                     | meaning                                                                                                                                                                 |
-| --------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `schemaVersion` | integer                                  | This document's version. Currently `1`.                                                                                                                                 |
-| `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                |
-| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"impact"`, or `"explain"`.                                                                       |
-| `workspace`     | `{root, provider, marker}`               | `root` is the resolved workspace root (absolute path); `provider` is `"nx"` or `"native"`; `marker` is the root file that decided it (`"nx.json"` or `"lattice.json"`). |
-| `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                 |
-| `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                          |
-| `coverage`      | object                                   | What the run inspected, and what it could not. See below.                                                                                                               |
-| `result`        | object                                   | The command's own payload — for `check`, the violations and the two workspace-level checks. See below.                                                                  |
+| field           | type                                     | meaning                                                                                                                                                                                                                       |
+| --------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                       |
+| `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                                                                      |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                |
+| `workspace`     | `{root, provider, marker}`               | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"lattice.json"`, `".moon"`, or `".config/moon"`). |
+| `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                       |
+| `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                |
+| `coverage`      | object                                   | What the run inspected, and what it could not. See below.                                                                                                                                                                     |
+| `result`        | object                                   | The command's own payload — for `check`, the violations and the two workspace-level checks. See below.                                                                                                                        |
 
 ## `status`, and the exit code it must agree with
 
@@ -133,12 +136,13 @@ already state.
 it exits `0` when it can build the snapshot, and `3` when coverage is incomplete.
 It never exits `1`.
 
-| field                   | type                         | meaning                                                                                                                                                                                                            |
-| ----------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `projects`              | `{name, root, type, tags}[]` | Every project, sorted by `name` with plain string comparison. `tags` is always an array, including when empty. `type` is `"app"` or `"lib"`. `targets` is present only when declared, listing target names by key. |
-| `dependencies`          | `{source, target, type}[]`   | Every edge as one flat array, sorted by `source`, then `target`, then `type`, all with plain string comparison. Edge identity is the full `(source, target, type)` triple.                                         |
-| `workspaceLayout`       | `{appsDir, libsDir}`         | The layout the engine used when judging imports.                                                                                                                                                                   |
-| `workspaceLayoutSource` | `"declared"` \| `"default"`  | Whether the workspace named the layout (`"declared"`, from `nx.json` or `lattice.json`) or the engine fell back to its built-in default (`"default"`).                                                             |
+| field                   | type                         | meaning                                                                                                                                                                                                                                                                                    |
+| ----------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `projects`              | `{name, root, type, tags}[]` | Every project, sorted by `name` with plain string comparison. `tags` is always an array, including when empty. `type` is `"app"` or `"lib"`. `targets` is present only when declared, listing target names by key.                                                                         |
+| `dependencies`          | `{source, target, type}[]`   | Every edge as one flat array, sorted by `source`, then `target`, then `type`, all with plain string comparison. Edge identity is the full `(source, target, type)` triple.                                                                                                                 |
+| `workspaceLayout`       | `{appsDir, libsDir}`         | The layout the engine used when judging imports.                                                                                                                                                                                                                                           |
+| `workspaceLayoutSource` | `"declared"` \| `"default"`  | Whether the workspace named the layout (`"declared"`, from `nx.json` or `lattice.json`) or the engine fell back to its built-in default (`"default"`).                                                                                                                                     |
+| `policy`                | `{fingerprint}` or absent    | When the boundary config was provided (via `--config` or the workspace's own declaration), a `fingerprint` field holds a SHA-256 hex string of the canonicalized policy (`depConstraints`, `options`, `suppressions`). Absent when no config was given — the consumer did not provide one. |
 
 The graph snapshot deliberately does not publish Nx-internal fields such as
 `mfeRemote`, `entryPoints`, or `declaredPackages`. They are implementation
@@ -158,14 +162,16 @@ Both sides must be complete. An incomplete baseline or current workspace exits
 be ambiguous between a real change and a coverage gap. `diff` is descriptive:
 changes do not make it exit `1`; a completed comparison always exits `0`.
 
-| field             | type                       | meaning                                                                                                |
-| ----------------- | -------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `baseline`        | `{path, projects, edges}`  | The baseline file path and its project/edge counts.                                                    |
-| `head`            | `{projects, edges}`        | The current workspace's project/edge counts.                                                           |
-| `addedProjects`   | `{name, root, tags}[]`     | Projects present in the current workspace but absent from the baseline, sorted by `name`.              |
-| `removedProjects` | `{name, root, tags}[]`     | Projects present in the baseline but absent from the current workspace, sorted by `name`.              |
-| `addedEdges`      | `{source, target, type}[]` | Edges present in the current workspace but absent from the baseline, sorted by the full edge identity. |
-| `removedEdges`    | `{source, target, type}[]` | Edges present in the baseline but absent from the current workspace, sorted by the full edge identity. |
+| field             | type                         | meaning                                                                                                                                                                                                                                                                                                                     |
+| ----------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseline`        | `{path, projects, edges}`    | The baseline file path and its project/edge counts.                                                                                                                                                                                                                                                                         |
+| `head`            | `{projects, edges}`          | The current workspace's project/edge counts.                                                                                                                                                                                                                                                                                |
+| `addedProjects`   | `{name, root, tags}[]`       | Projects present in the current workspace but absent from the baseline, sorted by `name`.                                                                                                                                                                                                                                   |
+| `removedProjects` | `{name, root, tags}[]`       | Projects present in the baseline but absent from the current workspace, sorted by `name`.                                                                                                                                                                                                                                   |
+| `changedProjects` | `{name, changes}[]`          | Projects present in both but with different metadata, sorted by `name`. Each `changes` entry is `{field, baseline, head}`. Detected fields: `tags` (array content), `type` (`"app"`/`"lib"`/`null`), `root` (project directory).                                                                                            |
+| `addedEdges`      | `{source, target, type}[]`   | Edges present in the current workspace but absent from the baseline, sorted by the full edge identity.                                                                                                                                                                                                                      |
+| `removedEdges`    | `{source, target, type}[]`   | Edges present in the baseline but absent from the current workspace, sorted by the full edge identity.                                                                                                                                                                                                                      |
+| `policyMismatch`  | `{baseline, head}` or absent | Present when both the baseline snapshot and the head run carry a policy fingerprint and they disagree. `baseline.fingerprint` and `head.fingerprint` are the SHA-256 hex strings. The rule-impact section may reflect the policy change rather than a structural change. Absent when no mismatch or no config was provided. |
 
 ## `result` (for `command: "impact"`)
 
@@ -197,7 +203,7 @@ Two shapes, depending on whether the import resolved:
 | `sourceTags`         | `string[]`                                        | The source project's tags, empty when unresolvable.                                                                              |
 | `targetTags`         | `string[]`                                        | The target project's tags, empty when unresolvable.                                                                              |
 | `matchedConstraints` | `object[]`                                        | The constraint rows from the boundary law whose `sourceTag`/`allSourceTags` matched the source project. Empty when none matched. |
-| `violation`          | `null` \| `{messageId, message, constraint}`      | The violation, if any. Same shape as each entry in `check`'s `result.violations`. `null` when the import is allowed.             |
+| `violations`         | `null` \| `{messageId, message, constraint}[]`    | The violations, if any. Same shape as each entry in `check`'s `result.violations`. `null` when the import is allowed.            |
 
 **Unresolvable site** (dynamic import with non-literal argument):
 
@@ -207,6 +213,29 @@ Two shapes, depending on whether the import resolved:
 | `unresolvable` | `true`                 | This site's target is not statically knowable.              |
 | `reason`       | string                 | Why the site is unresolvable (e.g. "non-literal argument"). |
 
+## `result` (for `command: "context"`)
+
+`context` takes a project name and shows the architecture constraints that
+govern it. It is descriptive: it never exits `1`, because a description of what
+the rules say is never a finding.
+
+| field          | type       | meaning                                                                                                                                |
+| -------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `project`      | string     | The project whose context was queried.                                                                                                 |
+| `tags`         | `string[]` | The project's tags, from the project graph.                                                                                            |
+| `constraints`  | `object[]` | The constraint rows from the boundary law whose `sourceTag`/`allSourceTags` matched the project's tags, with what each allows or bans. |
+| `dependencies` | `object[]` | The project's outgoing edges, each with `target`, `type`, and `violations` from the constraint table.                                  |
+
+Each `dependencies` entry:
+
+| field        | type       | meaning                                                                                            |
+| ------------ | ---------- | -------------------------------------------------------------------------------------------------- |
+| `target`     | string     | The project this edge reaches.                                                                     |
+| `type`       | string     | The edge type: `"static"` or `"dynamic"`.                                                          |
+| `violations` | `object[]` | Constraint violations for this edge from `judgeEdge`. Empty means allowed by the constraint table. |
+
+Each `violations` entry inside a dependency carries `messageId`, `constraint`, `source`, and `target` — the same shape `diff --format json` and `impact --format json` produce for edge-constraint violations.
+
 ## A worked example
 
 Run over this repository's own tree (`lattice`'s own CI step,
@@ -215,7 +244,7 @@ three declared blind spots and nothing else to say:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "tool": {
     "name": "@ecoma-io/lattice",
     "version": "0.0.0"
@@ -273,9 +302,4 @@ touch `coverage.complete`.
 
 ## What this is not, yet
 
-This page lives under `docs/usage/` alongside the rest of what a consumer
-reads to run the tool day to day. A later documentation pass (tracked as part
-of the repository's own roadmap work, not by this page) is expected to move it
-under a `docs/reference/` section once one exists — a schema reference reads
-differently from a how-to guide, and `docs/README.md`'s ownership map is where
-that move, if it happens, gets recorded. Until then, this is the page.
+This page is the schema reference for the `--format json` envelope.

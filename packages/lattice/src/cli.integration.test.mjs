@@ -2254,7 +2254,7 @@ describe("`graph` on the Nx fixture", () => {
     expect(await runCli(["graph", "--format", "json"], streams)).toBe(EXIT.ok);
     const envelope = JSON.parse(streams.lines.out.join("\n"));
     expect(envelope.command).toBe("graph");
-    expect(envelope.schemaVersion).toBe(1);
+    expect(envelope.schemaVersion).toBe(2);
     expect(envelope.coverage.complete).toBe(true);
     expect(envelope.result.projects.map((p) => p.name)).toEqual(
       envelope.result.projects
@@ -2730,7 +2730,7 @@ describe("`diff` argument and baseline validation", () => {
     writeFileSync(
       checkEnvelopeFile,
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         command: "check",
         status: "ok",
         exitCode: 0,

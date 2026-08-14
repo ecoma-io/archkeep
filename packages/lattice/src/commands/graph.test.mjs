@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_WORKSPACE_LAYOUT } from "../rules/specifiers.mjs";
-import { buildDependencies, buildProjects, graphCommand } from "./graph.mjs";
+import {
+  buildDependencies,
+  buildProjects,
+  computePolicyFingerprint,
+  graphCommand,
+} from "./graph.mjs";
 
 /**
  * What `graph` guarantees: determinism, completeness, and that nothing the
@@ -359,5 +364,94 @@ describe("graphCommand", () => {
       }),
     );
     expect(incomplete.status).toBe("no-verdict");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computePolicyFingerprint
+// ---------------------------------------------------------------------------
+
+describe("computePolicyFingerprint", () => {
+  it("returns a deterministic SHA-256 hex string", () => {
+    const config = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+      options: { allow: [], banTransitiveDependencies: false },
+      suppressions: [],
+    };
+    const fingerprint = computePolicyFingerprint(config);
+    expect(fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    // Same config → same fingerprint.
+    expect(computePolicyFingerprint(config)).toBe(fingerprint);
+  });
+
+  it("produces different fingerprints for different policies", () => {
+    const config1 = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+      options: { allow: [] },
+      suppressions: [],
+    };
+    const config2 = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:util"] }],
+      options: { allow: [] },
+      suppressions: [],
+    };
+    expect(computePolicyFingerprint(config1)).not.toBe(computePolicyFingerprint(config2));
+  });
+
+  it("treats missing fields as empty defaults", () => {
+    const minimal = {};
+    const explicit = { depConstraints: [], options: {}, suppressions: [] };
+    expect(computePolicyFingerprint(minimal)).toBe(computePolicyFingerprint(explicit));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// graphCommand — policy fingerprint
+// ---------------------------------------------------------------------------
+
+describe("graphCommand — policy fingerprint", () => {
+  function commandContext(overrides = {}) {
+    return {
+      root: "/workspace",
+      provider: "native",
+      marker: "lattice.json",
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+        },
+        dependencies: {},
+      },
+      analysis: {
+        analyzed: 1,
+        imports: [],
+        failures: [],
+      },
+      pluginGap: { registered: true, manifests: [] },
+      ...overrides,
+    };
+  }
+
+  it("omits policy when no config is provided", () => {
+    const result = graphCommand(commandContext());
+    expect(result.policy).toBeUndefined();
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.result.policy).toBeUndefined();
+  });
+
+  it("includes policy fingerprint when config is provided", () => {
+    const config = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+      options: { allow: [] },
+      suppressions: [],
+    };
+    const result = graphCommand(commandContext(), { config });
+    expect(result.policy).toBeDefined();
+    expect(result.policy.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.result.policy.fingerprint).toBe(result.policy.fingerprint);
   });
 });

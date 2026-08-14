@@ -1,7 +1,7 @@
 /**
  * The versioned JSON envelope every command's `--format json` wraps its
- * result in — one wrapper, five commands, so a consumer writes one parser
- * rather than one per command. `../../../../docs/usage/json-output.md` is the
+ * result in — one wrapper, six commands, so a consumer writes one parser
+ * rather than one per command. `../../../../docs/reference/json-output.md` is the
  * published contract this module builds; this file is where the contract's
  * three consistency rules are enforced in code rather than left to a
  * docs page a later command author might not read.
@@ -39,7 +39,7 @@ const { name: TOOL_NAME, version: TOOL_VERSION } = require("../../package.json")
  * package reads its own envelope back, so that refusal is advice to the
  * consumer, not a mechanism enforced here.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** The one `status`↔`exitCode` mapping every command's envelope must agree with. */
 const EXIT_CODE_FOR_STATUS = Object.freeze({ ok: 0, findings: 1, "no-verdict": 3 });

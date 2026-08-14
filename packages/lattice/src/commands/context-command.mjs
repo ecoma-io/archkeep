@@ -33,22 +33,26 @@
  * the real architecture.
  */
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import { judgeEdge } from "./edge-constraints.mjs";
 import { findConstraintsFor } from "../rules/tags.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatContextReport } from "../report/context-text.mjs";
 
 /**
  * Collects the architecture context for a project: its tags, which constraint
- * rows match, and what each row allows or bans.
+ * rows match, what each row allows or bans, and the project's current
+ * dependencies with per-edge constraint verdicts.
  *
  * @param {string} projectName The project whose context is being queried.
  * @param {object} graph The project graph: `{nodes, dependencies}`.
  * @param {object} config The loaded boundary config (from `loadBoundaryConfig`).
- * @returns {{project: string, tags: string[], constraints: object[]}}
+ * @returns {{project: string, tags: string[], constraints: object[],
+ *   dependencies: {target: string, type: string, violations: object[]}[]}}
  * @throws {Error} when `projectName` is not in the graph.
  */
 export function collectProjectContext(projectName, graph, config) {
   const nodes = graph.nodes;
+  const dependencies = graph.dependencies;
 
   if (!Object.hasOwn(nodes, projectName)) {
     throw new Error(
@@ -64,7 +68,24 @@ export function collectProjectContext(projectName, graph, config) {
 
   const matchedConstraints = findConstraintsFor(config.depConstraints, node);
 
-  return { project: projectName, tags, constraints: matchedConstraints };
+  // Collect the project's outgoing edges and judge each one.
+  const outgoing = dependencies[projectName] ?? [];
+  const deps = [];
+  for (const edge of outgoing) {
+    const violations = judgeEdge(
+      { source: projectName, target: edge.target },
+      nodes,
+      dependencies,
+      config.depConstraints,
+    );
+    deps.push({
+      target: edge.target,
+      type: edge.type,
+      violations,
+    });
+  }
+
+  return { project: projectName, tags, constraints: matchedConstraints, dependencies: deps };
 }
 
 /**
@@ -124,6 +145,7 @@ export function contextCommand(projectName, commandContext, config) {
     project: projectContext.project,
     tags: projectContext.tags,
     constraints: projectContext.constraints,
+    dependencies: projectContext.dependencies,
   };
 
   const envelope = jsonEnvelope({

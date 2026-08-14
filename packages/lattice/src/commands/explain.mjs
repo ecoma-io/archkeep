@@ -188,7 +188,7 @@ export function explainCommand(site, commandContext, config) {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: true,
         reason: siteFailure.reason,
       };
@@ -250,8 +250,8 @@ export function explainCommand(site, commandContext, config) {
   // because `evaluate` is pure and some rules (circular dependencies, lazy
   // loading) depend on the whole file graph — they cannot be computed on one
   // site in isolation.
-  const violations = evaluate(commandContext.analysis.imports, graph, config);
-  const siteViolations = violations.filter(
+  const allViolations = evaluate(commandContext.analysis.imports, graph, config);
+  const siteViolations = allViolations.filter(
     (v) =>
       v.sourceFile === parsed.sourceFile && v.line === parsed.line && v.column === parsed.column,
   );
@@ -279,18 +279,17 @@ export function explainCommand(site, commandContext, config) {
     ? findMatchingConstraints(config.depConstraints, sourceProjectNode)
     : [];
 
-  let violation = null;
+  let violations = null;
   if (siteViolations.length > 0) {
-    // A site produces at most one violation from the tag block, but
-    // `bannedExternalImports` + `noTransitiveDependencies` can fire together.
-    // For explain, we pick the first — the one the developer most needs to
-    // understand, and the one that matches the constraint row.
-    const v = siteViolations[0];
-    violation = {
+    // A site can produce multiple violations — e.g. `bannedExternalImports`
+    // and `noTransitiveDependencies` can fire together. An agent seeing only
+    // the first might fix it and be confused when `check` still fails. Return
+    // all of them so the consumer sees the complete picture.
+    violations = siteViolations.map((v) => ({
       messageId: v.messageId,
       message: v.message,
       constraint: v.constraint,
-    };
+    }));
   }
 
   const explanation = {
@@ -306,7 +305,7 @@ export function explainCommand(site, commandContext, config) {
     sourceTags,
     targetTags,
     matchedConstraints,
-    violation,
+    violations,
     unresolvable: false,
     reason: null,
   };
@@ -330,13 +329,7 @@ export function explainCommand(site, commandContext, config) {
     sourceTags,
     targetTags,
     matchedConstraints,
-    violation: violation
-      ? {
-          messageId: violation.messageId,
-          message: violation.message,
-          constraint: violation.constraint,
-        }
-      : null,
+    violations,
   };
 
   const envelope = jsonEnvelope({
