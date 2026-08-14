@@ -469,9 +469,9 @@ export function diffCommand(
   // Rule-impact analysis: when the boundary config is provided, judge each
   // added/removed edge against the constraint table. This is not the full
   // `evaluate` pipeline — it checks only the `depConstraints` violations
-  // that depend on project tags (not npm/circular/lazy-load rules, which
-  // need import-site details). A consumer who needs the complete verdict
-  // should run `check`.
+  // that depend on project tags (3 of 15 violation types; not npm/circular/
+  // lazy-load rules, which need import-site details). A consumer who needs
+  // the complete verdict should run `check`.
   if (config && config.depConstraints) {
     const ruleImpact = computeRuleImpact(
       diff,
@@ -485,6 +485,17 @@ export function diffCommand(
       introduced: ruleImpact.introduced,
       resolved: ruleImpact.resolved,
     };
+    // The rule-impact analysis covers depConstraints only (3 of 15 violation
+    // types). A consumer seeing no introduced/resolved violations must not
+    // conclude the workspace is free of all boundary violations — only that
+    // no depConstraints violations were introduced or resolved on the changed
+    // edges. Run `check` for the complete verdict.
+    coverage.notes.push(
+      "per-edge rule-impact covers only depConstraints (3 of 15 violation types). " +
+        "A dependency with no rule-impact may still violate npm-ban, circular-dependency, " +
+        "lazy-load, or other rules that require import-site details. Run check for the " +
+        "complete verdict.",
+    );
   }
 
   // Diff is descriptive — always status "ok" when it completes. Even an
