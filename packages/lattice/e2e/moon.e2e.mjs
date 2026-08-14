@@ -163,4 +163,20 @@ describe("Moon (full)", () => {
     expect(result.exitCode).toBe(0);
     expect(result.json.workspace.provider).toBe("moon");
   });
+
+  it("context returns project tags and constraints on a Moon tree", () => {
+    const result = lattice(moonConsumer.root, ["context", "core", "--format", "json"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.json).not.toBeNull();
+    expect(result.json.command).toBe("context");
+    expect(result.json.result.tags).toContain("layer:library");
+    expect(result.json.result.constraints.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("context warns in coverage.notes that per-edge verdicts cover only depConstraints", () => {
+    const result = lattice(moonConsumer.root, ["context", "core", "--format", "json"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.json.coverage.notes).toHaveLength(1);
+    expect(result.json.coverage.notes[0]).toContain("depConstraints");
+  });
 });

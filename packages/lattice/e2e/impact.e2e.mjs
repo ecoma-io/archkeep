@@ -107,4 +107,12 @@ describe("impact --config (full)", () => {
     expect(result.json.result.constraintImpact).toBeDefined();
     expect(result.json.result.constraintImpact).toEqual([]);
   });
+
+  it("warns in coverage.notes that per-edge verdicts cover only depConstraints", () => {
+    const result = lattice(monorepoConsumer.root, ["impact", "core", "--format", "json"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.json.coverage.notes).toHaveLength(1);
+    expect(result.json.coverage.notes[0]).toContain("depConstraints");
+    expect(result.json.coverage.notes[0]).toContain("check");
+  });
 });

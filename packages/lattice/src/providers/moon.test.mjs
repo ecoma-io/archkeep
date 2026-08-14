@@ -395,7 +395,7 @@ describe("transformMoonGraph — workspaceLayout inference", () => {
     expect(result.workspaceLayout).toBeUndefined();
   });
 
-  it("infers only appsDir when all apps share a prefix but libs do not", () => {
+  it("returns undefined when apps share a prefix but libs do not (partial layout)", () => {
     const raw = twoProjectGraph();
     // api under packages/ (library) + add a second library in libs/ to break the prefix.
     raw.data["1"].source = "packages/api";
@@ -407,10 +407,14 @@ describe("transformMoonGraph — workspaceLayout inference", () => {
       dependencies: [],
     };
     const result = transformMoonGraph(raw);
-    expect(result.workspaceLayout).toEqual({ appsDir: "apps" });
+    // A partial layout (appsDir only, no libsDir) would silently disable the
+    // absolute-import rule for the libs axis — inferWorkspaceLayout returns
+    // null instead, so `graph.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT`
+    // applies the complete default.
+    expect(result.workspaceLayout).toBeUndefined();
   });
 
-  it("infers only libsDir when all libs share a prefix but apps do not", () => {
+  it("returns undefined when libs share a prefix but apps do not (partial layout)", () => {
     const raw = twoProjectGraph();
     // Move web out of apps/ and add another app in a different directory.
     raw.data["0"].source = "src/web";
@@ -422,7 +426,11 @@ describe("transformMoonGraph — workspaceLayout inference", () => {
       dependencies: [],
     };
     const result = transformMoonGraph(raw);
-    expect(result.workspaceLayout).toEqual({ libsDir: "libs" });
+    // A partial layout (libsDir only, no appsDir) would silently disable the
+    // absolute-import rule for the apps axis — inferWorkspaceLayout returns
+    // null instead, so `graph.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT`
+    // applies the complete default.
+    expect(result.workspaceLayout).toBeUndefined();
   });
 
   it("infers layout from deeply nested projects", () => {

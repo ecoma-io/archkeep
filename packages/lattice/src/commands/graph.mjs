@@ -154,7 +154,18 @@ export function computePolicyFingerprint(config) {
     options: config.options ?? {},
     suppressions: config.suppressions ?? [],
   };
-  const canonical = JSON.stringify(policy);
+  // Canonicalise: sort object keys at every depth so insertion order does not
+  // affect the hash. Semantic equality, not construction order, is the claim.
+  const canonical = JSON.stringify(policy, (_, value) =>
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? Object.keys(value)
+          .sort()
+          .reduce((sorted, key) => {
+            sorted[key] = value[key];
+            return sorted;
+          }, {})
+      : value,
+  );
   return createHash("sha256").update(canonical).digest("hex");
 }
 

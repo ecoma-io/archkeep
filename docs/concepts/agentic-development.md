@@ -78,6 +78,21 @@ The commands above are read-only. An agent cannot use them to change the rules,
 only to understand them. That asymmetry is the design: the architecture tells the
 agent what is allowed; the agent does not tell the architecture what to allow.
 
+## What `context` and `impact` do not check
+
+The per-edge verdicts in `context` and `impact` cover only the `depConstraints`
+table — tag-based rules such as `onlyDependOnLibsWithTags` and
+`notDependOnLibsWithTags`. Eleven other violation types, including npm-ban,
+circular-dependency, lazy-load, and relative-import rules, require import-site
+details (the `file:line:column` of the import statement) and are not evaluated
+by these commands.
+
+An edge with `violations: []` in `context` or `impact` means the edge is allowed
+by the constraint table — it does **not** mean the edge is free of all boundary
+violations. An agent that needs the complete verdict must run `check`. The JSON
+envelopes for `context` and `impact` carry a `coverage.notes` entry stating this
+distinction.
+
 ## Where this is going
 
 [roadmap.md](../roadmap.md) owns the staged direction. The 2.x capability

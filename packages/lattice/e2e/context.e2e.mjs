@@ -87,4 +87,12 @@ describe("context (full)", () => {
     expect(appConstraint.onlyDependOnLibsWithTags).toContain("layer:api");
     expect(appConstraint.onlyDependOnLibsWithTags).toContain("layer:core");
   });
+
+  it("warns in coverage.notes that per-edge verdicts cover only depConstraints", () => {
+    const result = lattice(nativeConsumer.root, ["context", "core", "--format", "json"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.json.coverage.notes).toHaveLength(1);
+    expect(result.json.coverage.notes[0]).toContain("depConstraints");
+    expect(result.json.coverage.notes[0]).toContain("check");
+  });
 });
