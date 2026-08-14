@@ -57,7 +57,7 @@ import { formatDiffReport } from "../report/diff-text.mjs";
  * "removed" entry would be ambiguous between "gone" and "never seen").
  *
  * @param {string} path Absolute path to the baseline JSON file.
- * @returns {{projects: object[], dependencies: object[], coverage: object}}
+ * @returns {{projects: object[], dependencies: object[], coverage: object, policy: object|null}}
  * @throws {Error}
  */
 function readBaselineFromDisk(path) {
@@ -81,7 +81,7 @@ function readBaselineFromDisk(path) {
  *
  * @param {string} text The raw JSON text of the baseline envelope.
  * @param {string} path The path to name in error messages.
- * @returns {{projects: object[], dependencies: object[], coverage: object}}
+ * @returns {{projects: object[], dependencies: object[], coverage: object, policy: object|null}}
  * @throws {Error}
  */
 export function parseBaseline(text, path) {
@@ -305,7 +305,7 @@ export function computeDiff(baseline, head) {
  *
  * @param {string} baselinePath Absolute path to the baseline JSON file.
  * @param {object} commandContext From `resolveCommandContext`.
- * @param {{readBaseline?: (path: string) => {projects: object[], dependencies: object[], coverage: object},
+ * @param {{readBaseline?: (path: string) => {projects: object[], dependencies: object[], coverage: object, policy?: object|null},
  *   config?: object}} [io]
  *   Injectable baseline reader, so a test drives the diff without a real file.
  *   When omitted, reads from the real filesystem. `config` is the loaded

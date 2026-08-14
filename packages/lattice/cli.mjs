@@ -717,7 +717,7 @@ async function runCheck(options, { cwd, env }) {
  * `graph`'s `run`: resolves the command context, drives `graphCommand`, writes
  * the report where it belongs, and returns the process's exit code.
  *
- * @param {{format: string, output: string|null, paths: string[]}} options
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */

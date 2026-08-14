@@ -85,7 +85,7 @@ describe("check (full)", () => {
     expect(result.exitCode).toBe(0);
     expect(result.json).not.toBeNull();
     expect(result.json.command).toBe("check");
-    expect(result.json.schemaVersion).toBe(1);
+    expect(result.json.schemaVersion).toBe(2);
     expect(result.json.status).toBe("ok");
     expect(result.json.exitCode).toBe(0);
     expect(result.json.coverage.complete).toBe(true);
