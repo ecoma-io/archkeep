@@ -24,7 +24,7 @@
  * timestamp is not.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 /**
  * Resolves repository provenance from the workspace root.
@@ -37,7 +37,7 @@ import { execSync } from "node:child_process";
  */
 export function resolveProvenance(root) {
   try {
-    const commit = execSync("git rev-parse HEAD", {
+    const commit = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: root,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -48,7 +48,7 @@ export function resolveProvenance(root) {
     // the tree.
     let remote = null;
     try {
-      const remotes = execSync("git remote", {
+      const remotes = execFileSync("git", ["remote"], {
         cwd: root,
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "pipe"],
@@ -56,7 +56,7 @@ export function resolveProvenance(root) {
       if (remotes) {
         // Use the first remote's URL — typically "origin".
         const firstRemote = remotes.split("\n")[0].trim();
-        remote = execSync(`git remote get-url ${firstRemote}`, {
+        remote = execFileSync("git", ["remote", "get-url", firstRemote], {
           cwd: root,
           encoding: "utf-8",
           stdio: ["pipe", "pipe", "pipe"],
@@ -69,7 +69,7 @@ export function resolveProvenance(root) {
     // Dirty: any uncommitted change to tracked files means the working tree
     // does not match the commit. A baseline from a dirty tree is not a
     // reproducible claim about that commit.
-    const status = execSync("git status --porcelain", {
+    const status = execFileSync("git", ["status", "--porcelain"], {
       cwd: root,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],

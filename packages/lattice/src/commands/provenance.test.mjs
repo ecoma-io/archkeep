@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { resolveProvenance } from "./provenance.mjs";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,7 +48,7 @@ describe("resolveProvenance", () => {
     // verify the field exists and matches what git status actually reports.
     const provenance = resolveProvenance(process.cwd());
     expect(provenance).not.toBeNull();
-    const status = execSync("git status --porcelain", { encoding: "utf-8" }).trim();
+    const status = execFileSync("git", ["status", "--porcelain"], { encoding: "utf-8" }).trim();
     const expectedDirty = status.length > 0;
     expect(provenance.dirty).toBe(expectedDirty);
   });
@@ -56,7 +56,7 @@ describe("resolveProvenance", () => {
   it("reports commit matching git rev-parse HEAD", () => {
     const provenance = resolveProvenance(process.cwd());
     expect(provenance).not.toBeNull();
-    const expected = execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
+    const expected = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf-8" }).trim();
     expect(provenance.commit).toBe(expected);
   });
 
@@ -65,10 +65,10 @@ describe("resolveProvenance", () => {
     expect(provenance).not.toBeNull();
     let expectedRemote = null;
     try {
-      const remotes = execSync("git remote", { encoding: "utf-8" }).trim();
+      const remotes = execFileSync("git", ["remote"], { encoding: "utf-8" }).trim();
       if (remotes) {
         const firstRemote = remotes.split("\n")[0].trim();
-        expectedRemote = execSync(`git remote get-url ${firstRemote}`, {
+        expectedRemote = execFileSync("git", ["remote", "get-url", firstRemote], {
           encoding: "utf-8",
         }).trim();
       }
