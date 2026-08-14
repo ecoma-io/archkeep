@@ -58,6 +58,42 @@ integration but whose tracked files include polyglot manifests under project roo
 `diff` refuses loudly rather than computing a diff against a head whose edges
 silently under-represent the real architecture.
 
+## Rule-impact analysis
+
+When a boundary config is available (via `--config` or the workspace's own
+declaration), `diff` also computes which boundary violations the added edges
+introduce and which the removed edges resolve — the **rule impact** of the
+structural diff.
+
+This is narrower than `check`: it judges only `depConstraints` (tag-based rules
+such as `onlyDependOnLibsWithTags` and `notDependOnLibsWithTags`), not npm bans,
+circular dependencies, or lazy-load rules that need import-site details. A
+consumer who needs the complete verdict should run `check`.
+
+The rule-impact section appears whenever a boundary config is available — the
+workspace's own or one named by `--config`. Only a workspace with no
+boundaryConfig at all omits it, reporting structural changes only.
+
+### Flags for rule-impact
+
+| flag       | argument | default                  | meaning                                                              |
+| ---------- | -------- | ------------------------ | -------------------------------------------------------------------- |
+| `--config` | `<file>` | (from workspace options) | Read the boundary law from here instead of the workspace's own file. |
+
+When a boundary config is available, the rule-impact section appears after the
+structural changes. Without one, `diff` reports only added and removed projects
+and edges.
+
+### What the rule-impact section contains
+
+- **Introduced violations** — edges the diff added that violate a
+  `depConstraints` row. Each shows the source → target, the `messageId`, and
+  the constraint tag that the edge violates.
+- **Resolved violations** — edges the diff removed that were previously
+  violating. Same shape.
+- **No boundary-rule impact** — when the config was provided but no violations
+  changed, the report says so explicitly rather than being silent.
+
 ## Why there is no `--since`
 
 `diff` takes a snapshot file, not a Git ref. A `--since` flag would mean

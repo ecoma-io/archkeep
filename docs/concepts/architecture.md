@@ -102,6 +102,25 @@ return unchecked > 0 ? 3 : 0;
 Exit 0 was the bug. A checker that could not look must never be mistaken for one
 that looked and found nothing.
 
+## The six commands
+
+| command   | what it does                                                         | finds violations |
+| --------- | -------------------------------------------------------------------- | ---------------- |
+| `check`   | Judges every import site against the boundary law                    | yes — exits 1    |
+| `graph`   | Prints the project graph as a deterministic snapshot                 | no               |
+| `diff`    | Compares two graph snapshots, with optional rule-impact analysis     | no               |
+| `impact`  | Lists projects that depend on the named one, with constraint context | no               |
+| `explain` | Explains the judgment for one import site                            | no               |
+| `context` | Shows the architecture constraints that apply to a project           | no               |
+
+`check` is the only command that exits 1. The other five are descriptive: they
+answer questions about the architecture without claiming a violation. `context`
+answers the question an agent asks _before_ editing (what is this project
+allowed to reach?); `impact` answers the question during planning (what depends
+on this?); `explain` answers the question after a violation is reported (why
+did this one fail?). `diff` answers the question across time (what changed, and
+what boundary implications did the change carry?).
+
 ## The three faces
 
 | face             | when it runs                       | what it reads the graph from                   |
@@ -137,3 +156,13 @@ about what is a violation.
 
 **Options are the only layer that knows what a workspace named its files.**
 Everything downstream takes a resolved name as an argument.
+
+## Related concepts
+
+- [drift.md](drift.md) — what architectural drift means, and the three signals
+  Lattice uses to detect it.
+- [agentic-development.md](agentic-development.md) — the three questions an
+  agent asks, and the commands that answer them.
+- [boundaries.md](boundaries.md) — the constraint model and what "violation"
+  means.
+- [graph.md](graph.md) — project graph, edge identity, deterministic snapshots.

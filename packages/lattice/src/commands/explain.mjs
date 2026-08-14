@@ -269,12 +269,8 @@ export function explainCommand(site, commandContext, config) {
   const sourceProjectNode = sourceProjectName ? (graph.nodes[sourceProjectName] ?? null) : null;
   const targetProjectNode = targetProjectName ? (graph.nodes[targetProjectName] ?? null) : null;
 
-  const sourceTags = sourceProjectNode
-    ? (sourceProjectNode.data?.tags ?? sourceProjectNode.tags ?? [])
-    : [];
-  const targetTags = targetProjectNode
-    ? (targetProjectNode.data?.tags ?? targetProjectNode.tags ?? [])
-    : [];
+  const sourceTags = sourceProjectNode ? (sourceProjectNode.data?.tags ?? []) : [];
+  const targetTags = targetProjectNode ? (targetProjectNode.data?.tags ?? []) : [];
 
   // Find which constraint rows match the source project's tags — this is the
   // "allowed" explanation. A project with no matching constraints would have

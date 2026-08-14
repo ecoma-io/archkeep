@@ -116,7 +116,11 @@ different reader needs the answer at a different moment.
   on being cheap.
 - **The CLI** — the verdict as an exit code, which is the only form CI can read.
   Its four codes exist so a script can tell "your tree is dirty" from "the
-  checker could not look", and that distinction is the whole design.
+  checker could not look", and that distinction is the whole design. `context`
+  and `impact` answer the questions an agent asks before editing: what is this
+  project allowed to reach, and what depends on it?
+  [agentic-development.md](../concepts/agentic-development.md) describes the
+  three-question model.
 - **The language server** — the verdict at the edit. It runs in any LSP client;
   Claude Code installs it from this repository's own marketplace.
 - **The editor extension** — the same server, packaged so a developer installs it

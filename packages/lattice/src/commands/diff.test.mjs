@@ -283,14 +283,12 @@ describe("diffCommand", () => {
           alpha: {
             name: "alpha",
             type: "lib",
-            data: { root: "libs/alpha" },
-            tags: ["layer:domain"],
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
           },
           beta: {
             name: "beta",
             type: "lib",
             data: { root: "libs/beta" },
-            tags: [],
           },
         },
         dependencies: {
@@ -339,7 +337,7 @@ describe("diffCommand", () => {
             data: { root: "libs/alpha" },
             tags: ["layer:domain"],
           },
-          beta: { name: "beta", type: "lib", data: { root: "libs/beta" }, tags: [] },
+          beta: { name: "beta", type: "lib", data: { root: "libs/beta" } },
         },
         dependencies: {
           alpha: [
@@ -440,5 +438,225 @@ describe("diffCommand", () => {
     ]);
     // Not a whole-file failure, so coverage is still "complete" and the diff can run.
     expect(result.coverage.complete).toBe(true);
+  });
+
+  it("reports boundary violations introduced by added edges", () => {
+    const baseline = baselineEnvelope({
+      projects: [
+        { name: "alpha", root: "libs/alpha", tags: ["layer:domain"] },
+        { name: "beta", root: "libs/beta", tags: ["layer:util"] },
+        { name: "gamma", root: "libs/gamma", tags: ["layer:app"] },
+      ],
+      dependencies: [{ source: "alpha", target: "beta", type: "static" }],
+    });
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+          beta: {
+            name: "beta",
+            type: "lib",
+            data: { root: "libs/beta", tags: ["layer:util"] },
+          },
+          gamma: {
+            name: "gamma",
+            type: "lib",
+            data: { root: "libs/gamma", tags: ["layer:app"] },
+          },
+        },
+        dependencies: {
+          alpha: [
+            { target: "beta", type: "static" },
+            { target: "gamma", type: "static" },
+          ],
+        },
+      },
+    });
+    const config = {
+      depConstraints: [
+        {
+          sourceTag: "layer:domain",
+          onlyDependOnLibsWithTags: ["layer:domain", "layer:util"],
+          description: "Domain isolation",
+          remediation: "Depend on a domain or utility project",
+        },
+      ],
+    };
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+      config,
+    });
+
+    expect(result.diff.ruleImpact.introduced).toHaveLength(1);
+    expect(result.diff.ruleImpact.introduced[0].messageId).toBe("onlyTagsConstraintViolation");
+    expect(result.diff.ruleImpact.introduced[0].source).toBe("alpha");
+    expect(result.diff.ruleImpact.introduced[0].target).toBe("gamma");
+    expect(result.diff.ruleImpact.introduced[0].constraint.description).toBe("Domain isolation");
+    expect(result.report.text).toContain("boundary violation introduced");
+    expect(result.report.text).toContain("alpha → gamma");
+
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.result.ruleImpact.introduced).toHaveLength(1);
+  });
+
+  it("reports boundary violations resolved by removed edges", () => {
+    const baseline = baselineEnvelope({
+      projects: [
+        { name: "alpha", root: "libs/alpha", tags: ["layer:domain"] },
+        { name: "gamma", root: "libs/gamma", tags: ["layer:app"] },
+      ],
+      dependencies: [{ source: "alpha", target: "gamma", type: "static" }],
+    });
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+          gamma: {
+            name: "gamma",
+            type: "lib",
+            data: { root: "libs/gamma", tags: ["layer:app"] },
+          },
+        },
+        dependencies: { alpha: [] },
+      },
+    });
+    const config = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+    };
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+      config,
+    });
+
+    expect(result.diff.ruleImpact.resolved).toHaveLength(1);
+    expect(result.diff.ruleImpact.resolved[0].messageId).toBe("onlyTagsConstraintViolation");
+    expect(result.report.text).toContain("boundary violation resolved");
+  });
+
+  it("reports no boundary-rule impact when changed edges are allowed", () => {
+    const baseline = baselineEnvelope({
+      projects: [
+        { name: "alpha", root: "libs/alpha", tags: ["layer:domain"] },
+        { name: "beta", root: "libs/beta", tags: ["layer:util"] },
+      ],
+      dependencies: [],
+    });
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+          beta: {
+            name: "beta",
+            type: "lib",
+            data: { root: "libs/beta", tags: ["layer:util"] },
+          },
+        },
+        dependencies: { alpha: [{ target: "beta", type: "static" }] },
+      },
+    });
+    const config = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:util"] }],
+    };
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+      config,
+    });
+
+    expect(result.diff.ruleImpact.introduced).toEqual([]);
+    expect(result.diff.ruleImpact.resolved).toEqual([]);
+    expect(result.report.text).toContain("no boundary-rule impact");
+  });
+
+  it("omits ruleImpact when no boundary config is provided", () => {
+    const result = diffCommand("/baseline.json", commandContext(), {
+      readBaseline: () => baselineEnvelope(),
+    });
+    expect(result.diff).not.toHaveProperty("ruleImpact");
+  });
+
+  it("includes ruleImpact with empty introduced/resolved when config is provided but no structural changes", () => {
+    // Bug 1 regression: the renderer hid this section, but the command
+    // must always produce ruleImpact when a boundary config is available,
+    // so the renderer can show "no boundary-rule impact".
+    const baseline = baselineEnvelope({
+      projects: [
+        { name: "alpha", root: "libs/alpha", tags: ["layer:domain"] },
+        { name: "beta", root: "libs/beta", tags: ["layer:util"] },
+      ],
+      dependencies: [{ source: "alpha", target: "beta", type: "static" }],
+    });
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+          beta: { name: "beta", type: "lib", data: { root: "libs/beta", tags: ["layer:util"] } },
+        },
+        dependencies: { alpha: [{ target: "beta", type: "static" }] },
+      },
+    });
+    const config = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:util"] }],
+    };
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+      config,
+    });
+    expect(result.diff.ruleImpact).toBeDefined();
+    expect(result.diff.ruleImpact.introduced).toEqual([]);
+    expect(result.diff.ruleImpact.resolved).toEqual([]);
+    expect(result.report.text).toContain("no boundary-rule impact");
+  });
+
+  it("treats a baseline project missing the tags key as having empty tags", () => {
+    // edge-constraints.mjs uses `project.tags ?? []` when building baseline
+    // nodes from the snapshot — a project with no `tags` key (not `{tags:[]}`)
+    // must be treated as untagged, not as undefined.
+    const baseline = baselineEnvelope({
+      projects: [
+        { name: "alpha", root: "libs/alpha" },
+        { name: "beta", root: "libs/beta" },
+      ],
+      dependencies: [],
+    });
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: { name: "alpha", type: "lib", data: { root: "libs/alpha" } },
+          beta: { name: "beta", type: "lib", data: { root: "libs/beta" } },
+        },
+        dependencies: { alpha: [{ target: "beta", type: "static" }] },
+      },
+    });
+    const config = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+    };
+    const result = diffCommand("/baseline.json", ctx, {
+      readBaseline: () => baseline,
+      config,
+    });
+    expect(result.diff.ruleImpact).toBeDefined();
+    // alpha has no tags in the head graph (data.tags absent), so the new
+    // alpha→beta edge should flag projectWithoutTagsCannotHaveDependencies
+    const introduced = result.diff.ruleImpact.introduced;
+    expect(introduced.length).toBeGreaterThanOrEqual(1);
+    expect(introduced.some((v) => v.messageId === "projectWithoutTagsCannotHaveDependencies")).toBe(
+      true,
+    );
   });
 });

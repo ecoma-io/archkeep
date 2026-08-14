@@ -100,7 +100,12 @@ two:
 ```js
 export const depConstraints = [
   { sourceTag: "layer:app", onlyDependOnLibsWithTags: ["layer:domain", "layer:util"] },
-  { sourceTag: "scope:billing", onlyDependOnLibsWithTags: ["scope:billing", "scope:shared"] },
+  {
+    sourceTag: "scope:billing",
+    onlyDependOnLibsWithTags: ["scope:billing", "scope:shared"],
+    description: "Billing services must not reach outside their scope",
+    remediation: "Move the shared logic into a scope:shared library",
+  },
 ];
 
 export const moduleBoundaryOptions = {
@@ -135,10 +140,13 @@ pnpm exec lattice check --config boundaries.custom.mjs
 pnpm exec lattice graph
 pnpm exec lattice graph --format json --output snapshot.json
 pnpm exec lattice diff snapshot.json
+pnpm exec lattice diff snapshot.json --config boundaries.mjs
 pnpm exec lattice impact billing-core
-pnpm exec lattice impact billing-core --format json
+pnpm exec lattice impact billing-core --config boundaries.mjs
 pnpm exec lattice explain libs/billing/main.go:10:5
 pnpm exec lattice explain libs/billing/main.go:10:5 --format json
+pnpm exec lattice context billing-core
+pnpm exec lattice context billing-core --format json
 ```
 
 `graph` prints the project graph as a deterministic snapshot: two sorted arrays,
@@ -147,22 +155,36 @@ one of projects and one of edges, with internal fields stripped and
 finding — and never exits 1.
 
 `diff` compares that snapshot (a file, not a git ref) with the current
-workspace, reporting projects and edges added or removed. It refuses an
-incomplete baseline or head, because every "removed" entry would be ambiguous
-between "gone" and "never seen". It is descriptive and never exits 1.
+workspace, reporting projects and edges added or removed. When a boundary config
+is available (via `--config` or the workspace's own declaration), it also
+reports which boundary violations the added edges introduce and which the
+removed edges resolve. It refuses an incomplete baseline or head, because every
+"removed" entry would be ambiguous between "gone" and "never seen". It is
+descriptive and never exits 1.
 
 `impact` takes a project name and lists every project that transitively depends
 on it — the set a developer needs to consider before changing that project. It
-separates direct from transitive dependents and refuses incomplete coverage. An
-empty `dependents` list is a claim ("nothing depends on this"), not a shrug. It
-is descriptive and never exits 1.
+separates direct from transitive dependents and refuses incomplete coverage.
+When a boundary config is available, it also shows which constraint rows govern
+each dependent's edge and whether it violates them. An empty `dependents` list
+is a claim ("nothing depends on this"), not a shrug. It is descriptive and
+never exits 1.
 
 `explain` takes a `file:line:column` site and explains the judgment for that
 one import: which constraint row matched, which tags applied, whether it is a
-violation and why. A site that could not be resolved statically (a dynamic
+violation and why. Constraint rows that carry `description` or `remediation`
+show those fields. A site that could not be resolved statically (a dynamic
 `import()` with a non-literal argument) gets an `UNRESOLVABLE` verdict with
 the reason. `explain` accepts `--config` (same as `check`) because the judgment
 depends on which boundary law is in effect. It is descriptive and never exits 1.
+
+`context` takes a project name and shows the architecture constraints that
+govern it: the project's tags, which `depConstraints` rows match those tags,
+and what each row allows or bans. It answers the question a developer or an AI
+agent asks before editing a project — what is this project allowed to reach?
+It is the same constraint table `check` judges from, rendered as a readable
+summary rather than as a list of violations. It is descriptive and never
+exits 1.
 
 `--format json` wraps the same verdict `text` and `sarif` already compute in a
 versioned envelope — every field name and `schemaVersion` are a public

@@ -47,9 +47,13 @@ and then takes any of four optional list fields:
 | `allowedExternalImports`   | an allowlist for third-party specifiers          |
 | `bannedExternalImports`    | a denylist for third-party specifiers            |
 
-Anything else in a row is rejected at load. A row with an unknown field would
-otherwise be a rule that matches nothing — and a constraint matching nothing
-does not error, it approves.
+Anything else in a row is rejected at load — with two exceptions.
+`description` and `remediation` are optional documentation fields that do not
+affect the verdict. They appear in `context`, `explain`, `impact` and `diff`
+output so a developer can understand and resolve a violation without opening
+the config file directly. A row with any other unknown field would be a rule
+that matches nothing — and a constraint matching nothing does not error, it
+approves.
 
 ## Five semantics that surprise people
 

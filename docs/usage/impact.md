@@ -41,6 +41,45 @@ under-represent the real architecture.
 
 Exit 3, with that sentence in the error message.
 
+## Constraint context
+
+When a boundary config is available (via `--config` or the workspace's own
+declaration), `impact` also shows the **constraint context** for each dependent:
+which `depConstraints` rows govern that dependent's edge to the target project,
+and whether the edge currently violates them.
+
+This is narrower than `check`: it judges only `depConstraints` (tag-based rules
+such as `onlyDependOnLibsWithTags` and `notDependOnLibsWithTags`), not npm bans,
+circular dependencies, or lazy-load rules that need import-site details. A
+consumer who needs the complete verdict should run `check`.
+
+The constraint-context section appears whenever a boundary config is available —
+the workspace's own or one named by `--config`. Only a workspace with no
+boundaryConfig at all omits it, reporting dependents only.
+
+### Flags for constraint context
+
+| flag       | argument | default                  | meaning                                                              |
+| ---------- | -------- | ------------------------ | -------------------------------------------------------------------- |
+| `--config` | `<file>` | (from workspace options) | Read the boundary law from here instead of the workspace's own file. |
+
+When a boundary config is available, a "Constraint context" section follows the
+dependent listing. Without one, `impact` reports only the dependent list.
+
+### What the constraint-context section contains
+
+Each dependent is shown with a ✔ or ✖ marker:
+
+- **✔** — the edge to the target does not violate any matching constraint row.
+- **✖** — the edge violates at least one constraint row. The violation's
+  source → target and `messageId` are listed.
+
+Below each dependent, the matching constraint rows are listed: the tag that
+governs the edge, and what it allows or bans (`only [...]` / `not [...]`). When
+a constraint row carries `description` or `remediation`, those appear indented
+below it. A dependent with no matching constraint rows is noted explicitly —
+the project is unconstrained, not the command having failed to look.
+
 ## Exit codes
 
 | code | meaning                                                                             |

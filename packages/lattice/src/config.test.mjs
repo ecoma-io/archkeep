@@ -79,6 +79,50 @@ describe("findBoundaryConfigViolations", () => {
     expect(violations[0]).toMatch(/bannedExternalImport: not a constraint field/);
   });
 
+  it("accepts description and remediation on a constraint row, because they give a rule a name and a fix", () => {
+    expect(
+      findBoundaryConfigViolations({
+        ...wellFormed(),
+        depConstraints: [
+          {
+            sourceTag: "layer:domain",
+            notDependOnLibsWithTags: ["layer:infrastructure"],
+            description: "Domain isolation",
+            remediation: "Depend on an application-owned interface",
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("rejects an empty description, because an empty name explains less than none", () => {
+    const violations = findBoundaryConfigViolations({
+      ...wellFormed(),
+      depConstraints: [{ sourceTag: "layer:domain", description: "" }],
+    });
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(/description: must be a non-empty string/);
+  });
+
+  it("rejects an empty remediation, because an empty fix is the same as none", () => {
+    const violations = findBoundaryConfigViolations({
+      ...wellFormed(),
+      depConstraints: [{ sourceTag: "layer:domain", remediation: "" }],
+    });
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(/remediation: must be a non-empty string/);
+  });
+
+  it("rejects a non-string description or remediation", () => {
+    const violations = findBoundaryConfigViolations({
+      ...wellFormed(),
+      depConstraints: [{ sourceTag: "layer:domain", description: 42, remediation: true }],
+    });
+    expect(violations).toHaveLength(2);
+    expect(violations[0]).toMatch(/description: must be a non-empty string/);
+    expect(violations[1]).toMatch(/remediation: must be a non-empty string/);
+  });
+
   it("requires every tag list to hold strings", () => {
     const violations = findBoundaryConfigViolations({
       ...wellFormed(),

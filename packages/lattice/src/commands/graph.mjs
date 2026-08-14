@@ -75,7 +75,7 @@ export function buildProjects(nodes) {
           name: node.name,
           root: data.root,
           type: node.type,
-          tags: node.tags ?? data.tags ?? [],
+          tags: data.tags ?? [],
         };
         // Emit `targets` only when the node declares any. A native project has
         // no target table, and an empty array would falsely assert "zero

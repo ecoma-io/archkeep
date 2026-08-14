@@ -28,7 +28,6 @@ describe("buildProjects", () => {
           entryPoints: ["src/main.ts"],
           declaredPackages: ["@scope/a"],
         },
-        tags: [],
       },
     };
     const [project] = buildProjects(nodes);
@@ -40,15 +39,15 @@ describe("buildProjects", () => {
 
   it("sorts projects by name using plain string comparison (never localeCompare)", () => {
     const nodes = {
-      z: { name: "z", data: { root: "libs/z" }, tags: [] },
-      a: { name: "a", data: { root: "libs/a" }, tags: [] },
-      m: { name: "m", data: { root: "libs/m" }, tags: [] },
+      z: { name: "z", data: { root: "libs/z" } },
+      a: { name: "a", data: { root: "libs/a" } },
+      m: { name: "m", data: { root: "libs/m" } },
     };
     const names = buildProjects(nodes).map((p) => p.name);
     expect(names).toEqual(["a", "m", "z"]);
   });
 
-  it("falls back to data.tags when node.tags is absent", () => {
+  it("reads tags from data.tags (no provider writes node.tags)", () => {
     const nodes = {
       a: { name: "a", data: { root: "libs/a", tags: ["scope:core"] } },
     };
@@ -56,7 +55,7 @@ describe("buildProjects", () => {
     expect(project.tags).toEqual(["scope:core"]);
   });
 
-  it("uses an empty array when neither node.tags nor data.tags exists", () => {
+  it("uses an empty array when data.tags is absent", () => {
     const nodes = {
       a: { name: "a", data: { root: "libs/a" } },
     };
@@ -69,7 +68,6 @@ describe("buildProjects", () => {
       a: {
         name: "a",
         data: { root: "libs/a", targets: { build: {}, test: {} } },
-        tags: [],
       },
     };
     const [project] = buildProjects(nodes);
@@ -81,7 +79,6 @@ describe("buildProjects", () => {
       a: {
         name: "a",
         data: { root: "libs/a", targets: { test: {}, build: {}, lint: {} } },
-        tags: [],
       },
     };
     const [project] = buildProjects(nodes);
@@ -93,7 +90,6 @@ describe("buildProjects", () => {
       a: {
         name: "a",
         data: { root: "libs/a", targets: {} },
-        tags: [],
       },
     };
     const [project] = buildProjects(nodes);
@@ -102,7 +98,7 @@ describe("buildProjects", () => {
 
   it("omits targets when the node has no targets key at all", () => {
     const nodes = {
-      a: { name: "a", data: { root: "libs/a" }, tags: [] },
+      a: { name: "a", data: { root: "libs/a" } },
     };
     const [project] = buildProjects(nodes);
     expect("targets" in project).toBe(false);
@@ -110,7 +106,7 @@ describe("buildProjects", () => {
 
   it("includes type from node.type when present", () => {
     const nodes = {
-      a: { name: "a", type: "lib", data: { root: "libs/a" }, tags: [] },
+      a: { name: "a", type: "lib", data: { root: "libs/a" } },
     };
     const [project] = buildProjects(nodes);
     expect(project.type).toBe("lib");
@@ -118,7 +114,7 @@ describe("buildProjects", () => {
 
   it("omits type when node has no type field", () => {
     const nodes = {
-      a: { name: "a", data: { root: "libs/a" }, tags: [] },
+      a: { name: "a", data: { root: "libs/a" } },
     };
     const [project] = buildProjects(nodes);
     expect(project.type).toBeUndefined();
@@ -128,12 +124,12 @@ describe("buildProjects", () => {
     // Silent direction: an order-dependent payload makes every `diff` report
     // phantom changes and trains users to ignore it.
     const nodesA = {
-      alpha: { name: "alpha", data: { root: "libs/alpha" }, tags: [] },
-      beta: { name: "beta", data: { root: "libs/beta" }, tags: [] },
+      alpha: { name: "alpha", data: { root: "libs/alpha" } },
+      beta: { name: "beta", data: { root: "libs/beta" } },
     };
     const nodesB = {
-      beta: { name: "beta", data: { root: "libs/beta" }, tags: [] },
-      alpha: { name: "alpha", data: { root: "libs/alpha" }, tags: [] },
+      beta: { name: "beta", data: { root: "libs/beta" } },
+      alpha: { name: "alpha", data: { root: "libs/alpha" } },
     };
     expect(JSON.stringify(buildProjects(nodesA))).toEqual(JSON.stringify(buildProjects(nodesB)));
   });
@@ -141,7 +137,7 @@ describe("buildProjects", () => {
   it("handles null-prototype containers (native graph)", () => {
     // The native graph uses null-prototype containers for `__proto__` safety.
     const nodes = Object.create(null);
-    nodes.a = { name: "a", data: { root: "libs/a" }, tags: [] };
+    nodes.a = { name: "a", data: { root: "libs/a" } };
     const [project] = buildProjects(nodes);
     expect(project.name).toBe("a");
   });
@@ -206,14 +202,12 @@ describe("graphCommand", () => {
           alpha: {
             name: "alpha",
             type: "lib",
-            data: { root: "libs/alpha" },
-            tags: ["layer:domain"],
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
           },
           beta: {
             name: "beta",
             type: "lib",
             data: { root: "libs/beta" },
-            tags: [],
           },
         },
         dependencies: {
@@ -335,7 +329,7 @@ describe("graphCommand", () => {
       commandContext({
         graph: {
           nodes: {
-            alpha: { name: "alpha", data: { root: "libs/alpha" }, tags: [] },
+            alpha: { name: "alpha", data: { root: "libs/alpha" } },
           },
           dependencies: {},
           workspaceLayout: { appsDir: "applications", libsDir: "packages" },

@@ -38,6 +38,19 @@ load, naming the key.
 | `allowedExternalImports`   | string[] | Allowlist for third-party specifiers.                                   |
 | `bannedExternalImports`    | string[] | Denylist for third-party specifiers.                                    |
 
+### Documentation fields (optional)
+
+| field         | type   | meaning                                                                                               |
+| ------------- | ------ | ----------------------------------------------------------------------------------------------------- |
+| `description` | string | What this constraint row enforces and why. Shown in `context`, `explain`, `impact` and `diff` output. |
+| `remediation` | string | How to fix a violation of this row. Shown alongside the description.                                  |
+
+These fields are optional and do not affect the verdict. They exist so that a
+developer reading `lattice context`, `lattice explain`, or the constraint-context
+sections of `impact` and `diff` can understand both what the rule means and how
+to bring their import back into compliance without consulting the config file
+directly.
+
 `onlyDependOnLibsWithTags: []` is a rule, not an empty setting -- it means the
 project may not depend on any library carrying tags at all. If you meant "no
 restriction on this axis," omit the field.

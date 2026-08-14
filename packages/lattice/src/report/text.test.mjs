@@ -60,6 +60,27 @@ describe("a violation entry", () => {
     );
   });
 
+  it("renders the rule description and remediation when the constraint row carries them", () => {
+    const text = formatViolation(
+      violation({
+        constraint: {
+          sourceTag: "layer:domain",
+          onlyDependOnLibsWithTags: ["layer:domain"],
+          description: "Domain isolation",
+          remediation: "Depend on an application-owned interface",
+        },
+      }),
+    );
+    expect(text).toContain("rule        Domain isolation");
+    expect(text).toContain("remediation Depend on an application-owned interface");
+  });
+
+  it("omits the rule and remediation lines when the constraint row has none", () => {
+    const text = formatViolation(violation());
+    expect(text).not.toContain("rule        ");
+    expect(text).not.toContain("remediation ");
+  });
+
   it("indents every line of a multi-line message, so a wrapped one is not read as a second site", () => {
     const text = formatViolation(
       violation({

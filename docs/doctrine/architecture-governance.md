@@ -5,43 +5,31 @@ Every mechanism below runs in CI or is pinned by a test.
 
 ## The invariant
 
-**An empty result is a claim, not a shrug.** That sentence, stated in
-[AGENTS.md](../../AGENTS.md), is the measure every code path and every test is
-judged against. It makes the two error directions unequal:
+[AGENTS.md](../../AGENTS.md) owns the sentence and the reasoning under it: **an
+empty result is a claim, not a shrug.** What belongs here is why the mechanisms
+below exist because of that asymmetry rather than in spite of it.
 
-- **Loud** — reporting a violation that is not real. Someone sees it, disagrees,
-  files an issue. Self-correcting.
-- **Silent** — reporting nothing when a violation exists. Byte-for-byte identical
-  to a clean workspace. Nobody files anything. The boundary everyone believes is
-  enforced has not run for months.
-
-The silent direction is the failure Lattice exists to end, and it is the more
-dangerous of the two precisely because it is indistinguishable from success.
-Every mechanism in the code exists because of that asymmetry:
+The loud/silent asymmetry makes the two error directions unequal — a false
+positive self-corrects, a false negative is indistinguishable from success — and
+every mechanism in this document is a guard against the silent direction:
 
 - The CLI keeps four distinct exit codes. The distinction that matters is **3**
-  (could not look — no workspace, malformed config, tool failure) against **0**
-  (looked and found nothing). A checker that could not look must never be
-  mistaken for one that looked and found nothing.
+  (could not look) against **0** (looked and found nothing) —
+  [exit-codes.md](../reference/exit-codes.md).
 - The language server publishes an empty diagnostic list from exactly two named
-  places: a completed analysis that found nothing, and `clearDiagnostics` when a
-  document closes. A path that adds a third is the defect the design is built
-  around.
-- An analyzer that cannot read a file records the failure rather than dropping
-  it. The worst case of every known parse limit is a spurious record naming text
-  the file really contains — never a missed project.
+  places — [packages/lattice/CLAUDE.md](../../packages/lattice/CLAUDE.md).
+- An analyzer that cannot read a file records the failure rather than dropping it
+  — [contract.md](../../packages/lattice/src/analysis/contract.md).
 
 ## The boundary config as the single source of truth
 
-One file at the workspace root — named by the `boundaryConfig` option — is the
-single home of the constraint table and the eight options of
-`@nx/enforce-module-boundaries`. Nothing in this project restates a constraint,
-and nothing defaults an option. A default would be a second copy of a value the
-workspace already stated, and the two would disagree the day one changed.
+[north-star.md](north-star.md) refuses a second copy: "One constraint table, in
+the consumer's workspace." What follows is how Lattice's own development
+practices that refusal.
 
-This is how Lattice practices what it enforces. A workspace's architecture is
-declared in one place, and every consumer — the Nx hook, the CLI, the language
-server, the ESLint rule in a TypeScript workspace — reads from that one place.
+A workspace's architecture is declared in one place, and every consumer — the Nx
+hook, the CLI, the language server, the ESLint rule in a TypeScript workspace —
+reads from that one place.
 The conformance differential tests both engines against the same constraint table
 on the same fixtures, and the ledger of known differences is maintained because
 two enforcers reading one source is only trustworthy while you can name the ways
@@ -70,6 +58,9 @@ The enforcer's obligations:
   files, projects — beside every verdict, because "no violations" is a claim
   about coverage too. A report that stops saying what it inspected and only says
   what it found has lost the property that makes "no violations" trustworthy.
+- **Context before the edit.** The `context` command answers what a project is
+  allowed to reach before a developer or an agent writes the first import —
+  [context.md](../usage/context.md).
 - **Determinism.** Same workspace, same config, same tree, same answer. The
   consumer does not need to know which machine ran the check or which toolchains
   happened to be installed.
@@ -86,15 +77,13 @@ The consumer's obligations:
 
 ## Drift signals
 
-Four signals that the invariant is eroding, in the order they would probably
-appear:
+[north-star.md](north-star.md) owns the four signals that the invariant is
+eroding, and the argument for why each one matters. [drift.md](../concepts/drift.md)
+owns the broader concept: structural change, configuration inconsistency, and the
+gap between what the architecture declares and what the files do.
 
-1. A language ships with edges and no enforcement, "for now".
-2. A report stops saying what it inspected, and only says what it found.
-3. A shape an analyzer cannot read is discovered and fixed without its header
-   gaining a line.
-4. Someone proposes an option that makes a check not run, argued on performance.
-
-Each is individually reasonable. Together they are how a tool that exists to end
-silent non-enforcement becomes a tool that practises it.
-[north-star.md](north-star.md) owns the full argument.
+What belongs here is the governance consequence: each of those four signals is
+individually reasonable, and together they are how a tool that exists to end
+silent non-enforcement becomes a tool that practises it. The mechanisms in this
+document — the four exit codes, the two named places for an empty list, the
+failure-record contract — are the guards against that erosion.

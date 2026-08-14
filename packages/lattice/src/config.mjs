@@ -285,14 +285,39 @@ function constraintRowViolations(row, index) {
     }
     violations.push(...listEntryViolations(row[key], `${at}.${key}`, ROW_LIST_MATCHERS[key]));
   }
+  // Optional informational fields — they do not change evaluation, but they
+  // give a constraint row a name and a remediation hint that reports and
+  // explanations can surface. An unnamed constraint still enforces; a named
+  // one is easier to act on.
+  if ("description" in row) {
+    if (typeof row.description !== "string" || row.description === "") {
+      violations.push(
+        `${at}.description: must be a non-empty string when present, got ${describe(row.description)}`,
+      );
+    }
+  }
+  if ("remediation" in row) {
+    if (typeof row.remediation !== "string" || row.remediation === "") {
+      violations.push(
+        `${at}.remediation: must be a non-empty string when present, got ${describe(row.remediation)}`,
+      );
+    }
+  }
   // Rejected rather than ignored: an unknown key is almost always a
   // misspelling of one above (`bannedExternalImport`), and the rule would
   // accept the row, enforce the half it understood, and drop the ban.
+  const ROW_SCALAR_KEYS = ["description", "remediation"];
   for (const key of Object.keys(row)) {
-    if (key === "sourceTag" || key === "allSourceTags" || ROW_LIST_KEYS.includes(key)) continue;
+    if (
+      key === "sourceTag" ||
+      key === "allSourceTags" ||
+      ROW_LIST_KEYS.includes(key) ||
+      ROW_SCALAR_KEYS.includes(key)
+    )
+      continue;
     violations.push(
       `${at}.${key}: not a constraint field — expected one of ` +
-        `sourceTag, allSourceTags, ${ROW_LIST_KEYS.join(", ")}`,
+        `sourceTag, allSourceTags, ${ROW_LIST_KEYS.join(", ")}, ${ROW_SCALAR_KEYS.join(", ")}`,
     );
   }
   return violations;

@@ -388,6 +388,74 @@ describe("formatExplainReport", () => {
     expect(report).toContain("2 imports in 3 files across 4 projects");
   });
 
+  it("shows rule description and remediation when the violation's constraint carries them", () => {
+    const report = formatExplainReport({
+      explanation: {
+        site: { file: "libs/alpha/main.go", line: 10, column: 5 },
+        import: { specifier: "beta", kind: "static" },
+        sourceProject: "alpha",
+        targetProject: "beta",
+        sourceTags: ["layer:domain"],
+        targetTags: ["layer:app"],
+        matchedConstraints: [],
+        violation: {
+          messageId: "depConstraints",
+          message: "Domain layer must not depend on app layer",
+          constraint: {
+            sourceTag: "layer:domain",
+            onlyDependOnLibsWithTags: ["layer:domain"],
+            description: "Domain isolation",
+            remediation: "Depend on an application-owned interface",
+          },
+        },
+        unresolvable: false,
+        reason: null,
+      },
+      coverage: {
+        complete: true,
+        imports: 1,
+        analyzedFiles: 1,
+        projects: 2,
+        notAnalyzed: [],
+      },
+    });
+    expect(report).toContain("rule         Domain isolation");
+    expect(report).toContain("remediation  Depend on an application-owned interface");
+  });
+
+  it("omits rule and remediation lines when the violation's constraint has none", () => {
+    const report = formatExplainReport({
+      explanation: {
+        site: { file: "libs/alpha/main.go", line: 10, column: 5 },
+        import: { specifier: "beta", kind: "static" },
+        sourceProject: "alpha",
+        targetProject: "beta",
+        sourceTags: ["layer:domain"],
+        targetTags: ["layer:app"],
+        matchedConstraints: [],
+        violation: {
+          messageId: "depConstraints",
+          message: "Domain layer must not depend on app layer",
+          constraint: {
+            sourceTag: "layer:domain",
+            onlyDependOnLibsWithTags: ["layer:domain"],
+          },
+        },
+        unresolvable: false,
+        reason: null,
+      },
+      coverage: {
+        complete: true,
+        imports: 1,
+        analyzedFiles: 1,
+        projects: 2,
+        notAnalyzed: [],
+      },
+    });
+    expect(report).not.toContain("rule         ");
+    expect(report).not.toContain("remediation  ");
+  });
+
   it("renders an allSourceTags constraint row", () => {
     const report = formatExplainReport({
       explanation: {

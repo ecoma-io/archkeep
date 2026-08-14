@@ -46,7 +46,8 @@ said so** — because that is the line a fix has to agree with.
 The full catalogue of message ids and what resolves each one is in
 [violations.md](../reference/violations.md). To inspect one site's full judgment — including
 the tags and every matching constraint row — use
-[`lattice explain`](explain.md).
+[`lattice explain`](explain.md). To see which constraints apply to a project
+before editing it, use [`lattice context`](context.md).
 
 ## Scoped runs
 

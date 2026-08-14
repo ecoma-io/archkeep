@@ -115,3 +115,94 @@ describe("diff (full)", () => {
     expect(result.exitCode).toBe(3);
   });
 });
+
+describe("diff --config (full)", () => {
+  it("self-baseline diff with config shows 'no boundary-rule impact' in text", () => {
+    // Bug 1 regression: when the workspace has a boundaryConfig, a self-baseline
+    // diff must show "no boundary-rule impact" alongside "no changes" — the two
+    // are distinct claims and neither subsumes the other.
+    const baselineFile = join(nativeConsumer.root, "baseline-config-smoke.json");
+    lattice(nativeConsumer.root, ["graph", "--format", "json", "--output", baselineFile]);
+    const result = lattice(nativeConsumer.root, ["diff", baselineFile]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("no boundary-rule impact");
+    expect(result.stdout).toContain("no changes");
+  });
+
+  it("self-baseline diff with config in JSON has ruleImpact", () => {
+    const baselineFile = join(nativeConsumer.root, "baseline-config-json.json");
+    lattice(nativeConsumer.root, ["graph", "--format", "json", "--output", baselineFile]);
+    const result = lattice(nativeConsumer.root, ["diff", baselineFile, "--format", "json"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.json).not.toBeNull();
+    expect(result.json.result.ruleImpact).toBeDefined();
+    expect(result.json.result.ruleImpact.introduced).toEqual([]);
+    expect(result.json.result.ruleImpact.resolved).toEqual([]);
+  });
+
+  it("diff after violation with config shows 'boundary violation introduced'", () => {
+    const consumer = createNativeConsumer(artifact);
+    try {
+      const baselineFile = join(consumer.root, "baseline-pre-violation-config.json");
+      lattice(consumer.root, ["graph", "--format", "json", "--output", baselineFile]);
+
+      // Introduce the violation — core imports app, violating layer:core → layer:core.
+      commitFiles(consumer.root, CORE_REACHES_APP, "core reaches up into app");
+
+      const result = lattice(consumer.root, ["diff", baselineFile]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("boundary violation introduced");
+    } finally {
+      consumer.cleanup();
+    }
+  });
+
+  it("diff after violation with config in JSON has ruleImpact.introduced entries", () => {
+    const consumer = createNativeConsumer(artifact);
+    try {
+      const baselineFile = join(consumer.root, "baseline-pre-violation-config-json.json");
+      lattice(consumer.root, ["graph", "--format", "json", "--output", baselineFile]);
+
+      commitFiles(consumer.root, CORE_REACHES_APP, "core reaches up into app");
+
+      const result = lattice(consumer.root, ["diff", baselineFile, "--format", "json"]);
+      expect(result.exitCode).toBe(0);
+      expect(result.json).not.toBeNull();
+      expect(result.json.result.ruleImpact).toBeDefined();
+      expect(result.json.result.ruleImpact.introduced.length).toBeGreaterThan(0);
+      const entry = result.json.result.ruleImpact.introduced.find(
+        (v) => v.messageId === "onlyTagsConstraintViolation",
+      );
+      expect(entry).toBeDefined();
+    } finally {
+      consumer.cleanup();
+    }
+  });
+
+  it("diff with config after removing a violating edge shows 'boundary violation resolved'", () => {
+    const consumer = createNativeConsumer(artifact);
+    try {
+      // Start with the violation in place.
+      commitFiles(consumer.root, CORE_REACHES_APP, "core reaches up into app");
+      const baselineFile = join(consumer.root, "baseline-violating.json");
+      lattice(consumer.root, ["graph", "--format", "json", "--output", baselineFile]);
+
+      // Remove the violation: restore core's go.mod and rewrite violate.go
+      // so it no longer imports app. The workspace's own boundaryConfig is
+      // used automatically.
+      const CLEAN_CORE_GO_MOD = "module example.test/core\n\ngo 1.22\n";
+      const NOOP_VIOLATE_GO = "package core\n";
+      commitFiles(
+        consumer.root,
+        { "libs/core/go.mod": CLEAN_CORE_GO_MOD, "libs/core/violate.go": NOOP_VIOLATE_GO },
+        "remove core → app violation",
+      );
+
+      const result = lattice(consumer.root, ["diff", baselineFile]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("boundary violation resolved");
+    } finally {
+      consumer.cleanup();
+    }
+  });
+});

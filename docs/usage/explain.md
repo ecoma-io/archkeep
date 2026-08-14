@@ -23,9 +23,11 @@ exits 1).
 - **The target project** — the project the import reaches, with its tags.
   `(unresolved)` when the target could not be resolved to a project.
 - **The constraint rows that matched** — which `depConstraints` rows applied to
-  the source project's tags. `(none)` when no row matched.
+  the source project's tags. `(none)` when no row matched. When a constraint
+  row carries `description` or `remediation`, those appear indented below it.
 - **The verdict** — `allowed` when no constraint was violated; `VIOLATION` with
-  the `messageId` and the message when one was.
+  the `messageId`, the message, the rule description (when present), and the
+  remediation guidance (when present) when one was.
 - **Coverage** — whether this explanation is complete, same shape as every other
   command's footer.
 

@@ -128,6 +128,12 @@ export function formatExplainReport({ explanation, coverage }) {
         .map((line) => (line === "" ? "" : `${DETAIL}    ${line}`))
         .join("\n");
       sections.push(message);
+      if (v.constraint?.description) {
+        sections.push(`${DETAIL}rule         ${v.constraint.description}`);
+      }
+      if (v.constraint?.remediation) {
+        sections.push(`${DETAIL}remediation  ${v.constraint.remediation}`);
+      }
     } else {
       sections.push(`${DETAIL}verdict      allowed — no constraint was violated`);
     }

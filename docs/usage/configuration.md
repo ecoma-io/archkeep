@@ -104,16 +104,19 @@ inline form: it watches and re-reads a _file_, and an object embedded in
 
 ## CLI flags
 
-| flag       | commands that accept it                       | meaning                                                                          |
-| ---------- | --------------------------------------------- | -------------------------------------------------------------------------------- |
-| `--format` | `check`, `graph`, `diff`, `impact`, `explain` | `text` (default), `sarif` (check only), or `json` (versioned envelope)           |
-| `--output` | all commands                                  | Write the report to a file instead of stdout                                     |
-| `--config` | `check`, `explain`                            | Read the boundary law from this file instead of the workspace's `boundaryConfig` |
+| flag       | commands that accept it                                  | meaning                                                                          |
+| ---------- | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `--format` | `check`, `graph`, `diff`, `impact`, `explain`, `context` | `text` (default), `sarif` (check only), or `json` (versioned envelope)           |
+| `--output` | all commands                                             | Write the report to a file instead of stdout                                     |
+| `--config` | `check`, `diff`, `impact`, `explain`, `context`          | Read the boundary law from this file instead of the workspace's `boundaryConfig` |
 
 `--format sarif` is only available for `check`; the descriptive commands
-(`graph`, `diff`, `impact`, `explain`) produce `text` or `json` only. The
-`explain` command accepts `--config` because the judgment depends on which
-boundary law is in effect.
+(`graph`, `diff`, `impact`, `explain`, `context`) produce `text` or `json` only.
+`diff` accepts `--config` because rule-impact analysis depends on which boundary
+law is in effect. `impact` accepts it for constraint context. `explain` and
+`context` accept it because the judgment and the matching rows both depend on
+which constraint table governs. `graph` takes no `--config` because it describes
+structure, not rules.
 
 ## What is not configurable
 
