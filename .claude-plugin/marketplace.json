@@ -11,10 +11,18 @@
     {
       "name": "lattice",
       "source": "./packages/lattice",
-      "version": "1.0.1",
-      "description": "Module-boundary diagnostics at edit time for Go, Rust, Python and Vue, from the workspace's own boundary config",
+      "version": "0.4.0",
+      "description": "Module-boundary diagnostics at edit time, and architecture agent skills, for Go, Rust, Python and Vue",
       "category": "productivity",
-      "tags": ["nx", "monorepo", "module-boundaries", "polyglot", "language-server"],
+      "tags": [
+        "nx",
+        "monorepo",
+        "module-boundaries",
+        "polyglot",
+        "language-server",
+        "agent-skills",
+        "architecture"
+      ],
       "license": "Apache-2.0",
       "homepage": "https://github.com/ecoma-io/lattice#readme",
       "repository": "https://github.com/ecoma-io/lattice"
