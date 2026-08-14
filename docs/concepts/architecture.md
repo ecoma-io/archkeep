@@ -104,14 +104,14 @@ that looked and found nothing.
 
 ## The six commands
 
-| command   | what it does                                                         | finds violations |
-| --------- | -------------------------------------------------------------------- | ---------------- |
-| `check`   | Judges every import site against the boundary law                    | yes — exits 1    |
-| `graph`   | Prints the project graph as a deterministic snapshot                 | no               |
-| `diff`    | Compares two graph snapshots, with optional rule-impact analysis     | no               |
-| `impact`  | Lists projects that depend on the named one, with constraint context | no               |
-| `explain` | Explains the judgment for one import site                            | no               |
-| `context` | Shows the architecture constraints that apply to a project           | no               |
+| command   | what it does                                                          | finds violations |
+| --------- | --------------------------------------------------------------------- | ---------------- |
+| `check`   | Judges every import site against the boundary law                     | yes — exits 1    |
+| `graph`   | Prints the project graph as a deterministic snapshot                  | no               |
+| `diff`    | Compares two graph snapshots, with optional rule-impact analysis      | no               |
+| `impact`  | Lists projects that depend on the named one, with constraint context¹ | no               |
+| `explain` | Explains the judgment for one import site                             | no               |
+| `context` | Shows the architecture constraints that apply to a project¹           | no               |
 
 `check` is the only command that exits 1. The other five are descriptive: they
 answer questions about the architecture without claiming a violation. `context`
@@ -120,6 +120,11 @@ allowed to reach?); `impact` answers the question during planning (what depends
 on this?); `explain` answers the question after a violation is reported (why
 did this one fail?). `diff` answers the question across time (what changed, and
 what boundary implications did the change carry?).
+
+¹ Per-edge verdicts in `context` and `impact` cover only `depConstraints`
+(3 of 15 violation types). An edge with no violations in these commands may
+still violate npm-ban, circular-dependency, lazy-load, or other rules that
+require import-site details. Run `check` for the complete verdict.
 
 ## The three faces
 
@@ -159,8 +164,8 @@ Everything downstream takes a resolved name as an argument.
 
 ## Related concepts
 
-- [drift.md](drift.md) — what architectural drift means, and the three signals
-  Lattice uses to detect it.
+- [drift.md](drift.md) — what architectural drift means, and which commands
+  surface it.
 - [agentic-development.md](agentic-development.md) — the three questions an
   agent asks, and the commands that answer them.
 - [boundaries.md](boundaries.md) — the constraint model and what "violation"

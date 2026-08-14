@@ -39,6 +39,7 @@ import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatImpactReport } from "../report/impact-text.mjs";
+import { resolveProvenance } from "./provenance.mjs";
 
 /**
  * Computes the impact set: every project that transitively depends on
@@ -173,14 +174,14 @@ export function impactCommand(projectName, commandContext, config = null) {
       .filter((f) => !isWholeFileFailure(f))
       .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
     notes: [
-      "per-edge violations cover only depConstraints (tag-based rules). " +
+      "per-edge violations cover only depConstraints (3 of 15 violation types). " +
         "A dependent with no violations here may still violate npm-ban, circular-dependency, " +
         "lazy-load, or other rules that require import-site details. Run `check` for the " +
         "complete verdict.",
     ],
   };
 
-  const context = { root, provider, marker };
+  const context = { root, provider, marker, provenance: resolveProvenance(root) };
   const result = {
     project: impact.project,
     direct: impact.direct,

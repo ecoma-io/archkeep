@@ -51,16 +51,16 @@ follows) are both written for each command to reuse the same wrapper.
 
 ## Top-level fields
 
-| field           | type                                     | meaning                                                                                                                                                                                                                       |
-| --------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                       |
-| `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                                                                      |
-| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                |
-| `workspace`     | `{root, provider, marker}`               | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"lattice.json"`, `".moon"`, or `".config/moon"`). |
-| `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                       |
-| `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                |
-| `coverage`      | object                                   | What the run inspected, and what it could not. See below.                                                                                                                                                                     |
-| `result`        | object                                   | The command's own payload — for `check`, the violations and the two workspace-level checks. See below.                                                                                                                        |
+| field           | type                                     | meaning                                                                                                                                                                                                                                                                                                                 |
+| --------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                                                                                                                 |
+| `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                                                                                                                                                                |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                                                                                          |
+| `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"lattice.json"`, `".moon"`, or `".config/moon"`). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
+| `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                 |
+| `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                                                                                                          |
+| `coverage`      | object                                   | What the run inspected, and what it could not. See below.                                                                                                                                                                                                                                                               |
+| `result`        | object                                   | The command's own payload — for `check`, the violations and the two workspace-level checks. See below.                                                                                                                                                                                                                  |
 
 ## `status`, and the exit code it must agree with
 
@@ -106,7 +106,7 @@ not only about correctness — the same principle the terminal report's
 | `imports`       | number                           | Import sites judged against the boundary law.                                                                                                                                                                                                                                                                                                                                                  |
 | `notAnalyzed`   | `{file, reason}[]`               | Whole-file failures: a file the analyzer never reached a verdict about at all (unreadable, no analyzer, a config it depends on that would not load). Non-empty here is exactly what makes `complete` false and forces `status` away from `"ok"`.                                                                                                                                               |
 | `blindSpots`    | `{file, line, column, reason}[]` | Site-level failures: the file WAS analyzed, but one import site's target is not statically knowable (e.g. a dynamic `import()` with a non-literal argument). These do not affect `complete` — the file was judged.                                                                                                                                                                             |
-| `notes`         | string[]                         | Notes about how the boundary law itself was read — today, only the ESLint `boundaryConfig` dialect ever populates this, naming which `files`-scoped entry it bound.                                                                                                                                                                                                                            |
+| `notes`         | string[]                         | Caveats about how the result should be interpreted: ESLint dialect parsing (`check`), provider mismatches between baseline and head (`diff`), provenance gaps (`diff`), policy fingerprint disagreements (`diff`), or depConstraints narrowing (`context`, `impact`).                                                                                                                          |
 | `coverageGaps`  | `{kind, manifests}[]`            | Gaps in Nx-graph coverage that the checker's own analysis covers but `nx affected` and `@nx/enforce-module-boundaries` do not. Currently only one kind: `"unregistered-plugin"` — an Nx workspace whose `nx.json` does not register this plugin but whose tracked files include polyglot manifests (`go.mod`, `Cargo.toml`, `pyproject.toml`) under project roots. Empty when there is no gap. |
 
 The distinction between `notAnalyzed` and `blindSpots` is the same one the
@@ -114,6 +114,30 @@ terminal report draws under two separate headings, and it is load-bearing:
 losing a whole file is a coverage hole (`status: "no-verdict"` when nothing
 else fired); one unresolvable site inside an otherwise-analyzed file is a
 declared limit the run states and moves past.
+
+## `workspace.provenance`
+
+Optional git provenance for the run. When git is available in the workspace,
+the envelope carries the commit, remote, and dirty state so a consumer can
+verify which repository and which tree state produced the output. When git is
+not available (a test harness, a directory without `.git`), `provenance` is
+`null` — the envelope carries no origin claim it cannot verify.
+
+`workspace.root` is a local path that varies by machine and is **not**
+repository identity. `provenance` is the stable identity when it exists.
+
+| field    | type             | meaning                                                                                                                                            |
+| -------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `commit` | string           | The full SHA-1 hex of `HEAD` at the time of the run.                                                                                               |
+| `remote` | `null` \| string | The URL of the first git remote (typically `origin`), or `null` when the repository has no remotes.                                                |
+| `dirty`  | boolean          | `true` when `git status --porcelain` reports any uncommitted change — the working tree does not match the commit the envelope claims to come from. |
+
+A `diff` baseline that carries `provenance` allows the consumer to verify it
+came from the same repository as the head. When both sides carry provenance
+but their remotes differ, `diff` emits a `coverage.notes` warning that the
+diff may be across unrelated repositories. When one side has provenance and the
+other does not, a `coverage.notes` warning states that cross-repository
+verification is not possible.
 
 ## `result` (for `command: "check"`)
 
@@ -136,13 +160,13 @@ already state.
 it exits `0` when it can build the snapshot, and `3` when coverage is incomplete.
 It never exits `1`.
 
-| field                   | type                         | meaning                                                                                                                                                                                                                                                                                    |
-| ----------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `projects`              | `{name, root, type, tags}[]` | Every project, sorted by `name` with plain string comparison. `tags` is always an array, including when empty. `type` is `"app"` or `"lib"`. `targets` is present only when declared, listing target names by key.                                                                         |
-| `dependencies`          | `{source, target, type}[]`   | Every edge as one flat array, sorted by `source`, then `target`, then `type`, all with plain string comparison. Edge identity is the full `(source, target, type)` triple.                                                                                                                 |
-| `workspaceLayout`       | `{appsDir, libsDir}`         | The layout the engine used when judging imports.                                                                                                                                                                                                                                           |
-| `workspaceLayoutSource` | `"declared"` \| `"default"`  | Whether the workspace named the layout (`"declared"`, from `nx.json` or `lattice.json`) or the engine fell back to its built-in default (`"default"`).                                                                                                                                     |
-| `policy`                | `{fingerprint}` or absent    | When the boundary config was provided (via `--config` or the workspace's own declaration), a `fingerprint` field holds a SHA-256 hex string of the canonicalized policy (`depConstraints`, `options`, `suppressions`). Absent when no config was given — the consumer did not provide one. |
+| field                   | type                         | meaning                                                                                                                                                                                                                                                                                                                                |
+| ----------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `projects`              | `{name, root, type, tags}[]` | Every project, sorted by `name` with plain string comparison. `tags` is sorted by plain string comparison (matching how `targets` is sorted), so two runs that differ only in tag declaration order produce byte-identical output. `type` is `"app"` or `"lib"`. `targets` is present only when declared, listing target names by key. |
+| `dependencies`          | `{source, target, type}[]`   | Every edge as one flat array, sorted by `source`, then `target`, then `type`, all with plain string comparison. Edge identity is the full `(source, target, type)` triple.                                                                                                                                                             |
+| `workspaceLayout`       | `{appsDir, libsDir}`         | The layout the engine used when judging imports.                                                                                                                                                                                                                                                                                       |
+| `workspaceLayoutSource` | `"declared"` \| `"default"`  | Whether the workspace named the layout (`"declared"`, from `nx.json` or `lattice.json`) or the engine fell back to its built-in default (`"default"`).                                                                                                                                                                                 |
+| `policy`                | `{fingerprint}` or absent    | When the boundary config was provided (via `--config` or the workspace's own declaration), a `fingerprint` field holds a SHA-256 hex string of the canonicalized policy (`depConstraints`, `options`, `suppressions`). Absent when no config was given — the consumer did not provide one.                                             |
 
 The graph snapshot deliberately does not publish Nx-internal fields such as
 `mfeRemote`, `entryPoints`, or `declaredPackages`. They are implementation
@@ -162,16 +186,17 @@ Both sides must be complete. An incomplete baseline or current workspace exits
 be ambiguous between a real change and a coverage gap. `diff` is descriptive:
 changes do not make it exit `1`; a completed comparison always exits `0`.
 
-| field             | type                         | meaning                                                                                                                                                                                                                                                                                                                     |
-| ----------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `baseline`        | `{path, projects, edges}`    | The baseline file path and its project/edge counts.                                                                                                                                                                                                                                                                         |
-| `head`            | `{projects, edges}`          | The current workspace's project/edge counts.                                                                                                                                                                                                                                                                                |
-| `addedProjects`   | `{name, root, tags}[]`       | Projects present in the current workspace but absent from the baseline, sorted by `name`.                                                                                                                                                                                                                                   |
-| `removedProjects` | `{name, root, tags}[]`       | Projects present in the baseline but absent from the current workspace, sorted by `name`.                                                                                                                                                                                                                                   |
-| `changedProjects` | `{name, changes}[]`          | Projects present in both but with different metadata, sorted by `name`. Each `changes` entry is `{field, baseline, head}`. Detected fields: `tags` (array content), `type` (`"app"`/`"lib"`/`null`), `root` (project directory).                                                                                            |
-| `addedEdges`      | `{source, target, type}[]`   | Edges present in the current workspace but absent from the baseline, sorted by the full edge identity.                                                                                                                                                                                                                      |
-| `removedEdges`    | `{source, target, type}[]`   | Edges present in the baseline but absent from the current workspace, sorted by the full edge identity.                                                                                                                                                                                                                      |
-| `policyMismatch`  | `{baseline, head}` or absent | Present when both the baseline snapshot and the head run carry a policy fingerprint and they disagree. `baseline.fingerprint` and `head.fingerprint` are the SHA-256 hex strings. The rule-impact section may reflect the policy change rather than a structural change. Absent when no mismatch or no config was provided. |
+| field             | type                                   | meaning                                                                                                                                                                                                                                                                                                                     |
+| ----------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseline`        | `{path, projects, edges, toolVersion}` | The baseline file path, its project/edge counts, and the `tool.version` that produced the snapshot (or `null` if the baseline predates that field). A consumer can compare `toolVersion` with the current version to audit same-schema semantic drift.                                                                      |
+| `head`            | `{projects, edges}`                    | The current workspace's project/edge counts.                                                                                                                                                                                                                                                                                |
+| `addedProjects`   | `{name, root, tags}[]`                 | Projects present in the current workspace but absent from the baseline, sorted by `name`.                                                                                                                                                                                                                                   |
+| `removedProjects` | `{name, root, tags}[]`                 | Projects present in the baseline but absent from the current workspace, sorted by `name`.                                                                                                                                                                                                                                   |
+| `changedProjects` | `{name, changes}[]`                    | Projects present in both but with different metadata, sorted by `name`. Each `changes` entry is `{field, baseline, head}`. Detected fields: `tags` (array content), `type` (`"app"`/`"lib"`/`null`), `root` (project directory).                                                                                            |
+| `addedEdges`      | `{source, target, type}[]`             | Edges present in the current workspace but absent from the baseline, sorted by the full edge identity.                                                                                                                                                                                                                      |
+| `removedEdges`    | `{source, target, type}[]`             | Edges present in the baseline but absent from the current workspace, sorted by the full edge identity.                                                                                                                                                                                                                      |
+| `policyMismatch`  | `{baseline, head}` or absent           | Present when both the baseline snapshot and the head run carry a policy fingerprint and they disagree. `baseline.fingerprint` and `head.fingerprint` are the SHA-256 hex strings. The rule-impact section may reflect the policy change rather than a structural change. Absent when no mismatch or no config was provided. |
+| `ruleImpact`      | `{introduced, resolved}` or absent     | Present when a boundary config with `depConstraints` was provided. `introduced` lists violations the added edges introduce; `resolved` lists violations the removed edges resolve. Covers only tag-based constraints (3 of 15 violation types) — see `coverage.notes`. Absent when no config was provided.                  |
 
 ## `result` (for `command: "impact"`)
 
@@ -179,12 +204,13 @@ changes do not make it exit `1`; a completed comparison always exits `0`.
 on it. It is descriptive: it never exits `1`, because a reverse-reachability
 listing is never a finding.
 
-| field        | type       | meaning                                                                                              |
-| ------------ | ---------- | ---------------------------------------------------------------------------------------------------- |
-| `project`    | string     | The project whose impact was queried.                                                                |
-| `direct`     | `string[]` | Projects whose edges point straight at the target, sorted by plain string comparison.                |
-| `transitive` | `string[]` | Projects that reach the target only through another project, sorted by plain string comparison.      |
-| `dependents` | `string[]` | The union of `direct` and `transitive`, sorted by plain string comparison. An empty list is a claim. |
+| field              | type                 | meaning                                                                                                                                                                                                                                                                  |
+| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `project`          | string               | The project whose impact was queried.                                                                                                                                                                                                                                    |
+| `direct`           | `string[]`           | Projects whose edges point straight at the target, sorted by plain string comparison.                                                                                                                                                                                    |
+| `transitive`       | `string[]`           | Projects that reach the target only through another project, sorted by plain string comparison.                                                                                                                                                                          |
+| `dependents`       | `string[]`           | The union of `direct` and `transitive`, sorted by plain string comparison. An empty list is a claim.                                                                                                                                                                     |
+| `constraintImpact` | `object[]` or absent | Present when a boundary config with `depConstraints` was provided. Each entry is `{project, edges, constraintRows, violations}` for a dependent. Covers only tag-based constraints (3 of 15 violation types) — see `coverage.notes`. Absent when no config was provided. |
 
 ## `result` (for `command: "explain"`)
 
@@ -253,7 +279,12 @@ three declared blind spots and nothing else to say:
   "workspace": {
     "root": "/path/to/workspace",
     "provider": "nx",
-    "marker": "nx.json"
+    "marker": "nx.json",
+    "provenance": {
+      "commit": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+      "remote": "https://github.com/example/workspace.git",
+      "dirty": false
+    }
   },
   "status": "ok",
   "exitCode": 0,

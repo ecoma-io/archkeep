@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { jsonEnvelope, renderJson, SCHEMA_VERSION } from "./json.mjs";
 
-/** @type {{root: string, provider: "nx"|"native"|"moon", marker: string}} */
-const context = { root: "/w", provider: "nx", marker: "nx.json" };
+/** @type {{root: string, provider: "nx"|"native"|"moon", marker: string, provenance: null}} */
+const context = { root: "/w", provider: "nx", marker: "nx.json", provenance: null };
 
 const cleanCoverage = () => ({
   complete: true,
@@ -30,7 +30,7 @@ describe("jsonEnvelope", () => {
       schemaVersion: SCHEMA_VERSION,
       tool: { name: "@ecoma-io/lattice", version: expect.any(String) },
       command: "check",
-      workspace: { root: "/w", provider: "nx", marker: "nx.json" },
+      workspace: { root: "/w", provider: "nx", marker: "nx.json", provenance: null },
       status: "ok",
       exitCode: 0,
       coverage: cleanCoverage(),

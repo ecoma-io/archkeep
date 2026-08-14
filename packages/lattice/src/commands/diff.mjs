@@ -46,6 +46,7 @@ import { computeRuleImpact } from "./edge-constraints.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatDiffReport } from "../report/diff-text.mjs";
+import { resolveProvenance } from "./provenance.mjs";
 
 /**
  * Reads and validates a baseline snapshot from `path`.
@@ -57,7 +58,8 @@ import { formatDiffReport } from "../report/diff-text.mjs";
  * "removed" entry would be ambiguous between "gone" and "never seen").
  *
  * @param {string} path Absolute path to the baseline JSON file.
- * @returns {{projects: object[], dependencies: object[], coverage: object, policy: object|null}}
+ * @returns {{projects: object[], dependencies: object[], coverage: object, policy: object|null,
+ *   provider: string|null, provenance: {commit: string, remote: string|null, dirty: boolean}|null}}
  * @throws {Error}
  */
 function readBaselineFromDisk(path) {
@@ -81,7 +83,9 @@ function readBaselineFromDisk(path) {
  *
  * @param {string} text The raw JSON text of the baseline envelope.
  * @param {string} path The path to name in error messages.
- * @returns {{projects: object[], dependencies: object[], coverage: object, policy: object|null}}
+ * @returns {{projects: object[], dependencies: object[], coverage: object, policy: object|null,
+ *   provider: string|null, provenance: {commit: string, remote: string|null, dirty: boolean}|null,
+ *   toolVersion: string|null}}
  * @throws {Error}
  */
 export function parseBaseline(text, path) {
@@ -181,6 +185,9 @@ export function parseBaseline(text, path) {
     dependencies: envelope.result.dependencies,
     coverage: envelope.coverage,
     policy: envelope.result.policy ?? null,
+    provider: envelope.workspace?.provider ?? null,
+    provenance: envelope.workspace?.provenance ?? null,
+    toolVersion: envelope.tool?.version ?? null,
   };
 }
 
@@ -305,7 +312,9 @@ export function computeDiff(baseline, head) {
  *
  * @param {string} baselinePath Absolute path to the baseline JSON file.
  * @param {object} commandContext From `resolveCommandContext`.
- * @param {{readBaseline?: (path: string) => {projects: object[], dependencies: object[], coverage: object, policy?: object|null},
+ * @param {{readBaseline?: (path: string) => {projects: object[], dependencies: object[], coverage: object, policy?: object|null,
+ *   provider?: string|null, provenance?: {commit: string, remote: string|null, dirty: boolean}|null,
+ *   toolVersion?: string|null},
  *   config?: object}} [io]
  *   Injectable baseline reader, so a test drives the diff without a real file.
  *   When omitted, reads from the real filesystem. `config` is the loaded
@@ -372,12 +381,13 @@ export function diffCommand(
     notes: [],
   };
 
-  const context = { root, provider, marker };
+  const context = { root, provider, marker, provenance: resolveProvenance(root) };
   const result = {
     baseline: {
       path: baselinePath,
       projects: baseline.projects.length,
       edges: baseline.dependencies.length,
+      toolVersion: baseline.toolVersion,
     },
     head: { projects: head.projects.length, edges: head.dependencies.length },
     addedProjects: diff.addedProjects,
@@ -386,6 +396,49 @@ export function diffCommand(
     addedEdges: diff.addedEdges,
     removedEdges: diff.removedEdges,
   };
+
+  // Provider mismatch detection: when the baseline and head come from
+  // different providers, structural differences may be provider-artefacts
+  // rather than real architectural changes. A provider migration is a
+  // legitimate use case, so this is a warning (coverage.note), not a
+  // refusal.
+  const baselineProvider = baseline.provider;
+  if (baselineProvider && baselineProvider !== provider) {
+    coverage.notes.push(
+      `baseline provider (${baselineProvider}) differs from head provider (${provider}) — ` +
+        `structural differences may be provider-artefacts rather than real architectural changes`,
+    );
+  }
+
+  // Provenance mismatch: when both sides carry provenance with commit hashes,
+  // a consumer can verify the baseline came from the same repository (or at
+  // least the same commit). When the commits differ but the remote matches,
+  // the diff is between two revisions of the same repository (the expected
+  // case). When the remotes differ, the diff may be across unrelated
+  // repositories — a coverage.note warns the consumer.
+  const headProvenance = resolveProvenance(root);
+  const baselineProvenance = baseline.provenance;
+
+  if (baselineProvenance && headProvenance) {
+    if (
+      baselineProvenance.remote &&
+      headProvenance.remote &&
+      baselineProvenance.remote !== headProvenance.remote
+    ) {
+      coverage.notes.push(
+        `baseline provenance remote (${baselineProvenance.remote}) differs from head provenance remote (${headProvenance.remote}) — ` +
+          `the diff may be across unrelated repositories rather than two revisions of the same one`,
+      );
+    }
+  } else if (baselineProvenance && !headProvenance) {
+    coverage.notes.push(
+      `baseline carries provenance but the head does not — the consumer cannot verify the diff is between revisions of the same repository`,
+    );
+  } else if (!baselineProvenance && headProvenance) {
+    coverage.notes.push(
+      `head carries provenance but the baseline does not — the consumer cannot verify the diff is between revisions of the same repository`,
+    );
+  }
 
   // Policy mismatch detection: when both the baseline and the head carry a
   // policy fingerprint and they disagree, the diff is computed against a
@@ -400,6 +453,17 @@ export function diffCommand(
       baseline: { fingerprint: baselineFingerprint },
       head: { fingerprint: headFingerprint },
     };
+  }
+
+  // One-sided policy warning: when only one side carries a policy fingerprint,
+  // rule-impact numbers (if any) are based on an incomplete picture. The
+  // consumer should interpret them with caution.
+  if ((!baselineFingerprint && headFingerprint) || (baselineFingerprint && !headFingerprint)) {
+    const side = baselineFingerprint ? "baseline" : "head";
+    coverage.notes.push(
+      `policy fingerprint is present only on the ${side} side — ` +
+        `rule-impact results may not reflect the policy the other side was judged under`,
+    );
   }
 
   // Rule-impact analysis: when the boundary config is provided, judge each

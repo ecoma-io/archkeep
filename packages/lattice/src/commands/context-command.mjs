@@ -37,6 +37,7 @@ import { judgeEdge } from "./edge-constraints.mjs";
 import { findConstraintsFor } from "../rules/tags.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatContextReport } from "../report/context-text.mjs";
+import { resolveProvenance } from "./provenance.mjs";
 
 /**
  * Collects the architecture context for a project: its tags, which constraint
@@ -138,14 +139,14 @@ export function contextCommand(projectName, commandContext, config) {
       .filter((f) => !isWholeFileFailure(f))
       .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
     notes: [
-      "per-edge violations cover only depConstraints (tag-based rules). " +
+      "per-edge violations cover only depConstraints (3 of 15 violation types). " +
         "A dependency with no violations here may still violate npm-ban, circular-dependency, " +
         "lazy-load, or other rules that require import-site details. Run `check` for the " +
         "complete verdict.",
     ],
   };
 
-  const context = { root, provider, marker };
+  const context = { root, provider, marker, provenance: resolveProvenance(root) };
   const result = {
     project: projectContext.project,
     tags: projectContext.tags,

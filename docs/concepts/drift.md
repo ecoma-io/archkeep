@@ -4,8 +4,8 @@ Architecture drifts. Not because anyone decides to violate a boundary, but becau
 the workspace changes faster than the constraints do — and because some forms of
 drift are invisible to a checker that only judges imports.
 
-Lattice detects three kinds of drift today. Each is a different failure mode, and
-each is found by a different mechanism. None requires a toolchain installed.
+Lattice surfaces three kinds of drift through two commands. Each is a different failure
+mode, and two of the three share a command. None requires a toolchain installed.
 
 ## What drift means here
 
@@ -23,9 +23,9 @@ produces a boundary violation:
   violations, but they are build breakers or silent misresolutions that nothing
   else detects.
 
-A checker that only looks at imports misses both classes. Lattice addresses all
-three, because a gap in any one of them looks like "clean" from inside the other
-two.
+A checker that only looks at imports misses both classes. Lattice surfaces all
+three through `check` and `diff`, because a gap in any one of them looks like
+"clean" from inside the other two.
 
 ## The three drift signals
 
@@ -78,8 +78,8 @@ neither invokes `go` or `tsc`.
 ## Why drift is a concept and not a command
 
 A `drift` command would suggest a single answer to a single question. Drift is
-not one question — it is three, each found by a different mechanism, each with a
-different exit code semantics. The `check` command finds violations and
+not one question — it is three, surfaced through two commands, each with its own
+exit code semantics. The `check` command finds violations and
 configuration drift; the `diff` command finds structural drift and its rule
 impact. The concept ties them together; the commands answer the specific
 questions.
