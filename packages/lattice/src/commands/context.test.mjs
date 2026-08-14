@@ -225,6 +225,15 @@ describe("markersAt — detects all three workspace markers", () => {
     expect(markers.hasNative).toBe(false);
   });
 
+  it("detects a .config/moon directory as a Moon marker", () => {
+    const { root, write } = fixture("context-markers-alt-moon-");
+    write(".config/moon/tool.yml", " "); // .config/moon/ directory with any content
+    const markers = markersAt(root);
+    expect(markers.hasMoon).toBe(true);
+    expect(markers.hasNx).toBe(false);
+    expect(markers.hasNative).toBe(false);
+  });
+
   it("detects nx.json as an Nx marker", () => {
     const { root, write } = fixture("context-markers-nx-");
     write("nx.json", "{}\n");
@@ -308,5 +317,30 @@ describe("resolveCommandContext — the Moon branch scopes before it analyzes", 
     // Options come from defaults (no nx.json plugins table, no lattice.json).
     expect(context.options.boundaryConfig).toBe("module-boundaries.config.mjs");
     expect(context.options.tsConfig).toBe("tsconfig.base.json");
+  });
+
+  it("selects the Moon provider when .config/moon is present", () => {
+    const { root, write } = fixture("context-alt-moon-provider-");
+    write(".config/moon/tool.yml", " ");
+    write("libs/x/x.go", "package x\n");
+
+    const graph = {
+      nodes: {
+        x: { name: "x", type: "lib", data: { root: "libs/x" } },
+      },
+      dependencies: { x: [] },
+    };
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      {
+        readGraph: () => graph,
+        listFiles: () => [".config/moon/tool.yml", "libs/x/x.go"],
+      },
+    );
+
+    expect(context.provider).toBe("moon");
+    expect(context.marker).toBe(".config/moon");
+    expect(context.pluginGap).toEqual({ registered: true, manifests: [] });
   });
 });

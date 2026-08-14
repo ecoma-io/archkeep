@@ -119,20 +119,21 @@ export function formatExplainReport({ explanation, coverage }) {
       );
     }
 
-    if (explanation.violation) {
-      const v = explanation.violation;
-      sections.push(`${DETAIL}verdict      VIOLATION — ${v.messageId}`);
-      // The rendered message — same indent as the violation report.
-      const message = v.message
-        .split("\n")
-        .map((line) => (line === "" ? "" : `${DETAIL}    ${line}`))
-        .join("\n");
-      sections.push(message);
-      if (v.constraint?.description) {
-        sections.push(`${DETAIL}rule         ${v.constraint.description}`);
-      }
-      if (v.constraint?.remediation) {
-        sections.push(`${DETAIL}remediation  ${v.constraint.remediation}`);
+    if (explanation.violations && explanation.violations.length > 0) {
+      for (const v of explanation.violations) {
+        sections.push(`${DETAIL}verdict      VIOLATION — ${v.messageId}`);
+        // The rendered message — same indent as the violation report.
+        const message = v.message
+          .split("\n")
+          .map((line) => (line === "" ? "" : `${DETAIL}    ${line}`))
+          .join("\n");
+        sections.push(message);
+        if (v.constraint?.description) {
+          sections.push(`${DETAIL}rule         ${v.constraint.description}`);
+        }
+        if (v.constraint?.remediation) {
+          sections.push(`${DETAIL}remediation  ${v.constraint.remediation}`);
+        }
       }
     } else {
       sections.push(`${DETAIL}verdict      allowed — no constraint was violated`);

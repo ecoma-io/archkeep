@@ -6,13 +6,25 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { moonProvider, readProjectGraph, transformMoonGraph, MOON_DIR } from "./moon.mjs";
+import {
+  moonProvider,
+  readProjectGraph,
+  transformMoonGraph,
+  MOON_DIR,
+  MOON_ALT_DIR,
+} from "./moon.mjs";
 
 // ── constants ────────────────────────────────────────────────────────────────
 
 describe("MOON_DIR", () => {
   it('is ".moon"', () => {
     expect(MOON_DIR).toBe(".moon");
+  });
+});
+
+describe("MOON_ALT_DIR", () => {
+  it('is ".config/moon"', () => {
+    expect(MOON_ALT_DIR).toBe(".config/moon");
   });
 });
 
@@ -508,5 +520,25 @@ describe("readProjectGraph — injectable IO", () => {
     const path = capturedEnv?.PATH ?? "";
     const occurrences = path.split("/workspace/node_modules/.bin").length - 1;
     expect(occurrences).toBe(1);
+  });
+
+  it("uses path.delimiter to join PATH entries (not hardcoded ':')", () => {
+    /** @type {Record<string, string|undefined>|undefined} */
+    let capturedEnv;
+    const run = (_file, _args, _cwd, env) => {
+      capturedEnv = env;
+      return JSON.stringify(twoProjectGraph());
+    };
+    readProjectGraph("/workspace", { run, resolveMoon: () => "moon" });
+    // The PATH must use the platform delimiter — on Windows that is ';',
+    // on Unix it is ':'. A hardcoded ':' would break Windows.
+    const path = capturedEnv?.PATH ?? "";
+    const binDir = "/workspace/node_modules/.bin";
+    if (path.includes(binDir)) {
+      // After the bin dir, there should be a path.delimiter character.
+      const afterBin = path.slice(binDir.length);
+      // The first character after the bin dir must be the platform delimiter.
+      expect(afterBin[0]).toBe(require("node:path").delimiter);
+    }
   });
 });

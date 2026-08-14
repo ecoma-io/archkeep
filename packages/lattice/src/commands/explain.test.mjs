@@ -156,7 +156,7 @@ describe("explainCommand", () => {
     expect(result.explanation.targetProject).toBe("beta");
     expect(result.explanation.sourceTags).toEqual(["layer:domain"]);
     expect(result.explanation.targetTags).toEqual(["layer:util"]);
-    expect(result.explanation.violation).toBe(null);
+    expect(result.explanation.violations).toBe(null);
     // The source project has a matching constraint row.
     expect(result.explanation.matchedConstraints.length).toBeGreaterThan(0);
   });
@@ -184,7 +184,7 @@ describe("explainCommand", () => {
       },
     });
     const result = explainCommand("libs/alpha/main.go:10:5", ctx, config());
-    expect(result.explanation.violation).not.toBe(null);
+    expect(result.explanation.violations).not.toBe(null);
   });
 
   it("throws when the plugin is unregistered on a polyglot Nx workspace", () => {
@@ -359,6 +359,73 @@ describe("explainCommand", () => {
     const result = explainCommand("libs/alpha/main.go:10:5", commandContext(), config());
     expect(result.explanation.matchedConstraints.length).toBe(1);
     expect(result.explanation.matchedConstraints[0].sourceTag).toBe("layer:domain");
+  });
+
+  it("returns all violations at a site when multiple rules fire", () => {
+    // A site can violate multiple rules — e.g. bannedExternalImports AND
+    // noTransitiveDependencies. An agent seeing only the first might fix it and
+    // be confused when check still fails. Return all of them.
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: {
+            name: "alpha",
+            type: "lib",
+            data: { root: "libs/alpha", tags: ["layer:domain"] },
+          },
+          beta: {
+            name: "beta",
+            type: "lib",
+            data: { root: "libs/beta", tags: ["layer:app"] },
+          },
+        },
+        dependencies: {
+          alpha: [{ target: "beta", type: "static" }],
+        },
+      },
+      analysis: {
+        analyzed: 2,
+        imports: [
+          {
+            sourceFile: "libs/alpha/main.go",
+            line: 10,
+            column: 5,
+            specifier: "beta",
+            kind: "static",
+            spelling: { path: false, relative: false },
+            resolved: { target: "beta", file: "libs/beta/mod.go", external: false },
+          },
+        ],
+        failures: [],
+      },
+    });
+    // Use a config where the same import violates both a depConstraint and
+    // banTransitiveDependencies — two different rules.
+    const cfg = config({
+      depConstraints: [
+        { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain", "layer:util"] },
+      ],
+      options: {
+        ...config().options,
+        banTransitiveDependencies: true,
+      },
+    });
+    const result = explainCommand("libs/alpha/main.go:10:5", ctx, cfg);
+    expect(result.explanation.violations).not.toBe(null);
+    expect(Array.isArray(result.explanation.violations)).toBe(true);
+    // Each violation has the shape { messageId, message, constraint }.
+    for (const v of result.explanation.violations) {
+      expect(v).toHaveProperty("messageId");
+      expect(v).toHaveProperty("message");
+    }
+    // The JSON result also carries the violations array.
+    const parsed = JSON.parse(result.report.json);
+    expect(Array.isArray(parsed.result.violations)).toBe(true);
+  });
+
+  it("returns violations as null when the import is allowed", () => {
+    const result = explainCommand("libs/alpha/main.go:10:5", commandContext(), config());
+    expect(result.explanation.violations).toBe(null);
   });
 
   it("shows (none) when the source project matches no constraint row", () => {

@@ -25,7 +25,7 @@ describe("formatExplainReport", () => {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },
@@ -51,7 +51,7 @@ describe("formatExplainReport", () => {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },
@@ -76,7 +76,7 @@ describe("formatExplainReport", () => {
         sourceTags: ["layer:domain"],
         targetTags: ["layer:util"],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },
@@ -102,7 +102,7 @@ describe("formatExplainReport", () => {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },
@@ -128,7 +128,7 @@ describe("formatExplainReport", () => {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },
@@ -158,7 +158,7 @@ describe("formatExplainReport", () => {
             onlyDependOnLibsWithTags: ["layer:domain", "layer:util"],
           },
         ],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },
@@ -184,7 +184,7 @@ describe("formatExplainReport", () => {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },
@@ -211,7 +211,7 @@ describe("formatExplainReport", () => {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },
@@ -236,11 +236,13 @@ describe("formatExplainReport", () => {
         sourceTags: ["layer:domain"],
         targetTags: ["layer:app"],
         matchedConstraints: [],
-        violation: {
-          messageId: "depConstraints",
-          message:
-            "Projects tagged 'layer:domain' may only depend on projects tagged 'layer:domain' or 'layer:util'",
-        },
+        violations: [
+          {
+            messageId: "depConstraints",
+            message:
+              "Projects tagged 'layer:domain' may only depend on projects tagged 'layer:domain' or 'layer:util'",
+          },
+        ],
         unresolvable: false,
         reason: null,
       },
@@ -256,6 +258,43 @@ describe("formatExplainReport", () => {
     expect(report).toContain("Projects tagged 'layer:domain'");
   });
 
+  it("shows multiple violations when a site violates more than one rule", () => {
+    const report = formatExplainReport({
+      explanation: {
+        site: { file: "libs/alpha/main.go", line: 10, column: 5 },
+        import: { specifier: "beta", kind: "static" },
+        sourceProject: "alpha",
+        targetProject: "beta",
+        sourceTags: ["layer:domain"],
+        targetTags: ["layer:app"],
+        matchedConstraints: [],
+        violations: [
+          {
+            messageId: "depConstraints",
+            message: "Domain layer must not depend on app layer",
+          },
+          {
+            messageId: "noTransitiveDependencies",
+            message: "Transitive dependency detected",
+          },
+        ],
+        unresolvable: false,
+        reason: null,
+      },
+      coverage: {
+        complete: true,
+        imports: 1,
+        analyzedFiles: 1,
+        projects: 2,
+        notAnalyzed: [],
+      },
+    });
+    expect(report).toContain("verdict      VIOLATION — depConstraints");
+    expect(report).toContain("verdict      VIOLATION — noTransitiveDependencies");
+    expect(report).toContain("Domain layer must not depend on app layer");
+    expect(report).toContain("Transitive dependency detected");
+  });
+
   it("indents the violation message under the verdict", () => {
     const report = formatExplainReport({
       explanation: {
@@ -266,10 +305,12 @@ describe("formatExplainReport", () => {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: {
-          messageId: "depConstraints",
-          message: "line one\nline two",
-        },
+        violations: [
+          {
+            messageId: "depConstraints",
+            message: "line one\nline two",
+          },
+        ],
         unresolvable: false,
         reason: null,
       },
@@ -295,7 +336,7 @@ describe("formatExplainReport", () => {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: true,
         reason: "non-literal argument",
       },
@@ -321,7 +362,7 @@ describe("formatExplainReport", () => {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },
@@ -346,7 +387,7 @@ describe("formatExplainReport", () => {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },
@@ -373,7 +414,7 @@ describe("formatExplainReport", () => {
         sourceTags: [],
         targetTags: [],
         matchedConstraints: [],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },
@@ -398,16 +439,18 @@ describe("formatExplainReport", () => {
         sourceTags: ["layer:domain"],
         targetTags: ["layer:app"],
         matchedConstraints: [],
-        violation: {
-          messageId: "depConstraints",
-          message: "Domain layer must not depend on app layer",
-          constraint: {
-            sourceTag: "layer:domain",
-            onlyDependOnLibsWithTags: ["layer:domain"],
-            description: "Domain isolation",
-            remediation: "Depend on an application-owned interface",
+        violations: [
+          {
+            messageId: "depConstraints",
+            message: "Domain layer must not depend on app layer",
+            constraint: {
+              sourceTag: "layer:domain",
+              onlyDependOnLibsWithTags: ["layer:domain"],
+              description: "Domain isolation",
+              remediation: "Depend on an application-owned interface",
+            },
           },
-        },
+        ],
         unresolvable: false,
         reason: null,
       },
@@ -433,14 +476,16 @@ describe("formatExplainReport", () => {
         sourceTags: ["layer:domain"],
         targetTags: ["layer:app"],
         matchedConstraints: [],
-        violation: {
-          messageId: "depConstraints",
-          message: "Domain layer must not depend on app layer",
-          constraint: {
-            sourceTag: "layer:domain",
-            onlyDependOnLibsWithTags: ["layer:domain"],
+        violations: [
+          {
+            messageId: "depConstraints",
+            message: "Domain layer must not depend on app layer",
+            constraint: {
+              sourceTag: "layer:domain",
+              onlyDependOnLibsWithTags: ["layer:domain"],
+            },
           },
-        },
+        ],
         unresolvable: false,
         reason: null,
       },
@@ -471,7 +516,7 @@ describe("formatExplainReport", () => {
             onlyDependOnLibsWithTags: ["layer:domain"],
           },
         ],
-        violation: null,
+        violations: null,
         unresolvable: false,
         reason: null,
       },

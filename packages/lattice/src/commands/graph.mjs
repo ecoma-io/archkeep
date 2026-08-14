@@ -27,6 +27,8 @@
  * this plugin is never refused. No escape flag: an option that made analysis
  * not run would turn an unknown result into an apparently valid snapshot.
  */
+import { createHash } from "node:crypto";
+
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { DEFAULT_WORKSPACE_LAYOUT } from "../rules/specifiers.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
@@ -134,18 +136,45 @@ export function buildDependencies(dependencies) {
 }
 
 /**
+ * Computes a deterministic fingerprint for the boundary policy, so `diff`
+ * can warn when the policy changed between runs without re-implementing the
+ * config comparison logic.
+ *
+ * The fingerprint is SHA-256 of the canonicalized JSON for `depConstraints`,
+ * `options`, and `suppressions` — the three fields that affect which
+ * violations `evaluate` would produce. It changes only when the policy
+ * changes, and it is provider-independent (no workspace root, no file paths).
+ *
+ * @param {object} config The loaded boundary config.
+ * @returns {string} A hex-encoded SHA-256 fingerprint.
+ */
+export function computePolicyFingerprint(config) {
+  const policy = {
+    depConstraints: config.depConstraints ?? [],
+    options: config.options ?? {},
+    suppressions: config.suppressions ?? [],
+  };
+  const canonical = JSON.stringify(policy);
+  return createHash("sha256").update(canonical).digest("hex");
+}
+
+/**
  * Runs the `graph` command: resolves the command context, checks the
  * unregistered-plugin condition, and returns the snapshot.
  *
  * @param {object} commandContext From `resolveCommandContext`.
+ * @param {{config?: object}} [io] Optional IO overrides. `config` is the loaded
+ *   boundary config; when provided, a `policy` fingerprint is included in the
+ *   snapshot so `diff` can warn when the policy changed between runs.
  * @returns {{status: "ok"|"no-verdict", projects: object[], dependencies: object[],
  *   workspaceLayout: {appsDir: string, libsDir: string}, workspaceLayoutSource: string,
+ *   policy: {fingerprint: string}|undefined,
  *   coverage: object, report: {text: string, json: string}}}
  * @throws {Error} when an Nx workspace has polyglot manifests but the plugin
  *   is not registered — the graph would silently under-represent the real
  *   architecture.
  */
-export function graphCommand(commandContext) {
+export function graphCommand(commandContext, { config = null } = {}) {
   const { root, provider, marker, graph, pluginGap } = commandContext;
 
   // Descriptive commands refuse when the graph is known to be incomplete.
@@ -206,6 +235,13 @@ export function graphCommand(commandContext) {
     workspaceLayoutSource,
   };
 
+  // When the boundary config is provided, include a policy fingerprint so
+  // `diff` can warn when the policy changed between runs. Without a config,
+  // the snapshot carries no policy identity — the consumer did not provide one.
+  if (config) {
+    result.policy = { fingerprint: computePolicyFingerprint(config) };
+  }
+
   const envelope = jsonEnvelope({
     command: "graph",
     context,
@@ -221,6 +257,7 @@ export function graphCommand(commandContext) {
     dependencies,
     workspaceLayout,
     workspaceLayoutSource,
+    policy: result.policy,
     coverage,
     report: {
       text: formatGraphReport({

@@ -8,6 +8,10 @@
  * recognises the same shape here. When a constraint row carries `description`
  * or `remediation`, those appear indented below the row.
  *
+ * The project's current dependencies follow, each with a per-edge constraint
+ * verdict — so a developer (or an AI agent) sees which edges are allowed and
+ * which violate before writing a new import.
+ *
  * A project with no tags states so explicitly — "no tags" — because a project
  * with no tags and a renderer that printed nothing would be indistinguishable
  * (`AGENTS.md`: "an empty result is a claim, not a shrug"). A project whose
@@ -32,7 +36,8 @@ const DETAIL = "  ";
 /**
  * The whole context report.
  *
- * @param {{projectContext: {project: string, tags: string[], constraints: object[]},
+ * @param {{projectContext: {project: string, tags: string[], constraints: object[],
+ *   dependencies: {target: string, type: string, violations: object[]}[]},
  *   coverage: object}} input
  * @returns {string}
  */
@@ -80,6 +85,21 @@ export function formatContextReport({ projectContext, coverage }) {
     sections.push(
       "Constraints  (no matching constraint rows — this project's tags match no depConstraints entry)",
     );
+  }
+
+  // Dependencies with per-edge verdicts.
+  if (projectContext.dependencies && projectContext.dependencies.length > 0) {
+    const count = projectContext.dependencies.length;
+    sections.push(`Dependencies (${count} edge${count === 1 ? "" : "s"}):`);
+    for (const dep of projectContext.dependencies) {
+      const verdict = dep.violations.length > 0 ? "VIOLATION" : "allowed";
+      sections.push(`${DETAIL}${dep.target} (${dep.type}) ${verdict}`);
+      for (const v of dep.violations) {
+        sections.push(`${DETAIL}  ${v.messageId}`);
+      }
+    }
+  } else {
+    sections.push("Dependencies  (none)");
   }
 
   return sections.join("\n");

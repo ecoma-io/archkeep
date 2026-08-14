@@ -51,9 +51,13 @@ import {
  * @param {object} nodes The project graph's `nodes` map (carries `data.tags`).
  * @param {object} dependencies The project graph's `dependencies` map (for `notDependOnLibsWithTags` reachability).
  * @param {object[]} depConstraints The constraint table from the boundary config.
+ * @param {object} [reachability] Pre-computed reachability from `buildReachability`.
+ *   When omitted, it is built on demand (the slow path for single-edge callers).
+ *   When provided by a batch caller like `computeRuleImpact`, it is reused across
+ *   all edges in the same graph, avoiding O(E) rebuilds of the same structure.
  * @returns {{messageId: string, constraint: object, source: string, target: string}[]}
  */
-export function judgeEdge(edge, nodes, dependencies, depConstraints) {
+export function judgeEdge(edge, nodes, dependencies, depConstraints, reachability) {
   const sourceNode = nodes[edge.source];
   const targetNode = nodes[edge.target];
 
@@ -105,7 +109,7 @@ export function judgeEdge(edge, nodes, dependencies, depConstraints) {
 
     // `notDependOnLibsWithTags` is transitive — it needs reachability.
     if (constraint.notDependOnLibsWithTags?.length > 0) {
-      const reach = buildReachability({ nodes, dependencies });
+      const reach = reachability ?? buildReachability({ nodes, dependencies });
       const notTags = notTagsViolation(constraint, targetNode, { nodes }, reach);
       if (notTags) {
         violations.push({
@@ -166,9 +170,25 @@ export function computeRuleImpact(
     baselineDepsMap[edge.source].push({ target: edge.target, type: edge.type });
   }
 
+  // Build reachability once for the head graph and once for the baseline graph,
+  // so that repeated `judgeEdge` calls with `notDependOnLibsWithTags` constraints
+  // do not rebuild the same structure per edge (the performance concern this
+  // memoization addresses).
+  const headReachability = buildReachability({ nodes: headNodes, dependencies: headDependencies });
+  const baselineReachability = buildReachability({
+    nodes: baselineNodes,
+    dependencies: baselineDepsMap,
+  });
+
   const introduced = [];
   for (const edge of diff.addedEdges) {
-    const violations = judgeEdge(edge, headNodes, headDependencies, depConstraints);
+    const violations = judgeEdge(
+      edge,
+      headNodes,
+      headDependencies,
+      depConstraints,
+      headReachability,
+    );
     for (const v of violations) {
       introduced.push(v);
     }
@@ -176,7 +196,13 @@ export function computeRuleImpact(
 
   const resolved = [];
   for (const edge of diff.removedEdges) {
-    const violations = judgeEdge(edge, baselineNodes, baselineDepsMap, depConstraints);
+    const violations = judgeEdge(
+      edge,
+      baselineNodes,
+      baselineDepsMap,
+      depConstraints,
+      baselineReachability,
+    );
     for (const v of violations) {
       resolved.push(v);
     }
@@ -207,6 +233,11 @@ export function computeImpactConstraints(
   dependencies,
   depConstraints,
 ) {
+  // Build reachability once for the whole graph, so `judgeEdge` calls with
+  // `notDependOnLibsWithTags` constraints reuse the same structure instead of
+  // rebuilding it per dependent.
+  const reachability = buildReachability({ nodes, dependencies });
+
   const results = [];
 
   for (const dependent of dependents) {
@@ -223,7 +254,13 @@ export function computeImpactConstraints(
       // `target` and `type`, so `source` must be added before `judgeEdge` can
       // look up the source project's tags.
       const edgeWithSource = { source: dependent, target: edge.target, type: edge.type };
-      const edgeViolations = judgeEdge(edgeWithSource, nodes, dependencies, depConstraints);
+      const edgeViolations = judgeEdge(
+        edgeWithSource,
+        nodes,
+        dependencies,
+        depConstraints,
+        reachability,
+      );
       for (const v of edgeViolations) {
         violations.push(v);
       }

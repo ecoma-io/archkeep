@@ -33,7 +33,7 @@ import {
 } from "../options.mjs";
 import { readProjectGraph } from "../providers/nx.mjs";
 import { LATTICE_MODEL_FILE } from "../providers/native/model.mjs";
-import { MOON_DIR, moonProvider } from "../providers/moon.mjs";
+import { MOON_DIR, MOON_ALT_DIR, moonProvider } from "../providers/moon.mjs";
 import { nativeProvider } from "../providers/native/index.mjs";
 import {
   analyzeWorkspace,
@@ -87,8 +87,11 @@ function readFileAbsolute(path) {
 
 /**
  * The three facts that decide which project-model provider judges a workspace:
- * does `root` carry `nx.json`, `lattice.json`, `.moon/`, or — a state every
- * command refuses — more than one.
+ * does `root` carry `nx.json`, `lattice.json`, `.moon/`, `.config/moon/`,
+ * or — a state every command refuses — more than one.
+ *
+ * Moonrepo v2.0+ supports `.config/moon/` as an alternative to `.moon/`.
+ * Both are checked: `hasMoon` is true when either exists.
  *
  * @param {string} root
  * @returns {{hasNx: boolean, hasNative: boolean, hasMoon: boolean}}
@@ -97,7 +100,7 @@ export function markersAt(root) {
   return {
     hasNx: existsSync(join(root, NX_CONFIG_FILE)),
     hasNative: existsSync(join(root, LATTICE_MODEL_FILE)),
-    hasMoon: existsSync(join(root, MOON_DIR)),
+    hasMoon: existsSync(join(root, MOON_DIR)) || existsSync(join(root, MOON_ALT_DIR)),
   };
 }
 
@@ -105,7 +108,7 @@ export function markersAt(root) {
  * @typedef {object} CommandContext
  * @property {string} root Absolute workspace root.
  * @property {"nx"|"native"|"moon"} provider Which project-model provider answered.
- * @property {string} marker `nx.json`, `lattice.json`, or `.moon` — whichever
+ * @property {string} marker `nx.json`, `lattice.json`, `.moon`, or `.config/moon` — whichever
  *   `root` carries, and the one this run's provider came from.
  * @property {object} graph `{nodes, dependencies}`, from `readProjectGraph`
  *   or `nativeProvider.buildGraph`.
@@ -164,11 +167,11 @@ export function resolveCommandContext(
   // marker(s) the returned directory actually carries is then read back
   // below, because a walk that STOPPED at the first marker it saw could never
   // tell "only lattice.json here" from "both, one level up".
-  const root = findWorkspaceRoot(cwd, [NX_CONFIG_FILE, LATTICE_MODEL_FILE, MOON_DIR]);
+  const root = findWorkspaceRoot(cwd, [NX_CONFIG_FILE, LATTICE_MODEL_FILE, MOON_DIR, MOON_ALT_DIR]);
   if (root === null) {
     throw new Error(
       `lattice: no workspace root above ${cwd} — looked for an nx.json, a lattice.json, or a ` +
-        `.moon directory in every parent. The tree to judge is found from the working directory, ` +
+        `.moon (or .config/moon) directory in every parent. The tree to judge is found from the working directory, ` +
         `never from this tool's own location: installed from the registry, this tool lives under ` +
         `the consumer's node_modules and the two are always different trees.`,
     );
@@ -362,10 +365,15 @@ export function resolveCommandContext(
     };
   }
 
+  // Which Moon directory was actually found — `.config/moon/` is an alternative
+  // to `.moon/` that Moonrepo v2.0+ supports. The marker records whichever one
+  // the workspace carries, so diagnostics can name it correctly.
+  const moonMarker = existsSync(join(root, MOON_ALT_DIR)) ? MOON_ALT_DIR : MOON_DIR;
+
   return {
     root,
     provider: hasMoon ? "moon" : hasNative ? "native" : "nx",
-    marker: hasMoon ? MOON_DIR : hasNative ? LATTICE_MODEL_FILE : NX_CONFIG_FILE,
+    marker: hasMoon ? moonMarker : hasNative ? LATTICE_MODEL_FILE : NX_CONFIG_FILE,
     graph,
     workspace,
     tracked,

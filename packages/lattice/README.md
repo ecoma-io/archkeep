@@ -1,8 +1,8 @@
 # lattice
 
 Architecture enforcement for polyglot repositories — dependency graphs and module
-boundaries for Go, Rust, Python, TypeScript and Vue, with Nx as a first-class
-integration.
+boundaries for Go, Rust, Python, TypeScript and Vue, with Nx and Moon as
+first-class integrations.
 
 ## Why it exists
 
@@ -28,9 +28,10 @@ declaration with no enforcer. `src/analysis/` and `src/rules/` are where that
 becomes a real check — all fifteen `@nx/enforce-module-boundaries` violation
 types, under its eight options, over analysis records rather than an ESLint AST.
 
-Lattice works in any repository — Nx is a first-class integration, not a
-dependency. A workspace that has Nx gets graph reuse and `affected` integration;
-a repository that has never heard of Nx loses nothing.
+Lattice works in any repository — Nx and Moon are first-class integrations, not
+dependencies. A workspace that has Nx gets graph reuse and `affected` integration;
+a Moonrepo workspace gets the same from Moon's own project graph; a repository
+that has neither loses nothing.
 
 ## Installing it
 
@@ -88,6 +89,16 @@ but nothing here bundles a copy. `lattice check` needs it only for project-graph
 discovery; a workspace that never installed `nx` gets a named diagnostic and
 exit 3 — never a raw module-resolution stack — rather than a graph built from a
 copy this tool shipped, which could disagree with the workspace's own.
+
+### A Moonrepo workspace
+
+A workspace carrying a `.moon/` (or `.config/moon/`) directory at its root is
+automatically recognised as a Moonrepo workspace. Lattice reads the project
+graph from `moon project-graph --json` — the same one-call contract as the Nx
+provider — and derives tags from each project's `moon.yml` declarations,
+`layer`, and `stack`. The boundary config defaults to
+`module-boundaries.config.mjs` at the root, and the TypeScript config to
+`tsconfig.base.json`, the same defaults a native workspace uses.
 
 ## The boundary config
 

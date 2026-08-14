@@ -1,13 +1,17 @@
 /**
  * The terminal report for the `diff` command: two graph snapshots compared.
  *
- * Each section — added projects, removed projects, added edges, removed edges —
- * is printed only when it has content, and always ends with a count. A section
- * with zero entries is absent from the report, and the summary line then names
- * "no changes" rather than "0 added, 0 removed" — the two must never look
- * identical, because "no changes" is a claim about a complete comparison while
- * "0 added, 0 removed" would be ambiguous over a partial one
- * (`../../../../AGENTS.md`).
+ * Each section — added projects, removed projects, changed projects, added
+ * edges, removed edges — is printed only when it has content, and always ends
+ * with a count. A section with zero entries is absent from the report, and the
+ * summary line then names "no changes" rather than "0 added, 0 removed" — the
+ * two must never look identical, because "no changes" is a claim about a
+ * complete comparison while "0 added, 0 removed" would be ambiguous over a
+ * partial one (`../../../../AGENTS.md`).
+ *
+ * The changed-projects section lists projects that exist in both baseline and
+ * head but whose metadata (tags, type, root) changed. Each changed project
+ * shows the field name and its before → after values.
  *
  * When the diff carries a `ruleImpact` field (computed when a boundary config
  * was provided), a rule-impact section lists violations introduced and
@@ -21,6 +25,21 @@
  * This module decides nothing. A formatter that filtered would be a rule
  * wearing a formatter's name (`../README.md`).
  */
+
+/**
+ * One metadata change as a line.
+ *
+ * @param {{field: string, baseline: *, head: *}} change
+ * @returns {string}
+ */
+function formatChange(change) {
+  const formatValue = (v) => {
+    if (Array.isArray(v)) return v.length > 0 ? v.join(", ") : "(none)";
+    if (v === null || v === undefined) return "(none)";
+    return String(v);
+  };
+  return `  ${change.field}  ${formatValue(change.baseline)} → ${formatValue(change.head)}`;
+}
 
 /**
  * One project as a line, same shape as `graph-text.mjs`.
@@ -73,9 +92,19 @@ export function formatDiffReport({ diff, coverage }) {
   );
   sections.push(`head      ${diff.head.projects} projects, ${diff.head.edges} edges`);
 
+  // Policy mismatch warning: when the boundary law changed between the
+  // baseline and head runs, rule-impact results may reflect the policy change
+  // rather than a structural change.
+  if (diff.policyMismatch) {
+    sections.push(
+      "⚠ policy changed between baseline and head — rule-impact results may reflect the policy change, not a structural change",
+    );
+  }
+
   const hasChanges =
     diff.addedProjects.length > 0 ||
     diff.removedProjects.length > 0 ||
+    (diff.changedProjects && diff.changedProjects.length > 0) ||
     diff.addedEdges.length > 0 ||
     diff.removedEdges.length > 0;
 
@@ -93,6 +122,17 @@ export function formatDiffReport({ diff, coverage }) {
       sections.push(`- ${diff.removedProjects.length} removed ${word}`);
       for (const project of diff.removedProjects) {
         sections.push(formatProject(project));
+      }
+    }
+
+    if (diff.changedProjects && diff.changedProjects.length > 0) {
+      const word = diff.changedProjects.length === 1 ? "project" : "projects";
+      sections.push(`~ ${diff.changedProjects.length} changed ${word}`);
+      for (const project of diff.changedProjects) {
+        sections.push(`  ${project.name}`);
+        for (const change of project.changes) {
+          sections.push(formatChange(change));
+        }
       }
     }
 
@@ -153,6 +193,7 @@ export function formatDiffReport({ diff, coverage }) {
     const totalChanges =
       diff.addedProjects.length +
       diff.removedProjects.length +
+      (diff.changedProjects ? diff.changedProjects.length : 0) +
       diff.addedEdges.length +
       diff.removedEdges.length;
     sections.push(

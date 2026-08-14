@@ -1,9 +1,13 @@
 /**
- * The Moon project-model provider: `.moon/` directory, no Nx installed.
+ * The Moon project-model provider: `.moon/` or `.config/moon/` directory, no Nx installed.
  *
  * A Moonrepo workspace is identified by a `.moon/` directory at its root.
- * Moonrepo computes its own project graph — including dependencies between
- * projects — and this provider reads that graph via `moon project-graph --json`,
+ * Moonrepo v2.0+ also supports `.config/moon/` as an alternative config
+ * directory; both spellings are recognized by `../commands/context.mjs`'s
+ * `markersAt` and `findWorkspaceRoot`, and the one actually found is recorded
+ * in the `CommandContext`'s `marker` field.
+ *
+ * This provider reads the project graph via `moon project-graph --json`,
  * the same way `./nx.mjs` reads the Nx graph via `nx graph --file=`.
  *
  * This provider implements the one-call contract `./nx.mjs` already follows
@@ -22,10 +26,28 @@
  *   when the provider infers one.
  */
 
+import { delimiter } from "node:path";
+
 import { environmentForTree, runProcess } from "../process.mjs";
 
-/** The directory that marks a Moonrepo workspace root. */
+/**
+ * The directory that marks a Moonrepo workspace root.
+ *
+ * Moonrepo v1 uses `.moon/`; Moonrepo v2.0+ also supports `.config/moon/`
+ * as an alternative config directory. Both are valid markers; which one a
+ * workspace uses is Moon's own convention, not this tool's to decide.
+ */
 export const MOON_DIR = ".moon";
+
+/**
+ * The alternative config directory Moonrepo v2.0+ supports.
+ *
+ * A workspace may carry either `.moon/` or `.config/moon/` — never both,
+ * because Moon treats them as mutually exclusive roots. This constant lets
+ * `markersAt` and `findWorkspaceRoot` check for either spelling, the same
+ * way they already check for `nx.json` and `lattice.json`.
+ */
+export const MOON_ALT_DIR = ".config/moon";
 
 /**
  * Resolves the Moon CLI binary by adding the workspace root's
@@ -50,7 +72,7 @@ function resolveMoonEnv(workspaceRoot, { env = process.env } = {}) {
   const clean = environmentForTree(env);
   const binDir = `${workspaceRoot}/node_modules/.bin`;
   const pathEnv = clean.PATH ?? "";
-  const pathWithBin = pathEnv.includes(binDir) ? pathEnv : `${binDir}:${pathEnv}`;
+  const pathWithBin = pathEnv.includes(binDir) ? pathEnv : `${binDir}${delimiter}${pathEnv}`;
   return { moon: "moon", env: { ...clean, PATH: pathWithBin } };
 }
 
@@ -343,8 +365,8 @@ export function readProjectGraph(workspaceRoot, { run = runProcess, resolveMoon,
 
 /**
  * The `ProjectModelProvider`-family object `../../cli.mjs` selects when a
- * workspace root carries a `.moon/` directory rather than `nx.json` or
- * `lattice.json`.
+ * workspace root carries a `.moon/` or `.config/moon/` directory rather than
+ * `nx.json` or `lattice.json`.
  */
 export const moonProvider = {
   name: "moon",

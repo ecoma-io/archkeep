@@ -114,6 +114,10 @@ different reader needs the answer at a different moment.
 - **The Nx integration** — the graph, computed on every `nx` invocation. It is the
   one surface with no user interface at all, and the one everything else depends
   on being cheap.
+- **The Moon integration** — the graph, read from `moon project-graph --json`.
+  A Moonrepo workspace carries a `.moon/` or `.config/moon/` directory at its
+  root; Lattice reads the same project graph Moon already computed, the same
+  one-call contract the Nx provider follows.
 - **The CLI** — the verdict as an exit code, which is the only form CI can read.
   Its four codes exist so a script can tell "your tree is dirty" from "the
   checker could not look", and that distinction is the whole design. `context`
