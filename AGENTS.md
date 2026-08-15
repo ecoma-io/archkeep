@@ -75,6 +75,11 @@ scripts/
                            resolve — deleted target, nameless #anchor, a docs/…
                            citation pointing at nothing
   check-docs-links.test.mjs
+  editor-hooks/            the PostToolUse gates shared by every agent: format,
+                           lint, and check-docs-links after each file edit.
+                           Claude Code's settings.json, the opencode plugin in
+                           .opencode/plugins/, and the Codex adapter in
+                           .codex/config.toml all reach these same scripts
 packages/
   lattice/                 the plugin, the checker, the language server
   lattice-vscode/          the VS Code client for that server

@@ -1,8 +1,13 @@
 #!/usr/bin/env node
-// PostToolUse(Write|Edit) hook: run the doc-reference gate after a markdown
-// file is written, so a broken or out-of-docs link is reported while the edit
-// is still in context. Exit code 2 surfaces the findings to the agent
-// immediately, the same convention `lint-edited-file.mjs` uses.
+// PostToolUse(Write|Edit) hook, shared by Claude Code, opencode, and Codex:
+// run the doc-reference gate after a markdown file is written, so a broken or
+// out-of-docs link is reported while the edit is still in context. Exit code
+// 2 surfaces the findings to the agent immediately, the same convention
+// `lint-edited-file.mjs` uses.
+//
+// The stdin contract is Claude Code's (`tool_input.file_path`); the opencode
+// plugin and the Codex adapter restate it per file so every agent reaches
+// this one implementation.
 //
 // Runs the gate script through Node directly (not `pnpm exec`) so the hook
 // works wherever Node works. The gate scans the whole tracked tree rather

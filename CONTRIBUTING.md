@@ -47,9 +47,9 @@ is because that step was skipped. Do not skip it.
 `.claude/settings.json` is checked in, so the setup is the same for everyone and
 you run no command in the normal case. Two things it does:
 
-- **Format and lint on every write.** Hooks in `.claude/hooks/` run the moment a
-  file is edited, so a problem surfaces while the edit is still in context rather
-  than at commit time.
+- **Format and lint on every write.** Hooks in `scripts/editor-hooks/` run the
+  moment a file is edited, so a problem surfaces while the edit is still in
+  context rather than at commit time.
 - **Enables `lattice@lattice`** — this repository's own plugin, the one its
   marketplace catalogue (`.claude-plugin/marketplace.json`) publishes. It is the
   language server reporting module-boundary diagnostics as you edit, plus the
@@ -160,9 +160,12 @@ telling you Moon cannot see what you just added.
   computes. A provider that throws while the graph is being built breaks every
   `moon` command at once, including the ones that would report the error.
 
-If you are working with an AI coding agent, `.claude/` configures format and lint
-to run the moment a file is written, so problems surface while the edit is still
-in context rather than at commit time — see
+If you are working with an AI coding agent, the same three gates — format,
+lint, and the doc-reference check — run the moment a file is written, in
+Claude Code (`.claude/settings.json`), opencode (`.opencode/plugins/`), and
+Codex (`.codex/config.toml`). All three reach the shared scripts in
+`scripts/editor-hooks/`, so problems surface while the edit is still in
+context rather than at commit time — see
 [If you use Claude Code](#if-you-use-claude-code).
 
 Bypassing a hook with `--no-verify` is occasionally the right call during a

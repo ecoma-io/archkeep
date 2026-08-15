@@ -1,7 +1,11 @@
 #!/usr/bin/env node
-// PostToolUse(Write|Edit) hook: format the file that was just written with
-// Prettier, so the agent never hands back bytes the pre-commit hook would
-// rewrite underneath it.
+// PostToolUse(Write|Edit) hook, shared by Claude Code, opencode, and Codex:
+// format the file that was just written with Prettier, so the agent never
+// hands back bytes the pre-commit hook would rewrite underneath it.
+//
+// The stdin contract is Claude Code's (`tool_input.file_path`); the opencode
+// plugin and the Codex adapter restate it per file so every agent reaches
+// this one implementation.
 //
 // Runs Prettier's own bin through Node directly rather than `pnpm exec`, so the
 // hook works wherever Node works. Formatting is a fix, not a finding: this hook
