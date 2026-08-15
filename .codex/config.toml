@@ -1,0 +1,17 @@
+# Codex hooks for this repository, mirroring the Claude Code PostToolUse
+# gates: format, lint, and the doc-reference check run after every file edit.
+#
+# Codex deliveres one JSON object on stdin with `tool_input.command` holding
+# the apply_patch text, whose `*** Update File: <path> ***` markers name the
+# touched files. The adapter below (scripts/editor-hooks/codex-post-tool-use.mjs)
+# parses those paths and feeds each one to the same shared hook scripts
+# Claude Code and opencode use, so the checks have exactly one implementation
+# across every agent.
+[[hooks.PostToolUse]]
+matcher = "Edit|Write"
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = "node scripts/editor-hooks/codex-post-tool-use.mjs"
+statusMessage = "Formatting, linting and checking doc references"
+timeout = 60

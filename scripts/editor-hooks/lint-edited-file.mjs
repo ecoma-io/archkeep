@@ -1,8 +1,13 @@
 #!/usr/bin/env node
-// PostToolUse(Write|Edit) hook: lint the file that was just written, after
-// `format-edited-file.mjs` has already normalised it. Exit code 2 surfaces the
-// violations to the agent immediately, while the edit is still in context —
-// which is the whole point of linting here rather than at commit time.
+// PostToolUse(Write|Edit) hook, shared by Claude Code, opencode, and Codex:
+// lint the file that was just written, after `format-edited-file.mjs` has
+// already normalised it. Exit code 2 surfaces the violations to the agent
+// immediately, while the edit is still in context — which is the whole point
+// of linting here rather than at commit time.
+//
+// The stdin contract is Claude Code's (`tool_input.file_path`); the opencode
+// plugin and the Codex adapter restate it per file so every agent reaches
+// this one implementation.
 //
 // Runs ESLint's own bin through Node directly (not `pnpm exec`) so the hook
 // works wherever Node works.
