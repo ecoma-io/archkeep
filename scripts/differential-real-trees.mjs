@@ -41,10 +41,14 @@
 //
 // This script runs from `.github/workflows/differential.yml` (scheduled +
 // manual, NOT part of ci-gate — that file's header carries the argument), and
-// locally as `node scripts/differential-real-trees.mjs`.
+// locally as `node scripts/differential-real-trees.mjs`. CI runs it with
+// `--summary-out <file>`, writing the verdict envelope `buildSummary` defines
+// — the ONE machine-readable contract (consumed by
+// `scripts/reconcile-differential-issue.mjs` and by the release lane's
+// `--exit-class-of` mode) a red run's consumers read instead of a log.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -524,6 +528,75 @@ export function overallExit(verdicts) {
 class InfrastructureError extends Error {}
 
 /**
+ * The verdict envelope `--summary-out` writes, and the single machine-readable
+ * contract both consumers read: the issue trail
+ * (`scripts/reconcile-differential-issue.mjs`) and the release lane's
+ * `verify-conformance` gate (`.github/workflows/release.yml`, which reads the
+ * `exitClass` back via `--exit-class-of`). The envelope carries the same
+ * facts the console already printed — per-tree verdict and the exact
+ * UNEXPLAINED / STALE / BREACH lines — so a consumer never parses a log and
+ * never re-formats a finding.
+ *
+ * `exitCode` keeps the script's CLI contract, where infrastructure outranks
+ * findings (`overallExit` — a run that could not look must not read as one
+ * that looked). `exitClass` is deliberately a DIFFERENT mapping, and findings
+ * outranks infra there: a real divergence must file an issue and block a
+ * release even when a sibling tree could not be looked at. The silent
+ * direction this split refuses: an envelope reading "infra, nothing to do"
+ * while an unexplained difference sits in another tree's lines.
+ *
+ * @param {number} exitCode
+ * @param {{name: string, verdict: "ok"|"findings"|"infrastructure", lines: string[], infrastructure?: string}[]} trees
+ * @returns {{exitCode: number, exitClass: "ok"|"findings"|"infra"|"usage", trees: object[]}}
+ */
+export function buildSummary(exitCode, trees) {
+  const verdicts = trees.map((tree) => tree.verdict);
+  /** @type {"ok"|"findings"|"infra"|"usage"} */
+  let exitClass = "usage";
+  if (trees.length > 0) {
+    if (verdicts.includes("findings")) exitClass = "findings";
+    else if (verdicts.includes("infrastructure")) exitClass = "infra";
+    else exitClass = "ok";
+  }
+  return { exitCode, exitClass, trees };
+}
+
+/**
+ * The two file modes this script's `main()` accepts, mutually exclusive:
+ * `--summary-out <file>` appends the verdict envelope to the run (both
+ * consumers above read it), and `--exit-class-of <file>` prints the envelope's
+ * `exitClass` — the release gate needs the class as a job output, and the one
+ * place allowed to spell that vocabulary is the script that owns the envelope,
+ * never a second mapping typed into a workflow.
+ *
+ * @param {string[]} argv
+ * @returns {{summaryOut: string|undefined, exitClassOf: string|undefined}}
+ * @throws {Error} on an unrecognised argument, a missing value, or both flags.
+ */
+export function parseArgs(argv) {
+  const options = { summaryOut: undefined, exitClassOf: undefined };
+  for (let index = 0; index < argv.length; index += 1) {
+    const flag = argv[index];
+    const value = argv[index + 1];
+    if (flag === "--summary-out" || flag === "--exit-class-of") {
+      if (!value) throw new Error(`${flag} needs a file path`);
+      if (flag === "--summary-out") options.summaryOut = value;
+      else options.exitClassOf = value;
+      index += 1;
+    } else {
+      throw new Error(
+        `unrecognised argument ${JSON.stringify(flag)} — expected --summary-out <file> or ` +
+          `--exit-class-of <file>`,
+      );
+    }
+  }
+  if (options.summaryOut && options.exitClassOf) {
+    throw new Error("--summary-out and --exit-class-of are mutually exclusive");
+  }
+  return options;
+}
+
+/**
  * Runs a child process from an ARGUMENT ARRAY (`AGENTS.md`'s child-process
  * rule; nothing here is interpolated into a shell) with output passed through,
  * and throws the infrastructure class on any non-zero exit.
@@ -636,7 +709,7 @@ function measureTree(tree, workdir) {
  *   has no native leg" and skipped.
  * @param {number} toolVerdictCount So the empty-verdict claim can compare all
  *   three engines at once rather than the native leg alone.
- * @returns {{infrastructure?: string, unexplained: object[], stale: object[], breaches: string[]}}
+ * @returns {{infrastructure?: string, unexplained: object[], stale: object[], breaches: string[], lines: string[]}}
  */
 export function reportNativeLeg(tree, native, toolVerdictCount) {
   if (!native) {
@@ -644,13 +717,19 @@ export function reportNativeLeg(tree, native, toolVerdictCount) {
       `${tree.name}: the child process report carries no "native" field — the native leg did ` +
       `not run, or wrote a malformed report. Treated as could-not-look, never as a clean leg.`;
     console.error(`NATIVE LEG INFRASTRUCTURE FAILURE for ${tree.name}: ${infrastructure}`);
-    return { infrastructure, unexplained: [], stale: [], breaches: [] };
+    return { infrastructure, unexplained: [], stale: [], breaches: [], lines: [] };
   }
   if (native.infrastructureError) {
     console.error(
       `NATIVE LEG INFRASTRUCTURE FAILURE for ${tree.name}: ${native.infrastructureError}`,
     );
-    return { infrastructure: native.infrastructureError, unexplained: [], stale: [], breaches: [] };
+    return {
+      infrastructure: native.infrastructureError,
+      unexplained: [],
+      stale: [],
+      breaches: [],
+      lines: [],
+    };
   }
 
   const { counts, differences, derivedProjectCount, discoveryFailureCount } = native;
@@ -687,19 +766,25 @@ export function reportNativeLeg(tree, native, toolVerdictCount) {
     );
     console.log(`  ledger: ${entry.reason}`);
   }
-  for (const difference of unexplained) {
-    console.log(
+  const nativeUnexplainedLines = unexplained.map(
+    (difference) =>
       `NATIVE UNEXPLAINED ${difference.direction} ${difference.messageId} @ ${difference.site}`,
-    );
-  }
-  for (const entry of stale) {
-    console.log(
+  );
+  for (const line of nativeUnexplainedLines) console.log(line);
+  const nativeStaleLines = stale.map(
+    (entry) =>
       `STALE native ledger entry: ${entry.direction} ${entry.messageId} ${entry.sitePattern} no ` +
-        `longer fires — remove it or say what changed.`,
-    );
-  }
-  for (const breach of breaches) console.log(`NATIVE BREACH: ${breach}`);
-  return { unexplained, stale, breaches };
+      `longer fires — remove it or say what changed.`,
+  );
+  for (const line of nativeStaleLines) console.log(line);
+  const nativeBreachLines = breaches.map((breach) => `NATIVE BREACH: ${breach}`);
+  for (const line of nativeBreachLines) console.log(line);
+  return {
+    unexplained,
+    stale,
+    breaches,
+    lines: [...nativeUnexplainedLines, ...nativeStaleLines, ...nativeBreachLines],
+  };
 }
 
 /** Prints one tree's report and returns its outcome for the exit decision. */
@@ -747,17 +832,23 @@ function reportTree(tree, result) {
     console.log(`explained ${difference.direction} ${difference.messageId} @ ${difference.site}`);
     console.log(`  ledger: ${entry.reason}`);
   }
-  for (const difference of unexplained) {
-    console.log(`UNEXPLAINED ${difference.direction} ${difference.messageId} @ ${difference.site}`);
-    if (difference.detail) console.log(`  ${difference.detail}`);
-  }
-  for (const entry of stale) {
-    console.log(
+  // The same lines the console prints, collected once so the summary envelope
+  // (`--summary-out` below) can carry them verbatim — the issue trail's body
+  // IS this log fragment, never a second formatting vocabulary.
+  const unexplainedLines = unexplained.map(
+    (difference) =>
+      `UNEXPLAINED ${difference.direction} ${difference.messageId} @ ${difference.site}` +
+      (difference.detail ? `\n  ${difference.detail}` : ""),
+  );
+  for (const line of unexplainedLines) console.log(line);
+  const staleLines = stale.map(
+    (entry) =>
       `STALE ledger entry: ${entry.direction} ${entry.messageId} ${entry.sitePattern} no ` +
-        `longer fires — remove it or say what changed.`,
-    );
-  }
-  for (const breach of breaches) console.log(`EMPTY-VERDICT BREACH: ${breach}`);
+      `longer fires — remove it or say what changed.`,
+  );
+  for (const line of staleLines) console.log(line);
+  const breachLines = breaches.map((breach) => `EMPTY-VERDICT BREACH: ${breach}`);
+  for (const line of breachLines) console.log(line);
 
   // The native leg is reported and classified through the same mechanism
   // above, then merged: `treeVerdict` only needs to know whether ANY
@@ -769,19 +860,53 @@ function reportTree(tree, result) {
     unexplained: [...unexplained, ...nativeOutcome.unexplained],
     stale: [...stale, ...nativeOutcome.stale],
     breaches: [...breaches, ...nativeOutcome.breaches],
+    lines: [...unexplainedLines, ...staleLines, ...breachLines, ...nativeOutcome.lines],
   };
 }
 
 function main() {
-  if (process.argv.length > 2) {
-    console.error("usage: node scripts/differential-real-trees.mjs (no arguments)");
+  let options;
+  try {
+    options = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error(
+      "usage: node scripts/differential-real-trees.mjs [--summary-out <file> | --exit-class-of <file>]",
+    );
+    console.error(error.message);
     process.exit(EXIT.usage);
+  }
+
+  if (options.exitClassOf) {
+    // The release gate's waiver reads the envelope's class back as a job
+    // output; the vocabulary lives here (`buildSummary`), never in a workflow.
+    let envelope;
+    try {
+      envelope = JSON.parse(readFileSync(options.exitClassOf, "utf8"));
+    } catch (error) {
+      console.error(
+        `--exit-class-of: ${options.exitClassOf} does not hold a differential summary: ` +
+          `${error.message}`,
+      );
+      process.exit(EXIT.error);
+    }
+    if (!["ok", "findings", "infra", "usage"].includes(envelope.exitClass)) {
+      console.error(
+        `--exit-class-of: ${options.exitClassOf} carries exitClass ` +
+          `${JSON.stringify(envelope.exitClass)} — not a class any consumer knows`,
+      );
+      process.exit(EXIT.error);
+    }
+    process.stdout.write(`${envelope.exitClass}\n`);
+    return;
   }
 
   /** @type {("infrastructure"|"findings"|"ok")[]} */
   const verdicts = [];
+  /** @type {{name: string, verdict: "ok"|"findings"|"infrastructure", lines: string[], infrastructure?: string}[]} */
+  const treeResults = [];
   for (const tree of TREES) {
     const workdir = mkdtempSync(join(tmpdir(), `lattice-differential-${tree.name}-`));
+    /** @type {{infrastructure?: string, unexplained: object[], stale: object[], breaches: string[], lines: string[]}} */
     let outcome;
     try {
       const result = measureTree(tree, workdir);
@@ -796,15 +921,37 @@ function main() {
         unexplained: [],
         stale: [],
         breaches: [],
+        lines: [],
       };
       console.error(`INFRASTRUCTURE FAILURE for ${tree.name}: ${outcome.infrastructure}`);
       console.error(`clone kept at ${workdir}`);
     }
-    verdicts.push(treeVerdict(outcome));
-    console.log(`${tree.name}: ${verdicts.at(-1)}`);
+    const verdict = treeVerdict(outcome);
+    verdicts.push(verdict);
+    treeResults.push({
+      name: tree.name,
+      verdict,
+      lines: outcome.lines ?? [],
+      infrastructure: outcome.infrastructure,
+    });
+    console.log(`${tree.name}: ${verdict}`);
   }
 
   const exit = overallExit(verdicts);
+  if (options.summaryOut) {
+    try {
+      writeFileSync(
+        options.summaryOut,
+        `${JSON.stringify(buildSummary(exit, treeResults), null, 2)}\n`,
+      );
+    } catch (error) {
+      // An envelope that cannot be written means the run's consumers cannot
+      // decide — the issue trail step below fails loudly on the absent file,
+      // and the exit already stands red for any non-clean verdict.
+      console.error(`could not write the summary to ${options.summaryOut}: ${error.message}`);
+      process.exit(EXIT.error);
+    }
+  }
   console.log(
     `\ndifferential over ${TREES.length} real trees: ` +
       (exit === EXIT.ok

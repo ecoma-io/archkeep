@@ -217,7 +217,12 @@ another.
   that no publish job can see: the state that once published nothing while the
   workflow reported success, which is the same silence as an empty diagnostic.
   The lane measures, it does not assume — the measured failure is told in the
-  workflow's own comments.
+  workflow's own comments. The lane also re-runs the conformance differential
+  against the tagged bytes before publish (`verify-conformance`): a
+  findings-red blocks both publish jobs, a could-not-look red proceeds only
+  under a loud UNVERIFIED label — the waiver expression in the publish jobs'
+  `if:` is the line that must never widen (its full argument lives in
+  `release.yml` next to the gate, not here).
 - **The PR title runs through commitlint.** Squash is the only merge button, so
   the title becomes the subject of the commit on `main` — the one commit message
   that never passes through the `commit-msg` hook. The title reaches the step via

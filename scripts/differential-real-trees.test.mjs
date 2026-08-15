@@ -16,6 +16,7 @@ import {
   EXIT,
   LEDGER,
   TREES,
+  buildSummary,
   classifyDifferences,
   deriveNativeModel,
   emptyVerdictBreaches,
@@ -23,6 +24,7 @@ import {
   nativeProjectCountBreach,
   nodeFieldDifferences,
   overallExit,
+  parseArgs,
   reportNativeLeg,
   scopeLedgerToDirections,
   treeVerdict,
@@ -191,6 +193,74 @@ test("the trees table pins a native-project floor for every tree", () => {
         'the pinned commit" treatment expectViolations gets',
     );
   }
+});
+
+// --- The summary envelope (`--summary-out`) --------------------------------
+
+test("buildSummary classes a run by its tree verdicts — clean, infra, and findings each once", () => {
+  const ok = buildSummary(EXIT.ok, [{ name: "a", verdict: "ok", lines: [] }]);
+  assert.equal(ok.exitCode, EXIT.ok);
+  assert.equal(ok.exitClass, "ok");
+  const infra = buildSummary(EXIT.error, [
+    { name: "a", verdict: "infrastructure", lines: [], infrastructure: "clone failed" },
+  ]);
+  assert.equal(infra.exitClass, "infra");
+  assert.equal(infra.trees[0].infrastructure, "clone failed");
+  const findings = buildSummary(EXIT.findings, [
+    {
+      name: "a",
+      verdict: "findings",
+      lines: ["UNEXPLAINED stricter onlyTagsConstraintViolation @ x:1:1"],
+    },
+  ]);
+  assert.equal(findings.exitClass, "findings");
+});
+
+test("buildSummary: findings OUTRANKS infra — the silent-direction case for both consumers", () => {
+  // One tree could not be looked at while another carries a real divergence.
+  // The exit code keeps the CLI contract (infra outranks findings — a run that
+  // could not look must not read as one that looked the whole way), but the
+  // consumer class must say findings: the divergence must file an issue and
+  // block a release even though a sibling tree failed to look. An envelope
+  // reading "infra, nothing to do" here would drop the finding silently.
+  /** @type {{name: string, verdict: "ok"|"findings"|"infrastructure", lines: string[], infrastructure?: string}[]} */
+  const trees = [
+    { name: "a", verdict: "infrastructure", lines: [], infrastructure: "clone failed" },
+    {
+      name: "b",
+      verdict: "findings",
+      lines: ["UNEXPLAINED stricter onlyTagsConstraintViolation @ x:1:1"],
+    },
+  ];
+  const summary = buildSummary(EXIT.error, trees);
+  assert.equal(summary.exitCode, EXIT.error);
+  assert.equal(summary.exitClass, "findings");
+});
+
+test("buildSummary carries the exact console lines, so the issue body is never a second copy", () => {
+  const line = "EMPTY-VERDICT BREACH: code-pushup: tool reported ZERO verdicts on a tree";
+  const summary = buildSummary(EXIT.findings, [
+    { name: "code-pushup", verdict: "findings", lines: [line] },
+  ]);
+  assert.equal(summary.trees[0].lines[0], line);
+});
+
+test("parseArgs accepts exactly one of the two file modes", () => {
+  assert.deepEqual(parseArgs([]), { summaryOut: undefined, exitClassOf: undefined });
+  assert.deepEqual(parseArgs(["--summary-out", "/tmp/s.json"]), {
+    summaryOut: "/tmp/s.json",
+    exitClassOf: undefined,
+  });
+  assert.deepEqual(parseArgs(["--exit-class-of", "/tmp/s.json"]), {
+    summaryOut: undefined,
+    exitClassOf: "/tmp/s.json",
+  });
+  assert.throws(() => parseArgs(["--bogus"]), /unrecognised argument/u);
+  assert.throws(() => parseArgs(["--summary-out"]), /needs a file path/u);
+  assert.throws(
+    () => parseArgs(["--summary-out", "a", "--exit-class-of", "b"]),
+    /mutually exclusive/u,
+  );
 });
 
 // --- The native leg's own pure functions ---------------------------------

@@ -134,10 +134,105 @@ jobs:
             exit 1
           fi
 
-  publish:
-    name: Publish to npm
+  # The conformance differential, re-run against the TAGGED bytes this lane is
+  # about to ship. `.github/workflows/differential.yml`'s schedule measures
+  # `main`; only this job measures the exact code the tag carries, so a
+  # release never carries a parity claim the weekly sample did not look at.
+  # It is the same refuse-to-ship-unproven-bytes decision as
+  # `verify-package.mjs` above, applied to the boundary engine's central
+  # guarantee instead of the resolver's.
+  #
+  # Two classes of red, two consequences — the split
+  # `.github/workflows/differential.yml`'s header owns, spelled by the ONE
+  # vocabulary in `scripts/differential-real-trees.mjs`'s `buildSummary` and
+  # read back here through `--exit-class-of`:
+  #
+  # - findings (an unexplained difference, a stale ledger entry, an empty
+  #   verdict): the step fails, `exit_class` is `findings`, and the publish
+  #   jobs below SKIP. A release whose central claim is known-false must not
+  #   ship, and the lane shows the red that explains why — followed by a
+  #   skipped publish, never a silent one.
+  # - infra (clone/install/graph could not run): the job fails TOO — a run
+  #   that could not look must not read as one that looked — but
+  #   `exit_class` is `infra`, the publish jobs proceed, and this job's red
+  #   stays standing in the lane as the loud "parity UNVERIFIED" label.
+  #   Blocking a release on third-party reachability is the exact deletion
+  #   pressure the differential's header refuses; shipping under a
+  #   findings-red is the one line this lane must never cross.
+  #
+  # The waiver expression in both publish jobs is that line, in code: it
+  # names `exit_class == 'infra'` explicitly — nothing else waives. An
+  # UNREADABLE summary yields an empty `exit_class`, `== 'infra'` is false,
+  # and the release is blocked: fail-closed is the direction this must err
+  # in, because a release must not carry a parity claim of unknown class.
+  # Note the form of the guard too: `result == 'success'`, not
+  # `result != 'failure'` — a skipped or cancelled job must read as BLOCKED,
+  # because GitHub reports a skipped job as Success on the checks UI. Keep
+  # the two publish jobs' conditions identical; a divergence between them is
+  # a release that ships to one destination and not the other.
+  verify-conformance:
+    name: Differential against real trees (gate)
     needs: prepare
     if: needs.prepare.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      exit_class: ${{ steps.differential.outputs.exit_class }}
+    steps:
+      # The tag, not the branch — the same reason every publish job states
+      # it: `main` has already moved on, and the verdict must be about the
+      # bytes this release carries.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The step keeps the job RED on both classes (the exit code is
+      # re-exited, never swallowed); `exit_class` is read back from the
+      # envelope the script wrote, so the spelling lives exactly once.
+      # A run that exits 0 but writes no envelope is also coerced to red —
+      # a green run with no summary is the silent direction, and if the
+      # summary is missing for any reason the class falls to `infra`, the
+      # fail-open-with-a-label branch, never to a silent `success`.
+      - name: Run the differential
+        id: differential
+        run: |
+          set +e
+          node scripts/differential-real-trees.mjs --summary-out "$RUNNER_TEMP/differential-summary.json"
+          code=$?
+          if [ -f "$RUNNER_TEMP/differential-summary.json" ]; then
+            exit_class="$(node scripts/differential-real-trees.mjs --exit-class-of "$RUNNER_TEMP/differential-summary.json")"
+          else
+            [ "$code" -eq 0 ] && code=3
+            exit_class="infra"
+          fi
+          echo "exit_class=$exit_class" >> "$GITHUB_OUTPUT"
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+
+  publish:
+    name: Publish to npm
+    # The gate's contract, as the `verify-conformance` job's header spells it:
+    # proceed when the differential passed, or when it FAILED only because it
+    # could not look (`exit_class == 'infra'` — that job's red stays standing
+    # as the loud UNVERIFIED label). `== 'success'`, deliberately, not
+    # `!= 'failure'`: a skipped or cancelled gate must BLOCK, because a
+    # skipped job reports as Success on the checks UI. Keep this expression
+    # identical to `publish-vsix`'s — a divergence ships one destination and
+    # not the other.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -215,9 +310,12 @@ jobs:
     name: Publish the VS Code extension
     # Same output the npm job steers on: the extension shares the engine's
     # version by decision, so every release carries a vsix — a release without
-    # one would break the pairing the version number promises.
-    needs: prepare
-    if: needs.prepare.outputs.released == 'true'
+    # one would break the pairing the version number promises. The gate
+    # expression is the npm job's, verbatim — see the comment there; a
+    # divergence between the two is a release that ships to one destination
+    # and not the other.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
