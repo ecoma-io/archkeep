@@ -107,4 +107,62 @@ describe("createDependencies over a real workspace fixture", () => {
     };
     expect(createDependencies(undefined, tsOnly)).toEqual([]);
   });
+
+  it("emits one edge per pair even when a manifest declares the same dependency twice", () => {
+    // A single Cargo.toml naming `b` in both [dependencies] and
+    // [dev-dependencies] resolves to two identical records; the hook
+    // dedupes by (source, target, sourceFile) so the output stays canonical.
+    const dup = mkdtempSync(join(tmpdir(), "polyglot-graph-dup-"));
+    afterAll(() => rmSync(dup, { recursive: true, force: true }));
+    mkdirSync(join(dup, "rs/a"), { recursive: true });
+    mkdirSync(join(dup, "rs/b"), { recursive: true });
+    writeFileSync(
+      join(dup, "rs/a/Cargo.toml"),
+      [
+        '[package]\nname = "a"\nversion = "0.1.0"',
+        '[dependencies]\nb = { path = "../b" }',
+        '[dev-dependencies]\nb = { path = "../b" }',
+      ].join("\n\n"),
+      "utf8",
+    );
+    writeFileSync(
+      join(dup, "rs/b/Cargo.toml"),
+      '[package]\nname = "b"\nversion = "0.1.0"\n',
+      "utf8",
+    );
+
+    const deps = createDependencies(undefined, {
+      workspaceRoot: dup,
+      projects: { "rs-a": { root: "rs/a" }, "rs-b": { root: "rs/b" } },
+      fileMap: {
+        projectFileMap: {
+          "rs-a": [{ file: "rs/a/Cargo.toml" }],
+          "rs-b": [{ file: "rs/b/Cargo.toml" }],
+        },
+      },
+    });
+    expect(deps).toEqual([
+      { source: "rs-a", target: "rs-b", sourceFile: "rs/a/Cargo.toml", type: "static" },
+    ]);
+  });
+
+  it("still resolves a project whose files are missing from the file map", () => {
+    // `context.fileMap?.projectFileMap?.[name] ?? []` — a project absent from
+    // the map contributes no files, so no edges of its own, without breaking
+    // the projects that ARE listed. Nx always fills the map; the fallback
+    // exists so an odd context shape cannot crash every graph computation.
+    const { "rs-b": _unlisted, ...rest } = context.fileMap.projectFileMap;
+    const deps = createDependencies(undefined, {
+      ...context,
+      fileMap: { projectFileMap: rest },
+    });
+    // The rs-b manifest is unlisted, so the Rust project contributes nothing;
+    // the Go and Python edges are drawn from the projects that ARE listed.
+    expect(deps).toEqual([
+      { source: "go-one", target: "go-two", sourceFile: "go/one/main.go", type: "static" },
+      { source: "py-p", target: "py-q", sourceFile: "py/p/pyproject.toml", type: "static" },
+      { source: "py-r", target: "py-s", sourceFile: "py/r/pyproject.toml", type: "static" },
+      { source: "py-t", target: "py-u", sourceFile: "py/t/pyproject.toml", type: "static" },
+    ]);
+  });
 });

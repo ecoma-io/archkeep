@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  compareCase,
   compareFile,
   measuredScope,
   renderDivergences,
@@ -285,5 +286,170 @@ describe("the scope the differential actually measured", () => {
       incomparableExtensions: [".py", ".rs"],
       spellingGroups: 1,
     });
+  });
+});
+
+describe("compareCase against what a case CLAIMED", () => {
+  const materializedOf = (probes, overrides = {}) => ({
+    spec: { id: "case", probes },
+    graph: { nodes: {}, externalNodes: {}, dependencies: {} },
+    projectFileMap: {},
+    ...overrides,
+  });
+
+  /** One probe that passes every claim check on its own. */
+  const cleanProbe = (overrides = {}) => ({
+    file: "a.ts",
+    upstream: ["noImportsOfApps"],
+    ...overrides,
+  });
+
+  const upstreamFile = (messages = []) => ({
+    readable: true,
+    messages,
+    notes: [],
+  });
+
+  /** A violation from this engine at the case's own file. */
+  const caseViolation = (messageId) => ({
+    ...specifier(messageId),
+    sourceFile: "case/a.ts",
+  });
+
+  it("reads a probe that declares neither upstream nor tool as claiming nothing", () => {
+    // `probe.tool ?? probe.upstream ?? []` — a probe with no claim at all is
+    // a claim of nothing, and must not crash the breach checks or the row.
+    const materialized = materializedOf([cleanProbe({ upstream: undefined })]);
+    const { rows, breaches } = compareCase(materialized, new Map(), []);
+    expect(breaches).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].probeUpstream).toEqual([]);
+    expect(rows[0].reported).toEqual({ upstream: [], tool: [] });
+  });
+
+  it("builds the fallback verdict for a file upstream did not report on at all", () => {
+    // The runner's by-file map covers the probes it was given; a case whose
+    // file is missing from it (a runner that did not lint it) must read as
+    // unreadable and empty, never as clean-by-omission.
+    const materialized = materializedOf([
+      cleanProbe({
+        tool: ["noImportsOfApps"],
+        divergence: { direction: "stricter", reason: "r" },
+      }),
+    ]);
+    const { rows, breaches } = compareCase(materialized, new Map(), [
+      caseViolation("noImportsOfApps"),
+    ]);
+    expect(rows[0].upstreamReadable).toBe(false);
+    expect(breaches.some((breach) => /ESLint reported \[nothing\]/.test(breach))).toBe(true);
+  });
+
+  it("breaches when ESLint reported something other than the boundary rule", () => {
+    const materialized = materializedOf([cleanProbe()]);
+    const upstreamByFile = new Map([
+      ["case/a.ts", { readable: true, messages: [], notes: ["eslint: Parsing error: bad"] }],
+    ]);
+    const { breaches } = compareCase(materialized, upstreamByFile, []);
+    expect(
+      breaches.some((breach) =>
+        /The fixture does not parse, so its verdict means nothing/.test(breach),
+      ),
+    ).toBe(true);
+  });
+
+  it("breaches when ESLint reported different ids than the case claimed", () => {
+    const materialized = materializedOf([cleanProbe()]);
+    const upstreamByFile = new Map([["case/a.ts", upstreamFile([statement("noImportsOfE2e")])]]);
+    const { breaches } = compareCase(materialized, upstreamByFile, []);
+    expect(
+      breaches.some((breach) =>
+        /ESLint reported \[noImportsOfE2e\], the case claims \[noImportsOfApps\]/.test(breach),
+      ),
+    ).toBe(true);
+  });
+
+  it("breaches when ESLint reported nothing and the case claimed something", () => {
+    const materialized = materializedOf([cleanProbe()]);
+    const upstreamByFile = new Map([["case/a.ts", upstreamFile([])]]);
+    const { breaches } = compareCase(materialized, upstreamByFile, []);
+    expect(
+      breaches.some((breach) =>
+        /ESLint reported \[nothing\], the case claims \[noImportsOfApps\]/.test(breach),
+      ),
+    ).toBe(true);
+  });
+
+  it("breaches when this engine reported different ids than the case claimed", () => {
+    const materialized = materializedOf([cleanProbe()]);
+    const { breaches } = compareCase(materialized, new Map(), [caseViolation("noImportsOfE2e")]);
+    expect(
+      breaches.some((breach) =>
+        /this engine reported \[noImportsOfE2e\], the case claims \[noImportsOfApps\]/.test(breach),
+      ),
+    ).toBe(true);
+  });
+
+  it("breaches when this engine reported nothing and the case claimed something", () => {
+    const materialized = materializedOf([cleanProbe()]);
+    const { breaches } = compareCase(materialized, new Map(), []);
+    expect(
+      breaches.some((breach) =>
+        /this engine reported \[nothing\], the case claims \[noImportsOfApps\]/.test(breach),
+      ),
+    ).toBe(true);
+  });
+
+  it("breaches when a probe declares its own verdict without a divergence reason", () => {
+    const materialized = materializedOf([
+      cleanProbe({ upstream: ["noImportsOfApps"], tool: ["noImportsOfApps"] }),
+    ]);
+    const upstreamByFile = new Map([["case/a.ts", upstreamFile([statement("noImportsOfApps")])]]);
+    const { breaches } = compareCase(materialized, upstreamByFile, [
+      caseViolation("noImportsOfApps"),
+    ]);
+    expect(breaches).toHaveLength(1);
+    expect(breaches[0]).toMatch(/declares a verdict of its own without a 'divergence' reason/);
+  });
+
+  it("breaches on an undeclared false negative, which is never a decision", () => {
+    const materialized = materializedOf([cleanProbe()]);
+    const upstreamByFile = new Map([["case/a.ts", upstreamFile([statement("noImportsOfApps")])]]);
+    const { breaches } = compareCase(materialized, upstreamByFile, []);
+    expect(breaches.some((breach) => /FALSE NEGATIVE/.test(breach))).toBe(true);
+  });
+
+  it("breaches when a ledgered false negative has stopped happening", () => {
+    // The ledger holds both directions: a recorded defect that is fixed must
+    // be deleted from the ledger, not left as a claim nobody rereads.
+    const materialized = materializedOf([
+      cleanProbe({
+        upstream: ["noImportsOfApps"],
+        tool: ["noImportsOfApps"],
+        divergence: { direction: "weaker", reason: "recorded defect" },
+      }),
+    ]);
+    const upstreamByFile = new Map([["case/a.ts", upstreamFile([statement("noImportsOfApps")])]]);
+    const { breaches } = compareCase(materialized, upstreamByFile, [
+      caseViolation("noImportsOfApps"),
+    ]);
+    expect(breaches).toHaveLength(1);
+    expect(breaches[0]).toMatch(/records a false negative that no longer happens/);
+  });
+
+  it("attributes a stricter hit with no declared reason to 'undeclared'", () => {
+    const rows = [
+      {
+        caseId: "case",
+        file: "case/a.ts",
+        divergence: null,
+        upstreamReadable: true,
+        agree: [],
+        stricter: [{ messageId: "noImportsOfE2e", site: "case/a.ts:1:1", upstreamReadable: true }],
+        weaker: [],
+      },
+    ];
+    const summary = summarize(rows, ["noImportsOfE2e"], ["noImportsOfE2e"]);
+    expect(summary[0].notes).toContain("undeclared");
+    expect(renderDivergences(rows)).toContain("stricter  noImportsOfE2e");
   });
 });
