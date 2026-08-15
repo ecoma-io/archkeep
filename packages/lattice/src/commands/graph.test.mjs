@@ -68,6 +68,17 @@ describe("buildProjects", () => {
     expect(project.tags).toEqual([]);
   });
 
+  it("sorts a project's own tags deterministically, whatever order they were written in", () => {
+    const descending = {
+      a: { name: "a", data: { root: "libs/a", tags: ["scope:z", "scope:a"] } },
+    };
+    expect(buildProjects(descending)[0].tags).toEqual(["scope:a", "scope:z"]);
+    const ascending = {
+      a: { name: "a", data: { root: "libs/a", tags: ["scope:a", "scope:z"] } },
+    };
+    expect(buildProjects(ascending)[0].tags).toEqual(["scope:a", "scope:z"]);
+  });
+
   it("includes targets when the node declares any", () => {
     const nodes = {
       a: {
@@ -188,6 +199,48 @@ describe("buildDependencies", () => {
     dependencies.a = [{ target: "b", type: "static" }];
     const edges = buildDependencies(dependencies);
     expect(edges).toEqual([{ source: "a", target: "b", type: "static" }]);
+  });
+
+  it("orders edges by source even when sources are listed descending", () => {
+    const dependencies = {
+      a: [{ target: "x", type: "static" }],
+      z: [{ target: "y", type: "static" }],
+    };
+    expect(buildDependencies(dependencies).map((e) => e.source)).toEqual(["a", "z"]);
+  });
+
+  it("orders same-source edges by target, both spellings of the pair", () => {
+    const descending = {
+      a: [
+        { target: "z", type: "static" },
+        { target: "y", type: "static" },
+      ],
+    };
+    expect(buildDependencies(descending).map((e) => e.target)).toEqual(["y", "z"]);
+    const ascending = {
+      a: [
+        { target: "y", type: "static" },
+        { target: "z", type: "static" },
+      ],
+    };
+    expect(buildDependencies(ascending).map((e) => e.target)).toEqual(["y", "z"]);
+  });
+
+  it("orders same-pair edges by type, both spellings of the pair", () => {
+    const descending = {
+      a: [
+        { target: "b", type: "dynamic" },
+        { target: "b", type: "static" },
+      ],
+    };
+    expect(buildDependencies(descending).map((e) => e.type)).toEqual(["dynamic", "static"]);
+    const ascending = {
+      a: [
+        { target: "b", type: "static" },
+        { target: "b", type: "dynamic" },
+      ],
+    };
+    expect(buildDependencies(ascending).map((e) => e.type)).toEqual(["dynamic", "static"]);
   });
 });
 

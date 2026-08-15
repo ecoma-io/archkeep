@@ -139,6 +139,48 @@ describe("judgeEdge", () => {
     );
     expect(violations).toEqual([]);
   });
+
+  it("reports notDependOnLibsWithTags when the target transitively reaches a banned tag", () => {
+    // beta reaches adapter, so alpha depending on beta violates the ban — the
+    // transitive arm of the check, not the direct one.
+    const customConfig = {
+      depConstraints: [{ sourceTag: "layer:domain", notDependOnLibsWithTags: ["layer:adapter"] }],
+    };
+    const customNodes = nodes({
+      adapter: { name: "adapter", data: { root: "libs/adapter", tags: ["layer:adapter"] } },
+    });
+    const violations = judgeEdge(
+      { source: "alpha", target: "beta" },
+      customNodes,
+      { beta: [{ target: "adapter", type: "static" }] },
+      customConfig.depConstraints,
+    );
+    expect(violations).toEqual([
+      {
+        messageId: "notTagsConstraintViolation",
+        constraint: customConfig.depConstraints[0],
+        source: "alpha",
+        target: "beta",
+      },
+    ]);
+  });
+
+  it("reports emptyOnlyTagsConstraintViolation when onlyDependOnLibsWithTags is an empty list", () => {
+    // An empty allow-list is a real config an author can write — it bans
+    // every dependency. It must fire its own violation rather than reading
+    // as "no constraint" and passing the edge.
+    const emptyConfig = {
+      depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: [] }],
+    };
+    const violations = judgeEdge(
+      { source: "alpha", target: "beta" },
+      nodes(),
+      {},
+      emptyConfig.depConstraints,
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0].messageId).toBe("emptyOnlyTagsConstraintViolation");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -218,6 +260,30 @@ describe("computeRuleImpact", () => {
     expect(result.resolved[0].messageId).toBe("onlyTagsConstraintViolation");
     expect(result.resolved[0].source).toBe("alpha");
     expect(result.resolved[0].target).toBe("gamma");
+  });
+
+  it("keeps every baseline edge when a source appears more than once", () => {
+    // The baseline map is built by appending: two edges from the same source
+    // must both survive into the reachability view, or a resolved violation
+    // through the second would vanish.
+    const baselineProjects = [
+      { name: "alpha", root: "libs/alpha", tags: ["layer:domain"] },
+      { name: "beta", root: "libs/beta", tags: ["layer:util"] },
+      { name: "gamma", root: "libs/gamma", tags: ["layer:app"] },
+    ];
+    const baselineDeps = [
+      { source: "alpha", target: "beta", type: "static" },
+      { source: "alpha", target: "gamma", type: "static" },
+    ];
+    const result = computeRuleImpact(
+      { addedEdges: [], removedEdges: [{ source: "alpha", target: "gamma", type: "static" }] },
+      headNodes(),
+      {},
+      baselineProjects,
+      baselineDeps,
+      depConstraints,
+    );
+    expect(result.resolved.map((v) => v.target)).toEqual(["gamma"]);
   });
 
   it("reports no resolved violation when a removed edge was previously allowed", () => {

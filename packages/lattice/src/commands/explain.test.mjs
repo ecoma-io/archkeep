@@ -281,6 +281,60 @@ describe("explainCommand", () => {
     expect(result.coverage.complete).toBe(false);
   });
 
+  it("reports an unresolvable site at exit code 3 when another file could not be analyzed", () => {
+    // The site itself is a legitimate unresolvable failure; a whole-file
+    // failure on ANOTHER file makes the run incomplete. readBaseline
+    // semantics: the envelope must carry exit 3, so a consumer never reads
+    // an incomplete explanation as a clean one.
+    const ctx = commandContext({
+      analysis: {
+        analyzed: 1,
+        imports: [],
+        failures: [
+          { sourceFile: "libs/alpha/main.go", line: 10, column: 5, reason: "non-literal argument" },
+          { sourceFile: "libs/beta/other.go", line: null, column: null, reason: "unreadable" },
+        ],
+      },
+    });
+    const result = explainCommand("libs/alpha/main.go:10:5", ctx, config());
+    expect(result.status).toBe("no-verdict");
+    expect(result.explanation.unresolvable).toBe(true);
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.exitCode).toBe(3);
+  });
+
+  it("explains an external import from a file no project owns with no project context", () => {
+    // The import resolves to no project (external crate) and the file sits
+    // outside every project root: sourceProject, targetProject and both tag
+    // lists must read as their empty forms — null or [] — never as guessed
+    // values, and never as a crash.
+    const ctx = commandContext({
+      analysis: {
+        analyzed: 1,
+        imports: [
+          {
+            sourceFile: "loose/tool.go",
+            line: 3,
+            column: 5,
+            specifier: "github.com/acme/widget",
+            kind: "static",
+            spelling: { path: false, relative: false },
+            resolved: { target: null, file: null, external: true },
+          },
+        ],
+        failures: [],
+      },
+    });
+    const result = explainCommand("loose/tool.go:3:5", ctx, config());
+    expect(result.explanation.sourceProject).toBeNull();
+    expect(result.explanation.targetProject).toBeNull();
+    expect(result.explanation.sourceTags).toEqual([]);
+    expect(result.explanation.targetTags).toEqual([]);
+    expect(result.explanation.matchedConstraints).toEqual([]);
+    expect(result.explanation.import.specifier).toBe("github.com/acme/widget");
+    expect(result.explanation.import.targetProject).toBeNull();
+  });
+
   it("derives sourceProject from the file path, not from the import record", () => {
     // The import record has no sourceProject field — the analysis contract
     // keeps no project name on the record. explainCommand must derive it from

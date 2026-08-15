@@ -103,6 +103,17 @@ describe("collectProjectContext", () => {
     );
   });
 
+  it("lists available projects ascending even when declared in descending order", () => {
+    const graph = {
+      nodes: { beta: { name: "beta" }, alpha: { name: "alpha" } },
+      dependencies: {},
+    };
+    const config = { depConstraints: [] };
+    expect(() => collectProjectContext("missing", graph, config)).toThrow(
+      /available projects: alpha, beta/,
+    );
+  });
+
   it("reads tags from data.tags when present (Nx graph shape)", () => {
     const graph = {
       nodes: {
