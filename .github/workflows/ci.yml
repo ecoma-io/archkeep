@@ -104,6 +104,16 @@ jobs:
       # host-specific fields have leaked into the canonical skills.
       - run: node scripts/check-skills.mjs
 
+      # Fails on any doc reference that cannot resolve: markdown links in
+      # docs/ whose target file is gone, #anchors that name no heading, and
+      # docs/… citations in code comments and strings pointing at a file that
+      # does not exist. The documentation IA restructure once deleted two
+      # files and left twenty-five references — two inside shipped error
+      # messages — pointing at the old paths, and nothing caught it until
+      # someone clicked one. Prettier formats markdown but does not resolve a
+      # link; this step is where "does the link land" is answered.
+      - run: node scripts/check-docs-links.mjs
+
       # --force skips Moon's VCS affected detection (which needs full git
       # history, unavailable in the shallow checkout) and bypasses the local
       # cache — both correct for CI, where every target must run fresh.

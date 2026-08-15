@@ -320,7 +320,7 @@ either convention would answer confidently about a workspace it had misread.
   approximations.
 - **A dependency on any sibling package**, or a third-party package outside the
   short allow-list that
-  [`src/conformance/boundary.test.mjs`](../../packages/lattice/src/conformance/)
+  [`src/conformance/boundary.test.mjs`](../../packages/lattice/src/conformance/boundary.test.mjs)
   holds. A consumer installs one package and gets a working tool.
 - **Any workspace's project names, areas or tag values** — this repository's
   included. Fixtures too.
