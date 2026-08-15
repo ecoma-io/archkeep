@@ -25,7 +25,7 @@ nothing.
 
 ```shell
 pnpm test                                            # node --test over scripts/ only
-pnpm exec nx run-many -t lint test build typecheck   # each package's own target
+moon run ...:lint ...:test ...:typecheck             # each package's own target
 ```
 
 **`pnpm test`** is `node --test` over `scripts/*.test.mjs` — the gate scripts, and
@@ -205,10 +205,3 @@ fixture rather than just a fix. Which tier depends on what was silent:
 | a rule that should have fired        | `src/conformance/`, so ESLint's verdict is the check                                       |
 | an edge that never reached the graph | `graph/create-dependencies.integration.test.mjs`                                           |
 | a file the editor never received     | `lsp/editor-config.integration.test.mjs`                                                   |
-
-## litmus is advice, not a gate
-
-`litmus` is a skill package about test craft, enabled in `.claude/settings.json`
-and installed from its own marketplace. It advises a session writing tests.
-Nothing it says blocks a merge, and the distinction is deliberate — everything in
-the list above can fail a build; litmus cannot.

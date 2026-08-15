@@ -16,8 +16,9 @@
 //
 // The version it checks against comes from `packages/lattice/package.json` —
 // the single source of truth for the Lattice release version. All skill
-// metadata.version fields, the plugin manifest version, and the marketplace
-// entry version must match it.
+// metadata.version fields, the Claude Code plugin manifest version, the
+// marketplace entry version, the Codex plugin manifest version, and the VS
+// Code extension's package.json version must match it.
 
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -28,6 +29,10 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const SKILLS_DIR = "skills";
 export const EXPECTED_SKILLS = ["arch-context", "arch-change", "arch-check", "arch-review"];
 export const PACKAGE_JSON = "packages/lattice/package.json";
+export const CLAUDE_PLUGIN_MANIFEST = ".claude-plugin/plugin.json";
+export const MARKETPLACE_CATALOGUE = ".claude-plugin/marketplace.json";
+export const CODEX_PLUGIN_MANIFEST = ".codex-plugin/plugin.json";
+export const VSCODE_PACKAGE_JSON = "packages/lattice-vscode/package.json";
 
 // Host-specific frontmatter fields that must NOT appear in canonical skills.
 // These are Claude Code extensions to the Agent Skills spec.
@@ -118,13 +123,23 @@ function unquote(value) {
  * @param {object} input
  * @param {string[]} input.skillDirs directory names under skills/
  * @param {string} input.packageVersion version from packages/lattice/package.json
- * @param {string} input.pluginVersion version from plugin.json
- * @param {string} input.marketplaceVersion version from marketplace.json entry
+ * @param {string} input.pluginVersion version from the Claude Code plugin manifest
+ * @param {string} input.marketplaceVersion version from the marketplace.json entry
+ * @param {string} input.codexPluginVersion version from the Codex plugin manifest
+ * @param {string} input.vscodeVersion version from packages/lattice-vscode/package.json
  * @param {{dir: string, name: string|null, description: string|null, metadataVersion: string|null, compatibility: string|null, hostFields: string[]}[]} input.skills
  *   parsed frontmatter for each skill
  * @returns {{lines: string[], failures: string[]}}
  */
-export function evaluate({ skillDirs, packageVersion, pluginVersion, marketplaceVersion, skills }) {
+export function evaluate({
+  skillDirs,
+  packageVersion,
+  pluginVersion,
+  marketplaceVersion,
+  codexPluginVersion,
+  vscodeVersion,
+  skills,
+}) {
   const lines = [];
   const failures = [];
 
@@ -230,6 +245,25 @@ export function evaluate({ skillDirs, packageVersion, pluginVersion, marketplace
     lines.push(`FAIL marketplace.json — version mismatch`);
   }
 
+  // 11. Codex plugin manifest version must match package version
+  if (codexPluginVersion !== packageVersion) {
+    failures.push(
+      `codex-plugin/plugin.json version is "${codexPluginVersion}" but package version is ` +
+        `"${packageVersion}". The Codex plugin manifest must be synchronized with the package.`,
+    );
+    lines.push(`FAIL codex-plugin/plugin.json — version mismatch`);
+  }
+
+  // 12. VS Code extension version must match package version
+  if (vscodeVersion !== packageVersion) {
+    failures.push(
+      `packages/lattice-vscode/package.json version is "${vscodeVersion}" but package version is ` +
+        `"${packageVersion}". The extension is released with the engine it pairs with, ` +
+        `so its version must be synchronized with the package.`,
+    );
+    lines.push(`FAIL lattice-vscode/package.json — version mismatch`);
+  }
+
   return { lines, failures };
 }
 
@@ -237,24 +271,36 @@ export function evaluate({ skillDirs, packageVersion, pluginVersion, marketplace
  * Reads the filesystem and returns the facts `evaluate` needs.
  * This is the only function that touches the outside world.
  *
- * @returns {{skillDirs: string[], packageVersion: string, pluginVersion: string, marketplaceVersion: string, skills: object[]}}
+ * @returns {{skillDirs: string[], packageVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, skills: object[]}}
  */
 export function readSkillFacts() {
   const pkgPath = join(root, PACKAGE_JSON);
   const pkg = existsSync(pkgPath) ? JSON.parse(readFileSync(pkgPath, "utf8")) : { version: "?" };
   const packageVersion = pkg.version;
 
-  const manifestPath = join(root, "packages/lattice/.claude-plugin/plugin.json");
+  const manifestPath = join(root, CLAUDE_PLUGIN_MANIFEST);
   const manifest = existsSync(manifestPath)
     ? JSON.parse(readFileSync(manifestPath, "utf8"))
     : { version: "?" };
   const pluginVersion = manifest.version;
 
-  const cataloguePath = join(root, ".claude-plugin/marketplace.json");
+  const cataloguePath = join(root, MARKETPLACE_CATALOGUE);
   const catalogue = existsSync(cataloguePath)
     ? JSON.parse(readFileSync(cataloguePath, "utf8"))
     : { plugins: [{ version: "?" }] };
   const marketplaceVersion = catalogue.plugins[0]?.version ?? "?";
+
+  const codexPath = join(root, CODEX_PLUGIN_MANIFEST);
+  const codex = existsSync(codexPath)
+    ? JSON.parse(readFileSync(codexPath, "utf8"))
+    : { version: "?" };
+  const codexPluginVersion = codex.version;
+
+  const vscodePath = join(root, VSCODE_PACKAGE_JSON);
+  const vscode = existsSync(vscodePath)
+    ? JSON.parse(readFileSync(vscodePath, "utf8"))
+    : { version: "?" };
+  const vscodeVersion = vscode.version;
 
   const skillsDir = join(root, SKILLS_DIR);
   const skillDirs = existsSync(skillsDir)
@@ -292,7 +338,15 @@ export function readSkillFacts() {
     };
   });
 
-  return { skillDirs, packageVersion, pluginVersion, marketplaceVersion, skills };
+  return {
+    skillDirs,
+    packageVersion,
+    pluginVersion,
+    marketplaceVersion,
+    codexPluginVersion,
+    vscodeVersion,
+    skills,
+  };
 }
 
 function main() {

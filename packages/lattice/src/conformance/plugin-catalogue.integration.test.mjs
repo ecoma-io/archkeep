@@ -77,10 +77,14 @@ describe("the plugin catalogue this repository publishes", () => {
 
   it("keeps every catalogue entry inside this repository, so one commit describes them all", () => {
     // A `source` climbing out of the tree would make an installer's plugins come
-    // from somewhere the pull request that changes them cannot review.
+    // from somewhere the pull request that changes them cannot review. `"./"`
+    // — the marketplace root — is the inside case at its limit: the whole
+    // repository is the plugin, which is what lets the plugin manifest, the
+    // skills and the server travel together at one version.
+    const repoRoot = resolve(ROOT);
     for (const entry of marketplace.plugins) {
       const resolved = resolve(ROOT, entry.source);
-      expect(resolved.startsWith(ROOT), `${entry.name} -> ${entry.source}`).toBe(true);
+      expect(resolved.startsWith(repoRoot), `${entry.name} -> ${entry.source}`).toBe(true);
     }
   });
 
@@ -89,16 +93,20 @@ describe("the plugin catalogue this repository publishes", () => {
     // key naming a marketplace nothing registers is not an error, it is a plugin
     // that never starts. Two sources make a marketplace reachable — this
     // repository's own catalogue, and the `extraKnownMarketplaces` the same
-    // settings file declares — so the reachable set is derived from both rather
-    // than listed here, which is what makes this fail on a rename instead of
-    // needing one.
+    // settings file declares (absent here because this session uses only the
+    // repository's own marketplace) — so the reachable set is derived from both
+    // rather than listed here, which is what makes this fail on a rename instead
+    // of needing one.
     //
     // Deliberately NOT asserted: that every plugin this repository publishes is
     // also enabled here. The catalogue states what the repository OFFERS to
     // consumers; the settings state what a session here USES. A session in this
     // tree does not need the boundary server installed as a plugin, because the
     // conformance suite and the CLI already judge this tree in CI.
-    const reachable = new Set([marketplace.name, ...Object.keys(settings.extraKnownMarketplaces)]);
+    const reachable = new Set([
+      marketplace.name,
+      ...Object.keys(settings.extraKnownMarketplaces ?? {}),
+    ]);
 
     const enabled = Object.keys(settings.enabledPlugins ?? {});
     expect(enabled.length).toBeGreaterThan(0);
@@ -116,7 +124,7 @@ describe("the plugin catalogue this repository publishes", () => {
     // A malformed entry here fails the same silent way: the marketplace is never
     // registered, the plugin string points at nothing, and the session starts
     // without the skills the repository meant every contributor to have.
-    for (const [name, entry] of Object.entries(settings.extraKnownMarketplaces)) {
+    for (const [name, entry] of Object.entries(settings.extraKnownMarketplaces ?? {})) {
       expect(entry.source?.source, `${name} names a source type`).toBe("github");
       expect(entry.source.repo, `${name} names owner/repo`).toMatch(/^[^/\s]+\/[^/\s]+$/u);
     }

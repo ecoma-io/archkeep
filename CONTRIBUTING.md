@@ -50,26 +50,16 @@ you run no command in the normal case. Two things it does:
 - **Format and lint on every write.** Hooks in `.claude/hooks/` run the moment a
   file is edited, so a problem surfaces while the edit is still in context rather
   than at commit time.
-- **Enables `litmus`** — a skill package about test craft, published from
-  `ecoma-io/litmus`. It advises a session writing tests; it gates nothing, and no
-  merge depends on it.
+- **Enables `lattice@lattice`** — this repository's own plugin, the one its
+  marketplace catalogue (`.claude-plugin/marketplace.json`) publishes. It is the
+  language server reporting module-boundary diagnostics as you edit, plus the
+  `arch-*` skills; it gates nothing, and no merge depends on it.
 
 Your **first session in this directory prompts you to trust it**. Agreeing is
-what registers the `litmus` marketplace and installs the plugin — measured on
-Claude Code 2.1.223, where a repository's `extraKnownMarketplaces` is read only
-after that trust dialog is accepted. That gate is the whole safety property: a
-checkout you have not vouched for cannot make your session fetch and run anything.
-There is deliberately no `SessionStart` hook doing this automatically, because
-such a hook would route around the one gate that makes the arrangement safe, and
-would pay a `git clone` per session for it.
-
-If you decline, or the prompt does not appear, Claude Code says so and prints the
-exact command:
-
-```text
-Plugin "litmus@litmus" is enabled in project settings but isn't installed
- — run `claude plugin install litmus@litmus --scope project`
-```
+what lets that plugin run — a checkout you have not vouched for cannot make your
+session execute anything. There is deliberately no `SessionStart` hook doing this
+automatically, because such a hook would route around the one gate that makes the
+arrangement safe.
 
 Nothing else in the repository depends on it. Every gate a pull request must pass
 runs in CI and in the Git hooks.

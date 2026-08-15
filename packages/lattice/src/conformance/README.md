@@ -32,7 +32,7 @@ message ids come off the installed rule's own `defaultOptions` and
 both engines' input at once.
 
 ```
-pnpm nx test lattice
+moon run lattice:test
 ```
 
 Fixtures exist only while the suite runs, which is what keeps them out of the
@@ -94,7 +94,7 @@ Measured on vitest 4.1.10, the plain run above prints no table at all; this one
 prints it:
 
 ```
-pnpm nx test lattice --args="--reporter=verbose"
+moon run lattice:test -- --reporter=verbose
 ```
 
 Read every column against one scope: a row counts an outcome only where both

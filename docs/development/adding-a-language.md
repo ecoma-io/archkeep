@@ -159,8 +159,10 @@ Two things to get right, both learned the hard way in Python:
 
 ### 5. Route it to the editor
 
-`packages/lattice/.claude-plugin/plugin.json`, under
-`lspServers.*.extensionToLanguage`.
+`.claude-plugin/plugin.json` at the repository root, under
+`lspServers.*.extensionToLanguage`. The manifest lives at the root because the
+marketplace entry's `source` is `"./"` — the plugin is the whole repository —
+and the server it launches is `packages/lattice/lsp.mjs`.
 
 A JSON manifest cannot import anything, so this list is a second copy of
 `LANGUAGE_BY_EXTENSION` — allowed only because
@@ -178,10 +180,13 @@ What goes wrong without this step is quiet: the language is checked by the CLI
 and never by an editor, so every project written in it keeps showing no boundary
 problems in the buffer. That reads exactly like a clean tree.
 
-**Bump the manifest `version`** — here and in `.claude-plugin/marketplace.json`,
-which must match. An installed plugin is cached per version, so an unbumped edit
-reaches nobody, and `src/conformance/plugin-catalogue.integration.test.mjs` fails
-when the two drift.
+**Bump the manifest `version`** — here, in `.claude-plugin/marketplace.json`,
+in `.codex-plugin/plugin.json`, in `packages/lattice/package.json` and in
+`packages/lattice-vscode/package.json` (the extension routes the new extension
+too — `src/languages.mjs` is where, and `routed-extensions.integration.test.mjs`
+holds it), which must all match. An installed plugin is cached per version, so
+an unbumped edit reaches nobody, and `scripts/check-skills.mjs` fails when they
+drift.
 
 ### 6. If you need a parser dependency
 

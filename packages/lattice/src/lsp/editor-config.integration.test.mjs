@@ -22,16 +22,17 @@ import { describe, expect, it } from "vitest";
 import { LANGUAGE_BY_EXTENSION } from "../analysis/analyze.mjs";
 
 /**
- * The package root, and the manifest inside it.
+ * The repository root, and the plugin manifest at the marketplace root.
  *
- * Both are counted from this file rather than searched for, and the manifest
- * living IN the package is the point: it is what a consumer receives when they
- * install the plugin, so the entry point it names has to be resolvable from the
- * package alone. A manifest at the workspace root — where this one used to be —
- * describes a server only the repository that contains it can start.
+ * Both are counted from this file rather than searched for. The manifest lives
+ * at the repository root because the marketplace entry's `source` is `"./"` —
+ * the plugin is the whole repository, which is what lets the manifest, the
+ * `skills/` directory and this package's server travel into a consumer's
+ * plugin cache together. The entry point it names therefore resolves inside
+ * the plugin: `${CLAUDE_PLUGIN_ROOT}/packages/lattice/lsp.mjs`.
  */
-const PACKAGE_ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const MANIFEST = join(PACKAGE_ROOT, ".claude-plugin/plugin.json");
+const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
+const MANIFEST = join(REPO_ROOT, ".claude-plugin/plugin.json");
 const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
 const [server] = Object.values(manifest.lspServers);
 
@@ -52,7 +53,7 @@ describe("the Claude Code plugin that routes files to this server", () => {
 
     expect(server.command).toBe("node");
     expect(entry.startsWith("${CLAUDE_PLUGIN_ROOT}/")).toBe(true);
-    expect(existsSync(join(PACKAGE_ROOT, entry.replace("${CLAUDE_PLUGIN_ROOT}/", "")))).toBe(true);
+    expect(existsSync(join(REPO_ROOT, entry.replace("${CLAUDE_PLUGIN_ROOT}/", "")))).toBe(true);
   });
 
   it("judges the tree the editor opened, not the tree it was installed into", () => {
