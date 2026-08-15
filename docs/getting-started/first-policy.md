@@ -124,7 +124,7 @@ export default [
 Keep running it. It stays authoritative for JavaScript, TypeScript and Vue; this
 tool is for the languages it cannot parse. The conditions under which you could
 eventually drop it are enumerated in
-[`src/conformance/`](../../packages/lattice/src/conformance/README.md),
+`src/conformance/`,
 and one of the three is not met yet.
 
 ## Other dialects

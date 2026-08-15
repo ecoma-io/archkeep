@@ -5,7 +5,7 @@ Every mechanism below runs in CI or is pinned by a test.
 
 ## The invariant
 
-[AGENTS.md](../../AGENTS.md) owns the sentence and the reasoning under it: **an
+AGENTS.md owns the sentence and the reasoning under it: **an
 empty result is a claim, not a shrug.** What belongs here is why the mechanisms
 below exist because of that asymmetry rather than in spite of it.
 
@@ -17,9 +17,9 @@ every mechanism in this document is a guard against the silent direction:
   (could not look) against **0** (looked and found nothing) —
   [exit-codes.md](../reference/exit-codes.md).
 - The language server publishes an empty diagnostic list from exactly two named
-  places — [packages/lattice/CLAUDE.md](../../packages/lattice/CLAUDE.md).
+  places — packages/lattice/CLAUDE.md.
 - An analyzer that cannot read a file records the failure rather than dropping it
-  — [contract.md](../../packages/lattice/src/analysis/contract.md).
+  — contract.md.
 
 ## The boundary config as the single source of truth
 

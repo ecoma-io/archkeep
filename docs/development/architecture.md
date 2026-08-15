@@ -3,9 +3,9 @@
 One `check` run, end to end, and why the cuts between layers are where they are.
 
 This page owns the **flow**. What each layer is _allowed to know_ is owned by
-[`packages/lattice/CLAUDE.md`](../../packages/lattice/CLAUDE.md),
+`packages/lattice/CLAUDE.md`,
 and the record passed between them is frozen in
-[`src/analysis/contract.md`](../../packages/lattice/src/analysis/contract.md).
+`src/analysis/contract.md`.
 Those two bind; this page explains how they fit together.
 
 ## The two halves
@@ -56,7 +56,7 @@ On an Nx-registered workspace, `readPluginOptions(root)` reads
 renamed. A `lattice.json` workspace has no `plugins[].options` table to nest
 those under, so it states the same two keys — `boundaryConfig` and
 `tsConfig` — directly on `lattice.json` itself
-([`packages/lattice/CLAUDE.md`](../../packages/lattice/CLAUDE.md)'s "The three
+(`packages/lattice/CLAUDE.md`'s "The three
 consumers of the options" owns the exact shape). Either way this happens
 _before_ the config is loaded, because it decides _which_ config.
 
@@ -99,7 +99,7 @@ know which one they are holding.
   `lattice.json`'s declared∪inferred project list against the tracked tree,
   and `buildGraph()` reduces that plus the analysis records from step 7 into
   the same `{nodes, dependencies}` shape the Nx and Moon paths build from a
-  real `nx graph` or `moon project-graph`. [`packages/lattice/src/providers/native/README.md`](../../packages/lattice/src/providers/native/README.md)
+  real `nx graph` or `moon project-graph`. `packages/lattice/src/providers/native/README.md`
   owns this path's own semantics and declared limits.
 
 Both providers, and `listFiles(root)` (`git ls-files`, in `src/workspace.mjs`
@@ -175,7 +175,7 @@ share one verdict, and what lets all fifteen rules be driven from fixtures with
 no workspace at all. A rule that reached for a file would become a second, weaker
 analyzer.
 
-Read [`src/rules/README.md`](../../packages/lattice/src/rules/README.md)
+Read `src/rules/README.md`
 before touching anything in here. It carries the five upstream semantics a
 reimplementation gets backwards — starting with _no matching constraint is an
 error, not a pass_ — and every place this engine is deliberately stricter than
@@ -320,7 +320,7 @@ either convention would answer confidently about a workspace it had misread.
   approximations.
 - **A dependency on any sibling package**, or a third-party package outside the
   short allow-list that
-  [`src/conformance/boundary.test.mjs`](../../packages/lattice/src/conformance/boundary.test.mjs)
+  `src/conformance/boundary.test.mjs`
   holds. A consumer installs one package and gets a working tool.
 - **Any workspace's project names, areas or tag values** — this repository's
   included. Fixtures too.
@@ -332,6 +332,6 @@ either convention would answer confidently about a workspace it had misread.
 
 - Adding a language → [adding-a-language.md](adding-a-language.md)
 - Which suite proves what → [testing.md](testing.md)
-- The native provider's own declared limits → [`packages/lattice/src/providers/native/README.md`](../../packages/lattice/src/providers/native/README.md)
+- The native provider's own declared limits → `packages/lattice/src/providers/native/README.md`
 - `lattice.json`'s fields → [../reference/configuration.md](../reference/configuration.md)
 - The direction all of this serves → [../doctrine/north-star.md](../doctrine/north-star.md)

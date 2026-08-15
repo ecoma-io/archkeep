@@ -106,7 +106,7 @@ Two filenames, and nothing else. Both are Nx conventions a workspace may rename.
 
 The same options table is read by three faces, each through a different route.
 The differences are load-bearing —
-[`packages/lattice/CLAUDE.md`](../../packages/lattice/CLAUDE.md)'s
+`packages/lattice/CLAUDE.md`'s
 "The three consumers of the options" owns the full detail.
 
 | consumer                           | how it reads the options                                                              |
@@ -124,7 +124,7 @@ in every report from that language having no violations — which is the exact
 silence this tool exists to refuse. A workspace with no Go pays nothing for Go
 support already: each resolver keys off the manifests that exist, finds none,
 and does nothing. See
-[`packages/lattice/src/options.mjs`](../../packages/lattice/src/options.mjs)
+`packages/lattice/src/options.mjs`
 for the full argument.
 
 ## readProjectGraph

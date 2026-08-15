@@ -66,7 +66,7 @@ target returning early each stop the checks below them.
 That is a **missed violation**, and it is the most valuable bug report this
 project can get. It earns a permanent regression fixture rather than just a fix.
 The issue tracker has a
-[dedicated form for it](../../.github/ISSUE_TEMPLATE/missed_violation.yml),
+dedicated form for it (`.github/ISSUE_TEMPLATE/missed_violation.yml`),
 separate from the ordinary bug form, because a false negative is a different
 class of defect.
 
@@ -301,7 +301,7 @@ If your backend uses a shape that is not on the list, that is a gap worth filing
 Two doors, and they are different on purpose:
 
 - **A violation that was not reported** →
-  [the missed-violation form](../../.github/ISSUE_TEMPLATE/missed_violation.yml).
+  the missed-violation form (`.github/ISSUE_TEMPLATE/missed_violation.yml`).
   This is the dangerous class and it is tracked separately.
 - **Anything else** → the ordinary bug form.
 

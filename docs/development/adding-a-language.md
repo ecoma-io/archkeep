@@ -70,7 +70,7 @@ drive the analyzer from an in-memory string. `workspace` is
 `{ root, projects, filesOf, readFile }`.
 
 The record shape is frozen in
-[`src/analysis/contract.md`](../../packages/lattice/src/analysis/contract.md)
+`src/analysis/contract.md`
 and reproduced as JSDoc types in `analyze.mjs`; the two are edited together.
 Analyzers are meant to be written in parallel, and that only works if none of
 them gets to reinterpret the shape.
@@ -191,7 +191,7 @@ drift.
 ### 6. If you need a parser dependency
 
 Read the allow-list in
-[`src/conformance/boundary.test.mjs`](../../packages/lattice/src/conformance/boundary.test.mjs)
+`src/conformance/boundary.test.mjs`
 first — it is where the list lives, one entry per package with the reason it
 earns, and adding a dependency means adding it there in the same diff. The list
 is deliberately not restated in prose anywhere: it used to be, it drifted, and

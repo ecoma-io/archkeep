@@ -23,7 +23,7 @@ describes the workspace stays out of whichever file happens to be open.
 ## How it works
 
 The extension is a client and nothing else. All the analysis lives in
-[`@ecoma-io/lattice`](../../packages/lattice/README.md), which ships a language
+`@ecoma-io/lattice`, which ships a language
 server; what is here starts that server, tells it where the workspace root is,
 and shows you whether it is running.
 
@@ -97,7 +97,7 @@ answers through ESLint. `.vue` is claimed anyway, as a second opinion on the
 one extension both enforcers cover.
 
 The routed list is held to the engine's own analyzer registry by an integration
-test (`../../packages/lattice/src/lsp/editor-config.integration.test.mjs`), so a
+test (`packages/lattice/src/lsp/editor-config.integration.test.mjs`), so a
 language cannot arrive in the engine and stay invisible in the editor.
 
 ## Installation
@@ -177,4 +177,4 @@ duplicates what `@nx/enforce-module-boundaries` already tells you.
 - What each analyzer reads, and the shapes it cannot:
   [languages.md](../reference/languages.md)
 - The VS Code extension's own reference:
-  [`packages/lattice-vscode/README.md`](../../packages/lattice-vscode/README.md)
+  `packages/lattice-vscode/README.md`

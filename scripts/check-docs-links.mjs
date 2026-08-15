@@ -5,6 +5,12 @@
 //   1. Markdown links `[text](target)` — the target's file must exist, resolved
 //      relative to the file that carries the link, and a `#anchor` fragment
 //      naming a heading in that SAME file must match a heading actually there.
+//      A link carried by a page INSIDE docs/ must land INSIDE docs/: the
+//      documentation is a self-contained tree, so a docs page that links to
+//      `../CONTRIBUTING.md` or `../../packages/…` is a failure — its subject
+//      belongs in docs/, and a reader of docs/ is a docs reader. Markdown
+//      files OUTSIDE docs/ keep the right to link INTO docs/ (the direction a
+//      reader is steered toward); only the reverse is refused.
 //   2. Prose citations `docs/...` or `../docs/...` in `.mjs` comments and
 //      strings and in `.md` prose — resolved from the workspace root when they
 //      begin with `docs/`, from the carrying file when they begin with `../` or
@@ -33,6 +39,7 @@
 //     (this repository's convention for prose references);
 //   - a citation beginning with `../` or `./` resolves from its carrying file
 //     (the same path rule AGENTS.md applies to comments that cite documents);
+//   - a page inside docs/ may only link to another page inside docs/;
 //   - everything else is not a reference to this repository's docs and is
 //     ignored.
 //
@@ -45,7 +52,7 @@
 
 import { spawnSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -55,12 +62,16 @@ export const SCANNED_EXTENSIONS = [".md", ".mjs", ".js"];
 // Tracked files that deliberately look broken and must not fail the gate:
 // the Semgrep rule fixtures, and this gate's own test file, whose
 // failure-direction cases hand it references that do not resolve on purpose
-// (a gone target is the input, not a defect in the tree).
+// (a gone target is the input, not a defect in the tree). Same argument
+// Semgrep's fixtures get: deliberately unsafe content, checked by its own
+// harness rather than by the gate it is written for.
 export const IGNORED_PREFIXES = [
   ".github/semgrep/",
   ".claude/worktrees/",
   "scripts/check-docs-links.test.mjs",
 ];
+// The directory a docs/ page may link into — and only into.
+export const DOCS_DIR = "docs";
 
 /**
  * Extracts the local targets of every `[text](target)` markdown link in text.
@@ -171,6 +182,17 @@ export function withDirectories(paths) {
 }
 
 /**
+ * Whether an absolute path lies inside `docs/` (or is that directory itself).
+ *
+ * @param {string} resolved absolute path
+ * @param {string} docsDir absolute path of the docs/ directory
+ * @returns {boolean}
+ */
+function insideDocs(resolved, docsDir) {
+  return resolved === docsDir || resolved.startsWith(`${docsDir}${sep}`);
+}
+
+/**
  * Judges the reference facts and returns verdict lines and failures.
  *
  * `files` maps a repository-relative path to what its content references; each
@@ -204,13 +226,25 @@ export function evaluate({ files, existingPaths, root }) {
 
   lines.push(`scanning ${files.length} files for doc references`);
 
+  const docsDir = join(root, DOCS_DIR);
+
   for (const file of files) {
     const absolute = join(root, file.path);
+    const inDocs = file.path.startsWith(`${DOCS_DIR}/`);
     for (const { target, line } of file.links) {
       const [pathPart, fragment] = target.split("#", 2);
       // A bare `#anchor` resolves to the carrying file itself: the part
       // before the fragment is empty and the headings check below applies.
       const resolved = pathPart === "" ? absolute : resolve(dirname(absolute), pathPart);
+      if (inDocs && !insideDocs(resolved, docsDir)) {
+        failures.push(
+          `${file.path}:${line} links to \`${target}\` — a file OUTSIDE docs/. ` +
+            `Documentation may link only within docs/, so a page in docs/ cannot ` +
+            `point at \`${pathPart || "(this file)"}\` (which resolves to ${resolved}). ` +
+            `Name the file in plain text instead of linking it.`,
+        );
+        continue;
+      }
       if (!existingPaths.has(resolved)) {
         failures.push(
           `${file.path}:${line} links to \`${target}\` but \`${pathPart || "(this file)"}\` resolves to ` +
