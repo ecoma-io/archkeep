@@ -311,20 +311,6 @@ If a commit was AI-assisted, it carries `Assisted-by: <tool>`, or
 every commit message on the branch into the body of the one that lands, trailers
 and all, so a trailer repeated five times arrives in history five times.
 
-## Brand assets
-
-`.github/assets/logo.svg` is the source; the PNGs beside it are rendered from it
-with headless Chrome. Edit the SVG, re-render, never touch a PNG by hand. Two
-things that cost time when rediscovered: the SVG must be **inlined into the
-render HTML**, because an `<img src="logo.svg">` subresource does not load in
-that context and yields a broken-image placeholder that looks like a rendered
-file; and ImageMagick produces grayscale here, so it is not the tool. Verify a
-re-render by colour histogram, not by eye — the placeholder failure above passed
-a glance.
-
-Colours are Ecoma design tokens (`--primary` #335170, `--agent` #9B4D2C).
-Changing one is a brand decision, not a styling one.
-
 ## Human-facing documents
 
 **`docs/README.md` holds the ownership map**, and it is the file to read before
