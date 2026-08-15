@@ -64,8 +64,9 @@
  * Every Nx fixture's `nx.json` registers `../nx.mjs` — this package's own
  * plugin — as a LOCAL plugin, by relative path rather than by package name:
  * `nx graph` cannot draw a Go import edge on its own (`../../../../../AGENTS.md`'s
- * "what this repository is" — Nx reads TypeScript and stays quiet on
- * everything else), so without a plugin computing that edge the Nx side of
+ * "what this repository is" — Nx reads TypeScript and JavaScript and stays
+ * quiet on everything else), so without a plugin computing that edge the Nx
+ * side of
  * this comparison would trivially show zero dependencies and the test would
  * prove nothing. This is the plugin under test, so registering it here is
  * the same self-check `node packages/lattice/cli.mjs check` already runs
