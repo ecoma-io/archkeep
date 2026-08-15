@@ -161,6 +161,10 @@ about because a change can break them without breaking a single test:
   exits 0 on three different states and only one of them is good: nothing there,
   something there with no matching target (**skipped in silence**), or a
   directory with sources and no manifest (**invisible** to `nx show projects`).
+- **`check-docs-links`** — fails on any doc reference that cannot resolve:
+  a markdown link whose target file is gone, a `#anchor` that names no heading,
+  a `docs/…` citation pointing at nothing. Prettier formats a broken link and
+  marks it correct; this gate is where "does the link land" is answered.
 - **The tool run on this tree** — the final `check` step, over
   `module-boundaries.config.mjs` at the root. Everything above it proves the code
   correct against fixtures it built itself; this is the only step where the

@@ -45,6 +45,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
     "check-packages": "node scripts/check-packages.mjs",
+    "check-docs-links": "node scripts/check-docs-links.mjs",
     "test": "node --test scripts/*.test.mjs",
     "typecheck": "tsc -p scripts/tsconfig.json",
     "e2e": "vitest run --config packages/lattice/e2e/vitest.config.mjs",

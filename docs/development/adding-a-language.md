@@ -191,7 +191,7 @@ drift.
 ### 6. If you need a parser dependency
 
 Read the allow-list in
-[`src/conformance/boundary.test.mjs`](../../packages/lattice/src/conformance/)
+[`src/conformance/boundary.test.mjs`](../../packages/lattice/src/conformance/boundary.test.mjs)
 first — it is where the list lives, one entry per package with the reason it
 earns, and adding a dependency means adding it there in the same diff. The list
 is deliberately not restated in prose anywhere: it used to be, it drifted, and

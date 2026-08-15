@@ -35,6 +35,13 @@ program and writes nothing.
 - `check-packages.mjs` — asserts every `packages/*` directory is a project Moon
   can see, declaring at least one CI target. [CONTRIBUTING.md](../../CONTRIBUTING.md)
   explains why it exists and what it would catch.
+- `check-docs-links.mjs` — fails on any doc reference that cannot resolve:
+  markdown links in `docs/` whose target file is gone, `#anchors` that name no
+  heading, and `docs/…` citations in code comments and strings pointing at a
+  file that does not exist. It was written because the documentation IA
+  restructure once deleted two files and left twenty-five references — two
+  inside shipped error messages — pointing at the old paths, and nothing
+  caught it: Prettier formats markdown but does not resolve a link.
 - `verify-package.mjs` — packs the real tarball, installs it into a throwaway
   workspace, and drives what a consumer actually buys. Also runs against a
   second workspace with no Moon at all, proving the native provider works from a
@@ -49,10 +56,10 @@ package targets.
 ## CI
 
 `.github/workflows/ci.yml` is the single required check (`ci-gate`). It runs
-Prettier, ESLint, `node --test`, `check-packages`, the package targets, the
-tool on this tree, and the packed-artifact verification. It fails on any needed
-job that is `skipped` or `cancelled`, because `needs` alone only blocks on
-`failure`.
+Prettier, ESLint, `node --test`, `check-packages`, `check-docs-links`, the
+package targets, the tool on this tree, and the packed-artifact verification.
+It fails on any needed job that is `skipped` or `cancelled`, because `needs`
+alone only blocks on `failure`.
 
 `.github/workflows/analysis.yml` runs CodeQL (both `javascript-typescript` and
 `actions`), Scorecard, and Semgrep — separately from the correctness gate.

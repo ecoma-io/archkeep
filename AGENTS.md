@@ -71,6 +71,10 @@ docs/
 scripts/
   check-packages.mjs       the gate that makes a green build mean something
   check-packages.test.mjs
+  check-docs-links.mjs     the gate that fails on a doc reference which cannot
+                           resolve — deleted target, nameless #anchor, a docs/…
+                           citation pointing at nothing
+  check-docs-links.test.mjs
 packages/
   lattice/                 the plugin, the checker, the language server
   lattice-vscode/          the VS Code client for that server
@@ -111,6 +115,13 @@ function under `src/`, and its README says what it refuses and why.
   contain an instance of it. If you add a target to CI, the script picks it up;
   if you are tempted to add a constant listing targets, you have re-introduced
   the bug.
+- **`check-docs-links.mjs` resolves every reference against the tracked
+  tree.** A markdown link's target must exist (a directory counts — git cannot
+  track an empty one), a `#anchor` must name a heading in its own file, and a
+  `docs/…` citation resolves from the workspace root while a `../docs/…` one
+  resolves from its carrying file — the same rule the citation bullet below
+  states. Prettier formats a broken link; this gate is the only thing that
+  knows it is broken.
 - **The gate scripts take their facts as arguments.** `parseCiTargets` gets
   text, `evaluate` gets records. That is why the tests need no filesystem and no
   mocking library — not a preference, a consequence. A function that reads a
@@ -169,11 +180,12 @@ Seven things, and they own different halves of "correct". None substitutes for
 another.
 
 - **CI (`ci.yml`)** — Prettier, ESLint, `node --test`, `check-packages`,
-  `check-skills`, then `moon run`, the tool itself run on this tree, and last
-  the packed artifact driven from outside the workspace. `ci-gate` is the only
-  check name the branch ruleset requires, so a job added later tightens the gate
-  without touching repository settings. It fails on any needed job that is
-  `skipped` or `cancelled`, because `needs` alone only blocks on `failure`.
+  `check-skills`, `check-docs-links`, then `moon run`, the tool itself run on
+  this tree, and last the packed artifact driven from outside the workspace.
+  `ci-gate` is the only check name the branch ruleset requires, so a job added
+  later tightens the gate without touching repository settings. It fails on
+  any needed job that is `skipped` or `cancelled`, because `needs` alone only
+  blocks on `failure`.
 - **The repository's own module boundaries** — the final CI step runs
   `packages/lattice/cli.mjs check` against `module-boundaries.config.mjs`
   at this root. Every step before it proves the code correct against fixtures it
@@ -279,6 +291,7 @@ pnpm test               # node --test over scripts/*.test.mjs — the gate scrip
 pnpm typecheck          # tsc --noEmit over scripts/ — each package has its own target
 pnpm check-packages     # every packages/* directory, and which CI targets it runs
 node scripts/check-skills.mjs    # skills gate: shape, cites, and the version chain
+node scripts/check-docs-links.mjs # doc-reference gate: links, #anchors, citations
 moon run ...:lint ...:test ...:typecheck   # each package's own suite
 node packages/lattice/cli.mjs check        # this tree's own boundaries
 ```
