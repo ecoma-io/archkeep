@@ -4,7 +4,7 @@
   "last-release-sha": "2f4950e1f87f35c4834b6c42a57f7ea489bda6b6",
   "separate-pull-requests": true,
   "packages": {
-    "packages/lattice": {
+    ".": {
       "release-type": "node",
       "initial-version": "0.1.0",
       "include-component-in-tag": false,
@@ -12,16 +12,9 @@
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
       "extra-files": [
-        {
-          "type": "json",
-          "path": ".claude-plugin/plugin.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "../../.claude-plugin/marketplace.json",
-          "jsonpath": "$.plugins[0].version"
-        }
+        { "type": "json", "path": ".claude-plugin/plugin.json", "jsonpath": "$.version" },
+        { "type": "json", "path": ".codex-plugin/plugin.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/lattice/package.json", "jsonpath": "$.version" }
       ],
       "changelog-sections": [
         { "type": "feat", "section": "Features" },

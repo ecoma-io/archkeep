@@ -1,14 +1,4 @@
 <p align="center">
-  <a href="https://github.com/ecoma-io/lattice/actions/workflows/ci.yml"><img src="https://github.com/ecoma-io/lattice/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/ecoma-io/lattice/actions/workflows/analysis.yml"><img src="https://github.com/ecoma-io/lattice/actions/workflows/analysis.yml/badge.svg" alt="Analysis" /></a>
-  <a href="https://scorecard.dev/viewer/?uri=github.com/ecoma-io/lattice"><img src="https://api.scorecard.dev/projects/github.com/ecoma-io/lattice/badge" alt="OpenSSF Scorecard" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0" /></a>
-  <img src="https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg" alt="Node >= 24" />
-  <img src="https://img.shields.io/badge/languages-Go%20%C2%B7%20Rust%20%C2%B7%20Python%20%C2%B7%20TypeScript%20%C2%B7%20Vue-335170.svg" alt="Go, Rust, Python, TypeScript, Vue" />
-  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-9B4D2C.svg" alt="Pull requests welcome" /></a>
-</p>
-
-<p align="center">
   <img src=".github/assets/banner.png" alt="Lattice — architecture enforcement for polyglot repositories: dependency graphs and module boundaries for the languages ESLint cannot read" width="100%" />
 </p>
 
@@ -25,6 +15,13 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/ecoma-io/lattice/actions/workflows/ci.yml"><img src="https://github.com/ecoma-io/lattice/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/ecoma-io/lattice/actions/workflows/analysis.yml"><img src="https://github.com/ecoma-io/lattice/actions/workflows/analysis.yml/badge.svg" alt="Analysis" /></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/ecoma-io/lattice"><img src="https://api.scorecard.dev/projects/github.com/ecoma-io/lattice/badge" alt="OpenSSF Scorecard" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0" /></a>
+</p>
+
+<p align="center">
   <a href="docs/getting-started/installation.md"><strong>Get&nbsp;started&nbsp;→</strong></a> ·
   <a href="docs/why.md">Why&nbsp;it&nbsp;exists</a> ·
   <a href="docs/doctrine/north-star.md">Where&nbsp;it&nbsp;is&nbsp;going</a> ·
@@ -37,7 +34,10 @@
 ## Install
 
 ```bash
+npm install -D @ecoma-io/lattice
 pnpm add -D @ecoma-io/lattice
+yarn add -D @ecoma-io/lattice
+bun add -D @ecoma-io/lattice
 ```
 
 Create a `lattice.json` at the repository root and it starts discovering projects
@@ -171,20 +171,6 @@ Full index: [**docs/**](docs/README.md). The package's own reference, which
 stands alone as the npm landing page, is
 [here](packages/lattice/README.md).
 
-## Built for Ecoma — a labor operating system for humans and AI agents
-
-Lattice was extracted from the working practice of [**Ecoma**](https://ecoma.io),
-the self-hostable, fair-code **labor operating system** where people, AI agents
-and rules are the same kind of resource: a role, and whoever fills it.
-
-That premise puts unusual weight on a dependency graph. When an agent proposes a
-change, the question "what does this reach?" is asked by a machine, at a rate no
-reviewer can match — and an architectural boundary that only exists inside one
-language's linter is a boundary the agent will cross without ever seeing a
-warning. The rules here are the ones that survived contact with that problem.
-
-You do not need Ecoma to use them. Nothing in this repository depends on it.
-
 ## Contributing
 
 The most valuable contribution here is a **missed violation** — an import that
@@ -210,10 +196,9 @@ difference between "probably fine" and "written down".
 ---
 
 <p align="center">
-  <img src=".github/assets/logo.png" alt="" width="56" /><br />
   <sub>
-    Part of the <a href="https://ecoma.io">Ecoma</a> ecosystem ·
+    Maintain by <a href="https://ecoma.io">Ecoma</a> ·
     <a href="https://ecoma.io">Website</a> ·
-    <a href="https://github.com/ecoma-io">Organisation</a>
+    <a href="https://github.com/ecoma-io">Github</a>
   </sub>
 </p>
