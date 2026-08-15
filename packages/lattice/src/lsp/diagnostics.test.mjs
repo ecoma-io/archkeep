@@ -125,6 +125,27 @@ describe("the 1-based analysis record to 0-based LSP position conversion", () =>
       end: { line: 0, character: "package main".length },
     });
   });
+
+  it("still lands on the first line when the document has no lines at all", () => {
+    // `documentLines` always yields at least one element, but the function
+    // must not depend on that being true of its caller.
+    const range = rangeAt({ line: null, column: null }, []);
+    expect(range).toEqual({ start: { line: 0, character: 0 }, end: { line: 0, character: 0 } });
+  });
+
+  it("clamps a position against an empty line array, not just a short one", () => {
+    const range = rangeAt({ line: 5, column: 20, specifier: "x" }, []);
+    expect(range.start.line).toBe(0);
+    expect(range.start.character).toBe(0);
+    expect(range.end.character).toBe(0);
+  });
+
+  it("reads a missing column as the start of the line", () => {
+    // The record's column is 1-based; a record that carries none must not
+    // shift the diagnostic by one.
+    const range = rangeAt({ line: 2, column: null, specifier: "x" }, documentLines("one\ntwo\n"));
+    expect(range.start.character).toBe(0);
+  });
 });
 
 describe("diagnostics a reader has to be able to tell apart", () => {

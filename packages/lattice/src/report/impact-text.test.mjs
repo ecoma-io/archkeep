@@ -333,4 +333,71 @@ describe("formatImpactReport", () => {
     expect(report).toContain("untagged → core  projectWithoutTagsCannotHaveDependencies");
     expect(report).toContain("no matching constraint rows");
   });
+
+  it("renders an allSourceTags constraint row joined with +", () => {
+    const report = formatImpactReport({
+      impact: {
+        project: "core",
+        direct: ["app-a"],
+        transitive: [],
+        dependents: ["app-a"],
+        constraintImpact: [
+          {
+            project: "app-a",
+            edges: [],
+            constraintRows: [
+              { allSourceTags: ["layer:app", "scope:web"], onlyDependOnLibsWithTags: ["x"] },
+            ],
+            violations: [],
+          },
+        ],
+      },
+      coverage: { complete: true, imports: 1, analyzedFiles: 1, projects: 1 },
+    });
+    expect(report).toContain("[layer:app+scope:web]");
+  });
+
+  it("renders a constraint row that carries no source tag at all with '?'", () => {
+    // A row that names neither sourceTag nor allSourceTags (e.g. a bare
+    // notDependOnLibsWithTags row) must still render, visibly, rather than
+    // printing undefined.
+    const report = formatImpactReport({
+      impact: {
+        project: "core",
+        direct: ["app-a"],
+        transitive: [],
+        dependents: ["app-a"],
+        constraintImpact: [
+          {
+            project: "app-a",
+            edges: [],
+            constraintRows: [{ notDependOnLibsWithTags: ["layer:util"] }],
+            violations: [],
+          },
+        ],
+      },
+      coverage: { complete: true, imports: 1, analyzedFiles: 1, projects: 1 },
+    });
+    expect(report).toContain("[?]");
+    expect(report).toContain("not [layer:util]");
+  });
+
+  it("uses the singular file form when exactly one file was not analyzed", () => {
+    const report = formatImpactReport({
+      impact: {
+        project: "core",
+        direct: [],
+        transitive: [],
+        dependents: [],
+      },
+      coverage: {
+        complete: false,
+        imports: 0,
+        analyzedFiles: 1,
+        projects: 1,
+        notAnalyzed: [{}],
+      },
+    });
+    expect(report).toContain("1 file could not be analyzed");
+  });
 });

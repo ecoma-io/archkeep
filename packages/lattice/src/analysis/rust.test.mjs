@@ -84,6 +84,88 @@ describe("resolveRustDependencies", () => {
     };
     expect(resolveRustDependencies(projects, filesOf, (p) => contents[p] ?? null)).toHaveLength(1);
   });
+
+  it("resolves `workspace = true` against a workspace manifest at the tree root, one lookup for the crate", () => {
+    // The ancestor walk runs to the filesystem root (a `dir` of `""`), which
+    // is where this fixture's [workspace] sits. Three workspace deps on one
+    // crate also pin the lazy-lookup half: the manifest is read once, and the
+    // second and third deps reuse the answer. Two of the deps must produce no
+    // edge at all — a dependency on the crate's OWN root (Cargo would call
+    // that a cycle) and a workspace dep declared without a path, which no
+    // filesystem target can be recovered from.
+    const contents = {
+      "Cargo.toml": [
+        "[workspace]",
+        'members = ["libs/alpha", "libs/beta", "libs/gamma"]',
+        "[workspace.dependencies]",
+        'alpha = { path = "libs/alpha" }',
+        'beta = "2.0"',
+        'gamma = { path = "libs/gamma" }',
+      ].join("\n"),
+      "libs/alpha/Cargo.toml": [
+        '[package]\nname = "alpha"\nversion = "0.1.0"',
+        "[dependencies]",
+        "alpha = { workspace = true }",
+        "beta = { workspace = true }",
+        "gamma = { workspace = true }",
+      ].join("\n"),
+      "libs/beta/Cargo.toml": '[package]\nname = "beta"\nversion = "0.1.0"\n',
+      "libs/gamma/Cargo.toml": '[package]\nname = "gamma"\nversion = "0.1.0"\n',
+    };
+    const rootProjects = [
+      { name: "alpha", root: "libs/alpha" },
+      { name: "beta", root: "libs/beta" },
+      { name: "gamma", root: "libs/gamma" },
+    ];
+    const roots = { alpha: "libs/alpha", beta: "libs/beta", gamma: "libs/gamma" };
+    const filesOfRoot = (name) => (roots[name] ? [`${roots[name]}/Cargo.toml`] : []);
+    expect(resolveRustDependencies(rootProjects, filesOfRoot, (p) => contents[p] ?? null)).toEqual([
+      {
+        source: "alpha",
+        target: "gamma",
+        sourceFile: "libs/alpha/Cargo.toml",
+        type: "static",
+      },
+    ]);
+  });
+
+  it("draws no edge when `workspace = true` names a dep but no workspace manifest exists above", () => {
+    // The walk runs out of ancestors: the root read comes back empty, so the
+    // workspace resolution is `null` — no manifest, no declaration, no edge.
+    // The dep must then be skipped, not guessed at.
+    const contents = {
+      "acme/libs/alpha/Cargo.toml": [
+        '[package]\nname = "alpha"\nversion = "0.1.0"',
+        "[dependencies]\nbeta = { workspace = true }",
+      ].join("\n\n"),
+      "acme/libs/beta/Cargo.toml": '[package]\nname = "beta"\nversion = "0.1.0"\n',
+    };
+    expect(resolveRustDependencies(projects, filesOf, (p) => contents[p] ?? null)).toEqual([]);
+  });
+
+  it("skips a crate whose manifest is listed but cannot be read", () => {
+    // `filesOf` names the manifest; `readFile` cannot produce it (a file
+    // deleted between the listing and the read). The crate must not be
+    // guessed into existence, and the run must not throw.
+    const contents = {
+      "acme/libs/alpha/Cargo.toml": [
+        '[package]\nname = "alpha"\nversion = "0.1.0"',
+        '[dependencies]\nbeta = { path = "../beta" }',
+      ].join("\n\n"),
+      "acme/libs/beta/Cargo.toml": '[package]\nname = "beta"\nversion = "0.1.0"\n',
+    };
+    const withGhost = [...projects, { name: "ghost", root: "acme/libs/ghost" }];
+    const filesOfGhost = (name) =>
+      name === "ghost" ? ["acme/libs/ghost/Cargo.toml"] : filesOf(name);
+    expect(resolveRustDependencies(withGhost, filesOfGhost, (p) => contents[p] ?? null)).toEqual([
+      {
+        source: "alpha",
+        target: "beta",
+        sourceFile: "acme/libs/alpha/Cargo.toml",
+        type: "static",
+      },
+    ]);
+  });
 });
 
 describe("crate naming", () => {
@@ -282,6 +364,22 @@ describe("analyzeRust", () => {
     expect(imports[0].spelling).toEqual({ path: false, relative: false });
   });
 
+  it("keeps crate::, self:: and super:: from a file no project owns as external", () => {
+    // The relative forms are relative BY SPELLING — a loose file using them
+    // resolves to no project at all, and must be marked external rather than
+    // guessed into one. `owner?.name` is null here, which is the case that
+    // decides the answer.
+    const { imports } = analyze(
+      "use crate::a::B;\nuse self::c::D;\nuse super::e::F;\n",
+      "loose/script.rs",
+    );
+    expect(imports.map((record) => record.resolved)).toEqual([
+      { target: null, file: null, external: true, packageName: null },
+      { target: null, file: null, external: true, packageName: null },
+      { target: null, file: null, external: true, packageName: null },
+    ]);
+  });
+
   it("marks an unknown crate external and names it in the spelling a source can write", () => {
     const { imports } = analyze("use serde::de::Deserialize;\nuse std::fmt;\n");
     expect(imports.map((record) => record.resolved)).toEqual([
@@ -304,6 +402,46 @@ describe("analyzeRust", () => {
     expect(failures[0].line).toBe(1);
   });
 
+  it("reads nested manifests, and keeps one that is not a crate out of the crate map", () => {
+    // `trackedManifests` is deliberately broader than the edge resolver: a
+    // crate nested inside a project still belongs to it. Two nested shapes
+    // must contribute nothing: a `[workspace]`-only manifest (a workspace
+    // inside a project names no crate) and a listed manifest that cannot be
+    // read, which must not be parsed as the empty string.
+    const deep = {
+      ...workspace,
+      filesOf: (name) =>
+        ({
+          core: [
+            "acme/libs/core/Cargo.toml",
+            "acme/libs/core/vendor/Cargo.toml",
+            "acme/libs/core/gone/Cargo.toml",
+            "acme/libs/core/src/lib.rs",
+          ],
+          shell: ["acme/apps/shell/src-tauri/Cargo.toml", "acme/apps/shell/src-tauri/src/main.rs"],
+        })[name] ?? [],
+      readFile: (path) =>
+        ({
+          "acme/libs/core/Cargo.toml": '[package]\nname = "engine-core"\nversion = "0.1.0"\n',
+          "acme/libs/core/vendor/Cargo.toml": "[workspace]\nmembers = []\n",
+          "acme/apps/shell/src-tauri/Cargo.toml":
+            '[package]\nname = "shell"\nversion = "0.1.0"\n[lib]\nname = "shell_lib"\n',
+        })[path] ?? null,
+    };
+    const { imports } = analyzeRust({
+      sourceFile: "acme/apps/shell/src-tauri/src/main.rs",
+      text: "use vendor_crate::item;\nuse engine_core::task::Task;\n",
+      workspace: deep,
+    });
+    // `vendor_crate` names no crate the workspace declares, so the bare and
+    // use-site spellings stay external — the workspace manifest inside the
+    // project never entered the map. The declared crate still does.
+    expect(imports.map((record) => record.resolved)).toEqual([
+      { target: null, file: null, external: true, packageName: "vendor_crate" },
+      { target: "core", file: null, external: false, packageName: null },
+    ]);
+  });
+
   it("returns an envelope rather than throwing when the workspace misbehaves", () => {
     const hostile = {
       ...workspace,
@@ -314,5 +452,18 @@ describe("analyzeRust", () => {
     const result = analyzeRust({ sourceFile: "a/b.rs", text: "use x::Y;", workspace: hostile });
     expect(result.imports).toEqual([]);
     expect(result.failures[0].reason).toMatch(/graph unavailable/);
+  });
+
+  it("keeps returning an envelope when the workspace throws something that is not an Error", () => {
+    // A thrown string carries no `message`; the fallback must still land in a
+    // failure record rather than a crash.
+    const hostile = {
+      ...workspace,
+      filesOf: () => {
+        throw "graph unavailable";
+      },
+    };
+    const result = analyzeRust({ sourceFile: "a/b.rs", text: "use x::Y;", workspace: hostile });
+    expect(result.failures[0].reason).toBe("Rust analysis failed: graph unavailable");
   });
 });

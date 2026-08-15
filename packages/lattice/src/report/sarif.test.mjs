@@ -107,6 +107,17 @@ describe("a result", () => {
     expect(result.message.text).toContain("Constraint: THE CONSTRAINT");
   });
 
+  it("spells a violation with no source or target project as the placeholder forms", () => {
+    // A violation for a loose file importing an external package carries
+    // neither project; the rendered detail must say so, never print undefined.
+    const v = violation();
+    delete v.sourceProject;
+    delete v.targetProject;
+    const [result] = log({ violations: [v] }).results;
+    expect(result.message.text).toContain("from (no project)");
+    expect(result.message.text).toContain("to (unresolved)");
+  });
+
   it("keeps the upstream message verbatim in the property bag, so a comparison still has it", () => {
     const [result] = log({ violations: [violation()] }).results;
     expect(result.properties.upstreamMessage).toBe("Second rule says no");

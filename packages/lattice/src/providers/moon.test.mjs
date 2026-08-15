@@ -322,6 +322,83 @@ describe("transformMoonGraph — edge type from scope", () => {
     // The root-scoped edge should not appear.
     expect(result.dependencies["root-marker"]).toBeUndefined();
   });
+
+  it("maps an unknown edge scope to static, never silently dropping it", () => {
+    // A scope this provider has not seen must not vanish an edge — that would
+    // be a graph missing a dependency, silently.
+    const raw = twoProjectGraph();
+    raw.graph.edges = [[0, 1, "mystery-scope"]];
+    const result = transformMoonGraph(raw);
+    expect(result.dependencies.web[0].type).toBe("static");
+  });
+
+  it("skips an edge whose index names no node in the data map", () => {
+    const raw = twoProjectGraph();
+    raw.graph.edges = [
+      [9, 1, "production"],
+      [0, 9, "production"],
+    ];
+    raw.data["0"].dependencies = [];
+    const result = transformMoonGraph(raw);
+    expect(result.dependencies.web).toBeUndefined();
+    expect(result.dependencies.api).toBeUndefined();
+  });
+
+  it("skips an edge whose two ends are the same project", () => {
+    // A self-loop is not a dependency between projects.
+    const raw = twoProjectGraph();
+    raw.graph.edges = [[0, 0, "production"]];
+    raw.data["0"].dependencies = [];
+    const result = transformMoonGraph(raw);
+    expect(result.dependencies.web).toBeUndefined();
+  });
+
+  it("does not read a graph that carries no edges array", () => {
+    const raw = twoProjectGraph();
+    delete raw.graph.edges;
+    raw.data["0"].dependencies = [];
+    const result = transformMoonGraph(raw);
+    expect(result.dependencies.web).toBeUndefined();
+  });
+
+  it("skips a project node that carries no id or no source", () => {
+    const raw = twoProjectGraph();
+    raw.data["2"] = { layer: "library", source: "libs/ghost" };
+    raw.data["3"] = { id: "ghost", layer: "library" };
+    const result = transformMoonGraph(raw);
+    expect(result.nodes.ghost).toBeUndefined();
+    expect(Object.keys(result.nodes).sort()).toEqual(["api", "web"]);
+  });
+
+  it("reads a node whose dependencies are not an array as having none", () => {
+    const raw = twoProjectGraph();
+    /** @type {any} */ (raw.data["1"]).dependencies = "oops";
+    const result = transformMoonGraph(raw);
+    expect(result.nodes.api.data.implicitDependencies).toEqual([]);
+  });
+
+  it("reads a node with no dependencies key as having none", () => {
+    const raw = twoProjectGraph();
+    delete raw.data["1"].dependencies;
+    const result = transformMoonGraph(raw);
+    expect(result.nodes.api.data.implicitDependencies).toEqual([]);
+    expect(result.dependencies.api).toBeUndefined();
+  });
+
+  it("skips a dependency record that names no project", () => {
+    const raw = twoProjectGraph();
+    raw.graph.edges = [];
+    /** @type {any} */ (raw.data["0"]).dependencies = [{ scope: "production", source: "explicit" }];
+    const result = transformMoonGraph(raw);
+    expect(result.dependencies.web).toBeUndefined();
+  });
+
+  it("keeps a task target that has no project prefix as itself", () => {
+    const raw = twoProjectGraph();
+    raw.data["1"].taskTargets = ["build"];
+    const result = transformMoonGraph(raw);
+    expect(result.nodes.api.data.targets).toEqual({ build: { executor: "moon:declared" } });
+  });
 });
 
 describe("transformMoonGraph — implicit dependencies", () => {
@@ -466,6 +543,30 @@ describe("readProjectGraph — injectable IO", () => {
       args: ["project-graph", "--json"],
       cwd: "/workspace",
     });
+  });
+
+  it("uses the default moon binary name when no resolver is injected", () => {
+    const calls = [];
+    const run = (file, _args, _cwd, _env) => {
+      calls.push(file);
+      return JSON.stringify(twoProjectGraph());
+    };
+    readProjectGraph("/workspace", { run });
+    expect(calls).toEqual(["moon"]);
+  });
+
+  it("builds a PATH from nothing when the environment carries none at all", () => {
+    /** @type {Record<string, string|undefined>|undefined} */
+    let capturedEnv;
+    const run = (_file, _args, _cwd, env) => {
+      capturedEnv = env;
+      return JSON.stringify(twoProjectGraph());
+    };
+    readProjectGraph("/workspace", { run, resolveMoon: () => "moon", env: {} });
+    // The bin dir leads, delimiter-terminated; the empty remainder is joined
+    // the same way a real PATH would be.
+    const path = capturedEnv?.PATH ?? "";
+    expect(path).toBe(`/workspace/node_modules/.bin${require("node:path").delimiter}`);
   });
 
   it("passes argument array, never a shell string", () => {

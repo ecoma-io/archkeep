@@ -1,8 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { computeDiff, diffCommand, parseBaseline } from "./diff.mjs";
 import { computePolicyFingerprint } from "./graph.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
+
+// `readBaselineFromDisk` reads through node:fs, so the default reader is
+// driven here with a mocked fs — the baseline-path failure contract (name the
+// path, whatever shape the fs error takes) is pinned without touching disk.
+vi.mock("node:fs", () => ({ readFileSync: vi.fn() }));
+const readFileSync = vi.mocked((await import("node:fs")).readFileSync);
+
+// The head's provenance is resolved by spawning real git from the workspace
+// root; in this fixture the root is not a repository, so `resolveProvenance`
+// is a controllable mock and the provenance-note contract drives it directly.
+vi.mock("./provenance.mjs", () => ({ resolveProvenance: vi.fn() }));
+const resolveProvenance = vi.mocked((await import("./provenance.mjs")).resolveProvenance);
 
 /**
  * What `diff` guarantees: a complete, honest comparison between two graph
@@ -369,6 +381,124 @@ describe("computeDiff", () => {
     const diff = computeDiff(baseline, head);
     expect(diff.changedProjects.map((p) => p.name)).toEqual(["a", "z"]);
   });
+
+  it("reports a tag change when the head project carries no tags key", () => {
+    // The baseline declares tags; the head record has no tags key at all —
+    // `project.tags ?? []` must read the head side as untagged, not as
+    // undefined, so the change shows [] rather than vanishing.
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a", tags: ["layer:domain"] }],
+      dependencies: [],
+    };
+    const head = {
+      projects: [{ name: "a", root: "libs/a" }],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.changedProjects).toEqual([
+      { name: "a", changes: [{ field: "tags", baseline: ["layer:domain"], head: [] }] },
+    ]);
+  });
+
+  it("reports a type change when the head omits type", () => {
+    // The mirror image of "detects type changes": the field disappears. The
+    // reported head value must be null, not undefined — a JSON envelope can
+    // carry null.
+    const baseline = {
+      projects: [{ name: "a", root: "libs/a", type: "lib", tags: [] }],
+      dependencies: [],
+    };
+    const head = {
+      projects: [{ name: "a", root: "libs/a", tags: [] }],
+      dependencies: [],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.changedProjects).toEqual([
+      { name: "a", changes: [{ field: "type", baseline: "lib", head: null }] },
+    ]);
+  });
+
+  it("sorts removed projects by plain string comparison", () => {
+    const baseline = {
+      projects: [
+        { name: "b", root: "libs/b", tags: [] },
+        { name: "a", root: "libs/a", tags: [] },
+      ],
+      dependencies: [],
+    };
+    const head = { projects: [], dependencies: [] };
+    const diff = computeDiff(baseline, head);
+    expect(diff.removedProjects.map((p) => p.name)).toEqual(["a", "b"]);
+  });
+
+  it("orders added edges by source first", () => {
+    // Insertion order descending: the sort must still put "a" first, and the
+    // comparator's source-descending step is the one under test.
+    const baseline = { projects: [], dependencies: [] };
+    const head = {
+      projects: [],
+      dependencies: [
+        { source: "a", target: "z", type: "static" },
+        { source: "z", target: "a", type: "static" },
+      ],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.addedEdges.map((e) => e.source)).toEqual(["a", "z"]);
+  });
+
+  it("orders added edges by target when sources tie", () => {
+    const baseline = { projects: [], dependencies: [] };
+    const head = {
+      projects: [],
+      dependencies: [
+        { source: "a", target: "z", type: "static" },
+        { source: "a", target: "y", type: "static" },
+      ],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.addedEdges.map((e) => e.target)).toEqual(["y", "z"]);
+  });
+
+  it("orders added edges by target with the descending pair too", () => {
+    const baseline = { projects: [], dependencies: [] };
+    const head = {
+      projects: [],
+      dependencies: [
+        { source: "a", target: "y", type: "static" },
+        { source: "a", target: "z", type: "static" },
+      ],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.addedEdges.map((e) => e.target)).toEqual(["y", "z"]);
+  });
+
+  it("orders added edges by type when source and target tie", () => {
+    // Same pair under two types: the identity key is (source, target, type),
+    // so both edges exist in the diff, and the stable order is by type.
+    const baseline = { projects: [], dependencies: [] };
+    const head = {
+      projects: [],
+      dependencies: [
+        { source: "a", target: "b", type: "static" },
+        { source: "a", target: "b", type: "dynamic" },
+      ],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.addedEdges.map((e) => e.type)).toEqual(["dynamic", "static"]);
+  });
+
+  it("orders added edges by type with the descending insertion too", () => {
+    const baseline = { projects: [], dependencies: [] };
+    const head = {
+      projects: [],
+      dependencies: [
+        { source: "a", target: "b", type: "dynamic" },
+        { source: "a", target: "b", type: "static" },
+      ],
+    };
+    const diff = computeDiff(baseline, head);
+    expect(diff.addedEdges.map((e) => e.type)).toEqual(["dynamic", "static"]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -376,6 +506,10 @@ describe("computeDiff", () => {
 // ---------------------------------------------------------------------------
 
 describe("diffCommand", () => {
+  beforeEach(() => {
+    resolveProvenance.mockReturnValue(null);
+  });
+
   /** Build a valid baseline envelope for the injectable reader. */
   function baselineEnvelope(overrides = {}) {
     return {
@@ -954,5 +1088,113 @@ describe("diffCommand", () => {
         changes: [{ field: "tags", baseline: ["layer:domain"], head: ["layer:adapter"] }],
       },
     ]);
+  });
+
+  it("names the baseline path when the default reader cannot open the file", () => {
+    readFileSync.mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+    expect(() => diffCommand("/gone/baseline.json", commandContext())).toThrow(
+      /cannot read the baseline snapshot from '\/gone\/baseline\.json': ENOENT/,
+    );
+  });
+
+  it("still names the baseline path when the fs failure carries no message", () => {
+    readFileSync.mockImplementation(() => {
+      throw "gone";
+    });
+    expect(() => diffCommand("/gone/baseline.json", commandContext())).toThrow(
+      /cannot read the baseline snapshot from '\/gone\/baseline\.json': gone/,
+    );
+  });
+
+  it("names every file when the head has multiple whole-file failures", () => {
+    expect(() =>
+      diffCommand(
+        "/baseline.json",
+        commandContext({
+          analysis: {
+            analyzed: 2,
+            imports: [],
+            failures: [
+              { sourceFile: "a.go", line: null, column: null, reason: "r1" },
+              { sourceFile: "b.go", line: null, column: null, reason: "r2" },
+            ],
+          },
+        }),
+        { readBaseline: () => baselineEnvelope() },
+      ),
+    ).toThrow(/2 files could not be analyzed/);
+  });
+
+  it("notes a provider mismatch between baseline and head", () => {
+    const result = diffCommand(
+      "/baseline.json",
+      commandContext({ provider: "nx", pluginGap: { registered: true, manifests: [] } }),
+      { readBaseline: () => baselineEnvelope({ provider: "moon" }) },
+    );
+    expect(result.coverage.notes).toContain(
+      "baseline provider (moon) differs from head provider (nx) — structural differences may be provider-artefacts rather than real architectural changes",
+    );
+  });
+
+  it("notes when both sides carry provenance and the remotes differ", () => {
+    resolveProvenance.mockReturnValue({
+      commit: "abcd",
+      remote: "https://github.com/head/repo.git",
+      dirty: false,
+    });
+    const baseline = baselineEnvelope({
+      provenance: { commit: "wxyz", remote: "https://github.com/baseline/repo.git", dirty: false },
+    });
+    const result = diffCommand("/baseline.json", commandContext(), {
+      readBaseline: () => baseline,
+    });
+    expect(result.coverage.notes).toContain(
+      "baseline provenance remote (https://github.com/baseline/repo.git) differs from head provenance remote (https://github.com/head/repo.git) — the diff may be across unrelated repositories rather than two revisions of the same one",
+    );
+  });
+
+  it("does not note provenance when both sides name the same remote", () => {
+    resolveProvenance.mockReturnValue({
+      commit: "abcd",
+      remote: "https://github.com/head/repo.git",
+      dirty: false,
+    });
+    const baseline = baselineEnvelope({
+      provenance: { commit: "wxyz", remote: "https://github.com/head/repo.git", dirty: false },
+    });
+    const result = diffCommand("/baseline.json", commandContext(), {
+      readBaseline: () => baseline,
+    });
+    expect(result.coverage.notes).not.toContain(
+      expect.stringMatching(/baseline provenance remote/),
+    );
+  });
+
+  it("notes when the baseline carries provenance but the head does not", () => {
+    const baseline = baselineEnvelope({
+      provenance: { commit: "wxyz", remote: null, dirty: false },
+    });
+    const result = diffCommand("/baseline.json", commandContext(), {
+      readBaseline: () => baseline,
+    });
+    expect(result.coverage.notes).toContain(
+      "baseline carries provenance but the head does not — the consumer cannot verify the diff is between revisions of the same repository",
+    );
+  });
+
+  it("notes when the head carries provenance but the baseline does not", () => {
+    resolveProvenance.mockReturnValue({
+      commit: "abcd",
+      remote: null,
+      dirty: false,
+    });
+    const result = diffCommand("/baseline.json", commandContext(), {
+      readBaseline: () => baselineEnvelope(),
+    });
+    expect(result.coverage.notes).toContain(
+      "head carries provenance but the baseline does not — the consumer cannot verify the diff is between revisions of the same repository",
+    );
   });
 });

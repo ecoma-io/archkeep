@@ -164,4 +164,69 @@ describe("findMatchingProjects", () => {
   it("refuses a pattern it cannot reproduce rather than selecting an approximation", () => {
     expect(() => findMatchingProjects(["area/*"], nodes)).toThrow(/does not reproduce/);
   });
+
+  it("removes an excluded project that the expanding wildcard just selected", () => {
+    // `["*", "!beta"]` — the exclusion names a real node, so the delete must
+    // remove exactly that node from the wildcard's selection.
+    expect(findMatchingProjects(["*", "!beta"], nodes).sort()).toEqual(
+      Object.keys(nodes)
+        .filter((name) => name !== "beta")
+        .sort(),
+    );
+  });
+
+  it("returns nothing when the list is made only of empty patterns", () => {
+    expect(findMatchingProjects(["", ""], nodes)).toEqual([]);
+  });
+
+  it("skips an empty or cross-workspace pattern inside a longer list", () => {
+    // "nx-cloud:" patterns and empty strings are skipped per entry, so the
+    // rest of the list still selects.
+    expect(findMatchingProjects(["*", "", "nx-cloud:somewhere"], nodes).sort()).toEqual(
+      Object.keys(nodes).sort(),
+    );
+  });
+
+  it("reads a pattern that matches nothing as selecting nothing", () => {
+    // An unlabeled word that is neither a project name nor a root selects
+    // nothing, without error — the waterfall ends at the directory pass.
+    expect(findMatchingProjects(["nonexistent"], nodes)).toEqual([]);
+  });
+
+  it("treats a labeled pattern with an unknown label as the unlabeled waterfall", () => {
+    // `mystery:thing` — no valid label, no node of that name — falls through
+    // to the name pass and then the directory pass, selecting nothing.
+    expect(findMatchingProjects(["mystery:thing"], nodes)).toEqual([]);
+  });
+
+  it("matches a bare word by the word-bounded regex when it is not an exact name", () => {
+    // `_` is not a word boundary, so `x` selects `a_x` while `-x` inside
+    // `alpha-e2e` never matches `e2e`... the boundary rules are upstream's,
+    // reproduced exactly.
+    const sparse = { a_x: { data: { root: "area/a_x", tags: [] } } };
+    expect(findMatchingProjects(["x"], sparse)).toEqual(["a_x"]);
+  });
+
+  it("excludes a regex-matched name the same way it excludes an exact one", () => {
+    const sparse = {
+      a_x: { data: { root: "area/a_x", tags: [] } },
+      keep: { data: { root: "area/keep", tags: [] } },
+    };
+    expect(findMatchingProjects(["*", "!x"], sparse)).toEqual(["keep"]);
+  });
+
+  it("excludes by directory pattern, the mirror of the inclusion test", () => {
+    expect(findMatchingProjects(["!directory:area/beta"], nodes).sort()).toEqual(
+      Object.keys(nodes)
+        .filter((name) => name !== "beta")
+        .sort(),
+    );
+  });
+
+  it("reads a project with no tags key through the tag matcher", () => {
+    // `node.data?.tags || []` — a node without a tags key is untagged, and a
+    // tag pattern simply does not select it.
+    const sparse = { untagged: { data: { root: "area/untagged" } } };
+    expect(findMatchingProjects(["tag:zone:x"], sparse)).toEqual([]);
+  });
 });

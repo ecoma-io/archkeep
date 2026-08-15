@@ -102,6 +102,18 @@ describe("a violation entry", () => {
       ),
     ).toContain("engine-domain → (unresolved)");
   });
+
+  it("says so plainly when the importing file belongs to no project either", () => {
+    expect(
+      formatViolation(
+        violation({
+          sourceProject: null,
+          targetProject: null,
+          messageId: "bannedExternalImportsViolation",
+        }),
+      ),
+    ).toContain("(no project) → (unresolved)");
+  });
 });
 
 describe("the constraint line", () => {
@@ -183,6 +195,15 @@ describe("analysis failures", () => {
     expect(text).toContain("1 file could not be analyzed at all");
   });
 
+  it("uses the plural forms when more than one file was never analyzed", () => {
+    const text = formatFailures([
+      { sourceFile: "a/b.vue", line: null, column: null, reason: "first" },
+      { sourceFile: "c/d.rs", line: null, column: null, reason: "second" },
+    ]);
+    expect(text).toContain("2 files could not be analyzed at all");
+    expect(text).toContain("they are not covered by the verdict above");
+  });
+
   it("says nothing at all when there were none", () => {
     expect(formatFailures([])).toBe("");
   });
@@ -230,6 +251,22 @@ describe("go.work drift", () => {
   it("says nothing at all when the workspace has no go.work, which is the one silent case allowed", () => {
     expect(formatGoWork(null)).toBe("");
     expect(formatGoWork(undefined)).toBe("");
+  });
+
+  it("claims agreement with the singular module form for a one-module workspace", () => {
+    expect(formatGoWork({ findings: [], moduleProjects: 1 })).toBe(
+      "✔ go.work agrees with the project graph (1 Go module project)",
+    );
+  });
+
+  it("keeps a blank line inside a finding's message, indented like the rest", () => {
+    const text = formatGoWork({
+      findings: [
+        finding({ message: "line one\n\nline three", line: null, column: null, project: "beta" }),
+      ],
+      moduleProjects: 1,
+    });
+    expect(text).toContain("    line one\n\n    line three");
   });
 });
 
@@ -281,6 +318,27 @@ describe("tsconfig paths hygiene", () => {
     });
     expect(text).toContain("2 aliases judged in tsconfig.base.json");
     expect(text).toContain("1 outside this check's rule and not judged");
+  });
+
+  it("uses the plural forms when several dead aliases share the verdict", () => {
+    const text = formatTsconfigPaths({
+      tsConfig: "tsconfig.base.json",
+      findings: [deadAlias(), deadAlias({ alias: "@acme/other" })],
+      aliases: 2,
+      unjudged: 0,
+    });
+    expect(text).toContain("✖ dead tsconfig path aliases: 2 findings");
+    expect(text).toContain("these aliases can resolve");
+  });
+
+  it("keeps a blank line inside a dead-alias message, indented like the rest", () => {
+    const text = formatTsconfigPaths({
+      tsConfig: "tsconfig.base.json",
+      findings: [deadAlias({ message: "line one\n\nline three" })],
+      aliases: 1,
+      unjudged: 0,
+    });
+    expect(text).toContain("    line one\n\n    line three");
   });
 
   it("says nothing at all when the workspace declares no paths, which is the one silent case allowed", () => {

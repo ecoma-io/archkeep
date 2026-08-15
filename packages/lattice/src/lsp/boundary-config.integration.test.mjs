@@ -133,6 +133,31 @@ describe("reading a boundary config that outlives the process reading it", () =>
       /names an ESLint config .*\.eslintrc\.json.* as boundaryConfig/su,
     );
   });
+
+  it("refuses an unsupported extension by name, which is a naming mistake and not a load failure", async () => {
+    // The message separates the two problems: a `.yaml` boundaryConfig is a
+    // filename problem, not a missing or unreadable file, and would read as
+    // one otherwise.
+    await expect(readBoundaryConfig(root, 0, "boundaries.config.yaml")).rejects.toThrow(
+      /unsupported boundaryConfig extension '\.yaml'/,
+    );
+  });
+
+  it("refuses an extensionless name with the empty extension spelled out", async () => {
+    await expect(readBoundaryConfig(root, 0, "boundaries")).rejects.toThrow(
+      /unsupported boundaryConfig extension '\(none\)'/,
+    );
+  });
+
+  it("names the config file when the module itself throws on import", async () => {
+    // A config whose module body throws is a load failure like any other, and
+    // must name the file — a missing law enforces nothing silently. The throw
+    // shape is a plain string, so the fallback path is exercised too.
+    write("throw 'module exploded';\n");
+    await expect(readBoundaryConfig(root, 3, CONFIG_FILE)).rejects.toThrow(
+      /cannot load .*boundaries\.fixture\.mjs: module exploded/,
+    );
+  });
 });
 
 describe("the .json dialect, which this server used to be unable to load at all", () => {
@@ -164,6 +189,12 @@ describe("the .json dialect, which this server used to be unable to load at all"
     await expect(readBoundaryConfig(root, 11, CONFIG_FILE_JSON)).rejects.toThrow(Error);
     await expect(readBoundaryConfig(root, 11, CONFIG_FILE_JSON)).rejects.toThrow(
       /cannot load .*boundaries\.fixture\.json/u,
+    );
+  });
+
+  it("names the file when a .json boundaryConfig cannot be read at all", async () => {
+    await expect(readBoundaryConfig(root, 12, "missing.json")).rejects.toThrow(
+      /cannot load .*missing\.json/u,
     );
   });
 });

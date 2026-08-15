@@ -51,6 +51,18 @@ describe("buildReachability", () => {
     expect(() => buildReachability(graph)).not.toThrow();
     expect(pathExists(buildReachability(graph), "a", "a")).toBe(true);
   });
+
+  it("answers a graph with no nodes or dependencies at all", () => {
+    // The null-prototype and defensive `?? {}` reads must survive a graph
+    // that is only a shape, not a tree.
+    const reach = buildReachability({});
+    expect(pathExists(reach, "a", "b")).toBe(false);
+  });
+
+  it("survives a dependency key whose value is not a list", () => {
+    const graph = graphOf(["a"], { a: undefined });
+    expect(() => buildReachability(graph)).not.toThrow();
+  });
 });
 
 describe("getPath", () => {
@@ -68,6 +80,11 @@ describe("getPath", () => {
   it("returns nothing when no route exists", () => {
     const graph = graphOf(["a", "b"]);
     expect(getPath(buildReachability(graph), graph, "a", "b")).toEqual([]);
+  });
+
+  it("returns nothing for a source the graph does not contain", () => {
+    const graph = graphOf(["a"]);
+    expect(getPath(buildReachability(graph), graph, "ghost", "a")).toEqual([]);
   });
 });
 
@@ -114,5 +131,14 @@ describe("expandIgnoredCircularDependencies", () => {
 
   it("returns an empty map when nothing is ignored", () => {
     expect(expandIgnoredCircularDependencies([], graphOf(["a"]), selectByName).size).toBe(0);
+  });
+
+  it("expands a pair whose two sides overlap", () => {
+    // A pair like `["a", "a"]` matches the same project on both sides; the
+    // second direction's guards must read the set the first direction just
+    // wrote, not double-register it.
+    const graph = graphOf(["a", "b"]);
+    const ignored = expandIgnoredCircularDependencies([["a", "a"]], graph, selectByName);
+    expect(ignored.get("a")).toEqual(new Set(["a"]));
   });
 });

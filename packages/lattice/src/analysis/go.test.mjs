@@ -358,6 +358,44 @@ describe("resolveGoDependencies", () => {
     };
     expect(resolveGoDependencies(projects, filesOf, (p) => lookalike[p] ?? null)).toEqual([]);
   });
+
+  it("skips a project whose go.mod is listed but cannot be read, or names no module", () => {
+    // Two silent-direction guards. A go.mod that is listed but gone (deleted
+    // between the listing and the read) must not be parsed as the empty
+    // string — the empty string IS a module path for nothing, and the project
+    // could then match every import spelled `""`. And a go.mod that parsed
+    // but declares no module should not invent one. Neither may become an
+    // edge, and neither may throw.
+    const expanded = [
+      ...projects,
+      { name: "gamma", root: "acme/libs/gamma" },
+      { name: "delta", root: "acme/libs/delta" },
+    ];
+    const filesExpanded = {
+      ...files,
+      gamma: ["acme/libs/gamma/go.mod", "acme/libs/gamma/tool.go"],
+      delta: ["acme/libs/delta/go.mod", "acme/libs/delta/cmd.go"],
+    };
+    const filesOfExpanded = (name) => filesExpanded[name] ?? [];
+    const contentsExpanded = {
+      ...contents,
+      // gamma's manifest is listed but cannot be produced; delta's can be and
+      // declares no module — a `go.work`-owning root with no module of its own.
+      "acme/libs/delta/go.mod": "go 1.24\n",
+    };
+    const readFileExpanded = (p) => contentsExpanded[p] ?? null;
+    expect(resolveGoDependencies(expanded, filesOfExpanded, readFileExpanded)).toEqual([
+      { source: "alpha", target: "beta", sourceFile: "acme/libs/alpha/main.go", type: "static" },
+    ]);
+  });
+
+  it("skips a listed .go file whose contents cannot be read, instead of parsing an empty string", () => {
+    const unreadable = {
+      ...contents,
+      "acme/libs/alpha/main.go": null, // readFile's contract: null means unreadable
+    };
+    expect(resolveGoDependencies(projects, filesOf, (p) => unreadable[p] ?? null)).toEqual([]);
+  });
 });
 
 describe("parseGoImportSites", () => {
@@ -571,6 +609,47 @@ describe("analyzeGo", () => {
     expect(imports[0].resolved.target).toBe("app");
   });
 
+  it("wins the longest of the file's own modules, the rule that owns nested projects", () => {
+    // One project covering two module paths (a nested go.work layout): an
+    // import under the long path must be attributed to the long module, not
+    // to the short one that contains it. The modules are walked in listed
+    // order, so this pins the length comparison itself — a first-match answer
+    // would land every `alpha/sub` import on `alpha`.
+    const multi = {
+      ...workspace,
+      filesOf: () => [
+        "acme/libs/alpha/sub/go.mod",
+        "acme/libs/alpha/go.mod",
+        "acme/libs/alpha/main.go",
+      ],
+      readFile: (path) =>
+        ({
+          "acme/libs/alpha/sub/go.mod": "module example.com/acme/alpha/sub\n",
+          "acme/libs/alpha/go.mod": "module example.com/acme/alpha\n",
+        })[path] ?? null,
+    };
+    const { imports } = analyzeGo({
+      sourceFile: "acme/libs/alpha/main.go",
+      text: 'package main\n\nimport "example.com/acme/alpha/sub/pkg"\n',
+      workspace: multi,
+    });
+    expect(imports[0].resolved.target).toBe("alpha");
+    expect(imports[0].spelling.relative).toBe(true);
+  });
+
+  it("analyzes a file no project owns with no own-module match to claim", () => {
+    // `owner` is null here, and the module map is all that remains: a loose
+    // `.go` file still resolves its imports against the workspace's modules,
+    // and can never be "its own project's" import, for the trivial reason it
+    // has none.
+    const { imports } = analyze(
+      'package main\n\nimport "example.com/acme/alpha/store"\n',
+      "loose/tool.go",
+    );
+    expect(imports[0].resolved.target).toBe("alpha");
+    expect(imports[0].spelling).toEqual({ path: false, relative: false });
+  });
+
   it("returns an envelope rather than throwing when the workspace misbehaves", () => {
     const hostile = {
       ...workspace,
@@ -581,5 +660,19 @@ describe("analyzeGo", () => {
     const result = analyzeGo({ sourceFile: "a/b.go", text: 'import "fmt"', workspace: hostile });
     expect(result.imports).toEqual([]);
     expect(result.failures[0].reason).toMatch(/graph unavailable/);
+  });
+
+  it("keeps returning an envelope when the workspace throws something that is not an Error", () => {
+    // A thrown string carries no `message`; the fallback must still land in a
+    // failure record rather than a crash — a file with no verdict must never
+    // look like a file with nothing to say.
+    const hostile = {
+      ...workspace,
+      filesOf: () => {
+        throw "graph unavailable";
+      },
+    };
+    const result = analyzeGo({ sourceFile: "a/b.go", text: 'import "fmt"', workspace: hostile });
+    expect(result.failures[0].reason).toBe("Go analysis failed: graph unavailable");
   });
 });

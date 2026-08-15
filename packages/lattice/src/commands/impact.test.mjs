@@ -138,6 +138,56 @@ describe("computeImpact", () => {
     expect(result.direct).toEqual(["b"]);
     expect(result.dependents).toEqual(["b"]);
   });
+
+  it("visits a transitive dependent once when two paths reach it — the diamond", () => {
+    // a is reachable through b AND through c; the BFS must not record it
+    // twice, or the transitive set would double-report one project.
+    const graph = {
+      nodes: { a: { name: "a" }, b: { name: "b" }, c: { name: "c" }, d: { name: "d" } },
+      dependencies: {
+        b: [{ target: "d", type: "static" }],
+        c: [{ target: "d", type: "static" }],
+        a: [
+          { target: "b", type: "static" },
+          { target: "c", type: "static" },
+        ],
+      },
+    };
+    const result = computeImpact("d", graph);
+    expect(result.direct).toEqual(["b", "c"]);
+    expect(result.transitive).toEqual(["a"]);
+    expect(result.dependents).toEqual(["a", "b", "c"]);
+  });
+
+  it("lists available projects in ascending order when the name is missing", () => {
+    const graph = {
+      nodes: { z: { name: "z" }, a: { name: "a" } },
+      dependencies: {},
+    };
+    expect(() => computeImpact("missing", graph)).toThrow(/available projects: a, z/);
+  });
+
+  it("sorts transitive dependents by plain string comparison, whichever order they were visited in", () => {
+    // `x` is discovered before `a` — the walk order, not the assertion, is
+    // what is fixed here — and the sorted result must still read a, x.
+    const graph = {
+      nodes: {
+        a: { name: "a" },
+        b: { name: "b" },
+        c: { name: "c" },
+        d: { name: "d" },
+        x: { name: "x" },
+      },
+      dependencies: {
+        c: [{ target: "d", type: "static" }],
+        b: [{ target: "d", type: "static" }],
+        x: [{ target: "c", type: "static" }],
+        a: [{ target: "b", type: "static" }],
+      },
+    };
+    const result = computeImpact("d", graph);
+    expect(result.transitive).toEqual(["a", "x"]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -235,6 +285,24 @@ describe("impactCommand", () => {
         }),
       ),
     ).toThrow(/incomplete coverage/);
+  });
+
+  it("counts the unanalyzed files in the refusal", () => {
+    expect(() =>
+      impactCommand(
+        "alpha",
+        commandContext({
+          analysis: {
+            analyzed: 2,
+            imports: [],
+            failures: [
+              { sourceFile: "a.go", line: null, column: null, reason: "r1" },
+              { sourceFile: "b.go", line: null, column: null, reason: "r2" },
+            ],
+          },
+        }),
+      ),
+    ).toThrow(/2 files could not be analyzed/);
   });
 
   it("throws when the plugin is unregistered on a polyglot Nx workspace", () => {

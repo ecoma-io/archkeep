@@ -101,6 +101,7 @@ import {
   diffGraphs,
   emptyVerdictBreaches,
   LEDGER,
+  nodeShape,
   PAIR_LABELS,
   pairProblems,
   perMessageBreaches,
@@ -852,5 +853,131 @@ describe("dependencyShape does not collapse two distinct edges into one string",
       nx: "absent",
       native: "present",
     });
+  });
+});
+
+describe("the differential machinery's defensive edges", () => {
+  it("reads a node with no tags key as untagged", () => {
+    expect(nodeShape({ a: { type: "lib", data: { root: "libs/a" } } })).toEqual({
+      a: { root: "libs/a", type: "lib", tags: [] },
+    });
+  });
+
+  it("restores a pre-set NX_DAEMON after the spawn", () => {
+    const original = process.env.NX_DAEMON;
+    process.env.NX_DAEMON = "true";
+    runNxGraphSpawn(process.execPath, ["-e", "1"], "/");
+    // runNxGraphSpawn's own finally restored the value it found on entry.
+    expect(process.env.NX_DAEMON).toBe("true");
+    if (original === undefined) delete process.env.NX_DAEMON;
+    else process.env.NX_DAEMON = original;
+  });
+
+  it("reports an edge the native side has and nx does not, the mirror of the other direction", () => {
+    const rows = diffGraphs(
+      { nodes: {}, dependencies: [], violations: [] },
+      { nodes: {}, dependencies: ["a b static"], violations: [] },
+    );
+    expect(rows).toContainEqual({
+      kind: "dependency",
+      subject: "a b static",
+      field: "presence",
+      nx: "absent",
+      native: "present",
+    });
+  });
+
+  it("classifies a count difference in each direction, and none when the counts tie", () => {
+    const ledger = [];
+    const difference = (nx, native) => ({
+      kind: "dependency",
+      subject: "pair:a b static",
+      field: "count",
+      nx,
+      native,
+    });
+    expect(classifyDifferences([difference(1, 2)], ledger).unexplained).toHaveLength(1);
+    expect(classifyDifferences([difference(2, 1)], ledger).unexplained).toHaveLength(1);
+    expect(classifyDifferences([difference(1, 1)], ledger).unexplained).toHaveLength(1);
+  });
+
+  it("flags a native side that never reported a messageId nx reported at all", () => {
+    const breaches = perMessageBreaches("pair", [{ messageId: "x" }, { messageId: "x" }], []);
+    expect(breaches).toHaveLength(1);
+    expect(breaches[0]).toContain("native reported only 0");
+  });
+
+  it("throws on an unclaimed native file before the comparison ever runs", async () => {
+    // A tracked file no project owns is a discovery failure this fixture
+    // never expects — comparing the sides anyway would compare graphs that
+    // were read through a hole.
+    const nxRoot = mkdtempSync(join(packageRoot, ".oracle-unclaimed-nx-"));
+    const nativeRoot = mkdtempSync(join(packageRoot, ".oracle-unclaimed-native-"));
+    try {
+      writeIn(nativeRoot)(
+        "lattice.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "libs/a", name: "a", tags: [] }] },
+        }),
+      );
+      writeIn(nativeRoot)("libs/a/main.go", "package a\n");
+      writeIn(nativeRoot)("loose.py", "import os\n");
+      /** @type {typeof runNxGraphSpawn} */
+      const fakeNxRun = (_file, args) => {
+        const target = args.find((a) => a.startsWith("--file=")).slice("--file=".length);
+        writeFileSync(target, JSON.stringify({ graph: { nodes: {}, dependencies: {} } }));
+        return "";
+      };
+
+      await expect(
+        runBothProviders({
+          nxRoot,
+          nxFiles: [],
+          nativeRoot,
+          nativeFiles: ["lattice.json", "libs/a/main.go", "loose.py"],
+          io: { run: fakeNxRun },
+        }),
+      ).rejects.toThrow(/unclaimed-file failures/);
+    } finally {
+      rmSync(nxRoot, { recursive: true, force: true });
+      rmSync(nativeRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("pairProblems names an unexplained difference and a stale ledger row together", () => {
+    const result = {
+      nx: { nodes: {}, dependencies: [], violations: [], violationStrings: [] },
+      native: {
+        nodes: { extra: { root: "libs/extra", type: "lib", tags: [] } },
+        dependencies: [],
+        violations: [],
+        violationStrings: [],
+      },
+    };
+    const ledger = Object.freeze([
+      Object.freeze({
+        subject: "pair:something",
+        field: "count",
+        direction: "native-only",
+        reason: "a row that matches nothing, on purpose",
+        issue: "https://github.com/ecoma-io/lattice/issues/31",
+      }),
+    ]);
+    const problems = pairProblems("pair", result, ledger);
+    expect(problems.some((p) => /unexplained differences/.test(p))).toBe(true);
+    expect(problems.some((p) => /stale ledger rows/.test(p))).toBe(true);
+  });
+
+  it("assertPairAgrees throws on a disagreement, which is what lets a caller assert with it", () => {
+    const result = {
+      nx: { nodes: {}, dependencies: [], violations: [], violationStrings: [] },
+      native: {
+        nodes: { extra: { root: "libs/extra", type: "lib", tags: [] } },
+        dependencies: [],
+        violations: [],
+        violationStrings: [],
+      },
+    };
+    expect(() => assertPairAgrees("pair", result)).toThrow(/provider differential disagreement/);
   });
 });

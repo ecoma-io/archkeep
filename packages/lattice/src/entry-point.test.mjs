@@ -50,7 +50,24 @@ describe("deciding whether a module was run or imported", () => {
 
   it("says no when Node was given no path to run", () => {
     // `node -e` and the REPL: nothing was invoked, so nothing is the entry.
-    expect(isProgramEntry(pathToFileURL(real).href, undefined)).toBe(false);
+    // Passing `undefined` explicitly would NOT reach this — it triggers the
+    // default parameter, which fills in this process's own argv[1]. The argv
+    // must actually be short, the way it is in a `-e` process.
+    const saved = process.argv;
+    Object.defineProperty(process, "argv", {
+      value: [saved[0]],
+      configurable: true,
+      writable: true,
+    });
+    try {
+      expect(isProgramEntry(pathToFileURL(real).href)).toBe(false);
+    } finally {
+      Object.defineProperty(process, "argv", {
+        value: saved,
+        configurable: true,
+        writable: true,
+      });
+    }
   });
 
   it("compares a path it cannot resolve rather than throwing", () => {
