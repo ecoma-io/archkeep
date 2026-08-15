@@ -13,7 +13,9 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("node:child_process", () => ({ execFileSync: vi.fn() }));
 
-import { execFileSync } from "node:child_process";
+// `vi.mocked` so the JSDoc typecheck reads the mock's own type, not the real
+// `execFileSync`'s — the two carry different methods.
+const execFileSync = vi.mocked((await import("node:child_process")).execFileSync);
 
 import { runProcess } from "./process.mjs";
 
@@ -59,7 +61,7 @@ describe("runProcess", () => {
   it("falls back to the error message when the child leaves no stderr", () => {
     execFileSync.mockImplementation(() => {
       const cause = new Error("spawn definitely-not-a-program ENOENT");
-      cause.code = "ENOENT";
+      Object.assign(cause, { code: "ENOENT" });
       throw cause;
     });
     expect(() => runProcess("definitely-not-a-program", ["--x"], "/repo")).toThrow(

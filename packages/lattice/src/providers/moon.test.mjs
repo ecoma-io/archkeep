@@ -372,7 +372,7 @@ describe("transformMoonGraph — edge type from scope", () => {
 
   it("reads a node whose dependencies are not an array as having none", () => {
     const raw = twoProjectGraph();
-    raw.data["1"].dependencies = "oops";
+    /** @type {any} */ (raw.data["1"]).dependencies = "oops";
     const result = transformMoonGraph(raw);
     expect(result.nodes.api.data.implicitDependencies).toEqual([]);
   });
@@ -388,7 +388,7 @@ describe("transformMoonGraph — edge type from scope", () => {
   it("skips a dependency record that names no project", () => {
     const raw = twoProjectGraph();
     raw.graph.edges = [];
-    raw.data["0"].dependencies = [{ scope: "production", source: "explicit" }];
+    /** @type {any} */ (raw.data["0"]).dependencies = [{ scope: "production", source: "explicit" }];
     const result = transformMoonGraph(raw);
     expect(result.dependencies.web).toBeUndefined();
   });
@@ -556,6 +556,7 @@ describe("readProjectGraph — injectable IO", () => {
   });
 
   it("builds a PATH from nothing when the environment carries none at all", () => {
+    /** @type {Record<string, string|undefined>|undefined} */
     let capturedEnv;
     const run = (_file, _args, _cwd, env) => {
       capturedEnv = env;
@@ -564,7 +565,8 @@ describe("readProjectGraph — injectable IO", () => {
     readProjectGraph("/workspace", { run, resolveMoon: () => "moon", env: {} });
     // The bin dir leads, delimiter-terminated; the empty remainder is joined
     // the same way a real PATH would be.
-    expect(capturedEnv?.PATH).toBe(`/workspace/node_modules/.bin${require("node:path").delimiter}`);
+    const path = capturedEnv?.PATH ?? "";
+    expect(path).toBe(`/workspace/node_modules/.bin${require("node:path").delimiter}`);
   });
 
   it("passes argument array, never a shell string", () => {

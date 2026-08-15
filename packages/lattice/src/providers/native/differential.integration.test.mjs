@@ -889,15 +889,16 @@ describe("the differential machinery's defensive edges", () => {
 
   it("classifies a count difference in each direction, and none when the counts tie", () => {
     const ledger = [];
-    expect(
-      classifyDifferences([{ field: "count", nx: 1, native: 2 }], ledger).unexplained,
-    ).toHaveLength(1);
-    expect(
-      classifyDifferences([{ field: "count", nx: 2, native: 1 }], ledger).unexplained,
-    ).toHaveLength(1);
-    expect(
-      classifyDifferences([{ field: "count", nx: 1, native: 1 }], ledger).unexplained,
-    ).toHaveLength(1);
+    const difference = (nx, native) => ({
+      kind: "dependency",
+      subject: "pair:a b static",
+      field: "count",
+      nx,
+      native,
+    });
+    expect(classifyDifferences([difference(1, 2)], ledger).unexplained).toHaveLength(1);
+    expect(classifyDifferences([difference(2, 1)], ledger).unexplained).toHaveLength(1);
+    expect(classifyDifferences([difference(1, 1)], ledger).unexplained).toHaveLength(1);
   });
 
   it("flags a native side that never reported a messageId nx reported at all", () => {
