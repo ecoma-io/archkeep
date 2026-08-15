@@ -119,7 +119,7 @@ allowed to say it". That table:
 | `docs/getting-started/`                                                         | Installation, first project, first policy                                                                |
 | `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, projects, drift, agentic development, integrations |
 | `docs/usage/`                                                                   | How a consumer runs it and reads its answers                                                             |
-| `docs/integrations/`                                                            | Nx integration and VS Code extension — the two surfaces at the edge                                      |
+| `docs/integrations/`                                                            | The provider and editor integrations at the edge — Nx, Moon, and the VS Code extension                   |
 | `docs/reference/`                                                               | Schemas, exit codes, language limits, violation catalogue                                                |
 | `docs/development/`                                                             | How it works inside, and how to extend it                                                                |
 | `docs/skills/`                                                                  | Agent architecture skills: overview, installation, hosts, authoring, versioning                          |

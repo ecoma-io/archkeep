@@ -27,9 +27,8 @@ than the integration around it. Today it is a standalone governance system that
 works in any repository, with or without Nx or Moon, and
 [roadmap.md](../roadmap.md) owns that path. What this document says below
 remains the engine's direction: the sentence, the finish line per language, the
-refusals. Where older wording said "an Nx workspace", read "a repository", and
-the Nx mechanics it cites are one provider among the integrations rather than
-the foundation.
+refusals. Nx appears in it as the concrete example it was written against — one
+provider among the integrations, not the foundation.
 
 ## The sentence
 
@@ -129,13 +128,6 @@ A language is how Lattice reads a workspace; a surface is how a person reaches
 the verdict. The surfaces are deliberately few, and each exists because a
 different reader needs the answer at a different moment.
 
-- **The Nx integration** — the graph, computed on every `nx` invocation. It is the
-  one surface with no user interface at all, and the one everything else depends
-  on being cheap.
-- **The Moon integration** — the graph, read from `moon project-graph --json`.
-  A Moonrepo workspace carries a `.moon/` or `.config/moon/` directory at its
-  root; Lattice reads the same project graph Moon already computed, the same
-  one-call contract the Nx provider follows.
 - **The CLI** — the verdict as an exit code, which is the only form CI can read.
   Its four codes exist so a script can tell "your tree is dirty" from "the
   checker could not look", and that distinction is the whole design. `context`
@@ -154,6 +146,13 @@ different reader needs the answer at a different moment.
 - **The editor extension** — the same server, packaged so a developer installs it
   without knowing what LSP is. `packages/lattice-vscode` is that surface for VS
   Code; what is left is the marketplace listing, not the client.
+- **The Nx integration** — the graph, computed on every `nx` invocation. It is the
+  one surface with no user interface at all, and the one everything else depends
+  on being cheap. One provider among the integrations, not the foundation.
+- **The Moon integration** — the graph, read from `moon project-graph --json`.
+  A Moonrepo workspace carries a `.moon/` or `.config/moon/` directory at its
+  root; Lattice reads the same project graph Moon already computed, the same
+  one-call contract the Nx provider follows.
 
 What is _not_ on that list, and is not planned: a dashboard, a hosted service, a
 rule authoring UI. The constraint table is code in the workspace, reviewed like

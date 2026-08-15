@@ -55,15 +55,15 @@ A new reader should find these capabilities described as present, not promised.
   ([integrations/nx.md](integrations/nx.md),
   [integrations/moon.md](integrations/moon.md))
 - **Architecture snapshots with provenance.** `graph` produces a deterministic
-  snapshot carrying the git origin of the run; `diff` refuses a baseline that
-  cannot be attributed.
+  snapshot carrying the git origin of the run; `diff` warns when a baseline
+  cannot be attributed to the same repository.
   ([usage/graph.md](usage/graph.md), [reference/json-output.md](reference/json-output.md))
 - **Meaningful architecture diff.** `diff` separates structural change from
   policy mismatch from rule impact, and refuses an incomplete baseline.
   ([usage/diff.md](usage/diff.md))
-- **Basic drift detection.** Three drift signals surface through `check` and
-  `diff`: boundary violations, structural drift, and configuration drift —
-  with no predictive component.
+- **Basic drift detection.** Three drift signals, with no predictive
+  component: boundary violations and configuration drift surface through
+  `check`; structural drift and its rule impact surface through `diff`.
   ([concepts/drift.md](concepts/drift.md))
 - **Architecture planning facts for agents.** `context` and `impact` answer the
   questions an agent asks before and during a change, in machine-readable form;
@@ -100,7 +100,8 @@ new feature list:
   [doctrine/north-star.md](doctrine/north-star.md))
 - **Breadth of conformance evidence.** The differential against
   `@nx/enforce-module-boundaries` runs over real public workspaces, weekly and
-  on demand; more real trees is the remaining gap, not a missing feature.
+  on demand, as a non-required check that is still treated as a regression when
+  it goes red; more real trees is the remaining gap, not a missing feature.
   ([development/testing.md](development/testing.md))
 - **A stable `schemaVersion` promise.** The JSON envelope is versioned and
   documented; 1.0 makes that contract a promise consumers can build on.
@@ -120,8 +121,8 @@ explicit, not silent:
    observed architecture, computed from graph, policy, snapshot, diff and
    intent. Deterministic only; no predictive drift intelligence.
 3. **Lightweight Architecture Evolution / History** — deterministic historical
-   evidence: snapshot → change → diff → evolution record. No recommendation
-   engine.
+   evidence: a `graph` snapshot → a change → a `diff` between the two, each
+   carrying provenance. No recommendation engine.
 4. **Architecture Planning Facts for Agents** — context, affected projects,
    dependency impact, constraints, allowed boundaries and violations, provided
    to an agent as facts. The agent reasons, plans and decides how to modify
@@ -144,7 +145,7 @@ different relationship to the architecture the core already governs.
 - **Advanced drift detection** — drift that is anticipated or explained, on top
   of the deterministic drift 1.x already reports.
 - **Architecture evolution intelligence** — how the architecture changed and
-  why, on top of the deterministic evolution record 1.x already keeps.
+  why, on top of the deterministic snapshot-and-diff history 1.x already keeps.
 - **Change risk analysis and architectural impact prediction** — what a change
   is _likely_ to break, not only what it _demonstrably_ breaks.
 - **Migration planning and architecture recommendations** — proposed paths,

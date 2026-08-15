@@ -54,9 +54,9 @@ discovery that needs neither. That seam exists precisely so the authority does
 not depend on any of them. A workspace with Nx keeps `affected` and the project
 graph; a Moonrepo workspace reads its own graph back; a repository that has
 neither still gets the full verdict. The core model, the constraint table and
-the rule engine are provider-independent — the intent contract `Provider
-independence` is proven by an architecture test in
-`packages/lattice/src/intent/intent-manifest.json`.
+the rule engine are provider-independent — intent contract **A** in
+`packages/lattice/src/intent/intent-manifest.json` states it, and the line
+under "How the boundary is enforced" names the mechanism that holds it.
 
 What an integration may and must not do is owned by
 [concepts/integrations.md](../concepts/integrations.md).
@@ -115,7 +115,9 @@ convenient, because taking it would move the boundary above.
 
 - **A build system.** It declares no targets, runs nothing, and never replaces
   what a workspace builds.
-- **A package manager.** It reads manifests as data and resolves nothing.
+- **A package manager.** It reads manifests as data and installs nothing; the
+  resolution it performs is what the boundary rules need — transitive and
+  banned-import checks — never dependency management.
 - **An Nx replacement or a Moon replacement.** Both remain first-class
   integrations; Lattice is the layer above them.
 - **An LLM.** It computes verdicts from source; it does not reason about them.
@@ -131,8 +133,12 @@ convenient, because taking it would move the boundary above.
 
 The line above is not prose. Each piece of it is held by a mechanism:
 
-- **Provider independence** — an architecture test refuses provider imports in
-  the core layers (`src/conformance/boundary.test.mjs`, intent contract **A**).
+- **Provider independence** — the core layers (`rules`, `analysis`, `report`)
+  never import a provider; only the orchestration that composes a graph reads
+  one. That separation is stated in the intent contract **A**
+  (`packages/lattice/src/intent/intent-manifest.json`); the mechanism that
+  holds the dependency allow-list is
+  `src/conformance/boundary.test.mjs`.
 - **The core does not depend on a build system** — principle 5,
   [principles.md](principles.md); no provider shells out to a language toolchain.
 - **Skills never duplicate enforcement** — host-independent `SKILL.md` files,

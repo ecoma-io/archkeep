@@ -11,8 +11,6 @@ make and the whole project rests on it being true.
 
 ## What Nx gives a TypeScript and JavaScript workspace
 
-## What Nx gives a TypeScript and JavaScript workspace
-
 Nx's project graph is what makes a monorepo tractable. Two things stand on it:
 
 - **`nx affected`** runs only what a change can reach, which is what keeps CI

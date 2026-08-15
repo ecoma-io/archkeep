@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Lattice — architecture governance for human and agentic software development: dependency graphs and module boundaries for the languages ESLint cannot read" width="100%" />
+  <img src=".github/assets/banner.png" alt="Lattice — architecture governance for human and agentic software development: a deterministic authority that keeps the architecture your team declared aligned with the code your team keeps changing" width="100%" />
 </p>
 
 <h1 align="center">Lattice</h1>

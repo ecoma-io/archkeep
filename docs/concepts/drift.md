@@ -6,6 +6,8 @@ drift are invisible to a checker that only judges imports.
 
 Lattice surfaces three kinds of drift through two commands. Each is a different failure
 mode, and two of the three share a command. None requires a toolchain installed.
+Boundary violations and configuration drift surface through `check`; structural
+drift and its rule impact surface through `diff`.
 
 ## What drift means here
 
@@ -23,9 +25,9 @@ produces a boundary violation:
   violations, but they are build breakers or silent misresolutions that nothing
   else detects.
 
-A checker that only looks at imports misses both classes. Lattice surfaces all
-three through `check` and `diff`, because a gap in any one of them looks like
-"clean" from inside the other two.
+A checker that only looks at imports misses both classes. `check` and `diff`
+together surface all three, because a gap in any one of them looks like "clean"
+from inside the other two.
 
 ## The three drift signals
 
