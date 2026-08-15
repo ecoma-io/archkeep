@@ -23,7 +23,7 @@
  *
  * A THIRD dialect exists — `../config.mjs`'s ESLint flat-config reader
  * (`../eslint-config.mjs`), which the CLI and Nx-plugin faces both read
- * (`docs/usage/policy-file.md`) — and this server does not read it yet. That
+ * (`docs/concepts/policies.md`) — and this server does not read it yet. That
  * reader resolves the workspace's own installed `@nx/eslint-plugin` and has
  * no notion of a revisioned `import()` to defeat this process's module cache
  * across edits; wiring both mechanisms together belongs to the milestone that
@@ -152,7 +152,7 @@ export async function readBoundaryConfig(
       `lattice: ${path} names an ESLint config (${name}) as boundaryConfig — the language ` +
         "server reads only the .mjs/.js and .json policy-file dialects for now, not ESLint's " +
         "flat-config dialect the CLI and Nx-plugin faces also read " +
-        "(../../../../docs/usage/policy-file.md). Point boundaryConfig at an .mjs, .js, or .json " +
+        "(../../../../docs/reference/policy-schema.md). Point boundaryConfig at an .mjs, .js, or .json " +
         "boundary-law file to use it from the editor.",
     );
   }

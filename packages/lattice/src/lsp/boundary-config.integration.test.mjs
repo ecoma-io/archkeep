@@ -122,7 +122,7 @@ describe("reading a boundary config that outlives the process reading it", () =>
     writeFileSync(join(root, "eslint.config.mjs"), "export default [];", "utf8");
 
     await expect(readBoundaryConfig(root, 0, "eslint.config.mjs")).rejects.toThrow(
-      /names an ESLint config .*eslint\.config\.mjs.* as boundaryConfig.*policy-file\.md/su,
+      /names an ESLint config .*eslint\.config\.mjs.* as boundaryConfig.*policy-schema\.md/su,
     );
   });
 

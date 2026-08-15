@@ -193,7 +193,7 @@ function renderFlagHelp(flagHelp, options) {
  *
  * `inline` is true only for a native workspace whose `lattice.json →
  * boundaryConfig` is the policy object itself rather than a filename
- * (`docs/usage/policy-file.md`, "An inline policy, for lattice.json") — there
+ * (`docs/reference/policy-schema.md`, "An inline policy, for lattice.json") — there
  * is then no file to name, no ESLint table it is shared with, and no
  * `nx.json` to change it through, so that case gets its own paragraph rather
  * than a sentence that assumes a filename exists.
@@ -236,7 +236,7 @@ ${
     ? `Projects and tags come from lattice.json's own declared/inferred model; the rules come
 from ${boundaryConfig} — an inline policy object on lattice.json's own \`boundaryConfig\`
 field, not a separate file. There is no filename here for ESLint to share and no nx.json
-to change it through; see docs/usage/policy-file.md's "An inline policy" section.`
+to change it through; see docs/reference/policy-schema.md's "An inline policy" section.`
     : `Projects and tags come from the project graph (lattice.json or Nx); the rules come from
 ${boundaryConfig} at the workspace root — the same table ESLint
 reads, so both enforcers answer from one source. That filename is a
@@ -1117,7 +1117,7 @@ const CHECK_FLAG_HELP = Object.freeze([
     describe: Object.freeze([
       "Terminal report (default), SARIF 2.1.0 for GitHub",
       "code scanning, or the versioned JSON envelope",
-      "docs/usage/json-output.md documents",
+      "docs/reference/json-output.md documents",
     ]),
   }),
   Object.freeze({
@@ -1150,7 +1150,7 @@ const GRAPH_FLAG_HELP = Object.freeze([
     arg: "text|json",
     describe: Object.freeze([
       "Terminal report (default) or the versioned JSON envelope",
-      "docs/usage/json-output.md documents",
+      "docs/reference/json-output.md documents",
     ]),
   }),
   Object.freeze({
@@ -1174,7 +1174,7 @@ const DIFF_FLAG_HELP = Object.freeze([
     arg: "text|json",
     describe: Object.freeze([
       "Terminal report (default) or the versioned JSON envelope",
-      "docs/usage/json-output.md documents",
+      "docs/reference/json-output.md documents",
     ]),
   }),
   Object.freeze({
@@ -1207,7 +1207,7 @@ const IMPACT_FLAG_HELP = Object.freeze([
     arg: "text|json",
     describe: Object.freeze([
       "Terminal report (default) or the versioned JSON envelope",
-      "docs/usage/json-output.md documents",
+      "docs/reference/json-output.md documents",
     ]),
   }),
   Object.freeze({
@@ -1241,7 +1241,7 @@ const EXPLAIN_FLAG_HELP = Object.freeze([
     arg: "text|json",
     describe: Object.freeze([
       "Terminal report (default) or the versioned JSON envelope",
-      "docs/usage/json-output.md documents",
+      "docs/reference/json-output.md documents",
     ]),
   }),
   Object.freeze({
@@ -1277,7 +1277,7 @@ const CONTEXT_FLAG_HELP = Object.freeze([
     arg: "text|json",
     describe: Object.freeze([
       "Terminal report (default) or the versioned JSON envelope",
-      "docs/usage/json-output.md documents",
+      "docs/reference/json-output.md documents",
     ]),
   }),
   Object.freeze({

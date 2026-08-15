@@ -43,7 +43,7 @@ output. `jsonEnvelope` wraps whatever result object a command already computed
 (`../../cli.mjs`'s `check` builds its own `result.violations`/`result.goWork`/
 `result.tsconfigPaths`) in one versioned envelope every `--format json`
 consumer shares, and enforces in code the three consistency rules
-`docs/usage/json-output.md` documents in prose: `status: "ok"` never rides
+`docs/reference/json-output.md` documents in prose: `status: "ok"` never rides
 incomplete coverage, `status` and `exitCode` never disagree, and
 `coverage.complete` never disagrees with whether `coverage.notAnalyzed` is
 empty. It throws rather than degrade on any of the three, because a mismatch

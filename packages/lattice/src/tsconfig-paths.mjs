@@ -15,7 +15,7 @@
  * **This check judges the alias table itself and never resolves a specifier.**
  * `../analysis/typescript.mjs` delegates every real import to
  * `ts.resolveModuleName` precisely so this package never grows a second
- * resolver (docs/usage/languages.md § TypeScript), and a hygiene check that
+ * resolver (docs/reference/languages.md § TypeScript), and a hygiene check that
  * probed candidate files per resolution mode would be that second resolver
  * wearing a janitor's coat. What it may honestly decide instead follows from
  * one measured fact about how TypeScript forms candidates from a target

@@ -21,7 +21,7 @@ Neither present exits 3, naming what it looked for.
 
 The rest of this page covers the options each provider accepts. The boundary
 law itself — `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`
-— is the same table regardless of provider; [policy-file.md](policy-file.md) is
+— is the same table regardless of provider; [policy-schema.md](../reference/policy-schema.md) is
 its reference.
 
 ## Nx provider options
@@ -85,7 +85,7 @@ section below for the caveat about the inline form.
 
 On a `lattice.json` workspace, the same two options sit directly on the model
 file — there is no `plugins[].options` table to nest them under. The full
-`lattice.json` shape is at [lattice-json.md](lattice-json.md).
+`lattice.json` shape is at [configuration.md](../reference/configuration.md).
 
 ```jsonc
 // lattice.json

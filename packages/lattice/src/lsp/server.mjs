@@ -115,7 +115,7 @@ function markersAt(root) {
  *
  * `boundaryConfig` can also be an inline policy OBJECT rather than a filename
  * (`../providers/native/model.mjs`'s doc comment on `findNativeModelViolations`,
- * "boundaryConfig"; `../../docs/usage/policy-file.md`, "An inline policy, for
+ * "boundaryConfig"; `../../../../docs/reference/policy-schema.md`, "An inline policy, for
  * lattice.json") — a form this server does not yet read. Without the check
  * below, that object would flow into `watchedFilesFor` (`**\/[object Object]`,
  * a glob that matches nothing) and then into `./boundary-config.mjs`, which
@@ -151,7 +151,7 @@ export function readWorkspaceOptions(root) {
           `but not one this language server can load yet: it only ever reads a policy FILE, and ` +
           `has no filename here to watch or parse. Move the policy into its own .mjs or .json ` +
           `file and point boundaryConfig at that instead — see ` +
-          `../../../../docs/usage/policy-file.md, "An inline policy, for lattice.json".`,
+          `../../../../docs/reference/policy-schema.md, "An inline policy, for lattice.json".`,
       );
     }
     return { boundaryConfig: model.boundaryConfig, tsConfig: model.tsConfig };

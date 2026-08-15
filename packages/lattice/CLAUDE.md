@@ -315,7 +315,7 @@ and the two would disagree the day one changed.
 The file that name resolves to may be an `.mjs`/`.js` module (`import()`ed), a
 `.json` file (`JSON.parse`d, never JSONC), or an ESLint flat config named by
 basename (`eslint.config.*`) rather than extension —
-[`docs/usage/policy-file.md`](../../docs/usage/policy-file.md) is the dialect
+[`docs/concepts/policies.md`](../../docs/concepts/policies.md) is the dialect
 reference for all three. `src/config.mjs`'s `loadBoundaryConfigFile` is the
 one dispatch site, and it tests basename STRICTLY BEFORE extension: an
 `eslint.config.*` name always reaches `src/eslint-config.mjs`, and a legacy
@@ -349,7 +349,7 @@ import), and reusing it without working through both would be a guess dressed
 as support; and `src/lsp/server.mjs`'s `readWorkspaceOptions` refuses to start
 over a native root whose `boundaryConfig` is the inline-object form, loudly,
 because this server only ever watches and re-reads a policy _file_ —
-`../../docs/usage/policy-file.md`'s "An inline policy, for `lattice.json`"
+`../../docs/reference/policy-schema.md`'s "An inline policy, for `lattice.json`"
 names that limitation on the consumer-facing side, and its ESLint-dialect
 section names the language-server gap on the other.
 
@@ -383,7 +383,7 @@ at the repository root. Concretely:
   reads, so a future command that finds something reports it without claiming
   the boundary-violation exit code that means specifically this.
   `--format json` (`check` only, for now) wraps the same verdict in the
-  versioned envelope `src/report/json.mjs` builds and `docs/usage/json-output.md`
+  versioned envelope `src/report/json.mjs` builds and `docs/reference/json-output.md`
   documents — a third rendering, changing no exit code and no byte of the text
   or SARIF report.
 - `lsp.mjs` advertises `textDocumentSync` because it now serves it. What it

@@ -379,4 +379,4 @@ file is seen.
 When a language you use is not on the table above, the honest state is that the
 tool reads _no_ imports in it — and it says so, because a file it cannot analyze
 is counted and reported rather than skipped. See
-[troubleshooting.md](troubleshooting.md) § _It reported nothing_.
+[troubleshooting.md](../usage/troubleshooting.md) § _It reported nothing_.
