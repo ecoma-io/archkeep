@@ -130,6 +130,16 @@ describe("analyzeVue — a malformed SFC must not blank a run", () => {
       },
     ]);
   });
+
+  it("still records a failure when the analyzer throws something that is not an Error", () => {
+    // A thrown string carries no `message`; the fallback must land in the
+    // failure record all the same, so the file is never silently unjudged.
+    analyzeTypeScript.mockImplementationOnce(() => {
+      throw "compiler exploded";
+    });
+    const { failures } = analyze(SFC);
+    expect(failures[0].reason).toBe("Vue analysis failed: compiler exploded");
+  });
 });
 
 describe("analyzeVue — order", () => {
@@ -141,5 +151,16 @@ describe("analyzeVue — order", () => {
       .mockReturnValueOnce({ imports: [{ line: 2, column: 5 }], failures: [] });
     const { imports } = analyze(SFC);
     expect(imports.map((record) => record.line)).toEqual([2, 9]);
+  });
+
+  it("orders two imports sharing a line by column, the tie the contract still promises", () => {
+    // The same promise, one row tighter: two imports on one line have no line
+    // order, so the column decides. Without it, the sort is unstable where
+    // the two blocks' records meet.
+    analyzeTypeScript
+      .mockReturnValueOnce({ imports: [{ line: 2, column: 9 }], failures: [] })
+      .mockReturnValueOnce({ imports: [{ line: 2, column: 1 }], failures: [] });
+    const { imports } = analyze(SFC);
+    expect(imports.map((record) => record.column)).toEqual([1, 9]);
   });
 });
