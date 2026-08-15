@@ -8,23 +8,28 @@ works, what enforces it, and what happens on release.
 
 ```
 packages/lattice/package.json (source of truth)
-  = packages/lattice/.claude-plugin/plugin.json
+  = .claude-plugin/plugin.json
   = .claude-plugin/marketplace.json (entry version)
+  = .codex-plugin/plugin.json
+  = packages/lattice-vscode/package.json
   = skills/*/SKILL.md (metadata.version)
 ```
 
-All four must agree. A mismatch means a consumer's skills claim a version the
+All six must agree. A mismatch means a consumer's skills claim a version the
 engine does not match — which is worse than no version at all, because it reads
-as current.
+as current. The extension is on the list for the same reason: it pairs with the
+engine it is released with, and one version is what makes the pairing visible.
 
 ## CI enforcement
 
 `scripts/check-skills.mjs` runs in CI and validates:
 
 1. Every SKILL.md `metadata.version` matches the package version
-2. `plugin.json` version matches the package version
-3. `marketplace.json` entry version matches the package version
-4. No host-specific frontmatter fields have leaked into canonical skills
+2. `.claude-plugin/plugin.json` version matches the package version
+3. `.claude-plugin/marketplace.json` entry version matches the package version
+4. `.codex-plugin/plugin.json` version matches the package version
+5. `packages/lattice-vscode/package.json` version matches the package version
+6. No host-specific frontmatter fields have leaked into canonical skills
 
 A version mismatch fails the build. There is no warning tier.
 
@@ -35,13 +40,17 @@ version — a second enforcement point, independent of the gate script.
 
 ## Release-please automation
 
-When release-please creates a release PR bumping `packages/lattice/package.json`,
+The release unit is the repository root, so every version-bearing file sits
+inside it. When release-please creates a release PR bumping the root manifest,
 the `extra-files` configuration in `release-please-config.json` also bumps:
 
 - `.claude-plugin/plugin.json` (`$.version`)
-- `../../.claude-plugin/marketplace.json` (`$.plugins[0].version`)
+- `.claude-plugin/marketplace.json` (`$.plugins[0].version`)
+- `.codex-plugin/plugin.json` (`$.version`)
+- `packages/lattice/package.json` (`$.version`)
+- `packages/lattice-vscode/package.json` (`$.version`)
 
-These two files are bumped automatically. The `SKILL.md` files in `skills/` are
+These five files are bumped automatically. The `SKILL.md` files in `skills/` are
 YAML frontmatter and are not covered by release-please's generic updater.
 
 ## Manual SKILL.md version update

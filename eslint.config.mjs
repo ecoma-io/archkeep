@@ -23,6 +23,12 @@ export default [
       // Semgrep rule fixtures are deliberately unsafe code whose whole purpose
       // is to be reported by Semgrep. `semgrep --test` is what checks them.
       ".github/semgrep/**",
+      // Claude Code worktrees — full clones of this repository, some of them
+      // carrying leftover test fixtures whose eslint configs reference the
+      // `@nx/enforce-module-boundaries` dialect without a resolvable plugin.
+      // Prettier ignores them through `.gitignore`; ESLint reads only its own
+      // `ignores`, so the same exclusion is stated here for its own reader.
+      ".claude/worktrees/**",
     ],
   },
 

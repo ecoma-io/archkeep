@@ -95,13 +95,17 @@ engine and stay invisible in the editor.
 Not on the marketplace yet, and the missing piece is the publisher account, not
 the pipeline. CI packages the `.vsix` on every pull request and opens it to
 prove an install would hold what it needs (`scripts/package-vsix.mjs` and
-`scripts/verify-vsix.mjs` at the repository root), release-please versions this
-package and writes its changelog, and every release uploads the verified
-`.vsix` to the GitHub release — installable today via **Install from VSIX**.
-The marketplace publish step exists in the release lane but skips, loudly,
-until an `ecoma-io` publisher account and its `VSCE_PAT` secret exist.
-`private: true` is there to make `npm publish` refuse — this is an extension,
-not a package, and the marketplace is its only destination.
+`scripts/verify-vsix.mjs` at the repository root). The extension is versioned
+**with the repository** — one version for the engine and the client, written by
+release-please's `extra-files` and held to each other by
+`scripts/check-skills.mjs` — because a client that resolves the server out of
+the workspace pairs with the engine it is released with, and one version makes
+the pairing visible. Every release uploads the verified `.vsix` to the GitHub
+release — installable today via **Install from VSIX**. The marketplace publish
+step exists in the release lane but skips, loudly, until an `ecoma-io`
+publisher account and its `VSCE_PAT` secret exist. `private: true` is there to
+make `npm publish` refuse — this is an extension, not a package, and the
+marketplace is its only destination.
 
 ## Development
 
@@ -112,8 +116,8 @@ is excluded from coverage for the reason
 `cli.mjs` and `lsp.mjs`.
 
 ```bash
-pnpm exec nx test lattice-vscode
-pnpm exec nx lint lattice-vscode
+moon run lattice-vscode:test
+moon run lattice-vscode:lint
 ```
 
 Setup, commit format and how a change lands: [CONTRIBUTING.md](../../CONTRIBUTING.md).

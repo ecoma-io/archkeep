@@ -24,4 +24,8 @@ pnpm-debug.log*
 
 # Claude Code local overrides — the shared settings.json IS tracked.
 .claude/settings.local.json
+# Claude Code plan files
 .claude/plans/
+# Claude Code worktrees — full clones of this repository, one per worktree.
+# Prettier and the boundary checker would otherwise scan every clone.
+.claude/worktrees/

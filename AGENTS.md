@@ -24,7 +24,9 @@ The repository also ships `arch-*` agent architecture skills (`arch-context`,
 `arch-change`, `arch-check`, `arch-review`) in `skills/` at the root. These are
 host-independent behavioral protocols that teach an AI agent when and how to use
 Lattice commands. See `docs/skills/overview.md` for the architecture and
-`scripts/check-skills.mjs` for the CI gate that validates them.
+`scripts/check-skills.mjs` for the CI gate that validates them — including the
+single-version chain `docs/skills/versioning.md` owns, so a version bump that
+lands in the package but nowhere else is a red gate, not a silent drift.
 
 ## The invariant everything is judged against
 
@@ -56,6 +58,9 @@ test that only pins the message text is half a test.
   renovate.json5
 .claude-plugin/
   marketplace.json         the catalogue this repository publishes
+  plugin.json              the plugin manifest that catalogue entry points at
+.codex-plugin/
+  plugin.json              the same plugin manifest, for Codex's reader
 docs/
   README.md                the index, and the map of which file owns what
   north-star.md            the direction, and the refusals that follow from it
@@ -159,12 +164,12 @@ boundary checker's import resolution — its header owns that story.
 
 ## What scans this repository
 
-Six things, and they own different halves of "correct". None substitutes for
+Seven things, and they own different halves of "correct". None substitutes for
 another.
 
-- **CI (`ci.yml`)** — Prettier, ESLint, `node --test`, `check-packages`, then
-  `moon run`, the tool itself run on this tree, and last the packed artifact
-  driven from outside the workspace. `ci-gate` is the only
+- **CI (`ci.yml`)** — Prettier, ESLint, `node --test`, `check-packages`,
+  `check-skills`, then `moon run`, the tool itself run on this tree, and last
+  the packed artifact driven from outside the workspace. `ci-gate` is the only
   check name the branch ruleset requires, so a job added later tightens the gate
   without touching repository settings. It fails on any needed job that is
   `skipped` or `cancelled`, because `needs` alone only blocks on `failure`.
@@ -198,6 +203,20 @@ another.
   package's own declared peer ranges rather than pinning them, so the range is
   exercised as written: that is what caught `>=5` admitting TypeScript 7, whose
   entry point exports none of the compiler API this tool delegates to.
+- **Release (`release.yml`)** — release-please keeps one pull request open
+  holding the next version of the root component `"."`, which is every package
+  and skill this repository ships at once. That single version is written into
+  six places by `extra-files` (the chain `docs/skills/versioning.md` owns), and
+  `check-skills` on every PR holds the same six to each other, so a bump cannot
+  land half-applied. The publish jobs — npm and the VS Code extension, which
+  share the engine's version by decision — steer on the un-prefixed
+  `release_created` and `tag_name` outputs only a root component emits, and a
+  tripwire compares `paths_released` — the one output carrying no prefix to get
+  wrong — against that pair, failing the lane loudly when a release was cut
+  that no publish job can see: the state that once published nothing while the
+  workflow reported success, which is the same silence as an empty diagnostic.
+  The lane measures, it does not assume — the measured failure is told in the
+  workflow's own comments.
 - **The PR title runs through commitlint.** Squash is the only merge button, so
   the title becomes the subject of the commit on `main` — the one commit message
   that never passes through the `commit-msg` hook. The title reaches the step via
@@ -226,12 +245,6 @@ reached` — the free tier's review budget was spent elsewhere before this
   correct for the day the limit lifts, and because `.github/semgrep/scripts.yaml`
   and the child-process rule above both cite it.
 
-**litmus is not on that list, and the distinction is the point.** It is a skill
-package about test craft, enabled in `.claude/settings.json` and installed from
-the `ecoma-io/litmus` marketplace; it advises a session writing tests. Nothing it
-says blocks a merge. Setup is in `CONTRIBUTING.md` — a developer runs no command
-for it in the normal case.
-
 ### The Semgrep directory has two non-obvious constraints
 
 Both measured against semgrep 1.172.0, neither documented:
@@ -259,6 +272,7 @@ pnpm lint               # ESLint, zero warnings
 pnpm test               # node --test over scripts/*.test.mjs — the gate scripts only
 pnpm typecheck          # tsc --noEmit over scripts/ — each package has its own target
 pnpm check-packages     # every packages/* directory, and which CI targets it runs
+node scripts/check-skills.mjs    # skills gate: shape, cites, and the version chain
 moon run ...:lint ...:test ...:typecheck   # each package's own suite
 node packages/lattice/cli.mjs check        # this tree's own boundaries
 ```
@@ -307,8 +321,8 @@ file; and ImageMagick produces grayscale here, so it is not the tool. Verify a
 re-render by colour histogram, not by eye — the placeholder failure above passed
 a glance.
 
-Colours are Ecoma design tokens (`--primary` #335170, `--agent` #9B4D2C), the
-same pair litmus declares. Changing one is a brand decision, not a styling one.
+Colours are Ecoma design tokens (`--primary` #335170, `--agent` #9B4D2C).
+Changing one is a brand decision, not a styling one.
 
 ## Human-facing documents
 

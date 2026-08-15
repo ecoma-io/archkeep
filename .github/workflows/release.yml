@@ -7,16 +7,19 @@ name: Release
 # last tag. That pull request *is* the release proposal: merging it is what
 # tags, and the tag is what publishes.
 #
-# Two components release from here, each to the destination that can serve it.
+# One component releases from here, to the two destinations that can serve it.
 # The npm package ships to the registry and nothing else: an Nx plugin reaches
 # a workspace through its `node_modules` or it does not reach it at all, so its
 # release carries no assets. litmus, the sibling this workflow is modelled on,
 # also builds a reproducible tarball and has SLSA sign it — because a skills
 # package is consumed by `curl` as often as by `npm i`; that does not apply
 # here. The VS Code extension is the reverse case: npm can never serve it (its
-# manifest is `private: true` on purpose), so its release DOES carry an asset —
-# the .vsix, the one file a person can install by hand — and the marketplace
-# publish is guarded below until a publisher account exists.
+# manifest is `private: true` on purpose), so the SAME release carries an
+# asset — the .vsix, the one file a person can install by hand — and the
+# marketplace publish is guarded below until a publisher account exists.
+# Extension and engine share one version by decision, not by accident: a client
+# that resolves the server out of the workspace pairs with the engine it is
+# released with, and one version makes the pairing visible.
 #
 # The cost of the plugin's asset-less releases is exact and worth naming rather
 # than discovering later: OpenSSF Scorecard's Signed-Releases check looks for a
@@ -46,13 +49,16 @@ jobs:
       pull-requests: write
       issues: write
     outputs:
-      # Namespaced by package path, and that prefix is the whole reason this
-      # exists as a comment. release-please emits the un-prefixed
+      # One component, one output pair. release-please emits the un-prefixed
       # `release_created` and `tag_name` only for a component at the repository
-      # ROOT; every path in a manifest gets `<path>--<name>` instead. This
-      # workflow read the un-prefixed pair, which in a manifest configuration
-      # names nothing — so it evaluated to the empty string, `released == 'true'`
-      # was false, and `publish` skipped.
+      # ROOT; every path in a manifest gets `<path>--<name>` instead. The
+      # component sits at the root (`"."` in release-please-config.json), so
+      # its pair is the un-prefixed one, and BOTH publish jobs — npm and vsix —
+      # steer on it. This workflow once read the `packages/lattice--`-prefixed
+      # pair while the component was keyed by its package path — which in a
+      # manifest configuration names the release-please output for that path —
+      # so it evaluated to the empty string, `released == 'true'` was false,
+      # and `publish` skipped.
       #
       # Measured on the first real release rather than reasoned: `Release`
       # reported success, the tag and the GitHub release both existed, the log
@@ -63,16 +69,8 @@ jobs:
       # empty `tag`, and `actions/checkout` treats an empty `ref` as the default
       # branch. That publishes whatever `main` holds under the tagged version's
       # number — the one mistake npm does not let you take back.
-      #
-      # The path is stated here because `release-please-config.json` is the file
-      # that decides it; the two must be read together, and a rename there that
-      # is not made here fails loudly by publishing nothing rather than quietly
-      # by publishing the wrong tree.
-      released: ${{ steps.release.outputs['packages/lattice--release_created'] }}
-      tag: ${{ steps.release.outputs['packages/lattice--tag_name'] }}
-      # The extension's pair, same prefix rule, steered on by `publish-vsix`.
-      vsix_released: ${{ steps.release.outputs['packages/lattice-vscode--release_created'] }}
-      vsix_tag: ${{ steps.release.outputs['packages/lattice-vscode--tag_name'] }}
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
     steps:
       # An escape hatch, off by default. GitHub documents that events raised
       # with `GITHUB_TOKEN` do not start new workflow runs — which would leave
@@ -108,39 +106,33 @@ jobs:
       # The tripwire for the defect above coming back by another spelling.
       # `paths_released` is the top-level output naming every path release-please
       # cut a release for, and it carries no prefix to get wrong. So it and the
-      # per-path outputs must agree: a run that created a release for a path
-      # while the output a publish job steers on reads empty is precisely the
-      # state that published nothing and reported success, and it fails here
-      # instead — naming the values rather than leaving a reader to infer which
-      # one lied. Checked for BOTH components, because either publish job
-      # skipping on a drifted path is the same silent green.
+      # output the publish jobs steer on must agree: a run that created a release
+      # while `release_created` reads empty is precisely the state that published
+      # nothing and reported success, and it fails here instead — naming the
+      # values rather than leaving a reader to infer which one lied. Both publish
+      # jobs — npm and vsix — key off the SAME output, so one check guards both.
+      # If a second component is ever added back, its path needs a check here
+      # too, because the per-path outputs are exactly the spelling that drifted
+      # once.
       #
       # A release-less run is the ordinary case for every commit that merely
       # updates a release pull request, so an empty list fires nothing.
       - name: Fail if a release was cut that a publish job cannot see
         env:
           PATHS_RELEASED: ${{ steps.release.outputs.paths_released }}
-          GRAPH_RELEASED: ${{ steps.release.outputs['packages/lattice--release_created'] }}
-          VSIX_RELEASED: ${{ steps.release.outputs['packages/lattice-vscode--release_created'] }}
+          GRAPH_RELEASED: ${{ steps.release.outputs.release_created }}
         run: |
-          status=0
-          check() {
-            path="$1"; seen="$2"
-            if printf '%s' "$PATHS_RELEASED" | grep -qF "\"$path\"" && [ "$seen" != "true" ]; then
-              echo "release-please created a release for $path, but the per-path"
-              echo "output the publish job steers on did not report it:"
-              echo "  paths_released              = $PATHS_RELEASED"
-              echo "  $path--release_created read '$seen'"
-              echo ""
-              echo "That path in this workflow and in release-please-config.json"
-              echo "have drifted. Publish would skip and this lane would report"
-              echo "success having shipped nothing."
-              status=1
-            fi
-          }
-          check "packages/lattice" "$GRAPH_RELEASED"
-          check "packages/lattice-vscode" "$VSIX_RELEASED"
-          exit "$status"
+          if printf '%s' "$PATHS_RELEASED" | grep -qF '"."' && [ "$GRAPH_RELEASED" != "true" ]; then
+            echo "release-please created a release for the root, but the output"
+            echo "both publish jobs steer on did not report it:"
+            echo "  paths_released = $PATHS_RELEASED"
+            echo "  release_created read '$GRAPH_RELEASED'"
+            echo ""
+            echo "release-please-config.json and this workflow have drifted."
+            echo "Publish would skip and this lane would report success having"
+            echo "shipped nothing."
+            exit 1
+          fi
 
   publish:
     name: Publish to npm
@@ -221,8 +213,11 @@ jobs:
 
   publish-vsix:
     name: Publish the VS Code extension
+    # Same output the npm job steers on: the extension shares the engine's
+    # version by decision, so every release carries a vsix — a release without
+    # one would break the pairing the version number promises.
     needs: prepare
-    if: needs.prepare.outputs.vsix_released == 'true'
+    if: needs.prepare.outputs.released == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -236,7 +231,7 @@ jobs:
       # may have moved, and the vsix must hold the tagged bytes.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.prepare.outputs.vsix_tag }}
+          ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -262,7 +257,7 @@ jobs:
       - name: Upload the vsix to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.prepare.outputs.vsix_tag }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: gh release upload "$TAG" dist/lattice-vscode.vsix
 
       # Publishing is guarded, not wired to a publisher that does not exist
@@ -280,7 +275,7 @@ jobs:
       - name: Publish to the marketplace, or say loudly why not
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-          TAG: ${{ needs.prepare.outputs.vsix_tag }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           if [ -z "$VSCE_PAT" ]; then
             {

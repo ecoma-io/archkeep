@@ -72,12 +72,18 @@ describe("evaluate", () => {
 
   const allGood = () => EXPECTED_SKILLS.map((s) => goodSkill(s, s));
 
+  const baseFacts = {
+    skillDirs: [...EXPECTED_SKILLS],
+    packageVersion: "0.4.0",
+    pluginVersion: "0.4.0",
+    marketplaceVersion: "0.4.0",
+    codexPluginVersion: "0.4.0",
+    vscodeVersion: "0.4.0",
+  };
+
   it("passes when all skills are present, named correctly, and versions match", () => {
     const result = evaluate({
-      skillDirs: [...EXPECTED_SKILLS],
-      packageVersion: "0.4.0",
-      pluginVersion: "0.4.0",
-      marketplaceVersion: "0.4.0",
+      ...baseFacts,
       skills: allGood(),
     });
     assert.equal(result.failures.length, 0);
@@ -86,10 +92,8 @@ describe("evaluate", () => {
 
   it("fails when an expected skill directory is missing", () => {
     const result = evaluate({
+      ...baseFacts,
       skillDirs: ["arch-context"],
-      packageVersion: "0.4.0",
-      pluginVersion: "0.4.0",
-      marketplaceVersion: "0.4.0",
       skills: [goodSkill("arch-context", "arch-context")],
     });
     assert.ok(result.failures.length > 0);
@@ -102,10 +106,7 @@ describe("evaluate", () => {
     const skills = allGood();
     skills[0] = goodSkill("arch-context", "wrong-name");
     const result = evaluate({
-      skillDirs: [...EXPECTED_SKILLS],
-      packageVersion: "0.4.0",
-      pluginVersion: "0.4.0",
-      marketplaceVersion: "0.4.0",
+      ...baseFacts,
       skills,
     });
     assert.ok(result.failures.some((f) => f.includes("must match its directory name")));
@@ -115,10 +116,7 @@ describe("evaluate", () => {
     const skills = allGood();
     skills[0] = goodSkill("arch-context", "arch-context", "0.3.0");
     const result = evaluate({
-      skillDirs: [...EXPECTED_SKILLS],
-      packageVersion: "0.4.0",
-      pluginVersion: "0.4.0",
-      marketplaceVersion: "0.4.0",
+      ...baseFacts,
       skills,
     });
     assert.ok(result.failures.some((f) => f.includes("0.3.0") && f.includes("0.4.0")));
@@ -135,10 +133,7 @@ describe("evaluate", () => {
       hostFields: [],
     };
     const result = evaluate({
-      skillDirs: [...EXPECTED_SKILLS],
-      packageVersion: "0.4.0",
-      pluginVersion: "0.4.0",
-      marketplaceVersion: "0.4.0",
+      ...baseFacts,
       skills,
     });
     assert.ok(result.failures.some((f) => f.includes("no `name`")));
@@ -155,10 +150,7 @@ describe("evaluate", () => {
       hostFields: [],
     };
     const result = evaluate({
-      skillDirs: [...EXPECTED_SKILLS],
-      packageVersion: "0.4.0",
-      pluginVersion: "0.4.0",
-      marketplaceVersion: "0.4.0",
+      ...baseFacts,
       skills,
     });
     assert.ok(result.failures.some((f) => f.includes("no `description`")));
@@ -175,10 +167,7 @@ describe("evaluate", () => {
       hostFields: [],
     };
     const result = evaluate({
-      skillDirs: [...EXPECTED_SKILLS],
-      packageVersion: "0.4.0",
-      pluginVersion: "0.4.0",
-      marketplaceVersion: "0.4.0",
+      ...baseFacts,
       skills,
     });
     assert.ok(result.failures.some((f) => f.includes("no `metadata.version`")));
@@ -188,10 +177,7 @@ describe("evaluate", () => {
     const skills = allGood();
     skills[0] = { ...goodSkill("arch-context", "arch-context"), hostFields: ["context", "model"] };
     const result = evaluate({
-      skillDirs: [...EXPECTED_SKILLS],
-      packageVersion: "0.4.0",
-      pluginVersion: "0.4.0",
-      marketplaceVersion: "0.4.0",
+      ...baseFacts,
       skills,
     });
     assert.ok(result.failures.some((f) => f.includes("host-specific")));
@@ -199,10 +185,8 @@ describe("evaluate", () => {
 
   it("fails when plugin version does not match package version", () => {
     const result = evaluate({
-      skillDirs: [...EXPECTED_SKILLS],
-      packageVersion: "0.4.0",
+      ...baseFacts,
       pluginVersion: "1.0.1",
-      marketplaceVersion: "0.4.0",
       skills: allGood(),
     });
     assert.ok(result.failures.some((f) => f.includes("plugin.json") && f.includes("1.0.1")));
@@ -210,12 +194,28 @@ describe("evaluate", () => {
 
   it("fails when marketplace version does not match package version", () => {
     const result = evaluate({
-      skillDirs: [...EXPECTED_SKILLS],
-      packageVersion: "0.4.0",
-      pluginVersion: "0.4.0",
+      ...baseFacts,
       marketplaceVersion: "1.0.1",
       skills: allGood(),
     });
     assert.ok(result.failures.some((f) => f.includes("marketplace.json") && f.includes("1.0.1")));
+  });
+
+  it("fails when codex plugin version does not match package version", () => {
+    const result = evaluate({
+      ...baseFacts,
+      codexPluginVersion: "1.0.1",
+      skills: allGood(),
+    });
+    assert.ok(result.failures.some((f) => f.includes("codex") && f.includes("1.0.1")));
+  });
+
+  it("fails when vscode package version does not match package version", () => {
+    const result = evaluate({
+      ...baseFacts,
+      vscodeVersion: "1.0.1",
+      skills: allGood(),
+    });
+    assert.ok(result.failures.some((f) => f.includes("lattice-vscode") && f.includes("1.0.1")));
   });
 });
