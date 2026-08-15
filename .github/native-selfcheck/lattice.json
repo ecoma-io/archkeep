@@ -26,8 +26,8 @@
         "reason": "CI/analysis workflow config plus its own Semgrep test runner (.github/semgrep/scripts.mjs) — repository apparatus, not a project this workspace's boundary law judges."
       },
       {
-        "path": ".claude/**",
-        "reason": "agent-session tooling hooks (format-on-edit, lint-on-edit) that run outside any package's own lint/test/typecheck target."
+        "path": ".opencode/plugins/**",
+        "reason": "the opencode plugin that runs the shared editor-hook gates (scripts/editor-hooks/) at edit time, outside any package's own lint/test/typecheck target."
       },
       {
         "path": "*.mjs",
