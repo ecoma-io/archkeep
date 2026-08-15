@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/lattice",
+    "version": "0.4.0"
+  },
+  "command": "graph",
+  "workspace": {
+    "root": "/ws",
+    "provider": "nx",
+    "marker": "nx.json",
+    "provenance": {
+      "commit": "0000000000000000000000000000000000000000",
+      "remote": "https://github.com/ecoma-io/lattice.git",
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 2,
+    "analyzedFiles": 172,
+    "imports": 595,
+    "notAnalyzed": [],
+    "blindSpots": [
+      {
+        "file": "packages/lattice-vscode/extension.mjs",
+        "line": 26,
+        "column": 8,
+        "reason": "TypeScript cannot resolve 'vscode' from 'packages/lattice-vscode/extension.mjs'"
+      },
+      {
+        "file": "packages/lattice-vscode/extension.mjs",
+        "line": 32,
+        "column": 28,
+        "reason": "TypeScript cannot resolve 'vscode-languageclient/node' from 'packages/lattice-vscode/extension.mjs'"
+      },
+      {
+        "file": "packages/lattice/src/config-spelling.integration.test.mjs",
+        "line": 128,
+        "column": 3,
+        "reason": "'import(`data:text/javascript,${encodeURIComponent(SIMPLE_BOUNDARY_CONFIG)}`)' has a non-literal argument, so its target is not knowable statically"
+      },
+      {
+        "file": "packages/lattice/src/config.mjs",
+        "line": 582,
+        "column": 27,
+        "reason": "'import(pathToFileURL(path).href)' has a non-literal argument, so its target is not knowable statically"
+      },
+      {
+        "file": "packages/lattice/src/eslint-config.mjs",
+        "line": 399,
+        "column": 27,
+        "reason": "'import(pathToFileURL(path).href)' has a non-literal argument, so its target is not knowable statically"
+      },
+      {
+        "file": "packages/lattice/src/lsp/boundary-config.mjs",
+        "line": 61,
+        "column": 27,
+        "reason": "'import(url)' has a non-literal argument, so its target is not knowable statically"
+      }
+    ],
+    "notes": []
+  },
+  "result": {
+    "projects": [
+      {
+        "name": "lattice",
+        "root": "packages/lattice",
+        "type": "lib",
+        "tags": [
+          "npm:architecture",
+          "npm:dependency-graph",
+          "npm:enforcement",
+          "npm:golang",
+          "npm:language-server",
+          "npm:module-boundaries",
+          "npm:monorepo",
+          "npm:nx",
+          "npm:nx-plugin",
+          "npm:polyglot",
+          "npm:public",
+          "npm:python",
+          "npm:rust",
+          "npm:static-analysis",
+          "npm:typescript",
+          "scope:nx",
+          "type:package"
+        ],
+        "targets": ["lint", "nx-release-publish", "test", "typecheck"]
+      },
+      {
+        "name": "lattice-vscode",
+        "root": "packages/lattice-vscode",
+        "type": "app",
+        "tags": [
+          "npm:language-server",
+          "npm:module-boundaries",
+          "npm:monorepo",
+          "npm:nx",
+          "npm:polyglot",
+          "npm:private",
+          "scope:nx",
+          "type:extension"
+        ],
+        "targets": ["lint", "test", "typecheck"]
+      }
+    ],
+    "dependencies": [],
+    "policy": {
+      "fingerprint": "44d34a1024e289e9a129fe81fc6e880ead8a069a858338629015467a5c81f6b2"
+    }
+  }
+}

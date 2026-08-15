@@ -1327,6 +1327,16 @@ const HISTORY_FLAG_HELP = Object.freeze([
       "the history directory, then build the record",
     ]),
   }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: ({ boundaryConfig, inline }) =>
+      Object.freeze([
+        "Read the boundary law from here instead of",
+        inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
+      ]),
+  }),
 ]);
 
 /**

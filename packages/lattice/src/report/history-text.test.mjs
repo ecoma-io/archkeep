@@ -97,6 +97,36 @@ describe("formatHistoryReport", () => {
     expect(text).toContain("1 transition recorded an architectural change");
   });
 
+  it("renders removed projects, changed projects, and removed edges", () => {
+    const changes = {
+      addedProjects: [{ name: "new", root: "libs/new", tags: [] }],
+      removedProjects: [{ name: "gone", root: "libs/gone", tags: ["layer:core"] }],
+      changedProjects: [
+        { name: "a", changes: [{ field: "root", baseline: "libs/old-a", head: "libs/a" }] },
+      ],
+      addedEdges: [],
+      removedEdges: [{ source: "a", target: "c", type: "static" }],
+    };
+    const text = formatHistoryReport({
+      evolution: {
+        dir: "/ws/hist",
+        captured: null,
+        snapshots,
+        transitions: [transition({ architectureChanged: true, changes })],
+      },
+      coverage,
+    });
+    expect(text).toContain("+ 1 added project");
+    expect(text).toContain("  new  libs/new");
+    expect(text).toContain("- 1 removed project");
+    expect(text).toContain("  gone  libs/gone [layer:core]");
+    expect(text).toContain("~ 1 changed project");
+    expect(text).toContain("  a");
+    expect(text).toContain("  root  libs/old-a → libs/a");
+    expect(text).toContain("- 1 removed edge");
+    expect(text).toContain("  a → c (static)");
+  });
+
   it("classifies a policy change even when the graph did not move", () => {
     const text = formatHistoryReport({
       evolution: {
