@@ -518,9 +518,10 @@ const POLYGLOT_MANIFEST_NAMES = ["go.mod", "Cargo.toml", "pyproject.toml"];
  * it, and `./options.mjs`'s `pluginIsRegistered` is the other half of that
  * gap). A workspace running under Nx draws no edge for any of these three
  * languages unless this plugin is registered in `nx.json` — Nx parses only
- * TypeScript imports natively (`../../../AGENTS.md`, "for the other three both
- * go quiet") — so a tracked manifest with no registered plugin is exactly the
- * silent hole that invariant refuses. This function only names the manifests;
+ * TypeScript and JavaScript imports natively (`../../../AGENTS.md`, "for the
+ * other three both go quiet") — so a tracked manifest with no registered
+ * plugin is exactly the silent hole that invariant refuses. This function
+ * only names the manifests;
  * it does not decide whether the plugin is registered, and it is not
  * currently consulted by `check`'s own refusal logic — it is exported and
  * tested on its own so a later caller can wire it in without redoing the

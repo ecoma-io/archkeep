@@ -51,9 +51,9 @@ On an Nx workspace whose `nx.json` does not register the Nx integration but whos
 tracked files include polyglot manifests (Go, Rust, Python) under project
 roots, `graph` refuses loudly rather than returning a snapshot whose edges
 silently under-represent the real architecture. The refusal is narrowed to
-that condition: a pure-TypeScript Nx workspace whose graph is complete without
-the integration is never refused. There is no escape flag — an option that makes a
-check not run is a drift signal.
+that condition: a workspace whose projects are only TypeScript and JavaScript
+— whose graph is complete without the integration — is never refused. There is
+no escape flag — an option that makes a check not run is a drift signal.
 
 ## Snapshot for diff
 

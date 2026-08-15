@@ -79,13 +79,13 @@ host already infers edges, the provider supplies those edges and the engine does
 not infer a second answer. The native analyzers supply manifest edges for Go,
 Rust, and Python.
 
-| language                | edges from                         |
-| ----------------------- | ---------------------------------- |
-| Go                      | `go.mod`                           |
-| Rust                    | `Cargo.toml`                       |
-| Python                  | `pyproject.toml` (uv, Poetry, PDM) |
-| TypeScript / JavaScript | the selected provider              |
-| Vue                     | the selected provider              |
+| language                  | edges from                         |
+| ------------------------- | ---------------------------------- |
+| Go                        | `go.mod`                           |
+| Rust                      | `Cargo.toml`                       |
+| Python                    | `pyproject.toml` (uv, Poetry, PDM) |
+| TypeScript and JavaScript | the selected provider              |
+| Vue                       | the selected provider              |
 
 Everything is read statically. No `go`, no `cargo`, no `uv`, no `python`, no
 `tsc` process. Manifests are parsed as data, sources are read as text. A graph

@@ -36,9 +36,9 @@ repository, deterministically, with no build system as a precondition.
   builds the dependency graph and judges boundaries from its own model; Nx
   becomes one provider of that model rather than its foundation. Single-repo and
   monorepo layouts are first-class.
-- **A multi-language dependency graph read from source.** Go, Rust, Python and
-  TypeScript imports and manifests, statically — nothing invokes a toolchain
-  to answer a question about imports.
+- **A multi-language dependency graph read from source.** Go, Rust, Python,
+  TypeScript and JavaScript imports and manifests, statically — nothing invokes a
+  toolchain to answer a question about imports.
 - **Architecture as code.** Layers, boundaries, dependency constraints and
   ownership declared in a machine-readable model that is reviewed like code,
   in the repository it governs.

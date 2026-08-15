@@ -12,9 +12,9 @@ Architecture that cannot be checked by a machine is documentation that looks lik
 enforcement. A workspace whose projects carry `layer:` and `scope:` tags that no
 tool reads has boundaries in name only — the tags are decoration until something
 refuses an import that crosses them. Lattice exists because Nx's boundary
-enforcement covers TypeScript and covers nothing else, and "nothing else" on a
-dashboard is identical to "clean". This principle refuses architecture that lives
-only in diagrams and decisions.
+enforcement covers TypeScript and JavaScript and covers nothing else, and
+"nothing else" on a dashboard is identical to "clean". This principle refuses
+architecture that lives only in diagrams and decisions.
 
 ## 2. A green result must mean something
 

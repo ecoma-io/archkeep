@@ -28,8 +28,8 @@ the consumer's workspace." What follows is how Lattice's own development
 practices that refusal.
 
 A workspace's architecture is declared in one place, and every consumer — the Nx
-hook, the CLI, the language server, the ESLint rule in a TypeScript workspace —
-reads from that one place.
+hook, the CLI, the language server, the ESLint rule in a TypeScript and
+JavaScript workspace — reads from that one place.
 The conformance differential tests both engines against the same constraint table
 on the same fixtures, and the ledger of known differences is maintained because
 two enforcers reading one source is only trustworthy while you can name the ways

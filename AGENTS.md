@@ -7,10 +7,11 @@ inferable from the code.
 ## What this repository is
 
 Lattice makes an Nx workspace's dependency graph and module boundaries real for
-the languages ESLint cannot parse: Go, Rust and Python. Nx reads TypeScript
-imports and so `nx affected` and `@nx/enforce-module-boundaries` work there;
-for the other three both go quiet, and quiet is the problem — an under-selecting
-`affected` and an absent boundary rule look exactly like a clean workspace.
+the languages ESLint cannot parse: Go, Rust and Python. Nx reads TypeScript and
+JavaScript imports and so `nx affected` and `@nx/enforce-module-boundaries` work
+there; for the other three both go quiet, and quiet is the problem — an
+under-selecting `affected` and an absent boundary rule look exactly like a clean
+workspace.
 
 **The repository holds the toolchain and the engine it exists to ship.**
 `packages/lattice/` is that engine — an Nx plugin plus a boundary

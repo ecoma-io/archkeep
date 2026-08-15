@@ -8,7 +8,7 @@ not the foundation.
 The rest of this page is the evidence for that, because the claim is easy to make
 and the whole project rests on it being true.
 
-## What Nx gives a TypeScript workspace
+## What Nx gives a TypeScript and JavaScript workspace
 
 Nx's project graph is what makes a monorepo tractable. Two things stand on it:
 
@@ -19,9 +19,9 @@ Nx's project graph is what makes a monorepo tractable. Two things stand on it:
   `scope:billing`, `type:app`) and a table of which tags may reach which.
 
 Both rest on one fact: Nx knowing which project depends on which. For TypeScript
-it knows, because it reads the imports.
+and JavaScript it knows, because it reads the imports.
 
-## What happens when the workspace stops being TypeScript
+## What happens when the workspace stops being only TypeScript and JavaScript
 
 Add a Go service, a Rust crate or a Python package, and both features fail — in
 the same direction, which is the direction nobody notices.
@@ -33,8 +33,8 @@ passed.
 
 **`@nx/enforce-module-boundaries` never sees the file.** It is an ESLint rule.
 ESLint has no parser for `.go`, `.rs` or `.py`, so the architectural rule every
-TypeScript library is held to does not exist for the rest of the workspace. Not
-weaker — absent.
+TypeScript or JavaScript library is held to does not exist for the rest of the
+workspace. Not weaker — absent.
 
 Neither announces itself. You find out when a change ships broken, or when
 someone notices a `go.mod` that has been importing across a boundary for six

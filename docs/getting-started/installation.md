@@ -4,11 +4,11 @@ What you need before you install, and how to install it.
 
 ## Prerequisites
 
-|            |                                                                                                                                                                                                                                                   |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Node       | >= 22                                                                                                                                                                                                                                             |
-| TypeScript | >= 5 and < 7. Required even in a workspace with no TypeScript in it: `ts.resolveModuleName` is what resolves JS/TS specifiers, and the upper bound is there because TypeScript 7's entry point exports none of the compiler API this delegates to |
-| Vue        | optional, >= 3 -- needed only if you have `.vue` files, and loaded lazily so a workspace without it pays nothing                                                                                                                                  |
+|            |                                                                                                                                                                                                                                                                       |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node       | >= 22                                                                                                                                                                                                                                                                 |
+| TypeScript | >= 5 and < 7. Required even in a workspace with no TypeScript in it: `ts.resolveModuleName` is what resolves TypeScript and JavaScript specifiers, and the upper bound is there because TypeScript 7's entry point exports none of the compiler API this delegates to |
+| Vue        | optional, >= 3 -- needed only if you have `.vue` files, and loaded lazily so a workspace without it pays nothing                                                                                                                                                      |
 
 You do **not** need Go, Cargo or uv installed. Nothing here shells out to a
 toolchain; manifests are parsed as data. That is what lets the graph compute on a

@@ -132,9 +132,9 @@ After that, a session editing a `.go`, `.rs`, `.py` or `.vue` file gets boundary
 diagnostics in the conversation. Node must be on `PATH`; nothing else is
 installed.
 
-Claude Code gives one server per extension, so the same JS/TS exclusion applies
-as for VS Code — claiming `.ts` would displace the TypeScript server a developer
-needs.
+Claude Code gives one server per extension, so the same TypeScript and
+JavaScript exclusion applies as for VS Code — claiming `.ts` would displace the
+TypeScript server a developer needs.
 
 ## Other LSP clients
 
