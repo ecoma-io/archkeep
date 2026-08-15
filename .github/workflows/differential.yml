@@ -16,6 +16,16 @@
 # renovate-bumped `@nx/eslint-plugin` or eslint is re-measured against the
 # pinned trees within days of landing, not on whichever release notices.
 #
+# A red run is not a treasure hunt either: the run writes the verdict envelope
+# (`--summary-out`, below) and the `Reconcile the issue trail` step consumes
+# it — `scripts/reconcile-differential-issue.mjs` owns that lifecycle. A
+# findings-red opens or updates the `conformance-differential` issue; a later
+# green run closes it; an infra-red never touches it, because a run that could
+# not look cannot prove a divergence gone. The same envelope feeds the
+# release lane: `release.yml`'s `verify-conformance` gate re-runs this script
+# against the tagged bytes before publish. Both consumers read the envelope,
+# never this workflow's log.
+#
 # Nothing tree-side is cached (the script's header carries the argument: a
 # fresh clone at a pinned sha cannot be stale, and a cached node_modules that
 # survived a lockfile change would measure yesterday's inputs under today's
@@ -38,6 +48,12 @@ jobs:
     name: Differential against real trees
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Narrowed from the workflow-level block: job-level `permissions` REPLACES
+    # it rather than extending it, so `contents: read` is restated for the
+    # checkout, and `issues: write` exists for the reconcile step below.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,5 +70,30 @@ jobs:
 
       # Exit 3 (clone/install/graph failed — the run could not look) is as red
       # as exit 1 (an unexplained difference or an empty-verdict breach); the
-      # log's last lines say which one it was.
-      - run: node scripts/differential-real-trees.mjs
+      # log's last lines say which one it was. The envelope must be written on
+      # BOTH paths so the reconcile step can tell the classes apart — which is
+      # why the step captures and re-exits the code instead of letting a
+      # non-zero exit short-circuit the steps below it.
+      - name: Run the differential
+        run: |
+          set +e
+          node scripts/differential-real-trees.mjs --summary-out "$RUNNER_TEMP/differential-summary.json"
+          code=$?
+          exit "$code"
+
+      # `if: always()`: the issue trail must be reconciled on a RED run too —
+      # that is the whole point of its existence. The step decides from the
+      # envelope's exitClass; a missing or malformed envelope makes it fail
+      # loudly, because a red run whose issue never landed is a silent miss.
+      # The scheduled run measures the default branch, which is exactly the
+      # ref the issue trail's auto-close may trust (the release lane's tag
+      # runs never reconcile — `release.yml` has no such step).
+      - name: Reconcile the issue trail
+        if: always()
+        env:
+          DIFFERENTIAL_SUMMARY: "${{ runner.temp }}/differential-summary.json"
+          DIFFERENTIAL_REPO: "${{ github.repository }}"
+          DIFFERENTIAL_RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          DIFFERENTIAL_SHA: "${{ github.sha }}"
+          GH_TOKEN: "${{ github.token }}"
+        run: node scripts/reconcile-differential-issue.mjs

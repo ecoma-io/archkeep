@@ -12,13 +12,13 @@ never says a boundary _was crossed_, and `Cargo.toml:1` is not a location anyone
 can act on. The two disagreeing is itself information: a declared-but-unused
 dependency and an undeclared-but-imported one are both findings.
 
-| extension                                             | language                | edges from                         | analysis |
-| ----------------------------------------------------- | ----------------------- | ---------------------------------- | -------- |
-| `.go`                                                 | Go                      | `go.mod`                           | ✅       |
-| `.rs`                                                 | Rust                    | `Cargo.toml`                       | ✅       |
-| `.py`                                                 | Python                  | `pyproject.toml` (uv, Poetry, PDM) | ✅       |
-| `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` | TypeScript / JavaScript | Nx's own inference                 | ✅       |
-| `.vue`                                                | Vue                     | Nx's own inference                 | ✅       |
+| extension                                             | language                  | edges from                         | analysis |
+| ----------------------------------------------------- | ------------------------- | ---------------------------------- | -------- |
+| `.go`                                                 | Go                        | `go.mod`                           | ✅       |
+| `.rs`                                                 | Rust                      | `Cargo.toml`                       | ✅       |
+| `.py`                                                 | Python                    | `pyproject.toml` (uv, Poetry, PDM) | ✅       |
+| `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` | TypeScript and JavaScript | Nx's own inference                 | ✅       |
+| `.vue`                                                | Vue                       | Nx's own inference                 | ✅       |
 
 Anything else is a no-op: the dispatcher is pointed at every tracked file, and
 `README.md` is not an error. A file whose extension _is_ on this list but whose
@@ -292,8 +292,8 @@ applying `paths` here, which is the second resolver this package must not grow.
 
 **ESLint already covers this language**, and `@nx/enforce-module-boundaries`
 should keep running for it. This analyzer exists because the CLI and the language
-server judge the whole tree, and a report that skipped TypeScript would be
-answering a different question than the one asked.
+server judge the whole tree, and a report that skipped TypeScript and JavaScript
+would be answering a different question than the one asked.
 
 ### The paths table is checked for dead aliases
 

@@ -9,8 +9,9 @@
   Architecture enforcement that works in any repository, deterministically, with no
   build system as a precondition. Go, Rust, Python — the languages where
   <code>layer:</code> and <code>scope:</code> tags have no mechanism behind them —
-  get the same fifteen violation types and the same constraint table that TypeScript
-  already has. Nx and Moon are first-class integrations, not dependencies.<br />
+  get the same fifteen violation types and the same constraint table that
+  TypeScript and JavaScript already have. Nx and Moon are first-class integrations,
+  not dependencies.<br />
   <em>A rule that reports nothing looks exactly like a rule with nothing to report.</em>
 </p>
 
@@ -113,7 +114,7 @@ repository — Nx and Moon are providers of the project graph, not the only ones
 
 | Package                                                   |                                                                                                                                                                                                                         |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [**`@ecoma-io/lattice`**](packages/lattice/README.md)     | Architecture enforcement for polyglot repositories — dependency graphs and module boundaries for Go, Rust, Python, TypeScript and Vue, with Nx and Moon as first-class integrations.                                    |
+| [**`@ecoma-io/lattice`**](packages/lattice/README.md)     | Architecture enforcement for polyglot repositories — dependency graphs and module boundaries for Go, Rust, Python, TypeScript, JavaScript and Vue, with Nx and Moon as first-class integrations.                        |
 | [**`lattice-vscode`**](packages/lattice-vscode/README.md) | The VS Code client for that server: the same verdicts, at the edit. It runs the server your workspace installed rather than one of its own, so the buffer and the pipeline cannot disagree. Not on the marketplace yet. |
 
 Fifteen violation types, eight options, and the same `messageId`s ESLint reports

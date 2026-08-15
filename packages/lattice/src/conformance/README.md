@@ -440,14 +440,21 @@ holding them rather than a plan.
    measured to contain violations. The evidence lives in the
    `.github/workflows/differential.yml` runs (weekly and on demand — that
    file's header argues why it is not a required check); **a red run there is
-   a conformance regression**, not a flake. Measured 2026-08-11 at the pinned
+   a conformance regression**, not a flake. A red run is consumed rather than logged: `differential.yml`
+   writes a verdict envelope and reconciles the `conformance-differential`
+   issue (`../../../../scripts/reconcile-differential-issue.mjs` owns that
+   lifecycle — findings open or update it, a later green run on the default
+   branch closes it, a could-not-look run never touches it), and `release.yml`'s
+   `verify-conformance` gate re-runs the differential against the tagged bytes
+   before publish, blocking on findings and failing open — loudly, as
+   UNVERIFIED — only on could-not-look. Measured 2026-08-11 at the pinned
    commits: 33 verdicts per engine across both trees, all agreeing, ledger
-   empty. The scope: both trees are TypeScript workspaces, which is also the
-   entire surface upstream can read — no public Nx tree with Go, Rust, Python
-   or Vue sources and a non-trivial constraint table under a permissive
-   license existed to pin (the search and its rejects are recorded in the
-   script's tree table), so real-tree agreement covers TS/JS for now and two
-   trees remain evidence rather than a survey.
+   empty. The scope: both trees are TypeScript and JavaScript workspaces,
+   which is also the entire surface upstream can read — no public Nx tree with
+   Go, Rust, Python or Vue sources and a non-trivial constraint table under a
+   permissive license existed to pin (the search and its rejects are recorded
+   in the script's tree table), so real-tree agreement covers TypeScript and
+   JavaScript for now and two trees remain evidence rather than a survey.
 
 The honest position is still the one the tool already takes: run **both**.
 ESLint stays authoritative for JavaScript, TypeScript and Vue, where it is

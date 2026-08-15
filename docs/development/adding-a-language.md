@@ -1,9 +1,9 @@
 # Adding a language
 
 This is the keystone of the project's direction: the north star is _every_
-language in a repository getting the same enforcement TypeScript already has,
-and this page is the path from "not supported" to "supported" without the
-intermediate state that would quietly make the tool untrustworthy.
+language in a repository getting the same enforcement TypeScript and JavaScript
+already have, and this page is the path from "not supported" to "supported"
+without the intermediate state that would quietly make the tool untrustworthy.
 
 Read [../doctrine/north-star.md](../doctrine/north-star.md) § _How the next language earns its
 place_ first. The single most important rule here is not technical:

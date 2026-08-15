@@ -20,18 +20,18 @@ than the foundation.
 ## The sentence
 
 **Every language in a repository should have the same architectural
-enforcement as the TypeScript in it.**
+enforcement as the TypeScript and JavaScript in it.**
 
 Not similar enforcement. The same: the same fifteen violation types, the same
 eight options, the same constraint table, the same message ids — so that
 "boundary" means one thing in a workspace rather than one thing per language.
 
-Today Nx gives that to TypeScript and to nothing else. A Go service, a Rust
-crate and a Python package carry `layer:`, `scope:` and `license:` tags that
-match no mechanism at all, and the graph that decides what `nx affected` rebuilds
-has no edge between any two of them. Lattice exists to close that, and the
-target state is closure across the board — not across three languages that
-happened to be needed first.
+Today Nx gives that to TypeScript and JavaScript, and to nothing else. A Go
+service, a Rust crate and a Python package carry `layer:`, `scope:` and
+`license:` tags that match no mechanism at all, and the graph that decides what
+`nx affected` rebuilds has no edge between any two of them. Lattice exists to
+close that, and the target state is closure across the board — not across three
+languages that happened to be needed first.
 
 ## What arriving looks like
 
@@ -48,13 +48,13 @@ out loud rather than implying with a checkmark.
 
 Against that bar, the state today:
 
-| language                |  edges   | enforcement |          editor          | limits declared |
-| ----------------------- | :------: | :---------: | :----------------------: | :-------------: |
-| Go                      |    ✅    |     ✅      |      LSP · VS Code       |       ✅        |
-| Rust                    |    ✅    |     ✅      |      LSP · VS Code       |       ✅        |
-| Python                  |    ✅    |     ✅      |      LSP · VS Code       |       ✅        |
-| TypeScript / JavaScript | Nx's own |     ✅      | deliberately not claimed |       ✅        |
-| Vue                     | Nx's own |     ✅      |      LSP · VS Code       |       ✅        |
+| language                  |  edges   | enforcement |          editor          | limits declared |
+| ------------------------- | :------: | :---------: | :----------------------: | :-------------: |
+| Go                        |    ✅    |     ✅      |      LSP · VS Code       |       ✅        |
+| Rust                      |    ✅    |     ✅      |      LSP · VS Code       |       ✅        |
+| Python                    |    ✅    |     ✅      |      LSP · VS Code       |       ✅        |
+| TypeScript and JavaScript | Nx's own |     ✅      | deliberately not claimed |       ✅        |
+| Vue                       | Nx's own |     ✅      |      LSP · VS Code       |       ✅        |
 
 _LSP_ means any LSP client reaches the diagnostics; Claude Code does, from this
 repository's own marketplace. _VS Code_ means `packages/lattice-vscode`, which
@@ -67,13 +67,14 @@ missing there is the marketplace publisher account — the release lane already
 publishes the moment one exists — and it is one piece of work rather than four.
 
 Two cells are refusals rather than gaps, and both are argued where they are
-implemented. Nx already infers TypeScript edges, so a second inference would be a
-second answer to a question that has one. And an editor gives one language server
-per file extension, so claiming `.ts` would displace the TypeScript server a
-developer actually needs in order to re-answer a question ESLint already answers
-— which is why the server routes every extension the analyzer registry knows
-_except_ the JS/TS family, a list `src/lsp/editor-config.integration.test.mjs`
-fails on the day it and the registry disagree.
+implemented. Nx already infers TypeScript and JavaScript edges, so a second
+inference would be a second answer to a question that has one. And an editor
+gives one language server per file extension, so claiming `.ts` would displace
+the TypeScript server a developer actually needs in order to re-answer a question
+ESLint already answers — which is why the server routes every extension the
+analyzer registry knows _except_ the TypeScript and JavaScript family, a list
+`src/lsp/editor-config.integration.test.mjs` fails on the day it and the
+registry disagree.
 
 ## How the next language earns its place
 
@@ -179,8 +180,8 @@ hand-written `project.json`, and no target is ever inferred. The community
 plugins that solve the edge problem also infer targets, and rejecting that is
 this tool's reason to exist: what a target does keeps one source of truth.
 
-**TypeScript stays with `@nx/eslint-plugin`.** Lattice does not replace a rule
-that already works.
+**TypeScript and JavaScript stay with `@nx/eslint-plugin`.** Lattice does not
+replace a rule that already works.
 
 **One constraint table, in the consumer's workspace.** Nothing in this project
 defaults a constraint or an option, because a default is a second copy of a value

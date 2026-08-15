@@ -1,8 +1,8 @@
 # lattice
 
 Architecture enforcement for polyglot repositories — dependency graphs and module
-boundaries for Go, Rust, Python, TypeScript and Vue, with Nx and Moon as
-first-class integrations.
+boundaries for Go, Rust, Python, TypeScript, JavaScript and Vue, with Nx and
+Moon as first-class integrations.
 
 ## Why it exists
 
@@ -104,9 +104,9 @@ provider — and derives tags from each project's `moon.yml` declarations,
 
 One file at the workspace root — the one `boundaryConfig` names — holds the
 constraint table and the eight upstream options. It exports `depConstraints` in
-exactly the shape `@nx/enforce-module-boundaries` takes, so in a TypeScript
-workspace the same file feeds both enforcers and there is one table rather than
-two:
+exactly the shape `@nx/enforce-module-boundaries` takes, so in a TypeScript or
+JavaScript workspace the same file feeds both enforcers and there is one table
+rather than two:
 
 ```js
 export const depConstraints = [
@@ -259,11 +259,11 @@ could not analyze gets a diagnostic saying exactly that — so an empty diagnost
 list from this server always means "no violation", never "not checked".
 
 An editor rather than an ESLint plugin, because an ESLint plugin only runs where
-ESLint has a parser. In a workspace that configures one, that is JS, TS **and
-Vue** — measured, a `.vue` file importing a banned package draws the same
-message from ESLint and from this tool, differing only in the column each
-underlines. Go, Rust and Python have no parser at all, and that is the half an
-ESLint plugin could never reach.
+ESLint has a parser. In a workspace that configures one, that is JavaScript,
+TypeScript **and Vue** — measured, a `.vue` file importing a banned package draws
+the same message from ESLint and from this tool, differing only in the column
+each underlines. Go, Rust and Python have no parser at all, and that is the half
+an ESLint plugin could never reach.
 
 **Claude Code** installs it as a plugin, from this repository's marketplace:
 
@@ -275,10 +275,10 @@ claude plugin install lattice@lattice
 After that a session gets boundary diagnostics on every edit to a Go, Rust,
 Python or Vue file. The server entry is `lspServers` in
 `.claude-plugin/plugin.json`, and it claims every extension the analyzers handle
-except the JS/TS family: an editor gives one server per file extension, so
-claiming those would displace the language server a developer actually needs
-there. `.vue` falls on the claimed side of that line and ESLint reads it too,
-which makes Vue the one extension both enforcers cover.
+except the TypeScript and JavaScript family: an editor gives one server per file
+extension, so claiming those would displace the language server a developer
+actually needs there. `.vue` falls on the claimed side of that line and ESLint
+reads it too, which makes Vue the one extension both enforcers cover.
 
 **Any other LSP client** launches the same executable:
 

@@ -7,8 +7,8 @@ makes those edges visible to `nx affected` and to the boundary rules.
 
 What it does **not** do is re-infer what Nx already knows. TypeScript and
 JavaScript edges are Nx's own — Lattice adds Go, Rust and Python, and leaves
-the rest alone ([north-star.md](../doctrine/north-star.md): _TypeScript stays with
-`@nx/eslint-plugin`_).
+the rest alone ([north-star.md](../doctrine/north-star.md): _TypeScript and
+JavaScript stay with `@nx/eslint-plugin`_).
 
 ## What the integration provides
 
@@ -155,15 +155,15 @@ would be judged against Nx's default layout instead of the one it declared.
 ## affected integration
 
 `nx affected` decides what to rebuild or retest by walking the project graph's
-dependency edges. Nx already infers TypeScript edges from imports, so a change
-to a TypeScript library correctly marks its consumers affected. For Go, Rust and
-Python, that inference does not exist — the edges are absent, and `nx affected`
-silently under-selects.
+dependency edges. Nx already infers TypeScript and JavaScript edges from
+imports, so a change to a TypeScript or JavaScript library correctly marks its
+consumers affected. For Go, Rust and Python, that inference does not exist — the
+edges are absent, and `nx affected` silently under-selects.
 
 Lattice's plugin fills that gap. A Go project importing a sibling's module path,
 a Rust crate with a `path` dependency, a Python package wired through
 `[tool.uv.sources]` — each becomes a graph edge at computation time, and
-`nx affected` works the same way it does for TypeScript.
+`nx affected` works the same way it does for TypeScript and JavaScript.
 
 The boundary check catches violations that `nx affected` never will: an
 undeclared Python import that works at runtime, for example, crosses the
@@ -192,7 +192,8 @@ Nx infers TypeScript and JavaScript edges from import statements. Lattice does
 not re-infer them. A second inference would be a second answer to a question
 that already has one, and the project's position is that
 `@nx/enforce-module-boundaries` should keep running for those languages
-([north-star.md](../doctrine/north-star.md): _TypeScript stays with `@nx/eslint-plugin`_).
+([north-star.md](../doctrine/north-star.md): _TypeScript and JavaScript stay with
+`@nx/eslint-plugin`_).
 
 The boundary checker still analyzes `.ts`, `.js` and `.vue` files — it uses
 `ts.resolveModuleName` to resolve specifiers and reports violations against the

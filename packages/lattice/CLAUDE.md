@@ -303,10 +303,11 @@ which stays unresolved on purpose because resolving it would mean applying
 One file there — named by the `boundaryConfig` option, `module-boundaries.config.mjs`
 unless the workspace says otherwise — is the single home of the constraint table
 and the eight `@nx/enforce-module-boundaries` options. `src/config.mjs` reads it,
-and in a TypeScript workspace the same file is what the workspace's own ESLint
-config feeds to `@nx/enforce-module-boundaries`, so both enforcers answer from
-one table. Nothing here restates a constraint, and nothing here defaults an
-option — a default would be a second copy of a value that file already states,
+and in a TypeScript or JavaScript workspace the same file is what the workspace's
+own ESLint config feeds to `@nx/enforce-module-boundaries`, so both enforcers
+answer from one table. Nothing here restates a constraint, and nothing here
+defaults an option — a default would be a second copy of a value that file
+already states,
 and the two would disagree the day one changed.
 
 `src/config.mjs` validates shape only. Whether `layer:adapter` may reach

@@ -35,8 +35,8 @@ The primary drift signal: an import that crosses a constraint the architecture
 declared. `check` judges every import site against the constraint table and
 reports violations with `file:line:column` positions.
 
-This is the class `@nx/enforce-module-boundaries` already covers for TypeScript,
-and the class Lattice extends to Go, Rust, Python and Vue.
+This is the class `@nx/enforce-module-boundaries` already covers for TypeScript
+and JavaScript, and the class Lattice extends to Go, Rust, Python and Vue.
 
 ### 2. Structural drift — `diff`
 
