@@ -3,7 +3,7 @@
 Which suite proves what, and which failure each tier exists to catch.
 
 The commands themselves — setup, what to run before pushing, how a pull request
-lands — are [CONTRIBUTING.md](../../CONTRIBUTING.md)'s and are not repeated here.
+lands — are CONTRIBUTING.md's and are not repeated here.
 This page is about _why_ the suites are split the way they are, and what a new
 test has to do to be worth adding.
 
@@ -98,7 +98,7 @@ real pair.
 
 ### Conformance — the differential against ESLint
 
-[`src/conformance/`](../../packages/lattice/src/conformance/README.md)
+`src/conformance/`
 is the only thing in the repository that puts this engine's verdict beside real
 ESLint's on the same code. **46 fixture workspaces, 116 probes, 94 projects**, and
 80 of the 116 probes are near-misses where ESLint must report nothing.
@@ -115,7 +115,7 @@ column** (ESLint reports the whole statement, this engine reports the specifier,
 and a pair matches when this engine's position falls inside ESLint's range).
 
 The real-tree half of that comparison lives outside the package:
-[`scripts/differential-real-trees.mjs`](../../scripts/differential-real-trees.mjs)
+`scripts/differential-real-trees.mjs`
 drives the same two engines over public Nx workspaces pinned at fixed commits,
 from `.github/workflows/differential.yml` rather than from any `test` target —
 the conformance README's condition 3 states what it measures and why a red run

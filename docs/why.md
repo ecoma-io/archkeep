@@ -101,7 +101,7 @@ That third route has one property the other two lack: because the rules are the
 upstream rules rather than an approximation, they can be **differentially tested
 against real ESLint** on the same workspace, and the places the two disagree can
 be enumerated rather than hoped about.
-[`src/conformance/`](../packages/lattice/src/conformance/README.md)
+`src/conformance/`
 is that comparison — 46 fixture workspaces, 116 probes, and a ledger of every
 known difference with the reason for each.
 
@@ -119,13 +119,13 @@ a checker can be wrong.
 The second is the failure this tool exists to end, so a tool that produces it
 would be worse than nothing — it would replace a known gap with an unknown one,
 wearing a green checkmark. Hence the invariant that
-[`AGENTS.md`](../AGENTS.md) states and everything is judged against: **an empty
+`AGENTS.md` states and everything is judged against: **an empty
 result is a claim, not a shrug.** Every code path that cannot reach a verdict
 says so instead of returning empty. That is why the CLI has an exit code for
 "could not look" that is distinct from "looked and found nothing", why the
 language server refuses to publish an empty diagnostic list from anywhere except
 two named places, and why the issue tracker has a
-[dedicated form for a missed violation](../.github/ISSUE_TEMPLATE/missed_violation.yml)
+dedicated form for a missed violation (`.github/ISSUE_TEMPLATE/missed_violation.yml`)
 separate from the ordinary bug form.
 
 [north-star.md](doctrine/north-star.md) is where that stops being a defensive posture and

@@ -1,7 +1,7 @@
 # Release
 
 How a version of Lattice reaches the people who use it. This is the mechanics;
-[CONTRIBUTING.md](../../CONTRIBUTING.md) owns the contribution bar, and
+CONTRIBUTING.md owns the contribution bar, and
 [testing.md](testing.md) owns the suite that must pass before anything ships.
 
 ## What happens automatically

@@ -63,7 +63,7 @@ file, a file with no analyzer, or a `tsconfig` that will not load each leaves
 a file the summary counted but no rule ever judged, and that is enough to
 withhold the verdict. A `lattice.json` workspace has one partial-failure case
 the Nx path does not: a tracked, analyzable file no discovered project owns
-is also exit 3, for the same reason — [`../../packages/lattice/src/providers/native/README.md`](../../packages/lattice/src/providers/native/README.md)'s
+is also exit 3, for the same reason — `../../packages/lattice/src/providers/native/README.md`'s
 "Two failure classes, both loud" owns that distinction.
 
 Shell scripts get this wrong in a specific way. `set -e` treats every non-zero
@@ -252,7 +252,7 @@ rather than two that drift — see
 
 The conditions under which you could eventually drop the ESLint rule are
 enumerated in
-[`src/conformance/`](../../packages/lattice/src/conformance/README.md).
+`src/conformance/`.
 One of the three is not met — agreement measured on real trees — and it is not
 about correctness on the fixtures.
 
@@ -267,3 +267,5 @@ lattice check $(git diff --cached --name-only --diff-filter=ACM)
 
 The cycle and lazy-load rules will not see what a whole-workspace run sees, so a
 hook that passes is not a promise CI will.
+
+[bad](../README.md)

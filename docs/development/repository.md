@@ -33,7 +33,7 @@ program and writes nothing.
 `scripts/` holds the gates that make a green build mean something:
 
 - `check-packages.mjs` — asserts every `packages/*` directory is a project Moon
-  can see, declaring at least one CI target. [CONTRIBUTING.md](../../CONTRIBUTING.md)
+  can see, declaring at least one CI target. CONTRIBUTING.md
   explains why it exists and what it would catch.
 - `check-docs-links.mjs` — fails on any doc reference that cannot resolve:
   markdown links in `docs/` whose target file is gone, `#anchors` that name no
@@ -73,7 +73,7 @@ constraint table, with the tag vocabulary `type-package`/`scope-nx`. CI runs
 ## What owns what
 
 [docs/README.md](../README.md) holds the documentation ownership map.
-[AGENTS.md](../../AGENTS.md) holds the rules a diff is rejected for violating.
-[CONTRIBUTING.md](../../CONTRIBUTING.md) holds the contribution bar and the
-commands. [SECURITY.md](../../SECURITY.md) holds the threat model. None of
+AGENTS.md holds the rules a diff is rejected for violating.
+CONTRIBUTING.md holds the contribution bar and the
+commands. SECURITY.md holds the threat model. None of
 those are repeated here — see the ownership map for the full table.

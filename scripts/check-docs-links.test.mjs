@@ -249,6 +249,47 @@ test("evaluate passes a link to a directory — GitHub renders it as a listing",
   assert.equal(failures.length, 0);
 });
 
+test("evaluate FAILS a docs/ page linking OUTSIDE docs/ — the one-way door", () => {
+  // A docs page linking to `../CONTRIBUTING.md` is a failure even though the
+  // target exists: documentation is a self-contained tree, and a page inside
+  // docs/ may only point at another page inside docs/.
+  const { failures } = evaluate({
+    files: [file("docs/README.md", { links: [{ target: "../CONTRIBUTING.md", line: 5 }] })],
+    existingPaths: withDirectories([abs("CONTRIBUTING.md")]),
+    root: "/repo",
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /OUTSIDE docs\//);
+  assert.match(failures[0], /docs\/README\.md:5/);
+});
+
+test("evaluate allows a NON-docs markdown file to link INTO docs/", () => {
+  // The direction a reader is steered toward: the root README points into
+  // docs/, and that stays legal — only the reverse is refused.
+  const { failures } = evaluate({
+    files: [file("README.md", { links: [{ target: "docs/why.md", line: 2 }] })],
+    existingPaths: withDirectories([abs("docs/why.md")]),
+    root: "/repo",
+  });
+  assert.equal(failures.length, 0);
+});
+
+test("evaluate FAILS a docs/ page linking outside docs/ even when the target exists", () => {
+  // The existence check and the containment check are independent: a link to
+  // a real file outside docs/ is still a containment failure.
+  const { failures } = evaluate({
+    files: [
+      file("docs/usage/ci.md", {
+        links: [{ target: "../../packages/lattice/README.md", line: 9 }],
+      }),
+    ],
+    existingPaths: withDirectories([abs("packages/lattice/README.md")]),
+    root: "/repo",
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /OUTSIDE docs\//);
+});
+
 test("evaluate reports every broken reference, not just the first", () => {
   const { failures } = evaluate({
     files: [
