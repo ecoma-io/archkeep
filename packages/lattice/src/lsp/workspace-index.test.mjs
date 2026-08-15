@@ -679,6 +679,32 @@ describe("the native branch buildWorkspaceIndex takes for a lattice.json root", 
     expect(indexGaps(index)[0]).toContain("lattice.json");
   });
 
+  it("catches a stale coverage.exempt row into nativeModelFailure, never a silently empty index", () => {
+    // A waiver naming a file nothing unclaimed matches is a real defect in
+    // `lattice.json` — the covered file is owned by a project now, or the path
+    // was never right — and discover() refusing it loudly is what keeps a raw
+    // index from publishing verdicts computed against a tree it never fully
+    // read.
+    const staleFiles = {
+      "lattice.json": JSON.stringify({
+        projects: { declared: [{ root: "apps/a" }] },
+        coverage: {
+          exempt: [{ path: "scripts/*.py", reason: "generated, reviewed at codegen time" }],
+        },
+      }),
+      "apps/a/main.go": "package a\n",
+    };
+    const index = buildWorkspaceIndex({
+      root: "/fixture",
+      listFiles: () => Object.keys(staleFiles),
+      readFileAt: (_root, path) => staleFiles[path] ?? null,
+    });
+
+    expect(index.nativeMarker).toBe(true);
+    expect(index.nativeModelFailure).toContain("coverage.exempt");
+    expect(indexGaps(index)).toHaveLength(1);
+  });
+
   it("leaves nativeMarker false for a tree with no lattice.json at its root", () => {
     const index = buildWorkspaceIndex({
       root: "/fixture",

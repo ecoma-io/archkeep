@@ -70,6 +70,52 @@ describe("findNativeModelViolations", () => {
       ).toMatch(/projects\.declared\[0\]\.root: 'apps\/a\/' must be workspace-relative/);
     });
 
+    it("rejects '.' as a root — the workspace root is written '' instead", () => {
+      expect(findNativeModelViolations({ projects: { declared: [{ root: "." }] } })[0]).toMatch(
+        /projects\.declared\[0\]\.root: '\.' is not valid — write ''/,
+      );
+    });
+
+    it("rejects a backslash in a root — paths are matched posix-style", () => {
+      expect(
+        findNativeModelViolations({ projects: { declared: [{ root: "apps\\a" }] } })[0],
+      ).toMatch(/projects\.declared\[0\]\.root: 'apps\\a' must use forward slashes/);
+    });
+
+    it("rejects a '.' or '..' segment in a root", () => {
+      expect(
+        findNativeModelViolations({ projects: { declared: [{ root: "apps/../a" }] } })[0],
+      ).toMatch(/projects\.declared\[0\]\.root: 'apps\/\.\.\/a' must be a canonical path/);
+    });
+
+    it("rejects a non-object declared row", () => {
+      expect(findNativeModelViolations({ projects: { declared: ["apps/a"] } })[0]).toMatch(
+        /projects\.declared\[0\]: must be an object/,
+      );
+    });
+
+    it("rejects an invalid name or type on a declared row", () => {
+      const violations = findNativeModelViolations({
+        projects: { declared: [{ root: "apps/a", name: "", type: "service" }] },
+      });
+      expect(violations.some((v) => /\.name: must be a non-empty string/.test(v))).toBe(true);
+      expect(violations.some((v) => /\.type: must be one of app, lib, e2e/.test(v))).toBe(true);
+    });
+
+    it("rejects an empty string inside a declared row's tag list", () => {
+      expect(
+        findNativeModelViolations({ projects: { declared: [{ root: "apps/a", tags: [""] }] } })[0],
+      ).toMatch(/projects\.declared\[0\]\.tags\[0\]: must not be empty/);
+    });
+
+    it("accepts a declared row that carries no optional list keys at all", () => {
+      // `stringListViolations(undefined, …)` reads an absent key as "no
+      // violations", never as a malformed value.
+      expect(findNativeModelViolations({ projects: { declared: [{ root: "apps/a" }] } })).toEqual(
+        [],
+      );
+    });
+
     // '' names the workspace-root project itself, and it is the one root that
     // legitimately has neither a leading nor a trailing slash to strip.
     it("accepts an empty root as the workspace-root project", () => {
@@ -100,6 +146,121 @@ describe("findNativeModelViolations", () => {
       });
       expect(violations[0]).toMatch(
         /projects\.declared\[0\]\.implicitDependencies\[0\]: 'libs\/\*' uses glob syntax this engine does not reproduce/,
+      );
+    });
+  });
+
+  describe("projects.infer", () => {
+    it("rejects a non-object projects.infer", () => {
+      expect(findNativeModelViolations({ projects: { infer: 42 } })[0]).toMatch(
+        /projects\.infer: must be an object/,
+      );
+    });
+
+    it("rejects an empty manifests list, which would silently disable inference", () => {
+      expect(findNativeModelViolations({ projects: { infer: { manifests: [] } } })[0]).toMatch(
+        /projects\.infer\.manifests: must not be empty/,
+      );
+    });
+
+    it("rejects an unknown projects.infer field", () => {
+      expect(
+        findNativeModelViolations({ projects: { infer: { manifest: ["go.mod"] } } })[0],
+      ).toMatch(/projects\.infer\.manifest: not an infer field/);
+    });
+  });
+
+  describe("projectRules rows", () => {
+    it("rejects a non-object projectRules row", () => {
+      expect(findNativeModelViolations({ projectRules: ["libs/**"] })[0]).toMatch(
+        /projectRules\[0\]: must be an object/,
+      );
+    });
+
+    it("rejects an invalid type on a projectRules row", () => {
+      expect(
+        findNativeModelViolations({ projectRules: [{ match: "libs/**", type: "service" }] })[0],
+      ).toMatch(/projectRules\[0\]\.type: must be one of app, lib, e2e/);
+    });
+
+    it("rejects an unknown projectRules field", () => {
+      const violations = findNativeModelViolations({
+        projectRules: [{ match: "libs/**", tag: ["x"] }],
+      });
+      expect(
+        violations.some((v) => /projectRules\[0\]\.tag: not a projectRules field/.test(v)),
+      ).toBe(true);
+    });
+  });
+
+  describe("coverage", () => {
+    it("rejects a non-object coverage.exempt row", () => {
+      expect(findNativeModelViolations({ coverage: { exempt: ["README.md"] } })[0]).toMatch(
+        /coverage\.exempt\[0\]: must be an object/,
+      );
+    });
+
+    it("rejects an unknown coverage.exempt field", () => {
+      expect(
+        findNativeModelViolations({
+          coverage: { exempt: [{ path: "README.md", reason: "x", why: "y" }] },
+        })[0],
+      ).toMatch(/coverage\.exempt\[0\]\.why: not an exempt field/);
+    });
+
+    it("rejects a non-object coverage block, and a non-array exempt list", () => {
+      expect(findNativeModelViolations({ coverage: 42 })[0]).toMatch(
+        /coverage: must be an object when present/,
+      );
+      expect(findNativeModelViolations({ coverage: { exempt: "README.md" } })[0]).toMatch(
+        /coverage\.exempt: must be an array when present/,
+      );
+    });
+
+    it("rejects an unknown coverage field", () => {
+      expect(findNativeModelViolations({ coverage: { exempts: [] } })[0]).toMatch(
+        /coverage\.exempts: not a coverage field/,
+      );
+    });
+  });
+
+  describe("workspaceLayout", () => {
+    it("rejects a non-object workspaceLayout", () => {
+      expect(findNativeModelViolations({ workspaceLayout: "apps" })[0]).toMatch(
+        /workspaceLayout: must be an object/,
+      );
+    });
+
+    it("rejects an unknown workspaceLayout field", () => {
+      const violations = findNativeModelViolations({
+        workspaceLayout: { appsDir: "apps", libsDir: "libs", srcDir: "src" },
+      });
+      expect(
+        violations.some((v) => /workspaceLayout\.srcDir: not a workspaceLayout field/.test(v)),
+      ).toBe(true);
+    });
+  });
+
+  describe("projects block", () => {
+    it("rejects a non-object projects block", () => {
+      expect(findNativeModelViolations({ projects: [] })[0]).toMatch(/projects: must be an object/);
+    });
+
+    it("rejects a projects.declared that is not an array", () => {
+      expect(findNativeModelViolations({ projects: { declared: "apps/a" } })[0]).toMatch(
+        /projects\.declared: must be an array when present/,
+      );
+    });
+
+    it("rejects an unknown projects field", () => {
+      expect(findNativeModelViolations({ projects: { declareds: [] } })[0]).toMatch(
+        /projects\.declareds: not a projects field/,
+      );
+    });
+
+    it("rejects a non-array projectRules block", () => {
+      expect(findNativeModelViolations({ projectRules: {} })[0]).toMatch(
+        /projectRules: must be an array when present/,
       );
     });
   });
@@ -485,6 +646,25 @@ describe("loadNativeModel", () => {
     });
     const model = loadNativeModel("/repo", io({ "lattice.json": text }));
     expect(model.coverage.exempt[0].reason).toBe("see http://example.com and a trailing, } note");
+  });
+
+  it("survives escaped characters inside string values", () => {
+    // `\"` and `\\` inside a string are the string's own content, not syntax
+    // the comment/comma stripper may read — a `\\` followed by `"` must not
+    // end the literal early, and a `\\` followed by `/` must not open a
+    // comment.
+    const text = '{ "coverage": { "exempt": [{ "path": "x", "reason": "a\\"b\\\\/c" }] } }';
+    const model = loadNativeModel("/repo", io({ "lattice.json": text }));
+    expect(model.coverage.exempt[0].reason).toBe('a"b\\/c');
+  });
+
+  it("survives a string that ends in an escape at the document's very end", () => {
+    // An unterminated string closing on a backslash is broken JSON either
+    // way; the point is the stripper does not crash on the escaped final
+    // character, and the original parse failure is the one reported.
+    expect(() => loadNativeModel("/repo", io({ "lattice.json": '{ "projects": "x\\' }))).toThrow(
+      /cannot load \/repo\/lattice\.json:/,
+    );
   });
 
   // A file broken for a reason that has nothing to do with comments or
