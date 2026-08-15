@@ -52,6 +52,20 @@ describe("an empty diagnostic list means no violation, and nothing else", () => 
     expect(diagnostics[0].message).toContain("NOT a clean result");
   });
 
+  it("still names the throw when the no-analyzer failure is not an Error", () => {
+    // A thrown string carries no `message`; the fallback must land in the
+    // diagnostic all the same, or a language with no analyzer would publish
+    // an empty list and read as clean.
+    analyzeFile.mockImplementation(() => {
+      throw "no elvish import analyzer is implemented yet";
+    });
+
+    const { analyzed, diagnostics } = diagnoseDocument(REQUEST);
+
+    expect(analyzed).toBe(false);
+    expect(diagnostics[0].message).toContain("no elvish import analyzer is implemented yet");
+  });
+
   it("publishes the throw when the rule engine refuses the input it was handed", () => {
     // `evaluate` throws when the graph and the records describe different trees.
     // Every verdict after that point would be guesswork, so there is no partial

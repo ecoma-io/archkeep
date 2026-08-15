@@ -502,4 +502,294 @@ describe("asking the client to watch the files a verdict depends on", () => {
     expect(sent.find((m) => m.method === "client/registerCapability")).toBeUndefined();
     expect(logs.join("\n")).toContain("does not support dynamic file watching");
   });
+
+  it("does not re-register the same watch list it already holds", async () => {
+    // Re-sending a registration the client already holds would leave two
+    // watchers for every glob and two notifications per edit.
+    const { server, sent } = session();
+    await server.handle(
+      initialize({
+        capabilities: { workspace: { didChangeWatchedFiles: { dynamicRegistration: true } } },
+      }),
+    );
+    await server.handle({ jsonrpc: "2.0", method: "initialized", params: {} });
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "workspace/didChangeWatchedFiles",
+      params: { changes: [{ uri: `file://${ROOT}/${DEFAULT_WATCHED[0]}`, type: 2 }] },
+    });
+
+    const registrations = sent.filter((m) => m.method === "client/registerCapability");
+    expect(registrations).toHaveLength(1);
+    expect(sent.filter((m) => m.method === "client/unregisterCapability")).toHaveLength(0);
+  });
+
+  it("unregisters the old list before registering the new one when the watched set moved", async () => {
+    // `nx.json`'s `boundaryConfig` names one of these files, so editing it
+    // retires one glob and adds another. A client left holding both would
+    // report the old filename forever and the new one nowhere.
+    let call = 0;
+    const { server, sent } = session({
+      readOptions: () => {
+        call += 1;
+        return {
+          ...DEFAULT_OPTIONS,
+          boundaryConfig: call === 1 ? "first.config.mjs" : "second.config.mjs",
+        };
+      },
+    });
+    await server.handle(
+      initialize({
+        capabilities: { workspace: { didChangeWatchedFiles: { dynamicRegistration: true } } },
+      }),
+    );
+    await server.handle({ jsonrpc: "2.0", method: "initialized", params: {} });
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "workspace/didChangeWatchedFiles",
+      params: { changes: [{ uri: `file://${ROOT}/nx.json`, type: 2 }] },
+    });
+
+    const unregister = sent.find((m) => m.method === "client/unregisterCapability");
+    expect(unregister.params.unregisterations[0].id).toBe("lattice/watched-files");
+    const registrations = sent.filter((m) => m.method === "client/registerCapability");
+    expect(registrations).toHaveLength(2);
+  });
+
+  it("re-registers when the watched set changed but kept its size", async () => {
+    // Same list length, different members — the equality check must compare
+    // contents, not only the count.
+    let call = 0;
+    const { server, sent } = session({
+      readOptions: () => {
+        call += 1;
+        return {
+          ...DEFAULT_OPTIONS,
+          boundaryConfig: call === 1 ? "first.config.mjs" : "second.config.mjs",
+        };
+      },
+    });
+    await server.handle(
+      initialize({
+        capabilities: { workspace: { didChangeWatchedFiles: { dynamicRegistration: true } } },
+      }),
+    );
+    await server.handle({ jsonrpc: "2.0", method: "initialized", params: {} });
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "workspace/didChangeWatchedFiles",
+      params: { changes: [{ uri: `file://${ROOT}/nx.json`, type: 2 }] },
+    });
+
+    expect(sent.filter((m) => m.method === "client/registerCapability")).toHaveLength(2);
+  });
+
+  it("ignores a watched-files notification that carries no changes at all", async () => {
+    let build = 0;
+    const { server } = session({
+      buildIndex: () => {
+        build += 1;
+        return { workspace: {}, graph: { nodes: {} } };
+      },
+    });
+    await server.handle(initialize());
+    await server.handle(didOpen());
+    await server.handle({ jsonrpc: "2.0", method: "workspace/didChangeWatchedFiles" });
+
+    expect(build).toBe(1);
+  });
+
+  it("ignores a watched-files change that names no file on disk", async () => {
+    let build = 0;
+    const { server } = session({
+      buildIndex: () => {
+        build += 1;
+        return { workspace: {}, graph: { nodes: {} } };
+      },
+    });
+    await server.handle(initialize());
+    await server.handle(didOpen());
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "workspace/didChangeWatchedFiles",
+      params: { changes: [{ uri: "untitled:Untitled-1", type: 2 }] },
+    });
+
+    expect(build).toBe(1);
+  });
+});
+
+describe("message shapes the protocol allows and the server must survive", () => {
+  it("ignores an initialize notification, which has no id to answer", async () => {
+    const { server, sent } = session();
+    await server.handle({ jsonrpc: "2.0", method: "initialize", params: {} });
+    await server.handle(initialize());
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0].result.serverInfo.name).toBe("lattice");
+  });
+
+  it("ignores a notification that arrives before initialize, answering nothing", async () => {
+    const { server, sent } = session();
+    await server.handle({ jsonrpc: "2.0", method: "textDocument/didOpen", params: {} });
+
+    expect(sent).toHaveLength(0);
+  });
+
+  it("answers a shutdown notification with nothing at all", async () => {
+    const { server, sent } = session();
+    await server.handle(initialize());
+    await server.handle({ jsonrpc: "2.0", method: "shutdown" });
+
+    expect(sent).toHaveLength(1);
+  });
+
+  it("ignores a notification that arrives after shutdown", async () => {
+    // The specification: after shutdown a request errors and a notification is
+    // ignored. Answering normally would let the client keep using a server
+    // that has released its state.
+    const { server, sent } = session();
+    await server.handle(initialize());
+    await server.handle({ jsonrpc: "2.0", id: 2, method: "shutdown" });
+    await server.handle({ jsonrpc: "2.0", method: "textDocument/didOpen", params: {} });
+
+    expect(sent).toHaveLength(2);
+  });
+
+  it("treats a message with no shape at all as a no-op", async () => {
+    const { server, sent } = session();
+    await server.handle(initialize());
+    await server.handle(undefined);
+
+    expect(sent).toHaveLength(1);
+  });
+
+  it("falls back to the current working directory when initialize names no root at all", async () => {
+    const roots = [];
+    const { server } = session({
+      buildIndex: ({ root }) => {
+        roots.push(root);
+        return { workspace: {}, graph: { nodes: {} } };
+      },
+    });
+    await server.handle(
+      initialize({
+        rootUri: undefined,
+        workspaceFolders: undefined,
+        rootPath: undefined,
+      }),
+    );
+    await server.handle(didOpen("package inner\n", `file://${process.cwd()}/libs/inner/main.go`));
+
+    expect(roots).toEqual([process.cwd()]);
+  });
+
+  it("stores an opened document's text and version defensively", async () => {
+    diagnoseDocument.mockReturnValue({ analyzed: true, diagnostics: [] });
+    const { server } = session();
+    await server.handle(initialize());
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "textDocument/didOpen",
+      params: { textDocument: { uri: URI, languageId: "go", text: 42 } },
+    });
+
+    // The document was stored with an empty text and no version; the next
+    // didChange must not crash and must keep the stored version.
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: { textDocument: { uri: URI } },
+    });
+    expect(diagnoseDocument).toHaveBeenCalled();
+  });
+
+  it("marks a document unanalyzable when a full change carries no text", async () => {
+    const { server, sent } = session();
+    await server.handle(initialize());
+    await server.handle(didOpen());
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: { textDocument: { uri: URI, version: 2 }, contentChanges: [{}] },
+    });
+
+    // A full change with no text spares the document the ranged-change death
+    // sentence — it just replaces the buffer with the empty text.
+    expect(published(sent).at(-1)).toBeDefined();
+    expect(diagnoseDocument).toHaveBeenCalled();
+  });
+
+  it("ignores a change for a document it never opened", async () => {
+    const { server, sent } = session();
+    await server.handle(initialize());
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: { textDocument: { uri: URI, version: 2 }, contentChanges: [{ text: "x" }] },
+    });
+
+    expect(published(sent)).toHaveLength(0);
+  });
+
+  it("ignores a close for a document it never opened, publishing no empty list", async () => {
+    const { server, sent } = session();
+    await server.handle(initialize());
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "textDocument/didClose",
+      params: { textDocument: { uri: URI } },
+    });
+
+    expect(published(sent)).toHaveLength(0);
+  });
+
+  it("keeps its own failure text when a collaborator throws a plain string", async () => {
+    const { server, sent } = session({
+      readConfig: async () => {
+        throw "config exploded";
+      },
+    });
+    await server.handle(initialize());
+    await server.handle(didOpen());
+
+    expect(published(sent)[0].diagnostics[0].message).toContain("config exploded");
+  });
+
+  it("keeps the options failure when reading options throws a plain string", async () => {
+    const { server, sent } = session({
+      readOptions: () => {
+        throw "options exploded";
+      },
+    });
+    await server.handle(initialize());
+    await server.handle(didOpen());
+
+    expect(published(sent)[0].diagnostics[0].message).toContain("options exploded");
+  });
+
+  it("logs a plain-string throw from its own client without crashing the queue", async () => {
+    const sent = [];
+    const logs = [];
+    let firstSend = true;
+    const server = createServer({
+      send: (message) => {
+        if (firstSend) {
+          firstSend = false;
+          throw "the client's pipe went away";
+        }
+        sent.push(message);
+      },
+      exit: () => {},
+      log: (text) => logs.push(text),
+      buildIndex: () => ({ workspace: {}, graph: { nodes: {} } }),
+      readConfig: async () => ({ depConstraints: [], options: {} }),
+    });
+
+    await server.handle(initialize());
+    await server.handle({ jsonrpc: "2.0", id: 2, method: "shutdown" });
+
+    expect(logs.join("\n")).toContain("the client's pipe went away");
+    expect(sent).toEqual([{ jsonrpc: "2.0", id: 2, result: null }]);
+  });
 });

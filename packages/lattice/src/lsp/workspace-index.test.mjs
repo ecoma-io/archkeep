@@ -133,6 +133,32 @@ describe("discovering the projects a tree declares", () => {
 
     expect(projects).toEqual([{ name: "root", root: "", config: { name: "root" } }]);
   });
+
+  it("skips a project.json that is listed but cannot be read", () => {
+    // A manifest that vanishes between the git listing and the read is a
+    // skipped project, reported — a project silently absent from the graph is
+    // the same defect this index exists to refuse.
+    const { projects, skipped } = discoverProjects(
+      tree({
+        [`good/${PROJECT_CONFIG_FILE}`]: '{"name":"good"}',
+        [`gone/${PROJECT_CONFIG_FILE}`]: undefined,
+      }),
+    );
+    expect(projects.map((p) => p.name)).toEqual(["good"]);
+    expect(skipped).toEqual([{ file: `gone/${PROJECT_CONFIG_FILE}`, reason: "could not be read" }]);
+  });
+
+  it("skips a project.json at the root that can end up with no usable name", () => {
+    // No stated name, no package.json beside it, and the tree root — the name
+    // chain has nothing left to fall back to. Such a project must be skipped
+    // and SAID to be skipped, never guessed into the graph under a made-up
+    // name.
+    const { projects, skipped } = discoverProjects(tree({ [PROJECT_CONFIG_FILE]: "{}" }));
+    expect(projects).toEqual([]);
+    expect(skipped).toEqual([
+      { file: PROJECT_CONFIG_FILE, reason: "declares no usable project name" },
+    ]);
+  });
 });
 
 describe("the node type a project gets", () => {
@@ -270,6 +296,31 @@ describe("building the index over a whole tree", () => {
     expect(Object.keys(index.graph.nodes).sort()).toEqual(["inner", "nested"]);
   });
 
+  it("records a thrown string from an analyzer the same way, without crashing", () => {
+    // A thrown string carries no `message`; the `String(cause)` fallback must
+    // still land in the recorded failure.
+    analyzeFile.mockImplementationOnce(() => {
+      throw "no elvish import analyzer is implemented yet";
+    });
+    const index = buildWorkspaceIndex(options);
+
+    expect(index.fileFailures[0].reason).toContain("no elvish import analyzer");
+  });
+
+  it("records a file that is listed but cannot be read, instead of analyzing an empty string", () => {
+    // A file git listed but the reader cannot produce (deleted between the two)
+    // was not analyzed — recording the gap is what keeps the verdict honest.
+    const withGone = {
+      ...options,
+      listFiles: () => [...Object.keys(files), "libs/inner/gone.go"],
+    };
+    const index = buildWorkspaceIndex(withGone);
+
+    expect(index.fileFailures).toEqual([
+      { sourceFile: "libs/inner/gone.go", reason: "could not be read" },
+    ]);
+  });
+
   it("fails loudly when the file list cannot be obtained, rather than indexing nothing", () => {
     // An index built from no files puts every file in no project, and a file in
     // no project has no boundary to cross. That is a clean report produced by
@@ -355,6 +406,19 @@ describe("nx.json's workspaceLayout reaching the rule engine (Nx-shaped branch)"
     expect(index.workspaceLayoutFailure).toContain(
       "workspaceLayout declares libsDir but is missing appsDir",
     );
+  });
+
+  it("records a readLayout failure that is not an Error the same way", () => {
+    // The thrown shape is whatever the layout reader chose; the gap must be
+    // built from it either way.
+    const index = buildWorkspaceIndex({
+      ...baseOptions,
+      readLayout: () => {
+        throw "nx.json exploded";
+      },
+    });
+
+    expect(index.workspaceLayoutFailure).toBe("nx.json exploded");
   });
 });
 

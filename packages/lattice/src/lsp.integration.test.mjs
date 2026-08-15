@@ -734,4 +734,50 @@ describe("a real editor session against a native lattice.json workspace", () => 
 
     client.kill();
   }, 30_000);
+
+  it("refuses a root that declares both nx.json and lattice.json", async () => {
+    // One project model per workspace — the same refusal the CLI makes. A
+    // tree carrying both markers is a decision nobody made.
+    const both = realpathSync(mkdtempSync(join(tmpdir(), "lattice-lsp-both-")));
+    try {
+      writeFileSync(join(both, "nx.json"), "{}\n", "utf8");
+      writeFileSync(join(both, "lattice.json"), "{}\n", "utf8");
+      const { readWorkspaceOptions } = await import("./lsp/server.mjs");
+      expect(() => readWorkspaceOptions(both)).toThrow(/declares both nx\.json and lattice\.json/);
+    } finally {
+      rmSync(both, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("refuses a native root whose boundaryConfig is the inline-object form", async () => {
+    // `lattice.json`'s inline policy is valid for `cli.mjs`, but this server
+    // only ever reads a policy FILE — there is no filename to watch or parse.
+    const inline = realpathSync(mkdtempSync(join(tmpdir(), "lattice-lsp-inline-")));
+    try {
+      writeFileSync(
+        join(inline, "lattice.json"),
+        JSON.stringify({
+          projects: { declared: [{ root: "apps/inner", tags: ["zone:inner"] }] },
+          boundaryConfig: {
+            depConstraints: [],
+            moduleBoundaryOptions: {
+              allow: [],
+              buildTargets: ["build"],
+              enforceBuildableLibDependency: false,
+              allowCircularSelfDependency: false,
+              checkDynamicDependenciesExceptions: [],
+              ignoredCircularDependencies: [],
+              banTransitiveDependencies: false,
+              checkNestedExternalImports: false,
+            },
+          },
+        }),
+        "utf8",
+      );
+      const { readWorkspaceOptions } = await import("./lsp/server.mjs");
+      expect(() => readWorkspaceOptions(inline)).toThrow(/holds its boundaryConfig inline/);
+    } finally {
+      rmSync(inline, { recursive: true, force: true });
+    }
+  }, 30_000);
 });
