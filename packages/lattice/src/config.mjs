@@ -54,7 +54,7 @@
  * is written in promises), or an ESLint flat config (`./eslint-config.mjs`
  * reads the workspace's own `@nx/enforce-module-boundaries` rule entry off
  * it, rather than a second, hand-kept copy of the same table —
- * `docs/usage/policy-file.md` is the dialect reference for what that reader
+ * `docs/concepts/policies.md` is the dialect reference for what that reader
  * can and cannot see). `loadBoundaryConfigFile` is the one place that
  * dispatches between them, on **basename first, extension second**: a name
  * matching `eslint.config.*` (`ESLINT_FLAT_CONFIG_BASENAME`) always reaches
@@ -526,7 +526,7 @@ const JSON_POLICY_KEYS = ["depConstraints", "moduleBoundaryOptions", "boundarySu
  * with `allowSchema: false`: an inline policy has no separate file for an
  * editor to validate against, so `$schema` states no rule there either and is
  * rejected like any other unrecognised key rather than carved out
- * (`../../docs/usage/policy-file.md`, "An inline policy, for lattice.json").
+ * (`../../../docs/reference/policy-schema.md`, "An inline policy, for lattice.json").
  *
  * @param {unknown} parsed
  * @param {{allowSchema: boolean}} options

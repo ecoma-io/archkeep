@@ -7,7 +7,7 @@
  * own parser is to give a config Nx ALSO reads (`nx.json`, `project.json`)
  * the exact JSONC leniency Nx gives it — there is no such thing to match
  * here, because Nx never opens `lattice.json` at all; a workspace that has
- * one has no `nx.json` (`../../../../../docs/usage/lattice-json.md`, "This
+ * one has no `nx.json` (`../../../../../docs/reference/configuration.md`, "This
  * page is for a workspace with no Nx at all"). Routing it through `parseNxJson`
  * anyway meant its JSONC tolerance — the trailing comma or `//` comment this
  * very module's header used to advertise as accepted — silently depended on
@@ -478,7 +478,7 @@ const TOP_LEVEL_KEYS = [
  * validator and one default table for that pair rather than a second copy of
  * `DEFAULT_OPTIONS`'s rules. A `boundaryConfig` that is an OBJECT instead of a
  * string — the inline policy this file's own doc names as a second accepted
- * shape (`../../../../../docs/usage/lattice-json.md`, "boundaryConfig") —
+ * shape (`../../../../../docs/reference/configuration.md`, "boundaryConfig") —
  * bypasses `resolveOptions` entirely, since that function's whole contract is
  * "every value is a non-empty string", so its check is inline below, and it
  * reuses `../../config.mjs`'s own `findBoundaryConfigViolations` AND
@@ -487,7 +487,7 @@ const TOP_LEVEL_KEYS = [
  * `allowSchema: false` — an inline policy has no separate file for an editor
  * to validate against, so `$schema` states no rule here either and is
  * rejected by name like any other key the three real ones do not cover,
- * rather than carved out (`../../../../../docs/usage/policy-file.md`, "An
+ * rather than carved out (`../../../../../docs/reference/policy-schema.md`, "An
  * inline policy, for `lattice.json`").
  *
  * @param {unknown} raw The parsed `lattice.json`.
@@ -525,7 +525,7 @@ export function findNativeModelViolations(raw) {
   }
 
   // `projects` is optional the same way every other top-level key here is —
-  // `docs/usage/lattice-json.md`'s "The shape, field by field" names a bare
+  // `docs/reference/configuration.md`'s "The shape, field by field" names a bare
   // `{}` a valid `lattice.json`, and an absent `projects` means exactly what
   // `projects: {}` already validated as: zero declared rows, no inference.
   // Rejecting `undefined` here (as this used to) contradicted that documented

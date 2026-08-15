@@ -16,7 +16,7 @@ describe("findNativeModelViolations", () => {
     expect(findNativeModelViolations(wellFormed())).toEqual([]);
   });
 
-  // `../../../docs/usage/lattice-json.md`: "Every field below is optional; an
+  // `../../../../../docs/reference/configuration.md`: "Every field below is optional; an
   // empty `{}` is a valid `lattice.json`". Requiring `projects` to already be
   // a plain object made bare `{}` fail shape validation before
   // `./discover.mjs` ever got a chance to report the zero-projects case the
@@ -278,7 +278,7 @@ describe("findNativeModelViolations", () => {
       // it in unasked, to validate against a schema on disk. An inline policy
       // has no file for an editor to point a schema at, so `$schema` here
       // states no rule either and is rejected like any other unrecognised key
-      // — `../../../../../docs/usage/policy-file.md`'s "An inline policy, for
+      // — `../../../../../docs/reference/policy-schema.md`'s "An inline policy, for
       // `lattice.json`" is where a workspace author reads why.
       expect(
         findNativeModelViolations({
@@ -448,7 +448,7 @@ describe("loadNativeModel", () => {
   });
 
   // `lattice.json` is never a file Nx itself reads (a workspace that has one
-  // has no `nx.json` — `../../../docs/usage/lattice-json.md`), so it must
+  // has no `nx.json` — `../../../../../docs/reference/configuration.md`), so it must
   // parse JSONC on its own rather than through `../../nx-json.mjs`'s
   // Nx-reaching parser: that parser's fallback, when `nx` cannot be resolved,
   // throws asking for it, and `../../../CLAUDE.md` promises the engine runs

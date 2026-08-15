@@ -114,7 +114,7 @@ export function parseBaseline(text, path) {
   }
 
   // A consumer that reads a schemaVersion it does not recognise should refuse
-  // to parse the rest (`docs/usage/json-output.md`). This tool IS that
+  // to parse the rest (`docs/reference/json-output.md`). This tool IS that
   // consumer when reading a baseline — a future schema version could change
   // the edge shape in ways this diff code would silently misinterpret.
   if (envelope.schemaVersion !== SCHEMA_VERSION) {

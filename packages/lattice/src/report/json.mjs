@@ -31,7 +31,7 @@ const { name: TOOL_NAME, version: TOOL_VERSION } = require("../../package.json")
 
 /**
  * The schema version this build writes. An integer, per
- * `docs/usage/json-output.md`'s stability promise: it only moves for a
+ * `docs/reference/json-output.md`'s stability promise: it only moves for a
  * breaking change to the envelope, and a consumer that reads a
  * `schemaVersion` it does not recognise should refuse to parse the rest of
  * the envelope rather than guess — an unrecognised version is a caller
@@ -54,7 +54,7 @@ const EXIT_CODE_FOR_STATUS = Object.freeze({ ok: 0, findings: 1, "no-verdict": 3
  *   coverage: {complete: boolean, projects: number, analyzedFiles: number, imports: number,
  *     notAnalyzed: object[], blindSpots: object[], notes: string[], coverageGaps?: object[]},
  *   result: object}} run
- * @returns {object} The envelope `docs/usage/json-output.md` documents.
+ * @returns {object} The envelope `docs/reference/json-output.md` documents.
  * @throws {Error} when `status` claims `"ok"` over incomplete coverage, when
  *   `status` and `exitCode` disagree, or when `coverage.complete` disagrees
  *   with whether `coverage.notAnalyzed` is empty.

@@ -105,7 +105,7 @@ If your case is not one of those, it is a divergence worth filing.
 **A specifier that does not exist in the file.** Each analyzer has pinned parse
 limits, and every one of them errs toward a _spurious record naming text the file
 really contains_ rather than a missed import. The known shapes are listed per
-language in [languages.md](languages.md) — a Go raw string containing something
+language in [languages.md](../reference/languages.md) — a Go raw string containing something
 that looks like an import declaration, a Rust local `mod` named after a sibling
 crate, a Python triple-quoted string with an import-shaped line. If your case is
 not on that list, it is a bug.
@@ -122,7 +122,7 @@ These appear only in a workspace with a tracked `go.work` at its root, and they
 fail the run with exit 1 because both directions mean the same dangerous thing:
 a developer's `go build` and CI select different module sets, and nothing else
 notices. What each finding asks for — the four ids and their semantics are in
-[languages.md](languages.md) § _go.work is checked against the graph_:
+[languages.md](../reference/languages.md) § _go.work is checked against the graph_:
 
 - **`goWorkMissingUse`** — add the named `use` entry (the message spells it),
   or, if the module really should not be built locally, ask why it is a
@@ -149,7 +149,7 @@ a `paths` table, and it fails the run with exit 1 because an alias mapped only
 to directories that do not exist resolves no import: the build breaks on it, or
 it silently resolves to an installed package of the same name and every
 boundary decision reads the import as external. The rule and its limits are in
-[languages.md](languages.md) § _The paths table is checked for dead aliases_.
+[languages.md](../reference/languages.md) § _The paths table is checked for dead aliases_.
 
 The fix is what the message says: point the alias at the moved source, or
 delete it. Two shapes worth knowing before disputing one:
@@ -236,7 +236,7 @@ modelling limit surfacing, not a bug in either half.
 **Python.** An edge needs an explicit workspace wiring in the manifest, under
 the declaring tool's own semantics — a `[tool.uv.sources]` route, a Poetry
 `{ path = "…" }`, a PDM root-anchored local URL; the exact shapes are in
-[languages.md](languages.md) § _Python_. A name that merely coincides with a
+[languages.md](../reference/languages.md) § _Python_. A name that merely coincides with a
 sibling package draws nothing, and a declared path that lands on no project's
 root fails graph computation outright rather than being dropped.
 

@@ -295,7 +295,7 @@ test("deriveNativeModel is not trivially empty over a real-shaped graph", () => 
   assert.equal(byName.get("cli-e2e").type, "e2e", "the -e2e suffix rule, reproduced from Nx");
   assert.deepEqual(byName.get("core").tags, ["scope:core"]);
   // No projects.infer, no projectRules — the declared list must be exhaustive
-  // on its own, per docs/usage/lattice-json.md's "omitting this key means the
+  // on its own, per docs/reference/configuration.md's "omitting this key means the
   // declared list is exhaustive."
   assert.equal("infer" in model.projects, false);
   assert.equal("projectRules" in model, false);

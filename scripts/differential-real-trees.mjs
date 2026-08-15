@@ -399,7 +399,7 @@ export function emptyVerdictBreaches(tree, verdictCounts) {
  * suffix rule, applied to `data.projectType` — rather than the Nx graph
  * node's own already-computed top-level `type`, so every field in the derived
  * model traces to a field `lattice.json` itself would carry
- * (`../docs/usage/lattice-json.md`). No `projects.infer`, no `projectRules`: the
+ * (`../docs/reference/configuration.md`). No `projects.infer`, no `projectRules`: the
  * declared list is exhaustive — "Omitting this key entirely means the
  * declared list is exhaustive" (same document) — the one shape whose meaning
  * is unambiguous, so nothing is left for an inference rule to backfill or
@@ -409,7 +409,7 @@ export function emptyVerdictBreaches(tree, verdictCounts) {
  * project's root `"."`, and `lattice.json`'s own dialect rejects exactly that
  * spelling by name — `''` names the workspace root there
  * (`../packages/lattice/src/providers/native/model.mjs`'s
- * `declaredProjectViolations`, and `../docs/usage/lattice-json.md`).
+ * `declaredProjectViolations`, and `../docs/reference/configuration.md`).
  * Found by running this leg against a real tree rather than by reading:
  * `code-pushup` at its pinned commit carries a root-level project, and the
  * first real run turned that into a native-leg infrastructure failure — the
