@@ -530,4 +530,97 @@ describe("formatExplainReport", () => {
     });
     expect(report).toContain("allSourceTags [layer:domain, scope:billing]");
   });
+
+  it("explains a violation that is not driven by any depConstraints row", () => {
+    // `projectWithoutTagsCannotHaveDependencies` fires before the constraint
+    // table is read; a matched-constraint list carrying the null row must
+    // render the sentence rather than crash or print an undefined row.
+    const report = formatExplainReport({
+      explanation: {
+        site: { file: "libs/alpha/main.go", line: 10, column: 5 },
+        import: { specifier: "beta", kind: "static" },
+        sourceProject: "alpha",
+        targetProject: "beta",
+        sourceTags: [],
+        targetTags: ["layer:util"],
+        matchedConstraints: [null],
+        violations: [
+          {
+            messageId: "projectWithoutTagsCannotHaveDependencies",
+            message: "project 'alpha' without tags may not have dependencies",
+            constraint: null,
+          },
+        ],
+        unresolvable: false,
+        reason: null,
+      },
+      coverage: { complete: true, imports: 1, analyzedFiles: 1, projects: 2, notAnalyzed: [] },
+    });
+    expect(report).toContain("not driven by a depConstraints row");
+  });
+
+  it("keeps a blank line inside a multi-line violation message", () => {
+    // A message with an empty paragraph must not collapse to nothing — the
+    // line stays, indented like the rest of the message.
+    const report = formatExplainReport({
+      explanation: {
+        site: { file: "libs/alpha/main.go", line: 10, column: 5 },
+        import: { specifier: "beta", kind: "static" },
+        sourceProject: "alpha",
+        targetProject: "beta",
+        sourceTags: [],
+        targetTags: [],
+        matchedConstraints: [],
+        violations: [
+          {
+            messageId: "noCircularDependencies",
+            message: "line one\n\nline three",
+            constraint: null,
+          },
+        ],
+        unresolvable: false,
+        reason: null,
+      },
+      coverage: { complete: true, imports: 1, analyzedFiles: 1, projects: 2, notAnalyzed: [] },
+    });
+    expect(report).toContain("      line one\n\n      line three");
+  });
+
+  it("uses the singular project form when one project was inspected", () => {
+    const report = formatExplainReport({
+      explanation: {
+        site: { file: "libs/alpha/main.go", line: 10, column: 5 },
+        import: { specifier: "beta", kind: "static" },
+        sourceProject: "alpha",
+        targetProject: "beta",
+        sourceTags: [],
+        targetTags: [],
+        matchedConstraints: [],
+        violations: null,
+        unresolvable: false,
+        reason: null,
+      },
+      coverage: { complete: true, imports: 1, analyzedFiles: 1, projects: 1, notAnalyzed: [] },
+    });
+    expect(report).toContain("1 project");
+  });
+
+  it("says '1 file' when exactly one file could not be analyzed", () => {
+    const report = formatExplainReport({
+      explanation: {
+        site: { file: "libs/alpha/main.go", line: 10, column: 5 },
+        import: { specifier: "beta", kind: "static" },
+        sourceProject: "alpha",
+        targetProject: "beta",
+        sourceTags: [],
+        targetTags: [],
+        matchedConstraints: [],
+        violations: null,
+        unresolvable: false,
+        reason: null,
+      },
+      coverage: { complete: false, imports: 1, analyzedFiles: 1, projects: 2, notAnalyzed: [{}] },
+    });
+    expect(report).toContain("1 file could not be analyzed");
+  });
 });
