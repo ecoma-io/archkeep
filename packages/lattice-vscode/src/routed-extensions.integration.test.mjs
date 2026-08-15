@@ -27,7 +27,7 @@ import { describe, expect, it } from "vitest";
 
 import { ROUTED_EXTENSIONS } from "./languages.mjs";
 
-const MANIFEST_PATH = new URL("../../lattice/.claude-plugin/plugin.json", import.meta.url);
+const MANIFEST_PATH = new URL("../../../.claude-plugin/plugin.json", import.meta.url);
 
 describe("the file types this extension routes", () => {
   it("are exactly the ones the server package's own editor manifest routes", () => {
