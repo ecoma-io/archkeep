@@ -1,21 +1,35 @@
 # North star
 
-Executable architecture for software projects — keeping architecture enforceable
-when software is produced faster than humans can review it.
+Lattice is an architecture governance system for human and agentic software
+development — a deterministic authority that keeps the intended architecture
+aligned with the observed architecture while humans and agents continuously
+change the codebase.
+
+Agentic coding increases the rate at which architectural decisions are made.
+Humans cannot manually review every architectural decision. Therefore the
+architecture must become explicit, machine-readable, continuously checked,
+available to agents, and enforceable. That is what this project builds: not a
+dependency graph, not an architecture linter, not a plugin — the authority a
+repository consults for "does the code that exists agree with the architecture
+that was declared".
 
 Where Lattice is going, what counts as arriving, and what it will not do on the
 way. This document owns the direction. It owns no mechanism — where a claim here
 has a mechanism behind it, the file that owns the mechanism is linked, and that
-file is the one that binds.
+file is the one that binds. [architecture-authority.md](architecture-authority.md)
+owns the system boundary: which of the surrounding pieces — providers, skills,
+agents, CI — are Lattice, and the line none of them may cross.
 
-The direction is wider than it was when this document was written. Lattice is
-becoming a standalone architecture-enforcement engine — any repository, with or
-without Nx — and [roadmap.md](../roadmap.md) owns that staged path and the thesis
-behind it. What this document says below remains true of the engine inside that
-path: the sentence, the finish line per language, the refusals. Where it says
-"an Nx workspace", the pivot reads "a repository", and the Nx-specific
-mechanics it cites are becoming one provider among the integrations rather
-than the foundation.
+The direction is wider than it was when this document was written. Lattice
+started as an Nx plugin closing one instance of the gap — module boundaries for
+the languages ESLint cannot parse — and the engine underneath was always bigger
+than the integration around it. Today it is a standalone governance system that
+works in any repository, with or without Nx or Moon, and
+[roadmap.md](../roadmap.md) owns that path. What this document says below
+remains the engine's direction: the sentence, the finish line per language, the
+refusals. Where older wording said "an Nx workspace", read "a repository", and
+the Nx mechanics it cites are one provider among the integrations rather than
+the foundation.
 
 ## The sentence
 
@@ -26,12 +40,15 @@ Not similar enforcement. The same: the same fifteen violation types, the same
 eight options, the same constraint table, the same message ids — so that
 "boundary" means one thing in a workspace rather than one thing per language.
 
-Today Nx gives that to TypeScript and JavaScript, and to nothing else. A Go
-service, a Rust crate and a Python package carry `layer:`, `scope:` and
-`license:` tags that match no mechanism at all, and the graph that decides what
-`nx affected` rebuilds has no edge between any two of them. Lattice exists to
-close that, and the target state is closure across the board — not across three
-languages that happened to be needed first.
+For TypeScript and JavaScript, an Nx workspace already has an enforcer
+(`@nx/enforce-module-boundaries`) and a graph that decides what `affected`
+rebuilds — but only for those two. A Go service, a Rust crate and a Python
+package carry `layer:`, `scope:` and `license:` tags that match no mechanism at
+all, and the graph that decides what `nx affected` rebuilds has no edge between
+any two of them. Lattice exists to close that — and, because its model is
+provider-independent, to do it in a Moonrepo workspace or a repository with no
+workspace tool at all, not only in an Nx one. The target state is closure
+across the board — not across three languages that happened to be needed first.
 
 ## What arriving looks like
 
@@ -126,6 +143,12 @@ different reader needs the answer at a different moment.
   project allowed to reach, and what depends on it?
   [agentic-development.md](../concepts/agentic-development.md) describes the
   three-question model.
+- **The agent surfaces** — the same CLI, consumed machine-readably. Every
+  command's `--format json` envelope is a versioned contract an agent can read
+  without parsing prose, and the four `arch-*` skills teach an agent when to
+  ask and how to act on the answer. An agent is a first-class consumer of the
+  surfaces, never an authority over them.
+  ([skills/overview.md](../skills/overview.md))
 - **The language server** — the verdict at the edit. It runs in any LSP client;
   Claude Code installs it from this repository's own marketplace.
 - **The editor extension** — the same server, packaged so a developer installs it
@@ -192,6 +215,15 @@ tag values — this repository's own included. It is installed into trees it has
 never seen; `module-boundaries.config.mjs` at this root is what turns that from an
 intention into something CI can disprove, because its vocabulary shares nothing
 with the workspace the tool was extracted from.
+
+**Agents are consumers of the verdict, never its authority.** An agent reasons,
+plans and edits code; it does not decide whether the architecture is valid. The
+verdict comes from the deterministic core, the commands an agent consumes are
+read-only, and nothing an agent can run edits the constraint table to make its
+own change pass. [architecture-authority.md](architecture-authority.md) owns the
+boundary; this refusal exists so that moving it — giving the agent the capacity
+to make an architecture pass by modifying the law — is recognised as a change of
+direction rather than a convenience.
 
 ## The invariant, and why breadth depends on it
 

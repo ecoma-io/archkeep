@@ -93,11 +93,13 @@ violations. An agent that needs the complete verdict must run `check`. The JSON
 envelopes for `context` and `impact` carry a `coverage.notes` entry stating this
 distinction.
 
-## Where this is going
+## Where this sits in the roadmap
 
-[roadmap.md](../roadmap.md) owns the staged direction. The 2.x capability
-"agent-native interface" extends the three-question model: richer context,
-architecture-aware approval gates, and post-change verification that closes the
-loop. `context` and `impact` already answer the before-change and during-change
-questions; 2.x extends that reach. Nothing in 1.x promises those extensions;
-the three commands above are what ships today.
+The three questions and the read-only boundary above are the 1.x agent story —
+**architecture planning facts for agents**, the deterministic half of
+agent-facing governance. [roadmap.md](../roadmap.md) owns the staged path and
+lists it among the 1.x capabilities alongside the `arch-*` skills and the host
+integrations. What 2.x adds — agent-assisted planning help, richer context,
+approval gates, post-change verification that does more than re-run `check`, and
+anything with a reasoning component — is direction, not a promise. The commands
+and the consumer-not-authority line above are what ships today.

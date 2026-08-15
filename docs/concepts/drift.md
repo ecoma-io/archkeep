@@ -84,10 +84,12 @@ configuration drift; the `diff` command finds structural drift and its rule
 impact. The concept ties them together; the commands answer the specific
 questions.
 
-## Where this is going
+## Where this sits in the roadmap
 
-[roadmap.md](../roadmap.md) owns the staged direction. The 2.x capability
-"drift and architectural-change intelligence" extends what `diff` and `check`
-already report: richer policies, fitness functions, and historical evolution of
-the architecture over time. Nothing in 1.x promises that; the three signals
-above are what ships today.
+The three signals above are basic drift detection, and they are a 1.x
+capability: deterministic, computed from graph, policy, snapshot, diff and
+intent, with no predictive component. [roadmap.md](../roadmap.md) owns the
+staged path and lists this alongside the other 1.x capabilities. What 2.x adds
+on top — advanced and predictive drift, historical evolution intelligence, a
+recommendation component — is direction, not a promise; the deterministic
+signals are what ships today.
