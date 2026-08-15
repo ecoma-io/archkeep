@@ -10,12 +10,13 @@
 //      begin with `docs/`, from the carrying file when they begin with `../` or
 //      `./`.
 //
-// WHY this script exists. The documentation IA restructure deleted
-// `docs/usage/policy-file.md` and `docs/usage/lattice-json.md` and moved
-// `json-output.md` and `languages.md` out of `docs/usage/`, and twenty-five
-// references — including two inside shipped error messages — kept pointing at
-// the old paths. No existing gate saw them: Prettier formats markdown but does
-// not resolve a link, markdownlint's closest rule (MD051) checks only `#anchor`
+// WHY this script exists. The documentation IA restructure deleted two pages
+// from `docs/usage/` (the `policy-file.md` and `lattice-json.md` references
+// below are the old names, gone from the tree) and moved `json-output.md` and
+// `languages.md` out of that directory, and twenty-five references — including
+// two inside shipped error messages — kept pointing at the old paths. No
+// existing gate saw them: Prettier formats markdown but does not resolve a
+// link, markdownlint's closest rule (MD051) checks only `#anchor`
 // fragments within one file, and ESLint never reads prose. A broken reference
 // is invisible until someone clicks it, and the two that lived in error
 // messages were the tool itself sending a reader to a path that does not
@@ -51,8 +52,15 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 // Tracked files whose content is a candidate for either reference shape.
 export const SCANNED_EXTENSIONS = [".md", ".mjs", ".js"];
-// Tracked files that deliberately look broken and must not fail the gate.
-export const IGNORED_PREFIXES = [".github/semgrep/", ".claude/worktrees/"];
+// Tracked files that deliberately look broken and must not fail the gate:
+// the Semgrep rule fixtures, and this gate's own test file, whose
+// failure-direction cases hand it references that do not resolve on purpose
+// (a gone target is the input, not a defect in the tree).
+export const IGNORED_PREFIXES = [
+  ".github/semgrep/",
+  ".claude/worktrees/",
+  "scripts/check-docs-links.test.mjs",
+];
 
 /**
  * Extracts the local targets of every `[text](target)` markdown link in text.
