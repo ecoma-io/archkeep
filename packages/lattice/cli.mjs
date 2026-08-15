@@ -64,9 +64,10 @@
  * `COMMANDS` below is a table rather than a `switch`, and `parseArgs` is
  * shared rather than hand-rolled per command, so a new command is a new
  * row rather than a second copy of the dispatch and flag-parsing this file
- * used to own alone. The table is built for six commands — `check`, `graph`,
- * `diff`, `impact`, `explain`, `context` — with three flags shared across
- * all of them (`--format`, `--output`, `--config`). No subcommand nesting,
+ * used to own alone. The table is built for seven commands — `check`, `graph`,
+ * `diff`, `history`, `impact`, `explain`, `context` — with three flags shared
+ * across all of them (`--format`, `--output`, `--config`) and `history`'s
+ * boolean `--capture`, the first flag that takes no value. No subcommand nesting,
  * and no shell completion to generate, mean a plain table gets there without
  * a framework; reach for one only once a later command needs something this
  * table cannot express.
@@ -80,7 +81,8 @@ import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/co
 import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
 import { contextCommand } from "./src/commands/context-command.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
-import { graphCommand } from "./src/commands/graph.mjs";
+import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
+import { historyCommand } from "./src/commands/history.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
@@ -333,7 +335,8 @@ function resolveWorkspaceRootForUsage(cwd) {
  * report a clean tree — the exact false green this tool exists to remove.
  *
  * @param {string[]} argv
- * @param {{flags: Record<string,string>, defaults: object, formats?: readonly string[]}} spec
+ * @param {{flags: Record<string,string>, defaults: object, formats?: readonly string[],
+ *   booleans?: readonly string[]}} spec
  * @returns {object} `{...spec.defaults, paths: string[]}`, with every declared
  *   flag's value substituted in.
  * @throws {Error} on an unknown flag, a missing value, or (when `spec.formats`
@@ -341,6 +344,7 @@ function resolveWorkspaceRootForUsage(cwd) {
  */
 export function parseArgs(argv, spec) {
   const parsed = { ...spec.defaults, paths: [] };
+  const booleans = new Set(spec.booleans ?? []);
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (!arg.startsWith("--")) {
@@ -352,6 +356,16 @@ export function parseArgs(argv, spec) {
       : [arg, undefined];
     const key = spec.flags[flag];
     if (!key) throw new Error(`unknown option '${flag}'`);
+    if (booleans.has(key)) {
+      // A boolean flag takes no value. `--capture` must not swallow the next
+      // argument (the history directory) as its value the way a value-flag
+      // would; the presence of the flag is the whole assertion.
+      if (inlineValue !== undefined) {
+        throw new Error(`'${flag}' takes no value`);
+      }
+      parsed[key] = true;
+      continue;
+    }
     const value = inlineValue ?? argv[++index];
     if (value === undefined) throw new Error(`'${flag}' needs a value`);
     parsed[key] = value;
@@ -1102,6 +1116,93 @@ async function runContextCommand(options, { cwd, env }) {
 }
 
 /**
+ * `history`'s `run`: resolves the command context, optionally captures a
+ * snapshot of the current workspace, drives `historyCommand`, writes the
+ * report, and returns the exit code.
+ *
+ * The history directory is the single positional argument.
+ *
+ * @param {{format: string, output: string|null, capture: boolean, config: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runHistory(options, { cwd, env }) {
+  if (options.paths.length !== 1) {
+    env.err(
+      `lattice: history takes exactly one positional argument (the history directory); ` +
+        `got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  const dir = isAbsolute(options.paths[0]) ? options.paths[0] : resolve(cwd, options.paths[0]);
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    // The boundary law's fingerprint when the workspace declares one, so a
+    // captured snapshot records the policy it was taken under — the same
+    // config loading `graph` uses, kept in one place so a capture and a
+    // standalone `graph` never disagree about the current policy.
+    let fingerprint = null;
+    if (options.capture) {
+      const config = options.config
+        ? await loadBoundaryConfigFile(
+            isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+          )
+        : typeof commandContext.options.boundaryConfig === "string"
+          ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
+          : commandContext.options.boundaryConfig
+            ? policyFrom(
+                commandContext.options.boundaryConfig,
+                `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+              )
+            : null;
+      if (config) {
+        fingerprint = computePolicyFingerprint(config);
+      }
+    }
+
+    result = historyCommand(dir, commandContext, {
+      capture: options.capture,
+      policyFingerprint: fingerprint,
+    });
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(`lattice: history complete → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // History is descriptive: 0 when it completes, never 1.
+  return EXIT.ok;
+}
+
+/**
  * `check`'s own flags, described once — `usage()` renders this straight into
  * the Options block, and `flags` below (what `parseArgs` needs) is derived
  * from it rather than kept as a second list that could name a flag `--help`
@@ -1190,6 +1291,40 @@ const DIFF_FLAG_HELP = Object.freeze([
     describe: Object.freeze([
       "Read the boundary law from here instead of",
       "<workspace root>/module-boundaries.config.mjs",
+    ]),
+  }),
+]);
+
+/**
+ * `history`'s flags: text or JSON envelope, optional file output, and the
+ * boolean `--capture` that appends a snapshot of the current workspace
+ * before building the record.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const HISTORY_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--capture",
+    key: "capture",
+    arg: "",
+    describe: Object.freeze([
+      "Write a snapshot of the current workspace into",
+      "the history directory, then build the record",
     ]),
   }),
 ]);
@@ -1336,6 +1471,17 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runDiff,
+  }),
+  history: Object.freeze({
+    name: "history",
+    args: "<dir>",
+    summary: "Describe how the architecture evolved across snapshots",
+    flagHelp: HISTORY_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(HISTORY_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, capture: false, config: null }),
+    formats: DESCRIBABLE_FORMATS,
+    booleans: Object.freeze(["capture"]),
+    run: runHistory,
   }),
   impact: Object.freeze({
     name: "impact",
