@@ -35,27 +35,29 @@ is, what it is not, and the line its neighbours may not cross — and
 | [provenance.md](concepts/provenance.md)                   | The origin record, why `on` is optional, and why provenance never rules                |
 | [waivers.md](concepts/waivers.md)                         | Temporary acceptance of a boundary breach, the lifecycle, and the deadline             |
 | [fitness-functions.md](concepts/fitness-functions.md)     | Named quality gates — the verdict contract and what each condition judges              |
+| [reconciliation.md](concepts/reconciliation.md)           | The inverse of drift: the model scored element by element, and proposed repairs        |
 | [agentic-development.md](concepts/agentic-development.md) | The three questions an agent asks, and the commands that answer them                   |
 | [integrations.md](concepts/integrations.md)               | How integrations extend the core                                                       |
 
 ## Usage
 
-| page                                           | what it answers                                                               |
-| ---------------------------------------------- | ----------------------------------------------------------------------------- |
-| [configuration.md](usage/configuration.md)     | Every surface Lattice reads, and where each option lives                      |
-| [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                           |
-| [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph              |
-| [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis   |
-| [drift.md](usage/drift.md)                     | The `drift` command: observed architecture against the declared intent        |
-| [fitness.md](usage/fitness.md)                 | The `fitness` command: every declared quality gate judged, as a verdict table |
-| [history.md](usage/history.md)                 | The `history` command: the architecture's evolution across snapshots          |
-| [health.md](usage/health.md)                   | The `health` command: per-metric verdicts, trends, and the status contract    |
-| [debt.md](usage/debt.md)                       | The `debt` command: the architecture-debt ledger across snapshots             |
-| [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context                 |
-| [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained            |
-| [context.md](usage/context.md)                 | The `context` command: architecture constraints for one project               |
-| [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning                 |
-| [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look                      |
+| page                                           | what it answers                                                                   |
+| ---------------------------------------------- | --------------------------------------------------------------------------------- |
+| [configuration.md](usage/configuration.md)     | Every surface Lattice reads, and where each option lives                          |
+| [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                               |
+| [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph                  |
+| [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis       |
+| [drift.md](usage/drift.md)                     | The `drift` command: observed architecture against the declared intent            |
+| [fitness.md](usage/fitness.md)                 | The `fitness` command: every declared quality gate judged, as a verdict table     |
+| [history.md](usage/history.md)                 | The `history` command: the architecture's evolution across snapshots              |
+| [health.md](usage/health.md)                   | The `health` command: per-metric verdicts, trends, and the status contract        |
+| [debt.md](usage/debt.md)                       | The `debt` command: the architecture-debt ledger across snapshots                 |
+| [reconcile.md](usage/reconcile.md)             | The `reconcile` command: the model scored element by element, with proposed edits |
+| [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context                     |
+| [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained                |
+| [context.md](usage/context.md)                 | The `context` command: architecture constraints for one project                   |
+| [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning                     |
+| [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look                          |
 
 ## Integrations
 
@@ -89,6 +91,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [architecture-intent.md](reference/architecture-intent.md) | The `architecture-intent.json` schema, the five sections, and the four verdict states                              |
 | [debt.md](reference/debt.md)                               | The architecture-debt ledger: entry kinds, age model, severity, and the refusals                                   |
 | [provenance.md](reference/provenance.md)                   | The `provenance` command: report shapes, the JSON envelope, exit codes                                             |
+| [reconciliation.md](reference/reconciliation.md)           | The scored element and candidate shapes behind `lattice reconcile`                                                 |
 | [languages.md](reference/languages.md)                     | What each analyzer reads, the shapes it cannot, and the two workspace checks                                       |
 | [violations.md](reference/violations.md)                   | Each of the fifteen violations: what it means, and what fixes it                                                   |
 
@@ -122,30 +125,30 @@ This repository states a rule once and links to it from everywhere else, so the
 useful question is usually not "where is this documented" but "which file is
 allowed to say it". That table:
 
-| file                                                                            | owns                                                                                                                                                   |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `README.md`                                                                     | The pitch: what Lattice is in one breath, and the way in                                                                                               |
-| [`docs/why.md`](why.md)                                                         | The gap, and the evidence that it is real                                                                                                              |
-| [`docs/doctrine/north-star.md`](doctrine/north-star.md)                         | The direction, what "finished" means per language, and the refusals                                                                                    |
-| [`docs/doctrine/architecture-authority.md`](doctrine/architecture-authority.md) | What Lattice is, what it is not, and the boundary its neighbours may not cross                                                                         |
-| [`docs/doctrine/principles.md`](doctrine/principles.md)                         | The seven binding principles                                                                                                                           |
-| [`docs/roadmap.md`](roadmap.md)                                                 | The staged path: what ships today, which capabilities belong to which major version, and in what order                                                 |
-| `docs/getting-started/`                                                         | Installation, first project, first policy                                                                                                              |
-| `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, projects, drift, evidence, waivers, health, fitness functions, agentic development, integrations |
-| `docs/usage/`                                                                   | How a consumer runs it and reads its answers                                                                                                           |
-| `docs/integrations/`                                                            | The provider and editor integrations at the edge — Nx, Moon, and the VS Code extension                                                                 |
-| `docs/reference/`                                                               | Schemas, exit codes, command reference, language limits, violation catalogue                                                                           |
-| `docs/development/`                                                             | How it works inside, and how to extend it                                                                                                              |
-| `docs/skills/`                                                                  | Agent architecture skills: overview, installation, hosts, authoring, versioning                                                                        |
-| `CONTRIBUTING.md`                                                               | The contribution bar, the commands, hooks, commits, review, release                                                                                    |
-| `SECURITY.md`                                                                   | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/`                                                  |
-| `AGENTS.md`                                                                     | The rules a diff is rejected for violating, for humans and agents alike                                                                                |
-| `packages/lattice/README.md`                                                    | The package's own reference — it is the npm landing page and must stand alone                                                                          |
-| `packages/lattice-vscode/README.md`                                             | The VS Code client: what it requires, the two settings it has, and the two it refuses                                                                  |
-| `packages/lattice/CLAUDE.md`                                                    | Layer mechanics: what each layer may know                                                                                                              |
-| `packages/lattice/src/*/README.md`                                              | Each layer's own semantics — rules, report, conformance                                                                                                |
-| `packages/lattice/src/analysis/contract.md`                                     | The frozen record every analyzer returns                                                                                                               |
-| `skills/`                                                                       | Canonical agent architecture skills — the `arch-*` behavioral protocol                                                                                 |
+| file                                                                            | owns                                                                                                                                                                   |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `README.md`                                                                     | The pitch: what Lattice is in one breath, and the way in                                                                                                               |
+| [`docs/why.md`](why.md)                                                         | The gap, and the evidence that it is real                                                                                                                              |
+| [`docs/doctrine/north-star.md`](doctrine/north-star.md)                         | The direction, what "finished" means per language, and the refusals                                                                                                    |
+| [`docs/doctrine/architecture-authority.md`](doctrine/architecture-authority.md) | What Lattice is, what it is not, and the boundary its neighbours may not cross                                                                                         |
+| [`docs/doctrine/principles.md`](doctrine/principles.md)                         | The seven binding principles                                                                                                                                           |
+| [`docs/roadmap.md`](roadmap.md)                                                 | The staged path: what ships today, which capabilities belong to which major version, and in what order                                                                 |
+| `docs/getting-started/`                                                         | Installation, first project, first policy                                                                                                                              |
+| `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, projects, drift, evidence, waivers, health, fitness functions, reconciliation, agentic development, integrations |
+| `docs/usage/`                                                                   | How a consumer runs it and reads its answers                                                                                                                           |
+| `docs/integrations/`                                                            | The provider and editor integrations at the edge — Nx, Moon, and the VS Code extension                                                                                 |
+| `docs/reference/`                                                               | Schemas, exit codes, command reference, language limits, violation catalogue                                                                                           |
+| `docs/development/`                                                             | How it works inside, and how to extend it                                                                                                                              |
+| `docs/skills/`                                                                  | Agent architecture skills: overview, installation, hosts, authoring, versioning                                                                                        |
+| `CONTRIBUTING.md`                                                               | The contribution bar, the commands, hooks, commits, review, release                                                                                                    |
+| `SECURITY.md`                                                                   | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/`                                                                  |
+| `AGENTS.md`                                                                     | The rules a diff is rejected for violating, for humans and agents alike                                                                                                |
+| `packages/lattice/README.md`                                                    | The package's own reference — it is the npm landing page and must stand alone                                                                                          |
+| `packages/lattice-vscode/README.md`                                             | The VS Code client: what it requires, the two settings it has, and the two it refuses                                                                                  |
+| `packages/lattice/CLAUDE.md`                                                    | Layer mechanics: what each layer may know                                                                                                                              |
+| `packages/lattice/src/*/README.md`                                              | Each layer's own semantics — rules, report, conformance                                                                                                                |
+| `packages/lattice/src/analysis/contract.md`                                     | The frozen record every analyzer returns                                                                                                                               |
+| `skills/`                                                                       | Canonical agent architecture skills — the `arch-*` behavioral protocol                                                                                                 |
 
 Two of those rows overlap on purpose, and it is worth knowing which way:
 

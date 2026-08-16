@@ -86,6 +86,7 @@ import { planContextCommand } from "./src/commands/plan-context-command.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { driftCommand, driftForCheck } from "./src/commands/drift.mjs";
 import { fitnessCommand, fitnessForCheck } from "./src/commands/fitness.mjs";
+import { reconcileCommand } from "./src/commands/reconcile.mjs";
 import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
 import { historyCommand } from "./src/commands/history.mjs";
 import { healthCommand } from "./src/commands/health.mjs";
@@ -1217,6 +1218,67 @@ async function runProvenance(options, { cwd, env }) {
 }
 
 /**
+ * `reconcile`'s `run`: resolves the command context, drives
+ * `reconcileCommand`, writes the report where it belongs, and returns the
+ * process's exit code.
+ *
+ * `--propose` is a boolean flag (the `--capture` pattern): it adds the ranked
+ * candidate list to the report and result. Reconcile takes no positional
+ * arguments, it never writes into architecture-intent.json, and it is
+ * descriptive — 0 when the comparison completes, never 1.
+ *
+ * @param {{format: string, output: string|null, propose: boolean, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runReconcile(options, { cwd, env }) {
+  if (options.paths.length > 0) {
+    env.err(`lattice: reconcile takes no positional arguments; got ${options.paths.join(", ")}`);
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+    result = await reconcileCommand(commandContext, {}, { propose: options.propose ?? false });
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(
+      `lattice: ${result.reconcile.observed.projects} projects, ${result.reconcile.observed.edges} edges ` +
+        `→ ${options.output}`,
+    );
+  } else {
+    env.out(report);
+  }
+
+  // Reconcile is descriptive: 0 when the comparison completes, never 1.
+  return EXIT.ok;
+}
+
+/**
  * `waivers`' `run`: resolves the command context, drives `waiversCommand`,
  * writes the report where it belongs, and returns the process's exit code.
  *
@@ -2004,6 +2066,34 @@ const DIFF_FLAG_HELP = Object.freeze([
  *
  * @type {readonly FlagHelp[]}
  */
+const RECONCILE_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--propose",
+    key: "propose",
+    arg: "",
+    describe: Object.freeze([
+      "Emit a ranked candidate list of model edits,",
+      "marked proposed — never written into",
+      "architecture-intent.json",
+    ]),
+  }),
+]);
+
 const DRIFT_FLAG_HELP = Object.freeze([
   Object.freeze({
     flag: "--format",
@@ -2377,6 +2467,17 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runDrift,
+  }),
+  reconcile: Object.freeze({
+    name: "reconcile",
+    args: "",
+    summary: "Compare the declared intent against the observed architecture",
+    flagHelp: RECONCILE_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(RECONCILE_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, propose: false }),
+    formats: DESCRIBABLE_FORMATS,
+    booleans: Object.freeze(["propose"]),
+    run: runReconcile,
   }),
   waivers: Object.freeze({
     name: "waivers",
