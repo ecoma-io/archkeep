@@ -1742,11 +1742,14 @@ const PROVENANCE_FLAG_HELP = Object.freeze([
 /**
  * `waivers`' flags: text or JSON envelope, and optional file output — exactly
  * the descriptive-command pair (`text|json`, no SARIF: a waivers report is a
- * surface, not a findings container).
+ * surface, not a findings container). Plus `--config` in the `diff` shape:
+ * the waivers surface is part of the boundary law, so the law in effect for
+ * one run is the same `--config` pick that run's `check` would make — a flag
+ * `drift` deliberately lacks, because drift has no boundary-law dependence.
  *
  * @type {readonly FlagHelp[]}
  */
-const WAIVERS_FLAG_HELP = DRIFT_FLAG_HELP;
+const WAIVERS_FLAG_HELP = DIFF_FLAG_HELP;
 
 /**
  * `history`'s flags: text or JSON envelope, optional file output, and the

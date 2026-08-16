@@ -124,7 +124,7 @@ default.
 
 ## CLI flags
 
-All five commands share the same flag-parsing rules. Both `--flag value` and
+All commands share the same flag-parsing rules. Both `--flag value` and
 `--flag=value` work. An unknown flag is a usage error rather than a path.
 
 ### Global flags (every command)
@@ -135,10 +135,10 @@ All five commands share the same flag-parsing rules. Both `--flag value` and
 
 ### `--format`
 
-| command                                                  | values                  | default | meaning                                                                                               |
-| -------------------------------------------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
-| `check`                                                  | `text`, `sarif`, `json` | `text`  | Terminal report, SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope.                |
-| `graph`, `diff`, `drift`, `impact`, `explain`, `context` | `text`, `json`          | `text`  | Terminal report or the versioned JSON envelope. No SARIF -- descriptive commands produce no findings. |
+| command                                                             | values                  | default | meaning                                                                                               |
+| ------------------------------------------------------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| `check`                                                             | `text`, `sarif`, `json` | `text`  | Terminal report, SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope.                |
+| `graph`, `diff`, `drift`, `waivers`, `impact`, `explain`, `context` | `text`, `json`          | `text`  | Terminal report or the versioned JSON envelope. No SARIF -- descriptive commands produce no findings. |
 
 `--format` changes no exit code and no byte of the other two formats. It is an
 additional rendering of the same verdict.
@@ -158,12 +158,14 @@ truncated file.
 | ---------- | -------- | ------------------------------ | ------------------------------------------------------------------------------- |
 | `--config` | `<file>` | (from `boundaryConfig` option) | Read the boundary law from this file instead of the workspace's configured one. |
 
-Accepted by `check`, `diff`, `impact`, `explain`, and `context`. The judgment
-(`check`, `explain`), rule-impact analysis (`diff`), constraint context
-(`impact`), and matching rows (`context`) all depend on which boundary law is
-in effect. `graph` takes no `--config` because it describes structure, not
-rules. Does not move the workspace root — the tree being judged is still the
-consumer's.
+Accepted by `check`, `diff`, `impact`, `explain`, `context`, and `waivers`.
+The judgment (`check`, `explain`), rule-impact analysis (`diff`), constraint
+context (`impact`), matching rows (`context`), and the waiver surface
+(`waivers` — the rows listed are the ones the law in effect carries) all
+depend on which boundary law is in effect. `graph` takes no `--config` because
+it describes structure, not rules, and `drift` takes none because it compares
+the tree against the declared intent, not against any boundary law. Does not
+move the workspace root — the tree being judged is still the consumer's.
 
 ## What is deliberately not configurable
 

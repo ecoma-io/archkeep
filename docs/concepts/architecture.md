@@ -86,7 +86,9 @@ documented in [boundaries.md](boundaries.md).
 Suppressions are applied after every import has been judged. A suppression
 removes a verdict, never a failure — a file listed in `boundarySuppressions` is
 still fully analyzed, and anything the analyzer could not read in it is still
-reported.
+reported. A row with an `expiresAt` is a **waiver** — it does not remove the
+violation at all; it marks it accepted until that instant, and the violation
+re-asserts in full once the waiver lapses ([waivers.md](waivers.md)).
 
 The report renders and decides nothing. Two formats, two audiences: `text`
 produces the `file:line:column` a terminal turns into a link, and `sarif`

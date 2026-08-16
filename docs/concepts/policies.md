@@ -44,7 +44,10 @@ syntax around them changes:
   required, none defaulted — a default would be a second copy of a value the
   workspace already states.
 - **`boundarySuppressions`** — optional; absent means nothing is suppressed.
-  Each entry is `{ path, reason, messageId? }`.
+  Each entry is `{ path, reason, messageId?, expiresAt?, origin? }`. A row with
+  an `expiresAt` is a **waiver** — an acceptance with a deadline — whose
+  lifecycle [waivers.md](waivers.md) owns; without one it is a permanent
+  suppression.
 
 ## The ES module dialect (`.mjs` / `.js`)
 

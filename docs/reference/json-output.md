@@ -1,9 +1,10 @@
 # `--format json`
 
 `check --format json`, `graph --format json`, `diff --format json`,
-`drift --format json`, `history --format json`, `impact --format json`,
-`explain --format json`, and `context --format json` wrap the same verdict the
-terminal report and SARIF already carry in one versioned envelope. They change no exit code and no byte
+`drift --format json`, `waivers --format json`, `history --format json`,
+`impact --format json`, `explain --format json`, and `context --format json`
+wrap the same verdict the terminal report and SARIF already carry in one
+versioned envelope. They change no exit code and no byte
 of the other two formats — they are additional renderings of a verdict every
 format already computes, for a script that wants to branch on a field rather
 than scrape a report or walk a SARIF `runs[]` array.
@@ -15,6 +16,8 @@ lattice graph --format json
 lattice graph --format json --output snapshot.json
 lattice diff snapshot.json --format json
 lattice diff snapshot.json --format json --output delta.json
+lattice waivers --format json
+lattice waivers --format json --output waivers.json
 lattice history .lattice/history --format json
 lattice history .lattice/history --format json --output evolution.json
 lattice impact billing-core --format json
@@ -47,8 +50,8 @@ and no random identifier anywhere in it. That is what makes it diffable in a
 pull request the same way the SARIF output already is.
 
 `command` is the one field that varies by which command produced the envelope —
-`"check"`, `"graph"`, `"diff"`, `"history"`, `"impact"`, `"explain"`, or
-`"context"`. `src/report/json.mjs` (the module
+`"check"`, `"graph"`, `"diff"`, `"drift"`, `"waivers"`, `"history"`,
+`"impact"`, `"explain"`, or `"context"`. `src/report/json.mjs` (the module
 that builds the envelope) and `src/commands/README.md` (the module layout it
 follows) are both written for each command to reuse the same wrapper.
 
@@ -58,7 +61,7 @@ follows) are both written for each command to reuse the same wrapper.
 | --------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                                                                                                                 |
 | `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                                                                                                                                                                |
-| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"drift"`, `"history"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                                                                  |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"drift"`, `"waivers"`, `"history"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                                                     |
 | `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"lattice.json"`, `".moon"`, or `".config/moon"`). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                 |
 | `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                                                                                                          |
@@ -172,7 +175,8 @@ verification is not possible.
 
 | field           | type                                                                   | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | --------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `violations`    | `Violation[]`                                                          | Every boundary-rule violation, in the shape `src/rules/index.mjs`'s `Violation` typedef defines: `sourceFile`, `line`, `column` (both 1-based), `specifier`, `kind`, `messageId`, `message`, `sourceProject`, `targetProject`, `constraint`, `data`.                                                                                                                                                                                                                                                                                                                                                                                       |
+| `violations`    | `Violation[]`                                                          | Every boundary-rule violation, in the shape `src/rules/index.mjs`'s `Violation` typedef defines: `sourceFile`, `line`, `column` (both 1-based), `specifier`, `kind`, `messageId`, `message`, `sourceProject`, `targetProject`, `constraint`, `data`. A violation an ACTIVE waiver accepted additionally carries `waivedBy` (the suppressing row) and one re-asserted by an EXPIRED waiver carries `evidence` (`"expired waiver"`) — a waived violation is still `violations`, so the exit code stays 1.                                                                                                                                    |
+| `waived`        | number (optional)                                                      | How many violations an ACTIVE waiver accepted, present only when non-zero — an unchanged tree's envelope is unchanged, and the accepted count is a tracked decision, never a new error kind.                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `goWork`        | `null` \| `{checked: true, findings}`                                  | `null` when the workspace has no tracked `go.work` — no check, no claim, same as the text report's silence. Otherwise `checked: true` and `findings` is the array `compareGoWork` (`src/go-work.mjs`) returns: `{messageId, file, line, column, directory, project, message}` each, `line`/`column` `null` for a workspace-level finding with no single site.                                                                                                                                                                                                                                                                              |
 | `tsconfigPaths` | `null` \| `{checked: true, findings}`                                  | `null` when the workspace tsconfig declares no `paths` table — same silence. Otherwise `checked: true` and `findings` is the array `judgeTsconfigPaths` (`src/tsconfig-paths.mjs`) returns: `{messageId: "tsconfigDeadPathAlias", file, line: null, column: null, alias, targets, message}` each.                                                                                                                                                                                                                                                                                                                                          |
 | `intent`        | absent \| `{checked, file, verdict, findings, unresolved, boundaries}` | The architecture-intent verdict. The key is **absent** (never `null`) when the workspace has no tracked `architecture-intent.json` — no intent declared, no claim, and an intent-less envelope is byte-identical to one predating this feature. When present, `checked: true`, `file` is `"architecture-intent.json"`, `verdict` is `"ok"` \| `"findings"` \| `"no-verdict"`, `findings` is the array of `{source, target, rule, boundaryFrom, boundaryTo, message}` records, `unresolved` lists the boundaries (or row sides) that matched no observed project, and `boundaries` is the membership that was judged, `[{name, projects}]`. |
@@ -258,6 +262,34 @@ specific declared intent.
 command prints, the failing verdict is `check`'s job — and `check` folds drift in
 by presence, so a building workspace that violates its declared intent fails the
 same gate that reports the boundary violations.
+
+## `result` (for `command: "waivers"`)
+
+`waivers` lists the waiver surface — every `boundarySuppressions` row carrying
+an `expiresAt` — with each row's term and the violations it currently covers.
+It is descriptive: it never exits `1`, and it exits `0` whenever the surface
+could be read. The envelope's `status` is always `"ok"` on a completed run; a
+surface that only accepts violations is a fact the run reports, not a finding.
+
+| field     | type     | meaning                                                                                                                                                                                                                                                                                                                                                |
+| --------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `waivers` | object[] | Every waiver on the table, sorted by `path` then `expiresAt` (byte-identical across runs). Each row is the suppression row plus `status` (`"active"` \| `"expired"`), `remainingMs` (negative when expired, epoch-ms precision), and `covered` (how many violations it currently accepts, judged against the full finding set with the table removed). |
+| `covered` | number   | How many waivers currently cover at least one violation.                                                                                                                                                                                                                                                                                               |
+| `expired` | number   | How many waivers have lapsed — their `expiresAt` is at or before the reference instant, so each covers nothing and its violation re-asserts.                                                                                                                                                                                                           |
+| `stale`   | number   | How many waivers cover no violation right now, active or expired — the count of rows whose reason has lapsed and that are dead weight until edited away.                                                                                                                                                                                               |
+
+Each `waivers` entry:
+
+| field         | type    | meaning                                                                                                                     |
+| ------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `path`        | string  | Glob over the workspace-relative path of the importing file, as declared.                                                   |
+| `reason`      | string  | Why the acceptance exists — shown verbatim.                                                                                 |
+| `messageId`   | string? | The check the waiver narrows to, when the row narrowed it.                                                                  |
+| `expiresAt`   | string  | The instant the waiver stops covering anything.                                                                             |
+| `origin`      | string? | Where the row came from, when declared — a ticket id or decision record.                                                    |
+| `status`      | string  | `"active"` before `expiresAt`, `"expired"` at or after it.                                                                  |
+| `remainingMs` | number  | Epoch-ms until expiry; negative when expired.                                                                               |
+| `covered`     | number  | Current violations accepted by this row, judged against the full finding set. Zero means the row is stale — covers nothing. |
 
 ## `result` (for `command: "history"`)
 
