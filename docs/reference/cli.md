@@ -414,11 +414,11 @@ generates an LLM plan, decides an implementation strategy, or modifies source
 code — an agent reasons over these facts.
 
 `--plan` is strictly additive: it changes no exit code and no byte of the
-plain `context` text output. In JSON the plan's fields sit directly in
-`result` alongside the unchanged `result.project/tags/constraints/dependencies`
+plain `context` text output. In JSON the plan's fields sit under `result.plan`
+alongside the unchanged `result.project/tags/constraints/dependencies`
 (the four plain `context` fields keep their existing shape — see
-`json-output.md`), and `result.variant` is `"plan"` so a consumer can tell the
-two apart. The rule verdict is computed over the whole analyzeable tree (so
+`json-output.md`), and `result.plan.variant` is `"plan"` so a consumer can tell
+the two apart. The rule verdict is computed over the whole analyzeable tree (so
 whole-graph rules such as circular-dependency and lazy-load are correct on
 every provider); on Nx and Moon workspaces this is a second analysis pass,
 which costs more than a plain `context` run. The JSON output is deterministic:

@@ -185,6 +185,8 @@ pnpm exec lattice diff snapshot.json --config boundaries.mjs
 pnpm exec lattice history .lattice/history
 pnpm exec lattice history .lattice/history --capture
 pnpm exec lattice history .lattice/history --format json --output evolution.json
+pnpm exec lattice drift
+pnpm exec lattice drift --format json --output drift.json
 pnpm exec lattice impact billing-core
 pnpm exec lattice impact billing-core --config boundaries.mjs
 pnpm exec lattice explain libs/billing/main.go:10:5
@@ -216,6 +218,17 @@ provenance advancing while neither changed is disclosed as code drift.
 (`<sequence>-<sha8>.json`, so filename byte-sort is history order, deduplicating
 when the architecture has not moved). There is no index file and no database —
 the directory itself is the source of truth. It is descriptive and never exits 1.
+
+`drift` compares the observed architecture to the workspace's declared intended
+one. It requires a tracked `architecture-intent.json` at the workspace root; when
+one is present, it prints the intent fingerprint, the observed projects and
+edges, and every intent row the observed graph violates. It never exits 1 —
+describing drift is not a finding — but it exits 3 when the comparison cannot be
+verified, because an unverifiable intent must never read as a satisfied one.
+`check` folds the same comparison in by presence: when an intent file exists,
+`check` exits 1 on intent findings and 3 on a malformed or unverifiable intent.
+The schema and the four verdict states are in
+[docs/reference/architecture-intent.md](../../docs/reference/architecture-intent.md).
 
 `impact` takes a project name and lists every project that transitively depends
 on it — the set a developer needs to consider before changing that project. It

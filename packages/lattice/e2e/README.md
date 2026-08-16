@@ -8,7 +8,8 @@ The unit and integration tests under `src/` prove the engine correct against in-
 
 Specifically:
 
-- **All five public commands** (`check`, `graph`, `diff`, `impact`, `explain`) produce correct exit codes and structured output
+- **All eight public commands** (`check`, `graph`, `diff`, `drift`, `history`,
+  `impact`, `explain`, `context`) produce correct exit codes and structured output
 - **Native and Nx consumers** agree on semantics (project names, edge source/target/type, violation rule IDs and file paths)
 - **Deterministic output** — two runs over an unchanged tree produce byte-identical JSON
 - **Silent-failure guards** — exit 3 when no verdict is reachable (no workspace marker, incomplete graph, malformed baseline), never exit 0
@@ -71,6 +72,11 @@ fixtures/
 | `check.e2e.mjs`       | `check` (clean, violating, no-marker, JSON envelope)                    |
 | `graph.e2e.mjs`       | `graph` (clean, JSON envelope, project names, edges, `--output`)        |
 | `diff.e2e.mjs`        | `diff` (self-baseline, added/removed edge, invalid/incomplete baseline) |
+| `drift.e2e.mjs`       | `drift` (smoke, with an intent file)                                    |
+| `history.e2e.mjs`     | `history` (empty/capture, evolution)                                    |
+| `context.e2e.mjs`     | `context` (smoke, full)                                                 |
+| `intent.e2e.mjs`      | `architecture-intent` through the installed CLI                         |
+| `moon.e2e.mjs`        | Moon provider (smoke, full)                                             |
 | `impact.e2e.mjs`      | `impact` (leaf, mid-chain, root project, unknown project)               |
 | `explain.e2e.mjs`     | `explain` (clean site, violating site, malformed/missing site)          |
 | `parity.e2e.mjs`      | Native/Nx semantic parity (projects, edges, violations, envelope)       |
