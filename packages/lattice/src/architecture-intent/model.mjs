@@ -74,13 +74,13 @@ export const PROJECT_SECTION_KEYS = Object.freeze(["required", "forbidden"]);
 /** The sub-keys a `dependencies` section may carry. */
 export const DEPENDENCY_SECTION_KEYS = Object.freeze(["allowed", "forbidden"]);
 /** The keys a `projects.required[]` row may carry. */
-export const REQUIRED_PROJECT_KEYS = Object.freeze(["name", "tags"]);
+export const REQUIRED_PROJECT_KEYS = Object.freeze(["name", "tags", "decisionRef"]);
 /** The keys a `projects.forbidden[]` row may carry. */
-export const FORBIDDEN_PROJECT_KEYS = Object.freeze(["name"]);
+export const FORBIDDEN_PROJECT_KEYS = Object.freeze(["name", "decisionRef"]);
 /** The keys a `dependencies.allowed[]` / `dependencies.forbidden[]` row may carry. */
-export const DEPENDENCY_ROW_KEYS = Object.freeze(["source", "target"]);
+export const DEPENDENCY_ROW_KEYS = Object.freeze(["source", "target", "decisionRef"]);
 /** The keys a `forbiddenTags[]` row may carry. */
-export const TAG_ROW_KEYS = Object.freeze(["from", "to"]);
+export const TAG_ROW_KEYS = Object.freeze(["from", "to", "decisionRef"]);
 
 /**
  * The shared governance-block check for any intent row (Contract 2): when the
@@ -112,7 +112,7 @@ function governanceRowViolations(row, at) {
 const BOUNDARY_KEYS = Object.freeze(["name", "match"]);
 
 /** The keys an allowed/forbidden row may carry. */
-const ROW_KEYS = Object.freeze(["from", "to", "reason", "optional"]);
+const ROW_KEYS = Object.freeze(["from", "to", "reason", "optional", "decisionRef"]);
 
 /** A boundary `name`, matched exactly by the loaders — names can never contain `:`, so a name can never collide with a `name:`-prefixed selector. */
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/u;
