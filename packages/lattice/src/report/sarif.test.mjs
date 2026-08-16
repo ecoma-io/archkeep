@@ -155,6 +155,48 @@ describe("a result", () => {
   });
 });
 
+describe("a waived violation", () => {
+  it("stays a result — error-level, in the list — with the acceptance facts in the property bag", () => {
+    const v = violation();
+    v.waivedBy = {
+      path: "acme/libs/engine-domain/*",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+      reason: "temp seam",
+    };
+    const [result] = log({ violations: [v] }).results;
+    expect(result.level).toBe("error");
+    expect(result.properties.accepted).toBe(true);
+    expect(result.properties.acceptedUntil).toBe("2026-09-01T00:00:00.000Z");
+    expect(result.properties.acceptedReason).toBe("temp seam");
+  });
+
+  it("carries no acceptance properties on a plain violation, so an unchanged tree's SARIF is unchanged", () => {
+    const [result] = log({ violations: [violation()] }).results;
+    expect(result.properties.accepted).toBeUndefined();
+  });
+
+  it("rides a warning notification naming the accepted count — a run still failing, never a green upload", () => {
+    const v = violation();
+    v.waivedBy = {
+      path: "acme/libs/engine-domain/*",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+      reason: "temp seam",
+    };
+    const built = log({ violations: [v] });
+    const notifications = built.invocations[0].toolExecutionNotifications;
+    expect(notifications[0].level).toBe("warning");
+    expect(notifications[0].message.text).toContain("1 boundary violation accepted by waiver");
+    expect(notifications[0].message.text).toContain("run stays non-zero");
+  });
+
+  it("re-asserted violations carry the evidence in the property bag", () => {
+    const v = violation();
+    v.evidence = "expired waiver";
+    const [result] = log({ violations: [v] }).results;
+    expect(result.properties.evidence).toBe("expired waiver");
+  });
+});
+
 describe("a go.work drift finding", () => {
   const finding = (overrides = {}) => ({
     messageId: "driftRule",

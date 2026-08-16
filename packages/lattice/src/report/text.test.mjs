@@ -385,6 +385,61 @@ describe("the report as a whole", () => {
     expect(text).toContain("could not be analyzed at all");
   });
 
+  it("splits actively-waived violations into an accepted-violations section, with the waiver's term and reason", () => {
+    const text = formatReport(
+      run({
+        violations: [
+          violation({
+            waivedBy: {
+              path: "acme/libs/engine-domain/doc.go",
+              reason: "bundler resolves no alias for this file",
+              expiresAt: "2026-09-01T00:00:00.000Z",
+              origin: "ticket-1234",
+            },
+          }),
+        ],
+      }),
+    );
+    // An all-waived run is NOT clean: the boundary is still breached, so the
+    // summary must not say "✔ no boundary violations".
+    expect(text).not.toContain("✔ no boundary violations");
+    expect(text).toContain("accepted violations: 1 boundary violation waived");
+    expect(text).toContain("accepted until 2026-09-01T00:00:00.000Z");
+    expect(text).toContain("origin: ticket-1234");
+    expect(text).toContain("✖ 1 boundary violation accepted");
+  });
+
+  it("keeps a re-asserted violation (expired waiver) in the main findings list, with the evidence", () => {
+    const text = formatReport(
+      run({
+        violations: [violation({ evidence: "expired waiver" })],
+      }),
+    );
+    expect(text).toContain("✖ 1 boundary violation");
+    expect(text).toContain("evidence   expired waiver");
+    expect(text).not.toContain("accepted violations");
+  });
+
+  it("renders a waived violation alongside a live one without losing either count", () => {
+    const text = formatReport(
+      run({
+        violations: [
+          violation(),
+          violation({
+            sourceFile: "acme/libs/other/x.ts",
+            waivedBy: {
+              path: "acme/libs/other/x.ts",
+              reason: "waiting for the migration",
+              expiresAt: "2026-10-01T00:00:00.000Z",
+            },
+          }),
+        ],
+      }),
+    );
+    expect(text).toContain("✖ 1 boundary violation in 1 file");
+    expect(text).toContain("accepted violations: 1 boundary violation waived");
+  });
+
   it("carries the go.work section between the verdict and the failures when the check ran", () => {
     const text = formatReport(
       run({

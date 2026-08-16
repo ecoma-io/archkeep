@@ -171,6 +171,18 @@ export function sarifResult(violation) {
       ...(violation.constraint?.remediation
         ? { remediation: violation.constraint.remediation }
         : {}),
+      // A waived violation is still a result — the run still fails — but the
+      // properties say why it is present: an active waiver accepts it (with
+      // its expiry), or an expired one re-asserted it. Absent on a plain
+      // violation, so an unchanged tree produces unchanged SARIF.
+      ...(violation.waivedBy
+        ? {
+            accepted: true,
+            acceptedUntil: violation.waivedBy.expiresAt,
+            acceptedReason: violation.waivedBy.reason,
+          }
+        : {}),
+      ...(violation.evidence ? { evidence: violation.evidence } : {}),
     },
   };
 }
@@ -306,6 +318,27 @@ export function sarifNotification(failure) {
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
 export function buildSarifLog({ violations, failures, goWork, tsconfigPaths, intent }) {
+  const waived = violations.filter((violation) => violation.waivedBy);
+  // A waived count rides as a notification so a consumer scanning for "did
+  // this run accept anything" finds it without reading every result's
+  // properties. The results themselves are unchanged (still error-level: an
+  // accepted violation is still a violation); this is the count the mission
+  // calls out — additive, and never a `!` that would read as a new error.
+  const waiverNote =
+    waived.length > 0
+      ? [
+          {
+            level: "warning",
+            message: {
+              text:
+                `${waived.length} boundary violation${waived.length === 1 ? "" : "s"} ` +
+                `accepted by waiver — the run stays non-zero, and each accepted ` +
+                `violation re-asserts the moment its waiver expires (see result properties ` +
+                `"acceptedUntil" on the accepted results).`,
+            },
+          },
+        ]
+      : [];
   return {
     $schema: SARIF_SCHEMA,
     version: SARIF_VERSION,
@@ -325,7 +358,7 @@ export function buildSarifLog({ violations, failures, goWork, tsconfigPaths, int
             // are results rather than errors. Reporting false here makes GitHub
             // treat the upload as a broken analysis and drop the annotations.
             executionSuccessful: true,
-            toolExecutionNotifications: failures.map(sarifNotification),
+            toolExecutionNotifications: [...failures.map(sarifNotification), ...waiverNote],
           },
         ],
       },
