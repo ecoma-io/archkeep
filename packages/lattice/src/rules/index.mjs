@@ -675,6 +675,83 @@ function applySuppressions(violations, suppressions, now) {
  *   graph does not contain. Loud on purpose: an enforcer that starts on a
  *   broken input and reports nothing is indistinguishable from a clean tree.
  */
+/**
+ * The raw violations a site set produces BEFORE any suppression is removed, as
+ * `evaluate` would see them. `evaluate` itself reports the filtered set — the
+ * boundary as it stands after the workspace accepted its waivers — while the
+ * waiver surface (how much of the law is currently waived) needs the count that
+ * WAS suppressed, which the filtered result cannot express. The two are a
+ * superset/subset: `waived = raw − evaluated`, byte-for-byte.
+ *
+ * @param {object[]} importSites Analysis records — see `../analysis/contract.md`.
+ * @param {ProjectGraph} graph
+ * @param {{depConstraints: object[], options: object, suppressions?: object[]}} config
+ * @returns {Violation[]} in the order the sites were given, nothing removed.
+ */
+export function evaluateWithSuppressions(importSites, graph, config) {
+  const ctx = createContext(importSites, graph, config);
+  const violations = [];
+  for (const site of importSites) violations.push(...evaluateSite(site, ctx));
+  return violations;
+}
+
+/**
+ * Judges every import site against the workspace's boundary law.
+ *
+ * Pure: the same three arguments always produce the same violations, and none
+ * of them is read from disk here.
+ *
+ * ## Suppressions and waivers are a filter over VERDICTS, never a skip over
+ * sites
+ *
+ * `config.suppressions` decides what happens to violations the workspace
+ * accepted, each carrying the reason it was accepted (`../config.mjs`). The
+ * filter runs AFTER every site has been judged, and that ordering is the
+ * load-bearing part rather than an implementation detail: skipping a
+ * suppressed file up front would also skip the checks that make this function
+ * throw — a record naming a project the graph does not have, a malformed
+ * config — and a suppression must never be able to silence "I could not tell".
+ * A violation is a decision someone can accept; a failure is the absence of
+ * one, and accepting it would turn a blind spot into a green light.
+ *
+ * The suppression vocabulary has no field that could name a failure either: an
+ * entry carries a path glob, an optional `messageId` out of `MESSAGE_IDS`, its
+ * reason, and — for a waiver — `expiresAt`. Analysis failures never reach this
+ * function at all — they travel beside the records in the analyzer's envelope
+ * (`../analysis/contract.md`). Because the table never touches a failure, a
+ * waiver over `unknown` is structurally impossible: a row can only match a
+ * verdict this engine reached, and a verdict it could not reach never enters
+ * this array.
+ *
+ * The same ordering is why a waiver cannot promote `unknown` → `pass` either:
+ * a full logical consequence of the filter-after-judgement rule, not a second
+ * mechanism. And `applySuppressions` marks rather than removes for rows with
+ * `expiresAt`, so an accepted violation stays counted — the empty-result
+ * invariant (`../../../../AGENTS.md`) holds in the waiving direction too.
+ *
+ * `evaluateWithSuppressions` (above) is the raw superset this function folds
+ * down: it returns the violations BEFORE `applySuppressions`, so a caller that
+ * needs to measure the waiver surface — how much of the law is currently
+ * waived — can see the count that was suppressed, which the filtered result
+ * cannot express. The two differ by exactly the rows a suppression covers.
+ *
+ * @param {object[]} importSites Analysis records — see `../analysis/contract.md`.
+ * @param {ProjectGraph} graph
+ * @param {{depConstraints: object[], options: object, suppressions?: object[], now?: string}} config
+ *   As `loadBoundaryConfig` returns it, plus an optional `now` (ISO-8601
+ *   reference instant) used only to decide waiver expiry; defaults to the
+ *   shared governance clock. An absent `suppressions` suppresses nothing, which
+ *   is the direction that cannot hide a violation.
+ * @returns {Violation[]} in the order the sites were given, minus the ones a
+ *   suppression covers (legacy rows) — with the ones an ACTIVE waiver covers
+ *   still present, marked `waivedBy`, and the ones an EXPIRED waiver covered
+ *   present with `evidence: "expired waiver"`; a site may contribute zero, one,
+ *   or (in two documented cases) several.
+ * @throws {Error} when the config is malformed, when the graph has no `nodes`,
+ *   when a record carries no `spelling`, or when a record names a project the
+ *   graph does not contain. Loud on purpose: an enforcer that starts on a
+ *   broken input and reports nothing is indistinguishable from a clean tree.
+ */
 export function evaluate(importSites, graph, config) {
   const ctx = createContext(importSites, graph, config);
   const violations = [];
