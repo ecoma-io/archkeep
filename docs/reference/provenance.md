@@ -70,9 +70,11 @@ about rows that do not exist. Neither state is ever reported as a quiet success.
 
 ## The concept
 
-What an `origin` record is, why `on` is optional, and why provenance never
-changes a verdict — [concepts/provenance.md](../concepts/provenance.md). The
-shared governance block each row may carry is the row schema
-[policy-schema.md](policy-schema.md) and
-[architecture-intent.md](architecture-intent.md) document for their own row
-tables.
+What an `origin` record is, why `on` is optional, why provenance never
+changes a verdict, and the full governance block (`origin`, `rationale`,
+`decisionRef`, `fitnessBindings`) a row may carry — all in
+[concepts/provenance.md](../concepts/provenance.md). The block is defined once
+and validated by every row's loader (`packages/lattice/src/governance/row-schema.mjs`),
+so the row tables this command walks — the boundary law's `depConstraints` and
+`architecture-intent.json` — accept it additively, and legacy rows without it
+stay valid and byte-identical.
