@@ -8,6 +8,7 @@ supports today.
 | -------------- | ------------------------------------- | ------------- | --------------------------- | -------------------------- |
 | Claude Code    | Plugin `skills` field or `npx skills` | `/arch-*`     | Full                        | Plugin or `npx skills add` |
 | Codex          | `.agents/skills/` or `npx skills`     | `$arch-*`     | Full                        | `npx skills add`           |
+| opencode       | `npx skills`                          | Via agent     | Full                        | `npx skills add`           |
 | Cursor         | `.cursor/skills/` or `npx skills`     | Via agent     | Full                        | `npx skills add`           |
 | GitHub Copilot | `.github/skills/` or `npx skills`     | Via agent     | Full                        | `npx skills add`           |
 | Windsurf       | `.codeium/skills/` or `npx skills`    | Via agent     | Full                        | `npx skills add`           |
@@ -37,6 +38,13 @@ directly. See [claude-code.md](claude-code.md).
 Reads AGENTS.md natively, so the skill names and purposes are surfaced through
 that file. Install via `npx skills add ecoma-io/lattice -a codex` for full
 skill discovery.
+
+### opencode
+
+Runs the same editor-time gates as Claude Code and Codex: the PostToolUse
+format, lint and doc-reference checks run after every file edit through this
+repository's opencode plugin (`.opencode/plugins/editor-gates.js`). Install the
+skills via `npx skills add ecoma-io/lattice -a opencode`.
 
 ### Other platforms
 

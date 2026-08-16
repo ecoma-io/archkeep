@@ -21,6 +21,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `explain`    | `<file:line:column>` | Explain the judgment for one import site                                                           | no               |
 | `context`    | `<project>`          | Show the architecture constraints that apply to a project                                          | no               |
 | `provenance` | (none)               | Describe where this run's facts came from and which rows carry an origin                           | no               |
+| `adr`        | `[<id>]`             | List recorded architecture decisions and what each binds                                           | no               |
 
 `lattice --help` prints the help text and exits 0. An omitted command name is a
 usage error (exit 2). If the first positional argument names a path that exists
@@ -240,20 +241,20 @@ or verified must never read as "no debt".
 - `--format` changes no exit code and no byte of the other formats. It is an
   additional rendering of the same verdict.
 - `--output` writes atomically (write to `.tmp`, then rename) so a reader
-  never sees a truncated file. A write failure is exit 3. For `history` and
-  `debt`, pointing `--output` at a file inside the history directory is a usage
-  error (exit 2) — the report would be read back as a snapshot on the next run.
+  never sees a truncated file. A write failure is exit 3. For `history`,
+  pointing `--output` at a file inside the history directory is a usage error
+  (exit 2) — the report would be read back as a snapshot on the next run.
 - `--config` does not move the workspace root. The tree being judged is still
   the consumer's.
 
 ## Exit codes
 
-| code | meaning                                                                       | when                                                                                                                                                 |
-| ---- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | clean -- and every selected file was analyzed                                 | No findings and no coverage gaps.                                                                                                                    |
-| 1    | findings -- boundary violations, go.work drift, or dead tsconfig path aliases | `check` only. No other command exits 1.                                                                                                              |
-| 2    | usage error                                                                   | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                      |
-| 3    | no verdict -- the run could not start, or a selected file could not be read   | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load. |
+| code | meaning                                                                                                                | when                                                                                                                                                 |
+| ---- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | clean -- and every selected file was analyzed                                                                          | No findings and no coverage gaps.                                                                                                                    |
+| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, intent findings, or a failing fitness gate | `check` only. No other command exits 1.                                                                                                              |
+| 2    | usage error                                                                                                            | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                      |
+| 3    | no verdict -- the run could not start, or a selected file could not be read                                            | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load. |
 
 **Do not collapse 3 into 0.** A checker that could not look must never be
 mistaken for one that looked and found nothing. Both 1 and 3 must fail a CI
@@ -414,11 +415,11 @@ generates an LLM plan, decides an implementation strategy, or modifies source
 code — an agent reasons over these facts.
 
 `--plan` is strictly additive: it changes no exit code and no byte of the
-plain `context` text output. In JSON the plan's fields sit directly in
-`result` alongside the unchanged `result.project/tags/constraints/dependencies`
+plain `context` text output. In JSON the plan's fields sit under `result.plan`
+alongside the unchanged `result.project/tags/constraints/dependencies`
 (the four plain `context` fields keep their existing shape — see
-`json-output.md`), and `result.variant` is `"plan"` so a consumer can tell the
-two apart. The rule verdict is computed over the whole analyzeable tree (so
+`json-output.md`), and `result.plan.variant` is `"plan"` so a consumer can tell
+the two apart. The rule verdict is computed over the whole analyzeable tree (so
 whole-graph rules such as circular-dependency and lazy-load are correct on
 every provider); on Nx and Moon workspaces this is a second analysis pass,
 which costs more than a plain `context` run. The JSON output is deterministic:
