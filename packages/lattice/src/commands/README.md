@@ -83,6 +83,19 @@ commands share rather than a command. It composes `../workspace.mjs`,
   boundary config the way `drift` does — a row list built from a file it could
   not read is a claim about rows that do not exist. Descriptive: never exits 1.
 
+- **`discover`** (`./discover.mjs`'s `discoverCommand`) — the observed
+  architecture, and under `--propose` the candidate architecture those
+  observations imply. Builds the observed `{projects, edges}` from the same
+  model `graph`/`drift` read, reports projects/edges/tags plus the coverage a
+  verdict could trust, and optionally drives
+  `../../src/governance/discovery-proposal.mjs`'s pure evaluator over it.
+  Proposal-only: every candidate carries `proposed: true` and
+  `notAuthoritative: true`, and the command never writes
+  `architecture-intent.json`. Returns `status: "no-verdict"` (exit 3) over
+  incomplete coverage and refuses `--propose` over it; refuses an Nx workspace
+  with polyglot manifests but no plugin registration; a zero-project workspace
+  is the empty `unknown` proposal, not a refusal. Descriptive: never exits 1.
+
 ## Shared modules
 
 - **`snapshot-meta.mjs`** — `compareSnapshotMetadata`, shared by `diff` and

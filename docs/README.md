@@ -30,6 +30,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [policies.md](concepts/policies.md)                       | Three dialects, one table, stability contract                                          |
 | [projects.md](concepts/projects.md)                       | What a project is, discovery, naming                                                   |
 | [drift.md](concepts/drift.md)                             | The four drift signals Lattice detects, and which command surfaces each                |
+| [discovery.md](concepts/discovery.md)                     | The proposal-only line, the observed side, the four candidate classes                  |
 | [health.md](concepts/health.md)                           | What "architecture health" means, and the invariant behind every metric                |
 | [evidence.md](concepts/evidence.md)                       | The one verdict vocabulary every judgment speaks, and the evidence each state requires |
 | [provenance.md](concepts/provenance.md)                   | The origin record, why `on` is optional, and why provenance never rules                |
@@ -82,6 +83,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [configuration.md](reference/configuration.md)             | `lattice.json` fields, `nx.json` options, Moon options, inline boundary config                                     |
 | [policy-schema.md](reference/policy-schema.md)             | Constraint table schema: every key of `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, `fitness` |
 | [cli.md](reference/cli.md)                                 | All commands, all flags, all exit codes                                                                            |
+| [discovery.md](reference/discovery.md)                     | The `discover` command: flags, exit codes, the additive JSON envelope                                             |
 | [exit-codes.md](reference/exit-codes.md)                   | The four exit codes with exact meaning                                                                             |
 | [json-output.md](reference/json-output.md)                 | `--format json`'s versioned envelope: every field, and the stability promise                                       |
 | [evidence.md](reference/evidence.md)                       | The four-state verdict vocabulary, the five invariants, and the `decision` shape                                   |
@@ -129,10 +131,12 @@ allowed to say it". That table:
 | [`docs/doctrine/principles.md`](doctrine/principles.md)                         | The seven binding principles                                                                                                                           |
 | [`docs/roadmap.md`](roadmap.md)                                                 | The staged path: what ships today, which capabilities belong to which major version, and in what order                                                 |
 | `docs/getting-started/`                                                         | Installation, first project, first policy                                                                                                              |
-| `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, projects, drift, evidence, waivers, health, fitness functions, agentic development, integrations |
+| `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, projects, drift, discovery, evidence, waivers, health, fitness functions, agentic development, integrations |
+| `docs/concepts/discovery.md`                                                    | Discovery: the proposal-only line, what is observed, the four candidate classes, uncertainty markers                                                   |
 | `docs/usage/`                                                                   | How a consumer runs it and reads its answers                                                                                                           |
 | `docs/integrations/`                                                            | The provider and editor integrations at the edge — Nx, Moon, and the VS Code extension                                                                 |
 | `docs/reference/`                                                               | Schemas, exit codes, command reference, language limits, violation catalogue                                                                           |
+| `docs/reference/discovery.md`                                                   | The `discover` command: flags, exit codes, the additive JSON envelope, the proposal never written                                                     |
 | `docs/development/`                                                             | How it works inside, and how to extend it                                                                                                              |
 | `docs/skills/`                                                                  | Agent architecture skills: overview, installation, hosts, authoring, versioning                                                                        |
 | `CONTRIBUTING.md`                                                               | The contribution bar, the commands, hooks, commits, review, release                                                                                    |
