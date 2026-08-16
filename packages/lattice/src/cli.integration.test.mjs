@@ -1198,6 +1198,274 @@ var _ = adapter.Name
   });
 });
 
+describe("context --plan, the agent architecture planning context, end to end", () => {
+  // A native tree with the same two-project layer-crossing shape as the block
+  // above PLUS a second, two-direction change, so the plan's whole-tree verdict
+  // and scoped reporting can both be observed. `--plan` runs the real whole-tree
+  // `analyzeWorkspace` + `evaluate` — nothing is injected, so the plan's
+  // "violations are the full-workspace verdict" claim is the wiring under test.
+  const planRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-plan-"));
+  afterAll(() => rmSync(planRoot, { recursive: true, force: true }));
+
+  const writePlan = (relativePath, text) => {
+    mkdirSync(join(planRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(planRoot, relativePath), text);
+  };
+
+  writePlan(
+    "lattice.json",
+    JSON.stringify({
+      projects: {
+        declared: [
+          { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+          { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+          { root: "libs/util", name: "util", tags: ["layer:util"] },
+        ],
+      },
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "workspace tooling config at the root, not itself a project",
+          },
+        ],
+      },
+    }),
+  );
+  writePlan(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter", "layer:util"] },
+  { sourceTag: "layer:util", onlyDependOnLibsWithTags: ["layer:domain", "layer:util"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writePlan("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writePlan("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writePlan("libs/util/go.mod", "module example.com/util\n\ngo 1.24\n");
+  writePlan("libs/adapter/adapter.go", "package adapter\n");
+  writePlan("libs/util/util.go", "package util\n");
+  // The crossing: domain imports adapter (forbidden — domain may only reach
+  // domain). A change scoped to libs/adapter should NOT surface it for
+  // reporting, even though the whole-tree verdict computes it.
+  writePlan(
+    "libs/domain/doc.go",
+    `// Package domain.
+package domain
+
+import (
+	"example.com/adapter"
+)
+
+var _ = adapter.Name
+`,
+  );
+  // A legitimate adapter → util edge, so the plan shows a real dependency edge
+  // and a real impact list.
+  writePlan(
+    "libs/adapter/handler.go",
+    `package adapter
+
+import (
+	"example.com/util"
+)
+
+var _ = util.Name
+`,
+  );
+
+  const planFiles = [
+    "lattice.json",
+    "module-boundaries.config.mjs",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "libs/adapter/go.mod",
+    "libs/adapter/adapter.go",
+    "libs/adapter/handler.go",
+    "libs/util/go.mod",
+    "libs/util/util.go",
+  ];
+
+  const planContext = { cwd: planRoot, listFiles: () => planFiles };
+  const planEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      ...planContext,
+    };
+  };
+
+  it("reports a complete plan (exit 0) with the violation in scope when the target project is the violator", async () => {
+    // A change to `domain` is in scope of the domain→adapter crossing, so the
+    // plan must surface that violation — the whole-tree verdict, scoped for
+    // reporting, agrees with what a full `check` would say.
+    const streams = planEnv();
+    expect(await runCli(["context", "domain", "--plan"], streams)).toBe(EXIT.ok);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("planning context complete");
+    expect(out).toContain("Project  domain");
+    expect(out).toContain("Violations (1 in scope of this change)");
+    expect(out).toContain("libs/domain/doc.go");
+  });
+
+  it("scopes reporting away from a violation outside the change's projects", async () => {
+    // A change to `util` scoped to libs/util touches a project with no
+    // violating imports, so the plan shows 0 in-scope violations even though
+    // the whole-tree verdict computed the domain crossing — the whole-graph
+    // claim, narrowed only for reporting.
+    const streams = planEnv();
+    expect(await runCli(["context", "util", "--plan", "libs/util"], streams)).toBe(EXIT.ok);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("Project  util");
+    expect(out).toContain("Violations (0 in scope of this change)");
+    expect(out).not.toContain("libs/domain/doc.go");
+  });
+
+  it("shows impact: who depends on the target project", async () => {
+    // adapter depends on util directly, and domain depends on adapter (even
+    // though that edge is a violation) — so util's dependents are both direct
+    // and transitive.
+    const streams = planEnv();
+    expect(await runCli(["context", "util", "--plan"], streams)).toBe(EXIT.ok);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("2 projects depend on it");
+    expect(out).toContain("direct 1, transitive 1");
+    expect(out).toContain("adapter");
+  });
+
+  it("scopes the change by trailing path: a path into libs/adapter limits the affected projects", async () => {
+    // With a scope path pointing at libs/adapter, the affected-projects list
+    // narrows to adapter, and the domain crossing (outside that scope) is not
+    // reported.
+    const streams = planEnv();
+    expect(await runCli(["context", "util", "--plan", "libs/adapter"], streams)).toBe(EXIT.ok);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("affected projects  adapter");
+    expect(out).not.toContain("libs/domain/doc.go");
+  });
+
+  it("is deterministic: two runs over the unchanged tree produce identical bytes", async () => {
+    const first = planEnv();
+    const second = planEnv();
+    expect(await runCli(["context", "domain", "--plan", "--format", "json"], first)).toBe(EXIT.ok);
+    expect(await runCli(["context", "domain", "--plan", "--format", "json"], second)).toBe(EXIT.ok);
+    expect(first.lines.out.join("")).toBe(second.lines.out.join(""));
+  });
+
+  it("carries the plan under result.plan in the JSON envelope, with a variant marker", async () => {
+    const streams = planEnv();
+    expect(await runCli(["context", "domain", "--plan", "--format", "json"], streams)).toBe(
+      EXIT.ok,
+    );
+    const envelope = JSON.parse(streams.lines.out.join(""));
+    expect(envelope.command).toBe("context");
+    expect(envelope.result.plan.variant).toBe("plan");
+    // The plain context fields stay at top level (additive envelope).
+    expect(envelope.result.project).toBe("domain");
+    expect(envelope.result.tags).toEqual(["layer:domain"]);
+    expect(envelope.result.constraints).toHaveLength(1);
+    expect(envelope.result.dependencies).toBeDefined();
+    // Planning sections present.
+    expect(envelope.result.plan.architecture.projects.length).toBe(3);
+    expect(envelope.result.plan.impact).toHaveLength(1);
+    expect(envelope.result.plan.verify.length).toBeGreaterThanOrEqual(1);
+    expect(envelope.result.plan.drift.goWork).toBeNull();
+    expect(envelope.result.plan.drift.tsconfigPaths).toBeNull();
+    expect(envelope.result.plan.policyFingerprint).toBeDefined();
+  });
+
+  it("reports the plan's drift and architecture in the text output", async () => {
+    const streams = planEnv();
+    expect(await runCli(["context", "domain", "--plan"], streams)).toBe(EXIT.ok);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("Drift");
+    expect(out).toContain("go.work        not judged (no manifest to read)");
+    expect(out).toContain("tsconfig paths not judged (no manifest to read)");
+    expect(out).toContain("projects           3");
+    expect(out).toContain("dependencies       ");
+  });
+
+  it("keeps the plain context path unchanged: --plan is strictly additive", async () => {
+    // The plain `context` command must keep producing its own document even
+    // though --plan now exists alongside it — the plan feature adds a new
+    // renderer without corrupting the shared preamble that existed before.
+    const plain = planEnv();
+    expect(await runCli(["context", "domain"], plain)).toBe(EXIT.ok);
+    const plainOut = plain.lines.out.join("");
+    expect(plainOut).toContain("✔ context complete");
+    expect(plainOut).toContain("Project  domain");
+    expect(plainOut).toContain("Constraints (1 row matches):");
+    // The plan renderer is a *different* document with its own header and its
+    // own worded constraints section — not the plain document with sections
+    // appended. Both live, neither replaces the other.
+    const plans = planEnv();
+    expect(await runCli(["context", "domain", "--plan"], plans)).toBe(EXIT.ok);
+    const planOut = plans.lines.out.join("");
+    expect(planOut).toContain("✔ planning context complete");
+    expect(planOut).toContain("Project  domain");
+  });
+
+  it("folds the canonical architecture-intent verdict into result.plan when a tracked intent exists", async () => {
+    // The phase-4 pact: context --plan must consume the SAME canonical intent
+    // the drift/check commands share, not a parallel model. A tracked intent
+    // that forbids the observed domain → adapter edge must surface as
+    // plan.intent.verdict = "findings" with the file named — the empty-result
+    // invariant applied to the planning document.
+    writePlan(
+      "architecture-intent.json",
+      JSON.stringify({
+        version: "1",
+        boundaries: [
+          { name: "domains", match: ["tag:layer:domain"] },
+          { name: "adapters", match: ["tag:layer:adapter"] },
+        ],
+        forbidden: [
+          {
+            from: "domains",
+            to: "adapters",
+            reason: "adapter layers must stay below domain layers",
+          },
+        ],
+      }),
+    );
+    const tracked = [...planFiles, "architecture-intent.json"];
+    const streams = planEnv();
+    streams.listFiles = () => tracked;
+    expect(await runCli(["context", "domain", "--plan", "--format", "json"], streams)).toBe(
+      EXIT.ok,
+    );
+    const envelope = JSON.parse(streams.lines.out.join(""));
+    expect(envelope.result.plan.intent.verified).toBe(true);
+    expect(envelope.result.plan.intent.file).toBe("architecture-intent.json");
+    expect(envelope.result.plan.intent.verdict).toBe("findings");
+    const edge = envelope.result.plan.intent.findings.find(
+      (f) => f.source === "domain" && f.target === "adapter",
+    );
+    expect(edge).toBeDefined();
+    // The text report states the verdict, so a reader of the terminal sees the
+    // same contract as the JSON consumer.
+    const text = planEnv();
+    text.listFiles = () => tracked;
+    expect(await runCli(["context", "domain", "--plan"], text)).toBe(EXIT.ok);
+    expect(text.lines.out.join("")).toContain("Intent (verified)");
+    expect(text.lines.out.join("")).toContain("1 finding");
+  });
+});
+
 describe("the .json boundaryConfig dialect, end to end through the native provider", () => {
   // A third, independent tmpdir: same two-project layer-crossing shape as the
   // native `lattice.json` block above, but `boundaryConfig` names a `.json`
