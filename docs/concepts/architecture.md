@@ -104,27 +104,47 @@ return unchecked > 0 ? 3 : 0;
 Exit 0 was the bug. A checker that could not look must never be mistaken for one
 that looked and found nothing.
 
-## The seven commands
+## The fifteen commands
 
-| command   | what it does                                                           | finds violations |
-| --------- | ---------------------------------------------------------------------- | ---------------- |
-| `check`   | Judges every import site against the boundary law                      | yes — exits 1    |
-| `graph`   | Prints the project graph as a deterministic snapshot                   | no               |
-| `diff`    | Compares two graph snapshots, with optional rule-impact analysis       | no               |
-| `history` | Describes how the architecture evolved across a directory of snapshots | no               |
-| `impact`  | Lists projects that depend on the named one, with constraint context¹  | no               |
-| `explain` | Explains the judgment for one import site                              | no               |
-| `context` | Shows the architecture constraints that apply to a project¹            | no               |
+| command      | what it does                                                                          | finds violations |
+| ------------ | ------------------------------------------------------------------------------------- | ---------------- |
+| `check`      | Judges every import site against the boundary law, plus the intent                    | yes — exits 1    |
+| `graph`      | Prints the project graph as a deterministic snapshot                                  | no               |
+| `diff`       | Compares two graph snapshots, with optional rule-impact analysis                      | no               |
+| `drift`      | Compares the observed architecture against the declared intent                        | no               |
+| `discover`   | Reports observed facts; `--propose` derives candidate architecture, never written     | no               |
+| `reconcile`  | Scores the observed side against the declared model; `--propose` derives repair edits | no               |
+| `waivers`    | Lists term-bound suppressions; a waived violation stays a finding in `check`          | no               |
+| `fitness`    | Judges the workspace's named quality gates (folded into `check` by presence)          | no               |
+| `history`    | Describes how the architecture evolved across a directory of snapshots                | no               |
+| `health`     | Per-metric verdicts; an unmeasured metric is `unknown`/`not_applicable`, never zero   | no               |
+| `debt`       | Ages waivers, gaps and drift across snapshots — a ledger, not a gate                  | no               |
+| `impact`     | Lists projects that depend on the named one, with constraint context¹                 | no               |
+| `explain`    | Explains the judgment for one import site                                             | no               |
+| `context`    | Shows the architecture constraints that apply to a project¹                           | no               |
+| `provenance` | Reports the governance row schema and the run's origin                                | no               |
 
-`check` is the only command that exits 1. The other six are descriptive: they
-answer questions about the architecture without claiming a violation. `context`
-answers the question an agent asks _before_ editing (what is this project
-allowed to reach?); `impact` answers the question during planning (what depends
-on this?); `explain` answers the question after a violation is reported (why
-did this one fail?). `diff` answers the question across a single change (what
-changed, and what boundary implications did the change carry?); `history`
-answers it across time (how did the architecture evolve, and which of those
-changes were architectural, policy, or provider?).
+`check` is the only command that exits 1. The other fourteen are descriptive or
+proposal-only: they answer questions about the architecture without claiming a
+violation. `context` answers the question an agent asks _before_ editing (what
+is this project allowed to reach?); `impact` answers the question during
+planning (what depends on this?); `explain` answers the question after a
+violation is reported (why did this one fail?). `diff` answers the question
+across a single change (what changed, and what boundary implications did the
+change carry?); `history` answers it across time (how did the architecture
+evolve, and which of those changes were architectural, policy, or provider?);
+`drift` answers it in the present tense (does the code that exists agree with
+the architecture that was declared?); `reconcile --propose` and
+`discover --propose` answer it in the future tense (what would the declared
+model need to look like for the two sides to agree?) — as proposals, never
+written. `fitness` and `waivers` sit between: their verdicts fold into
+`check`'s exit code by presence, but neither exits 1 on its own.
+
+Two of the descriptive commands fold into `check` by presence: a policy
+declaring a `fitness` export counts its per-function verdicts into `check`'s
+exit code (`fail` → 1, `unknown` → 3), and a violation an active waiver
+accepts stays exit `1`, moved to the "accepted violations" section until its
+term lapses. The rest only inform the reader.
 
 ¹ Per-edge verdicts in `context` and `impact` cover only `depConstraints`
 (3 of 15 violation types). An edge with no violations in these commands may

@@ -46,12 +46,13 @@ A new reader should find these capabilities described as present, not promised.
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer. ([reference/exit-codes.md](reference/exit-codes.md))
-- **Thirteen commands — `check`, `graph`, `impact`, `diff`, `explain`,
-  `history`, `context`, `fitness`, `waivers`, `drift`, `provenance`, `health`,
-  `debt`** — each with output a script or an agent can consume without parsing
-  prose. `history` records the architecture's evolution across captured
-  snapshots — the deterministic half of "how it got here" — and `debt` ages the
-  workspace's waivers, gaps and drift across that same record.
+- **Fifteen commands — `check`, `graph`, `diff`, `drift`, `discover`,
+  `reconcile`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`,
+  `explain`, `context`, `provenance`** — each with output a script or an agent
+  can consume without parsing prose. `history` records the architecture's
+  evolution across captured snapshots — the deterministic half of "how it got
+  here" — and `debt` ages the workspace's waivers, gaps and drift across that
+  same record.
   ([reference/cli.md](reference/cli.md), [usage/history.md](usage/history.md),
   [usage/debt.md](usage/debt.md))
 - **Nx and Moon as first-class integrations, not dependencies.** A workspace
@@ -66,9 +67,11 @@ A new reader should find these capabilities described as present, not promised.
 - **Meaningful architecture diff.** `diff` separates structural change from
   policy mismatch from rule impact, and refuses an incomplete baseline.
   ([usage/diff.md](usage/diff.md))
-- **Basic drift detection.** Three drift signals, with no predictive
-  component: boundary violations and configuration drift surface through
-  `check`; structural drift and its rule impact surface through `diff`.
+- **Basic drift detection.** Four drift signals, with no predictive component:
+  boundary violations and configuration drift surface through `check`;
+  structural drift and its rule impact surface through `diff`; and
+  architecture-intent drift has a descriptive face of its own (`drift`) that
+  `check` also folds in by presence.
   ([concepts/drift.md](concepts/drift.md))
 - **Fitness functions.** Named, declared quality gates — "the graph stays
   cycle-free", "at least 90% of files are analyzed" — judged deterministically
