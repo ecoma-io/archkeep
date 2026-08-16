@@ -115,7 +115,7 @@ states and moves past.
 
 ## Descriptive commands
 
-`graph`, `diff`, `impact`, `explain`, and `context` are descriptive -- they never exit 1.
+`graph`, `diff`, `history`, `impact`, `explain`, and `context` are descriptive -- they never exit 1.
 They exit 0 when the run completes and 3 when coverage is incomplete. The
 envelope's `status` follows the same mapping: `"ok"` for 0, `"no-verdict"` for 3. `"findings"` never appears for a descriptive command.
 

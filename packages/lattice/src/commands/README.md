@@ -58,7 +58,26 @@ commands share rather than a command. It composes `../workspace.mjs`,
   an Nx workspace with polyglot manifests but no plugin registration.
   Descriptive: never exits 1.
 
+- **`history`** (`./history.mjs`'s `historyCommand`) — the architecture's
+  evolution across a consumer-managed directory of `graph --format json`
+  snapshots. Reads every snapshot (the directory is the sole source of truth —
+  no index, no database), in filename byte-sort (history) order, and classifies
+  each transition by what the snapshots carry: graph diff (architecture),
+  `policy.fingerprint` (policy/intent), `workspace.provider` (provider), and
+  provenance advance with neither changed (code drift). One-sided or cross-repo
+  signals are disclosed as incomparable rather than read as unchanged.
+  `--capture` writes `<sequence>-<sha8>.json` (deduplicating when the
+  architecture identity already is the last snapshot) and refuses incomplete
+  head coverage. Refuses an empty or unreadable directory, and a snapshot that
+  parses as an incomplete envelope. Descriptive: never exits 1.
+
 ## Shared modules
+
+- **`snapshot-meta.mjs`** — `compareSnapshotMetadata`, shared by `diff` and
+  `history`: the provider, provenance (with cross-repo and one-sided
+  detection) and policy-fingerprint comparison between a baseline and a head.
+
+- **`edge-constraints.mjs`** — edge-constraint analysis shared by `diff` and
 
 - **`edge-constraints.mjs`** — edge-constraint analysis shared by `diff` and
   `impact`. Judges a single graph edge against the `depConstraints` table,

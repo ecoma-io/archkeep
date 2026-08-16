@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -2755,6 +2763,99 @@ describe("`diff` argument and baseline validation", () => {
       rmSync(checkEnvelopeFile, { force: true });
     } catch {
       // Already gone.
+    }
+  });
+});
+
+describe("`history` capture and describe against the Nx fixture", () => {
+  // `runCli` drives the real command wiring in-process (parseArgs with the
+  // boolean `--capture`, the history run function, envelope render), over the
+  // injected graph — the half the spawned-subprocess E2E cannot cover because
+  // cli.mjs is excluded from in-process coverage. The history directory lives
+  // outside the workspace tree so the captured snapshot is not itself tracked.
+  const histDir = mkdtempSync(join(tmpdir(), "polyglot-cli-hist-"));
+  afterAll(() => rmSync(histDir, { recursive: true, force: true }));
+
+  it("captures the workspace graph and describes it as JSON", async () => {
+    const streams = env();
+    expect(await runCli(["history", histDir, "--capture"], streams)).toBe(EXIT.ok);
+
+    const files = readdirSync(histDir);
+    const snapshots = files
+      .filter((name) => name.endsWith(".json") && !name.endsWith(".json.tmp"))
+      .sort();
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toMatch(/^0001-[0-9a-f]{8}\.json$/);
+
+    const envelope = JSON.parse(readFileSync(join(histDir, snapshots[0]), "utf8"));
+    expect(envelope.command).toBe("graph");
+    expect(envelope.status).toBe("ok");
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.result.projects.map((p) => p.name).sort()).toEqual(["adapter", "domain"]);
+
+    // The record, as JSON, carries the one snapshot and no transitions.
+    const describeStreams = env();
+    expect(await runCli(["history", histDir, "--format", "json"], describeStreams)).toBe(EXIT.ok);
+    const record = JSON.parse(describeStreams.lines.out.join("\n"));
+    expect(record.command).toBe("history");
+    expect(record.status).toBe("ok");
+    expect(record.result.snapshots).toHaveLength(1);
+    expect(record.result.transitions).toEqual([]);
+  });
+
+  it("deduplicates a capture when the architecture did not change", async () => {
+    const streams = env();
+    expect(await runCli(["history", histDir, "--capture"], streams)).toBe(EXIT.ok);
+    const files = readdirSync(histDir).filter(
+      (name) => name.endsWith(".json") && !name.endsWith(".json.tmp"),
+    );
+    expect(files).toHaveLength(1);
+    expect(streams.lines.out.join("\n")).toContain("already the last snapshot");
+  });
+
+  it("refuses to write the report back into the history directory it reads", async () => {
+    // The self-footgun guard: --output inside the history dir would be read
+    // back as a (refused) snapshot on the next run, so it must be a usage
+    // error rather than a silent poison.
+    const streams = env();
+    expect(
+      await runCli(
+        ["history", histDir, "--format", "json", "--output", join(histDir, "report.json")],
+        streams,
+      ),
+    ).toBe(EXIT.usage);
+    expect(streams.lines.err.join("\n")).toContain("inside the history directory");
+    expect(existsSync(join(histDir, "report.json"))).toBe(false);
+  });
+
+  it("ignores a .json.tmp left by an interrupted capture", async () => {
+    // Atomic capture writes `<name>.json.tmp` then renames; an interrupted
+    // write leaves the tmp behind, and that must never count as a snapshot.
+    const streams = env();
+    const leaveTmp = mkdtempSync(join(tmpdir(), "polyglot-cli-hist-tmp-"));
+    try {
+      writeFileSync(join(leaveTmp, "0001-deadbeef.json.tmp"), "partial garbage");
+      expect(await runCli(["history", leaveTmp, "--capture"], streams)).toBe(EXIT.ok);
+      const names = readdirSync(leaveTmp).sort();
+      // The stray tmp remains (it is not deleted), and the capture wrote one
+      // real snapshot that is not the tmp itself.
+      expect(names).toContain("0001-deadbeef.json.tmp");
+      const snapshots = names.filter((n) => n.endsWith(".json") && !n.endsWith(".json.tmp"));
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0]).toMatch(/^0001-[0-9a-f]{8}\.json$/);
+    } finally {
+      rmSync(leaveTmp, { recursive: true, force: true });
+    }
+  });
+
+  it("exits 3 on a history directory with no snapshots", async () => {
+    const emptyDir = mkdtempSync(join(tmpdir(), "polyglot-cli-hist-empty-"));
+    try {
+      const streams = env();
+      expect(await runCli(["history", emptyDir], streams)).toBe(EXIT.error);
+      expect(streams.lines.err.join("\n")).toContain("contains no snapshots");
+    } finally {
+      rmSync(emptyDir, { recursive: true, force: true });
     }
   });
 });
