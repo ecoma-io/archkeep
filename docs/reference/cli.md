@@ -10,6 +10,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `graph`      | (none)               | Print the project graph as a deterministic snapshot                                                | no               |
 | `diff`       | `<baseline>`         | Compare two graph snapshots edge by edge                                                           | no               |
 | `drift`      | (none)               | Compare the observed architecture to the declared intent                                           | no               |
+| `discover`   | (none)               | Report observed facts, and optionally propose candidates                                           | no               |
 | `reconcile`  | (none)               | Score the declared intent against the observed architecture, with proposed edits under `--propose` | no               |
 | `fitness`    | (none)               | Judge every declared fitness function against the workspace                                        | no               |
 | `waivers`    | (none)               | List the boundary waivers on the table, with their terms                                           | no               |
@@ -106,6 +107,21 @@ completed judgment and 3 when coverage is incomplete or the policy declares no
 `fitness` at all. Each declared function is judged against the observed
 workspace and printed as a verdict row; `check` folds the same verdicts in by
 presence.
+
+### `discover`
+
+| flag        | argument       | default | meaning                                                                                                                        |
+| ----------- | -------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `--format`  | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope.                                                                                |
+| `--output`  | `<file>`       | stdout  | Write the report to a file instead of stdout.                                                                                  |
+| `--propose` | (none)         | off     | Compute and print the candidate architecture — components, boundary assertions, tag vocabulary, rules — over the observations. |
+
+No positional arguments. `discover` is descriptive: it never exits 1, only 0 on
+a completed observation and 3 when coverage is incomplete, the model cannot be
+loaded, or the plugin gap refuses the graph. Under `--propose`, incomplete
+coverage is a refusal — a proposal over an unread tree would be a fabrication
+wearing a proposal's name. Every candidate carries the markers `proposed: true`
+and `notAuthoritative: true` and is never written to `architecture-intent.json`.
 
 ### `reconcile`
 
@@ -247,11 +263,11 @@ build; they differ in what you go and look at, not in whether you go and look.
 analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
-A descriptive command (`graph`, `diff`, `drift`, `reconcile`, `fitness`,
-`waivers`, `history`, `health`, `debt`, `impact`, `explain`, `context`,
-`provenance`) exits 0 when it completes, 3 when coverage is incomplete or a
-metric is `unknown`, and 2 on usage error. None exits 1, because a descriptive
-result is never a finding.
+A descriptive command (`graph`, `diff`, `drift`, `discover`, `reconcile`,
+`fitness`, `waivers`, `history`, `health`, `debt`, `impact`, `explain`,
+`context`, `provenance`) exits 0 when it completes, 3 when coverage is
+incomplete or a metric is `unknown`, and 2 on usage error. None exits 1,
+because a descriptive result is never a finding.
 
 ## What each command does
 
@@ -269,6 +285,15 @@ level checks that ignore path scoping.
 Prints the project graph as a deterministic snapshot: two sorted arrays, one of
 projects and one of edges, with `workspaceLayout` included. Descriptive -- a
 snapshot of what is is never a finding.
+
+### `discover`
+
+Reports the observed architecture: projects, edges, tags, and the coverage a
+verdict over this tree could trust. With `--propose`, it also derives the
+candidate architecture those observations imply — components, boundary
+assertions, tag vocabulary and rules — each marked `proposed: true` and
+`notAuthoritative: true`, and never written to `architecture-intent.json`.
+Descriptive -- an observation, or a candidate, is never a finding.
 
 ### `diff <baseline>`
 

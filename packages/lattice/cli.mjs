@@ -84,6 +84,7 @@ import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/command
 import { contextCommand } from "./src/commands/context-command.mjs";
 import { planContextCommand } from "./src/commands/plan-context-command.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
+import { discoverCommand } from "./src/commands/discover.mjs";
 import { driftCommand, driftForCheck } from "./src/commands/drift.mjs";
 import { fitnessCommand, fitnessForCheck } from "./src/commands/fitness.mjs";
 import { reconcileCommand } from "./src/commands/reconcile.mjs";
@@ -1877,6 +1878,72 @@ async function runDebt(options, { cwd, env }) {
 }
 
 /**
+ * `discover`'s `run`: resolves the command context, drives `discoverCommand`,
+ * writes the report where it belongs, and returns the process's exit code.
+ *
+ * `discover` takes no positional arguments — the observed side is the whole
+ * graph. `--propose` is opt-in: a proposal is a suggestion, and a workspace
+ * that does not ask for one must not get one.
+ *
+ * @param {{format: string, output: string|null, propose: boolean, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runDiscover(options, { cwd, env }) {
+  if (options.paths.length > 0) {
+    env.err(`lattice: discover takes no positional arguments; got ${options.paths.join(", ")}`);
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    result = discoverCommand(commandContext, { propose: options.propose });
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(
+      `lattice: ${result.discovery.projects.length} projects, ${result.discovery.edges.length} ` +
+        `edges` +
+        (result.proposal
+          ? `, ${result.proposal.boundaryAssertions.total} boundary assertions`
+          : "") +
+        ` → ${options.output}`,
+    );
+  } else {
+    env.out(report);
+  }
+
+  // Discover is descriptive: 0 when it completes, never 1.
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
+}
+
+/**
+ * `health`'s `run`: resolves the command context, drives `healthCommand`,
+ * writes the report where it belongs, and returns the process's exit code.
  * `health`'s `run`: resolves the command context, drives `healthCommand`,
  * writes the report where it belongs, and returns the process's exit code.
  *
@@ -2091,6 +2158,42 @@ const RECONCILE_FLAG_HELP = Object.freeze([
       "marked proposed — never written into",
       "architecture-intent.json",
     ]),
+  }),
+]);
+
+/**
+ * `discover`'s flags: text or JSON envelope, optional file output, and an
+ * opt-in `--propose` that derives candidate architecture. `--propose` is
+ * explicit because a proposal is a suggestion: a workspace that does not ask
+ * for one must not get one.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const DISCOVER_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--propose",
+    key: "propose",
+    arg: "",
+    describe: Object.freeze([
+      "Also derive candidate components, boundaries, tags and rules from",
+      "the observed facts — every candidate marked proposed and not",
+      "authoritative; nothing is ever written",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
   }),
 ]);
 
@@ -2457,6 +2560,17 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runDiff,
+  }),
+  discover: Object.freeze({
+    name: "discover",
+    args: "[--propose]",
+    summary: "Report observed facts, and optionally propose candidate architecture",
+    flagHelp: DISCOVER_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(DISCOVER_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, propose: false }),
+    formats: DESCRIBABLE_FORMATS,
+    booleans: Object.freeze(["propose"]),
+    run: runDiscover,
   }),
   drift: Object.freeze({
     name: "drift",
