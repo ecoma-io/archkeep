@@ -1226,6 +1226,23 @@ describe("the waivers surface, end to end", () => {
           { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
         ],
       },
+      // The root config file is workspace tooling, not a project — an
+      // unclaimed file becomes a whole-file failure, and a command that
+      // refuses incomplete coverage (waivers now among them) would otherwise
+      // read this tree as "could not look". Same reason every native fixture
+      // that asserts a completed verdict names its config here. The `--config`
+      // test's `alt-boundaries.mjs` is NOT exempted: it is written mid-run and
+      // never listed in the tracked files, so coverage never sees it — and an
+      // exemption naming a file that exists in no unclaimed set is itself a
+      // config error.
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "workspace tooling config at the root, not itself a project",
+          },
+        ],
+      },
     }),
   );
   writeWaivers(
@@ -1356,6 +1373,20 @@ export const boundarySuppressions = [
     // pretending the tree is clean.
     expect(streams.lines.out.join("\n")).toContain("accepted violations: 1 boundary violation");
     expect(streams.lines.out.join("\n")).toContain("accepted until 2999-01-01T00:00:00.000Z");
+  });
+
+  it("waivers refuses a tree it could not fully read — exit 3, never a stale-looking surface", async () => {
+    // The silent direction named in the coverage-refusal: a file the analyzer
+    // never judged contributes no finding, so a waiver naming it would read as
+    // "covers nothing" about a finding the run never looked at. `check` treats
+    // the same tree as no-verdict (3); the waiver surface must do the same
+    // rather than complete with "1 waiver on the table".
+    const streams = {
+      ...waiversEnv(),
+      listFiles: () => [...waiversFiles, "libs/domain/absent.go"],
+    };
+    expect(await runCli(["waivers"], streams)).toBe(EXIT.error);
+    expect(streams.lines.err.join("\n")).toContain("incomplete coverage");
   });
 });
 

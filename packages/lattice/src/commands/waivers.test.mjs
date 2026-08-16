@@ -119,6 +119,19 @@ describe("computeWaivers", () => {
       "z/z.ts@2026-09-01T00:00:00.000Z",
     ]);
   });
+
+  it("sorts with plain string comparison — never localeCompare, which depends on ICU data", () => {
+    // Path casing keeps the plain-comparison answer separable from a
+    // locale-collated one: under `en-US`, `"AB"` sorts before `"ab"` only
+    // because the collator folds case, while plain byte order puts uppercase
+    // (`A` = 0x41) before lowercase (`a` = 0x61) regardless of locale.
+    const { waivers } = computeWaivers(
+      [waiver({ path: "ab/main.ts" }), waiver({ path: "AB/main.ts" })],
+      [],
+      NOW,
+    );
+    expect(waivers.map((w) => w.path)).toEqual(["AB/main.ts", "ab/main.ts"]);
+  });
 });
 
 describe("formatWaiversReport", () => {
@@ -198,6 +211,28 @@ describe("waiversCommand", () => {
     expect(result.waivers.waivers[0].covered).toBe(1);
     expect(result.waivers.waivers[0].status).toBe("active");
     expect(result.report.text).toContain("1 current violation");
+  });
+
+  it("refuses a tree it could not fully read — incomplete coverage must not read as a stale surface", async () => {
+    // A whole-file failure (line: null) means the analyzer never judged the
+    // file, so a waiver naming it would read as "covers nothing" about a
+    // finding the run never looked at — the silent direction. The command
+    // throws, which `cli.mjs`'s `runWaivers` surfaces as exit 3.
+    await expect(
+      waiversCommand(
+        commandContext({
+          analysis: {
+            analyzed: 1,
+            imports: [],
+            failures: [
+              { sourceFile: "area/alpha/src/index.ts", line: null, reason: "could not parse" },
+            ],
+          },
+        }),
+        policy([waiver()]),
+        { now: NOW },
+      ),
+    ).rejects.toThrow(/incomplete coverage/);
   });
 
   it("names an expired waiver against the injected clock, and a run of only waivers is still not clean", async () => {

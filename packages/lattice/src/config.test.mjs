@@ -422,7 +422,7 @@ describe("boundarySuppressions", () => {
         findBoundaryConfigViolations(
           withSuppressions([{ path: "a.js", reason: "why", expiresAt: "not-a-date" }]),
         )[0],
-      ).toMatch(/expiresAt: must be an ISO-8601 instant/);
+      ).toMatch(/expiresAt: must be a full ISO-8601 instant/);
     });
 
     it("rejects an empty expiresAt, which would read as permanent", () => {
@@ -430,7 +430,41 @@ describe("boundarySuppressions", () => {
         findBoundaryConfigViolations(
           withSuppressions([{ path: "a.js", reason: "why", expiresAt: "" }]),
         )[0],
-      ).toMatch(/expiresAt: must be an ISO-8601 instant/);
+      ).toMatch(/expiresAt: must be a full ISO-8601 instant/);
+    });
+
+    it("rejects a date-only expiresAt, which is interpreted in the machine's local zone", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "2026-09-01" }]),
+        )[0],
+      ).toMatch(/must be a full ISO-8601 instant with an explicit UTC\/offset/);
+    });
+
+    it("rejects an epoch-number expiresAt — a waiver that expires immediately", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "0" }]),
+        )[0],
+      ).toMatch(/must be a full ISO-8601 instant with an explicit UTC\/offset/);
+    });
+
+    it("rejects a TZ-less datetime, which means different things under different TZ environments", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "2026-09-01 03:00" }]),
+        )[0],
+      ).toMatch(/must be a full ISO-8601 instant with an explicit UTC\/offset/);
+    });
+
+    it("accepts an offset-bearing instant, the same instant under every TZ", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([
+            { path: "a.js", reason: "why", expiresAt: "2026-09-01T03:00:00.000+02:00" },
+          ]),
+        ),
+      ).toEqual([]);
     });
 
     it("rejects an origin that is not a non-empty string", () => {

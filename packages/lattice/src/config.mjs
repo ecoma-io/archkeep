@@ -416,20 +416,26 @@ function suppressionRowViolations(row, index) {
     );
   }
   if ("expiresAt" in row) {
-    // A waiver's term. Rejected when it does not parse as an ISO instant,
-    // because an unparseable term makes the waiver's fate unknowable — and a
-    // waiver whose fate is unknowable either covers nothing (if it never
-    // parses) or reads as a permanence the author never wrote. `Number.isNaN`
-    // is the one test that catches `"garbage"` and `""` alike without
-    // accepting `"0"` (which parses as the epoch).
+    // A waiver's term. Must be a full ISO-8601 instant carrying an explicit
+    // UTC or offset designator — the shape `Date.prototype.toISOString()`
+    // itself produces, and the one spellings like `"2026-09-01"` or `"0"`
+    // (`Date.parse`'s epoch) or `"2026-09-01 03:00"` deliberately do not
+    // match. Those parse, but ambiguity is the bug: a date-only or TZ-less
+    // string is interpreted in the machine's local zone, so the same law
+    // yields a different term — and a different expiry verdict — under two
+    // machines' `TZ`. A waiver whose term means different things to different
+    // machines is not a term; an instant-bearing spelling means the same
+    // instant everywhere.
     if (
       typeof row.expiresAt !== "string" ||
-      Number.isNaN(Date.parse(/** @type {string} */ (row.expiresAt)))
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(row.expiresAt) ||
+      Number.isNaN(Date.parse(row.expiresAt))
     ) {
       violations.push(
-        `${at}.expiresAt: must be an ISO-8601 instant the waiver accepts until, got ` +
-          `${describe(row.expiresAt)} — an expired waiver re-asserts the violation it covered, so ` +
-          `a term that cannot be read cannot be honoured`,
+        `${at}.expiresAt: must be a full ISO-8601 instant with an explicit UTC/offset, ` +
+          `like "2026-09-01T00:00:00.000Z", got ${describe(row.expiresAt)} — a term with no ` +
+          `designator is interpreted in the machine's local zone, so the same waiver would mean ` +
+          `different things under different TZ environments`,
       );
     }
   }

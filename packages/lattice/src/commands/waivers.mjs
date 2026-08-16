@@ -60,7 +60,15 @@ export function computeWaivers(suppressions, rawViolations, now = referenceTime(
       remainingMs: remainingMs(row, now),
       covered: rawViolations.filter((violation) => suppressionCovers(row, violation)).length,
     }))
-    .sort((a, b) => a.path.localeCompare(b.path) || a.expiresAt.localeCompare(b.expiresAt));
+    // Plain string comparison — never `localeCompare`, which depends on the
+    // locale and the Node build's ICU data and would let two machines order the
+    // same rows differently (the determinism rule every snapshot-state command
+    // shares; `graph`'s `buildProjects` documents the same refusal).
+    .sort(
+      (a, b) =>
+        (a.path < b.path ? -1 : a.path > b.path ? 1 : 0) ||
+        (a.expiresAt < b.expiresAt ? -1 : a.expiresAt > b.expiresAt ? 1 : 0),
+    );
 
   const covered = waivers.reduce((sum, w) => sum + (w.covered > 0 ? 1 : 0), 0);
   const expired = waivers.filter((w) => w.status === "expired").length;
@@ -79,13 +87,33 @@ export function computeWaivers(suppressions, rawViolations, now = referenceTime(
  *   does, so the surface listed is the surface the law actually enforces.
  * @param {{now?: string}} [io] The injected clock.
  * @returns {Promise<{status: "ok", waivers: object, report: {text: string, json: string}}>}
- * @throws {Error} whenever the run's law is malformed — exit-3 class, the same
- *   posture `check` takes on a malformed config.
+ * @throws {Error} whenever the run's law is malformed, or the tree has
+ *   whole-file analysis failures — exit-3 class, the same posture `check` takes
+ *   on a malformed config and `impact`/`drift` take on incomplete coverage.
  */
 export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
   const { root, provider, marker, analysis, graph } = commandContext;
   const now = io.now ?? referenceTime();
   const config = boundaryConfig;
+
+  // A waiver surface over a tree it could not fully read is a lottery ticket,
+  // not a surface: a file the analyzer never judged contributes no raw
+  // violation, so every waiver that names it reads as stale and the report
+  // says "covers nothing" about a finding the run never looked at. Refuse
+  // loudly on whole-file failures, the same posture `impact`, `drift`, and
+  // `history` take — "could not look" must never read as "looked and found
+  // nothing" (`./impact.mjs`'s refusal names the same silence).
+  const notAnalyzed = analysis.failures
+    .filter(isWholeFileFailure)
+    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
+
+  if (notAnalyzed.length > 0) {
+    throw new Error(
+      `lattice: waivers has incomplete coverage — ${notAnalyzed.length} file` +
+        `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so every waiver naming one ` +
+        `would read as covering nothing it never saw. Fix the unanalyzed files and re-run.`,
+    );
+  }
 
   // Evaluate with the suppression table REMOVED, so every row's coverage is
   // measured against the full finding set rather than the post-waiver run.
@@ -103,7 +131,7 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
     projects: Object.keys(graph.nodes).length,
     analyzedFiles: analysis.analyzed,
     imports: analysis.imports.length,
-    notAnalyzed: [],
+    notAnalyzed,
     blindSpots: analysis.failures
       .filter((failure) => !isWholeFileFailure(failure))
       .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
