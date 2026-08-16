@@ -620,11 +620,16 @@ describe("Contract D — Architecture snapshot identity", () => {
   });
 
   it("computePolicyFingerprint canonicalizes JSON before hashing (key-order independent)", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "graph.mjs"), "utf-8");
-    // The fingerprint must sort keys at every depth so that insertion order
-    // does not affect the hash — two semantically identical policy objects
-    // constructed in different key order must produce the same fingerprint.
-    expect(content).toMatch(/Object\.keys\(value\)\s*\.sort\(\)/);
+    // The canonicalizer is shared, not inlined here — `graph.mjs` calls it and
+    // `src/canonical.mjs` owns the sort, so the invariant lives in exactly one
+    // place (`../../AGENTS.md`, "Never state a rule twice").
+    const graphContent = readFileSync(join(ROOT, "src", "commands", "graph.mjs"), "utf-8");
+    expect(graphContent).toMatch(/canonicalizeJson\(policy\)/);
+    const canonicalContent = readFileSync(join(ROOT, "src", "canonical.mjs"), "utf-8");
+    // The sort must happen at every depth so that insertion order does not
+    // affect the hash — two semantically identical objects constructed in
+    // different key order must produce the same fingerprint.
+    expect(canonicalContent).toMatch(/Object\.keys\(current\)\s*\.sort\(\)/);
   });
 
   it("INTERNAL_DATA_FIELDS covers every node.data field the snapshot strips", () => {

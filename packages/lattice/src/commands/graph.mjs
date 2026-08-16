@@ -30,6 +30,7 @@
 import { createHash } from "node:crypto";
 
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import { canonicalizeJson } from "../canonical.mjs";
 import { DEFAULT_WORKSPACE_LAYOUT } from "../rules/specifiers.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatGraphReport } from "../report/graph-text.mjs";
@@ -156,17 +157,11 @@ export function computePolicyFingerprint(config) {
     suppressions: config.suppressions ?? [],
   };
   // Canonicalise: sort object keys at every depth so insertion order does not
-  // affect the hash. Semantic equality, not construction order, is the claim.
-  const canonical = JSON.stringify(policy, (_, value) =>
-    value !== null && typeof value === "object" && !Array.isArray(value)
-      ? Object.keys(value)
-          .sort()
-          .reduce((sorted, key) => {
-            sorted[key] = value[key];
-            return sorted;
-          }, {})
-      : value,
-  );
+  // affect the hash. Semantic equality, not construction order, is the claim —
+  // the same canonicalizer the intent fingerprint uses
+  // (`../architecture-intent/intent-fingerprint.mjs`), so two fingerprints
+  // cannot drift from two serializations.
+  const canonical = canonicalizeJson(policy);
   return createHash("sha256").update(canonical).digest("hex");
 }
 

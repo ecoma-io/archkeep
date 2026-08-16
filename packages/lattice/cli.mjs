@@ -66,9 +66,9 @@
  * `COMMANDS` below is a table rather than a `switch`, and `parseArgs` is
  * shared rather than hand-rolled per command, so a new command is a new
  * row rather than a second copy of the dispatch and flag-parsing this file
- * used to own alone. The table is built for seven commands — `check`, `graph`,
- * `diff`, `history`, `impact`, `explain`, `context` — with three flags shared
- * across all of them (`--format`, `--output`, `--config`) and `history`'s
+ * used to own alone. The table is built for eight commands — `check`, `graph`,
+ * `diff`, `drift`, `history`, `impact`, `explain`, `context` — with three flags
+ * shared across all of them (`--format`, `--output`, `--config`) and `history`'s
  * boolean `--capture`, the first flag that takes no value. No subcommand nesting,
  * and no shell completion to generate, mean a plain table gets there without
  * a framework; reach for one only once a later command needs something this
@@ -83,6 +83,7 @@ import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/co
 import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
 import { contextCommand } from "./src/commands/context-command.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
+import { driftCommand } from "./src/commands/drift.mjs";
 import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
 import { historyCommand } from "./src/commands/history.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
@@ -953,6 +954,64 @@ async function runDiff(options, { cwd, env }) {
 }
 
 /**
+ * `drift`'s `run`: resolves the command context, drives `driftCommand`, writes
+ * the report where it belongs, and returns the process's exit code.
+ *
+ * `drift` takes no positional arguments — the observed side is the whole
+ * graph, and the intended side is the tracked root `architecture-intent.json`.
+ *
+ * @param {{format: string, output: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runDrift(options, { cwd, env }) {
+  if (options.paths.length > 0) {
+    env.err(`lattice: drift takes no positional arguments; got ${options.paths.join(", ")}`);
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+    result = await driftCommand(commandContext);
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(
+      `lattice: ${result.drift.observed.projects} projects, ${result.drift.observed.edges} edges ` +
+        `→ ${options.output}`,
+    );
+  } else {
+    env.out(report);
+  }
+
+  // Drift is descriptive: 0 when the comparison completes, never 1.
+  return EXIT.ok;
+}
+
+/**
  * `impact`'s `run`: resolves the command context, drives `impactCommand`,
  * writes the report where it belongs, and returns the process's exit code.
  *
@@ -1390,6 +1449,32 @@ const DIFF_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `drift`'s flags: text or JSON envelope, optional file output. The intent is
+ * always read from the tracked root `architecture-intent.json` — the same one
+ * `check` judges — so there is no `--config` flag: a descriptive comparison
+ * of the observed tree against the declared intent needs no boundary law.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const DRIFT_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+]);
+
+/**
  * `history`'s flags: text or JSON envelope, optional file output, and the
  * boolean `--capture` that appends a snapshot of the current workspace
  * before building the record.
@@ -1575,6 +1660,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runDiff,
+  }),
+  drift: Object.freeze({
+    name: "drift",
+    args: "",
+    summary: "Compare the observed architecture against the declared intent",
+    flagHelp: DRIFT_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(DRIFT_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runDrift,
   }),
   history: Object.freeze({
     name: "history",
