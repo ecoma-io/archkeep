@@ -21,6 +21,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `explain`    | `<file:line:column>` | Explain the judgment for one import site                                                           | no               |
 | `context`    | `<project>`          | Show the architecture constraints that apply to a project                                          | no               |
 | `provenance` | (none)               | Describe where this run's facts came from and which rows carry an origin                           | no               |
+| `adr`        | `[<id>]`             | List recorded architecture decisions and what each binds                                           | no               |
 
 `lattice --help` prints the help text and exits 0. An omitted command name is a
 usage error (exit 2). If the first positional argument names a path that exists

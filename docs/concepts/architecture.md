@@ -104,7 +104,7 @@ return unchecked > 0 ? 3 : 0;
 Exit 0 was the bug. A checker that could not look must never be mistaken for one
 that looked and found nothing.
 
-## The fifteen commands
+## The sixteen commands
 
 | command      | what it does                                                                          | finds violations |
 | ------------ | ------------------------------------------------------------------------------------- | ---------------- |
@@ -123,8 +123,9 @@ that looked and found nothing.
 | `explain`    | Explains the judgment for one import site                                             | no               |
 | `context`    | Shows the architecture constraints that apply to a project¹                           | no               |
 | `provenance` | Reports the governance row schema and the run's origin                                | no               |
+| `adr`        | Lists recorded architecture decisions and what each binds (`docs/adr/`)               | no               |
 
-`check` is the only command that exits 1. The other fourteen are descriptive or
+`check` is the only command that exits 1. The other fifteen are descriptive or
 proposal-only: they answer questions about the architecture without claiming a
 violation. `context` answers the question an agent asks _before_ editing (what
 is this project allowed to reach?); `impact` answers the question during

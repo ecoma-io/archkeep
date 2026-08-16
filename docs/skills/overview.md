@@ -40,7 +40,7 @@ requires every command for every change.
 
 `check` is the only command that exits 1. Every other command is descriptive
 or proposal-only: `drift`, `discover`, `reconcile`, `waivers`, `fitness`,
-`health`, `debt`, and `provenance` never exit 1 on their own, and both
+`health`, `debt`, `provenance`, and `adr` never exit 1 on their own, and both
 `--propose` surfaces mark their output as proposals that are never written —
 no command writes to the Intent. Reconciling a stale declared architecture
 with the observed one is a human decision the CLI can only shape, never make.
