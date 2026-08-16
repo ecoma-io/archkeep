@@ -38,7 +38,11 @@ answer is to surface it, never to ignore it.
    - The project's tags (`layer:`, `scope:`, `license:`)
    - Every constraint that applies — what the project MAY import, and what is
      forbidden
-   - Any current dependencies, with any that already violate constraints marked
+   - Any current dependencies, with any that already violate constraints
+     marked. Per-edge verdicts here cover only `depConstraints` (3 of 15
+     violation types) — a dependency with no violations in this list may still
+     violate a cycle, lazy-load, or npm-ban rule. `context --plan` or `check`
+     is the complete verdict.
 
 3. **Check the declared Intent.** When the workspace carries a tracked
    `architecture-intent.json`, the architecture is a comparison, not a row of
@@ -97,7 +101,7 @@ answer is to surface it, never to ignore it.
    context.** These are descriptive, never gates — they never exit 1:
    `lattice waivers` lists the term-bound suppressions a violation under review
    may be covered by; `lattice health` reports per-metric verdicts (unmeasured
-   is `unknown`/`not_applicable`, never zero); `lattice debt` ages waivers,
+   is `unknown`/`not_applicable`, never zero); `lattice debt <dir>` ages waivers,
    gaps and drift across snapshots; `lattice fitness` (when the policy declares
    a `fitness` export) judges the workspace's named quality gates; and
    `lattice reconcile --propose` / `lattice discover --propose` shape a stale

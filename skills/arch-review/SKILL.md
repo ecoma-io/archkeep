@@ -117,7 +117,7 @@ cites when it says "the declared architecture no longer matches the code".
   the workspace's named quality gates with `pass` / `fail` / `unknown` /
   `not_applicable` verdicts. Both are descriptive — they never exit 1. `check`
   stays the gate.
-- **Pre-existing violations ("debt")** — `lattice debt` ages waivers, gaps
+- **Pre-existing violations ("debt")** — `lattice debt <dir>` ages waivers, gaps
   and drift across a snapshots directory: how long a violation has been
   accepted or unknown. It is a ledger, not a live gate — it never changes a
   verdict. For "did THIS change introduce the violation", compare the current
@@ -125,7 +125,8 @@ cites when it says "the declared architecture no longer matches the code".
   this change.
 - **Waivers / exceptions** — a suppression (no `expiresAt`) is permanent, and
   a waiver (with `expiresAt`) accepts a violation for a fixed term. Both live
-  in `boundarySuppressions`; `lattice waivers` lists them, and `check` keeps
+  in `boundarySuppressions`; `lattice waivers` lists only the term-bound rows
+  (a permanent suppression is absent from the listing), and `check` keeps
   reporting a waived violation as a finding (exit 1) so CI still catches the
   day the term lapses. `coverage.exempt` in `lattice.json` is the one
   coverage-count suppression surface, and it requires a mandatory reason.
