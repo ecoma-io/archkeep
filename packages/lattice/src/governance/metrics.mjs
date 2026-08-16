@@ -3,7 +3,7 @@
  * `{ projects, dependencies, analysis, coverage, intent }` without a service,
  * a dashboard, or a datastore beyond the snapshot directory `history` already
  * keeps (`../commands/history.mjs`). North-star doctrine refuses the hosted
- * surface outright (`../../../docs/doctrine/north-star.md`, § "What is not on
+ * surface outright (`../../../../docs/doctrine/north-star.md`, § "What is not on
  * that list"): the numbers are computed here, read-only, per run, and a
  * maintainer acts on the trend across `history` snapshots instead.
  *
