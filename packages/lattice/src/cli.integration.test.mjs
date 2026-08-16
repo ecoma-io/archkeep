@@ -1204,6 +1204,124 @@ var _ = adapter.Name
   });
 });
 
+describe("the waivers surface, end to end", () => {
+  // A third native tmpdir whose boundary law carries a `boundarySuppressions`
+  // waiver row over the same layer-crossing import, so the whole pipeline is
+  // exercised: the config validator accepts the extended row, `check` reports
+  // the waived count, and `waivers` lists the surface with its term.
+  const waiversRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-waivers-"));
+  afterAll(() => rmSync(waiversRoot, { recursive: true, force: true }));
+
+  const writeWaivers = (relativePath, text) => {
+    mkdirSync(join(waiversRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(waiversRoot, relativePath), text);
+  };
+
+  writeWaivers(
+    "lattice.json",
+    JSON.stringify({
+      projects: {
+        declared: [
+          { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+          { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+        ],
+      },
+    }),
+  );
+  writeWaivers(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const boundarySuppressions = [
+  {
+    path: "libs/domain/doc.go",
+    reason: "the adapter seam lands next release",
+    expiresAt: "2999-01-01T00:00:00.000Z",
+    origin: "ticket-42",
+  },
+];
+`,
+  );
+  writeWaivers("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeWaivers(
+    "libs/domain/doc.go",
+    `package domain
+
+import (
+	"example.com/adapter"
+)
+
+var _ = adapter.Name
+`,
+  );
+  writeWaivers("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writeWaivers("libs/adapter/adapter.go", "package adapter\n");
+
+  const waiversFiles = [
+    "lattice.json",
+    "module-boundaries.config.mjs",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "libs/adapter/go.mod",
+    "libs/adapter/adapter.go",
+  ];
+
+  const waiversContext = { cwd: waiversRoot, listFiles: () => waiversFiles };
+  const waiversEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      ...waiversContext,
+    };
+  };
+
+  it("waivers exits 0, lists the active waiver with its term and the violation it covers", async () => {
+    const streams = waiversEnv();
+    expect(await runCli(["waivers"], streams)).toBe(EXIT.ok);
+    const text = streams.lines.out.join("\n");
+    expect(text).toContain("1 waiver on the table");
+    expect(text).toContain("libs/domain/doc.go");
+    expect(text).toContain("1 current violation");
+    expect(text).toContain("2999-01-01T00:00:00.000Z");
+    expect(text).toContain("origin: ticket-42");
+    expect(text).toContain("reason: the adapter seam lands next release");
+  });
+
+  it("waivers --format json writes the envelope with the term facts", async () => {
+    const streams = waiversEnv();
+    expect(await runCli(["waivers", "--format", "json"], streams)).toBe(EXIT.ok);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.command).toBe("waivers");
+    expect(envelope.status).toBe("ok");
+    expect(envelope.result.waivers).toHaveLength(1);
+    expect(envelope.result.waivers[0].status).toBe("active");
+    expect(envelope.result.waivers[0].expiresAt).toBe("2999-01-01T00:00:00.000Z");
+  });
+
+  it("check still exits 1 over a waived violation — accepting must not flip 1→0", async () => {
+    const streams = waiversEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    // The stdout report names the accepted violation and its term rather than
+    // pretending the tree is clean.
+    expect(streams.lines.out.join("\n")).toContain("accepted violations: 1 boundary violation");
+    expect(streams.lines.out.join("\n")).toContain("accepted until 2999-01-01T00:00:00.000Z");
+  });
+});
+
 describe("context --plan, the agent architecture planning context, end to end", () => {
   // A native tree with the same two-project layer-crossing shape as the block
   // above PLUS a second, two-direction change, so the plan's whole-tree verdict
