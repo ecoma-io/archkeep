@@ -409,7 +409,7 @@ export function formatAcceptedViolations(waived) {
  * that indistinguishability is the defect this whole tool exists to end
  * (`../../CLAUDE.md`).
  *
-* Waived violations are still `violations` (the engine marks them `waivedBy`,
+ * Waived violations are still `violations` (the engine marks them `waivedBy`,
  * it never removes them), so an all-waived run still renders non-zero — the
  * "waiving must not flip exit 1 → 0" invariant, in the report layer. The
  * summary line above only says "no boundary violations" when there is nothing

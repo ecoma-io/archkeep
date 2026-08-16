@@ -417,7 +417,7 @@ export function parseCheckArgs(argv) {
  * verify — is the case that must not read `ok`, because `ok` is read as
  * "checked, and fine".
  *
-* The `decision` is the canonical 4-state verb of the same verdict
+ * The `decision` is the canonical 4-state verb of the same verdict
  * (`src/report/evidence.mjs`), built from the same counts so the envelope's
  * `status` and its `decision.verdict` cannot disagree: `ok`→`pass`,
  * `findings`→`fail`, `no-verdict`→`unknown`. `buildDecision` throws on any
@@ -438,7 +438,7 @@ function verdictFor({
   fitnessFail = 0,
   fitnessUnknown = 0,
 }) {
-if (
+  if (
     violations > 0 ||
     goWorkDrift > 0 ||
     tsconfigPathsDead > 0 ||
@@ -451,8 +451,7 @@ if (
       decision: buildDecision({
         status: "findings",
         coverageComplete: unchecked === 0,
-        findings:
-          violations + goWorkDrift + tsconfigPathsDead + intentFindings + fitnessFail,
+        findings: violations + goWorkDrift + tsconfigPathsDead + intentFindings + fitnessFail,
       }),
     };
   }
@@ -522,7 +521,7 @@ if (
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} context
  * @returns {Promise<{report: string, violations: number, goWorkDrift: number,
  *   tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number,
-*   fitnessFail: number, fitnessUnknown: number, analyzed: number, unchecked: number,
+ *   fitnessFail: number, fitnessUnknown: number, analyzed: number, unchecked: number,
  *   waived?: number}>}
  */
 export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
@@ -1157,7 +1156,7 @@ async function runDrift(options, { cwd, env }) {
 }
 
 /**
-* `provenance`'s `run`: resolves the command context, drives
+ * `provenance`'s `run`: resolves the command context, drives
  * `provenanceCommand`, writes the report where it belongs, and returns the
  * process's exit code.
  *
@@ -2261,7 +2260,7 @@ const COMMANDS = Object.freeze({
     formats: DESCRIBABLE_FORMATS,
     run: runDrift,
   }),
-waivers: Object.freeze({
+  waivers: Object.freeze({
     name: "waivers",
     args: "",
     summary: "List the boundary waivers on the table, with their terms",
