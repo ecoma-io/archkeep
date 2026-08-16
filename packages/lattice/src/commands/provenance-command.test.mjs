@@ -244,4 +244,20 @@ describe("provenanceCommand", () => {
     expect(result.status).toBe("ok");
     expect(result.report.json).not.toContain('"exitCode": 1');
   });
+
+  it("is byte-identical across two runs over the same tree — determinism's command half", async () => {
+    const io = ioWith({
+      intent: intent({
+        forbidden: [{ from: "a", to: "b", reason: "x", origin: { by: "j", tool: "l" } }],
+        projects: { required: [{ name: "p" }] },
+      }),
+      config: config([{ sourceTag: "x" }]),
+    });
+    const [a, b] = await Promise.all([
+      provenanceCommand(commandContext(), io),
+      provenanceCommand(commandContext(), io),
+    ]);
+    expect(a.report.json).toBe(b.report.json);
+    expect(a.report.text).toBe(b.report.text);
+  });
 });
