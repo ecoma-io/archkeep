@@ -291,8 +291,8 @@ describe("planContextCommand", () => {
     };
   }
 
-  it("returns a planning context with the target project and policy", () => {
-    const result = planContextCommand("alpha", [], commandContext(), config());
+  it("returns a planning context with the target project and policy", async () => {
+    const result = await planContextCommand("alpha", [], commandContext(), config());
     expect(result.status).toBe("ok");
     expect(result.exitCode).toBe(0);
     expect(result.result.plan.variant).toBe("plan");
@@ -303,8 +303,8 @@ describe("planContextCommand", () => {
     expect(result.result.dependencies).toHaveLength(0);
   });
 
-  it("adds the planning sections under result.plan: architecture, impact, violations, drift, verify", () => {
-    const result = planContextCommand("alpha", [], commandContext(), config());
+  it("adds the planning sections under result.plan: architecture, impact, violations, drift, verify", async () => {
+    const result = await planContextCommand("alpha", [], commandContext(), config());
     const plan = result.result.plan;
     expect(plan.architecture).toBeDefined();
     expect(plan.architecture.projects.length).toBe(2);
@@ -320,15 +320,20 @@ describe("planContextCommand", () => {
     expect(plan.policyFingerprint).toBeDefined();
   });
 
-  it("marks a scope that matched no project in coverage.notes", () => {
-    const result = planContextCommand("alpha", ["libs/nonexistent"], commandContext(), config());
+  it("marks a scope that matched no project in coverage.notes", async () => {
+    const result = await planContextCommand(
+      "alpha",
+      ["libs/nonexistent"],
+      commandContext(),
+      config(),
+    );
     expect(result.status).toBe("ok");
     expect(
       result.coverage.notes.some((n) => n.includes("no path matched a project-owned file")),
     ).toBe(true);
   });
 
-  it("returns 'no-verdict' when coverage is incomplete (whole-file failure)", () => {
+  it("returns 'no-verdict' when coverage is incomplete (whole-file failure)", async () => {
     // A whole-file failure (line === null) anywhere in the tree — even outside
     // the scoped change — withholds the verdict. Fail-closed: the plan must
     // never present facts against a tree it could not fully read as if they
@@ -354,14 +359,14 @@ describe("planContextCommand", () => {
         ],
       },
     });
-    const result = planContextCommand("alpha", [], ctx, config());
+    const result = await planContextCommand("alpha", [], ctx, config());
     expect(result.status).toBe("no-verdict");
     expect(result.exitCode).toBe(3);
     expect(result.coverage.complete).toBe(false);
     expect(result.coverage.notAnalyzed.some((f) => f.file === "libs/broken/broken.go")).toBe(true);
   });
 
-  it("goes no-verdict when a drift manifest cannot be read", () => {
+  it("goes no-verdict when a drift manifest cannot be read", async () => {
     const ctx = commandContext({
       tracked: ["go.work"],
       workspace: {
@@ -371,21 +376,21 @@ describe("planContextCommand", () => {
         projects: [{}],
       },
     });
-    const result = planContextCommand("alpha", [], ctx, config());
+    const result = await planContextCommand("alpha", [], ctx, config());
     // The unreadable go.work becomes a whole-file failure → no-verdict.
     expect(result.status).toBe("no-verdict");
     expect(result.exitCode).toBe(3);
     expect(result.coverage.complete).toBe(false);
   });
 
-  it("never exits 1 — the planning context is facts, not a finding", () => {
-    const result = planContextCommand("alpha", [], commandContext(), config());
+  it("never exits 1 — the planning context is facts, not a finding", async () => {
+    const result = await planContextCommand("alpha", [], commandContext(), config());
     expect(result.status).not.toBe("findings");
     expect(result.exitCode).not.toBe(1);
   });
 
-  it("throws when the plugin is unregistered on a polyglot Nx workspace", () => {
-    expect(() =>
+  it("throws when the plugin is unregistered on a polyglot Nx workspace", async () => {
+    await expect(
       planContextCommand(
         "alpha",
         [],
@@ -395,22 +400,22 @@ describe("planContextCommand", () => {
         }),
         config(),
       ),
-    ).toThrow(/refusing to build a planning context/);
+    ).rejects.toThrow(/refusing to build a planning context/);
   });
 
-  it("keeps the plain context fields identical to the plain context command", () => {
+  it("keeps the plain context fields identical to the plain context command", async () => {
     // Without --plan, context stays byte-identical; the plan command's result
     // must carry the same project/tags/constraints/dependencies the plain
     // contextCommand builds, so a consumer reading those keys reads the same.
-    const result = planContextCommand("alpha", [], commandContext(), config());
+    const result = await planContextCommand("alpha", [], commandContext(), config());
     expect(result.result.project).toBe("alpha");
     expect(result.result.tags).toEqual(["layer:domain"]);
     expect(Array.isArray(result.result.constraints)).toBe(true);
     expect(Array.isArray(result.result.dependencies)).toBe(true);
   });
 
-  it("produces both text and JSON report renderings", () => {
-    const result = planContextCommand("alpha", [], commandContext(), config());
+  it("produces both text and JSON report renderings", async () => {
+    const result = await planContextCommand("alpha", [], commandContext(), config());
     expect(result.report.text).toContain("planning context complete");
     expect(result.report.text).toContain("Project  alpha");
     expect(result.report.json).toContain('"command": "context"');

@@ -30,6 +30,9 @@
  *   circular-dependency and lazy-load rules correct on every provider.
  * - **Drift** — go.work and tsconfig-path boundary drift, sourced from the
  *   same `compareGoWork`/`judgeTsconfigPaths` functions `check` uses.
+ * - **Intent** — the canonical Architecture Intent verdict (`driftForCheck`,
+ *   the object `drift` and `check` share), absent when the workspace declares
+ *   no `architecture-intent.json`, no-verdict when one cannot be established.
  * - **Coverage / limitations** — complete vs no-verdict, with the exact files
  *   that could not be analyzed.
  * - **Verification commands** — the deterministic commands an agent runs after
@@ -49,6 +52,7 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
 
+import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { tsconfigPathsFacts } from "../analysis/typescript.mjs";
 import { compareGoWork, parseGoWorkUse } from "../go-work.mjs";
@@ -56,6 +60,7 @@ import { judgeTsconfigPaths } from "../tsconfig-paths.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { evaluate } from "../rules/index.mjs";
 import { analyzeWorkspace } from "../workspace.mjs";
+import { driftForCheck } from "./drift.mjs";
 import { computeImpact } from "./impact.mjs";
 import { collectProjectContext } from "./context-command.mjs";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
@@ -222,11 +227,11 @@ export function collectDrift(commandContext) {
  * @param {string[]} paths Optional workspace-relative paths the change touches.
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {object} config The loaded boundary config.
- * @returns {{status: "ok"|"no-verdict", exitCode: number, coverage: object,
- *   result: object, report: {text: string, json: string}}}
+ * @returns {Promise<{status: "ok"|"no-verdict", exitCode: number, coverage: object,
+ *   result: object, report: {text: string, json: string}}>}
  */
-export function planContextCommand(projectName, paths, commandContext, config) {
-  const { root, provider, marker, graph, workspace, pluginGap } = commandContext;
+export async function planContextCommand(projectName, paths, commandContext, config) {
+  const { root, provider, marker, graph, workspace, pluginGap, tracked } = commandContext;
 
   // The same refusal every descriptive command carries: on an Nx workspace
   // whose plugin is unregistered but whose tracked files include polyglot
@@ -263,6 +268,45 @@ export function planContextCommand(projectName, paths, commandContext, config) {
   // The change's own scoped failures plus the drift check's failures are what
   // decide coverage: every whole-file failure puts the run in the 3-class.
   const drift = collectDrift(commandContext);
+  // The canonical Intent verdict, folded the way `check`'s does —
+  // `driftForCheck` is what `drift` and `check` share, and the plan's Intent
+  // section must not disagree with either. Absent when the workspace chose not
+  // to make an intent (a workspace decision, not a finding); a deviant or
+  // unreadable intent is a no-verdict exactly as it is for `check`, and rides
+  // `intent`'s own no-verdict lane, never the file-coverage hole list.
+  let intent = null;
+  if (tracked.includes(INTENT_FILE)) {
+    try {
+      const intentDrift = await driftForCheck(commandContext, {
+        loadIntentOverride: (root) => loadIntent(root, { tracked }),
+      });
+      intent = {
+        verdict:
+          intentDrift.findings.length > 0
+            ? "findings"
+            : intentDrift.unresolved.length > 0
+              ? "no-verdict"
+              : "ok",
+        rows: intentDrift.intent.rows,
+        boundaries: intentDrift.boundaries,
+        findings: intentDrift.findings,
+        unresolved: intentDrift.unresolved,
+        notes: intentDrift.notes,
+      };
+    } catch (cause) {
+      const reason =
+        `${cause?.message ?? cause} — architecture-intent.json could not be ` +
+        `established, so the intent check reached no verdict`;
+      intent = {
+        verdict: "no-verdict",
+        rows: 0,
+        findings: [],
+        unresolved: [{ boundary: INTENT_FILE, issue: reason }],
+        boundaries: [],
+        notes: [],
+      };
+    }
+  }
   const failures = [...wholeTree.failures, ...drift.failures];
   const notAnalyzed = failures
     .filter(isWholeFileFailure)
@@ -315,7 +359,10 @@ export function planContextCommand(projectName, paths, commandContext, config) {
     blindSpots: failures
       .filter((failure) => !isWholeFileFailure(failure))
       .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
-    notes,
+    // Intent's own coverage notes ride the same seam `check` threads them on
+    // (today only an `"optional": true` allowed row whose statement is absent),
+    // so the plan's text and JSON reports read the same notes `check` does.
+    notes: [...notes, ...(intent === null ? [] : intent.notes)],
   };
 
   const result = {
@@ -353,6 +400,24 @@ export function planContextCommand(projectName, paths, commandContext, config) {
         goWork: goWorkResult(drift.goWork),
         tsconfigPaths: tsconfigPathsResult(drift.tsconfigPaths),
       },
+      // The canonical Architecture Intent verdict — the same fold `check` and
+      // `drift` report. Absent (key omitted) when no intent file is tracked,
+      // matching `check`: intent absence is a workspace decision about
+      // governance, never a claim of zero findings.
+      ...(intent === null
+        ? {}
+        : {
+            intent: {
+              verified: true,
+              file: INTENT_FILE,
+              verdict: intent.verdict,
+              rows: intent.rows,
+              findings: intent.findings,
+              unresolved: intent.unresolved,
+              boundaries: intent.boundaries,
+              notes: intent.notes,
+            },
+          }),
       // The deterministic commands an agent runs after making the change.
       verify: [
         `lattice check --format json`,

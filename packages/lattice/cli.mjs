@@ -1250,7 +1250,7 @@ async function runContextCommand(options, { cwd, env }) {
           );
 
     result = options.plan
-      ? planContextCommand(projectName, scopePaths, commandContext, config)
+      ? await planContextCommand(projectName, scopePaths, commandContext, config)
       : contextCommand(projectName, commandContext, config);
   } catch (error) {
     const usageError =

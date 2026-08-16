@@ -235,14 +235,16 @@ whole workspace is in scope.
 
 The planning context is facts, not a plan. Lattice reports the current
 architecture snapshot, the applicable policy with the author's Intent
-(`description`/`remediation`), the impact of a change to the target project
-(dependents capped at 10 with an explicit overflow note), the current
-violations (the full-workspace rule-engine verdict, scoped for reporting),
-drift (go.work and tsconfig-path aliases, `null` when no manifest exists to
-read), coverage with the exact files that could not be analyzed, and the
-deterministic commands that verify the change afterwards. It never generates
-an LLM plan, decides an implementation strategy, or modifies source code —
-an agent reasons over these facts.
+(`description`/`remediation`), the canonical `architecture-intent.json`
+verdict (the same model `check` and `drift` judge — findings, no-verdict, or
+ok; absent when the workspace declares no intent), the impact of a change to
+the target project (dependents capped at 10 with an explicit overflow note),
+the current violations (the full-workspace rule-engine verdict, scoped for
+reporting), drift (go.work and tsconfig-path aliases, `null` when no manifest
+exists to read), coverage with the exact files that could not be analyzed, and
+the deterministic commands that verify the change afterwards. It never
+generates an LLM plan, decides an implementation strategy, or modifies source
+code — an agent reasons over these facts.
 
 `--plan` is strictly additive: it changes no exit code and no byte of the
 plain `context` text output. In JSON the plan's fields sit directly in

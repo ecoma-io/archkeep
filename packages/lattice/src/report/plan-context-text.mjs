@@ -114,6 +114,24 @@ export function formatPlanContextReport({ project, coverage }) {
   sections.push(`${DETAIL}go.work        ${driftText(plan.drift.goWork)}`);
   sections.push(`${DETAIL}tsconfig paths ${driftText(plan.drift.tsconfigPaths)}`);
 
+  // Canonical Architecture Intent — the same fold `check` and `drift` report.
+  const intentCount = plan.intent?.findings.length ?? 0;
+  const intentUnresolved = plan.intent?.unresolved.length ?? 0;
+  sections.push(`Intent (${plan.intent ? "verified" : "no intent declared"})`);
+  if (!plan.intent) {
+    sections.push(
+      `${DETAIL}towards architecture-intent.json — the workspace declares no intent, so none is judged`,
+    );
+  } else {
+    const verdict =
+      intentCount > 0
+        ? `${intentCount} finding${intentCount === 1 ? "" : "s"}`
+        : intentUnresolved > 0
+          ? `no-verdict (${intentUnresolved} unresolvable)`
+          : "ok";
+    sections.push(`${DETAIL}${plan.intent.verdict}: ${verdict} (${plan.intent.rows} rows)`);
+  }
+
   // Verification commands.
   sections.push("Verify after the change");
   for (const command of plan.verify) {

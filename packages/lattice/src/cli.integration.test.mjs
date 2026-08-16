@@ -1418,6 +1418,52 @@ var _ = util.Name
     expect(planOut).toContain("✔ planning context complete");
     expect(planOut).toContain("Project  domain");
   });
+
+  it("folds the canonical architecture-intent verdict into result.plan when a tracked intent exists", async () => {
+    // The phase-4 pact: context --plan must consume the SAME canonical intent
+    // the drift/check commands share, not a parallel model. A tracked intent
+    // that forbids the observed domain → adapter edge must surface as
+    // plan.intent.verdict = "findings" with the file named — the empty-result
+    // invariant applied to the planning document.
+    writePlan(
+      "architecture-intent.json",
+      JSON.stringify({
+        version: "1",
+        boundaries: [
+          { name: "domains", match: ["tag:layer:domain"] },
+          { name: "adapters", match: ["tag:layer:adapter"] },
+        ],
+        forbidden: [
+          {
+            from: "domains",
+            to: "adapters",
+            reason: "adapter layers must stay below domain layers",
+          },
+        ],
+      }),
+    );
+    const tracked = [...planFiles, "architecture-intent.json"];
+    const streams = planEnv();
+    streams.listFiles = () => tracked;
+    expect(await runCli(["context", "domain", "--plan", "--format", "json"], streams)).toBe(
+      EXIT.ok,
+    );
+    const envelope = JSON.parse(streams.lines.out.join(""));
+    expect(envelope.result.plan.intent.verified).toBe(true);
+    expect(envelope.result.plan.intent.file).toBe("architecture-intent.json");
+    expect(envelope.result.plan.intent.verdict).toBe("findings");
+    const edge = envelope.result.plan.intent.findings.find(
+      (f) => f.source === "domain" && f.target === "adapter",
+    );
+    expect(edge).toBeDefined();
+    // The text report states the verdict, so a reader of the terminal sees the
+    // same contract as the JSON consumer.
+    const text = planEnv();
+    text.listFiles = () => tracked;
+    expect(await runCli(["context", "domain", "--plan"], text)).toBe(EXIT.ok);
+    expect(text.lines.out.join("")).toContain("Intent (verified)");
+    expect(text.lines.out.join("")).toContain("1 finding");
+  });
 });
 
 describe("the .json boundaryConfig dialect, end to end through the native provider", () => {
