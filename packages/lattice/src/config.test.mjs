@@ -467,6 +467,22 @@ describe("boundarySuppressions", () => {
       ).toEqual([]);
     });
 
+    it("rejects a calendar-impossible expiresAt that Date.parse would silently shift — a term that means a different day than written", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "2026-02-30T00:00:00.000Z" }]),
+        )[0],
+      ).toMatch(/silently shifted to another day/);
+    });
+
+    it("rejects an hour-out-of-range expiresAt that Date.parse would roll over", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "2026-01-01T24:00:00.000Z" }]),
+        )[0],
+      ).toMatch(/silently shifted to another day/);
+    });
+
     it("rejects an origin that is not a non-empty string", () => {
       expect(
         findBoundaryConfigViolations(

@@ -426,16 +426,40 @@ function suppressionRowViolations(row, index) {
     // machines' `TZ`. A waiver whose term means different things to different
     // machines is not a term; an instant-bearing spelling means the same
     // instant everywhere.
-    if (
-      typeof row.expiresAt !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(row.expiresAt) ||
-      Number.isNaN(Date.parse(row.expiresAt))
-    ) {
+    const expiryMatch =
+      typeof row.expiresAt === "string"
+        ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(row.expiresAt)
+        : null;
+    const expiry = expiryMatch ? Date.parse(row.expiresAt) : NaN;
+    // A calendar-impossible instant like `2026-02-30` passes the shape regex
+    // AND `Date.parse`, which silently normalises it to a different calendar
+    // day (`2026-03-02`) — a term that quietly extends acceptance past what
+    // its author wrote, the one direction this repository treats as poison.
+    // The written calendar fields are checked against the same fields of the
+    // instant they claim, independent of the string's timezone: `Date.UTC`
+    // normalises the impossible and the round-trip no longer matches.
+    const [, y, mo, d, h, mi, s] = expiryMatch ?? [];
+    const normalized =
+      expiryMatch && !Number.isNaN(expiry) ? new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)) : null;
+    const impossibleCalendar =
+      normalized !== null &&
+      (normalized.getUTCFullYear() !== +y ||
+        normalized.getUTCMonth() !== +mo - 1 ||
+        normalized.getUTCDate() !== +d ||
+        normalized.getUTCHours() !== +h ||
+        normalized.getUTCMinutes() !== +mi ||
+        normalized.getUTCSeconds() !== +s);
+    if (!expiryMatch || Number.isNaN(expiry) || impossibleCalendar) {
       violations.push(
         `${at}.expiresAt: must be a full ISO-8601 instant with an explicit UTC/offset, ` +
           `like "2026-09-01T00:00:00.000Z", got ${describe(row.expiresAt)} — a term with no ` +
           `designator is interpreted in the machine's local zone, so the same waiver would mean ` +
-          `different things under different TZ environments`,
+          `different things under different TZ environments${
+            impossibleCalendar
+              ? `; a calendar date this calendar does not contain (like ${`${y}-${mo}-${d}`}) would be ` +
+                `silently shifted to another day by the parser, extending the waiver past what was written`
+              : ""
+          }`,
       );
     }
   }
