@@ -35,6 +35,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [health.md](concepts/health.md)                           | What "architecture health" means, and the invariant behind every metric                |
 | [evidence.md](concepts/evidence.md)                       | The one verdict vocabulary every judgment speaks, and the evidence each state requires |
 | [provenance.md](concepts/provenance.md)                   | The origin record, why `on` is optional, and why provenance never rules                |
+| [adr.md](concepts/adr.md)                                 | Architecture decision records: the filename identity, the strict dialect, the refusals |
 | [waivers.md](concepts/waivers.md)                         | Temporary acceptance of a boundary breach, the lifecycle, and the deadline             |
 | [fitness-functions.md](concepts/fitness-functions.md)     | Named quality gates — the verdict contract and what each condition judges              |
 | [reconciliation.md](concepts/reconciliation.md)           | The inverse of drift: the model scored element by element, and proposed repairs        |
@@ -59,6 +60,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context                     |
 | [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained                |
 | [context.md](usage/context.md)                 | The `context` command: architecture constraints for one project                   |
+| [adr.md](usage/adr.md)                         | The `adr` command: recorded decisions, what each binds, and the reverse lookup    |
 | [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning                     |
 | [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look                          |
 
@@ -96,6 +98,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [architecture-intent.md](reference/architecture-intent.md) | The `architecture-intent.json` schema, the five sections, and the four verdict states                              |
 | [debt.md](reference/debt.md)                               | The architecture-debt ledger: entry kinds, age model, severity, and the refusals                                   |
 | [provenance.md](reference/provenance.md)                   | The `provenance` command: report shapes, the JSON envelope, exit codes                                             |
+| [adr.md](reference/adr.md)                                 | The `adr` command: report shapes, the JSON envelope, exit codes, the id name space                                 |
 | [reconciliation.md](reference/reconciliation.md)           | The scored element and candidate shapes behind `lattice reconcile`                                                 |
 | [languages.md](reference/languages.md)                     | What each analyzer reads, the shapes it cannot, and the two workspace checks                                       |
 | [violations.md](reference/violations.md)                   | Each of the fifteen violations: what it means, and what fixes it                                                   |
@@ -139,7 +142,7 @@ allowed to say it". That table:
 | [`docs/doctrine/principles.md`](doctrine/principles.md)                         | The seven binding principles                                                                                                                                                                |
 | [`docs/roadmap.md`](roadmap.md)                                                 | The staged path: what ships today, which capabilities belong to which major version, and in what order                                                                                      |
 | `docs/getting-started/`                                                         | Installation, first project, first policy                                                                                                                                                   |
-| `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, profiles, projects, drift, discovery, evidence, waivers, health, fitness functions, reconciliation, agentic development, integrations |
+| `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, profiles, projects, drift, discovery, evidence, provenance, adr, waivers, health, fitness functions, reconciliation, agentic development, integrations |
 | `docs/concepts/discovery.md`                                                    | Discovery: the proposal-only line, what is observed, the four candidate classes, uncertainty markers                                                                                        |
 | `docs/usage/`                                                                   | How a consumer runs it and reads its answers                                                                                                                                                |
 | `docs/integrations/`                                                            | The provider and editor integrations at the edge — Nx, Moon, and the VS Code extension                                                                                                      |
