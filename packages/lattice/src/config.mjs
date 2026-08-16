@@ -428,7 +428,9 @@ function suppressionRowViolations(row, index) {
     // instant everywhere.
     const expiryMatch =
       typeof row.expiresAt === "string"
-        ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(row.expiresAt)
+        ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(
+            row.expiresAt,
+          )
         : null;
     const expiry = expiryMatch ? Date.parse(row.expiresAt) : NaN;
     // A calendar-impossible instant like `2026-02-30` passes the shape regex
@@ -440,7 +442,9 @@ function suppressionRowViolations(row, index) {
     // normalises the impossible and the round-trip no longer matches.
     const [, y, mo, d, h, mi, s] = expiryMatch ?? [];
     const normalized =
-      expiryMatch && !Number.isNaN(expiry) ? new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)) : null;
+      expiryMatch && !Number.isNaN(expiry)
+        ? new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s))
+        : null;
     const impossibleCalendar =
       normalized !== null &&
       (normalized.getUTCFullYear() !== +y ||
