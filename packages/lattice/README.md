@@ -87,6 +87,32 @@ Both options default to the values above — the Nx conventions — so a workspa
 that follows them can register the integration by name alone. An unknown key
 throws rather than falling back to a default for the same reason as above.
 
+A workspace that enforces by **named law profile** instead of by file adds a
+third option, and `boundaryConfig` then names a profile from that registry
+rather than a filename:
+
+```json
+{
+  "plugins": [
+    {
+      "plugin": "@ecoma-io/lattice/nx",
+      "options": {
+        "boundaryConfig": "strict",
+        "tsConfig": "tsconfig.base.json",
+        "profiles": "law-profiles.json"
+      }
+    }
+  ]
+}
+```
+
+Every silent failure this tool refuses stays refused: a registry that cannot
+be read, a `base` that names nothing, a base chain that cycles, and a selected
+name the registry does not have all stop the run loudly rather than enforcing
+a smaller law than the workspace wrote. The language server does not follow a
+profile selection yet — it refuses loudly rather than reading a name as a
+file.
+
 `nx` is a peer dependency, and an optional one: it is resolved from your
 workspace, so the graph this tool reads is the one your own `nx` command builds,
 but nothing here bundles a copy. `lattice check` needs it only for project-graph

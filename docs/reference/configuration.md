@@ -112,15 +112,17 @@ For a workspace with an Nx root. Stated under `plugins[].options`:
 }
 ```
 
-| field            | type   | default                          | meaning                                             |
-| ---------------- | ------ | -------------------------------- | --------------------------------------------------- |
-| `boundaryConfig` | string | `"module-boundaries.config.mjs"` | Filename of the boundary law at the workspace root. |
-| `tsConfig`       | string | `"tsconfig.base.json"`           | Filename of the shared TypeScript config.           |
+| field            | type   | default                          | meaning                                                                                                                           |
+| ---------------- | ------ | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `boundaryConfig` | string | `"module-boundaries.config.mjs"` | Filename of the boundary law at the workspace root — or, when `profiles` is present, a profile NAME.                              |
+| `tsConfig`       | string | `"tsconfig.base.json"`           | Filename of the shared TypeScript config.                                                                                         |
+| `profiles`       | string | absent                           | Name of a profile registry file. When present, `boundaryConfig`/`--config` select a profile by name ([profiles.md](profiles.md)). |
 
-Both default to the Nx conventions, so a workspace that follows them can
-register the plugin by name alone. An unknown key throws at every consumer --
-the Nx hook, the CLI, and the language server -- rather than falling back to a
-default.
+`boundaryConfig` and `tsConfig` default to the Nx conventions, so a workspace
+that follows them can register the plugin by name alone. An unknown key throws
+at every consumer -- the Nx hook, the CLI, and the language server -- rather
+than falling back to a default. A `profiles` option is refused by the language
+server at startup, loudly, because it only ever reads a policy file.
 
 ## CLI flags
 

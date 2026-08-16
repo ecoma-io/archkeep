@@ -127,3 +127,8 @@ lattice check --config proposed-boundaries.mjs
 The file is resolved from the workspace root. It changes the boundary law, not
 the workspace root or provider. This is useful when reviewing a proposed policy
 without replacing the workspace's current one.
+
+A workspace that names a `profiles` option selects a law by name instead: the
+same `--config` then names a profile from the registry, and the run enforces
+that profile's effective block for one run
+([profiles.md](profiles.md) has the workflow).

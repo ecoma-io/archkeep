@@ -54,10 +54,13 @@ If your workspace renamed either file the plugin reads, say so:
 }
 ```
 
-Those two values are the defaults. There are no other options. An unknown key
-**throws** rather than falling back — a `tsconfigBase` typed for `tsConfig`
-that quietly used the default would give you a full green run against a rule
-nobody wrote.
+Those two values are the defaults. An unknown key **throws** rather than
+falling back — a `tsconfigBase` typed for `tsConfig` that quietly used the
+default would give you a full green run against a rule nobody wrote. A
+`profiles` option switches `boundaryConfig` from a filename to a profile name
+(`docs/concepts/profiles.md` owns that switch and the loud failures it adds).
+A workspace that names one is enforced by profile, and the editor refuses the
+workspace loudly rather than reading a name as a file.
 
 Confirm the plugin loaded:
 
@@ -95,12 +98,14 @@ loud immediately.
 
 ## Options
 
-Two filenames, and nothing else. Both are Nx conventions a workspace may rename.
+Three options; the first two are Nx conventions a workspace may rename, the
+third opts a workspace into named-law selection.
 
-| option           | default                        | what it names                                    |
-| ---------------- | ------------------------------ | ------------------------------------------------ |
-| `boundaryConfig` | `module-boundaries.config.mjs` | The file holding the constraint table            |
-| `tsConfig`       | `tsconfig.base.json`           | The shared TypeScript config for path resolution |
+| option           | default                        | what it names                                                               |
+| ---------------- | ------------------------------ | --------------------------------------------------------------------------- |
+| `boundaryConfig` | `module-boundaries.config.mjs` | The file holding the constraint table — or, with `profiles`, a profile name |
+| `tsConfig`       | `tsconfig.base.json`           | The shared TypeScript config for path resolution                            |
+| `profiles`       | absent                         | The profile registry file, when the workspace enforces by profile name      |
 
 ### Three consumers, three routes
 
