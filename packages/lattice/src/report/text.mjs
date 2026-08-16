@@ -235,6 +235,68 @@ export function formatTsconfigPaths(tsconfigPaths) {
 }
 
 /**
+ * The architecture-intent section — rendered only when the run HAS an intent
+ * verdict, decided nowhere here.
+ *
+ * `intent` is `null` (or absent) when the workspace has no tracked root
+ * `architecture-intent.json`, and then this prints nothing: a workspace
+ * without the declaration pays nothing and hears nothing, the same bargain
+ * `formatGoWork` and `formatTsconfigPaths` state. When the check ran, even a
+ * clean result is a line that counts the boundaries judged, because
+ * "architecture-intent agrees" is a claim about coverage the reader cannot
+ * otherwise tell apart from "nothing looked" — the same reason the go.work
+ * line counts modules.
+ *
+ * A no-verdict is a boundary (or a row side) that matched no observed project:
+ * the intent for that boundary cannot be verified, which is not a clean
+ * verdict. It renders as a warning line and the run fails (exit 3), the same
+ * posture a whole-file failure takes — an empty boundary must never read as a
+ * boundary that passed.
+ *
+ * @param {{verdict: "ok"|"findings"|"no-verdict", findings: object[],
+ *   unresolved: object[], boundaries: object[]}|null|undefined} intent
+ * @returns {string} Empty exactly when there is no intent verdict to render.
+ */
+export function formatIntentSection(intent) {
+  if (intent == null) return "";
+  const { verdict, findings, unresolved, boundaries } = intent;
+  const count = boundaries.length;
+  const label = `${count} boundar${count === 1 ? "y" : "ies"}`;
+  if (verdict === "ok") {
+    return `✔ architecture-intent agrees with the observed graph (${label})`;
+  }
+  if (verdict === "no-verdict") {
+    const entries = unresolved.map((entry) => {
+      const message = entry.issue
+        .split("\n")
+        .map((line) => (line === "" ? "" : `${CONTINUED}${line}`))
+        .join("\n");
+      return `${entry.boundary}  ${message}`;
+    });
+    return [
+      entries.join("\n\n"),
+      `⚠ architecture-intent.json reached no verdict on ${unresolved.length} ` +
+        `boundar${unresolved.length === 1 ? "y" : "ies"} — the intent ` +
+        `${unresolved.length === 1 ? "this boundary names" : "these boundaries name"} ` +
+        `could not be verified, and the run fails`,
+    ].join("\n\n");
+  }
+  const entries = findings.map((finding) => {
+    const message = finding.message
+      .split("\n")
+      .map((line) => (line === "" ? "" : `${CONTINUED}${line}`))
+      .join("\n");
+    return `${finding.rule}  ${message}`;
+  });
+  return [
+    entries.join("\n\n"),
+    `✖ architecture-intent findings: ${findings.length} ` +
+      `finding${findings.length === 1 ? "" : "s"} (${label}) — the intended ` +
+      `architecture and the observed one disagree, and the run fails`,
+  ].join("\n\n");
+}
+
+/**
  * The polyglot coverage gap section — rendered only when the Nx graph is known
  * to be missing polyglot edges that the checker's own analysis did cover.
  *
@@ -276,7 +338,7 @@ export function formatCoverageGaps(coverageGaps) {
  * that indistinguishability is the defect this whole tool exists to end
  * (`../../CLAUDE.md`).
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, coverageGaps?: object[], notes?: string[]}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, intent?: object|null, coverageGaps?: object[], notes?: string[]}} run
  * @returns {string}
  */
 export function formatReport({
@@ -287,6 +349,7 @@ export function formatReport({
   imports,
   goWork,
   tsconfigPaths,
+  intent,
   coverageGaps = [],
   notes = [],
 }) {
@@ -316,6 +379,9 @@ export function formatReport({
 
   const tsconfigPathsSection = formatTsconfigPaths(tsconfigPaths);
   if (tsconfigPathsSection !== "") sections.push(tsconfigPathsSection);
+
+  const intentSection = formatIntentSection(intent);
+  if (intentSection !== "") sections.push(intentSection);
 
   const coverageGapsSection = formatCoverageGaps(coverageGaps);
   if (coverageGapsSection !== "") sections.push(coverageGapsSection);
