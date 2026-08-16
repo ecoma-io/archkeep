@@ -1,0 +1,105 @@
+/**
+ * The terminal report for the `debt` command: the architecture-debt ledger as
+ * a table a reader can act on.
+ *
+ * Every section ends with a count, and the header states what the ledger is a
+ * claim about — how many entries, across how many snapshots, and whether the
+ * ages are real. `agings: false` is the debt-report way of saying "observed,
+ * not yet aged": ages are all 0 because the directory cannot establish time,
+ * and showing them as 0 while disclosing why keeps "this debt is exactly one
+ * snapshot old" from ever being read as "born yesterday".
+ *
+ * An empty ledger prints a "✔ no architecture debt" line — a claim about the
+ * whole comparison, never a bare zero. The aggregates are printed even when
+ * empty, so a reader can tell "no debt" from "the report forgot a section".
+ *
+ * This module decides nothing. A formatter that filtered would be a rule
+ * wearing a formatter's name (`../README.md`).
+ */
+
+/**
+ * Neutralises control and terminal-escape sequences in a name or value before
+ * it is printed, so a crafted suppression path, project name or finding cannot
+ * inject escape sequences into a consumer's terminal (`SECURITY.md`). The same
+ * sanitation every other report renderer uses.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function sanitize(text) {
+  // eslint-disable-next-line no-control-regex
+  return String(text).replace(/[\x00-\x1F\x7F]/g, (c) => {
+    if (c === "\n") return "\\n";
+    if (c === "\t") return "\\t";
+    if (c === "\r") return "\\r";
+    return `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`;
+  });
+}
+
+/**
+ * The whole debt report.
+ *
+ * @param {{ledger: {dir: string, snapshots: number, agings: boolean,
+ *   sampleTime: string, entries: {source: string, kind: string,
+ *   severity: string, age: number, count: number, remediationHint: string}[],
+ *   total: number, byKind: object, bySeverity: object},
+ *   coverage: object}} input
+ * @returns {string}
+ */
+export function formatDebtReport({ ledger, coverage }) {
+  const sections = [];
+
+  sections.push(`debt  ${ledger.dir}`);
+  const word = ledger.total === 1 ? "entry" : "entries";
+  const ageWord = ledger.agings
+    ? "a snapshot-relative ledger"
+    : "ages not yet established (fewer than two snapshots)";
+  sections.push(
+    `${ledger.total} ${word} across ${ledger.snapshots} snapshot${ledger.snapshots === 1 ? "" : "s"} — ${ageWord}`,
+  );
+
+  const orderedKinds = [
+    ["waiver", "waivers (accepted boundary violations)"],
+    ["aspirational-gap", "aspirational gaps (optional allowed rows not built)"],
+    ["drift", "drift findings"],
+    ["unresolved", "unresolved intent"],
+  ];
+  let sawAny = false;
+  for (const [kind, label] of orderedKinds) {
+    const items = ledger.entries.filter((e) => e.kind === kind);
+    if (items.length === 0) continue;
+    sawAny = true;
+    sections.push(`${items.length} ${label}:`);
+    for (const entry of items) {
+      const age = ledger.agings ? `age ${entry.age}` : "age not yet established";
+      sections.push(
+        `  [${entry.kind}] ${entry.severity}  ${sanitize(entry.source)}  (${age}, count ${entry.count})`,
+      );
+      sections.push(`    ${sanitize(entry.remediationHint)}`);
+    }
+  }
+
+  if (!sawAny) {
+    sections.push(
+      "✔ no architecture debt — no waivers, aspirational gaps, drift or unresolved intent",
+    );
+  }
+
+  sections.push(
+    `total ${ledger.total} ${word} · byKind: waiver ${ledger.byKind.waiver}, ` +
+      `aspirational-gap ${ledger.byKind["aspirational-gap"]}, drift ${ledger.byKind.drift}, ` +
+      `unresolved ${ledger.byKind.unresolved} · bySeverity: high ${ledger.bySeverity.high}, ` +
+      `medium ${ledger.bySeverity.medium}, low ${ledger.bySeverity.low}`,
+  );
+  sections.push(`sampled ${ledger.sampleTime}`);
+
+  // The coverage line states what the ledger is a claim about, the same
+  // disclosure every other report renderer makes (`graph-text.mjs`, etc.).
+  const inspected =
+    `${coverage.imports} import${coverage.imports === 1 ? "" : "s"} in ` +
+    `${coverage.analyzedFiles} file${coverage.analyzedFiles === 1 ? "" : "s"} across ` +
+    `${coverage.projects} project${coverage.projects === 1 ? "" : "s"}`;
+  sections.push(coverage.complete ? `✔ complete (${inspected})` : `✖ ${inspected}`);
+
+  return sections.join("\n");
+}

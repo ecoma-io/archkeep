@@ -14,6 +14,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `waivers`    | (none)               | List the boundary waivers on the table, with their terms                 | no               |
 | `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                   | no               |
 | `health`     | `[<snapshot-dir>]`   | Describe architecture health metrics and trends                          | no               |
+| `debt`       | `<dir>`              | Print the architecture-debt ledger across snapshots                      | no               |
 | `impact`     | `<project>`          | List projects that depend on the named project                           | no               |
 | `explain`    | `<file:line:column>` | Explain the judgment for one import site                                 | no               |
 | `context`    | `<project>`          | Show the architecture constraints that apply to a project                | no               |
@@ -177,6 +178,25 @@ as a transition rather than being swallowed by the identity match. An empty
 directory, an unreadable snapshot, or a malformed snapshot is a no-verdict run
 (exit 3), never a record of nothing.
 
+### `debt`
+
+| flag       | argument       | default                  | meaning                                                                     |
+| ---------- | -------------- | ------------------------ | --------------------------------------------------------------------------- |
+| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                             |
+| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                               |
+| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. |
+
+The directory is a single positional argument — the same consumer-managed
+history directory `history` reads, so the ledger ages across the same snapshots
+the evolution record is built from. The ledger is a report, never a gate: it
+lists the workspace's waivers (accepted violations), aspirational gaps
+(`optional` intent rows not yet built), and drift findings, each ranked by
+severity, aged across the snapshots (see `docs/reference/debt.md` for the four
+entry kinds, the age model, and what `agings: false` means). An unresolved
+intent, incomplete coverage, or an unreadable/malformed history directory is a
+no-verdict run (exit 3), never an empty ledger — an entry that cannot be read
+or verified must never read as "no debt".
+
 - Both `--flag value` and `--flag=value` work.
 - An unknown flag is a usage error (exit 2) rather than treated as a path.
   A typo like `--fromat sarif` would otherwise select no files and report a
@@ -184,9 +204,9 @@ directory, an unreadable snapshot, or a malformed snapshot is a no-verdict run
 - `--format` changes no exit code and no byte of the other formats. It is an
   additional rendering of the same verdict.
 - `--output` writes atomically (write to `.tmp`, then rename) so a reader
-  never sees a truncated file. A write failure is exit 3. For `history`,
-  pointing `--output` at a file inside the history directory is a usage error
-  (exit 2) — the report would be read back as a snapshot on the next run.
+  never sees a truncated file. A write failure is exit 3. For `history` and
+  `debt`, pointing `--output` at a file inside the history directory is a usage
+  error (exit 2) — the report would be read back as a snapshot on the next run.
 - `--config` does not move the workspace root. The tree being judged is still
   the consumer's.
 
@@ -208,9 +228,9 @@ analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
 A descriptive command (`graph`, `diff`, `drift`, `waivers`, `history`,
-`health`, `impact`, `explain`, `context`) exits 0 when it completes, 3 when
-coverage is incomplete or a metric is `unknown`, and 2 on usage error. None
-exits 1, because a descriptive result is never a finding.
+`health`, `debt`, `impact`, `explain`, `context`) exits 0 when it completes,
+3 when coverage is incomplete or a metric is `unknown`, and 2 on usage error.
+None exits 1, because a descriptive result is never a finding.
 
 ## What each command does
 
@@ -273,6 +293,16 @@ measure carries no number. Given a snapshot directory, the same structural
 metrics are reported across the snapshots `history` reads, with the disclosure
 that rule-impact cannot be re-derived from stored bytes. Descriptive — a
 description of health is never itself a finding.
+
+### `debt <dir>`
+
+Reads the same history directory `history` reads and builds the
+architecture-debt ledger: every waiver the boundary config accepts, every
+`optional` intent row not yet built, and every drift finding the intent judge
+reports — each aged across the snapshots by the owning project and ranked by
+severity. A drift finding in a project that also carries an accepted waiver is
+ranked HIGH and the waiver is still listed; the ledger must never hide a
+waiver that is failing today. Descriptive -- debt never makes it exit 1.
 
 ### `impact <project>`
 

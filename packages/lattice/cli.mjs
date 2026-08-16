@@ -67,7 +67,7 @@
  * shared rather than hand-rolled per command, so a new command is a new
  * row rather than a second copy of the dispatch and flag-parsing this file
  * used to own alone. The table is built for nine commands — `check`, `graph`,
- * `diff`, `drift`, `history`, `health`, `impact`, `explain`, `context`,
+ * `diff`, `drift`, `history`, `health`, `debt`, `impact`, `explain`, `context`,
  * `provenance` — with three flags shared across all of them (`--format`,
  * `--output`, `--config`) and `history`'s boolean `--capture`, the first flag
  * that takes no value. No subcommand nesting, and no shell completion to
@@ -89,6 +89,7 @@ import { fitnessCommand, fitnessForCheck } from "./src/commands/fitness.mjs";
 import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
 import { historyCommand } from "./src/commands/history.mjs";
 import { healthCommand } from "./src/commands/health.mjs";
+import { debtCommand } from "./src/commands/debt.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
 import { provenanceCommand } from "./src/commands/provenance-command.mjs";
@@ -1733,6 +1734,87 @@ async function runHistory(options, { cwd, env }) {
 }
 
 /**
+ * `debt`'s `run`: resolves the command context, drives `debtCommand`, writes
+ * the ledger report, and returns the exit code.
+ *
+ * The history directory is the single positional argument — the same
+ * consumer-managed directory `history` reads, so a ledger ages across the
+ * same snapshots the evolution record is built from.
+ *
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runDebt(options, { cwd, env }) {
+  if (options.paths.length !== 1) {
+    env.err(
+      `lattice: debt takes exactly one positional argument (the history directory); ` +
+        `got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  const dir = isAbsolute(options.paths[0]) ? options.paths[0] : resolve(cwd, options.paths[0]);
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    // The boundary law the ledger ages waivers against — resolved the same way
+    // `graph` and `diff` resolve it, so a `debt` run and a `check` run never
+    // disagree about the current suppressions.
+    const config = options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : typeof commandContext.options.boundaryConfig === "string"
+        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
+        : commandContext.options.boundaryConfig
+          ? policyFrom(
+              commandContext.options.boundaryConfig,
+              `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+            )
+          : null;
+
+    result = await debtCommand(dir, commandContext, { config });
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(
+      `lattice: ${result.ledger.total} debt entr` +
+        `${result.ledger.total === 1 ? "y" : "ies"} → ${options.output}`,
+    );
+  } else {
+    env.out(report);
+  }
+
+  // Debt is descriptive: 0 when the ledger completes, never 1.
+  return EXIT.ok;
+}
+
+/**
  * `health`'s `run`: resolves the command context, drives `healthCommand`,
  * writes the report where it belongs, and returns the process's exit code.
  *
@@ -2086,10 +2168,46 @@ const HEALTH_FLAG_HELP = Object.freeze([
     flag: "--config",
     key: "config",
     arg: "<file>",
+    describe: ({ boundaryConfig, inline }) =>
+      Object.freeze([
+        "Read the boundary law from here instead of",
+        inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
+      ]),
+  }),
+]);
+
+/**
+ * `debt`'s flags: text or JSON envelope, optional file output, and the same
+ * `--config` the other descriptive commands take, so a ledger ages the
+ * suppressions of the exact law it was run under.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const DEBT_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
     describe: Object.freeze([
-      "Read the boundary law from here instead of",
-      "<workspace root>/module-boundaries.config.mjs",
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
     ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: ({ boundaryConfig, inline }) =>
+      Object.freeze([
+        "Read the boundary law from here instead of",
+        inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
+      ]),
   }),
 ]);
 
@@ -2300,6 +2418,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runHealth,
+  }),
+  debt: Object.freeze({
+    name: "debt",
+    args: "<dir>",
+    summary: "Print the architecture-debt ledger across snapshots",
+    flagHelp: DEBT_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(DEBT_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runDebt,
   }),
   impact: Object.freeze({
     name: "impact",

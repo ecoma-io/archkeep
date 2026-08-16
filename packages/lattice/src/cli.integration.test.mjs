@@ -2742,6 +2742,22 @@ describe("the exit contract", () => {
     expect(result.stderr).toContain("unknown option '--fromat'");
   });
 
+  it("registers debt as a descriptive command with its own usage error", () => {
+    // A mistyped `debt` (no trailing 't') already falls into the unknown-
+    // command bucket above; this pins that `debt` itself is registered and
+    // its positional-argument contract is what a missing `<dir>` trips, NOT
+    // "unknown command". Regression direction: an unregistered command would
+    // report the usage error for the wrong reason.
+    const result = run(["debt"]);
+    expect(result.status).toBe(EXIT.usage);
+    expect(result.stderr).toContain("debt takes exactly one positional argument");
+
+    const mixed = run(["debt", "a", "b"]);
+    expect(mixed.status).toBe(EXIT.usage);
+    expect(mixed.stderr).toContain("debt takes exactly one positional argument");
+    expect(mixed.stderr).toContain("got 2");
+  });
+
   it("distinguishes a run that could not complete from a tree that is clean", async () => {
     // Exit 3, never 0 and never 1: a checker that could not look must not be
     // mistaken for one that looked and found nothing.
