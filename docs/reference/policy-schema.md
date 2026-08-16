@@ -118,7 +118,7 @@ projects its `match` selects, on every run.
 | field       | type     | required | meaning                                                                                                                                                   |
 | ----------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`      | string   | yes      | Letters, digits, `-` and `_` only -- no `:` (so a name can never collide with a selector label). Unique across the list.                                  |
-| `match`     | string[] | yes      | Non-empty list of project selectors (`name:x`, `tag:x`, `directory:x`, `*`, `!`). Zero selected projects is `skipped`, loudly.                            |
+| `match`     | string[] | yes      | Non-empty list of project selectors (`name:x`, `tag:x`, `directory:x`, `*`, `!`). Zero selected projects is `not_applicable`, loudly.                    |
 | `condition` | object   | yes      | One condition type plus its fields. See the table below.                                                                                                  |
 | `reason`    | string   | yes      | Non-empty. A fitness function is a policy decision, and one with no reason written down is indistinguishable from a policy that quietly stopped applying. |
 

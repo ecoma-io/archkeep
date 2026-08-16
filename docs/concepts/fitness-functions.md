@@ -11,7 +11,7 @@ boundary suppressions.
 Fitness functions are named, declared, and machine-checkable. Each is a small
 quality gate the workspace holds itself to, and each produces one of four
 verdicts on every run: `pass`, `fail`, `unknown` (the run could not determine
-it), or `skipped` (its `match` selected no project).
+it), or `not_applicable` (its `match` selected no project).
 
 ## Why they exist
 
@@ -42,13 +42,15 @@ what `pass` may mean and what it may not:
   project carries; a `coverage-minimum` over zero owned files; `drift-free`
   over no intent), and the function's `match` could not be judged against the
   observed graph.
-- **`skipped`** — a declared function whose `match` selects zero projects.
-  Reported loudly — "declared but matches nothing" — never folded into `pass`.
+- **`not_applicable`** — a declared function whose `match` selects zero
+  projects. Reported loudly — "declared but matches nothing" — never folded
+  into `pass`, and it names a `notApplicableReason` so the reader can tell
+  "did not apply" from "did not run".
 
 The silent direction this tool exists to end is the one where an empty result
 reads as "checked, clean". A function that cannot be determined is therefore
-`unknown`, and a function that matches nothing is `skipped`: neither may read as
-a function that passed.
+`unknown`, and a function that matches nothing is `not_applicable`: neither may
+read as a function that passed.
 
 ## Declaration
 

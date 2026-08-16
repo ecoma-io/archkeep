@@ -34,9 +34,11 @@
  *     matched project carries; a `coverage-minimum` over zero owned
  *     statements; `drift-free` over no intent), and the function's `match`
  *     itself could not be judged against the observed graph.
- *   - `skipped` — a declared function whose `match` selects zero projects.
- *     Reported loudly — "declared but matches nothing" — never folded into
- *     `pass`.
+ *   - `not_applicable` — a declared function whose `match` selects zero
+ *     projects, so it could not be judged. Reported loudly — "declared but
+ *     matches nothing" — never folded into `pass`. Invariant I4
+ *     (`../governance/verdict.mjs`) requires it to name a
+ *     `notApplicableReason`.
  *
  * ## Determinism
  *

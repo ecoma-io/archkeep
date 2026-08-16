@@ -11,7 +11,7 @@ lattice fitness --format json --output fitness.json
 `fitness` takes no positional arguments — the observed side is the whole project
 graph plus the workspace analysis, and the declared side is the `fitness` export
 of the workspace's boundary policy. It prints a verdict table: one line per
-function (`✔ pass`, `✖ fail`, `⚠ unknown`, `◌ skipped`) naming the function and
+function (`✔ pass`, `✖ fail`, `⚠ unknown`, `◌ not_applicable`) naming the function and
 the evidence that decided it, then an overall posture line.
 
 ## What is judged
