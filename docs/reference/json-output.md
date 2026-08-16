@@ -62,6 +62,7 @@ follows) are both written for each command to reuse the same wrapper.
 | `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"lattice.json"`, `".moon"`, or `".config/moon"`). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                 |
 | `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                                                                                                          |
+| `decision`      | object \| absent                         | The same verdict in the four-state vocabulary — `{verdict, reason?, notApplicableReason?, sampleTime?}`. Present on every `check` envelope; see [evidence.md](evidence.md).                                                                                                                                             |
 | `coverage`      | object                                   | What the run inspected, and what it could not. See below.                                                                                                                                                                                                                                                               |
 | `result`        | object                                   | The command's own payload — for `check`, the violations, the two workspace-level checks, and — when the workspace has one — the architecture-intent verdict. See below.                                                                                                                                                 |
 
@@ -94,6 +95,31 @@ unanalyzed file still reports `"findings"` — a violation is a certain verdict
 regardless of what else the run could not reach, and the unreached files are
 still listed in `coverage.notAnalyzed`. Only a run with **no** findings can be
 downgraded from `"ok"` to `"no-verdict"`.
+
+## `decision`, and the status it must agree with
+
+`decision` renders the same verdict the `status`/`exitCode` pair already
+carries into the canonical four-state vocabulary
+([evidence.md](evidence.md) is the vocabulary's source). It is present on every
+`check` envelope and absent from every other command's, and its `verdict` is
+exactly the one `status` implies — `"ok"` → `"pass"`, `"findings"` → `"fail"`,
+`"no-verdict"` → `"unknown"`. `jsonEnvelope` throws rather than build an
+envelope where `decision.verdict` and `status` disagree, the same consistency
+rule the `status`/`exitCode` table enforces.
+
+| field                 | type   | meaning                                                                                                                                                                                |
+| --------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verdict`             | string | `"pass"` \| `"fail"` \| `"unknown"`. `"not_applicable"` has no status and never reaches this release's envelopes.                                                                      |
+| `reason`              | string | **Always present on `"unknown"`** — names which could-not-look condition fired: `"coverage was incomplete"`, the file count that could not be analyzed, an unresolved intent boundary. |
+| `notApplicableReason` | string | Present only on `"not_applicable"` — unreachable in this release.                                                                                                                      |
+| `sampleTime`          | string | **Opt-in, absent by default.** An ISO-8601 UTC instant a time-based capability adds via the shared reference clock. The envelope is otherwise byte-deterministic.                      |
+
+`reason` on an `"unknown"` decision is the fourth place the envelope states what
+the run actually inspected: `status` says the run could not reach a verdict,
+`coverage.notAnalyzed` lists the files, and `decision.reason` says which
+could-not-look condition produced the whole result. A consumer that wants to
+distinguish "coverage incomplete" from "intent could not be established" reads
+it here.
 
 ## `coverage`
 
@@ -378,6 +404,7 @@ three declared blind spots and nothing else to say:
   },
   "status": "ok",
   "exitCode": 0,
+  "decision": { "verdict": "pass" },
   "coverage": {
     "complete": true,
     "projects": 2,
@@ -419,7 +446,8 @@ Three declared blind spots, zero violations, `goWork`/`tsconfigPaths` both
 `null` — this workspace has neither a `go.work` nor a tsconfig `paths` table —
 and `status: "ok"` because every one of the 120 analyzed files reached a
 verdict; the three blind spots are site-level, not whole-file, so they never
-touch `coverage.complete`.
+touch `coverage.complete`. `decision` renders the same verdict in the
+vocabulary: `{ "verdict": "pass" }`.
 
 ## What this is not, yet
 

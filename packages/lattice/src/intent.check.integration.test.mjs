@@ -141,6 +141,15 @@ describe("architecture intent through check — the absent-declaration pact", ()
     expect(envelope.result.intent.verdict).toBe("no-verdict");
     expect(envelope.exitCode).toBe(EXIT.error);
     expect(envelope.status).toBe("no-verdict");
+    // The canonical four-state verdict of the same run, through the CLI: an
+    // intent boundary that matched nothing emits `unknown` with the reason
+    // naming the half that could not look — never the `pass` that would read
+    // as "checked, and fine". This is the intent leg of the reason R1's
+    // review asked to see pinned end to end.
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.decision.reason).toContain(
+      "1 architecture-intent boundary or row could not be established",
+    );
   });
 
   it("reports a forbidden edge as a finding — exit 1, intent key present, envelope carries it", async () => {

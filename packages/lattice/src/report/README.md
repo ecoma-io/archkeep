@@ -42,6 +42,13 @@ dependencies)` for projects with no edges, and a coverage claim above the
   id, and each transition classified (architecture / policy / provider /
   code drift / unchanged) with its changes and disclosure notes. Renders the
   same payload `json.mjs` wraps; decides nothing.
+- `evidence.mjs` — the decision builder, `buildDecision`: turns a command's
+  verdict counts into the `decision` the envelope optionally carries, enforcing
+  the five evidence invariants (`../governance/verdict.mjs` states them) in
+  code — `pass` requires complete coverage, `fail` requires a finding, `unknown`
+  requires a reason, `not_applicable` requires `notApplicableReason`, and a
+  could-not-determine run is never a `pass`. It decides nothing about whether a
+  finding IS one; it throws when the verdict and its evidence disagree.
 
 `json.mjs` is not a formatter in that sense — it does not turn violations into
 output. `jsonEnvelope` wraps whatever result object a command already computed
@@ -53,7 +60,8 @@ incomplete coverage, `status` and `exitCode` never disagree, and
 `coverage.complete` never disagrees with whether `coverage.notAnalyzed` is
 empty. It throws rather than degrade on any of the three, because a mismatch
 there is a bug in the command that built the envelope, not a fact about the
-workspace being judged.
+workspace being judged. It also refuses a `decision` whose `verdict` contradicts
+the envelope's `status` — the same rule, at the evidence layer.
 
 ## Where the LSP conversion lives, and why not here
 

@@ -148,6 +148,127 @@ describe("jsonEnvelope", () => {
       { kind: "unregistered-plugin", manifests: ["libs/a/go.mod"] },
     ]);
   });
+
+  it("writes an optional decision through when present, and omits it when absent", () => {
+    // The additive contract: `decision` is a field a command opts into, and
+    // its absence keeps an envelope byte-compatible with one predating it.
+    const withDecision = jsonEnvelope({
+      command: "check",
+      context,
+      status: "findings",
+      exitCode: 1,
+      coverage: cleanCoverage(),
+      result: { violations: [{}] },
+      decision: { verdict: "fail" },
+    });
+    expect(withDecision.decision).toEqual({ verdict: "fail" });
+
+    const withoutDecision = jsonEnvelope({
+      command: "check",
+      context,
+      status: "findings",
+      exitCode: 1,
+      coverage: cleanCoverage(),
+      result: { violations: [{}] },
+    });
+    expect(Object.hasOwn(withoutDecision, "decision")).toBe(false);
+  });
+
+  it("throws when decision.verdict contradicts the envelope's status — the two must never lie", () => {
+    // The silent direction: a decision that disagrees with its own status
+    // would let a reader trust whichever field it read first.
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "findings",
+        exitCode: 1,
+        coverage: cleanCoverage(),
+        result: { violations: [{}] },
+        decision: { verdict: "pass" },
+      }),
+    ).toThrow(/decision\.verdict "pass" contradicts status "findings"/);
+
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "ok",
+        exitCode: 0,
+        coverage: cleanCoverage(),
+        result: {},
+        decision: { verdict: "not_applicable", notApplicableReason: "why" },
+      }),
+    ).toThrow(/decision\.verdict "not_applicable" contradicts status "ok"/);
+
+    // The third status, pinned for the same reason as the other two: an
+    // "unknown" decision on a findings envelope would read as could-not-look
+    // while the envelope's status names a certain violation — one of the two
+    // is a lie.
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "findings",
+        exitCode: 1,
+        coverage: cleanCoverage(),
+        result: { violations: [{}] },
+        decision: { verdict: "unknown", reason: "coverage was incomplete" },
+      }),
+    ).toThrow(/decision\.verdict "unknown" contradicts status "findings"/);
+  });
+
+  it("refuses a decision that is null or not an object, with the named message rather than a raw TypeError", () => {
+    // Minor from R1: `decision: null` used to pass the `!== undefined` guard
+    // and crash on `.verdict` — loud, but a confusing programming error
+    // instead of the "refusing to build a JSON envelope" message the other
+    // guards give.
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "ok",
+        exitCode: 0,
+        coverage: cleanCoverage(),
+        result: {},
+        decision: null,
+      }),
+    ).toThrow(/decision is null .*rather than an object/);
+
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "ok",
+        exitCode: 0,
+        coverage: cleanCoverage(),
+        result: {},
+        // A cast: the test deliberately feeds a non-object decision (the
+        // guard rejects it), which the envelope's JSDoc does not admit.
+        decision: /** @type {any} */ ("pass"),
+      }),
+    ).toThrow(/decision is a string .*rather than an object/);
+  });
+
+  it("refuses an unknown decision without a reason", () => {
+    // R1 latch: jsonEnvelope is the last boundary a hand-built decision
+    // crosses, so the invariant I3 (reason on unknown) from
+    // governance/evidence.mjs is enforced here too — the current engine
+    // path never reaches this (buildDecision always supplies a reason), but
+    // a future command building a decision by hand must not be able to ship
+    // a reason-less "no verdict" past this boundary.
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "no-verdict",
+        exitCode: 3,
+        coverage: cleanCoverage(),
+        result: {},
+        decision: { verdict: "unknown" },
+      }),
+    ).toThrow(/an "unknown" decision has no reason/);
+  });
 });
 
 describe("renderJson", () => {
