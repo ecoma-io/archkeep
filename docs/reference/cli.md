@@ -4,21 +4,23 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 
 ## Commands
 
-| command      | positional args      | summary                                                                  | finds violations |
-| ------------ | -------------------- | ------------------------------------------------------------------------ | ---------------- |
-| `check`      | `[<path>...]`        | Check imports against the boundary rules                                 | yes -- exits 1   |
-| `graph`      | (none)               | Print the project graph as a deterministic snapshot                      | no               |
-| `diff`       | `<baseline>`         | Compare two graph snapshots edge by edge                                 | no               |
-| `drift`      | (none)               | Compare the observed architecture to the declared intent                 | no               |
-| `discover`   | (none)               | Report observed facts, and optionally propose candidates                 | no               |
-| `fitness`    | (none)               | Judge every declared fitness function against the workspace              | no               |
-| `waivers`    | (none)               | List the boundary waivers on the table, with their terms                 | no               |
-| `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                   | no               |
-| `health`     | `[<snapshot-dir>]`   | Describe architecture health metrics and trends                          | no               |
-| `impact`     | `<project>`          | List projects that depend on the named project                           | no               |
-| `explain`    | `<file:line:column>` | Explain the judgment for one import site                                 | no               |
-| `context`    | `<project>`          | Show the architecture constraints that apply to a project                | no               |
-| `provenance` | (none)               | Describe where this run's facts came from and which rows carry an origin | no               |
+| command      | positional args      | summary                                                                                            | finds violations |
+| ------------ | -------------------- | -------------------------------------------------------------------------------------------------- | ---------------- |
+| `check`      | `[<path>...]`        | Check imports against the boundary rules                                                           | yes -- exits 1   |
+| `graph`      | (none)               | Print the project graph as a deterministic snapshot                                                | no               |
+| `diff`       | `<baseline>`         | Compare two graph snapshots edge by edge                                                           | no               |
+| `drift`      | (none)               | Compare the observed architecture to the declared intent                                           | no               |
+| `discover`   | (none)               | Report observed facts, and optionally propose candidates                                           | no               |
+| `reconcile`  | (none)               | Score the declared intent against the observed architecture, with proposed edits under `--propose` | no               |
+| `fitness`    | (none)               | Judge every declared fitness function against the workspace                                        | no               |
+| `waivers`    | (none)               | List the boundary waivers on the table, with their terms                                           | no               |
+| `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                                             | no               |
+| `health`     | `[<snapshot-dir>]`   | Describe architecture health metrics and trends                                                    | no               |
+| `debt`       | `<dir>`              | Print the architecture-debt ledger across snapshots                                                | no               |
+| `impact`     | `<project>`          | List projects that depend on the named project                                                     | no               |
+| `explain`    | `<file:line:column>` | Explain the judgment for one import site                                                           | no               |
+| `context`    | `<project>`          | Show the architecture constraints that apply to a project                                          | no               |
+| `provenance` | (none)               | Describe where this run's facts came from and which rows carry an origin                           | no               |
 
 `lattice --help` prints the help text and exits 0. An omitted command name is a
 usage error (exit 2). If the first positional argument names a path that exists
@@ -121,6 +123,25 @@ coverage is a refusal — a proposal over an unread tree would be a fabrication
 wearing a proposal's name. Every candidate carries the markers `proposed: true`
 and `notAuthoritative: true` and is never written to `architecture-intent.json`.
 
+### `reconcile`
+
+| flag        | argument       | default | meaning                                                                                                            |
+| ----------- | -------------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| `--format`  | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope.                                                                    |
+| `--output`  | `<file>`       | stdout  | Write the report to a file instead of stdout.                                                                      |
+| `--propose` | (none)         | off     | Emit a ranked candidate list of model edits, each marked proposed — never written into `architecture-intent.json`. |
+
+No positional arguments. Reconcile is descriptive — it never exits 1, only 0 on
+a completed comparison and 3 when coverage is incomplete or the intent cannot be
+verified. It never writes into `architecture-intent.json`; `--propose` adds the
+ranked candidate list (add, removal, tag-change, boundary-change) marked
+`proposed: true` / `notAuthoritative: true`. The intended side is the tracked
+`architecture-intent.json` at the workspace root. A boundary or row side that
+matched no observed project so the comparison cannot be completed exits 3 with a
+loud message — "cannot verify" must never read as "no divergence". See
+[reconciliation.md](reconciliation.md) and
+[usage/reconcile.md](../usage/reconcile.md).
+
 ### `impact`
 
 | flag       | argument       | default                  | meaning                                                                                                                                         |
@@ -193,6 +214,25 @@ as a transition rather than being swallowed by the identity match. An empty
 directory, an unreadable snapshot, or a malformed snapshot is a no-verdict run
 (exit 3), never a record of nothing.
 
+### `debt`
+
+| flag       | argument       | default                  | meaning                                                                     |
+| ---------- | -------------- | ------------------------ | --------------------------------------------------------------------------- |
+| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                             |
+| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                               |
+| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. |
+
+The directory is a single positional argument — the same consumer-managed
+history directory `history` reads, so the ledger ages across the same snapshots
+the evolution record is built from. The ledger is a report, never a gate: it
+lists the workspace's waivers (accepted violations), aspirational gaps
+(`optional` intent rows not yet built), and drift findings, each ranked by
+severity, aged across the snapshots (see `docs/reference/debt.md` for the four
+entry kinds, the age model, and what `agings: false` means). An unresolved
+intent, incomplete coverage, or an unreadable/malformed history directory is a
+no-verdict run (exit 3), never an empty ledger — an entry that cannot be read
+or verified must never read as "no debt".
+
 - Both `--flag value` and `--flag=value` work.
 - An unknown flag is a usage error (exit 2) rather than treated as a path.
   A typo like `--fromat sarif` would otherwise select no files and report a
@@ -200,9 +240,9 @@ directory, an unreadable snapshot, or a malformed snapshot is a no-verdict run
 - `--format` changes no exit code and no byte of the other formats. It is an
   additional rendering of the same verdict.
 - `--output` writes atomically (write to `.tmp`, then rename) so a reader
-  never sees a truncated file. A write failure is exit 3. For `history`,
-  pointing `--output` at a file inside the history directory is a usage error
-  (exit 2) — the report would be read back as a snapshot on the next run.
+  never sees a truncated file. A write failure is exit 3. For `history` and
+  `debt`, pointing `--output` at a file inside the history directory is a usage
+  error (exit 2) — the report would be read back as a snapshot on the next run.
 - `--config` does not move the workspace root. The tree being judged is still
   the consumer's.
 
@@ -223,10 +263,11 @@ build; they differ in what you go and look at, not in whether you go and look.
 analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
-A descriptive command (`graph`, `diff`, `drift`, `waivers`, `history`,
-`health`, `impact`, `explain`, `context`, `discover`) exits 0 when it
-completes, 3 when coverage is incomplete or a metric is `unknown`, and 2 on
-usage error. None exits 1, because a descriptive result is never a finding.
+A descriptive command (`graph`, `diff`, `drift`, `discover`, `reconcile`,
+`fitness`, `waivers`, `history`, `health`, `debt`, `impact`, `explain`,
+`context`, `provenance`) exits 0 when it completes, 3 when coverage is
+incomplete or a metric is `unknown`, and 2 on usage error. None exits 1,
+because a descriptive result is never a finding.
 
 ## What each command does
 
@@ -298,6 +339,26 @@ measure carries no number. Given a snapshot directory, the same structural
 metrics are reported across the snapshots `history` reads, with the disclosure
 that rule-impact cannot be re-derived from stored bytes. Descriptive — a
 description of health is never itself a finding.
+
+### `debt <dir>`
+
+Reads the same history directory `history` reads and builds the
+architecture-debt ledger: every waiver the boundary config accepts, every
+`optional` intent row not yet built, and every drift finding the intent judge
+reports — each aged across the snapshots by the owning project and ranked by
+severity. A drift finding in a project that also carries an accepted waiver is
+ranked HIGH and the waiver is still listed; the ledger must never hide a
+waiver that is failing today. Descriptive -- debt never makes it exit 1.
+
+### `reconcile`
+
+Scores the declared intended model against the observed architecture element by
+element — projects, edges, tags, boundaries, and every intent row in file order
+— and reports the divergence plane by plane. `--propose` adds the ranked
+candidate list of model edits (add, removal, tag-change, boundary-change), each
+carrying its evidence and an explicit `proposed` / `notAuthoritative` marker;
+the list is a suggestion, never an applied change, and the intent file stays
+byte-identical after every run. Descriptive.
 
 ### `impact <project>`
 

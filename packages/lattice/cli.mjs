@@ -1944,6 +1944,8 @@ async function runDiscover(options, { cwd, env }) {
 /**
  * `health`'s `run`: resolves the command context, drives `healthCommand`,
  * writes the report where it belongs, and returns the process's exit code.
+ * `health`'s `run`: resolves the command context, drives `healthCommand`,
+ * writes the report where it belongs, and returns the process's exit code.
  *
  * `health` takes no positional arguments — it measures the whole workspace.
  * The snapshot directory for trends is the single optional positional

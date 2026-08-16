@@ -46,11 +46,14 @@ A new reader should find these capabilities described as present, not promised.
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer. ([reference/exit-codes.md](reference/exit-codes.md))
-- **Eight commands — `check`, `graph`, `impact`, `diff`, `explain`, `history`,
-  `context`, `fitness`** — each with output a script or an agent can consume
-  without parsing prose. `history` records the architecture's evolution across
-  captured snapshots — the deterministic half of "how it got here".
-  ([reference/cli.md](reference/cli.md), [usage/history.md](usage/history.md))
+- **Thirteen commands — `check`, `graph`, `impact`, `diff`, `explain`,
+  `history`, `context`, `fitness`, `waivers`, `drift`, `provenance`, `health`,
+  `debt`** — each with output a script or an agent can consume without parsing
+  prose. `history` records the architecture's evolution across captured
+  snapshots — the deterministic half of "how it got here" — and `debt` ages the
+  workspace's waivers, gaps and drift across that same record.
+  ([reference/cli.md](reference/cli.md), [usage/history.md](usage/history.md),
+  [usage/debt.md](usage/debt.md))
 - **Nx and Moon as first-class integrations, not dependencies.** A workspace
   that has Nx or Moon gets graph reuse and `affected` integration; a repository
   that has neither loses nothing.
