@@ -30,9 +30,12 @@
  * `"ok"` implies `"pass"`, `"findings"` implies `"fail"`, `"no-verdict"`
  * implies `"unknown"`. A decision that contradicts its status would make one
  * of them a lie — the exact class of disagreement this module refuses to
- * ship. The field is OPTIONAL (absent on every envelope that does not opt
- * in), which is what keeps SCHEMA_VERSION at 2: additive, byte-compatible
- * with every consumer that reads the envelope today.
+ * ship. The same refusal covers the invariant the uncertain verdict carries:
+ * an `"unknown"` decision must name the reason no verdict was reached, so a
+ * hand-built decision cannot slip a reason-less "no verdict" past the last
+ * boundary it crosses. The field is OPTIONAL (absent on every envelope that
+ * does not opt in), which is what keeps SCHEMA_VERSION at 2: additive,
+ * byte-compatible with every consumer that reads the envelope today.
  */
 import { verdictForStatus } from "../governance/verdict.mjs";
 import { createRequire } from "node:module";
@@ -99,13 +102,44 @@ export function jsonEnvelope({ command, context, status, exitCode, coverage, res
         `run for a complete one.`,
     );
   }
-  if (decision !== undefined && decision.verdict !== verdictForStatus(status)) {
+  // A bare `null` decision is the same programming error as a hand-built
+  // decision that contradicts its status: refuse it with the named message
+  // rather than crash on `decision.verdict` with a raw TypeError.
+  if (decision !== undefined && (decision === null || typeof decision !== "object")) {
     throw new Error(
-      `lattice: refusing to build a JSON envelope where decision.verdict "${decision.verdict}" ` +
-        `contradicts status "${status}" — status implies ${verdictForStatus(status)}, and a ` +
-        `decision that disagrees with its own status would make one of the two a lie. ` +
+      `lattice: refusing to build a JSON envelope where decision is ${decision === null ? "null" : `a ${typeof decision}`} ` +
+        `rather than an object — a decision must carry a verdict that agrees with its status. ` +
         `This is a bug in the command that built the envelope.`,
     );
+  }
+  if (decision != null) {
+    const implied = verdictForStatus(status);
+    if (decision.verdict !== implied) {
+      throw new Error(
+        `lattice: refusing to build a JSON envelope where decision.verdict "${decision.verdict}" ` +
+          `contradicts status "${status}" — status implies ${implied}, and a ` +
+          `decision that disagrees with its own status would make one of the two a lie. ` +
+          `This is a bug in the command that built the envelope.`,
+      );
+    }
+    // I3, enforced again at this boundary — `src/governance/evidence.mjs`
+    // already guarantees it for the engine path, but a hand-built decision
+    // would otherwise ship an "unknown" without the reason I3 requires and
+    // only this boundary would ever see the mistake. I2 (findings on "fail")
+    // gets no latch here for the same reason I4 gets none: the other
+    // invariants already pin every route a "fail" can take — `verdictForStatus`
+    // only returns "fail" for a "findings" status, and this module knows no
+    // command's payload, so counting findings would mean reaching into
+    // `result`. A hand-built "fail" with no findings is still a loud lie
+    // (status "findings", exitCode 1, verdict "fail"), never the silent
+    // direction.
+    if (decision.verdict === "unknown" && decision.reason === undefined) {
+      throw new Error(
+        `lattice: refusing to build a JSON envelope where an "unknown" decision has no reason — ` +
+          `I3: an unknown verdict must say why no verdict was reached, or it reads as a shrug. ` +
+          `This is a bug in the command that built the envelope.`,
+      );
+    }
   }
 
   return {
@@ -122,7 +156,7 @@ export function jsonEnvelope({ command, context, status, exitCode, coverage, res
     exitCode,
     coverage,
     result,
-    ...(decision === undefined ? {} : { decision }),
+    ...(decision == null ? {} : { decision }),
   };
 }
 

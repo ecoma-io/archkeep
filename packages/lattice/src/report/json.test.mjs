@@ -217,6 +217,58 @@ describe("jsonEnvelope", () => {
       }),
     ).toThrow(/decision\.verdict "unknown" contradicts status "findings"/);
   });
+
+  it("refuses a decision that is null or not an object, with the named message rather than a raw TypeError", () => {
+    // Minor from R1: `decision: null` used to pass the `!== undefined` guard
+    // and crash on `.verdict` — loud, but a confusing programming error
+    // instead of the "refusing to build a JSON envelope" message the other
+    // guards give.
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "ok",
+        exitCode: 0,
+        coverage: cleanCoverage(),
+        result: {},
+        decision: null,
+      }),
+    ).toThrow(/decision is null .*rather than an object/);
+
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "ok",
+        exitCode: 0,
+        coverage: cleanCoverage(),
+        result: {},
+        // A cast: the test deliberately feeds a non-object decision (the
+        // guard rejects it), which the envelope's JSDoc does not admit.
+        decision: /** @type {any} */ ("pass"),
+      }),
+    ).toThrow(/decision is a string .*rather than an object/);
+  });
+
+  it("refuses an unknown decision without a reason", () => {
+    // R1 latch: jsonEnvelope is the last boundary a hand-built decision
+    // crosses, so the invariant I3 (reason on unknown) from
+    // governance/evidence.mjs is enforced here too — the current engine
+    // path never reaches this (buildDecision always supplies a reason), but
+    // a future command building a decision by hand must not be able to ship
+    // a reason-less "no verdict" past this boundary.
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "no-verdict",
+        exitCode: 3,
+        coverage: cleanCoverage(),
+        result: {},
+        decision: { verdict: "unknown" },
+      }),
+    ).toThrow(/an "unknown" decision has no reason/);
+  });
 });
 
 describe("renderJson", () => {

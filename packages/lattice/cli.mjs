@@ -452,11 +452,21 @@ function verdictFor({
         coverageComplete: unchecked === 0,
         findings: 0,
         // The could-not-look condition, named so a reader knows WHICH half of
-        // the run did not reach a verdict (I3).
-        reason:
+        // the run did not reach a verdict (I3). When read-only coverage and
+        // intent both failed, name both — a reason naming only the file count
+        // would hide the unresolved intent boundary from a reader acting on
+        // the reason alone (it stays visible in result.intent.unresolved, and
+        // status is still no-verdict, so nothing is silent).
+        reason: [
           unchecked > 0
             ? `${unchecked} file${unchecked === 1 ? "" : "s"} could not be analyzed — coverage incomplete`
-            : `${intentUnresolved} architecture-intent boundary or row${intentUnresolved === 1 ? "" : "s"} could not be established`,
+            : null,
+          unchecked === 0 && intentUnresolved > 0
+            ? `${intentUnresolved} architecture-intent boundary or row${intentUnresolved === 1 ? "" : "s"} could not be established`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("; "),
       }),
     };
   }
