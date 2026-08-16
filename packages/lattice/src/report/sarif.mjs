@@ -46,6 +46,7 @@
  * breaking even when no API moved, so it lands as its own decision rather than
  * as a side effect of a comment being corrected.
  */
+import { INTENT_MESSAGE_IDS, INTENT_MESSAGES } from "../architecture-intent/judge.mjs";
 import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
 import { MESSAGE_IDS, MESSAGES } from "../rules/messages.mjs";
 import { TSCONFIG_PATHS_MESSAGE_IDS, TSCONFIG_PATHS_MESSAGES } from "../tsconfig-paths.mjs";
@@ -75,8 +76,8 @@ export function toUriReference(path) {
 /**
  * The rule catalogue: one descriptor per `messageId` a run can produce — the
  * upstream boundary ids in `MESSAGE_IDS` order, then this package's own
- * go.work drift ids, then its tsconfig paths hygiene ids, so `ruleIndex` is an
- * index into this exact array.
+ * go.work drift ids, then its tsconfig paths hygiene ids, then its
+ * architecture-intent ids, so `ruleIndex` is an index into this exact array.
  *
  * Every id is listed, not only the ones that fired. A GitHub alert shows the
  * rule's description beside the finding, and a catalogue that grew only as
@@ -114,6 +115,13 @@ export function sarifRules() {
       name: id,
       shortDescription: { text: TSCONFIG_PATHS_MESSAGES[id].split("\n")[0] },
       fullDescription: { text: TSCONFIG_PATHS_MESSAGES[id] },
+      defaultConfiguration: { level: "error" },
+    })),
+    ...INTENT_MESSAGE_IDS.map((id) => ({
+      id,
+      name: id,
+      shortDescription: { text: INTENT_MESSAGES[id].split("\n")[0] },
+      fullDescription: { text: INTENT_MESSAGES[id] },
       defaultConfiguration: { level: "error" },
     })),
   ];
@@ -229,6 +237,43 @@ export function sarifTsconfigPathsResult(finding) {
 }
 
 /**
+ * One architecture-intent finding as a SARIF result.
+ *
+ * A result for the same reason a go.work drift finding is one: it is a verdict
+ * the run fails on. The finding is positionless by construction — intent
+ * judges graph edges, not source sites, and the violating dependency's origin
+ * line is not part of the record (`../architecture-intent/judge.mjs`) — so the
+ * location carries the intent file alone rather than a fabricated line 1, the
+ * reasoning `sarifNotification` states.
+ *
+ * @param {object} finding A finding from `../architecture-intent/judge.mjs`.
+ * @returns {object}
+ */
+export function sarifIntentResult(finding) {
+  return {
+    ruleId: finding.rule,
+    ruleIndex:
+      MESSAGE_IDS.length +
+      GO_WORK_MESSAGE_IDS.length +
+      TSCONFIG_PATHS_MESSAGE_IDS.length +
+      INTENT_MESSAGE_IDS.indexOf(finding.rule),
+    level: "error",
+    message: { text: finding.message },
+    locations: [
+      {
+        physicalLocation: { artifactLocation: { uri: toUriReference("architecture-intent.json") } },
+      },
+    ],
+    properties: {
+      source: finding.source,
+      target: finding.target,
+      boundaryFrom: finding.boundaryFrom,
+      boundaryTo: finding.boundaryTo,
+    },
+  };
+}
+
+/**
  * One analysis failure as a tool-execution notification.
  *
  * A failure with no position is about the file as a whole (`line`/`column`
@@ -256,10 +301,11 @@ export function sarifNotification(failure) {
  *
  * @param {{violations: object[], failures: object[],
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
- *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null}} run
+ *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
+ *   intent?: {findings: object[]}|null}} run
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
-export function buildSarifLog({ violations, failures, goWork, tsconfigPaths }) {
+export function buildSarifLog({ violations, failures, goWork, tsconfigPaths, intent }) {
   return {
     $schema: SARIF_SCHEMA,
     version: SARIF_VERSION,
@@ -271,6 +317,7 @@ export function buildSarifLog({ violations, failures, goWork, tsconfigPaths }) {
           ...violations.map(sarifResult),
           ...(goWork?.findings ?? []).map(sarifGoWorkResult),
           ...(tsconfigPaths?.findings ?? []).map(sarifTsconfigPathsResult),
+          ...(intent?.findings ?? []).map(sarifIntentResult),
         ],
         invocations: [
           {
@@ -292,7 +339,8 @@ export function buildSarifLog({ violations, failures, goWork, tsconfigPaths }) {
  *
  * @param {{violations: object[], failures: object[],
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
- *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null}} run
+ *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
+ *   intent?: {findings: object[]}|null}} run
  * @returns {string}
  */
 export function formatSarif(run) {

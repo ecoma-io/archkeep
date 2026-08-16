@@ -18,7 +18,7 @@ identical to one that analyzed four hundred.
 
 ## What `check` judges
 
-One run combines three verdicts:
+One run combines four verdicts:
 
 1. **Import boundaries** — every import site in every tracked, supported source
    file is matched against the boundary law.
@@ -26,6 +26,11 @@ One run combines three verdicts:
    list is compared against every project's `go.mod`.
 3. **Dead tsconfig aliases** — when the workspace tsconfig declares a `paths`
    table, each alias is checked for at least one target directory that exists.
+4. **Architecture intent** — when a tracked root
+   `architecture-intent.json` exists, its declared boundaries and allowed /
+   forbidden relationships are held against the observed graph. The schema and
+   the four verdict states live in
+   [architecture-intent.md](../reference/architecture-intent.md).
 
 The second and third checks are workspace facts, so paths named on the command
 line do not scope them.
@@ -95,12 +100,12 @@ promise are in [json-output.md](../reference/json-output.md).
 
 ## Exit codes
 
-| code | meaning                                                                      |
-| ---- | ---------------------------------------------------------------------------- |
-| `0`  | No findings, and every selected file was analyzed                            |
-| `1`  | Boundary violation, `go.work` drift, or dead tsconfig alias                  |
-| `2`  | Usage error — invalid arguments, unknown flag, or path outside the workspace |
-| `3`  | No verdict — the run could not look, or coverage is incomplete               |
+| code | meaning                                                                                         |
+| ---- | ----------------------------------------------------------------------------------------------- |
+| `0`  | No findings, and every selected file was analyzed                                               |
+| `1`  | Boundary violation, `go.work` drift, dead tsconfig alias, or an architecture-intent finding     |
+| `2`  | Usage error — invalid arguments, unknown flag, or path outside the workspace                    |
+| `3`  | No verdict — the run could not look, coverage is incomplete, or intent could not be established |
 
 Do not collapse 3 into 0. A checker that could not look must never be mistaken
 for one that looked and found nothing. [ci.md](ci.md) owns the full automation

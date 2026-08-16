@@ -20,9 +20,21 @@ vi.mock("../tsconfig-paths.mjs", () => ({
   TSCONFIG_PATHS_MESSAGE_IDS: ["deadAliasRule"],
   TSCONFIG_PATHS_MESSAGES: { deadAliasRule: "Dead alias rule's summary line\n\nAnd its detail" },
 }));
+vi.mock("../architecture-intent/judge.mjs", () => ({
+  INTENT_MESSAGE_IDS: ["intentForbiddenEdge"],
+  INTENT_MESSAGES: {
+    intentForbiddenEdge: "Forbidden edge's summary line\n\nAnd its detail",
+  },
+}));
 vi.mock("./text.mjs", () => ({ formatConstraint: () => "THE CONSTRAINT" }));
 
-import { buildSarifLog, formatSarif, sarifRules, toUriReference } from "./sarif.mjs";
+import {
+  buildSarifLog,
+  formatSarif,
+  sarifIntentResult,
+  sarifRules,
+  toUriReference,
+} from "./sarif.mjs";
 
 const violation = () => ({
   sourceFile: "acme/libs/engine-domain/doc.go",
@@ -71,8 +83,9 @@ describe("the rule catalogue", () => {
       "secondRule",
       "driftRule",
       "deadAliasRule",
+      "intentForbiddenEdge",
     ]);
-    expect(log().tool.driver.rules).toHaveLength(4);
+    expect(log().tool.driver.rules).toHaveLength(5);
   });
 
   it("keeps the whole template as the description and its first line as the summary", () => {
@@ -244,6 +257,96 @@ describe("a dead tsconfig path alias finding", () => {
       "driftRule",
       "deadAliasRule",
     ]);
+  });
+});
+
+describe("an architecture-intent finding", () => {
+  const intentFinding = (overrides = {}) => ({
+    rule: "intentForbiddenEdge",
+    source: "acme/libs/engine-domain",
+    target: "acme/libs/engine-adapters",
+    boundaryFrom: "domain",
+    boundaryTo: "adapters",
+    message: "core → adapters — architecture-intent.json forbids this reach",
+    ...overrides,
+  });
+
+  it("is a result whose ruleId resolves in the catalogue, exactly like a violation's", () => {
+    const built = log({ intent: { findings: [intentFinding()] } });
+    const [result] = built.results;
+    expect(result.ruleId).toBe("intentForbiddenEdge");
+    expect(built.tool.driver.rules[result.ruleIndex].id).toBe("intentForbiddenEdge");
+    expect(result.ruleIndex).toBe(
+      // MESSAGE_IDS + GO_WORK_MESSAGE_IDS + TSCONFIG_PATHS_MESSAGE_IDS offsets.
+      2 + 1 + 1,
+    );
+    expect(result.level).toBe("error");
+    expect(result.message.text).toBe(
+      "core → adapters — architecture-intent.json forbids this reach",
+    );
+    expect(result.properties).toEqual({
+      source: "acme/libs/engine-domain",
+      target: "acme/libs/engine-adapters",
+      boundaryFrom: "domain",
+      boundaryTo: "adapters",
+    });
+  });
+
+  it("carries the intent file alone and no region — the finding is positionless by construction", () => {
+    const built = log({ intent: { findings: [intentFinding()] } });
+    expect(built.results[0].locations[0].physicalLocation).toEqual({
+      artifactLocation: { uri: "architecture-intent.json" },
+    });
+  });
+
+  it("appears beside the violations, drift findings and dead aliases, none replacing another", () => {
+    const built = log({
+      violations: [violation()],
+      goWork: {
+        findings: [
+          {
+            messageId: "driftRule",
+            file: "go.work",
+            line: 4,
+            column: 2,
+            directory: "libs/gone",
+            project: null,
+            message: "the drift",
+          },
+        ],
+        moduleProjects: 2,
+      },
+      tsconfigPaths: {
+        findings: [
+          {
+            messageId: "deadAliasRule",
+            file: "tsconfig.base.json",
+            line: null,
+            column: null,
+            alias: "@acme/gone",
+            targets: ["libs/gone/src/index.ts"],
+            message: "the dead alias",
+          },
+        ],
+        aliases: 1,
+        unjudged: 0,
+      },
+      intent: { findings: [intentFinding()] },
+    });
+    expect(built.results.map((result) => result.ruleId)).toEqual([
+      "secondRule",
+      "driftRule",
+      "deadAliasRule",
+      "intentForbiddenEdge",
+    ]);
+  });
+
+  it("renders directly, not only through buildSarifLog", () => {
+    const result = sarifIntentResult(intentFinding());
+    expect(result.ruleId).toBe("intentForbiddenEdge");
+    expect(result.locations[0].physicalLocation.artifactLocation.uri).toBe(
+      "architecture-intent.json",
+    );
   });
 });
 

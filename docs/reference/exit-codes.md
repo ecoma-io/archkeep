@@ -6,12 +6,12 @@ map to them.
 
 ## Process exit codes
 
-| code | meaning                                                                       | when                                                                                                                                                                                                             |
-| ---- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | clean -- and every selected file was analyzed                                 | No findings and no coverage gaps.                                                                                                                                                                                |
-| 1    | findings -- boundary violations, go.work drift, or dead tsconfig path aliases | `check` only. No other command can exit 1.                                                                                                                                                                       |
-| 2    | usage error                                                                   | Unknown command, unknown flag, missing argument, path outside the tree. Never reaches the JSON envelope.                                                                                                         |
-| 3    | no verdict -- the run could not start, or a selected file could not be read   | No workspace, both root markers present, malformed config, `nx graph`/`git` failed, unreadable file, no analyzer for a file, `tsconfig` that will not load, or (native provider) a tracked file no project owns. |
+| code | meaning                                                                                                                   | when                                                                                                                                                                                                                                                                                                            |
+| ---- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | clean -- and every selected file was analyzed                                                                             | No findings and no coverage gaps.                                                                                                                                                                                                                                                                               |
+| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, or architecture-intent findings               | `check` only. No other command can exit 1.                                                                                                                                                                                                                                                                      |
+| 2    | usage error                                                                                                               | Unknown command, unknown flag, missing argument, path outside the tree. Never reaches the JSON envelope.                                                                                                                                                                                                        |
+| 3    | no verdict -- the run could not start, a selected file could not be read, or architecture intent could not be established | No workspace, both root markers present, malformed config, `nx graph`/`git` failed, unreadable file, no analyzer for a file, `tsconfig` that will not load, a tracked `architecture-intent.json` that will not parse or whose boundaries match no project, or (native provider) a tracked file no project owns. |
 
 ## Why 3 exists, and why it covers partial runs
 
@@ -59,11 +59,11 @@ Three values, each carrying exactly one `exitCode`. The `jsonEnvelope` builder
 throws rather than build an envelope where the two disagree, so this table is
 enforced in code, not just documented:
 
-| `status`       | `exitCode` | meaning                                                                                                                 |
-| -------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `"ok"`         | 0          | No findings, and every selected file was analyzed.                                                                      |
-| `"findings"`   | 1          | Boundary violations, go.work drift, or dead tsconfig path aliases.                                                      |
-| `"no-verdict"` | 3          | No findings, but the run could not fully read the tree (`coverage.complete` is `false`). Never mistake this for `"ok"`. |
+| `status`       | `exitCode` | meaning                                                                                                                                                                 |
+| -------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"ok"`         | 0          | No findings, and every selected file was analyzed.                                                                                                                      |
+| `"findings"`   | 1          | Boundary violations, go.work drift, dead tsconfig path aliases, or architecture-intent findings.                                                                        |
+| `"no-verdict"` | 3          | No findings, but the run could not fully read the tree (`coverage.complete` is `false`) or architecture intent could not be established. Never mistake this for `"ok"`. |
 
 `exitCode` in the envelope is never 2: a usage error exits before the envelope
 is built.
@@ -87,21 +87,26 @@ violation is a certain verdict regardless of what else the run could not reach.
 The unreached files are listed in `coverage.notAnalyzed`. Only a run with no
 findings can be downgraded from `"ok"` to `"no-verdict"`.
 
+Architecture intent adds nothing to the ok/findings pair and one new door into
+no-verdict: an intent file that will not parse, or an intent boundary matching
+no observed project, withholds the verdict (exit 3) even when every import was
+clean -- because an unverifiable intent must never read as a satisfied one.
+
 ## `coverage` and the exit code
 
 The `--format json` envelope carries a `coverage` object that names what the run
 inspected. Its `complete` field is the switch that decides between `status:
 "ok"` (exit 0) and `status: "no-verdict"` (exit 3) on a findings-free run.
 
-| field           | type                             | meaning                                                                                                                                                                                                                                   |
-| --------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `complete`      | boolean                          | `true` only when `notAnalyzed` is empty -- enforced, not just correlated.                                                                                                                                                                 |
-| `projects`      | number                           | Project count in the graph this run judged against.                                                                                                                                                                                       |
-| `analyzedFiles` | number                           | Files the analyzer produced a verdict for.                                                                                                                                                                                                |
-| `imports`       | number                           | Import sites judged against the boundary law.                                                                                                                                                                                             |
-| `notAnalyzed`   | `{file, reason}[]`               | Whole-file failures: a file the analyzer never reached a verdict about at all (unreadable, no analyzer, a config it depends on that would not load). Non-empty here is what forces exit 3.                                                |
-| `blindSpots`    | `{file, line, column, reason}[]` | Site-level failures: the file was analyzed, but one import site's target is not statically knowable. These do not affect `complete` or the exit code.                                                                                     |
-| `notes`         | string[]                         | Caveats about how the result should be interpreted: ESLint dialect parsing, provider mismatches between baseline and head (`diff`), provenance gaps, policy fingerprint disagreements, or depConstraints narrowing (`context`, `impact`). |
+| field           | type                             | meaning                                                                                                                                                                                                                                                                                                  |
+| --------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `complete`      | boolean                          | `true` only when `notAnalyzed` is empty -- enforced, not just correlated.                                                                                                                                                                                                                                |
+| `projects`      | number                           | Project count in the graph this run judged against.                                                                                                                                                                                                                                                      |
+| `analyzedFiles` | number                           | Files the analyzer produced a verdict for.                                                                                                                                                                                                                                                               |
+| `imports`       | number                           | Import sites judged against the boundary law.                                                                                                                                                                                                                                                            |
+| `notAnalyzed`   | `{file, reason}[]`               | Whole-file failures: a file the analyzer never reached a verdict about at all (unreadable, no analyzer, a config it depends on that would not load). Non-empty here is what forces exit 3.                                                                                                               |
+| `blindSpots`    | `{file, line, column, reason}[]` | Site-level failures: the file was analyzed, but one import site's target is not statically knowable. These do not affect `complete` or the exit code.                                                                                                                                                    |
+| `notes`         | string[]                         | Caveats about how the result should be interpreted: ESLint dialect parsing, provider mismatches between baseline and head (`diff`), provenance gaps, policy fingerprint disagreements, depConstraints narrowing (`context`, `impact`), or an optional architecture-intent relationship not yet observed. |
 
 The distinction between `notAnalyzed` and `blindSpots` is load-bearing: losing a
 whole file is a coverage hole (exit 3 when nothing else fired); one

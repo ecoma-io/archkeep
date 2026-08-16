@@ -43,12 +43,12 @@ judged is still the consumer's.
 
 ## The exit codes, and the one that matters
 
-| code | meaning                                                                    |
-| ---- | -------------------------------------------------------------------------- |
-| `0`  | clean — **and** every selected file was analyzed                           |
-| `1`  | findings — boundary violations, go.work drift, or dead tsconfig aliases    |
-| `2`  | usage error                                                                |
-| `3`  | no verdict — the run could not start, or a selected file could not be read |
+| code | meaning                                                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------ |
+| `0`  | clean — **and** every selected file was analyzed                                                                         |
+| `1`  | findings — boundary violations, go.work drift, dead tsconfig aliases, or architecture-intent findings                    |
+| `2`  | usage error                                                                                                              |
+| `3`  | no verdict — the run could not start, a selected file could not be read, or architecture intent could not be established |
 
 **Do not collapse 3 into 0.** A checker that could not look must never be
 mistaken for one that looked and found nothing — that is the single distinction
@@ -61,7 +61,10 @@ defect: a declared root with no tracked file, two projects colliding on one
 name, a stale `coverage.exempt` waiver) but a **partial** one. An unreadable
 file, a file with no analyzer, or a `tsconfig` that will not load each leaves
 a file the summary counted but no rule ever judged, and that is enough to
-withhold the verdict. A `lattice.json` workspace has one partial-failure case
+withhold the verdict. A tracked `architecture-intent.json` that will not parse
+or validate, or whose boundaries match no observed project, is exit 3 for the
+same reason: an intent the tool cannot establish must never read as a
+satisfied one. A `lattice.json` workspace has one partial-failure case
 the Nx path does not: a tracked, analyzable file no discovered project owns
 is also exit 3, for the same reason — `../../packages/lattice/src/providers/native/README.md`'s
 "Two failure classes, both loud" owns that distinction.

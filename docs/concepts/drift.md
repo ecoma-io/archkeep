@@ -4,8 +4,9 @@ Architecture drifts. Not because anyone decides to violate a boundary, but becau
 the workspace changes faster than the constraints do — and because some forms of
 drift are invisible to a checker that only judges imports.
 
-Lattice surfaces three kinds of drift through two commands. Each is a different failure
-mode, and two of the three share a command. None requires a toolchain installed.
+Lattice surfaces four kinds of drift through two commands. Each is a different
+failure mode, and three of the four share a command. None requires a toolchain
+installed.
 
 ## What drift means here
 
@@ -23,11 +24,11 @@ produces a boundary violation:
   violations, but they are build breakers or silent misresolutions that nothing
   else detects.
 
-A checker that only looks at imports misses both classes. Lattice surfaces all
-three through `check` and `diff`, because a gap in any one of them looks like
-"clean" from inside the other two.
+A checker that only looks at imports misses all of these classes. Lattice
+surfaces the four through `check` and `diff`, because a gap in any one of them
+looks like "clean" from inside the others.
 
-## The three drift signals
+## The four drift signals
 
 ### 1. Boundary violations — `check`
 
@@ -59,6 +60,21 @@ git checkout main && lattice graph --format json --output baseline.json
 git checkout my-branch && lattice diff baseline.json
 ```
 
+### 4. Architecture-intent drift — `check`
+
+A fourth drift signal that no rule table can see, because it is about the
+intended architecture rather than the constraint table. When a workspace
+commits an [`architecture-intent.json`](../reference/architecture-intent.md),
+`check` compares the intended relationships against the observed graph: an
+`allowed` relationship with no observed edge is drift (`intentAllowedMissing`,
+exit 1) — the team declared "this is how we connect" and nothing connects — and
+a `forbidden` one that appears in the graph is a violation
+(`intentForbiddenEdge`). Both read the same observed source as the boundary
+checker, but they judge the team's stated intent rather than a row of tables.
+When intent cannot be established at all — a file that will not parse, or a
+boundary matching no project — `check` withholds the verdict (exit 3) rather
+than let an unverifiable declaration read as a satisfied one.
+
 ### 3. Configuration drift — `check` (workspace checks)
 
 When the workspace has a tracked `go.work` at its root, `check` compares its
@@ -78,16 +94,16 @@ neither invokes `go` or `tsc`.
 ## Why drift is a concept and not a command
 
 A `drift` command would suggest a single answer to a single question. Drift is
-not one question — it is three, surfaced through two commands, each with its own
-exit code semantics. The `check` command finds violations and
-configuration drift; the `diff` command finds structural drift and its rule
-impact. The concept ties them together; the commands answer the specific
-questions.
+not one question — it is four, surfaced through two commands, each with its own
+exit code semantics. The `check` command finds violations, configuration
+drift, and architecture-intent drift; the `diff` command finds structural
+drift and its rule impact. The concept ties them together; the commands answer
+the specific questions.
 
 ## Where this is going
 
 [roadmap.md](../roadmap.md) owns the staged direction. The 2.x capability
 "drift and architectural-change intelligence" extends what `diff` and `check`
 already report: richer policies, fitness functions, and historical evolution of
-the architecture over time. Nothing in 1.x promises that; the three signals
+the architecture over time. Nothing in 1.x promises that; the four signals
 above are what ships today.

@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "boundaries": [
+    { "name": "packages", "match": ["tag:type-package"] },
+    { "name": "extensions", "match": ["tag:type-extension"] }
+  ],
+  "forbidden": [
+    {
+      "from": "packages",
+      "to": "extensions",
+      "reason": "a package must never reach out into an editor extension — this workspace's only dependency direction is the reverse, an extension resolving the engine's server out of the workspace (packages/lattice-vscode/src/server-module.mjs). Verified against the observed graph on 2026-08-16: no path connects the two."
+    }
+  ]
+}
