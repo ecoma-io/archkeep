@@ -2,6 +2,7 @@
 
 `check --format json`, `graph --format json`, `diff --format json`,
 `drift --format json`, `waivers --format json`, `history --format json`,
+`debt --format json`,
 `impact --format json`, `explain --format json`, and `context --format json`
 wrap the same verdict the terminal report and SARIF already carry in one
 versioned envelope. They change no exit code and no byte
@@ -20,6 +21,8 @@ lattice waivers --format json
 lattice waivers --format json --output waivers.json
 lattice history .lattice/history --format json
 lattice history .lattice/history --format json --output evolution.json
+lattice debt .lattice/history --format json
+lattice debt .lattice/history --format json --output debt.json
 lattice impact billing-core --format json
 lattice impact billing-core --format json --output impact.json
 lattice explain libs/alpha/main.go:10:5 --format json
@@ -50,7 +53,7 @@ and no random identifier anywhere in it. That is what makes it diffable in a
 pull request the same way the SARIF output already is.
 
 `command` is the one field that varies by which command produced the envelope —
-`"check"`, `"graph"`, `"diff"`, `"drift"`, `"waivers"`, `"history"`,
+`"check"`, `"graph"`, `"diff"`, `"drift"`, `"waivers"`, `"history"`, `"health"`, `"debt"`,
 `"impact"`, `"explain"`, or `"context"`. `src/report/json.mjs` (the module
 that builds the envelope) and `src/commands/README.md` (the module layout it
 follows) are both written for each command to reuse the same wrapper.
@@ -61,7 +64,7 @@ follows) are both written for each command to reuse the same wrapper.
 | --------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                                                                                                                 |
 | `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                                                                                                                                                                |
-| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"drift"`, `"waivers"`, `"history"`, `"health"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                                         |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"drift"`, `"waivers"`, `"history"`, `"health"`, `"debt"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                               |
 | `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"lattice.json"`, `".moon"`, or `".config/moon"`). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                 |
 | `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                                                                                                          |
@@ -331,6 +334,27 @@ The `coverage` envelope field carries the run's completeness facts, and
 `coverage.notes` discloses an unregistered Nx plugin (a graph with no
 Go/Rust/Python edges) so the metrics that needed those edges read `unknown`
 rather than a measured zero.
+
+## `result` (for `command: "debt"`)
+
+`debt` reads the same history directory `history` reads and builds the
+architecture-debt ledger: every waiver the boundary config accepts, every
+`optional` intent row not yet built, and every drift finding the intent judge
+reports — each aged across the snapshots by the owning project. It is
+descriptive: it never exits `1`. An unreadable or malformed history directory,
+incomplete graph coverage, or an intent that cannot be verified is a no-verdict
+run (exit 3) that produces no envelope, never an empty ledger.
+
+| field        | type       | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`        | string     | The history directory that was read.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `snapshots`  | number     | The number of snapshots the ledger was aged across.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `agings`     | boolean    | `true` when at least two snapshots could establish age; `false` when the directory holds fewer than two, in which case every entry's `age` is `0` and reads "observed, not yet aged" rather than "born yesterday".                                                                                                                                                                                                                                                                                                                                                                                          |
+| `sampleTime` | string     | ISO-8601 instant the ledger was taken, from the same clock seam the CLI passes in — so a reader can see when a report was produced, and a fixed clock makes two runs over an unchanged tree byte-identical.                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `entries`    | `object[]` | One entry per debt. Each `{source, kind, severity, age, count, remediationHint}`. `kind` is `"waiver"` (an accepted violation), `"aspirational-gap"` (an `optional` intent row not yet built), `"drift"` (a finding — HIGH when its source project also carries a waiver), or `"unresolved"` (an intent boundary that matched nothing; `severity` is `"unknown"`, never a clean ledger). `source` is the suppression path for a waiver, the finding's project for drift, the intent statement for a gap, and the boundary name for unresolved. Entries sort by plain string comparison of kind-then-source. |
+| `total`      | number     | `entries.length`. An empty list is a claim — "no exemptions, gaps or findings" — never a shrug.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `byKind`     | object     | Counts per `kind`: `{waiver, "aspirational-gap", drift, unresolved}`. Always present, even when zero, so a consumer can tell "no debt" from "the report forgot a section".                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `bySeverity` | object     | Counts per `severity`: `{high, medium, low}`. `unknown`-severity entries are excluded. Always present.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 ## `result` (for `command: "impact"`)
 

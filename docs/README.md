@@ -50,6 +50,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [fitness.md](usage/fitness.md)                 | The `fitness` command: every declared quality gate judged, as a verdict table |
 | [history.md](usage/history.md)                 | The `history` command: the architecture's evolution across snapshots          |
 | [health.md](usage/health.md)                   | The `health` command: per-metric verdicts, trends, and the status contract    |
+| [debt.md](usage/debt.md)                       | The `debt` command: the architecture-debt ledger across snapshots             |
 | [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context                 |
 | [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained            |
 | [context.md](usage/context.md)                 | The `context` command: architecture constraints for one project               |
@@ -86,6 +87,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [json-output.md](reference/json-output.md)                 | `--format json`'s versioned envelope: every field, and the stability promise                                       |
 | [evidence.md](reference/evidence.md)                       | The four-state verdict vocabulary, the five invariants, and the `decision` shape                                   |
 | [architecture-intent.md](reference/architecture-intent.md) | The `architecture-intent.json` schema, the five sections, and the four verdict states                              |
+| [debt.md](reference/debt.md)                               | The architecture-debt ledger: entry kinds, age model, severity, and the refusals                                   |
 | [provenance.md](reference/provenance.md)                   | The `provenance` command: report shapes, the JSON envelope, exit codes                                             |
 | [languages.md](reference/languages.md)                     | What each analyzer reads, the shapes it cannot, and the two workspace checks                                       |
 | [violations.md](reference/violations.md)                   | Each of the fifteen violations: what it means, and what fixes it                                                   |
