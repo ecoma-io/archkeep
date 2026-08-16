@@ -1312,6 +1312,43 @@ var _ = adapter.Name
     expect(envelope.result.waivers[0].expiresAt).toBe("2999-01-01T00:00:00.000Z");
   });
 
+  it("waivers --config reads the law from the named file, resolving against cwd", async () => {
+    // The waiver surface rides the boundary law, so `--config` must pick a
+    // different law for one run exactly as it does for `check` — a flag the
+    // same run's `check` would honour, kept in the loop by a flag test.
+    writeWaivers(
+      "alt-boundaries.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const boundarySuppressions = [
+  {
+    path: "libs/domain/doc.go",
+    reason: "a different row under a different law",
+    expiresAt: "2999-02-02T00:00:00.000Z",
+    origin: "ticket-43",
+  },
+];
+`,
+    );
+    const streams = waiversEnv();
+    expect(await runCli(["waivers", "--config", "alt-boundaries.mjs"], streams)).toBe(EXIT.ok);
+    const text = streams.lines.out.join("\n");
+    expect(text).toContain("a different row under a different law");
+    expect(text).toContain("2999-02-02T00:00:00.000Z");
+    expect(text).toContain("origin: ticket-43");
+  });
+
   it("check still exits 1 over a waived violation — accepting must not flip 1→0", async () => {
     const streams = waiversEnv();
     expect(await runCli(["check"], streams)).toBe(EXIT.violations);
