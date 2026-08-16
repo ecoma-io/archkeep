@@ -4,10 +4,11 @@ Architecture drifts. Not because anyone decides to violate a boundary, but becau
 the workspace changes faster than the constraints do — and because some forms of
 drift are invisible to a checker that only judges imports.
 
-Lattice surfaces four kinds of drift through two commands. Each is a different
-failure mode, and three of the four share a command. None requires a toolchain
-installed. Boundary violations and configuration drift surface through `check`;
-structural drift and its rule impact surface through `diff`.
+Lattice surfaces four kinds of drift through three commands. Each is a different
+failure mode, and none requires a toolchain installed. Boundary violations and
+configuration drift surface through `check`; structural drift and its rule
+impact surface through `diff`; architecture-intent drift surfaces both as its
+own descriptive command (`drift`) and, by presence, inside `check`.
 
 ## What drift means here
 
@@ -81,29 +82,39 @@ Both checks run on the CLI only — they describe the workspace, not any file be
 edited, so the language server does not publish them. Both are read statically;
 neither invokes `go` or `tsc`.
 
-### 4. Architecture-intent drift — `check`
+### 4. Architecture-intent drift — `drift`, and by presence inside `check`
 
-A fourth drift signal that no rule table can see, because it is about the
-intended architecture rather than the constraint table. When a workspace
-commits an [`architecture-intent.json`](../reference/architecture-intent.md),
-`check` compares the intended relationships against the observed graph: an
-`allowed` relationship with no observed edge is drift (`intentAllowedMissing`,
-exit 1) — the team declared "this is how we connect" and nothing connects — and
-a `forbidden` one that appears in the graph is a violation
-(`intentForbiddenEdge`). Both read the same observed source as the boundary
-checker, but they judge the team's stated intent rather than a row of tables.
-When intent cannot be established at all — a file that will not parse, or a
-boundary matching no project — `check` withholds the verdict (exit 3) rather
-than let an unverifiable declaration read as a satisfied one.
+A drift signal no rule table can see, because it is about the intended
+architecture rather than the constraint table. When a workspace commits an
+[`architecture-intent.json`](../reference/architecture-intent.md), the observed
+architecture is compared against the declared intent: an `allowed` relationship
+with no observed edge is drift (`intentAllowedMissing`), a `forbidden`
+relationship that appears in the graph is a violation (`intentForbiddenEdge`),
+and the intent's `projects`/`dependencies`/`forbiddenTags` sections judge
+existence and tag facts by name. Both read the same observed source as the
+boundary checker, but they judge the team's stated intent rather than a row of
+tables.
 
-## Why drift is a concept and not a command
+`drift` is the descriptive face — it prints the intent, the findings, and the
+intent fingerprint, and it never exits 1. `check` is the gate face: when an
+intent file is present, `check` folds drift in by presence (exit 1 on findings,
+3 on a malformed intent or one whose boundary matched no project). When intent
+cannot be established at all — a file that will not parse, a boundary matching
+no project, a drift comparison that cannot be verified — both commands withhold
+the verdict (exit 3) rather than let an unverifiable declaration read as a
+satisfied one.
 
-A `drift` command would suggest a single answer to a single question. Drift is
-not one question — it is four, surfaced through two commands, each with its own
-exit code semantics. The `check` command finds violations, configuration
-drift, and architecture-intent drift; the `diff` command finds structural
-drift and its rule impact. The concept ties them together; the commands answer
-the specific questions.
+## A `drift` command, and why it does not replace `check`
+
+The intent then has a descriptive verb of its own — `lattice drift` prints the
+full comparison for a developer reading it at a terminal, while `check` decides
+whether the same comparison means the build is red. The two share one analysis
+(`packages/lattice/src/commands/drift.mjs` owns the single verdict both
+consume), so a description and a gate can never disagree about the same intent.
+There is no `--drift` flag:
+an opt-in flag would make a forgotten flag byte-identical to "no drift checked",
+which is the silent direction this whole tool exists to end — when an intent
+file exists and is tracked, `check` already counts it.
 
 ## Where this sits in the roadmap
 

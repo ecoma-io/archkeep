@@ -127,7 +127,10 @@ function projectSources(directory = PROJECT_ROOT) {
 const INLINE_PATTERNS = [
   /(?:^|\n)\s*import\s[^;\n]*?from\s*["']([^"']+)["']/gu,
   /(?:^|\n)\s*import\s*["']([^"']+)["']/gu,
-  /(?:^|\n)\s*export\s[^;\n]*?from\s*["']([^"']+)["']/gu,
+  // The clause between `export` and `from` also excludes quotes: a re-export
+  // clause can never contain one, and `export const X = freeze(["from", ...])`
+  // would otherwise read the string contents as the `from` keyword.
+  /(?:^|\n)\s*export\s[^;\n"']*?from\s*["']([^"']+)["']/gu,
   /(?:^|\n)\s*\}\s*from\s*["']([^"']+)["']/gu,
   /\brequire(?:_)?\(\s*["']([^"']+)["']\s*\)/gu,
   /\bimport\(\s*["']([^"']+)["']\s*\)/gu,

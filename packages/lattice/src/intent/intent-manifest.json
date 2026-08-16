@@ -281,6 +281,29 @@
         }
       ],
       "status": "proven"
+    },
+    {
+      "id": "M",
+      "name": "Drift — observed vs declared intent",
+      "intent": "drift compares the observed project graph against the canonical architecture-intent.json through the single judgeIntent. It is descriptive (never exits 1); check folds it in by presence and exits 1 on drift findings. Every path that cannot reach a drift verdict (malformed/absent intent, incomplete coverage, incomplete graph) says so loudly instead of returning empty.",
+      "evidence": [
+        {
+          "type": "behavioral-test",
+          "path": "src/commands/drift.test.mjs",
+          "assertion": "driftCommand returns status ok with observed facts and findings; refuses incomplete coverage, absent intent, and unregistered-plugin incomplete graph; buildObserved counts implicit edges separately"
+        },
+        {
+          "type": "behavioral-test",
+          "path": "src/drift/drift-text.test.mjs",
+          "assertion": "formatDriftReport states comparison facts even when clean (no-drift is a claim about coverage); groups findings by rule in taxonomy order; byte-identical determinism"
+        },
+        {
+          "type": "e2e-test",
+          "path": "e2e/drift.e2e.mjs",
+          "assertion": "Through the installed CLI: drift exits 0 on a matching tree and names fingerprint/rows; reports dependencyForbidden and projectMissing; JSON envelope carries findings; malformed intent exits 3 for both drift and check"
+        }
+      ],
+      "status": "proven"
     }
   ],
   "bugsFixed": [

@@ -42,7 +42,7 @@ describe("findIntentViolations — the top level", () => {
 
   it("rejects an unknown top-level key by name", () => {
     expect(violations({ ...VALID, stray: true })).toEqual([
-      'unknown key "stray" — architecture-intent.json may carry only version, boundaries, allowed, forbidden',
+      'unknown key "stray" — architecture-intent.json may carry only version, boundaries, allowed, forbidden, projects, dependencies, forbiddenTags',
     ]);
   });
 
@@ -299,6 +299,14 @@ describe("the file's identity", () => {
   it("names the root file and the one supported version", () => {
     expect(INTENT_FILE).toBe("architecture-intent.json");
     expect(INTENT_VERSION).toBe("1");
-    expect(TOP_LEVEL_KEYS).toEqual(["version", "boundaries", "allowed", "forbidden"]);
+    expect(TOP_LEVEL_KEYS).toEqual([
+      "version",
+      "boundaries",
+      "allowed",
+      "forbidden",
+      "projects",
+      "dependencies",
+      "forbiddenTags",
+    ]);
   });
 });

@@ -29,7 +29,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [boundaries.md](concepts/boundaries.md)                   | Layer/scope/license axes, constraint model, tag semantics, what "violation" is |
 | [policies.md](concepts/policies.md)                       | Three dialects, one table, stability contract                                  |
 | [projects.md](concepts/projects.md)                       | What a project is, discovery, naming                                           |
-| [drift.md](concepts/drift.md)                             | The four drift signals Lattice detects, and why drift is not one command       |
+| [drift.md](concepts/drift.md)                             | The four drift signals Lattice detects, and which command surfaces each        |
 | [agentic-development.md](concepts/agentic-development.md) | The three questions an agent asks, and the commands that answer them           |
 | [integrations.md](concepts/integrations.md)               | How integrations extend the core                                               |
 
@@ -41,6 +41,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                         |
 | [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph            |
 | [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis |
+| [drift.md](usage/drift.md)                     | The `drift` command: observed architecture against the declared intent      |
 | [history.md](usage/history.md)                 | The `history` command: the architecture's evolution across snapshots        |
 | [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context               |
 | [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained          |
@@ -69,16 +70,16 @@ is, what it is not, and the line its neighbours may not cross — and
 
 ## Reference
 
-| page                                                       | what it answers                                                                   |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| [configuration.md](reference/configuration.md)             | `lattice.json` fields, `nx.json` options, Moon options, inline boundary config    |
-| [policy-schema.md](reference/policy-schema.md)             | Constraint table schema: every key, every value                                   |
-| [cli.md](reference/cli.md)                                 | All commands, all flags, all exit codes                                           |
-| [exit-codes.md](reference/exit-codes.md)                   | The four exit codes with exact meaning                                            |
-| [json-output.md](reference/json-output.md)                 | `--format json`'s versioned envelope: every field, and the stability promise      |
-| [architecture-intent.md](reference/architecture-intent.md) | The `architecture-intent.json` schema, the two lists, and the four verdict states |
-| [languages.md](reference/languages.md)                     | What each analyzer reads, the shapes it cannot, and the two workspace checks      |
-| [violations.md](reference/violations.md)                   | Each of the fifteen violations: what it means, and what fixes it                  |
+| page                                                       | what it answers                                                                       |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [configuration.md](reference/configuration.md)             | `lattice.json` fields, `nx.json` options, Moon options, inline boundary config        |
+| [policy-schema.md](reference/policy-schema.md)             | Constraint table schema: every key, every value                                       |
+| [cli.md](reference/cli.md)                                 | All commands, all flags, all exit codes                                               |
+| [exit-codes.md](reference/exit-codes.md)                   | The four exit codes with exact meaning                                                |
+| [json-output.md](reference/json-output.md)                 | `--format json`'s versioned envelope: every field, and the stability promise          |
+| [architecture-intent.md](reference/architecture-intent.md) | The `architecture-intent.json` schema, the five sections, and the four verdict states |
+| [languages.md](reference/languages.md)                     | What each analyzer reads, the shapes it cannot, and the two workspace checks          |
+| [violations.md](reference/violations.md)                   | Each of the fifteen violations: what it means, and what fixes it                      |
 
 ## Doctrine
 

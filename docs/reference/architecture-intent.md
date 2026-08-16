@@ -91,6 +91,79 @@ A side that is neither a declared boundary nor a valid selector is a load
 error, because a typo like `tagz:` would otherwise silently match nothing at
 judge time.
 
+## The existence and dependency sections
+
+Beyond `boundaries` / `allowed` / `forbidden`, the intent model carries three
+optional sections that judge existence and dependency facts _by name and tag_
+rather than by boundary selector. These make the file an architectural
+invariant — project and dependency inventory that will not drift — rather than
+only a pair of relationship lists.
+
+### `projects`
+
+```json
+{
+  "projects": {
+    "required": [{ "name": "core", "tags": ["type-package"] }],
+    "forbidden": [{ "name": "legacy-app" }]
+  }
+}
+```
+
+- **`projects.required`** — a project that must exist. A required project the
+  observed architecture lacks is `projectMissing`; one lacking a required tag is
+  `projectTagMissing`.
+- **`projects.forbidden`** — a project that must not exist. A present one is
+  `projectPresent`.
+
+### `dependencies`
+
+```json
+{
+  "dependencies": {
+    "allowed": [{ "source": "app", "target": "api" }],
+    "forbidden": [{ "source": "api", "target": "core" }]
+  }
+}
+```
+
+- **`dependencies.forbidden`** — a dependency that must not appear. A present
+  `source → target` is `dependencyForbidden`.
+- **`dependencies.allowed`** — when present, an allowlist: an _observed_ `source
+→ target` pair not in the list is `dependencyNotAllowed`. Unlike
+  `allowed`/`forbidden`, this is a full-closure declaration — an observed
+  dependency outside it is a finding.
+
+`from`/`to` on a dependency row and `name` on a project row are **exact project
+names, never selectors** — a typo'd name is a load-provable
+`intentUnknownProject`, never a boundary that silently matches nothing.
+
+### `forbiddenTags`
+
+```json
+{
+  "forbiddenTags": [{ "from": "type-extension", "to": "type-package" }]
+}
+```
+
+A dependency forbidden between _tag values_: any observed edge from a project
+carrying `from` to a project carrying `to` is `tagDependencyForbidden`. A tag no
+observed project carries is `intentUnknownTag`.
+
+These five sections close the intended side of the comparison. Together the
+file states what the architecture _is_ (boundaries), what it _must not do_ and
+_must build_ (`forbidden` / `allowed`), and what projects and dependencies may
+exist (`projects` / `dependencies` / `forbiddenTags`) — one canonical contract
+the `drift` command and `check`'s fold both judge.
+
+## Drift is a descriptive command, and the reference
+
+`lattice drift` compares the observed architecture to this file — prints the
+findings and the intent fingerprint, and never exits 1. `check` folds the same
+comparison in by presence: when an intent file exists and is tracked, `check`
+exits 1 on intent findings and 3 on a malformed intent, exactly like a malformed
+go.work. See [drift.md](../usage/drift.md).
+
 ## Governance is a deterministic comparison
 
 The intent file declares the intended architecture; the observed architecture

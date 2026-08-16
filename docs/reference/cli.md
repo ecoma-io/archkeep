@@ -9,6 +9,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `check`   | `[<path>...]`        | Check imports against the boundary rules                  | yes -- exits 1   |
 | `graph`   | (none)               | Print the project graph as a deterministic snapshot       | no               |
 | `diff`    | `<baseline>`         | Compare two graph snapshots edge by edge                  | no               |
+| `drift`   | (none)               | Compare the observed architecture to the declared intent  | no               |
 | `history` | `<dir>`              | Describe how the architecture evolved across snapshots    | no               |
 | `impact`  | `<project>`          | List projects that depend on the named project            | no               |
 | `explain` | `<file:line:column>` | Explain the judgment for one import site                  | no               |
@@ -55,6 +56,21 @@ must be complete; an incomplete baseline or current workspace exits 3 and
 produces no diff. When a boundary config is available, the report includes a
 rule-impact section showing boundary violations introduced or resolved by the
 diff.
+
+### `drift`
+
+| flag       | argument       | default | meaning                                         |
+| ---------- | -------------- | ------- | ----------------------------------------------- |
+| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope. |
+| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.   |
+
+No positional arguments. Drift is descriptive — it never exits 1, only 0 on a
+completed comparison and 3 when coverage is incomplete or the intent cannot be
+verified. The intended side is the tracked `architecture-intent.json` at the
+workspace root; load it, describe the findings, print the intent fingerprint,
+and let `check` do the failing. A boundary or row side that matched no observed
+project so the comparison cannot be completed exits 3 with a loud message —
+"cannot verify" must never read as "no drift".
 
 ### `impact`
 
