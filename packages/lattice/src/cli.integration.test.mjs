@@ -1057,6 +1057,26 @@ export const moduleBoundaryOptions = {
   writeNative("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
   writeNative("libs/adapter/adapter.go", "package adapter\n");
   writeNative("libs/adapter/README.md", "# adapter\n");
+  // A tracked intent: without it, `drift` refuses ("drift is about a declared
+  // intent"). Boundaries-only, with no allowed/forbidden rows — the two
+  // boundaries each match one observed project, so the comparison is clean
+  // without stating an opinion that would contradict the boundary law below
+  // (which forbids domain→adapter). The `--output` path is what this block
+  // pins.
+  writeNative(
+    "architecture-intent.json",
+    JSON.stringify(
+      {
+        version: "1",
+        boundaries: [
+          { name: "domain", match: ["name:domain"] },
+          { name: "adapter", match: ["name:adapter"] },
+        ],
+      },
+      null,
+      2,
+    ),
+  );
   // Same crossing as the Nx fixture above, so the two blocks prove the same
   // rule fires whichever provider supplied the graph.
   writeNative(
@@ -1074,6 +1094,7 @@ var _ = adapter.Name
 
   const nativeFiles = [
     "lattice.json",
+    "architecture-intent.json",
     "module-boundaries.config.mjs",
     "libs/domain/go.mod",
     "libs/domain/doc.go",
@@ -1109,6 +1130,23 @@ var _ = adapter.Name
     );
     expect(violations).toBe(1);
     expect(report).toContain("libs/domain/doc.go:5:2  onlyTagsConstraintViolation");
+  });
+
+  it("writes a drift report to --output atomically, and names the fact on stderr", async () => {
+    // The `--output` branch of `runDrift`: write to `<target>.tmp`, rename over
+    // the target, print the comparison fact on stderr. Neither a `<target>.tmp`
+    // left behind nor a missing/truncated target may survive the run, because
+    // a report that half-appeared is the silent direction.
+    const target = join(nativeRoot, "drift.json");
+    const streams = nativeEnv();
+    expect(await runCli(["drift", "--format", "json", "--output", target], streams)).toBe(EXIT.ok);
+    expect(existsSync(`${target}.tmp`)).toBe(false);
+    expect(streams.lines.err.join("\n")).toContain("1 edges → ");
+    const written = JSON.parse(readFileSync(target, "utf8"));
+    expect(written.command).toBe("drift");
+    expect(written.result.intent.file).toBe("architecture-intent.json");
+    expect(written.result.findings).toHaveLength(0);
+    expect(written.coverage.complete).toBe(true);
   });
 
   it("says nothing about README.md, since it is not an analyzable file — the coverage near-miss that keeps the check usable", async () => {
