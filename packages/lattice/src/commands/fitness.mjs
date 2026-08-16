@@ -43,7 +43,6 @@ import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatFitnessSection } from "../report/text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { driftForCheck } from "./drift.mjs";
-import { INTENT_FILE } from "../architecture-intent/model.mjs";
 import {
   evaluateFitness,
   fitnessSnapshot,
@@ -125,27 +124,21 @@ export async function fitnessCommand(commandContext, io = {}) {
   // disagree about whether the declared intent matches the observed graph. A
   // drift comparison that cannot be completed surfaces as an `unknown` verdict
   // on the function, never a `fail` reading "0 findings" over an intent the
-  // command never actually judged.
-  let intent;
-  try {
-    const drift = await driftForCheck(commandContext);
-    intent = {
-      verdict:
-        drift.findings.length > 0 ? "findings" : drift.unresolved.length > 0 ? "no-verdict" : "ok",
-      boundaries: drift.boundaries,
-      findings: drift.findings,
-      unresolved: drift.unresolved,
-      notes: drift.notes,
-    };
-  } catch (cause) {
-    intent = {
-      verdict: "no-verdict",
-      findings: [],
-      unresolved: [{ boundary: INTENT_FILE, issue: cause?.message ?? String(cause) }],
-      boundaries: [],
-      notes: [],
-    };
-  }
+  // command never actually judged. `driftForCheck` is NOT caught here: an
+  // intent that is simply absent resolves to `undefined` (a quiet, `unknown`
+  // drift-free), while the fail-closed throws — an unregistered plugin over
+  // polyglot manifests, an unreadable or invalid intent — must exit 3 exactly
+  // as they do for `drift`/`graph`/`impact`/`explain`, not fold into a
+  // verdict-bearing run over a graph that cannot see the workspace.
+  const drift = await driftForCheck(commandContext);
+  const intent = {
+    verdict:
+      drift.findings.length > 0 ? "findings" : drift.unresolved.length > 0 ? "no-verdict" : "ok",
+    boundaries: drift.boundaries,
+    findings: drift.findings,
+    unresolved: drift.unresolved,
+    notes: drift.notes,
+  };
   const snapshot = fitnessSnapshot(commandContext, {
     intent,
     suppressions: config.suppressions,

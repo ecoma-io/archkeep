@@ -1330,6 +1330,80 @@ export const fitness = [
     expect(out).toContain("matches the observed graph");
   });
 
+  it("exits 3 when the graph cannot see the workspace — the fitness command must not fold an incomplete-graph refusal into a verdict", async () => {
+    // R2-Major regression: `fitnessCommand` used to wrap `driftForCheck` in a
+    // catch-all that converted its fail-closed throw (an Nx workspace whose
+    // `nx.json` does not register this plugin but whose tracked files include
+    // polyglot manifests) into a `no-verdict` intent with exit 0. Every other
+    // read-only command (`drift`, `graph`, `impact`, `explain`) exits 3 for
+    // this same condition — a graph that cannot see the workspace must never
+    // be judged as if it did. The command now lets the throw propagate, so the
+    // run exits 3 naming the refusal.
+    const root = mkdtempSync(join(tmpdir(), "fitness-cli-unregistered-"));
+    try {
+      const writeUnreg = (relativePath, text) => {
+        mkdirSync(join(root, relativePath, ".."), { recursive: true });
+        writeFileSync(join(root, relativePath), text);
+      };
+      writeUnreg("nx.json", JSON.stringify({})); // No plugins entry.
+      writeUnreg(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "intent-clean",
+    match: ["*"],
+    condition: { type: "drift-free" },
+    reason: "must not be judged over a graph that cannot see the workspace",
+  },
+];
+`,
+      );
+      writeUnreg("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeUnreg("libs/domain/doc.go", "package domain\n");
+      const graph = {
+        nodes: {
+          domain: {
+            name: "domain",
+            type: "lib",
+            data: { root: "libs/domain", tags: [] },
+          },
+        },
+        dependencies: { domain: [] },
+      };
+      const files = [
+        "nx.json",
+        "module-boundaries.config.mjs",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+      const streams = {
+        out: (t) => streams.lines.out.push(t),
+        err: (t) => streams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: root,
+        readGraph: () => graph,
+        listFiles: () => files,
+      };
+      expect(await runCli(["fitness"], streams)).toBe(EXIT.error);
+      const report = streams.lines.out.join("\n") + streams.lines.err.join("\n");
+      expect(report).toContain("refusing to judge drift");
+      expect(report).toContain("go.mod");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("says nothing about README.md, since it is not an analyzable file — the coverage near-miss that keeps the check usable", async () => {
     const { report, violations, unchecked } = await check(
       { format: "text", config: null, paths: [] },

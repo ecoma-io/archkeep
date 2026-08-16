@@ -37,9 +37,12 @@ function edgesAmong(nodes, dependencies, names) {
 }
 
 /**
- * Whether the subgraph induced on `names` contains a cycle. A project reaching
- * itself through a real edge is a cycle too (a self-loop); the graph's own
- * reachability handles the transitive case.
+ * Whether the subgraph induced on `names` contains a cycle. Only multi-project
+ * cycles are considered: every provider strips self-edges before the graph
+ * reaches the rules (`../providers/native/graph.mjs` and
+ * `../providers/moon.mjs` drop `source === target` edges, and the Nx graph
+ * cannot carry one), so a self-loop cannot occur here and is not a `cycle-free`
+ * finding.
  *
  * @param {{nodes: object, dependencies?: object}} graph
  * @param {string[]} names
