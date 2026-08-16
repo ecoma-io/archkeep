@@ -1,8 +1,8 @@
 # `--format json`
 
 `check --format json`, `graph --format json`, `diff --format json`,
-`drift --format json`, `waivers --format json`, `history --format json`,
-`debt --format json`,
+`drift --format json`, `reconcile --format json`, `waivers --format json`,
+`history --format json`, `debt --format json`,
 `impact --format json`, `explain --format json`, and `context --format json`
 wrap the same verdict the terminal report and SARIF already carry in one
 versioned envelope. They change no exit code and no byte
@@ -53,7 +53,7 @@ and no random identifier anywhere in it. That is what makes it diffable in a
 pull request the same way the SARIF output already is.
 
 `command` is the one field that varies by which command produced the envelope —
-`"check"`, `"graph"`, `"diff"`, `"drift"`, `"waivers"`, `"history"`, `"health"`, `"debt"`,
+`"check"`, `"graph"`, `"diff"`, `"drift"`, `"reconcile"`, `"waivers"`, `"history"`, `"health"`, `"debt"`,
 `"impact"`, `"explain"`, or `"context"`. `src/report/json.mjs` (the module
 that builds the envelope) and `src/commands/README.md` (the module layout it
 follows) are both written for each command to reuse the same wrapper.
@@ -64,7 +64,7 @@ follows) are both written for each command to reuse the same wrapper.
 | --------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                                                                                                                 |
 | `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                                                                                                                                                                |
-| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"drift"`, `"waivers"`, `"history"`, `"health"`, `"debt"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                               |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"drift"`, `"reconcile"`, `"waivers"`, `"history"`, `"health"`, `"debt"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                |
 | `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"lattice.json"`, `".moon"`, or `".config/moon"`). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                 |
 | `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                                                                                                          |
@@ -293,6 +293,31 @@ Each `waivers` entry:
 | `status`      | string  | `"active"` before `expiresAt`, `"expired"` at or after it.                                                                  |
 | `remainingMs` | number  | Epoch-ms until expiry; negative when expired.                                                                               |
 | `covered`     | number  | Current violations accepted by this row, judged against the full finding set. Zero means the row is stale — covers nothing. |
+
+## `result` (for `command: "reconcile"`)
+
+`reconcile` scores the declared intended model against the observed architecture
+element by element — the inverse of `drift`. It is descriptive: it never exits
+`1`, and it exits `3` when coverage is incomplete or the intent cannot be
+verified against the observed graph. It never writes into
+`architecture-intent.json`; with `--propose` the envelope carries the ranked
+candidate list of model edits under the always-true `proposed` /
+`notAuthoritative` markers.
+
+| field              | type                 | meaning                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------ | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `intent`           | object               | `{file, fingerprint, rows}` — the resolved file name (`architecture-intent.json`), the SHA-256 fingerprint of the canonicalized intent, and the number of intent rows scored. Always present: `reconcile` requires a tracked intent file.                                                                                                                                                                   |
+| `observed`         | object               | `{projects, edges, implicitEdges}` — the project count, the code-dependency edge count, and how many `implicit` (build-ordering, not code) edges were excluded.                                                                                                                                                                                                                                             |
+| `scores`           | object               | `{projects, edges, tags, boundaries, intentRows}` — the scored element arrays. Each element is `{plane, name, state, severity, classification, confidence, intentRow}`; `intentRow` is `{plane, index, kind, key}` (the exact intent row an operator would edit) or `null` for an observed-only element.                                                                                                    |
+| `unknownFiles`     | `{file, reason}[]`   | Whole-file failures the analyzer never reached a verdict about. Always empty on a completed run — the command refuses on the first one.                                                                                                                                                                                                                                                                     |
+| `candidates`       | absent \| `object[]` | Present only with `--propose`. The ranked candidate list, each `{kind, plane, name, state, severity, evidence, intentRow, edit, proposed: true, notAuthoritative: true}`, sorted by severity then plane then name (plain string comparison). `kind` is `"add"`, `"removal"`, `"tag-change"`, or `"boundary-change"`; `edit` names the intent section and action (`{section, action, key, value?, reason}`). |
+| `proposed`         | absent \| `true`     | Present only with `--propose`, always `true`.                                                                                                                                                                                                                                                                                                                                                               |
+| `notAuthoritative` | absent \| `true`     | Present only with `--propose`, always `true`.                                                                                                                                                                                                                                                                                                                                                               |
+
+`reconcile` never returns a `"findings"` status or exit `1`: describing and
+proposing divergence is not a finding. An empty `scores` divergence means the
+observed architecture matches the intended model; a run that could not complete
+the comparison exits `3` with no envelope rather than report a clean one.
 
 ## `result` (for `command: "history"`)
 
