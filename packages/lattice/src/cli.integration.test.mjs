@@ -1375,6 +1375,81 @@ export const boundarySuppressions = [
     expect(streams.lines.out.join("\n")).toContain("accepted until 2999-01-01T00:00:00.000Z");
   });
 
+  it("an expired waiver re-asserts the violation in check text/SARIF/JSON and surfaces expired in waivers", async () => {
+    // The silent direction for a term: an expiry the calendar cannot hold is
+    // rejected at config load (config.test.mjs), and a term that HAS lapsed
+    // must not stay a waiver. Run the SAME tree under a boundary law whose row
+    // term is already in the past (a distinct filename, so the module cache
+    // loads the flip fresh — rewriting the existing file would re-import the
+    // cached 2999 law) and require the violation to be live again everywhere a
+    // developer could look, never silently re-accepted.
+    writeWaivers(
+      "past-boundaries.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const boundarySuppressions = [
+  {
+    path: "libs/domain/doc.go",
+    reason: "the adapter seam lands next release",
+    expiresAt: "2020-01-01T00:00:00.000Z",
+    origin: "ticket-42",
+  },
+];
+`,
+    );
+
+    // `check` — the violation is a plain finding again, with the re-assert
+    // evidence visible in the line a developer jumps to, and a non-zero exit.
+    const checkStreams = waiversEnv();
+    expect(await runCli(["check", "--config", "past-boundaries.mjs"], checkStreams)).toBe(
+      EXIT.violations,
+    );
+    const checkText = checkStreams.lines.out.join("\n");
+    expect(checkText).toContain("evidence   expired waiver");
+    expect(checkText).not.toContain("accepted until");
+
+    // SARIF — the same re-assert rides the same byte stream a SARIF uploader
+    // reads, so an upload never silences an expired term.
+    const sarifStreams = waiversEnv();
+    expect(
+      await runCli(["check", "--format", "sarif", "--config", "past-boundaries.mjs"], sarifStreams),
+    ).toBe(EXIT.violations);
+    const sarif = JSON.parse(sarifStreams.lines.out.join("\n"));
+    const results = sarif.runs[0].results;
+    expect(results).toHaveLength(1);
+    expect(results[0].properties.evidence).toBe("expired waiver");
+
+    // JSON — the envelope's failure carries the evidence too, the same object
+    // the `--format json` consumers parse.
+    const jsonStreams = waiversEnv();
+    expect(
+      await runCli(["check", "--format", "json", "--config", "past-boundaries.mjs"], jsonStreams),
+    ).toBe(EXIT.violations);
+    const envelope = JSON.parse(jsonStreams.lines.out.join("\n"));
+    expect(envelope.result.violations).toHaveLength(1);
+    expect(envelope.result.violations[0].evidence).toBe("expired waiver");
+    expect(envelope.result.waived).toBeUndefined();
+
+    // `waivers` — the same row is now reported as expired, not active: a term
+    // that lapsed is surfaced loudly on the surface that used to accept it.
+    const wvStreams = waiversEnv();
+    expect(await runCli(["waivers", "--config", "past-boundaries.mjs"], wvStreams)).toBe(EXIT.ok);
+    const wvText = wvStreams.lines.out.join("\n");
+    expect(wvText).toContain("1 expired, 0 cover nothing right now");
+    expect(wvText).toMatch(/expired \d+ms ago/);
+  });
+
   it("waivers refuses a tree it could not fully read — exit 3, never a stale-looking surface", async () => {
     // The silent direction named in the coverage-refusal: a file the analyzer
     // never judged contributes no finding, so a waiver naming it would read as

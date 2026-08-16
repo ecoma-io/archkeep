@@ -468,17 +468,24 @@ describe("boundarySuppressions", () => {
     });
 
     it("rejects a calendar-impossible expiresAt that Date.parse would silently shift — a term that means a different day than written", () => {
-      expect(
-        findBoundaryConfigViolations(
-          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "2026-02-30T00:00:00.000Z" }]),
-        )[0],
-      ).toMatch(/silently shifted to another day/);
+      // February (28 days) and September (30 days) both catch roll-over of a
+      // day the month cannot hold — the same code path, exercised at two month
+      // lengths so a fix that special-cases one length can't fake green.
+      for (const expiresAt of ["2026-02-30T00:00:00.000Z", "2026-09-31T00:00:00.000Z"]) {
+        expect(
+          findBoundaryConfigViolations(
+            withSuppressions([{ path: "a.js", reason: "why", expiresAt }]),
+          )[0],
+        ).toMatch(/silently shifted to another day/);
+      }
     });
 
     it("rejects an hour-out-of-range expiresAt that Date.parse would roll over", () => {
       expect(
         findBoundaryConfigViolations(
-          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "2026-01-01T24:00:00.000Z" }]),
+          withSuppressions([
+            { path: "a.js", reason: "why", expiresAt: "2026-01-01T24:00:00.000Z" },
+          ]),
         )[0],
       ).toMatch(/silently shifted to another day/);
     });
