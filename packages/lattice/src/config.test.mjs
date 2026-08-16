@@ -400,6 +400,55 @@ describe("boundarySuppressions", () => {
       /boundarySuppressions: must be an exported array/,
     );
   });
+
+  describe("waiver rows — expiresAt turns a suppression into a waiver", () => {
+    it("accepts an expiresAt instant and an origin on the same row as a suppression", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([
+            {
+              path: "area/app/some.config.js",
+              reason: "temporary acceptance while the alias lands",
+              expiresAt: "2026-09-01T00:00:00.000Z",
+              origin: "ticket-1234",
+            },
+          ]),
+        ),
+      ).toEqual([]);
+    });
+
+    it("rejects an expiresAt that does not parse as an ISO instant — a term that cannot be read cannot be honoured", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "not-a-date" }]),
+        )[0],
+      ).toMatch(/expiresAt: must be an ISO-8601 instant/);
+    });
+
+    it("rejects an empty expiresAt, which would read as permanent", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "" }]),
+        )[0],
+      ).toMatch(/expiresAt: must be an ISO-8601 instant/);
+    });
+
+    it("rejects an origin that is not a non-empty string", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", origin: "" }]),
+        )[0],
+      ).toMatch(/origin: must be a non-empty string/);
+    });
+
+    it("rejects a misspelled waiver field through the same key check as every other field", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expireAt: "2026-09-01T00:00:00.000Z" }]),
+        )[0],
+      ).toMatch(/expireAt: not a suppression field/);
+    });
+  });
 });
 
 describe("suppressionCovers", () => {

@@ -338,9 +338,12 @@ function constraintRowViolations(row, index) {
 
 /**
  * The keys a suppression entry may carry. `reason` is not optional, and that is
- * the whole point of the shape — see `suppressionRowViolations`.
+ * the whole point of the shape — see `suppressionRowViolations`. A row that
+ * also carries `expiresAt` is a WAIVER (temporary acceptance) rather than a
+ * suppression (permanent one): both validate through this same shape, and the
+ * waiver semantics live in `./governance/waiver.mjs`.
  */
-const SUPPRESSION_KEYS = ["path", "messageId", "reason"];
+const SUPPRESSION_KEYS = ["path", "messageId", "reason", "expiresAt", "origin"];
 
 /**
  * Does this suppression cover a violation at `sourceFile` with `messageId`?
@@ -410,6 +413,30 @@ function suppressionRowViolations(row, index) {
     violations.push(
       `${at}.messageId: ${describe(row.messageId)} is not a violation type this engine ` +
         `reports — expected one of ${MESSAGE_IDS.join(", ")}`,
+    );
+  }
+  if ("expiresAt" in row) {
+    // A waiver's term. Rejected when it does not parse as an ISO instant,
+    // because an unparseable term makes the waiver's fate unknowable — and a
+    // waiver whose fate is unknowable either covers nothing (if it never
+    // parses) or reads as a permanence the author never wrote. `Number.isNaN`
+    // is the one test that catches `"garbage"` and `""` alike without
+    // accepting `"0"` (which parses as the epoch).
+    if (
+      typeof row.expiresAt !== "string" ||
+      Number.isNaN(Date.parse(/** @type {string} */ (row.expiresAt)))
+    ) {
+      violations.push(
+        `${at}.expiresAt: must be an ISO-8601 instant the waiver accepts until, got ` +
+          `${describe(row.expiresAt)} — an expired waiver re-asserts the violation it covered, so ` +
+          `a term that cannot be read cannot be honoured`,
+      );
+    }
+  }
+  if ("origin" in row && (typeof row.origin !== "string" || row.origin.trim() === "")) {
+    violations.push(
+      `${at}.origin: must be a non-empty string naming where the waiver came from, got ` +
+        `${describe(row.origin)}`,
     );
   }
   for (const key of Object.keys(row)) {
