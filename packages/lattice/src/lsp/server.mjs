@@ -128,8 +128,10 @@ function markersAt(root) {
  * @param {string} root
  * @returns {{boundaryConfig: string, tsConfig: string}}
  * @throws {Error} when both markers are present, the marker present is
- *   unreadable or malformed, or a native root's `boundaryConfig` is the
- *   inline-object form this server cannot yet read.
+ *   unreadable or malformed, a native root's `boundaryConfig` is the
+ *   inline-object form this server cannot yet read, or an Nx root's options
+ *   name a `profiles` registry — a profile NAME is not a file this server
+ *   could watch or parse.
  */
 export function readWorkspaceOptions(root) {
   const { hasNx, hasNative } = markersAt(root);
@@ -156,7 +158,18 @@ export function readWorkspaceOptions(root) {
     }
     return { boundaryConfig: model.boundaryConfig, tsConfig: model.tsConfig };
   }
-  return readPluginOptions(root);
+  const options = readPluginOptions(root);
+  if (typeof options.profiles === "string") {
+    throw new Error(
+      `lattice: ${root}'s nx.json options name a profiles registry (${options.profiles}) — a ` +
+        `valid form (../../cli.mjs's check resolves a policy by profile name from it), but not ` +
+        `one this language server can load yet: it only ever reads a policy FILE, and a profile ` +
+        `name is a selector, not a path it could watch or parse. Enforce by file instead — ` +
+        `remove the profiles option, or point boundaryConfig at an .mjs or .json file — see ` +
+        `../../../../docs/concepts/profiles.md.`,
+    );
+  }
+  return options;
 }
 
 /**

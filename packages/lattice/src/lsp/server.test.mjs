@@ -288,6 +288,31 @@ describe("publishing, where silence has to mean clean", () => {
     expect(diagnoseDocument).not.toHaveBeenCalled();
   });
 
+  it("publishes a failure, not an empty list, when an Nx workspace's options name a profiles registry", async () => {
+    // `readWorkspaceOptions` (`./server.mjs`) refuses a `profiles` option by
+    // throwing, rather than watching the profile NAME (`options.boundaryConfig`)
+    // as though it were a policy file and loading it — the loud alternative to
+    // a server that watched `[object Object]`-style nothing forever. A profile
+    // name is a selector, not a path this server could watch or parse, so the
+    // loud refusal is the only answer that does not read as a clean workspace.
+    const { server, sent } = session({
+      readOptions: () => {
+        throw new Error(
+          "lattice: /fixture's nx.json options name a profiles registry (law-profiles.json) — a " +
+            "valid form (../../cli.mjs's check resolves a policy by profile name from it), but not " +
+            "one this language server can load yet",
+        );
+      },
+    });
+    await server.handle(initialize());
+    await server.handle(didOpen());
+
+    const [publish] = published(sent);
+    expect(publish.diagnostics).toHaveLength(1);
+    expect(publish.diagnostics[0].message).toContain("name a profiles registry");
+    expect(diagnoseDocument).not.toHaveBeenCalled();
+  });
+
   it("publishes a failure rather than an empty list when the index cannot be built", async () => {
     const { server, sent } = session({
       buildIndex: () => {

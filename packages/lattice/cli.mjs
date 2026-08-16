@@ -80,6 +80,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs";
 import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/config.mjs";
+import { profilePolicy } from "./src/governance/profile-registry.mjs";
 import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
 import { contextCommand } from "./src/commands/context-command.mjs";
 import { planContextCommand } from "./src/commands/plan-context-command.mjs";
@@ -544,23 +545,39 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // checks below, the same order `check` has always used — a malformed
   // `--config` stops the run before either of them runs at all.
   //
-  // Typed explicitly because the three producers below disagree: the two
+  // A workspace that names a `profiles` plugin option enforces BY PROFILE NAME:
+  // `commandContext.options.profiles` names the registry file, and the value of
+  // `--config` / `boundaryConfig` selects which profile in it to apply. The
+  // profile's resolved block runs through the same `profilePolicy` →
+  // `config.mjs` `policyFrom` tail every file dialect uses, so there is exactly
+  // ONE enforcement path — a profile is a way to name a policy, never a second
+  // kind of policy that could disagree with a file about the same row
+  // (`./src/governance/profile-registry.mjs`).
+  //
+  // Typed explicitly because the four producers below disagree: the two
   // calls into `./src/config.mjs` (`loadBoundaryConfig`/`loadBoundaryConfigFile`)
-  // are typed with the optional `notes`, and the direct `policyFrom` call for
-  // a native workspace's inline `boundaryConfig` is typed without it — left
+  // are typed with the optional `notes`, the direct `policyFrom` call for a
+  // native workspace's inline `boundaryConfig` is typed without it, and
+  // `profilePolicy` returns the shared policy shape without `notes` — left
   // inferred, `tsc` narrows the union to whichever arm's return type is
   // narrowest and refuses the `notes` read below on that narrower type.
   /** @type {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }} */
-  const config = options.config
-    ? await loadBoundaryConfigFile(
-        isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+  const config = hasProfiles(commandContext.options)
+    ? profilePolicy(
+        resolve(root, commandContext.options.profiles),
+        String(options.config ?? commandContext.options.boundaryConfig),
+        options.config ?? commandContext.options.boundaryConfig,
       )
-    : typeof commandContext.options.boundaryConfig === "string"
-      ? await loadBoundaryConfig(root, commandContext.options.boundaryConfig)
-      : policyFrom(
-          commandContext.options.boundaryConfig,
-          `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-        );
+    : options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : typeof commandContext.options.boundaryConfig === "string"
+        ? await loadBoundaryConfig(root, commandContext.options.boundaryConfig)
+        : policyFrom(
+            commandContext.options.boundaryConfig,
+            `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+          );
 
   // The go.work drift check, keyed off the manifest's presence the way every
   // resolver keys off its language's manifest: no tracked root go.work, no
@@ -951,6 +968,20 @@ async function runCheck(options, { cwd, env }) {
   }
 
   return verdictFor(result).exitCode;
+}
+
+/**
+ * Whether the workspace's resolved options name a `profiles` registry — the
+ * check command's signal to enforce by profile NAME rather than by file. A
+ * workspace that never registered the plugin carries the default `profiles:
+ * undefined`, which is the same "no registry, no named law" state as a
+ * workspace that declared nothing.
+ *
+ * @param {object} options The resolved options from `resolveCommandContext`.
+ * @returns {boolean}
+ */
+function hasProfiles(options) {
+  return typeof options?.profiles === "string" && options.profiles !== "";
 }
 
 /**

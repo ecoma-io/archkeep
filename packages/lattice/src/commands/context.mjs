@@ -120,8 +120,9 @@ export function markersAt(root) {
  *   scoped-then-analyzed (nx/moon) result — see the branches below for why the
  *   order is not the same on all three.
  * @property {{boundaryConfig: string|object, tsConfig: object|undefined,
- *   inline?: boolean}} options What this workspace names its boundary law and
- *   its shared tsconfig — `check`'s `--config` flag, if given, still wins over
+ *   profiles?: string, inline?: boolean}} options What this workspace names its
+ *   boundary law, its shared tsconfig, and — when it uses one — its named
+ *   profile registry. `check`'s `--config` flag, if given, still wins over
  *   `options.boundaryConfig`; that override is `check`'s decision, not this
  *   module's.
  * @property {{registered: boolean, manifests: string[]}} pluginGap Whether
@@ -339,7 +340,11 @@ export function resolveCommandContext(
     // rather than contracts. Read before the graph, because it decides which
     // tsconfig `createWorkspace` resolves paths against.
     const pluginOptions = readPluginOptions(root);
-    options = { boundaryConfig: pluginOptions.boundaryConfig, tsConfig: pluginOptions.tsConfig };
+    options = {
+      boundaryConfig: pluginOptions.boundaryConfig,
+      tsConfig: pluginOptions.tsConfig,
+      ...(pluginOptions.profiles === undefined ? {} : { profiles: pluginOptions.profiles }),
+    };
 
     graph = effectiveReadGraph(root);
     ({ workspace, owned } = createWorkspace({
