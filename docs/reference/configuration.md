@@ -135,10 +135,10 @@ All five commands share the same flag-parsing rules. Both `--flag value` and
 
 ### `--format`
 
-| command                                         | values                  | default | meaning                                                                                               |
-| ----------------------------------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
-| `check`                                         | `text`, `sarif`, `json` | `text`  | Terminal report, SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope.                |
-| `graph`, `diff`, `impact`, `explain`, `context` | `text`, `json`          | `text`  | Terminal report or the versioned JSON envelope. No SARIF -- descriptive commands produce no findings. |
+| command                                                  | values                  | default | meaning                                                                                               |
+| -------------------------------------------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| `check`                                                  | `text`, `sarif`, `json` | `text`  | Terminal report, SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope.                |
+| `graph`, `diff`, `drift`, `impact`, `explain`, `context` | `text`, `json`          | `text`  | Terminal report or the versioned JSON envelope. No SARIF -- descriptive commands produce no findings. |
 
 `--format` changes no exit code and no byte of the other two formats. It is an
 additional rendering of the same verdict.

@@ -1,9 +1,9 @@
 # `--format json`
 
 `check --format json`, `graph --format json`, `diff --format json`,
-`history --format json`, `impact --format json`, `explain --format json`, and
-`context --format json` wrap the same verdict the terminal report and SARIF
-already carry in one versioned envelope. They change no exit code and no byte
+`drift --format json`, `history --format json`, `impact --format json`,
+`explain --format json`, and `context --format json` wrap the same verdict the
+terminal report and SARIF already carry in one versioned envelope. They change no exit code and no byte
 of the other two formats — they are additional renderings of a verdict every
 format already computes, for a script that wants to branch on a field rather
 than scrape a report or walk a SARIF `runs[]` array.
@@ -58,7 +58,7 @@ follows) are both written for each command to reuse the same wrapper.
 | --------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                                                                                                                 |
 | `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                                                                                                                                                                |
-| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"history"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                                                                             |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"drift"`, `"history"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                                                                  |
 | `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"lattice.json"`, `".moon"`, or `".config/moon"`). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                 |
 | `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                                                                                                          |
@@ -212,6 +212,26 @@ changes do not make it exit `1`; a completed comparison always exits `0`.
 | `removedEdges`    | `{source, target, type}[]`             | Edges present in the baseline but absent from the current workspace, sorted by the full edge identity.                                                                                                                                                                                                                      |
 | `policyMismatch`  | `{baseline, head}` or absent           | Present when both the baseline snapshot and the head run carry a policy fingerprint and they disagree. `baseline.fingerprint` and `head.fingerprint` are the SHA-256 hex strings. The rule-impact section may reflect the policy change rather than a structural change. Absent when no mismatch or no config was provided. |
 | `ruleImpact`      | `{introduced, resolved}` or absent     | Present when a boundary config with `depConstraints` was provided. `introduced` lists violations the added edges introduce; `resolved` lists violations the removed edges resolve. Covers only tag-based constraints (3 of 15 violation types) — see `coverage.notes`. Absent when no config was provided.                  |
+
+## `result` (for `command: "drift"`)
+
+`drift` compares the observed architecture to the workspace's declared intended
+one — the tracked root `architecture-intent.json`. It is descriptive: it never
+exits `1`, and it exits `3` when coverage is incomplete or the intent cannot be
+verified against the observed graph. The intended side is a contract, and its
+envelope names it by fingerprint so "no drift" always reads as a claim about a
+specific declared intent.
+
+| field      | type     | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `intent`   | object   | `{file, fingerprint, rows}` — the resolved file name (`architecture-intent.json`), the SHA-256 fingerprint of the canonicalized intent, and the number of intent rows judged. Always present: `drift` requires a tracked intent file.                                                                                                                                                                                                                           |
+| `observed` | object   | `{projects, edges, implicitEdges}` — the project count, the code-dependency edge count, and how many `implicit` (build-ordering, not code) edges were excluded. An empty finding list means "no drift among the code-dependency edges of exactly these projects".                                                                                                                                                                                               |
+| `findings` | object[] | Every intent row the observed architecture violates, each `{source, target, rule, boundaryFrom, boundaryTo, message}`. `rule` is one of the ten `judgeIntent` message ids (`intentForbiddenEdge`, `intentAllowedMissing`, `projectMissing`, `projectPresent`, `projectTagMissing`, `dependencyForbidden`, `dependencyNotAllowed`, `tagDependencyForbidden`, `intentUnknownProject`, `intentUnknownTag`). Sorted by a total key so two runs stay byte-identical. |
+
+`drift` never returns a `"findings"` status or exit `1`. Whatever the descriptive
+command prints, the failing verdict is `check`'s job — and `check` folds drift in
+by presence, so a building workspace that violates its declared intent fails the
+same gate that reports the boundary violations.
 
 ## `result` (for `command: "history"`)
 
