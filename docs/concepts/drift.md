@@ -6,6 +6,8 @@ drift are invisible to a checker that only judges imports.
 
 Lattice surfaces three kinds of drift through two commands. Each is a different failure
 mode, and two of the three share a command. None requires a toolchain installed.
+Boundary violations and configuration drift surface through `check`; structural
+drift and its rule impact surface through `diff`.
 
 ## What drift means here
 
@@ -23,9 +25,9 @@ produces a boundary violation:
   violations, but they are build breakers or silent misresolutions that nothing
   else detects.
 
-A checker that only looks at imports misses both classes. Lattice surfaces all
-three through `check` and `diff`, because a gap in any one of them looks like
-"clean" from inside the other two.
+A checker that only looks at imports misses both classes. `check` and `diff`
+together surface all three, because a gap in any one of them looks like "clean"
+from inside the other two.
 
 ## The three drift signals
 
@@ -84,10 +86,12 @@ configuration drift; the `diff` command finds structural drift and its rule
 impact. The concept ties them together; the commands answer the specific
 questions.
 
-## Where this is going
+## Where this sits in the roadmap
 
-[roadmap.md](../roadmap.md) owns the staged direction. The 2.x capability
-"drift and architectural-change intelligence" extends what `diff` and `check`
-already report: richer policies, fitness functions, and historical evolution of
-the architecture over time. Nothing in 1.x promises that; the three signals
-above are what ships today.
+The three signals above are basic drift detection, and they are a 1.x
+capability: deterministic, computed from graph, policy, snapshot, diff and
+intent, with no predictive component. [roadmap.md](../roadmap.md) owns the
+staged path and lists this alongside the other 1.x capabilities. What 2.x adds
+on top — advanced and predictive drift, historical evolution intelligence, a
+recommendation component — is direction, not a promise; the deterministic
+signals are what ships today.

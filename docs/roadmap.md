@@ -5,15 +5,19 @@ which capabilities belong to which major version, and in what order the project
 earns them. It deliberately owns nothing finer than that: individual features,
 their design and their sequencing live in GitHub issues and milestones, because
 a roadmap that lists fifty features is a backlog wearing a roadmap's name, and
-it is stale the day the first one ships. [north-star.md](doctrine/north-star.md) owns
-what "finished" means for the capabilities named here and the refusals that
-hold on the way; when a claim in this file needs a finish line, that file is
-the one that binds.
+it is stale the day the first one ships. [doctrine/north-star.md](doctrine/north-star.md)
+owns what "finished" means for the capabilities named here and the refusals
+that hold on the way; [doctrine/architecture-authority.md](doctrine/architecture-authority.md)
+owns the system boundary every capability stays inside. When a claim in this
+file needs a finish line, that file is the one that binds.
 
 ## The thesis
 
-**Executable architecture for software projects — keeping architecture
-enforceable when software is produced faster than humans can review it.**
+Lattice is an **architecture governance system for human and agentic software
+development** — a deterministic authority that keeps the intended architecture
+aligned with the observed architecture while humans and agents continuously
+change the codebase. [doctrine/north-star.md](doctrine/north-star.md) owns the
+full sentence and the argument behind it; this document owns the staged path.
 
 Architecture today lives in documents — READMEs, ADRs, diagrams — that nothing
 executes and nothing checks. The code drifts from them silently, and the drift
@@ -22,61 +26,141 @@ produce most of the diffs. Lattice's answer is to make the architecture itself
 machine-readable and its enforcement deterministic, so that "the boundary
 holds" is a verdict a pipeline computes rather than a belief a reviewer holds.
 
-Lattice began as an Nx plugin closing one instance of that gap — module
-boundaries for the languages ESLint cannot parse. The engine underneath was
-always bigger than the integration around it, and the roadmap below is the path
-from that plugin to the engine standing on its own.
+## Current / implemented
 
-## 1.x — Universal Architecture Enforcement
+Everything in this section ships today (package 0.4.0) and is not future work.
+A new reader should find these capabilities described as present, not promised.
 
-The goal of every 1.x release: architecture enforcement that works in any
-repository, deterministically, with no build system as a precondition.
-
-- **A core independent of Nx and of monorepos.** The engine discovers projects,
-  builds the dependency graph and judges boundaries from its own model; Nx
-  becomes one provider of that model rather than its foundation. Single-repo and
-  monorepo layouts are first-class.
+- **A core independent of Nx, of Moon, and of monorepos.** The engine discovers
+  projects, builds the dependency graph and judges boundaries from its own
+  model; Nx and Moon are providers of that model rather than its foundation.
+  Single-repo, monorepo and polyrepo layouts are first-class.
+  ([concepts/integrations.md](concepts/integrations.md))
 - **A multi-language dependency graph read from source.** Go, Rust, Python,
-  TypeScript and JavaScript imports and manifests, statically — nothing invokes a
-  toolchain to answer a question about imports.
+  TypeScript, JavaScript and Vue imports and manifests, statically — nothing
+  invokes a toolchain to answer a question about imports.
+  ([reference/languages.md](reference/languages.md))
 - **Architecture as code.** Layers, boundaries, dependency constraints and
-  ownership declared in a machine-readable model that is reviewed like code,
-  in the repository it governs.
+  ownership declared in a machine-readable model that is reviewed like code, in
+  the repository it governs. ([concepts/boundaries.md](concepts/boundaries.md))
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
-  the same answer.
-- **`check`, `graph`, `impact`, `diff`, `explain` and `context`,** each with
-  output a script or an agent can consume without parsing prose.
-- **Nx as a first-class integration, not a dependency.** A workspace that has
-  Nx gets graph reuse and `affected` integration; a repository that has never
-  heard of Nx loses nothing.
+  the same answer. ([reference/exit-codes.md](reference/exit-codes.md))
+- **Six commands — `check`, `graph`, `diff`, `impact`, `explain`, `context`** —
+  each with output a script or an agent can consume without parsing prose.
+  ([reference/cli.md](reference/cli.md))
+- **Nx and Moon as first-class integrations, not dependencies.** A workspace
+  that has Nx or Moon gets graph reuse and `affected` integration; a repository
+  that has neither loses nothing.
+  ([integrations/nx.md](integrations/nx.md),
+  [integrations/moon.md](integrations/moon.md))
+- **Architecture snapshots with provenance.** `graph` produces a deterministic
+  snapshot carrying the git origin of the run; `diff` warns when a baseline
+  cannot be attributed to the same repository.
+  ([usage/graph.md](usage/graph.md), [reference/json-output.md](reference/json-output.md))
+- **Meaningful architecture diff.** `diff` separates structural change from
+  policy mismatch from rule impact, and refuses an incomplete baseline.
+  ([usage/diff.md](usage/diff.md))
+- **Basic drift detection.** Three drift signals, with no predictive
+  component: boundary violations and configuration drift surface through
+  `check`; structural drift and its rule impact surface through `diff`.
+  ([concepts/drift.md](concepts/drift.md))
+- **Architecture planning facts for agents.** `context` and `impact` answer the
+  questions an agent asks before and during a change, in machine-readable form;
+  `explain` explains a finding after it is reported.
+  ([concepts/agentic-development.md](concepts/agentic-development.md))
+- **Architecture intent as a machine-readable contract.** The boundary config
+  is the declared intent: boundaries, allowed and forbidden relationships, and
+  the constraints a workspace states about its own structure. Intent is
+  validated against the observed architecture with no AI-generated intent and
+  no semantic inference.
+  ([concepts/boundaries.md](concepts/boundaries.md))
+- **Agentic governance.** The four `arch-*` skills teach agents when to ask the
+  authority and how to read its answers; Claude Code, Codex and opencode run
+  the same editor gates; the repository dogfoods its own enforcer in CI.
+  ([skills/overview.md](skills/overview.md),
+  [doctrine/architecture-authority.md](doctrine/architecture-authority.md))
 
-1.0 is the release where all of that holds together and the conformance
-oracles say the pivot changed no verdict it did not mean to change.
+## 1.x — Universal Agentic Architecture Governance
 
-## 2.x — Agentic Architecture Platform
+The goal of 1.x: the system above, complete and stable — the deterministic
+authority, its evidence commands, the machine-readable intent it enforces, the
+evolution safety that keeps change honest, and the agent protocol that makes
+agents consumers rather than authorities.
 
-The goal of 2.x: Lattice as the architectural control plane for software that
-is substantially produced by agents.
+Most of 1.x is already implemented and listed above. What remains before a
+**stable 1.0** is completion of the surfaces and hardening of the proof, not a
+new feature list:
 
-- **Drift and architectural-change intelligence** — not only "this import is
-  illegal" but "this change alters the architecture, and here is how".
-- **Fitness functions and richer policies** beyond dependency constraints.
-- **An agent-native interface**: architectural context before a change,
-  impact analysis during it, verification after it — machine-readable at
-  every step, because the consumer is a model, not a reader. `context` and
-  `impact` already answer the before-change and during-change questions; 2.x
-  extends that reach.
-- **Architecture-aware agent workflows and approval gates**, so an agent's
-  diff meets the architecture before it meets a human.
-- **Deeper editor, LSP and forge integrations** (GitHub, GitLab, CI
-  platforms), and a plugin surface for third-party providers and analyzers.
-- **Visualization and historical evolution** — the architecture as it is, as
-  it was, and how it got here.
+- **The language server on the VS Code marketplace.** The client exists and
+  runs from a development host or a `.vsix` CI build; what is missing is the
+  marketplace publisher account, so a developer who does not already run an LSP
+  client still has a manual install to perform.
+  ([integrations/vscode.md](integrations/vscode.md),
+  [doctrine/north-star.md](doctrine/north-star.md))
+- **Breadth of conformance evidence.** The differential against
+  `@nx/enforce-module-boundaries` runs over real public workspaces, weekly and
+  on demand, as a non-required check that is still treated as a regression when
+  it goes red; more real trees is the remaining gap, not a missing feature.
+  ([development/testing.md](development/testing.md))
+- **A stable `schemaVersion` promise.** The JSON envelope is versioned and
+  documented; 1.0 makes that contract a promise consumers can build on.
+  ([reference/json-output.md](reference/json-output.md))
 
-Nothing in 2.x weakens the 1.x contract: every intelligence feature sits on
-top of the deterministic core, never in place of it. A prediction is allowed
-to be wrong; a verdict is not.
+### Capabilities pulled forward from 2.x
+
+Four capabilities moved from the 2.x direction into the 1.x scope, each in a
+deliberately deterministic form. They are listed here so the adjusted roadmap is
+explicit, not silent:
+
+1. **Architecture Intent** — the boundary config as a machine-readable
+   contract: boundaries, allowed and forbidden dependencies, constraints and
+   intended structure. It includes no AI-generated intent, no semantic
+   architecture inference, and no automatic redesign.
+2. **Basic Drift Detection** — the difference between intended architecture and
+   observed architecture, computed from graph, policy, snapshot, diff and
+   intent. Deterministic only; no predictive drift intelligence.
+3. **Lightweight Architecture Evolution / History** — deterministic historical
+   evidence: a `graph` snapshot → a change → a `diff` between the two, each
+   carrying provenance. No recommendation engine.
+4. **Architecture Planning Facts for Agents** — context, affected projects,
+   dependency impact, constraints, allowed boundaries and violations, provided
+   to an agent as facts. The agent reasons, plans and decides how to modify
+   code; Lattice does not become an LLM.
+   ([doctrine/architecture-authority.md](doctrine/architecture-authority.md))
+
+Each of these four is deterministic and inspectable: the verdict is reproducible
+from source, and the authority never reasons about the architecture it reports.
+
+## 2.x — Architecture Intelligence
+
+The goal of 2.x: the layer that reads and predicts, sitting on top of — never
+in place of — the deterministic 1.x core. It is not "more rules"; it is a
+different relationship to the architecture the core already governs.
+
+- **Deeper architecture intent** — richer, machine-readable intent beyond the
+  dependency constraint table.
+- **Semantic architecture understanding** — the architecture as a meaning to be
+  read, not only a graph to be checked.
+- **Advanced drift detection** — drift that is anticipated or explained, on top
+  of the deterministic drift 1.x already reports.
+- **Architecture evolution intelligence** — how the architecture changed and
+  why, on top of the deterministic snapshot-and-diff history 1.x already keeps.
+- **Change risk analysis and architectural impact prediction** — what a change
+  is _likely_ to break, not only what it _demonstrably_ breaks.
+- **Migration planning and architecture recommendations** — proposed paths,
+  offered to a human to accept or refuse.
+- **Cross-repository architecture intelligence** — reasoning across more than
+  one repository at a time.
+- **Agent-assisted architecture planning** — planning help that extends the
+  facts 1.x provides, while the agent remains the decision-maker.
+- **Potentially AI-assisted reasoning** — where intelligence is not a verdict.
+
+2.x is a **direction, not a commitment to implementation details**. The list
+above names the headroom; nothing in it is a dated promise, and a prediction is
+allowed to be wrong where a verdict is not. Nothing in 2.x weakens the 1.x
+contract: every intelligence feature sits on top of the deterministic core,
+never in place of it.
 
 ## What this roadmap refuses
 
@@ -86,3 +170,8 @@ to be wrong; a verdict is not.
   rejected and closed without this document lying in the meantime.
 - **A phase 3.** When 2.x is real, what comes after it will be visible from
   there, and not before.
+- **Moving the authority.** Any capability that would let an agent, a provider,
+  a skill or CI decide whether an architecture is valid — rather than report
+  whether it holds — is refused by the boundary in
+  [doctrine/architecture-authority.md](doctrine/architecture-authority.md). The
+  roadmap stages breadth and reading; it never stages that line.

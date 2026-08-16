@@ -5,11 +5,12 @@ Two doors. Take the one that matches what you are here to do.
 - **I want to use it** → [getting-started/installation.md](getting-started/installation.md)
 - **I want to change it** → [development/architecture.md](development/architecture.md)
 
-And three documents that are neither, but decide what the rest say:
+And four documents that are neither, but decide what the rest say:
 [why.md](why.md) — the problem this exists for, with the measurement behind it —
 [north-star.md](doctrine/north-star.md) — where it is going and what it will refuse on
-the way — and [roadmap.md](roadmap.md) — the staged path there, by major
-version.
+the way — [architecture-authority.md](doctrine/architecture-authority.md) — what Lattice
+is, what it is not, and the line its neighbours may not cross — and
+[roadmap.md](roadmap.md) — the staged path there, by major version.
 
 ## Getting started
 
@@ -79,11 +80,12 @@ version.
 
 ## Doctrine
 
-| page                                                              | what it answers                                                     |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------- |
-| [north-star.md](doctrine/north-star.md)                           | The direction, what "finished" means per language, and the refusals |
-| [principles.md](doctrine/principles.md)                           | The seven binding principles                                        |
-| [architecture-governance.md](doctrine/architecture-governance.md) | How Lattice practices what it enforces                              |
+| page                                                              | what it answers                                                                        |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| [north-star.md](doctrine/north-star.md)                           | The direction, what "finished" means per language, and the refusals                    |
+| [architecture-authority.md](doctrine/architecture-authority.md)   | What Lattice is, what it is not, and the line providers/skills/agents/CI may not cross |
+| [principles.md](doctrine/principles.md)                           | The seven binding principles                                                           |
+| [architecture-governance.md](doctrine/architecture-governance.md) | How Lattice practices what it enforces                                                 |
 
 ## Development
 
@@ -106,29 +108,30 @@ This repository states a rule once and links to it from everywhere else, so the
 useful question is usually not "where is this documented" but "which file is
 allowed to say it". That table:
 
-| file                                                    | owns                                                                                                     |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `README.md`                                             | The pitch: what Lattice is in one breath, and the way in                                                 |
-| [`docs/why.md`](why.md)                                 | The gap, and the evidence that it is real                                                                |
-| [`docs/doctrine/north-star.md`](doctrine/north-star.md) | The direction, what "finished" means per language, and the refusals                                      |
-| [`docs/doctrine/principles.md`](doctrine/principles.md) | The seven binding principles                                                                             |
-| [`docs/roadmap.md`](roadmap.md)                         | The staged path: which capabilities belong to which major version, and in what order                     |
-| `docs/getting-started/`                                 | Installation, first project, first policy                                                                |
-| `docs/concepts/`                                        | The model: architecture, graph, boundaries, policies, projects, drift, agentic development, integrations |
-| `docs/usage/`                                           | How a consumer runs it and reads its answers                                                             |
-| `docs/integrations/`                                    | Nx integration and VS Code extension — the two surfaces at the edge                                      |
-| `docs/reference/`                                       | Schemas, exit codes, language limits, violation catalogue                                                |
-| `docs/development/`                                     | How it works inside, and how to extend it                                                                |
-| `docs/skills/`                                          | Agent architecture skills: overview, installation, hosts, authoring, versioning                          |
-| `CONTRIBUTING.md`                                       | The contribution bar, the commands, hooks, commits, review, release                                      |
-| `SECURITY.md`                                           | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/`    |
-| `AGENTS.md`                                             | The rules a diff is rejected for violating, for humans and agents alike                                  |
-| `packages/lattice/README.md`                            | The package's own reference — it is the npm landing page and must stand alone                            |
-| `packages/lattice-vscode/README.md`                     | The VS Code client: what it requires, the two settings it has, and the two it refuses                    |
-| `packages/lattice/CLAUDE.md`                            | Layer mechanics: what each layer may know                                                                |
-| `packages/lattice/src/*/README.md`                      | Each layer's own semantics — rules, report, conformance                                                  |
-| `packages/lattice/src/analysis/contract.md`             | The frozen record every analyzer returns                                                                 |
-| `skills/`                                               | Canonical agent architecture skills — the `arch-*` behavioral protocol                                   |
+| file                                                                            | owns                                                                                                     |
+| ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `README.md`                                                                     | The pitch: what Lattice is in one breath, and the way in                                                 |
+| [`docs/why.md`](why.md)                                                         | The gap, and the evidence that it is real                                                                |
+| [`docs/doctrine/north-star.md`](doctrine/north-star.md)                         | The direction, what "finished" means per language, and the refusals                                      |
+| [`docs/doctrine/architecture-authority.md`](doctrine/architecture-authority.md) | What Lattice is, what it is not, and the boundary its neighbours may not cross                           |
+| [`docs/doctrine/principles.md`](doctrine/principles.md)                         | The seven binding principles                                                                             |
+| [`docs/roadmap.md`](roadmap.md)                                                 | The staged path: what ships today, which capabilities belong to which major version, and in what order   |
+| `docs/getting-started/`                                                         | Installation, first project, first policy                                                                |
+| `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, projects, drift, agentic development, integrations |
+| `docs/usage/`                                                                   | How a consumer runs it and reads its answers                                                             |
+| `docs/integrations/`                                                            | The provider and editor integrations at the edge — Nx, Moon, and the VS Code extension                   |
+| `docs/reference/`                                                               | Schemas, exit codes, language limits, violation catalogue                                                |
+| `docs/development/`                                                             | How it works inside, and how to extend it                                                                |
+| `docs/skills/`                                                                  | Agent architecture skills: overview, installation, hosts, authoring, versioning                          |
+| `CONTRIBUTING.md`                                                               | The contribution bar, the commands, hooks, commits, review, release                                      |
+| `SECURITY.md`                                                                   | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/`    |
+| `AGENTS.md`                                                                     | The rules a diff is rejected for violating, for humans and agents alike                                  |
+| `packages/lattice/README.md`                                                    | The package's own reference — it is the npm landing page and must stand alone                            |
+| `packages/lattice-vscode/README.md`                                             | The VS Code client: what it requires, the two settings it has, and the two it refuses                    |
+| `packages/lattice/CLAUDE.md`                                                    | Layer mechanics: what each layer may know                                                                |
+| `packages/lattice/src/*/README.md`                                              | Each layer's own semantics — rules, report, conformance                                                  |
+| `packages/lattice/src/analysis/contract.md`                                     | The frozen record every analyzer returns                                                                 |
+| `skills/`                                                                       | Canonical agent architecture skills — the `arch-*` behavioral protocol                                   |
 
 Two of those rows overlap on purpose, and it is worth knowing which way:
 

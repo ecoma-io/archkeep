@@ -76,7 +76,9 @@ like code, and anything that edits it from outside the repository — a dashboar
 a hosted service, an agent prompt — breaks the property that makes it
 trustworthy. This principle refuses any path that makes architecture a
 conversation rather than a contract. [agentic-development.md](../concepts/agentic-development.md)
-shows how the current commands keep the agent on the consumer side of that line.
+shows how the current commands keep the agent on the consumer side of that line,
+and [architecture-authority.md](architecture-authority.md) owns the full boundary —
+what Lattice is, what it is not, and the line its neighbours may not cross.
 
 ---
 

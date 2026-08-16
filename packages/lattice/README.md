@@ -1,8 +1,12 @@
 # lattice
 
-Architecture enforcement for polyglot repositories — dependency graphs and module
-boundaries for Go, Rust, Python, TypeScript, JavaScript and Vue, with Nx and
-Moon as first-class integrations.
+Architecture governance for polyglot repositories — the deterministic authority
+that keeps the architecture your team declared aligned with the code your team
+keeps changing. Dependency graphs and module boundaries for Go, Rust, Python,
+TypeScript, JavaScript and Vue, with Nx and Moon as first-class integrations.
+Agents read the same verdicts, machine-readably, through the `arch-*` skills.
+The system boundary — what Lattice is, what it is not — is owned by
+`docs/doctrine/architecture-authority.md`.
 
 ## Why it exists
 
