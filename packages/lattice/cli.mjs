@@ -37,13 +37,15 @@
  * Exit codes are part of the contract; a script calling this has to tell "your
  * tree is dirty" from "you typed it wrong" from "the checker itself broke":
  *   0  no violations, and every selected file was analyzed
- *   1  findings — boundary violations, go.work drift, or dead tsconfig path
- *      aliases. `check` is the only command that can produce this exit code —
- *      every other verb this table might grow only ever reads.
+ *   1  findings — boundary violations, go.work drift, dead tsconfig path
+ *      aliases, or architecture-intent findings. `check` is the only command
+ *      that can produce this exit code — every other verb this table might grow
+ *      only ever reads.
  *   2  usage error — unknown command, unknown flag, missing argument, path
  *      outside the tree
  *   3  no verdict — no workspace, malformed config, the graph provider or git
- *      failed, or a selected file could not be analyzed at all. Distinct from
+ *      failed, a selected file could not be analyzed at all, or an
+ *      architecture-intent boundary matched no observed project. Distinct from
  *      1 on purpose: a checker that could not look must never be mistaken for
  *      one that looked and found nothing.
  *
@@ -83,6 +85,8 @@ import { diffCommand } from "./src/commands/diff.mjs";
 import { graphCommand } from "./src/commands/graph.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
+import { judgeIntent } from "./src/architecture-intent/judge.mjs";
+import { INTENT_FILE, loadIntent } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
 import { NX_CONFIG_FILE, readPluginOptions } from "./src/options.mjs";
@@ -385,21 +389,29 @@ export function parseCheckArgs(argv) {
  * `exitCode` fields — called once each, from the same counts, so the two can
  * never disagree about a run neither of them re-derives from the other.
  *
- * Findings first — boundary violations, go.work drift and dead tsconfig path
- * aliases alike are verdicts, and a caller that gets `findings` knows the tree
- * is dirty whatever else the run could not reach; the report lists the
- * unreached files either way. A clean run with a file nobody could analyze is
- * the case that must not read `ok`, because `ok` is read as "checked, and
- * fine".
+ * Findings first — boundary violations, go.work drift, dead tsconfig path
+ * aliases and architecture-intent findings alike are verdicts, and a caller
+ * that gets `findings` knows the tree is dirty whatever else the run could not
+ * reach; the report lists the unreached files either way. A clean run with a
+ * file nobody could analyze — or an architecture-intent boundary nobody could
+ * verify — is the case that must not read `ok`, because `ok` is read as
+ * "checked, and fine".
  *
- * @param {{violations: number, goWorkDrift: number, tsconfigPathsDead: number, unchecked: number}} counts
+ * @param {{violations: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, unchecked: number}} counts
  * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3}}
  */
-function verdictFor({ violations, goWorkDrift, tsconfigPathsDead, unchecked }) {
-  if (violations > 0 || goWorkDrift > 0 || tsconfigPathsDead > 0) {
+function verdictFor({
+  violations,
+  goWorkDrift,
+  tsconfigPathsDead,
+  intentFindings,
+  intentUnresolved,
+  unchecked,
+}) {
+  if (violations > 0 || goWorkDrift > 0 || tsconfigPathsDead > 0 || intentFindings > 0) {
     return { status: "findings", exitCode: EXIT.violations };
   }
-  return unchecked > 0
+  return unchecked > 0 || intentUnresolved > 0
     ? { status: "no-verdict", exitCode: EXIT.error }
     : { status: "ok", exitCode: EXIT.ok };
 }
@@ -428,7 +440,8 @@ function verdictFor({ violations, goWorkDrift, tsconfigPathsDead, unchecked }) {
  * @param {{format: string, config: string|null, paths: string[]}} options
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} context
  * @returns {Promise<{report: string, violations: number, goWorkDrift: number,
- *   tsconfigPathsDead: number, analyzed: number, unchecked: number}>}
+ *   tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number,
+ *   analyzed: number, unchecked: number}>}
  */
 export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
   const commandContext = resolveCommandContext(
@@ -538,9 +551,43 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     }
   }
 
+  // The architecture-intent check, keyed the same way as go.work and tsconfig:
+  // a tracked root `architecture-intent.json` means the workspace declared the
+  // architecture it intends, and the observed graph is judged against it. An
+  // intent file that fails to parse or validate is a no-verdict (exit 3) on
+  // the intent axis rather than "no intent" — a declaration this tool cannot
+  // establish must never read as one that was verified. It is NOT folded into
+  // `failures`: that bucket means "a source file the analysis could not read",
+  // and counting `architecture-intent.json` there would flip
+  // `coverage.complete` and list it among `notAnalyzed` source holes, which a
+  // reader would misread as a coverage problem with source files (the design
+  // contract `docs/reference/architecture-intent.md` states: a malformed
+  // intent renders as a distinct line, never as "N files could not be
+  // analyzed"). It rides `intentUnresolved` instead, the same no-verdict lane
+  // a zero-member boundary takes.
+  let intent = null;
+  if (tracked.includes(INTENT_FILE)) {
+    try {
+      intent = judgeIntent(await loadIntent(root, { tracked }), graph);
+    } catch (cause) {
+      const reason =
+        `${cause?.message ?? cause} — architecture-intent.json could not be ` +
+        `established, so the intent check reached no verdict`;
+      intent = {
+        verdict: "no-verdict",
+        findings: [],
+        unresolved: [{ boundary: INTENT_FILE, issue: reason }],
+        boundaries: [],
+        notes: [],
+      };
+    }
+  }
+
   const violations = evaluate(imports, graph, config);
   const goWorkDrift = goWork === null ? 0 : goWork.findings.length;
   const tsconfigPathsDead = tsconfigPaths === null ? 0 : tsconfigPaths.findings.length;
+  const intentFindings = intent === null ? 0 : intent.findings.length;
+  const intentUnresolved = intent === null ? 0 : intent.unresolved.length;
   // Files the run produced no verdict about, counted here rather than
   // recomputed by the caller: the exit code, the text report and the JSON
   // envelope must all agree about which failures mean "not covered", and one
@@ -548,7 +595,11 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   const unchecked = new Set(
     failures.filter(isWholeFileFailure).map((failure) => failure.sourceFile),
   ).size;
-  const notes = config.notes ?? [];
+  // Ready-to-ship policy facts have always been sourced from `boundaryConfig`
+  // via `src/config.mjs`'s `notes`; the intent check's own coverage notes ride
+  // the same seam so both surfaces (text and JSON) thread them identically —
+  // today only an `"optional": true` allowed row whose statement is absent.
+  const notes = [...(config.notes ?? []), ...(intent === null ? [] : intent.notes)];
 
   // A polyglot coverage gap: the Nx graph carries no polyglot edges because
   // the plugin is not registered, but polyglot manifests exist under project
@@ -582,6 +633,8 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               violations: violations.length,
               goWorkDrift,
               tsconfigPathsDead,
+              intentFindings,
+              intentUnresolved,
               unchecked,
             }),
             coverage: {
@@ -608,6 +661,25 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               goWork: goWork === null ? null : { checked: true, findings: goWork.findings },
               tsconfigPaths:
                 tsconfigPaths === null ? null : { checked: true, findings: tsconfigPaths.findings },
+              // Intent is a governance DECLARATION, absent when the workspace
+              // chose not to make one: the key is omitted, never written as
+              // null — the design contract `docs/reference/json-output.md` will
+              // state ("never serialized as `null` — absent key, not null
+              // value"). goWork/tsconfig leave a named null because those are
+              // checks the tool can always run (they just found nothing);
+              // intent absence is a workspace decision, not a finding of zero.
+              ...(intent === null
+                ? {}
+                : {
+                    intent: {
+                      checked: true,
+                      file: INTENT_FILE,
+                      verdict: intent.verdict,
+                      findings: intent.findings,
+                      unresolved: intent.unresolved,
+                      boundaries: intent.boundaries,
+                    },
+                  }),
             },
           }),
         )
@@ -619,6 +691,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
           projects: Object.keys(graph.nodes).length,
           goWork,
           tsconfigPaths,
+          intent,
           // Only the ESLint boundaryConfig dialect ever produces one (see
           // `./src/eslint-config.mjs`'s `extractBoundaryRule`) — which entry it
           // bound when more than one configured the rule, or that the winning
@@ -635,6 +708,8 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     violations: violations.length,
     goWorkDrift,
     tsconfigPathsDead,
+    intentFindings,
+    intentUnresolved,
     analyzed,
     unchecked,
   };
@@ -700,6 +775,9 @@ async function runCheck(options, { cwd, env }) {
           : "") +
         (result.tsconfigPathsDead > 0
           ? `, ${result.tsconfigPathsDead} dead tsconfig path alias${result.tsconfigPathsDead === 1 ? "" : "es"}`
+          : "") +
+        (result.intentFindings > 0
+          ? `, ${result.intentFindings} architecture-intent finding${result.intentFindings === 1 ? "" : "s"}`
           : "") +
         (result.unchecked > 0
           ? `, ${result.unchecked} file${result.unchecked === 1 ? "" : "s"} not analyzed`
