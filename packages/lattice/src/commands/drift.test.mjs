@@ -233,6 +233,33 @@ describe("driftCommand", () => {
       driftCommand(commandContext(), { loadIntentOverride: async () => undefined }),
     ).rejects.toThrow(/drift requires a tracked architecture-intent\.json/);
   });
+
+  it("refuses when a boundary or row side matched no observed project — 'cannot verify' must not read as 'no drift'", async () => {
+    // The empty-result invariant's drift face: a boundary whose selectors
+    // match no observed project is a no-verdict in `check` (exit 3). The
+    // descriptive command must refuse loudly too — "✔ no drift" over an
+    // unmatched boundary would claim a clean comparison the run never made.
+    await expect(
+      driftCommand(
+        commandContext({
+          graph: {
+            nodes: {
+              core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
+            },
+            dependencies: {},
+          },
+        }),
+        ioWithIntent(
+          intent({
+            boundaries: [
+              { name: "packages", match: ["tag:type-package"] },
+              { name: "apps", match: ["tag:type-app"] }, // matches no project
+            ],
+          }),
+        ),
+      ),
+    ).rejects.toThrow(/boundary\/row apps: matches no observed project/);
+  });
 });
 
 describe("driftForCheck — the check fold", () => {
@@ -253,5 +280,19 @@ describe("driftForCheck — the check fold", () => {
     expect(verdict.observed.projects).toBe(2);
     expect(verdict.observed.edges).toBe(1);
     expect(verdict.findings.some((f) => f.rule === "intentForbiddenEdge")).toBe(true);
+  });
+
+  it("carries the judged boundaries and unused-resolved list for the report layer", async () => {
+    const verdict = await driftForCheck(
+      commandContext(),
+      ioWithIntent(
+        intent({
+          boundaries: [{ name: "packages", match: ["tag:type-package"] }],
+        }),
+      ),
+    );
+    expect(verdict.boundaries).toEqual([{ name: "packages", projects: ["core"] }]);
+    expect(verdict.unresolved).toEqual([]);
+    expect(verdict.notes).toEqual([]);
   });
 });

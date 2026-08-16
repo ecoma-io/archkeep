@@ -83,12 +83,11 @@ import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/co
 import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
 import { contextCommand } from "./src/commands/context-command.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
-import { driftCommand } from "./src/commands/drift.mjs";
+import { driftCommand, driftForCheck } from "./src/commands/drift.mjs";
 import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
 import { historyCommand } from "./src/commands/history.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
-import { judgeIntent } from "./src/architecture-intent/judge.mjs";
 import { INTENT_FILE, loadIntent } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
@@ -583,7 +582,25 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   let intent = null;
   if (tracked.includes(INTENT_FILE)) {
     try {
-      intent = judgeIntent(await loadIntent(root, { tracked }), graph);
+      // The drift fold runs the same refuse-incomplete-graph guard the `drift`
+      // command does: an Nx workspace whose polyglot manifests are invisible to
+      // the graph must not have its intent judged against a graph that cannot
+      // see them. `driftForCheck` is what `drift` and `check` share.
+      const drift = await driftForCheck(commandContext, {
+        loadIntentOverride: (root) => loadIntent(root, { tracked }),
+      });
+      intent = {
+        verdict:
+          drift.findings.length > 0
+            ? "findings"
+            : drift.unresolved.length > 0
+              ? "no-verdict"
+              : "ok",
+        boundaries: drift.boundaries,
+        findings: drift.findings,
+        unresolved: drift.unresolved,
+        notes: drift.notes,
+      };
     } catch (cause) {
       const reason =
         `${cause?.message ?? cause} — architecture-intent.json could not be ` +

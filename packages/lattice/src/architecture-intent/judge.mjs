@@ -429,10 +429,18 @@ export function judgeIntent(intent, graph) {
   }
 
   // Determinism: findings by (source, target), unresolved by boundary, both
-  // with plain `<` comparison (never localeCompare).
-  findings.sort((a, b) =>
-    a.source === b.source ? (a.target < b.target ? -1 : 1) : a.source < b.source ? -1 : 1,
-  );
+  // with plain `<` comparison (never localeCompare). The comparator is a total
+  // order: `null`/`undefined` sides (presence and tag findings) sort before
+  // any string, and equal keys return 0 — a comparator that returned 1 for an
+  // equal key would hand the sort an inconsistent order and the byte-identical
+  // promise with it.
+  const compareKey = (a, b) => {
+    if (a === b) return 0;
+    if (a === null || a === undefined) return -1;
+    if (b === null || b === undefined) return 1;
+    return a < b ? -1 : 1;
+  };
+  findings.sort((a, b) => compareKey(a.source, b.source) || compareKey(a.target, b.target) || 0);
   unresolved.sort((a, b) => (a.boundary < b.boundary ? -1 : a.boundary > b.boundary ? 1 : 0));
 
   const verdict = findings.length > 0 ? "findings" : unresolved.length > 0 ? "no-verdict" : "ok";

@@ -35,7 +35,10 @@
  *   same reasoning as `diff` — every "project missing" would be ambiguous
  *   between "gone" and "never seen";
  * - an Nx workspace has polyglot manifests but the plugin is not registered →
- *   exit 3, the same refusal `graph`/`diff` make.
+ *   exit 3, the same refusal `graph`/`diff` make;
+ * - a boundary or row side matched no observed project → exit 3, the same
+ *   no-verdict `check` renders for the same state — "cannot verify" must never
+ *   read as "no drift".
  *
  * An empty finding list must mean exactly "the observed architecture matches
  * the intended one".
@@ -136,7 +139,8 @@ export function refuseIncompleteGraph(commandContext) {
  * @param {{loadIntentOverride?: (root: string) => Promise<object>}} [io]
  * @returns {Promise<{intent: {file: string, fingerprint: string, rows: number},
  *   observed: {projects: number, edges: number, implicitEdges: number},
- *   findings: object[]}>}
+ *   findings: object[], unresolved: object[], boundaries: object[],
+ *   notes: string[]}>}
  */
 export async function driftForCheck(commandContext, io = {}) {
   refuseIncompleteGraph(commandContext);
@@ -160,6 +164,9 @@ export async function driftForCheck(commandContext, io = {}) {
       implicitEdges: observed.implicitEdges,
     },
     findings: verdict.findings,
+    unresolved: verdict.unresolved,
+    boundaries: verdict.boundaries,
+    notes: verdict.notes,
   };
 }
 
@@ -229,6 +236,20 @@ export async function driftCommand(commandContext, io = {}) {
     dependencies: commandContext.graph.dependencies,
   });
 
+  // An intent whose boundary or row side matched no observed project reached no
+  // verdict on that row — "no drift" must never mean "cannot verify". `check`
+  // renders the same state exit 3; the descriptive command must refuse loudly
+  // rather than print "✔ no drift".
+  if (verdict.unresolved.length > 0) {
+    throw new Error(
+      `lattice: cannot compare the observed architecture to ${INTENT_FILE} — ` +
+        verdict.unresolved
+          .map(({ boundary, issue }) => `boundary/row ${boundary}: ${issue}`)
+          .join("; ") +
+        `. An intent that cannot be verified is not a clean one; fix the intent or the graph and re-run.`,
+    );
+  }
+
   const coverage = {
     complete: true,
     projects: observed.projects.length,
@@ -240,7 +261,10 @@ export async function driftCommand(commandContext, io = {}) {
     blindSpots: analysis.failures
       .filter((failure) => !isWholeFileFailure(failure))
       .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
-    notes: [],
+    // Coverage notes (e.g. an `optional: true` allowed row the team has not
+    // built yet) ride here so "optional and absent" never reads as "never
+    // checked".
+    notes: verdict.notes,
   };
 
   const context = { root, provider, marker, provenance: resolveProvenance(root) };
