@@ -18,9 +18,7 @@ function inMemoryTree(files) {
     readFileSync: (path) => {
       const name = path.split("/").pop();
       if (!(name in files)) {
-        const error = new Error(`ENOENT: no such file ${name}`);
-        error.code = "ENOENT";
-        throw error;
+        throw Object.assign(new Error(`ENOENT: no such file ${name}`), { code: "ENOENT" });
       }
       return files[name];
     },
@@ -155,9 +153,7 @@ describe("loadAdrRegistry", () => {
   it("throws when the registry cannot be read at all (unreadable ≠ empty)", () => {
     const io = {
       readdirSync: () => {
-        const error = new Error("EACCES: permission denied");
-        error.code = "EACCES";
-        throw error;
+        throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
       },
     };
     expect(() => loadAdrRegistry("/tmp/x", io)).toThrow(/cannot read docs\/adr/);

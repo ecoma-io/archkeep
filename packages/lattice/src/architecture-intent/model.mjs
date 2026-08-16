@@ -38,7 +38,6 @@
 
 import { readFile as readFileFromDisk } from "node:fs/promises";
 
-import { DECISION_REF_KEY, decisionRefViolations } from "../governance/row-schema.mjs";
 import { isValidSelector, splitSelector } from "./selectors.mjs";
 import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "../governance/row-schema.mjs";
 
@@ -145,22 +144,6 @@ function rowSideValid(side, names) {
 }
 
 /**
- * A row's `decisionRef` violations, if any. The row schema owns the field's
- * shape; `resolve` — when provided — decides whether the reference actually
- * names something known (an ADR id or a rule/fitness id). With no resolver the
- * shape half still runs, so a row whose `decisionRef` is not a non-empty
- * string is refused even in a workspace with no ADR registry.
- *
- * @param {unknown} value The row's `decisionRef`.
- * @param {string} at Dotted path, e.g. `forbidden[0]`.
- * @param {{resolve?: (ref: string) => boolean}} [io]
- * @returns {string[]}
- */
-function rowDecisionRefViolations(value, at, io) {
-  return decisionRefViolations(value, `${at}.${DECISION_REF_KEY}`, io);
-}
-
-/**
  * Whether a selector can match at most one project on every graph — true for
  * `name:x` and a bare `x` (both exact project-name matches), false for
  * `tag:`, `directory:` and `*`. Used to tell a single-project self-ban from a
@@ -187,12 +170,9 @@ export function boundaryNames(intent) {
  * well-formed. Pure and nodes-free — membership is the judge's question.
  *
  * @param {unknown} raw The parsed JSON value.
- * @param {{resolve?: (ref: string) => boolean}} [io] An optional decisionRef
- *   resolver — see `rowDecisionRefViolations`. Absent, the shape half of the
- *   `decisionRef` check still runs; resolution is the caller's ADR registry.
  * @returns {string[]}
  */
-export function findIntentViolations(raw, io = {}) {
+export function findIntentViolations(raw) {
   const violations = [];
 
   if (!isPlainObject(raw)) {
@@ -309,9 +289,6 @@ export function findIntentViolations(raw, io = {}) {
           `${at}.to: must reference a declared boundary (${names.size > 0 ? [...names].join(", ") : "none declared"}) or a valid selector, got ${describe(row.to)}`,
         );
       }
-      violations.push(
-        ...rowDecisionRefViolations(row[DECISION_REF_KEY], at, { resolve: io.resolve }),
-      );
       if (listName === "forbidden") {
         if (typeof row.reason !== "string" || row.reason.length === 0) {
           violations.push(
@@ -420,9 +397,6 @@ export function findIntentViolations(raw, io = {}) {
                 });
               }
             }
-            violations.push(
-              ...rowDecisionRefViolations(row[DECISION_REF_KEY], at, { resolve: io.resolve }),
-            );
           });
         }
       }
@@ -449,9 +423,6 @@ export function findIntentViolations(raw, io = {}) {
             if (typeof row.name !== "string" || row.name.trim() === "") {
               violations.push(`${at}.name: must be a non-empty string, got ${describe(row.name)}`);
             }
-            violations.push(
-              ...rowDecisionRefViolations(row[DECISION_REF_KEY], at, { resolve: io.resolve }),
-            );
           });
         }
       }
@@ -504,9 +475,6 @@ export function findIntentViolations(raw, io = {}) {
               );
             }
           }
-          violations.push(
-            ...rowDecisionRefViolations(row[DECISION_REF_KEY], at, { resolve: io.resolve }),
-          );
         });
       }
     }
@@ -548,9 +516,6 @@ export function findIntentViolations(raw, io = {}) {
             `${at}: from and to must differ — a tag depending on itself is a no-op and should not be phrased as a rule`,
           );
         }
-        violations.push(
-          ...rowDecisionRefViolations(row[DECISION_REF_KEY], at, { resolve: io.resolve }),
-        );
       });
     }
   }
@@ -607,18 +572,16 @@ export function normalizeIntent(intent) {
  * Read, parse and validate `architecture-intent.json` at `root`.
  *
  * @param {string} root Absolute workspace root.
- * @param {{read?: (path: string, encoding: "utf8") => Promise<string>, tracked?: string[],
- *   resolve?: (ref: string) => boolean}} [io]
+ * @param {{read?: (path: string, encoding: "utf8") => Promise<string>, tracked?: string[]}} [io]
  *   Injectable read, defaulting to `node:fs/promises`' `readFile` — the only
  *   code in this function that reaches outside the process; `tracked` is the
  *   `git ls-files` list, and when provided and the file is not in it, the
  *   loader treats the file as absent (an untracked intent file is not the
- *   reviewed repository state, the same edge `../../go-work.mjs` documents);
- *   `resolve` is a decisionRef resolver — see `findIntentViolations`' `io`.
+ *   reviewed repository state, the same edge `../../go-work.mjs` documents).
  * @returns {Promise<object>} The normalized, validated model, or `undefined` when the file is absent.
  * @throws {Error} naming every validation violation at once.
  */
-export async function loadIntent(root, { read = readFileFromDisk, tracked, resolve } = {}) {
+export async function loadIntent(root, { read = readFileFromDisk, tracked } = {}) {
   const path = `${root}/${INTENT_FILE}`;
   if (tracked !== undefined && !tracked.includes(INTENT_FILE)) {
     return undefined;
@@ -639,7 +602,7 @@ export async function loadIntent(root, { read = readFileFromDisk, tracked, resol
       cause,
     });
   }
-  const violations = findIntentViolations(raw, resolve ? { resolve } : {});
+  const violations = findIntentViolations(raw);
   if (violations.length > 0) {
     throw new Error(`${INTENT_FILE}: ${violations.join("; ")}`);
   }

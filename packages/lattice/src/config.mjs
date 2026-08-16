@@ -99,7 +99,6 @@ import { basename, extname, posix } from "node:path";
 import { readFile as readFileFromDisk } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
-import { DECISION_REF_KEY, decisionRefViolations } from "./governance/row-schema.mjs";
 import { loadEslintBoundaryConfig } from "./eslint-config.mjs";
 import { findFitnessViolations } from "./governance/fitness-registry.mjs";
 import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "./governance/row-schema.mjs";
@@ -244,7 +243,7 @@ function listEntryViolations(values, at, patternError) {
 }
 
 /** One row's problems, prefixed with its index so a report names the offender. */
-function constraintRowViolations(row, index, resolveRef) {
+function constraintRowViolations(row, index) {
   const at = `depConstraints[${index}]`;
   if (!isPlainObject(row)) return [`${at}: must be an object, got ${describe(row)}`];
 
@@ -319,7 +318,7 @@ function constraintRowViolations(row, index, resolveRef) {
   // Rejected rather than ignored: an unknown key is almost always a
   // misspelling of one above (`bannedExternalImport`), and the rule would
   // accept the row, enforce the half it understood, and drop the ban.
-  const ROW_SCALAR_KEYS = ["description", "remediation", DECISION_REF_KEY];
+  const ROW_SCALAR_KEYS = ["description", "remediation"];
   for (const key of Object.keys(row)) {
     if (
       key === "sourceTag" ||
@@ -335,11 +334,6 @@ function constraintRowViolations(row, index, resolveRef) {
         GOVERNANCE_ROW_KEYS.join(", "),
     );
   }
-  violations.push(
-    ...decisionRefViolations(row[DECISION_REF_KEY], `${at}.${DECISION_REF_KEY}`, {
-      resolve: resolveRef,
-    }),
-  );
   return violations;
 }
 
@@ -507,17 +501,13 @@ function describe(value) {
  * is well-formed. Pure, so a test drives it without a file on disk.
  *
  * @param {unknown} module The config module's exports.
- * @param {{resolveRef?: (ref: string) => boolean}} [io] An optional decisionRef
- *   resolver — see `constraintRowViolations`. Absent, the shape half of the
- *   `decisionRef` check still runs; resolution is the caller's ADR registry.
  * @returns {string[]}
  */
-export function findBoundaryConfigViolations(module, io = {}) {
+export function findBoundaryConfigViolations(module) {
   if (!isPlainObject(module)) return [`config: expected a module object, got ${describe(module)}`];
 
   const violations = [];
-const { depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness } = module;
-  const resolveRef = io.resolveRef;
+  const { depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness } = module;
 
   // The fitness list — declared where every other executable policy is
   // (`../governance/fitness-registry.mjs` owns the shape). Absent means "no
@@ -552,9 +542,7 @@ const { depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness } =
         `this is the constraint table both enforcers read`,
     );
   } else {
-    depConstraints.forEach((row, index) =>
-      violations.push(...constraintRowViolations(row, index, resolveRef)),
-    );
+    depConstraints.forEach((row, index) => violations.push(...constraintRowViolations(row, index)));
   }
 
   if (!isPlainObject(moduleBoundaryOptions)) {
@@ -693,8 +681,8 @@ export function policyKeyViolations(parsed, { allowSchema }) {
  *   violation found, when `extraViolations` or `findBoundaryConfigViolations`
  *   found any.
  */
-export function policyFrom(parsed, sourceLabel, extraViolations = [], io = {}) {
-  const violations = [...extraViolations, ...findBoundaryConfigViolations(parsed, io)];
+export function policyFrom(parsed, sourceLabel, extraViolations = []) {
+  const violations = [...extraViolations, ...findBoundaryConfigViolations(parsed)];
   if (violations.length > 0) {
     throw new Error(`lattice: ${sourceLabel} is malformed:\n  ${violations.join("\n  ")}`);
   }

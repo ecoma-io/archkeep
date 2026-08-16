@@ -2799,7 +2799,7 @@ const COMMANDS = Object.freeze({
     booleans: Object.freeze(["plan"]),
     run: runContextCommand,
   }),
-provenance: Object.freeze({
+  provenance: Object.freeze({
     name: "provenance",
     args: "",
     summary: "Describe where this run's facts came from and which rows carry an origin",
