@@ -118,7 +118,6 @@ This repository states a rule once and links to it from everywhere else, so the
 useful question is usually not "where is this documented" but "which file is
 allowed to say it". That table:
 
-<<<<<<< HEAD
 | file                                                                            | owns                                                                                                                        |
 | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `README.md`                                                                     | The pitch: what Lattice is in one breath, and the way in                                                                    |
