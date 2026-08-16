@@ -84,6 +84,7 @@ import { profilePolicy } from "./src/governance/profile-registry.mjs";
 import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
 import { contextCommand } from "./src/commands/context-command.mjs";
 import { planContextCommand } from "./src/commands/plan-context-command.mjs";
+import { adrCommand } from "./src/commands/adr.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { discoverCommand } from "./src/commands/discover.mjs";
 import { driftCommand, driftForCheck } from "./src/commands/drift.mjs";
@@ -1725,6 +1726,72 @@ async function runContextCommand(options, { cwd, env }) {
 }
 
 /**
+ * `adr`'s `run`: reads the ADR registry at the workspace root and renders it.
+ *
+ * The registry lives in `docs/adr/` in the tree being described, not in this
+ * package's own tree, so the root comes from the current working directory —
+ * the same walking `resolveCommandContext` does, but without the whole
+ * project-graph preamble. `adr` never exits 1: a description of what is
+ * recorded is never a finding. An unreadable registry (a malformed record, an
+ * unreadable file, a bad filename) throws → exit 3; an id the user asked
+ * about that the registry does not know → exit 3, the invariant.
+ *
+ * @param {{format: string, output: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runAdr(options, { cwd, env }) {
+  if (options.paths.length > 1) {
+    env.err(
+      `lattice: adr takes at most one positional argument (an ADR id); ` +
+        `got ${options.paths.join(", ")}`,
+    );
+    return EXIT.usage;
+  }
+
+  const root = resolveWorkspaceRootForUsage(cwd);
+  if (root === null) {
+    env.err(
+      `lattice: adr needs a workspace root — no nx.json, lattice.json, or .moon marker found ` +
+        `walking up from ${cwd}`,
+    );
+    return EXIT.error;
+  }
+
+  let result;
+  try {
+    result = adrCommand(root, { id: options.paths[0] });
+  } catch (error) {
+    env.err(String(error?.message ?? error));
+    return EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(`lattice: adr complete → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // Descriptive: 0 for answered, 3 for incomplete coverage.
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
+}
+
+/**
  * `history`'s `run`: resolves the command context, optionally captures a
  * snapshot of the current workspace, drives `historyCommand`, writes the
  * report, and returns the exit code.
@@ -2554,6 +2621,32 @@ const CONTEXT_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `adr`'s flags: text or JSON envelope, optional file output. The registry is
+ * always read from the tracked `docs/adr/` at the workspace root — there is no
+ * `--config` flag, because `adr` describes what is recorded, and a description
+ * needs no boundary law.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const ADR_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+]);
+
+/**
  * The command table `usage()` and `runCli` both read from — a command added
  * later is a new entry here, not a new branch in either. `args` is the
  * placeholder `usage()` prints after the command name; `flagHelp` is the
@@ -2706,7 +2799,7 @@ const COMMANDS = Object.freeze({
     booleans: Object.freeze(["plan"]),
     run: runContextCommand,
   }),
-  provenance: Object.freeze({
+provenance: Object.freeze({
     name: "provenance",
     args: "",
     summary: "Describe where this run's facts came from and which rows carry an origin",
@@ -2715,6 +2808,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runProvenance,
+  }),
+  adr: Object.freeze({
+    name: "adr",
+    args: "[<id>]",
+    summary: "List recorded architecture decisions and what each binds",
+    flagHelp: ADR_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(ADR_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runAdr,
   }),
 });
 
