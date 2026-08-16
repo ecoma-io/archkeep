@@ -213,6 +213,9 @@ describe("checking a real tree", () => {
     expect(envelope.exitCode).toBe(1);
     expect(envelope.coverage.complete).toBe(true);
     expect(envelope.coverage.imports).toBeGreaterThan(0);
+    // The canonical verdict of the same counts: findings is `fail`, and the
+    // decision agrees with the status by construction.
+    expect(envelope.decision).toEqual({ verdict: "fail" });
     expect(envelope.result.violations).toHaveLength(1);
     expect(envelope.result.violations[0]).toMatchObject({
       sourceFile: "libs/domain/doc.go",
@@ -302,6 +305,9 @@ describe("checking a real tree", () => {
     expect(envelope.coverage.complete).toBe(true);
     expect(envelope.coverage.imports).toBeGreaterThan(0);
     expect(envelope.result.violations).toEqual([]);
+    // A fully-read, clean tree carries the `pass` decision — complete
+    // coverage plus zero findings, the only counts that earn it.
+    expect(envelope.decision).toEqual({ verdict: "pass" });
   });
 
   it("pins every field of the violation object in the JSON envelope", async () => {
@@ -2296,6 +2302,11 @@ describe("the exit contract", () => {
     expect(envelope.coverage.notAnalyzed).toEqual([
       { file: "libs/adapter/absent.go", reason: expect.stringContaining("could not be read") },
     ]);
+    // The canonical four-state verdict of the same run: a tree that could not
+    // be fully read emits `unknown` — never the `pass` that would read as
+    // "checked, and fine" — with the reason naming which half could not look.
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.decision.reason).toContain("could not be analyzed");
   });
 
   it("still exits 1 when the tree is dirty AND a file could not be analyzed, since that verdict is certain", async () => {

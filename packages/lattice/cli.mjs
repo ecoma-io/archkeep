@@ -93,6 +93,7 @@ import { INTENT_FILE, loadIntent } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
 import { NX_CONFIG_FILE, readPluginOptions } from "./src/options.mjs";
+import { buildDecision } from "./src/report/evidence.mjs";
 import { jsonEnvelope, renderJson } from "./src/report/json.mjs";
 import { formatSarif } from "./src/report/sarif.mjs";
 import { formatReport } from "./src/report/text.mjs";
@@ -412,8 +413,16 @@ export function parseCheckArgs(argv) {
  * verify — is the case that must not read `ok`, because `ok` is read as
  * "checked, and fine".
  *
+ * The `decision` is the canonical 4-state verb of the same verdict
+ * (`src/report/evidence.mjs`), built from the same counts so the envelope's
+ * `status` and its `decision.verdict` cannot disagree: `ok`→`pass`,
+ * `findings`→`fail`, `no-verdict`→`unknown`. `buildDecision` throws on any
+ * invariant the counts violate (a `pass` over incomplete coverage, a `fail`
+ * with no findings), which makes a regression in this mapping a loud error
+ * rather than a silent one.
+ *
  * @param {{violations: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, unchecked: number}} counts
- * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3}}
+ * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3, decision: object}}
  */
 function verdictFor({
   violations,
@@ -424,11 +433,42 @@ function verdictFor({
   unchecked,
 }) {
   if (violations > 0 || goWorkDrift > 0 || tsconfigPathsDead > 0 || intentFindings > 0) {
-    return { status: "findings", exitCode: EXIT.violations };
+    return {
+      status: "findings",
+      exitCode: EXIT.violations,
+      decision: buildDecision({
+        status: "findings",
+        coverageComplete: unchecked === 0,
+        findings: violations + goWorkDrift + tsconfigPathsDead + intentFindings,
+      }),
+    };
   }
-  return unchecked > 0 || intentUnresolved > 0
-    ? { status: "no-verdict", exitCode: EXIT.error }
-    : { status: "ok", exitCode: EXIT.ok };
+  if (unchecked > 0 || intentUnresolved > 0) {
+    return {
+      status: "no-verdict",
+      exitCode: EXIT.error,
+      decision: buildDecision({
+        status: "no-verdict",
+        coverageComplete: unchecked === 0,
+        findings: 0,
+        // The could-not-look condition, named so a reader knows WHICH half of
+        // the run did not reach a verdict (I3).
+        reason:
+          unchecked > 0
+            ? `${unchecked} file${unchecked === 1 ? "" : "s"} could not be analyzed — coverage incomplete`
+            : `${intentUnresolved} architecture-intent boundary or row${intentUnresolved === 1 ? "" : "s"} could not be established`,
+      }),
+    };
+  }
+  return {
+    status: "ok",
+    exitCode: EXIT.ok,
+    decision: buildDecision({
+      status: "ok",
+      coverageComplete: true,
+      findings: 0,
+    }),
+  };
 }
 
 /**
@@ -662,6 +702,10 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               provider: commandContext.provider,
               marker: commandContext.marker,
             },
+            // `verdictFor` returns `status`, `exitCode`, and the canonical
+            // `decision` — the four-state verb of the same counts — so the
+            // envelope's `decision.verdict` and its `status` are built from
+            // exactly one computation and can never disagree.
             ...verdictFor({
               violations: violations.length,
               goWorkDrift,

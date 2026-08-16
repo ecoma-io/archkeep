@@ -148,6 +148,59 @@ describe("jsonEnvelope", () => {
       { kind: "unregistered-plugin", manifests: ["libs/a/go.mod"] },
     ]);
   });
+
+  it("writes an optional decision through when present, and omits it when absent", () => {
+    // The additive contract: `decision` is a field a command opts into, and
+    // its absence keeps an envelope byte-compatible with one predating it.
+    const withDecision = jsonEnvelope({
+      command: "check",
+      context,
+      status: "findings",
+      exitCode: 1,
+      coverage: cleanCoverage(),
+      result: { violations: [{}] },
+      decision: { verdict: "fail" },
+    });
+    expect(withDecision.decision).toEqual({ verdict: "fail" });
+
+    const withoutDecision = jsonEnvelope({
+      command: "check",
+      context,
+      status: "findings",
+      exitCode: 1,
+      coverage: cleanCoverage(),
+      result: { violations: [{}] },
+    });
+    expect(Object.hasOwn(withoutDecision, "decision")).toBe(false);
+  });
+
+  it("throws when decision.verdict contradicts the envelope's status — the two must never lie", () => {
+    // The silent direction: a decision that disagrees with its own status
+    // would let a reader trust whichever field it read first.
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "findings",
+        exitCode: 1,
+        coverage: cleanCoverage(),
+        result: { violations: [{}] },
+        decision: { verdict: "pass" },
+      }),
+    ).toThrow(/decision\.verdict "pass" contradicts status "findings"/);
+
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "ok",
+        exitCode: 0,
+        coverage: cleanCoverage(),
+        result: {},
+        decision: { verdict: "not_applicable", notApplicableReason: "why" },
+      }),
+    ).toThrow(/decision\.verdict "not_applicable" contradicts status "ok"/);
+  });
 });
 
 describe("renderJson", () => {

@@ -22,7 +22,19 @@
  * mismatch here is a bug in the command that built the envelope, not a fact
  * about the workspace being judged, so it gets a programming error rather than
  * a diagnostic.
+ *
+ * The optional `decision` field rides the same posture. It carries the
+ * canonical 4-state verdict (`../governance/verdict.mjs`) that every
+ * governance capability emits and consumes, and its `verdict` must agree
+ * with the envelope's `status` the same way `status` and `exitCode` must:
+ * `"ok"` implies `"pass"`, `"findings"` implies `"fail"`, `"no-verdict"`
+ * implies `"unknown"`. A decision that contradicts its status would make one
+ * of them a lie — the exact class of disagreement this module refuses to
+ * ship. The field is OPTIONAL (absent on every envelope that does not opt
+ * in), which is what keeps SCHEMA_VERSION at 2: additive, byte-compatible
+ * with every consumer that reads the envelope today.
  */
+import { verdictForStatus } from "../governance/verdict.mjs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -53,13 +65,16 @@ const EXIT_CODE_FOR_STATUS = Object.freeze({ ok: 0, findings: 1, "no-verdict": 3
  *   status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3,
  *   coverage: {complete: boolean, projects: number, analyzedFiles: number, imports: number,
  *     notAnalyzed: object[], blindSpots: object[], notes: string[], coverageGaps?: object[]},
- *   result: object}} run
+ *   result: object,
+ *   decision?: {verdict: string, reason?: string, notApplicableReason?: string,
+ *     sampleTime?: string}}} run
  * @returns {object} The envelope `docs/reference/json-output.md` documents.
  * @throws {Error} when `status` claims `"ok"` over incomplete coverage, when
- *   `status` and `exitCode` disagree, or when `coverage.complete` disagrees
- *   with whether `coverage.notAnalyzed` is empty.
+ *   `status` and `exitCode` disagree, when `coverage.complete` disagrees
+ *   with whether `coverage.notAnalyzed` is empty, or when the optional
+ *   `decision.verdict` contradicts the envelope's `status`.
  */
-export function jsonEnvelope({ command, context, status, exitCode, coverage, result }) {
+export function jsonEnvelope({ command, context, status, exitCode, coverage, result, decision }) {
   if (status === "ok" && coverage.complete !== true) {
     throw new Error(
       `lattice: refusing to build a JSON envelope claiming status "ok" over incomplete coverage ` +
@@ -84,6 +99,14 @@ export function jsonEnvelope({ command, context, status, exitCode, coverage, res
         `run for a complete one.`,
     );
   }
+  if (decision !== undefined && decision.verdict !== verdictForStatus(status)) {
+    throw new Error(
+      `lattice: refusing to build a JSON envelope where decision.verdict "${decision.verdict}" ` +
+        `contradicts status "${status}" — status implies ${verdictForStatus(status)}, and a ` +
+        `decision that disagrees with its own status would make one of the two a lie. ` +
+        `This is a bug in the command that built the envelope.`,
+    );
+  }
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -99,6 +122,7 @@ export function jsonEnvelope({ command, context, status, exitCode, coverage, res
     exitCode,
     coverage,
     result,
+    ...(decision === undefined ? {} : { decision }),
   };
 }
 

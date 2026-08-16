@@ -498,6 +498,25 @@ function verifyCleanAndLspChecks(consumer, label, packageName) {
       /[1-9]\d* project/.test(clean.stdout ?? ""),
     `stdout: ${clean.stdout ?? "(empty)"}`,
   );
+  // The packed artifact's JSON envelope carries the canonical decision: a
+  // structurally clean, fully read tree emits `pass`. The four-state
+  // vocabulary is what every governance capability consumes, so the contract
+  // is pinned against the real installed tarball, not only against fixtures.
+  const cleanJson = run("pnpm", ["exec", "lattice", "check", "--format", "json"], consumer);
+  let cleanEnvelope = null;
+  try {
+    cleanEnvelope = JSON.parse(cleanJson.stdout ?? "");
+  } catch {
+    // Will fail the check below.
+  }
+  check(
+    `check --format json carries a pass decision on the clean tree (${label})`,
+    cleanEnvelope !== null &&
+      cleanEnvelope.status === "ok" &&
+      cleanEnvelope.schemaVersion === 2 &&
+      cleanEnvelope.decision?.verdict === "pass",
+    `exit ${cleanJson.status}\nstdout: ${cleanJson.stdout ?? "(empty)"}`,
+  );
 
   // 3. The language server answers when launched through the symlinked path.
   //    `node_modules/<name>` is a symlink into `node_modules/.pnpm/…`, and the
@@ -562,6 +581,24 @@ function verifyViolatingCheck(
     dirtyOutput.includes("onlyTagsConstraintViolation") &&
       /libs\/core\/violate\.go:\d+:\d+/.test(dirtyOutput),
     dirtyOutput || "(no output)",
+  );
+  // The violating tree's envelope carries the `fail` decision — the verdict
+  // the four-state vocabulary gives a run with findings, agreeing with the
+  // three-state status the way status and exitCode agree.
+  const dirtyJson = run("pnpm", ["exec", "lattice", "check", "--format", "json"], consumer);
+  let dirtyEnvelope = null;
+  try {
+    dirtyEnvelope = JSON.parse(dirtyJson.stdout ?? "");
+  } catch {
+    // Will fail the check below.
+  }
+  check(
+    `check --format json carries a fail decision on the violating tree (${label})`,
+    dirtyEnvelope !== null &&
+      dirtyEnvelope.status === "findings" &&
+      dirtyEnvelope.schemaVersion === 2 &&
+      dirtyEnvelope.decision?.verdict === "fail",
+    `exit ${dirtyJson.status}\nstdout: ${dirtyJson.stdout ?? "(empty)"}`,
   );
 }
 

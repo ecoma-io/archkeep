@@ -92,6 +92,9 @@ describe("check (full)", () => {
     expect(result.json.coverage.notAnalyzed).toEqual([]);
     expect(result.json.coverage.imports).toBeGreaterThan(0);
     expect(result.json.coverage.analyzedFiles).toBeGreaterThan(0);
+    // The canonical verdict of a structurally clean run — the same envelope
+    // now carries it as a four-state decision alongside the three-state status.
+    expect(result.json.decision.verdict).toBe("pass");
   });
 
   it("produces a valid JSON envelope on a violating native tree", () => {
@@ -104,6 +107,9 @@ describe("check (full)", () => {
       expect(result.json.status).toBe("findings");
       expect(result.json.exitCode).toBe(1);
       expect(result.json.result.violations.length).toBeGreaterThan(0);
+      // The decision of a violating tree: `fail`, agreeing with the status the
+      // same way status and exitCode agree.
+      expect(result.json.decision.verdict).toBe("fail");
       const v = result.json.result.violations[0];
       expect(v.messageId).toBe("onlyTagsConstraintViolation");
     } finally {
