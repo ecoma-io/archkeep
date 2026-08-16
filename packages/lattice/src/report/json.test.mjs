@@ -200,6 +200,22 @@ describe("jsonEnvelope", () => {
         decision: { verdict: "not_applicable", notApplicableReason: "why" },
       }),
     ).toThrow(/decision\.verdict "not_applicable" contradicts status "ok"/);
+
+    // The third status, pinned for the same reason as the other two: an
+    // "unknown" decision on a findings envelope would read as could-not-look
+    // while the envelope's status names a certain violation — one of the two
+    // is a lie.
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "findings",
+        exitCode: 1,
+        coverage: cleanCoverage(),
+        result: { violations: [{}] },
+        decision: { verdict: "unknown", reason: "coverage was incomplete" },
+      }),
+    ).toThrow(/decision\.verdict "unknown" contradicts status "findings"/);
   });
 });
 
