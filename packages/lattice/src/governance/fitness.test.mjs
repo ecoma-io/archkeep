@@ -543,6 +543,37 @@ describe("fitnessSnapshot and evaluateFitness", () => {
     expect(snapshot.analysis.analyzed).toBe(1);
   });
 
+  it("rides the scoped flag inside analysis, where judgeFitnessRow reads it — a path-scoped run must answer unknown, never pass", () => {
+    // P0-1 regression: the flag used to sit on the snapshot's top level, which
+    // `validateAndConfigure` never read, so a scoped run claimed full-coverage
+    // `pass` over the files it happened to analyze. The snapshot must place it
+    // where the rule reads it — `analysis.scoped`.
+    const snapshot = fitnessSnapshot(
+      {
+        graph: graph([["app", "apps/app"]]),
+        analysis: { analyzedFiles: ["apps/app/main.mjs"], imports: [], analyzed: 1 },
+        owned: [{ file: "apps/app/main.mjs", project: "app" }],
+      },
+      { scoped: true },
+    );
+    expect(snapshot.analysis.scoped).toBe(true);
+    const row = {
+      name: "scoped-cov",
+      match: ["*"],
+      condition: { type: "coverage-minimum", statement: 100 },
+      reason: "r",
+    };
+    const d = judgeFitnessRow(
+      row,
+      snapshot.graph,
+      snapshot.analysis,
+      snapshot.intent,
+      snapshot.suppressions,
+    );
+    expect(d.verdict).toBe("unknown");
+    expect(d.message).toMatch(/scoped to specific paths/);
+  });
+
   it("evaluates every declared row, in declaration order", () => {
     const rows = [
       { name: "one", match: ["*"], condition: { type: "cycle-free" }, reason: "r" },

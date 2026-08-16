@@ -1240,6 +1240,96 @@ export const fitness = [
     expect(out).toContain("no matched project carries tag");
   });
 
+  it("exits 3 when a path-scoped run hides whole-file coverage — the scoped flag must reach coverage-minimum as unknown, never pass", async () => {
+    // P0-1 regression: `fitnessSnapshot` used to put `scoped` on the snapshot's
+    // top level, where `judgeFitnessRow` never read it — so `check libs/adapter`
+    // over a `coverage-minimum` fitness claimed `pass` over the one file it
+    // actually analyzed, the silent direction. The flag now rides inside
+    // `analysis`, and the run must exit 3 naming scope instead of claiming full
+    // coverage.
+    writeNative(
+      "fitness-scoped.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "scoped-coverage",
+    match: ["*"],
+    condition: { type: "coverage-minimum", statement: 100 },
+    reason: "scoping must never read as full coverage",
+  },
+];
+`,
+    );
+    const streams = nativeEnv();
+    // `libs/adapter` scopes the run to one project's files; the other project's
+    // files were not analyzed, so whole-tree coverage is not determinable. The
+    // domain→adapter crossing is excluded the same way the no-verdict test
+    // excludes it, so exit 3 here is the scope verdict, not a boundary finding.
+    expect(
+      await runCli(["check", "--config", "fitness-scoped.config.mjs", "libs/adapter"], streams),
+    ).toBe(EXIT.error);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("⚠ scoped-coverage");
+    expect(out).toContain("was scoped to specific paths");
+  });
+
+  it("judges drift-free against the verdict-shaped intent, not the raw file — a clean intent passes, never fail", async () => {
+    // P0-2 regression: the `fitness` command used to hand `loadIntent`'s raw
+    // normalized model (no `verdict`/`findings`/`unresolved`) to the
+    // `drift-free` rule, whose final branch read `verdict === undefined` as
+    // `fail` — so a clean intent reported `✖ drift-free` over "0 findings".
+    // The command now reuses `driftForCheck`'s verdict-shaped intent, the same
+    // one `check`'s fold builds. The native fixture tracks an
+    // `architecture-intent.json` whose boundaries match the observed projects,
+    // so the comparison is clean and the function must PASS.
+    writeNative(
+      "fitness-drift.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "intent-clean",
+    match: ["*"],
+    condition: { type: "drift-free" },
+    reason: "this workspace declares an intent and must not drift from it",
+  },
+];
+`,
+    );
+    const streams = nativeEnv();
+    expect(await runCli(["fitness", "--config", "fitness-drift.config.mjs"], streams)).toBe(
+      EXIT.ok,
+    );
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("✔ intent-clean");
+    expect(out).toContain("matches the observed graph");
+  });
+
   it("says nothing about README.md, since it is not an analyzable file — the coverage near-miss that keeps the check usable", async () => {
     const { report, violations, unchecked } = await check(
       { format: "text", config: null, paths: [] },

@@ -42,7 +42,8 @@ import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatFitnessSection } from "../report/text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
-import { loadIntent } from "../architecture-intent/model.mjs";
+import { driftForCheck } from "./drift.mjs";
+import { INTENT_FILE } from "../architecture-intent/model.mjs";
 import {
   evaluateFitness,
   fitnessSnapshot,
@@ -119,7 +120,32 @@ export async function fitnessCommand(commandContext, io = {}) {
     );
   }
 
-  const intent = await loadIntent(root, { tracked: commandContext.tracked });
+  // `drift-free` judges the SAME verdict-shaped intent `check`'s fold builds —
+  // `driftForCheck` (not raw `loadIntent`) — so the two faces can never
+  // disagree about whether the declared intent matches the observed graph. A
+  // drift comparison that cannot be completed surfaces as an `unknown` verdict
+  // on the function, never a `fail` reading "0 findings" over an intent the
+  // command never actually judged.
+  let intent;
+  try {
+    const drift = await driftForCheck(commandContext);
+    intent = {
+      verdict:
+        drift.findings.length > 0 ? "findings" : drift.unresolved.length > 0 ? "no-verdict" : "ok",
+      boundaries: drift.boundaries,
+      findings: drift.findings,
+      unresolved: drift.unresolved,
+      notes: drift.notes,
+    };
+  } catch (cause) {
+    intent = {
+      verdict: "no-verdict",
+      findings: [],
+      unresolved: [{ boundary: INTENT_FILE, issue: cause?.message ?? String(cause) }],
+      boundaries: [],
+      notes: [],
+    };
+  }
   const snapshot = fitnessSnapshot(commandContext, {
     intent,
     suppressions: config.suppressions,

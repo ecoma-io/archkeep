@@ -45,7 +45,7 @@
  * test that needs byte-identical output. Running the same snapshot through
  * the registry twice produces identical evidence.
  */
-import { resolveMembers } from "../architecture-intent/selectors.mjs";
+import { isValidSelector, resolveMembers } from "../architecture-intent/selectors.mjs";
 import { languageOf } from "../analysis/registry.mjs";
 import { canonicalizeJson } from "../canonical.mjs";
 import { fitnessVerdict, isVerdict } from "./verdict.mjs";
@@ -147,9 +147,10 @@ export function findFitnessViolations(list) {
       );
     } else {
       match.forEach((selector, selIndex) => {
-        if (typeof selector !== "string" || selector.length === 0) {
+        if (!isValidSelector(selector)) {
           violations.push(
-            `${at}.match[${selIndex}]: must be a non-empty string, got ${describe(selector)}`,
+            `${at}.match[${selIndex}]: must be a valid project selector ` +
+              `(name:x, tag:x, directory:x, "*", or "!"-prefixed), got ${describe(selector)}`,
           );
         }
       });
@@ -336,7 +337,7 @@ export function judgeFitnessRow(row, graph, analysis, intent, suppressions) {
  *   the whole-tree analysis); `scoped` is set by `check` when `paths` scoped
  *   the run.
  * @returns {{graph: object, analysis: {coverage: object, analyzed: number,
- *   owned: number}, scoped: boolean, intent: object|null, suppressions: object[]}}
+ *   owned: number, scoped: boolean}, intent: object|null, suppressions: object[]}}
  */
 export function fitnessSnapshot(commandContext, extra = {}) {
   const graph = {
@@ -363,8 +364,11 @@ export function fitnessSnapshot(commandContext, extra = {}) {
       coverage,
       owned: Object.values(coverage).reduce((sum, c) => sum + c.owned, 0),
       analyzed: Object.values(coverage).reduce((sum, c) => sum + c.analyzed, 0),
+      // `scoped` rides IN the analysis object because `judgeFitnessRow` reads
+      // `analysis.scoped` — a path-scoped run analyzed a subset, so coverage is
+      // not determinable from it. A top-level `scoped` never reached the rules.
+      scoped: extra.scoped ?? false,
     },
-    scoped: extra.scoped ?? false,
     intent: extra.intent ?? null,
     suppressions: extra.suppressions ?? [],
   };
