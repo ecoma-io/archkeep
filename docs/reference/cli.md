@@ -12,6 +12,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `drift`      | (none)               | Compare the observed architecture to the declared intent                 | no               |
 | `waivers`    | (none)               | List the boundary waivers on the table, with their terms                 | no               |
 | `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                   | no               |
+| `health`     | `[<snapshot-dir>]`   | Describe architecture health metrics and trends                          | no               |
 | `impact`     | `<project>`          | List projects that depend on the named project                           | no               |
 | `explain`    | `<file:line:column>` | Explain the judgment for one import site                                 | no               |
 | `context`    | `<project>`          | Show the architecture constraints that apply to a project                | no               |
@@ -73,6 +74,21 @@ workspace root; load it, describe the findings, print the intent fingerprint,
 and let `check` do the failing. A boundary or row side that matched no observed
 project so the comparison cannot be completed exits 3 with a loud message —
 "cannot verify" must never read as "no drift".
+
+### `health`
+
+| flag       | argument       | default                  | meaning                                                                     |
+| ---------- | -------------- | ------------------------ | --------------------------------------------------------------------------- |
+| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                             |
+| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                               |
+| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. |
+
+The optional positional argument names the snapshot directory for trends (the
+same `.lattice/history/` directory `history` reads); with no argument, health
+reports the current run's metrics without a trend. Health is descriptive — it
+never exits 1 — and it exits 3 whenever any metric reads `unknown`: a run that
+could not fully inspect its own evidence is not a healthy run, and "cannot
+look" must never read as "clean".
 
 ### `impact`
 
@@ -177,9 +193,9 @@ analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
 A descriptive command (`graph`, `diff`, `drift`, `waivers`, `history`,
-`impact`, `explain`, `context`) exits 0 when it completes, 3 when coverage is
-incomplete, and 2 on usage error. None exits 1, because a descriptive result
-is never a finding.
+`health`, `impact`, `explain`, `context`) exits 0 when it completes, 3 when
+coverage is incomplete or a metric is `unknown`, and 2 on usage error. None
+exits 1, because a descriptive result is never a finding.
 
 ## What each command does
 
@@ -229,6 +245,19 @@ while neither architecture nor policy changed is disclosed as code drift. What
 a snapshot does not carry is disclosed, never asserted. `--capture` appends a
 snapshot of the current workspace before describing the record.
 Descriptive -- evolution never makes it exit 1.
+
+### `health [<snapshot-dir>]`
+
+Reports deterministic architecture-health metrics for the current workspace:
+project and edge counts, the coverage ratio, boundary violations and the waiver
+surface, cycle count, edge density, debt rows from the config's own notes, and
+the intent (fitness) verdict. Each metric carries a verdict in the canonical
+vocabulary — `ok`, `findings`, `not_applicable` (nothing to measure) or
+`unknown` (evidence could not be fully inspected), and a metric that did not
+measure carries no number. Given a snapshot directory, the same structural
+metrics are reported across the snapshots `history` reads, with the disclosure
+that rule-impact cannot be re-derived from stored bytes. Descriptive — a
+description of health is never itself a finding.
 
 ### `impact <project>`
 

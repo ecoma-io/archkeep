@@ -61,7 +61,7 @@ follows) are both written for each command to reuse the same wrapper.
 | --------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                                                                                                                 |
 | `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                                                                                                                                                                |
-| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"drift"`, `"waivers"`, `"history"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                                                     |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"drift"`, `"waivers"`, `"history"`, `"health"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                                      |
 | `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"lattice.json"`, `".moon"`, or `".config/moon"`). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                 |
 | `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                                                                                                          |
@@ -309,6 +309,28 @@ run (exit 3) that produces no envelope, not a record of an empty history.
 `history` never recomputes rule-impact from stored snapshots — a snapshot
 carries the graph and the policy fingerprint, not the constraint table or
 import sites — so `coverage.notes` states that limit on every record.
+
+## `result` (for `command: "health"`)
+
+`health` reports deterministic architecture-health metrics for the current
+workspace. It is descriptive: it never exits `1`. Each metric carries a verdict
+in the canonical vocabulary (`ok`, `findings`, `not_applicable`, `unknown`),
+and a metric's `value` is present **only when** the verdict is `ok` or
+`findings` — a `not_applicable` or `unknown` metric carries no number, because
+a number over no evidence would read as a measured zero. The status is `"ok"`
+(exit 0) when every metric reached a verdict, and `"no-verdict"` (exit 3) when
+any metric is `unknown`.
+
+| field      | type             | meaning                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trendDir` | `null` \| string | The snapshot directory read for trends, or `null` when none was given.                                                                                                                                                                                                                                                                                                                                                 |
+| `metrics`  | object           | One entry per metric, each `{verdict, value?, note?}` — `projects`, `edges`, `coverage`, `violations`, `waiverSurface`, `cycles`, `edgeDensity`, `debt`, `fitness`. `note` explains a `not_applicable` or `unknown` verdict and is absent for a measured one. `edgeDensity` is descriptive (`ok` + ratio — a pressure gauge, not a pass/fail); `waiverSurface` is a fact on the books (`ok` + count), never a finding. |
+| `trends`   | `null` \| object | `null` when no snapshot directory was given. Otherwise `{snapshots: [{name, projects, dependencies}], notes: string[]}` — the structural metrics per snapshot in history order, with the disclosure that rule-impact cannot be re-derived from stored bytes.                                                                                                                                                           |
+
+The `coverage` envelope field carries the run's completeness facts, and
+`coverage.notes` discloses an unregistered Nx plugin (a graph with no
+Go/Rust/Python edges) so the metrics that needed those edges read `unknown`
+rather than a measured zero.
 
 ## `result` (for `command: "impact"`)
 

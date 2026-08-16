@@ -57,7 +57,7 @@ Architecture model          projects, edges, tags — from a provider (Nx, Moon,
     ↓
 Policy / intent             the constraint table in your workspace
     ↓
-Deterministic evidence      graph · check · diff · impact · explain · context · snapshots
+Deterministic evidence      graph · check · diff · drift · history · health · impact · explain · context · snapshots
     ↓
 Governance                  the verdict, as an exit code and a machine-readable report
     ↓
@@ -65,8 +65,9 @@ Human + coding agent        a developer in CI, an agent reading the JSON envelop
 ```
 
 One analysis, three faces: the CLI, the language server, and the integrations. The verdict is
-the same everywhere; only the delivery changes. Six commands —
-`check`, `graph`, `diff`, `impact`, `explain`, `context` — with versioned machine-readable
+the same everywhere; only the delivery changes. Nine commands —
+`check`, `graph`, `diff`, `drift`, `history`, `health`, `impact`, `explain`, `context` —
+with versioned machine-readable
 output, four exit codes, and a snapshot/diff pair that records the architecture over time
 with provenance. The full pipeline is in [**docs/concepts/architecture.md**](docs/concepts/architecture.md).
 
@@ -168,17 +169,17 @@ reasoning, and the refusals that follow from it, are in
 
 ## Documentation
 
-|                                                                                                                                                        |                                                                          |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| [**Getting started**](docs/getting-started/installation.md)                                                                                            | Install, configure, first violation                                      |
-| [**North star**](docs/doctrine/north-star.md) · [**Roadmap**](docs/roadmap.md)                                                                         | The direction, and the staged path (1.x governance → 2.x intelligence)   |
-| [Designing boundaries](docs/concepts/boundaries.md)                                                                                                    | The constraint table, and the five semantics that surprise people        |
-| [The fifteen violations](docs/reference/violations.md)                                                                                                 | What each `messageId` means, and what fixes it                           |
-| [What each language sees](docs/reference/languages.md)                                                                                                 | Per-language coverage and every declared parse limit                     |
-| [Commands](docs/reference/cli.md)                                                                                                                      | `check` · `graph` · `diff` · `impact` · `explain` · `context`            |
-| [CI](docs/usage/ci.md) · [VS Code](docs/integrations/vscode.md) · [Troubleshooting](docs/usage/troubleshooting.md)                                     | Exit codes, SARIF, LSP setup, and what to check when it reported nothing |
-| [Agent skills](docs/skills/overview.md)                                                                                                                | Architecture-aware agent protocol: four `arch-*` skills                  |
-| [Architecture](docs/development/architecture.md) · [Adding a language](docs/development/adding-a-language.md) · [Testing](docs/development/testing.md) | For contributors                                                         |
+|                                                                                                                                                        |                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| [**Getting started**](docs/getting-started/installation.md)                                                                                            | Install, configure, first violation                                                            |
+| [**North star**](docs/doctrine/north-star.md) · [**Roadmap**](docs/roadmap.md)                                                                         | The direction, and the staged path (1.x governance → 2.x intelligence)                         |
+| [Designing boundaries](docs/concepts/boundaries.md)                                                                                                    | The constraint table, and the five semantics that surprise people                              |
+| [The fifteen violations](docs/reference/violations.md)                                                                                                 | What each `messageId` means, and what fixes it                                                 |
+| [What each language sees](docs/reference/languages.md)                                                                                                 | Per-language coverage and every declared parse limit                                           |
+| [Commands](docs/reference/cli.md)                                                                                                                      | `check` · `graph` · `diff` · `drift` · `history` · `health` · `impact` · `explain` · `context` |
+| [CI](docs/usage/ci.md) · [VS Code](docs/integrations/vscode.md) · [Troubleshooting](docs/usage/troubleshooting.md)                                     | Exit codes, SARIF, LSP setup, and what to check when it reported nothing                       |
+| [Agent skills](docs/skills/overview.md)                                                                                                                | Architecture-aware agent protocol: four `arch-*` skills                                        |
+| [Architecture](docs/development/architecture.md) · [Adding a language](docs/development/adding-a-language.md) · [Testing](docs/development/testing.md) | For contributors                                                                               |
 
 Full index: [**docs/**](docs/README.md). The package's own reference, which stands alone as the
 npm landing page, is [here](packages/lattice/README.md).
