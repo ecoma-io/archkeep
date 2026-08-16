@@ -100,6 +100,7 @@ import { readFile as readFileFromDisk } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { loadEslintBoundaryConfig } from "./eslint-config.mjs";
+import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "./governance/row-schema.mjs";
 import {
   globPatternError,
   importPatternError,
@@ -303,6 +304,16 @@ function constraintRowViolations(row, index) {
       );
     }
   }
+  // The governance block (Contract 2): origin/rationale/decisionRef/
+  // fitnessBindings, validated by the ONE shared schema (`./governance/row-schema.mjs`)
+  // so a constraint row and an intent row are checked identically across the
+  // wave — never a second copy of what a governance key may hold. Additive: a
+  // row without the block is a legacy row and stays valid byte-identical.
+  // Resolution of a decisionRef/fitnessBinding id is the registry capability's
+  // (`./governance/row-schema.mjs`); shape is validated here, loudly.
+  if ("origin" in row || "rationale" in row || "decisionRef" in row || "fitnessBindings" in row) {
+    violations.push(...rowSchemaViolations(row, at));
+  }
   // Rejected rather than ignored: an unknown key is almost always a
   // misspelling of one above (`bannedExternalImport`), and the rule would
   // accept the row, enforce the half it understood, and drop the ban.
@@ -312,12 +323,14 @@ function constraintRowViolations(row, index) {
       key === "sourceTag" ||
       key === "allSourceTags" ||
       ROW_LIST_KEYS.includes(key) ||
-      ROW_SCALAR_KEYS.includes(key)
+      ROW_SCALAR_KEYS.includes(key) ||
+      GOVERNANCE_ROW_KEYS.includes(key)
     )
       continue;
     violations.push(
       `${at}.${key}: not a constraint field — expected one of ` +
-        `sourceTag, allSourceTags, ${ROW_LIST_KEYS.join(", ")}, ${ROW_SCALAR_KEYS.join(", ")}`,
+        `sourceTag, allSourceTags, ${ROW_LIST_KEYS.join(", ")}, ${ROW_SCALAR_KEYS.join(", ")}, ` +
+        GOVERNANCE_ROW_KEYS.join(", "),
     );
   }
   return violations;

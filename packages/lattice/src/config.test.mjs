@@ -248,6 +248,82 @@ describe("findBoundaryConfigViolations", () => {
   });
 });
 
+describe("findBoundaryConfigViolations — the governance block (Contract 2)", () => {
+  it("accepts a constraint row carrying the full governance block", () => {
+    expect(
+      findBoundaryConfigViolations({
+        ...wellFormed(),
+        depConstraints: [
+          {
+            sourceTag: "layer:domain",
+            onlyDependOnLibsWithTags: ["layer:util"],
+            origin: { by: "jane@example.com", tool: "lattice:v1" },
+            rationale: "the domain must never reach outward",
+            decisionRef: "adr:0012",
+            fitnessBindings: ["fitness:hotspot"],
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("accepts a legacy row with no governance block at all — byte-identical parse", () => {
+    expect(findBoundaryConfigViolations(wellFormed())).toEqual([]);
+  });
+
+  it("rejects an invalid origin loudly, naming the row", () => {
+    const violations = findBoundaryConfigViolations({
+      ...wellFormed(),
+      depConstraints: [{ sourceTag: "x", onlyDependOnLibsWithTags: ["y"], origin: { tool: "l" } }],
+    });
+    expect(violations.some((v) => v.startsWith("depConstraints[0].origin.by"))).toBe(true);
+  });
+
+  it("accepts an origin carrying a committed `on` — a static file fact needs no clock to read", () => {
+    expect(
+      findBoundaryConfigViolations({
+        ...wellFormed(),
+        depConstraints: [
+          {
+            sourceTag: "x",
+            onlyDependOnLibsWithTags: ["y"],
+            origin: { by: "jane", tool: "l", on: "2026-08-16" },
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("rejects an empty rationale and an empty fitnessBindings list", () => {
+    const violations = findBoundaryConfigViolations({
+      ...wellFormed(),
+      depConstraints: [
+        {
+          sourceTag: "x",
+          onlyDependOnLibsWithTags: ["y"],
+          rationale: "",
+          fitnessBindings: [],
+        },
+      ],
+    });
+    expect(violations.some((v) => v.includes("rationale: must be a non-empty string"))).toBe(true);
+    expect(violations.some((v) => v.includes("fitnessBindings: must not be empty"))).toBe(true);
+  });
+
+  it("does not reject a governance key as an unknown constraint field", () => {
+    // The unknown-key loop must recognize the four governance keys; before
+    // Contract 2 a row carrying `origin` was rejected by name.
+    expect(
+      findBoundaryConfigViolations({
+        ...wellFormed(),
+        depConstraints: [
+          { sourceTag: "x", onlyDependOnLibsWithTags: ["y"], origin: { by: "j", tool: "l" } },
+        ],
+      }),
+    ).toEqual([]);
+  });
+});
+
 describe("boundarySuppressions", () => {
   const withSuppressions = (boundarySuppressions) => ({ ...wellFormed(), boundarySuppressions });
 
