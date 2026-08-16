@@ -257,7 +257,149 @@ describe("judgeIntent — determinism and provider independence", () => {
 });
 
 describe("INTENT_MESSAGE_IDS", () => {
-  it("names exactly the two ruling concepts, each a distinct verdict", () => {
-    expect(INTENT_MESSAGE_IDS).toEqual(["intentForbiddenEdge", "intentAllowedMissing"]);
+  it("names every concept one judge can emit, each a distinct verdict", () => {
+    expect(INTENT_MESSAGE_IDS).toEqual([
+      "intentForbiddenEdge",
+      "intentAllowedMissing",
+      "projectMissing",
+      "projectPresent",
+      "projectTagMissing",
+      "dependencyForbidden",
+      "dependencyNotAllowed",
+      "tagDependencyForbidden",
+      "intentUnknownProject",
+      "intentUnknownTag",
+    ]);
+  });
+});
+
+describe("judgeIntent — projects (drift presence)", () => {
+  it("reports a required project that does not exist as projectMissing", () => {
+    const result = judgeIntent(intent({ projects: { required: [{ name: "ghost" }] } }), graph({}));
+    expect(result.verdict).toBe("findings");
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].rule).toBe("projectMissing");
+    expect(result.findings[0].source).toBeNull();
+  });
+
+  it("reports a required project that exists but lacks a required tag as projectTagMissing", () => {
+    const result = judgeIntent(
+      intent({ projects: { required: [{ name: "core", tags: ["type-package", "scope-x"] }] } }),
+      graph({ core: node(["type-package"]) }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings.map((f) => f.rule)).toEqual(["projectTagMissing"]);
+    expect(result.findings[0].message).toContain("scope-x");
+  });
+
+  it("is clean when the required project exists and carries its required tags", () => {
+    const result = judgeIntent(
+      intent({
+        projects: { required: [{ name: "core", tags: ["type-package"] }] },
+      }),
+      graph({ core: node(["type-package"]) }),
+    );
+    expect(result.verdict).toBe("ok");
+    expect(result.findings).toEqual([]);
+  });
+
+  it("reports a forbidden project that is present as projectPresent", () => {
+    const result = judgeIntent(
+      intent({ projects: { forbidden: [{ name: "ui" }] } }),
+      graph({ core: node(["type-package"]), ui: node(["type-package"]) }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings[0].rule).toBe("projectPresent");
+  });
+
+  it("is clean when a forbidden project is absent", () => {
+    const result = judgeIntent(
+      intent({ projects: { forbidden: [{ name: "legacy" }] } }),
+      graph({ core: node(["type-package"]) }),
+    );
+    expect(result.verdict).toBe("ok");
+    expect(result.findings).toEqual([]);
+  });
+});
+
+describe("judgeIntent — dependencies (drift edges)", () => {
+  it("reports an explicitly forbidden dependency as dependencyForbidden", () => {
+    const result = judgeIntent(
+      intent({ dependencies: { forbidden: [{ source: "core", target: "site" }] } }),
+      graph({ ...pkgs, site: exts.site }, { core: [{ target: "site" }] }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings[0].rule).toBe("dependencyForbidden");
+    expect(result.findings[0].source).toBe("core");
+    expect(result.findings[0].target).toBe("site");
+  });
+
+  it("reports an edge outside the exhaustive allowlist as dependencyNotAllowed", () => {
+    // `site` is a real observed project (an extension) but is not on the
+    // allowlist, so the observed edge core→site must be drift. A target with
+    // no node in the graph is filtered from the observed side the same way
+    // `directEdges` filters external edges — it is never judged.
+    const result = judgeIntent(
+      intent({ dependencies: { allowed: [{ source: "core", target: "ui" }] } }),
+      graph({ ...pkgs, site: exts.site }, { core: [{ target: "site" }] }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings.map((f) => f.rule)).toEqual(["dependencyNotAllowed"]);
+  });
+
+  it("is clean when every observed edge is inside the allowlist", () => {
+    const result = judgeIntent(
+      intent({ dependencies: { allowed: [{ source: "core", target: "ui" }] } }),
+      graph({ ...pkgs }, { core: [{ target: "ui" }] }),
+    );
+    expect(result.verdict).toBe("ok");
+  });
+
+  it("does not enable allowlist closure when allowed is omitted", () => {
+    const result = judgeIntent(
+      intent({ dependencies: { forbidden: [{ source: "core", target: "site" }] } }),
+      graph({ ...pkgs, site: exts.site }, { core: [{ target: "ui" }] }),
+    );
+    expect(result.verdict).toBe("ok");
+    expect(result.findings).toEqual([]);
+  });
+
+  it("reports an intent row naming an unknown project as intentUnknownProject", () => {
+    const result = judgeIntent(
+      intent({ dependencies: { forbidden: [{ source: "core", target: "ghost" }] } }),
+      graph({ ...pkgs }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings.some((f) => f.rule === "intentUnknownProject")).toBe(true);
+  });
+
+  it("reports an edge crossing a forbidden tag pair as tagDependencyForbidden", () => {
+    const forbiddenTags = intent({
+      forbiddenTags: [{ from: "type-package", to: "type-extension" }],
+    });
+    const result = judgeIntent(
+      forbiddenTags,
+      graph({ ...pkgs, site: exts.site }, { core: [{ target: "site" }] }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings.some((f) => f.rule === "tagDependencyForbidden")).toBe(true);
+  });
+
+  it("reports a tag rule no project carries as intentUnknownTag", () => {
+    const result = judgeIntent(
+      intent({ forbiddenTags: [{ from: "backend", to: "frontend" }] }),
+      graph({ ...pkgs }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings.some((f) => f.rule === "intentUnknownTag")).toBe(true);
+  });
+
+  it("emits a fail-closed no-verdict when a boundary matches no project", () => {
+    const result = judgeIntent(
+      intent({ boundaries: [{ name: "empty", match: ["tag:none"] }] }),
+      graph({}),
+    );
+    expect(result.verdict).toBe("no-verdict");
+    expect(result.findings).toEqual([]);
   });
 });

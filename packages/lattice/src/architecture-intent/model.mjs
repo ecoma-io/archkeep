@@ -4,9 +4,12 @@
  * `architecture-intent.json` at a workspace root declares the architecture the
  * team intends to preserve — which groups of projects share a role (boundaries)
  * and, per boundary pair, which dependencies are allowed and which are
- * forbidden. The observed architecture stays the graph Lattice derives from
- * source; governance is a deterministic comparison (`./judge.mjs`). NO LLM/AI
- * anywhere in the core.
+ * forbidden. It also declares the architecture's *existence* facts: which
+ * projects must and must not exist, which tags a required project must carry,
+ * which dependencies are permitted or forbidden by exact name, and which
+ * tag→tag dependencies are forbidden — the drift contract #86 consumes. The
+ * observed architecture stays the graph Lattice derives from source; governance
+ * is a deterministic comparison (`./judge.mjs`). NO LLM/AI anywhere in the core.
  *
  * This module mirrors `../../config.mjs`'s and
  * `../../providers/native/model.mjs`'s split: a pure `(raw) -> string[]`
@@ -43,8 +46,40 @@ export const INTENT_FILE = "architecture-intent.json";
 /** The one supported `version`. A different value is a load error. */
 export const INTENT_VERSION = "1";
 
-/** The only keys a valid intent file may carry at the top level. */
-export const TOP_LEVEL_KEYS = Object.freeze(["version", "boundaries", "allowed", "forbidden"]);
+/**
+ * The only keys a valid intent file may carry at the top level.
+ *
+ * The first four ship in v1. The last three — the drift sections — are part of
+ * the same version-1 contract: an intent file that uses none of them is
+ * byte-identical to a file written before drift existed, and a file that uses
+ * them declares the additional existence facts the judge enforces. Keeping
+ * them one version means a file cannot silently carry a section the judge does
+ * not understand; adding them to the same version is safe because they are
+ * additive — a consumer that cannot judge them must not receive them, and this
+ * engine judges them.
+ */
+export const TOP_LEVEL_KEYS = Object.freeze([
+  "version",
+  "boundaries",
+  "allowed",
+  "forbidden",
+  "projects",
+  "dependencies",
+  "forbiddenTags",
+]);
+
+/** The sub-keys a `projects` section may carry. */
+export const PROJECT_SECTION_KEYS = Object.freeze(["required", "forbidden"]);
+/** The sub-keys a `dependencies` section may carry. */
+export const DEPENDENCY_SECTION_KEYS = Object.freeze(["allowed", "forbidden"]);
+/** The keys a `projects.required[]` row may carry. */
+export const REQUIRED_PROJECT_KEYS = Object.freeze(["name", "tags"]);
+/** The keys a `projects.forbidden[]` row may carry. */
+export const FORBIDDEN_PROJECT_KEYS = Object.freeze(["name"]);
+/** The keys a `dependencies.allowed[]` / `dependencies.forbidden[]` row may carry. */
+export const DEPENDENCY_ROW_KEYS = Object.freeze(["source", "target"]);
+/** The keys a `forbiddenTags[]` row may carry. */
+export const TAG_ROW_KEYS = Object.freeze(["from", "to"]);
 
 /** The keys a boundary entry may carry. */
 const BOUNDARY_KEYS = Object.freeze(["name", "match"]);
@@ -282,6 +317,171 @@ export function findIntentViolations(raw) {
     });
   }
 
+  // ── projects (drift) ──────────────────────────────────────────────────────
+  // Optional, but when present must be an object holding at most `required` and
+  // `forbidden`. Absence of a `projects` section is a workspace choice, not a
+  // verdict; a section present but empty would read as policy while deciding
+  // nothing, the same "many enforce" rule below that governs dependencies.
+  if (raw.projects !== undefined) {
+    if (!isPlainObject(raw.projects)) {
+      violations.push(`projects: must be an object, got ${describe(raw.projects)}`);
+    } else {
+      for (const key of unknownKeys(raw.projects, PROJECT_SECTION_KEYS)) {
+        violations.push(
+          `projects: unknown key "${key}" — a projects section may carry only ${PROJECT_SECTION_KEYS.join(", ")}`,
+        );
+      }
+      const requiredList = raw.projects.required;
+      if (requiredList !== undefined) {
+        if (!Array.isArray(requiredList)) {
+          violations.push(`projects.required: must be an array, got ${describe(requiredList)}`);
+        } else {
+          requiredList.forEach((row, index) => {
+            const at = `projects.required[${index}]`;
+            if (!isPlainObject(row)) {
+              violations.push(`${at}: must be an object, got ${describe(row)}`);
+              return;
+            }
+            for (const key of unknownKeys(row, REQUIRED_PROJECT_KEYS)) {
+              violations.push(
+                `${at}.${key}: unknown key — a required project may carry only ${REQUIRED_PROJECT_KEYS.join(", ")}`,
+              );
+            }
+            if (typeof row.name !== "string" || row.name.trim() === "") {
+              violations.push(`${at}.name: must be a non-empty string, got ${describe(row.name)}`);
+            }
+            if (row.tags !== undefined) {
+              if (!Array.isArray(row.tags)) {
+                violations.push(
+                  `${at}.tags: must be an array of non-empty strings, got ${describe(row.tags)}`,
+                );
+              } else {
+                row.tags.forEach((tag, tagIndex) => {
+                  if (typeof tag !== "string" || tag.trim() === "") {
+                    violations.push(
+                      `${at}.tags[${tagIndex}]: must be a non-empty string, got ${describe(tag)}`,
+                    );
+                  }
+                });
+              }
+            }
+          });
+        }
+      }
+      const forbiddenList = raw.projects.forbidden;
+      if (forbiddenList !== undefined) {
+        if (!Array.isArray(forbiddenList)) {
+          violations.push(`projects.forbidden: must be an array, got ${describe(forbiddenList)}`);
+        } else {
+          forbiddenList.forEach((row, index) => {
+            const at = `projects.forbidden[${index}]`;
+            if (!isPlainObject(row)) {
+              violations.push(`${at}: must be an object, got ${describe(row)}`);
+              return;
+            }
+            for (const key of unknownKeys(row, FORBIDDEN_PROJECT_KEYS)) {
+              violations.push(
+                `${at}.${key}: unknown key — a forbidden project may carry only ${FORBIDDEN_PROJECT_KEYS.join(", ")}`,
+              );
+            }
+            if (typeof row.name !== "string" || row.name.trim() === "") {
+              violations.push(`${at}.name: must be a non-empty string, got ${describe(row.name)}`);
+            }
+          });
+        }
+      }
+    }
+  }
+
+  // ── dependencies (drift) ──────────────────────────────────────────────────
+  // Optional, but when present must be an object holding at most `allowed` and
+  // `forbidden`. When `allowed` is present and non-empty, it is an exhaustive
+  // whitelist: every observed edge outside it is drift. When `allowed` is
+  // omitted entirely, only the forbidden rules can fire.
+  if (raw.dependencies !== undefined) {
+    if (!isPlainObject(raw.dependencies)) {
+      violations.push(`dependencies: must be an object, got ${describe(raw.dependencies)}`);
+    } else {
+      for (const key of unknownKeys(raw.dependencies, DEPENDENCY_SECTION_KEYS)) {
+        violations.push(
+          `dependencies: unknown key "${key}" — a dependencies section may carry only ${DEPENDENCY_SECTION_KEYS.join(", ")}`,
+        );
+      }
+      for (const listName of DEPENDENCY_SECTION_KEYS) {
+        const list = raw.dependencies[listName];
+        if (list === undefined) continue;
+        if (!Array.isArray(list)) {
+          violations.push(`dependencies.${listName}: must be an array, got ${describe(list)}`);
+          continue;
+        }
+        if (list.length === 0) {
+          violations.push(
+            `dependencies.${listName}: must not be empty — a list present but empty reads as policy while deciding nothing`,
+          );
+          continue;
+        }
+        list.forEach((row, index) => {
+          const at = `dependencies.${listName}[${index}]`;
+          if (!isPlainObject(row)) {
+            violations.push(`${at}: must be an object, got ${describe(row)}`);
+            return;
+          }
+          for (const key of unknownKeys(row, DEPENDENCY_ROW_KEYS)) {
+            violations.push(
+              `${at}.${key}: unknown key — a dependency row may carry only ${DEPENDENCY_ROW_KEYS.join(", ")}`,
+            );
+          }
+          for (const side of ["source", "target"]) {
+            if (typeof row[side] !== "string" || row[side].trim() === "") {
+              violations.push(
+                `${at}.${side}: must be a non-empty string, got ${describe(row[side])}`,
+              );
+            }
+          }
+        });
+      }
+    }
+  }
+
+  // ── forbiddenTags (drift) ─────────────────────────────────────────────────
+  // Optional, but when present must be a non-empty array of from/to rows. A
+  // row whose `from` equals its `to` forbids a tag from depending on itself —
+  // a no-op the author should not phrase as a rule; it is a load error.
+  if (raw.forbiddenTags !== undefined) {
+    if (!Array.isArray(raw.forbiddenTags)) {
+      violations.push(`forbiddenTags: must be an array, got ${describe(raw.forbiddenTags)}`);
+    } else if (raw.forbiddenTags.length === 0) {
+      violations.push(
+        "forbiddenTags: must not be empty — a list present but empty reads as policy while deciding nothing",
+      );
+    } else {
+      raw.forbiddenTags.forEach((row, index) => {
+        const at = `forbiddenTags[${index}]`;
+        if (!isPlainObject(row)) {
+          violations.push(`${at}: must be an object, got ${describe(row)}`);
+          return;
+        }
+        for (const key of unknownKeys(row, TAG_ROW_KEYS)) {
+          violations.push(
+            `${at}.${key}: unknown key — a tag row may carry only ${TAG_ROW_KEYS.join(", ")}`,
+          );
+        }
+        for (const side of ["from", "to"]) {
+          if (typeof row[side] !== "string" || row[side].trim() === "") {
+            violations.push(
+              `${at}.${side}: must be a non-empty string, got ${describe(row[side])}`,
+            );
+          }
+        }
+        if (typeof row.from === "string" && typeof row.to === "string" && row.from === row.to) {
+          violations.push(
+            `${at}: from and to must differ — a tag depending on itself is a no-op and should not be phrased as a rule`,
+          );
+        }
+      });
+    }
+  }
+
   // Rule 7: allowed ⊕ forbidden overlap. A from/to pair in both lists is
   // ambiguous — the same dependency cannot be both explicitly allowed and
   // explicitly forbidden. State the allowed pair minus the forbidden one as
@@ -316,7 +516,7 @@ export function findIntentViolations(raw) {
  * takes for a `go.work` it cannot read (`../../go-work.mjs`).
  *
  * @param {object} intent The validated intent object.
- * @returns {object} The normalized model: `{version, boundaries: {name, match, members?}[], allowed, forbidden}`.
+ * @returns {object} The normalized model: `{version, boundaries: {name, match, members?}[], allowed, forbidden, projects?, dependencies?, forbiddenTags?}`.
  */
 export function normalizeIntent(intent) {
   return {
@@ -324,6 +524,9 @@ export function normalizeIntent(intent) {
     boundaries: intent.boundaries.map((b) => ({ name: b.name, match: [...b.match] })),
     allowed: intent.allowed ?? [],
     forbidden: intent.forbidden ?? [],
+    projects: intent.projects,
+    dependencies: intent.dependencies,
+    forbiddenTags: intent.forbiddenTags ?? [],
   };
 }
 

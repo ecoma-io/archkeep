@@ -43,6 +43,16 @@ export const INTENT_MESSAGES = Object.freeze({
   intentAllowedMissing:
     "A dependency this workspace's architecture-intent.json allows is not observed — the " +
     "intended architecture is not being built.",
+  projectMissing:
+    "the intent requires a project to exist, but the observed architecture has no project of that name",
+  projectPresent: "the intent forbids a project, but the observed architecture contains it",
+  projectTagMissing: "a required project lacks a required tag",
+  dependencyForbidden: "a dependency the intent forbids exists in the observed architecture",
+  dependencyNotAllowed: "an observed dependency is not among the dependencies the intent allows",
+  tagDependencyForbidden:
+    "a dependency the intent forbids between two tags exists in the observed architecture",
+  intentUnknownProject: "an intent row names a project the observed architecture does not have",
+  intentUnknownTag: "a tag rule names a tag no observed project carries",
 });
 
 export const INTENT_MESSAGE_IDS = Object.freeze(Object.keys(INTENT_MESSAGES));
@@ -247,6 +257,176 @@ export function judgeIntent(intent, graph) {
 
   for (const row of intent.forbidden) judgeRow(row, "forbidden");
   for (const row of intent.allowed) judgeRow(row, "allowed");
+
+  // ── Drift sections (projects / dependencies / forbiddenTags) ─────────────
+  // These judge existence facts by *name* and *tag* rather than by boundary
+  // selector. `from`/`to` on a dependency row and `name` on a project row are
+  // exact project names, never selectors — a typo'd name must be a loud
+  // `intentUnknownProject`, not a boundary that silently matches nothing. Tag
+  // rows reference tag values, judged against the union of every observed
+  // project's tags.
+  /** @type {Map<string, {name: string, tags: string[]}>} */
+  const projectsByName = new Map();
+  for (const [entryName, entry] of Object.entries(nodes)) {
+    // Tags live under `data.tags` (the provider-neutral node shape the selector
+    // engine reads) — read from there, never from a bare `tags` field.
+    projectsByName.set(entryName, { name: entryName, tags: entry?.data?.tags ?? [] });
+  }
+  const known = (name) => projectsByName.has(name);
+  const tagsOf = (name) => {
+    const project = projectsByName.get(name);
+    return project?.tags ?? [];
+  };
+  const tagVocabulary = new Set();
+  for (const project of projectsByName.values())
+    for (const tag of project.tags) tagVocabulary.add(tag);
+
+  /**
+   * `alreadyNamed` lets a drift rule skip a (source,target) pair a boundary or
+   * project rule already reported, so no edge is ever two findings.
+   */
+  const alreadyNamed = (list, source, target) =>
+    list.some((f) => f.source === source && f.target === target);
+
+  /**
+   * The observed direct edges as `[source, target]` pairs, built with the same
+   * traversal `directEdges` above uses — the drift sections read the pair list
+   * rather than parse `edgeKey` strings back apart. Order is irrelevant: the
+   * final sort below is total.
+   */
+  const observedEdgePairs = [];
+  for (const [source, dependencies] of Object.entries(graph.dependencies ?? {})) {
+    for (const dependency of dependencies ?? []) {
+      if (graph.nodes[dependency.target] !== undefined) {
+        observedEdgePairs.push([source, dependency.target]);
+      }
+    }
+  }
+
+  for (const row of intent.dependencies?.forbidden ?? []) {
+    const { source, target } = row;
+    if (edges.has(edgeKey(source, target))) {
+      findings.push({
+        source,
+        target,
+        rule: "dependencyForbidden",
+        boundaryFrom: null,
+        boundaryTo: null,
+        message: `${source} → ${target} — architecture-intent.json forbids this dependency, but the observed graph contains it`,
+      });
+    }
+  }
+  const hasDependencyAllowlist = (intent.dependencies?.allowed?.length ?? 0) > 0;
+  if (hasDependencyAllowlist) {
+    const allowedSet = new Set(
+      (intent.dependencies.allowed ?? []).map((r) => `${r.source} ${r.target}`),
+    );
+    for (const [source, target] of observedEdgePairs) {
+      if (alreadyNamed(findings, source, target) || allowedSet.has(`${source} ${target}`)) continue;
+      findings.push({
+        source,
+        target,
+        rule: "dependencyNotAllowed",
+        boundaryFrom: null,
+        boundaryTo: null,
+        message: `${source} → ${target} — architecture-intent.json allows only the listed dependencies, and this one is not listed`,
+      });
+    }
+  }
+  for (const row of intent.forbiddenTags ?? []) {
+    const { from, to } = row;
+    const fromMissing = !tagVocabulary.has(from);
+    const toMissing = !tagVocabulary.has(to);
+    if (fromMissing || toMissing) {
+      const missing = [fromMissing ? `"${from}"` : null, toMissing ? `"${to}"` : null]
+        .filter(Boolean)
+        .join(" and ");
+      findings.push({
+        source: null,
+        target: null,
+        rule: "intentUnknownTag",
+        boundaryFrom: null,
+        boundaryTo: null,
+        message: `architecture-intent.json forbids a dependency from tag "${from}" to tag "${to}", but no observed project carries ${missing}`,
+      });
+    }
+    for (const [source, target] of observedEdgePairs) {
+      if (!known(source) || !known(target)) continue;
+      if (tagsOf(source).includes(from) && tagsOf(target).includes(to)) {
+        findings.push({
+          source,
+          target,
+          rule: "tagDependencyForbidden",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message: `${source} → ${target} — architecture-intent.json forbids a dependency from any project carrying tag "${from}" to any project carrying tag "${to}"`,
+        });
+      }
+    }
+  }
+  // Referenced-but-unknown project names in the dependency sections — a typo'd
+  // name can never fire and must be loud, never silent.
+  const referenced = new Set();
+  for (const row of [
+    ...(intent.dependencies?.allowed ?? []),
+    ...(intent.dependencies?.forbidden ?? []),
+  ]) {
+    if (typeof row.source === "string") referenced.add(row.source);
+    if (typeof row.target === "string") referenced.add(row.target);
+  }
+  for (const name of [...referenced].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
+    if (!known(name)) {
+      findings.push({
+        source: null,
+        target: null,
+        rule: "intentUnknownProject",
+        boundaryFrom: null,
+        boundaryTo: null,
+        message: `architecture-intent.json names project "${name}", but the observed architecture has no project of that name`,
+      });
+    }
+  }
+  if (intent.projects?.required) {
+    for (const row of intent.projects.required) {
+      const requiredTags = row.tags ?? [];
+      if (!known(row.name)) {
+        findings.push({
+          source: null,
+          target: null,
+          rule: "projectMissing",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message: `architecture-intent.json requires project "${row.name}" to exist, but the observed architecture has no project of that name`,
+        });
+      }
+      for (const tag of requiredTags) {
+        if (!tagsOf(row.name).includes(tag)) {
+          findings.push({
+            source: null,
+            target: null,
+            rule: "projectTagMissing",
+            boundaryFrom: null,
+            boundaryTo: null,
+            message: `architecture-intent.json requires project "${row.name}" to carry tag "${tag}", but it does not`,
+          });
+        }
+      }
+    }
+  }
+  if (intent.projects?.forbidden) {
+    for (const row of intent.projects.forbidden) {
+      if (known(row.name)) {
+        findings.push({
+          source: null,
+          target: null,
+          rule: "projectPresent",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message: `architecture-intent.json forbids project "${row.name}", but the observed architecture contains it`,
+        });
+      }
+    }
+  }
 
   // Determinism: findings by (source, target), unresolved by boundary, both
   // with plain `<` comparison (never localeCompare).
