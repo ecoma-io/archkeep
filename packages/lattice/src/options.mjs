@@ -1,13 +1,15 @@
 /**
  * The plugin's options: what a workspace may tell this tool about itself.
  *
- * Two filenames, and nothing else. Both are Nx CONVENTIONS rather than fixed
- * contracts — a workspace is free to name them otherwise, and when it does,
- * every answer this tool gives about that workspace is silently wrong: a
- * `tsconfig.base.json` under another name means no path alias resolves, and a
- * boundary config under another name means the enforcer cannot find the law and
- * says so at best, reads a stale one at worst. That is the difference between
- * this pair and the manifests next door: `go.mod`, `Cargo.toml`,
+ * Two filenames, and one optional third, and nothing else. All three are Nx
+ * CONVENTIONS rather than fixed contracts — a workspace is free to name them
+ * otherwise, and when it does, every answer this tool gives about that workspace
+ * is silently wrong: a `tsconfig.base.json` under another name means no path
+ * alias resolves, a boundary config under another name means the enforcer
+ * cannot find the law and says so at best, reads a stale one at worst, and a
+ * profiles registry under another name means the `check` command cannot find
+ * the named laws it was asked to enforce. That is the difference between this
+ * triple and the manifests next door: `go.mod`, `Cargo.toml`,
  * `pyproject.toml`, `nx.json` and `project.json` are named by their own
  * toolchains and cannot be renamed by a workspace decision, so they stay
  * hardcoded at their single use site: a literal belongs inline only where it is
@@ -64,6 +66,15 @@ export const DEFAULT_OPTIONS = Object.freeze({
   boundaryConfig: "module-boundaries.config.mjs",
   /** Where the workspace's shared `compilerOptions` and `paths` live. */
   tsConfig: "tsconfig.base.json",
+  /**
+   * The workspace's named-profile registry, when it uses one — see
+   * `./governance/profile-registry.mjs`. Absent (`undefined`) means the
+   * workspace enforces by file, exactly as before; present, the value of
+   * `boundaryConfig` becomes a profile NAME selected from this registry (the
+   * check command's "select by name instead of by file" — documented in
+   * `../../../docs/concepts/profiles.md`).
+   */
+  profiles: undefined,
 });
 
 /** The file Nx reads to learn a workspace exists — and where the options live. */
@@ -81,7 +92,7 @@ export const NX_CONFIG_FILE = "nx.json";
  *
  * @param {object|undefined|null} rawOptions Whatever `nx.json` carried, or
  *   whatever Nx handed the hook. Absent is legal and means "all defaults".
- * @returns {{boundaryConfig: string, tsConfig: string}}
+ * @returns {{boundaryConfig: string, tsConfig: string, profiles?: string}}
  * @throws {Error} on an unknown key, a non-object, or a value that is not a
  *   non-empty string. An empty string would build `<root>/` and read a
  *   directory as a config, which fails somewhere far from the typo.
@@ -190,7 +201,7 @@ function readNxJsonOrNull(workspaceRoot, readFile) {
  *   derived from this file's own location, for the reason `./config.mjs` gives.
  * @param {{readFile?: (path: string) => string|null}} [io] Injectable read, so
  *   `resolveOptions`'s callers can be driven over a tree that is not on disk.
- * @returns {{boundaryConfig: string, tsConfig: string}}
+ * @returns {{boundaryConfig: string, tsConfig: string, profiles?: string}}
  * @throws {Error} when `nx.json` is unparseable, or its options are malformed.
  *   Loud on purpose, and the same posture as everywhere else here: a tool that
  *   could not read its own configuration must not answer as though it had.
