@@ -67,7 +67,7 @@
  * shared rather than hand-rolled per command, so a new command is a new
  * row rather than a second copy of the dispatch and flag-parsing this file
  * used to own alone. The table is built for nine commands — `check`, `graph`,
-* `diff`, `drift`, `history`, `health`, `impact`, `explain`, `context`,
+ * `diff`, `drift`, `history`, `health`, `impact`, `explain`, `context`,
  * `provenance` — with three flags shared across all of them (`--format`,
  * `--output`, `--config`) and `history`'s boolean `--capture`, the first flag
  * that takes no value. No subcommand nesting, and no shell completion to
