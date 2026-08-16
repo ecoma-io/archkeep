@@ -107,6 +107,13 @@ promise are in [json-output.md](../reference/json-output.md).
 | `2`  | Usage error — invalid arguments, unknown flag, or path outside the workspace                    |
 | `3`  | No verdict — the run could not look, coverage is incomplete, or intent could not be established |
 
+A violation an active waiver accepts is still exit `1`: waiving a boundary
+breach for a fixed term is a tracked decision, not a fix, so accepting it
+never flips a red build green. The accepted half is reported under its own
+"accepted violations" section, and the moment a waiver lapses the violation
+re-asserts in full with the evidence `"expired waiver"` — see
+[waivers.md](../concepts/waivers.md).
+
 Do not collapse 3 into 0. A checker that could not look must never be mistaken
 for one that looked and found nothing. [ci.md](ci.md) owns the full automation
 contract.

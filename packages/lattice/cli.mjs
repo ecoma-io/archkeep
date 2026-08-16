@@ -90,6 +90,7 @@ import { historyCommand } from "./src/commands/history.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
 import { provenanceCommand } from "./src/commands/provenance-command.mjs";
+import { waiversCommand } from "./src/commands/waivers.mjs";
 import { INTENT_FILE, loadIntent } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
@@ -507,7 +508,7 @@ function verdictFor({
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} context
  * @returns {Promise<{report: string, violations: number, goWorkDrift: number,
  *   tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number,
- *   analyzed: number, unchecked: number}>}
+ *   analyzed: number, unchecked: number, waived?: number}>}
  */
 export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
   const commandContext = resolveCommandContext(
@@ -668,6 +669,12 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   }
 
   const violations = evaluate(imports, graph, config);
+  // An ACTIVE waiver keeps the violation it accepts in the findings list,
+  // marked `waivedBy` — the run is still non-zero (waiving does not flip
+  // exit 1 → 0), and this count is the additive "accepted violations" number
+  // the report surfaces. Expired waivers re-assert in full (evidence
+  // "expired waiver"), so they are ordinary violations here, never waived.
+  const waived = violations.filter((violation) => violation.waivedBy).length;
   const goWorkDrift = goWork === null ? 0 : goWork.findings.length;
   const tsconfigPathsDead = tsconfigPaths === null ? 0 : tsconfigPaths.findings.length;
   const intentFindings = intent === null ? 0 : intent.findings.length;
@@ -746,6 +753,10 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
             },
             result: {
               violations,
+              // Additive and optional: absent when the tree has no active
+              // waivers, so an unchanged tree's JSON is unchanged. Never `!` —
+              // the accepted count is a tracked decision, not a new error kind.
+              ...(waived > 0 ? { waived } : {}),
               goWork: goWork === null ? null : { checked: true, findings: goWork.findings },
               tsconfigPaths:
                 tsconfigPaths === null ? null : { checked: true, findings: tsconfigPaths.findings },
@@ -794,6 +805,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   return {
     report,
     violations: violations.length,
+    waived,
     goWorkDrift,
     tsconfigPathsDead,
     intentFindings,
@@ -858,6 +870,7 @@ async function runCheck(options, { cwd, env }) {
     env.err(
       `lattice: ${result.violations} violation${result.violations === 1 ? "" : "s"} ` +
         `over ${result.analyzed} analyzed file${result.analyzed === 1 ? "" : "s"}` +
+        (result.waived > 0 ? ` (${result.waived} waived until their expiry)` : "") +
         (result.goWorkDrift > 0
           ? `, ${result.goWorkDrift} go.work drift finding${result.goWorkDrift === 1 ? "" : "s"}`
           : "") +
@@ -1141,6 +1154,82 @@ async function runProvenance(options, { cwd, env }) {
 
   // Provenance is descriptive — it never changes a verdict, so it never exits
   // 1. 0 when it completes; failures exit 3 up in the catch above.
+  return EXIT.ok;
+}
+
+/**
+ * `waivers`' `run`: resolves the command context, drives `waiversCommand`,
+ * writes the report where it belongs, and returns the process's exit code.
+ *
+ * A read-only command, modeled on `runDrift`: no positional arguments, the
+ * same `text|json` formats, and exit 0 whenever the surface could be read —
+ * it is descriptive, never the boundary-violation exit code that is `check`'s
+ * alone.
+ *
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runWaivers(options, { cwd, env }) {
+  if (options.paths.length > 0) {
+    env.err(`lattice: waivers takes no positional arguments; got ${options.paths.join(", ")}`);
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    // The waivers surface is part of the run's boundary law, so the law is
+    // loaded the same way `check` loads it and `--config` wins the same way —
+    // resolved against the working directory, never against this tool's own
+    // location. A malformed law throws here, exit 3, exactly as in `check`.
+    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }} */
+    const config = options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : typeof commandContext.options.boundaryConfig === "string"
+        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
+        : policyFrom(
+            commandContext.options.boundaryConfig,
+            `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+          );
+
+    result = await waiversCommand(commandContext, config);
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(
+      `lattice: ${result.waivers.waivers.length} waivers on the table ` + `→ ${options.output}`,
+    );
+  } else {
+    env.out(report);
+  }
+
+  // Waivers is descriptive: 0 when the surface could be read, never 1.
   return EXIT.ok;
 }
 
@@ -1651,6 +1740,18 @@ const PROVENANCE_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `waivers`' flags: text or JSON envelope, and optional file output — exactly
+ * the descriptive-command pair (`text|json`, no SARIF: a waivers report is a
+ * surface, not a findings container). Plus `--config` in the `diff` shape:
+ * the waivers surface is part of the boundary law, so the law in effect for
+ * one run is the same `--config` pick that run's `check` would make — a flag
+ * `drift` deliberately lacks, because drift has no boundary-law dependence.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const WAIVERS_FLAG_HELP = DIFF_FLAG_HELP;
+
+/**
  * `history`'s flags: text or JSON envelope, optional file output, and the
  * boolean `--capture` that appends a snapshot of the current workspace
  * before building the record.
@@ -1860,6 +1961,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runDrift,
+  }),
+  waivers: Object.freeze({
+    name: "waivers",
+    args: "",
+    summary: "List the boundary waivers on the table, with their terms",
+    flagHelp: WAIVERS_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(WAIVERS_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runWaivers,
   }),
   history: Object.freeze({
     name: "history",

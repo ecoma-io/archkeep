@@ -143,3 +143,9 @@ A real violation that the workspace is going to live with goes in
   suppress nothing while reading as though it did.
 - A suppression removes a **verdict**, never a failure. The file is still fully
   analyzed. You cannot use this to silence a blind spot.
+
+A row with an `expiresAt` is a **waiver**, not a suppression: it accepts the
+violation only until that instant, keeps it in the run's findings (the exit
+code stays 1) so CI still sees it, and re-asserts it in full — with the
+evidence `"expired waiver"` — the moment the term lapses. The distinction, the
+lifecycle, and when to use which are in [waivers.md](waivers.md).

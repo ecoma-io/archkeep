@@ -88,6 +88,13 @@ export function formatViolation(violation) {
   if (violation.constraint?.remediation) {
     lines.push(`${DETAIL}remediation ${violation.constraint.remediation}`);
   }
+  if (violation.evidence !== undefined) {
+    // The one evidence a violation carries today: `"expired waiver"` — the row
+    // that used to accept it lapsed, and the boundary is live again. Rendered
+    // here so the re-assert is visible in the line a developer jumps to, not
+    // only in the JSON.
+    lines.push(`${DETAIL}evidence   ${violation.evidence}`);
+  }
   return lines.join("\n");
 }
 
@@ -330,6 +337,38 @@ export function formatCoverageGaps(coverageGaps) {
 }
 
 /**
+ * The accepted-violations section: every violation an ACTIVE waiver covered,
+ * rendered with the waiver that accepts it and its expiry.
+ *
+ * A waived violation lives in `run.violations` (marked `waivedBy`) — it is
+ * still a violation, still counted, still exit-1 — and this formatter splits
+ * it out of the main list so a reader sees exactly what is being accepted and
+ * for how long. The evidence of the acceptance is the reason the waiver row
+ * carries.
+ *
+ * @param {object[]} waived Violations carrying `waivedBy`.
+ * @returns {string}
+ */
+export function formatAcceptedViolations(waived) {
+  const rows = waived.map((violation) => {
+    const waiver = violation.waivedBy;
+    return [
+      formatViolation(violation),
+      `${DETAIL}waiver    accepted until ${waiver.expiresAt}` +
+        (waiver.origin ? ` (origin: ${waiver.origin})` : ""),
+      `${DETAIL}reason    ${waiver.reason}`,
+    ].join("\n");
+  });
+  const count = waived.length;
+  return [
+    `⚠ accepted violations: ${count} boundary violation${count === 1 ? "" : "s"} waived until their ` +
+      `expiry — the boundary is still breached (the run stays non-zero), and each one below will ` +
+      `re-assert the moment its waiver lapses:`,
+    rows.join("\n\n"),
+  ].join("\n\n");
+}
+
+/**
  * The whole report, violations first.
  *
  * The summary states what was inspected and not only what was found, because
@@ -337,6 +376,12 @@ export function formatCoverageGaps(coverageGaps) {
  * that analyzed nothing and a clean tree print the same sentence otherwise, and
  * that indistinguishability is the defect this whole tool exists to end
  * (`../../CLAUDE.md`).
+ *
+ * Waived violations are still `violations` (the engine marks them `waivedBy`,
+ * it never removes them), so an all-waived run still renders non-zero — the
+ * "waiving must not flip exit 1 → 0" invariant, in the report layer. The
+ * summary line above only says "no boundary violations" when there is nothing
+ * a waiver is covering either.
  *
  * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, intent?: object|null, coverageGaps?: object[], notes?: string[]}} run
  * @returns {string}
@@ -363,15 +408,31 @@ export function formatReport({
     (notes.length > 0 ? `; ${notes.join("; ")}` : "");
   const sections = [];
 
-  if (violations.length > 0) {
-    sections.push(violations.map(formatViolation).join("\n\n"));
-    const files = new Set(violations.map((violation) => violation.sourceFile)).size;
+  const waived = violations.filter((violation) => violation.waivedBy);
+  const live = violations.filter((violation) => !violation.waivedBy);
+
+  if (live.length > 0) {
+    sections.push(live.map(formatViolation).join("\n\n"));
+    const files = new Set(live.map((violation) => violation.sourceFile)).size;
     sections.push(
-      `✖ ${violations.length} boundary violation${violations.length === 1 ? "" : "s"} ` +
+      `✖ ${live.length} boundary violation${live.length === 1 ? "" : "s"} ` +
         `in ${files} file${files === 1 ? "" : "s"} (${inspected})`,
     );
-  } else {
+  } else if (violations.length === 0) {
     sections.push(`✔ no boundary violations (${inspected})`);
+  }
+
+  if (waived.length > 0) {
+    sections.push(formatAcceptedViolations(waived));
+    // When every finding is waived the run is still NOT clean (exit 1), so the
+    // summary says so rather than letting the accepted section read as a clean
+    // tree. `waived` is the count word, deliberately not `!` — the finding is
+    // accepted, not an error a reader must chase.
+    if (live.length === 0) {
+      sections.push(
+        `✖ ${waived.length} boundary violation${waived.length === 1 ? "" : "s"} accepted (${inspected})`,
+      );
+    }
   }
 
   const goWorkSection = formatGoWork(goWork);

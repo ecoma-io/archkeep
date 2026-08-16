@@ -50,7 +50,10 @@ runs. Empty `allow` and re-run to test.
 
 **A suppression is matching.** Check `boundarySuppressions` in your boundary
 config for a `path` glob broader than intended. Every entry carries a mandatory
-`reason` precisely so this is auditable.
+`reason` precisely so this is auditable. A row with an `expiresAt` is a
+**waiver**, not a suppression — it keeps the violation in the findings (exit
+stays 1) until it expires, so waiving will not make a red build go green; only
+a permanent suppression (no `expiresAt`) removes a violation.
 
 **You scoped the run.** `lattice check <path>` restricts the file set,
 and the cycle and lazy-load rules judge the file graph as a whole. Re-run without

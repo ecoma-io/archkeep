@@ -63,8 +63,10 @@ disagree the day one changes. What each option does is in
 
 ### `boundarySuppressions`
 
-Where an accepted violation goes, and `reason` is mandatory on every entry. Keep
-the empty array rather than deleting it: an empty list is the rule satisfied; an
+Where an accepted violation goes, and `reason` is mandatory on every entry. A
+row with an `expiresAt` is a waiver — an acceptance with a deadline, which
+re-asserts when it lapses; without one it is a permanent suppression. Keep the
+empty array rather than deleting it: an empty list is the rule satisfied; an
 absent list is the rule having nowhere to live when the first exemption is
 proposed.
 

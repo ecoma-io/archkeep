@@ -10,6 +10,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `graph`      | (none)               | Print the project graph as a deterministic snapshot                      | no               |
 | `diff`       | `<baseline>`         | Compare two graph snapshots edge by edge                                 | no               |
 | `drift`      | (none)               | Compare the observed architecture to the declared intent                 | no               |
+| `waivers`    | (none)               | List the boundary waivers on the table, with their terms                 | no               |
 | `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                   | no               |
 | `impact`     | `<project>`          | List projects that depend on the named project                           | no               |
 | `explain`    | `<file:line:column>` | Explain the judgment for one import site                                 | no               |
@@ -111,6 +112,20 @@ The project name is a single positional argument. `--config` is accepted because
 the answer depends on which boundary law is in effect — a different constraint
 table produces a different set of matching rows.
 
+### `waivers`
+
+| flag       | argument       | default                  | meaning                                                                                                                     |
+| ---------- | -------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                                                                             |
+| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                                                                               |
+| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. The surface listed is the one this law carries. |
+
+No positional arguments. Lists every `boundarySuppressions` row carrying an
+`expiresAt` — a waiver — with its term and the current violations it covers.
+Coverage is judged against the full finding set with the suppression table
+removed, so a row that covers nothing reads as stale. Descriptive: it exits 0
+whenever the surface could be read, never 1.
+
 ### `history`
 
 | flag        | argument       | default                  | meaning                                                                                                                                                                                         |
@@ -161,9 +176,10 @@ build; they differ in what you go and look at, not in whether you go and look.
 analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
-A descriptive command (`graph`, `diff`, `history`, `impact`, `explain`,
-`context`) exits 0 when it completes, 3 when coverage is incomplete, and 2 on
-usage error. None exits 1, because a descriptive result is never a finding.
+A descriptive command (`graph`, `diff`, `drift`, `waivers`, `history`,
+`impact`, `explain`, `context`) exits 0 when it completes, 3 when coverage is
+incomplete, and 2 on usage error. None exits 1, because a descriptive result
+is never a finding.
 
 ## What each command does
 
@@ -189,6 +205,17 @@ reporting projects and edges added or removed. When a boundary config is
 available, also reports which violations the added edges introduce and which
 the removed edges resolve. The baseline is a file, not a git ref. Both sides
 must be complete. Descriptive -- changes do not make it exit 1.
+
+### `waivers`
+
+Lists every `boundarySuppressions` row carrying an `expiresAt` — a waiver —
+with its term and the current violations it covers. Coverage is judged against
+the full finding set (the table removed), so a row that covers nothing is
+flagged as stale rather than silently doing nothing. A waiver that has lapsed
+is listed as expired with its remaining time; it covers nothing and the
+violation it accepted re-asserts. A `waivers` run is descriptive and never
+modifies the table — waivers are removed by an explicit edit, never by the
+tool. Descriptive.
 
 ### `history <dir>`
 

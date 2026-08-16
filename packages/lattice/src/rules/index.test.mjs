@@ -1220,6 +1220,91 @@ describe("evaluate", () => {
     });
   });
 
+  describe("waivers", () => {
+    /** A relative import that crosses into another project — a real violation. */
+    const crossing = () =>
+      site({
+        specifier: "../../beta/src/thing",
+        resolved: {
+          target: "beta",
+          file: "area/beta/src/thing.ts",
+          external: false,
+          packageName: null,
+        },
+      });
+
+    const NOW = "2026-08-16T10:00:00.000Z";
+
+    const waive = (rows, sites = [crossing()], now = NOW) =>
+      evaluate(sites, twoLibs(), { ...config(permissive), suppressions: rows, now });
+
+    const waiver = (overrides = {}) => ({
+      path: "area/alpha/src/index.ts",
+      reason: "bundler loads this file with no alias resolution",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+      ...overrides,
+    });
+
+    it("keeps an actively waived violation in the run's findings, marked — waiving must not flip exit 1 → 0", () => {
+      const violations = waive([waiver()]);
+      // The violation is NOT removed: it stays counted, so the run is still
+      // findings (exit 1). A waiver is a tracked, temporary acceptance, not a
+      // fix — the boundary is still breached.
+      expect(idsOf(violations)).toEqual(["noRelativeOrAbsoluteImportsAcrossLibraries"]);
+      expect(violations[0].waivedBy).toEqual(waiver());
+    });
+
+    it("an expired waiver re-asserts the violation in full, with the expired-waiver evidence", () => {
+      const violations = waive([waiver({ expiresAt: "2026-08-01T00:00:00.000Z" })]);
+      expect(idsOf(violations)).toEqual(["noRelativeOrAbsoluteImportsAcrossLibraries"]);
+      // No waivedBy — the waiver no longer covers it — and the evidence names
+      // WHY this boundary is live again.
+      expect(violations[0].waivedBy).toBeUndefined();
+      expect(violations[0].evidence).toBe("expired waiver");
+    });
+
+    it("a waiver expired exactly at the reference time re-asserts — 'valid through' means strictly before", () => {
+      const violations = waive([waiver({ expiresAt: NOW })]);
+      expect(violations[0].evidence).toBe("expired waiver");
+    });
+
+    it("an active waiver is decided at millisecond precision", () => {
+      const stillActive = waive([waiver({ expiresAt: "2026-08-16T10:00:00.001Z" })]);
+      expect(stillActive[0].waivedBy).toBeDefined();
+      const justExpired = waive([waiver({ expiresAt: "2026-08-16T09:59:59.999Z" })]);
+      expect(justExpired[0].evidence).toBe("expired waiver");
+    });
+
+    it("leaves every other file alone, and only waives the violation type it names", () => {
+      const [other] = waive([waiver()], [], NOW);
+      expect(other).toBeUndefined();
+
+      // The row names no messageId → waives the crossing. The row that names a
+      // different messageId does NOT cover it, so the violation re-asserts
+      // (unmarked).
+      const [missed] = waive([
+        waiver({ messageId: "noImportsOfApps", expiresAt: "2026-09-01T00:00:00.000Z" }),
+      ]);
+      expect(missed.waivedBy).toBeUndefined();
+      expect(missed.evidence).toBeUndefined();
+    });
+
+    it("cannot silence a failure, because a waiver is a positive statement over a VERDICT, never over 'I could not tell'", () => {
+      // The load-bearing ordering, in waiving shape: the engine judges every
+      // site before the table acts, so a waiver over a site that reached no
+      // verdict (here, a record naming a project the graph does not have)
+      // still throws loudly — it can never promote unknown → pass.
+      const graph = graphOf([project("alpha", { tags: ["zone:x"] })]);
+      expect(() =>
+        evaluate([site()], graph, {
+          ...config(permissive),
+          suppressions: [waiver({ path: "area/alpha/**" })],
+          now: NOW,
+        }),
+      ).toThrow(/resolved to project 'beta'/);
+    });
+  });
+
   describe("the violation record", () => {
     it("carries the position, the specifier and the rendered message", () => {
       const graph = graphOf([

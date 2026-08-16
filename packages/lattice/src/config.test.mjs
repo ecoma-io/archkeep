@@ -400,6 +400,112 @@ describe("boundarySuppressions", () => {
       /boundarySuppressions: must be an exported array/,
     );
   });
+
+  describe("waiver rows — expiresAt turns a suppression into a waiver", () => {
+    it("accepts an expiresAt instant and an origin on the same row as a suppression", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([
+            {
+              path: "area/app/some.config.js",
+              reason: "temporary acceptance while the alias lands",
+              expiresAt: "2026-09-01T00:00:00.000Z",
+              origin: "ticket-1234",
+            },
+          ]),
+        ),
+      ).toEqual([]);
+    });
+
+    it("rejects an expiresAt that does not parse as an ISO instant — a term that cannot be read cannot be honoured", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "not-a-date" }]),
+        )[0],
+      ).toMatch(/expiresAt: must be a full ISO-8601 instant/);
+    });
+
+    it("rejects an empty expiresAt, which would read as permanent", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "" }]),
+        )[0],
+      ).toMatch(/expiresAt: must be a full ISO-8601 instant/);
+    });
+
+    it("rejects a date-only expiresAt, which is interpreted in the machine's local zone", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "2026-09-01" }]),
+        )[0],
+      ).toMatch(/must be a full ISO-8601 instant with an explicit UTC\/offset/);
+    });
+
+    it("rejects an epoch-number expiresAt — a waiver that expires immediately", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "0" }]),
+        )[0],
+      ).toMatch(/must be a full ISO-8601 instant with an explicit UTC\/offset/);
+    });
+
+    it("rejects a TZ-less datetime, which means different things under different TZ environments", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expiresAt: "2026-09-01 03:00" }]),
+        )[0],
+      ).toMatch(/must be a full ISO-8601 instant with an explicit UTC\/offset/);
+    });
+
+    it("accepts an offset-bearing instant, the same instant under every TZ", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([
+            { path: "a.js", reason: "why", expiresAt: "2026-09-01T03:00:00.000+02:00" },
+          ]),
+        ),
+      ).toEqual([]);
+    });
+
+    it("rejects a calendar-impossible expiresAt that Date.parse would silently shift — a term that means a different day than written", () => {
+      // February (28 days) and September (30 days) both catch roll-over of a
+      // day the month cannot hold — the same code path, exercised at two month
+      // lengths so a fix that special-cases one length can't fake green.
+      for (const expiresAt of ["2026-02-30T00:00:00.000Z", "2026-09-31T00:00:00.000Z"]) {
+        expect(
+          findBoundaryConfigViolations(
+            withSuppressions([{ path: "a.js", reason: "why", expiresAt }]),
+          )[0],
+        ).toMatch(/silently shifted to another day/);
+      }
+    });
+
+    it("rejects an hour-out-of-range expiresAt that Date.parse would roll over", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([
+            { path: "a.js", reason: "why", expiresAt: "2026-01-01T24:00:00.000Z" },
+          ]),
+        )[0],
+      ).toMatch(/silently shifted to another day/);
+    });
+
+    it("rejects an origin that is not a non-empty string", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", origin: "" }]),
+        )[0],
+      ).toMatch(/origin: must be a non-empty string/);
+    });
+
+    it("rejects a misspelled waiver field through the same key check as every other field", () => {
+      expect(
+        findBoundaryConfigViolations(
+          withSuppressions([{ path: "a.js", reason: "why", expireAt: "2026-09-01T00:00:00.000Z" }]),
+        )[0],
+      ).toMatch(/expireAt: not a suppression field/);
+    });
+  });
 });
 
 describe("suppressionCovers", () => {

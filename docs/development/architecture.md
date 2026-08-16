@@ -186,7 +186,11 @@ ESLint.
 Suppressions are applied **after** every import has been judged. A suppression
 removes a _verdict_ and never a _failure_, so a file listed in
 `boundarySuppressions` is still fully analyzed and anything it could not resolve
-is still reported. You cannot use a suppression to silence a blind spot.
+is still reported. You cannot use a suppression to silence a blind spot. A row
+with an `expiresAt` is a **waiver** instead: it keeps the violation in the
+run's findings (marked accepted, exit code stays 1) and the violation re-asserts
+in full once the waiver lapses — the expiry is judged against the injectable
+governance clock, so a run's bytes are reproducible over a fixed injected time.
 
 ### 11. Report
 

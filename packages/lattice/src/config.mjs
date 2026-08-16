@@ -338,9 +338,12 @@ function constraintRowViolations(row, index) {
 
 /**
  * The keys a suppression entry may carry. `reason` is not optional, and that is
- * the whole point of the shape — see `suppressionRowViolations`.
+ * the whole point of the shape — see `suppressionRowViolations`. A row that
+ * also carries `expiresAt` is a WAIVER (temporary acceptance) rather than a
+ * suppression (permanent one): both validate through this same shape, and the
+ * waiver semantics live in `./governance/waiver.mjs`.
  */
-const SUPPRESSION_KEYS = ["path", "messageId", "reason"];
+const SUPPRESSION_KEYS = ["path", "messageId", "reason", "expiresAt", "origin"];
 
 /**
  * Does this suppression cover a violation at `sourceFile` with `messageId`?
@@ -388,6 +391,10 @@ export function suppressionCovers(suppression, violation) {
  * nothing, which is the safe direction, but it also reads as a decision that
  * has been taken when it has not.
  */
+/**
+ * @param {object} row
+ * @param {number} index
+ */
 function suppressionRowViolations(row, index) {
   const at = `boundarySuppressions[${index}]`;
   if (!isPlainObject(row)) return [`${at}: must be an object, got ${describe(row)}`];
@@ -410,6 +417,66 @@ function suppressionRowViolations(row, index) {
     violations.push(
       `${at}.messageId: ${describe(row.messageId)} is not a violation type this engine ` +
         `reports — expected one of ${MESSAGE_IDS.join(", ")}`,
+    );
+  }
+  if ("expiresAt" in row) {
+    // A waiver's term. Must be a full ISO-8601 instant carrying an explicit
+    // UTC or offset designator — the shape `Date.prototype.toISOString()`
+    // itself produces, and the one spellings like `"2026-09-01"` or `"0"`
+    // (`Date.parse`'s epoch) or `"2026-09-01 03:00"` deliberately do not
+    // match. Those parse, but ambiguity is the bug: a date-only or TZ-less
+    // string is interpreted in the machine's local zone, so the same law
+    // yields a different term — and a different expiry verdict — under two
+    // machines' `TZ`. A waiver whose term means different things to different
+    // machines is not a term; an instant-bearing spelling means the same
+    // instant everywhere.
+    const expiryMatches = typeof row.expiresAt === "string" ? row.expiresAt : null;
+    const expiryMatch = expiryMatches
+      ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(
+          expiryMatches,
+        )
+      : null;
+    const expiry = expiryMatch ? Date.parse(expiryMatches) : NaN;
+    // A calendar-impossible instant like `2026-02-30` passes the shape regex
+    // AND `Date.parse`, which silently normalises it to a different calendar
+    // day (`2026-03-02`) — a term that quietly extends acceptance past what
+    // its author wrote, the one direction this repository treats as poison.
+    // The written calendar fields are checked against the same fields of the
+    // instant they claim, independent of the string's timezone: `Date.UTC`
+    // normalises the impossible and the round-trip no longer matches.
+    // The capture groups destructure as `unknown` under tsc's strict JSDoc
+    // checking (the regex `.exec` return type does not name them), so each is
+    // coerced here — the calendar comparison wants numbers anyway.
+    const [, ...captures] = expiryMatch ?? [];
+    const [y, mo, d, h, mi, s] = captures.map(Number);
+    const normalized =
+      expiryMatch && !Number.isNaN(expiry) ? new Date(Date.UTC(y, mo - 1, d, h, mi, s)) : null;
+    const impossibleCalendar =
+      normalized !== null &&
+      (normalized.getUTCFullYear() !== y ||
+        normalized.getUTCMonth() !== mo - 1 ||
+        normalized.getUTCDate() !== d ||
+        normalized.getUTCHours() !== h ||
+        normalized.getUTCMinutes() !== mi ||
+        normalized.getUTCSeconds() !== s);
+    if (!expiryMatch || Number.isNaN(expiry) || impossibleCalendar) {
+      violations.push(
+        `${at}.expiresAt: must be a full ISO-8601 instant with an explicit UTC/offset, ` +
+          `like "2026-09-01T00:00:00.000Z", got ${describe(row.expiresAt)} — a term with no ` +
+          `designator is interpreted in the machine's local zone, so the same waiver would mean ` +
+          `different things under different TZ environments${
+            impossibleCalendar
+              ? `; a calendar date this calendar does not contain (like ${`${y}-${mo}-${d}`}) would be ` +
+                `silently shifted to another day by the parser, extending the waiver past what was written`
+              : ""
+          }`,
+      );
+    }
+  }
+  if ("origin" in row && (typeof row.origin !== "string" || row.origin.trim() === "")) {
+    violations.push(
+      `${at}.origin: must be a non-empty string naming where the waiver came from, got ` +
+        `${describe(row.origin)}`,
     );
   }
   for (const key of Object.keys(row)) {

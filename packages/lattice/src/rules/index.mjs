@@ -41,6 +41,8 @@
  * See ../analysis/contract.md for the `ImportSite` shape this consumes.
  */
 import { findBoundaryConfigViolations, suppressionCovers } from "../config.mjs";
+import { referenceTime } from "../governance/clock.mjs";
+import { EXPIRED_WAIVER_EVIDENCE, suppressionFate } from "../governance/waiver.mjs";
 
 import { matchImportWithWildcard, findMatchingProjects } from "./match.mjs";
 import { renderMessage } from "./messages.mjs";
@@ -103,6 +105,13 @@ export { MESSAGE_IDS, MESSAGES, renderMessage } from "./messages.mjs";
  * @property {object|null} constraint The `depConstraints` row that fired.
  * @property {object} data The message's interpolation values, so a formatter
  *   can re-render without re-deriving them.
+ * @property {object} [waivedBy] The `boundarySuppressions` row that WAIVED
+ *   this violation — present only on a violation an ACTIVE waiver accepted
+ *   (`../governance/waiver.mjs`). A waived violation is still a violation:
+ *   the run stays non-zero, and the row records why it is present.
+ * @property {string} [evidence] Why a violation is present in the report when
+ *   the table would have removed it — `"expired waiver"` for a violation
+ *   whose waiver lapsed and re-asserted.
  */
 
 /**
@@ -571,36 +580,96 @@ function evaluateSite(site, ctx) {
 }
 
 /**
+ * Applies the suppression/waiver table to a run's violations. `config.mjs`'s
+ * `findBoundaryConfigViolations` validated the table; this is where the rows
+ * act.
+ *
+ * A legacy row (no `expiresAt`) suppresses — removes the violation, unchanged
+ * from before waivers existed. A row WITH `expiresAt` is a waiver, and the
+ * fate is time-dependent (`../governance/waiver.mjs`):
+ *
+ * - active → the violation is kept and marked `waivedBy` (the row), so the
+ *   report can render it under "accepted violations". It is NOT removed: a
+ *   run whose only findings are waived is not clean, because accepting a
+ *   boundary breach for a fixed term is a tracked decision, not a fix.
+ * - expired → the violation is kept, carrying `evidence: "expired waiver"`.
+ *   A waiver whose term has lapsed covers nothing, and the boundary it
+ *   accepted is live again.
+ *
+ * Marking rather than removing keeps `evaluate` returning the same shape
+ * (a `Violation[]`), which is what every caller — `check`, the language
+ * server, the descriptive commands, the conformance differential — already
+ * expects, and it is the property that makes waiving unable to hide a
+ * violation: the violation is still in the array, still counted, still exit-1.
+ *
+ * @param {object[]} violations The engine's raw findings.
+ * @param {object[]} suppressions The validated `boundarySuppressions` table.
+ * @param {string} now Reference instant (ISO-8601).
+ * @returns {object[]}
+ */
+function applySuppressions(violations, suppressions, now) {
+  return violations.filter((violation) => {
+    for (const entry of suppressions) {
+      if (!suppressionCovers(entry, violation)) continue;
+      const fate = suppressionFate(entry, now);
+      if (fate === "suppress") return false;
+      if (fate === "waive") {
+        violation.waivedBy = entry;
+        return true;
+      }
+      violation.evidence = EXPIRED_WAIVER_EVIDENCE;
+      return true;
+    }
+    return true;
+  });
+}
+
+/**
  * Judges every import site against the workspace's boundary law.
  *
  * Pure: the same three arguments always produce the same violations, and none
  * of them is read from disk here.
  *
- * ## Suppressions are a filter over VERDICTS, never a skip over sites
+ * ## Suppressions and waivers are a filter over VERDICTS, never a skip over
+ * sites
  *
- * `config.suppressions` removes violations the workspace has decided to accept,
- * each carrying the reason it was accepted (`../config.mjs`). The filter runs
- * AFTER every site has been judged, and that ordering is the load-bearing part
- * rather than an implementation detail: skipping a suppressed file up front
- * would also skip the checks that make this function throw — a record naming a
- * project the graph does not have, a malformed config — and a suppression must
- * never be able to silence "I could not tell". A violation is a decision
- * someone can accept; a failure is the absence of one, and accepting it would
- * turn a blind spot into a green light.
+ * `config.suppressions` decides what happens to violations the workspace
+ * accepted, each carrying the reason it was accepted (`../config.mjs`). The
+ * filter runs AFTER every site has been judged, and that ordering is the
+ * load-bearing part rather than an implementation detail: skipping a
+ * suppressed file up front would also skip the checks that make this function
+ * throw — a record naming a project the graph does not have, a malformed
+ * config — and a suppression must never be able to silence "I could not tell".
+ * A violation is a decision someone can accept; a failure is the absence of
+ * one, and accepting it would turn a blind spot into a green light.
  *
  * The suppression vocabulary has no field that could name a failure either: an
- * entry carries a path glob, an optional `messageId` out of `MESSAGE_IDS`, and
- * its reason. Analysis failures never reach this function at all — they travel
- * beside the records in the analyzer's envelope (`../analysis/contract.md`).
+ * entry carries a path glob, an optional `messageId` out of `MESSAGE_IDS`, its
+ * reason, and — for a waiver — `expiresAt`. Analysis failures never reach this
+ * function at all — they travel beside the records in the analyzer's envelope
+ * (`../analysis/contract.md`). Because the table never touches a failure, a
+ * waiver over `unknown` is structurally impossible: a row can only match a
+ * verdict this engine reached, and a verdict it could not reach never enters
+ * this array.
+ *
+ * The same ordering is why a waiver cannot promote `unknown` → `pass` either:
+ * a full logical consequence of the filter-after-judgement rule, not a second
+ * mechanism. And `applySuppressions` marks rather than removes for rows with
+ * `expiresAt`, so an accepted violation stays counted — the empty-result
+ * invariant (`../../../../AGENTS.md`) holds in the waiving direction too.
  *
  * @param {object[]} importSites Analysis records — see `../analysis/contract.md`.
  * @param {ProjectGraph} graph
- * @param {{depConstraints: object[], options: object, suppressions?: object[]}} config
- *   As `loadBoundaryConfig` returns it. An absent `suppressions` suppresses
- *   nothing, which is the direction that cannot hide a violation.
+ * @param {{depConstraints: object[], options: object, suppressions?: object[], now?: string}} config
+ *   As `loadBoundaryConfig` returns it, plus an optional `now` (ISO-8601
+ *   reference instant) used only to decide waiver expiry; defaults to the
+ *   shared governance clock. An absent `suppressions` suppresses nothing, which
+ *   is the direction that cannot hide a violation.
  * @returns {Violation[]} in the order the sites were given, minus the ones a
- *   suppression covers; a site may contribute zero, one, or (in two documented
- *   cases) several.
+ *   suppression covers (legacy rows) — with the ones an ACTIVE waiver covers
+ *   still present, marked `waivedBy`, and the ones an EXPIRED waiver covered
+ *   present with `evidence: "expired waiver"`; a site may contribute zero, one,
+ *   or (in two documented cases) several.
  * @throws {Error} when the config is malformed, when the graph has no `nodes`,
  *   when a record carries no `spelling`, or when a record names a project the
  *   graph does not contain. Loud on purpose: an enforcer that starts on a
@@ -610,7 +679,5 @@ export function evaluate(importSites, graph, config) {
   const ctx = createContext(importSites, graph, config);
   const violations = [];
   for (const site of importSites) violations.push(...evaluateSite(site, ctx));
-  return violations.filter(
-    (violation) => !ctx.suppressions.some((entry) => suppressionCovers(entry, violation)),
-  );
+  return applySuppressions(violations, ctx.suppressions, config?.now ?? referenceTime());
 }

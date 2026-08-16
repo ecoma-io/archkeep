@@ -1204,6 +1204,267 @@ var _ = adapter.Name
   });
 });
 
+describe("the waivers surface, end to end", () => {
+  // A third native tmpdir whose boundary law carries a `boundarySuppressions`
+  // waiver row over the same layer-crossing import, so the whole pipeline is
+  // exercised: the config validator accepts the extended row, `check` reports
+  // the waived count, and `waivers` lists the surface with its term.
+  const waiversRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-waivers-"));
+  afterAll(() => rmSync(waiversRoot, { recursive: true, force: true }));
+
+  const writeWaivers = (relativePath, text) => {
+    mkdirSync(join(waiversRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(waiversRoot, relativePath), text);
+  };
+
+  writeWaivers(
+    "lattice.json",
+    JSON.stringify({
+      projects: {
+        declared: [
+          { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+          { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+        ],
+      },
+      // The root config file is workspace tooling, not a project — an
+      // unclaimed file becomes a whole-file failure, and a command that
+      // refuses incomplete coverage (waivers now among them) would otherwise
+      // read this tree as "could not look". Same reason every native fixture
+      // that asserts a completed verdict names its config here. The `--config`
+      // test's `alt-boundaries.mjs` is NOT exempted: it is written mid-run and
+      // never listed in the tracked files, so coverage never sees it — and an
+      // exemption naming a file that exists in no unclaimed set is itself a
+      // config error.
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "workspace tooling config at the root, not itself a project",
+          },
+        ],
+      },
+    }),
+  );
+  writeWaivers(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const boundarySuppressions = [
+  {
+    path: "libs/domain/doc.go",
+    reason: "the adapter seam lands next release",
+    expiresAt: "2999-01-01T00:00:00.000Z",
+    origin: "ticket-42",
+  },
+];
+`,
+  );
+  writeWaivers("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeWaivers(
+    "libs/domain/doc.go",
+    `package domain
+
+import (
+	"example.com/adapter"
+)
+
+var _ = adapter.Name
+`,
+  );
+  writeWaivers("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writeWaivers("libs/adapter/adapter.go", "package adapter\n");
+
+  const waiversFiles = [
+    "lattice.json",
+    "module-boundaries.config.mjs",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "libs/adapter/go.mod",
+    "libs/adapter/adapter.go",
+  ];
+
+  const waiversContext = { cwd: waiversRoot, listFiles: () => waiversFiles };
+  const waiversEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      ...waiversContext,
+    };
+  };
+
+  it("waivers exits 0, lists the active waiver with its term and the violation it covers", async () => {
+    const streams = waiversEnv();
+    expect(await runCli(["waivers"], streams)).toBe(EXIT.ok);
+    const text = streams.lines.out.join("\n");
+    expect(text).toContain("1 waiver on the table");
+    expect(text).toContain("libs/domain/doc.go");
+    expect(text).toContain("1 current violation");
+    expect(text).toContain("2999-01-01T00:00:00.000Z");
+    expect(text).toContain("origin: ticket-42");
+    expect(text).toContain("reason: the adapter seam lands next release");
+  });
+
+  it("waivers --format json writes the envelope with the term facts", async () => {
+    const streams = waiversEnv();
+    expect(await runCli(["waivers", "--format", "json"], streams)).toBe(EXIT.ok);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.command).toBe("waivers");
+    expect(envelope.status).toBe("ok");
+    expect(envelope.result.waivers).toHaveLength(1);
+    expect(envelope.result.waivers[0].status).toBe("active");
+    expect(envelope.result.waivers[0].expiresAt).toBe("2999-01-01T00:00:00.000Z");
+  });
+
+  it("waivers --config reads the law from the named file, resolving against cwd", async () => {
+    // The waiver surface rides the boundary law, so `--config` must pick a
+    // different law for one run exactly as it does for `check` — a flag the
+    // same run's `check` would honour, kept in the loop by a flag test.
+    writeWaivers(
+      "alt-boundaries.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const boundarySuppressions = [
+  {
+    path: "libs/domain/doc.go",
+    reason: "a different row under a different law",
+    expiresAt: "2999-02-02T00:00:00.000Z",
+    origin: "ticket-43",
+  },
+];
+`,
+    );
+    const streams = waiversEnv();
+    expect(await runCli(["waivers", "--config", "alt-boundaries.mjs"], streams)).toBe(EXIT.ok);
+    const text = streams.lines.out.join("\n");
+    expect(text).toContain("a different row under a different law");
+    expect(text).toContain("2999-02-02T00:00:00.000Z");
+    expect(text).toContain("origin: ticket-43");
+  });
+
+  it("check still exits 1 over a waived violation — accepting must not flip 1→0", async () => {
+    const streams = waiversEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    // The stdout report names the accepted violation and its term rather than
+    // pretending the tree is clean.
+    expect(streams.lines.out.join("\n")).toContain("accepted violations: 1 boundary violation");
+    expect(streams.lines.out.join("\n")).toContain("accepted until 2999-01-01T00:00:00.000Z");
+  });
+
+  it("an expired waiver re-asserts the violation in check text/SARIF/JSON and surfaces expired in waivers", async () => {
+    // The silent direction for a term: an expiry the calendar cannot hold is
+    // rejected at config load (config.test.mjs), and a term that HAS lapsed
+    // must not stay a waiver. Run the SAME tree under a boundary law whose row
+    // term is already in the past (a distinct filename, so the module cache
+    // loads the flip fresh — rewriting the existing file would re-import the
+    // cached 2999 law) and require the violation to be live again everywhere a
+    // developer could look, never silently re-accepted.
+    writeWaivers(
+      "past-boundaries.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const boundarySuppressions = [
+  {
+    path: "libs/domain/doc.go",
+    reason: "the adapter seam lands next release",
+    expiresAt: "2020-01-01T00:00:00.000Z",
+    origin: "ticket-42",
+  },
+];
+`,
+    );
+
+    // `check` — the violation is a plain finding again, with the re-assert
+    // evidence visible in the line a developer jumps to, and a non-zero exit.
+    const checkStreams = waiversEnv();
+    expect(await runCli(["check", "--config", "past-boundaries.mjs"], checkStreams)).toBe(
+      EXIT.violations,
+    );
+    const checkText = checkStreams.lines.out.join("\n");
+    expect(checkText).toContain("evidence   expired waiver");
+    expect(checkText).not.toContain("accepted until");
+
+    // SARIF — the same re-assert rides the same byte stream a SARIF uploader
+    // reads, so an upload never silences an expired term.
+    const sarifStreams = waiversEnv();
+    expect(
+      await runCli(["check", "--format", "sarif", "--config", "past-boundaries.mjs"], sarifStreams),
+    ).toBe(EXIT.violations);
+    const sarif = JSON.parse(sarifStreams.lines.out.join("\n"));
+    const results = sarif.runs[0].results;
+    expect(results).toHaveLength(1);
+    expect(results[0].properties.evidence).toBe("expired waiver");
+
+    // JSON — the envelope's failure carries the evidence too, the same object
+    // the `--format json` consumers parse.
+    const jsonStreams = waiversEnv();
+    expect(
+      await runCli(["check", "--format", "json", "--config", "past-boundaries.mjs"], jsonStreams),
+    ).toBe(EXIT.violations);
+    const envelope = JSON.parse(jsonStreams.lines.out.join("\n"));
+    expect(envelope.result.violations).toHaveLength(1);
+    expect(envelope.result.violations[0].evidence).toBe("expired waiver");
+    expect(envelope.result.waived).toBeUndefined();
+
+    // `waivers` — the same row is now reported as expired, not active: a term
+    // that lapsed is surfaced loudly on the surface that used to accept it.
+    const wvStreams = waiversEnv();
+    expect(await runCli(["waivers", "--config", "past-boundaries.mjs"], wvStreams)).toBe(EXIT.ok);
+    const wvText = wvStreams.lines.out.join("\n");
+    expect(wvText).toContain("1 expired, 0 cover nothing right now");
+    expect(wvText).toMatch(/expired \d+ms ago/);
+  });
+
+  it("waivers refuses a tree it could not fully read — exit 3, never a stale-looking surface", async () => {
+    // The silent direction named in the coverage-refusal: a file the analyzer
+    // never judged contributes no finding, so a waiver naming it would read as
+    // "covers nothing" about a finding the run never looked at. `check` treats
+    // the same tree as no-verdict (3); the waiver surface must do the same
+    // rather than complete with "1 waiver on the table".
+    const streams = {
+      ...waiversEnv(),
+      listFiles: () => [...waiversFiles, "libs/domain/absent.go"],
+    };
+    expect(await runCli(["waivers"], streams)).toBe(EXIT.error);
+    expect(streams.lines.err.join("\n")).toContain("incomplete coverage");
+  });
+});
+
 describe("context --plan, the agent architecture planning context, end to end", () => {
   // A native tree with the same two-project layer-crossing shape as the block
   // above PLUS a second, two-direction change, so the plan's whole-tree verdict
