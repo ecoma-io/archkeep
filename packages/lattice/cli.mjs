@@ -66,13 +66,13 @@
  * `COMMANDS` below is a table rather than a `switch`, and `parseArgs` is
  * shared rather than hand-rolled per command, so a new command is a new
  * row rather than a second copy of the dispatch and flag-parsing this file
- * used to own alone. The table is built for eight commands — `check`, `graph`,
- * `diff`, `drift`, `history`, `impact`, `explain`, `context` — with three flags
- * shared across all of them (`--format`, `--output`, `--config`) and `history`'s
- * boolean `--capture`, the first flag that takes no value. No subcommand nesting,
- * and no shell completion to generate, mean a plain table gets there without
- * a framework; reach for one only once a later command needs something this
- * table cannot express.
+ * used to own alone. The table is built for nine commands — `check`, `graph`,
+ * `diff`, `drift`, `history`, `impact`, `explain`, `context`, `provenance` —
+ * with three flags shared across all of them (`--format`, `--output`,
+ * `--config`) and `history`'s boolean `--capture`, the first flag that takes
+ * no value. No subcommand nesting, and no shell completion to generate, mean a
+ * plain table gets there without a framework; reach for one only once a later
+ * command needs something this table cannot express.
  */
 import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -89,6 +89,7 @@ import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs
 import { historyCommand } from "./src/commands/history.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
+import { provenanceCommand } from "./src/commands/provenance-command.mjs";
 import { INTENT_FILE, loadIntent } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
@@ -1084,6 +1085,66 @@ async function runDrift(options, { cwd, env }) {
 }
 
 /**
+ * `provenance`'s `run`: resolves the command context, drives
+ * `provenanceCommand`, writes the report where it belongs, and returns the
+ * process's exit code.
+ *
+ * Provenance reads no graph and judges nothing — it describes where the run's
+ * facts came from and which governance rows carry an origin. It is
+ * fail-closed the way every descriptive command is: a malformed intent or
+ * boundary config throws out of `provenanceCommand` → exit 3, so "rows
+ * unlisted" never reads as "rows attested".
+ *
+ * @param {{format: string, output: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runProvenance(options, { cwd, env }) {
+  if (options.paths.length > 0) {
+    env.err(`lattice: provenance takes no positional arguments; got ${options.paths.join(", ")}`);
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+    result = await provenanceCommand(commandContext);
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(`lattice: ${result.rows.length} governance rows → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // Provenance is descriptive — it never changes a verdict, so it never exits
+  // 1. 0 when it completes; failures exit 3 up in the catch above.
+  return EXIT.ok;
+}
+
+/**
  * `impact`'s `run`: resolves the command context, drives `impactCommand`,
  * writes the report where it belongs, and returns the process's exit code.
  *
@@ -1562,6 +1623,34 @@ const DRIFT_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `provenance`'s flags: text or JSON envelope, optional file output. The
+ * command itself has no positional arguments — it reads whichever workspace
+ * the working directory is inside, so there is no `--config`: the rows it
+ * reports come from that workspace's OWN declared intent and boundary config,
+ * and a flag overriding either would report a provenance this run never
+ * judged.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const PROVENANCE_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+]);
+
+/**
  * `history`'s flags: text or JSON envelope, optional file output, and the
  * boolean `--capture` that appends a snapshot of the current workspace
  * before building the record.
@@ -1813,6 +1902,16 @@ const COMMANDS = Object.freeze({
     formats: DESCRIBABLE_FORMATS,
     booleans: Object.freeze(["plan"]),
     run: runContextCommand,
+  }),
+  provenance: Object.freeze({
+    name: "provenance",
+    args: "",
+    summary: "Describe where this run's facts came from and which rows carry an origin",
+    flagHelp: PROVENANCE_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(PROVENANCE_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runProvenance,
   }),
 });
 

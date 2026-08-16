@@ -71,6 +71,18 @@ commands share rather than a command. It composes `../workspace.mjs`,
   head coverage. Refuses an empty or unreadable directory, and a snapshot that
   parses as an incomplete envelope. Descriptive: never exits 1.
 
+- **`provenance`** (`./provenance-command.mjs`'s `provenanceCommand`) — where
+  this run's facts came from and which governance rows carry an origin.
+  Two surfaces: repository provenance (the git commit, remote and dirty state
+  `./provenance.mjs` exposes to every envelope) and decision provenance (each
+  `architecture-intent.json` row and each boundary-config `depConstraints` row,
+  and whether it carries an `origin` record — a row without one is flagged
+  `no origin recorded — cannot attest`). Reads the workspace's OWN declared
+  intent and config, and its own provider via `resolveCommandContext`; never
+  changes a verdict and never exits 1. Refuses out of a malformed intent or
+  boundary config the way `drift` does — a row list built from a file it could
+  not read is a claim about rows that do not exist. Descriptive: never exits 1.
+
 ## Shared modules
 
 - **`snapshot-meta.mjs`** — `compareSnapshotMetadata`, shared by `diff` and
