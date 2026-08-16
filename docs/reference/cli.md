@@ -175,3 +175,33 @@ Constraint rows that carry `description` or `remediation` show those fields.
 Useful before editing a project — the same constraint table `check` judges
 from, rendered as a readable summary rather than as a list of violations.
 Descriptive.
+
+### `context <project> --plan [<path>...]`
+
+Requests the **agent architecture planning context**: the deterministic facts
+a coding agent needs before planning a change to `project`. Trailing paths
+scope the change (which project roots or files it touches); with no paths, the
+whole workspace is in scope.
+
+The planning context is facts, not a plan. Lattice reports the current
+architecture snapshot, the applicable policy with the author's Intent
+(`description`/`remediation`), the impact of a change to the target project
+(dependents capped at 10 with an explicit overflow note), the current
+violations (the full-workspace rule-engine verdict, scoped for reporting),
+drift (go.work and tsconfig-path aliases, `null` when no manifest exists to
+read), coverage with the exact files that could not be analyzed, and the
+deterministic commands that verify the change afterwards. It never generates
+an LLM plan, decides an implementation strategy, or modifies source code —
+an agent reasons over these facts.
+
+`--plan` is strictly additive: it changes no exit code and no byte of the
+plain `context` text output. In JSON the plan's fields sit directly in
+`result` alongside the unchanged `result.project/tags/constraints/dependencies`
+(the four plain `context` fields keep their existing shape — see
+`json-output.md`), and `result.variant` is `"plan"` so a consumer can tell the
+two apart. The rule verdict is computed over the whole analyzeable tree (so
+whole-graph rules such as circular-dependency and lazy-load are correct on
+every provider); on Nx and Moon workspaces this is a second analysis pass,
+which costs more than a plain `context` run. The JSON output is deterministic:
+two runs over an unchanged tree produce byte-identical bytes.
+Descriptive.

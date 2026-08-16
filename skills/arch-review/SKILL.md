@@ -36,6 +36,15 @@ does not show.
    and which are forbidden. If the project has no constraints, that is an
    unknown, not a green light.
 
+   For a change whose architecture consequences matter, request the planning
+   context too — it bundles the current architecture, policy with Intent,
+   impact, current violations, drift, and verification commands in one
+   document:
+
+   ```
+   lattice context <project> --plan path/to/file.go
+   ```
+
 2. **Diff.** If a baseline graph snapshot exists (from a prior `lattice graph
 --format json` run), compare the current graph against it:
 

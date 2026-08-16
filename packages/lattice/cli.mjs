@@ -79,6 +79,7 @@ import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/config.mjs";
 import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
 import { contextCommand } from "./src/commands/context-command.mjs";
+import { planContextCommand } from "./src/commands/plan-context-command.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { graphCommand } from "./src/commands/graph.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
@@ -333,7 +334,8 @@ function resolveWorkspaceRootForUsage(cwd) {
  * report a clean tree — the exact false green this tool exists to remove.
  *
  * @param {string[]} argv
- * @param {{flags: Record<string,string>, defaults: object, formats?: readonly string[]}} spec
+ * @param {{flags: Record<string,string>, defaults: object, formats?: readonly string[],
+ *   presenceFlags?: readonly string[]}} spec
  * @returns {object} `{...spec.defaults, paths: string[]}`, with every declared
  *   flag's value substituted in.
  * @throws {Error} on an unknown flag, a missing value, or (when `spec.formats`
@@ -341,6 +343,7 @@ function resolveWorkspaceRootForUsage(cwd) {
  */
 export function parseArgs(argv, spec) {
   const parsed = { ...spec.defaults, paths: [] };
+  const presence = new Set(spec.presenceFlags ?? []);
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (!arg.startsWith("--")) {
@@ -352,6 +355,10 @@ export function parseArgs(argv, spec) {
       : [arg, undefined];
     const key = spec.flags[flag];
     if (!key) throw new Error(`unknown option '${flag}'`);
+    if (presence.has(flag)) {
+      parsed[key] = true;
+      continue;
+    }
     const value = inlineValue ?? argv[++index];
     if (value === undefined) throw new Error(`'${flag}' needs a value`);
     parsed[key] = value;
@@ -1030,12 +1037,19 @@ async function runExplain(options, { cwd, env }) {
  * same as `check` and `explain`, because the answer depends on which boundary
  * law is in effect.
  *
- * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{format: string, output: string|null, config: string|null, plan: boolean, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
 async function runContextCommand(options, { cwd, env }) {
-  if (options.paths.length !== 1) {
+  // Without `--plan`, context takes exactly one positional (the project name);
+  // with `--plan`, the first positional is still the project name and the rest
+  // are the change's scope (paths the change touches).
+  if (options.paths.length === 0) {
+    env.err(`lattice: context takes a project name; got none`);
+    return EXIT.usage;
+  }
+  if (options.paths.length !== 1 && !options.plan) {
     env.err(
       `lattice: context takes exactly one positional argument (the project name); ` +
         `got ${options.paths.length}`,
@@ -1044,9 +1058,15 @@ async function runContextCommand(options, { cwd, env }) {
   }
 
   const projectName = options.paths[0];
+  const scopePaths = options.plan ? options.paths.slice(1) : [];
 
   let result;
   try {
+    // The command context is resolved over the WHOLE workspace. Scoping by
+    // path is the plan command's decision (which projects the change touches),
+    // not the preamble's: the rule verdict and the architecture snapshot must
+    // be over the whole tree, and only reporting is narrowed. Passing no paths
+    // here keeps the non-plan `context` path byte-for-byte identical to before.
     const commandContext = resolveCommandContext(
       { cwd },
       { readGraph: env.readGraph, listFiles: env.listFiles },
@@ -1067,7 +1087,9 @@ async function runContextCommand(options, { cwd, env }) {
             `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
           );
 
-    result = contextCommand(projectName, commandContext, config);
+    result = options.plan
+      ? planContextCommand(projectName, scopePaths, commandContext, config)
+      : contextCommand(projectName, commandContext, config);
   } catch (error) {
     const usageError =
       /is outside the workspace/.test(error?.message ?? "") ||
@@ -1272,6 +1294,20 @@ const EXPLAIN_FLAG_HELP = Object.freeze([
  */
 const CONTEXT_FLAG_HELP = Object.freeze([
   Object.freeze({
+    flag: "--plan",
+    key: "plan",
+    arg: "",
+    describe: Object.freeze([
+      "Request the agent planning context: current",
+      "architecture, applicable policy (with Intent),",
+      "impact, current violations, drift, coverage, and",
+      "the commands that verify the change. Trailing",
+      "paths scope the change; deterministic and",
+      "never an LLM plan — Lattice produces facts,",
+      "agents produce plans.",
+    ]),
+  }),
+  Object.freeze({
     flag: "--format",
     key: "format",
     arg: "text|json",
@@ -1359,12 +1395,13 @@ const COMMANDS = Object.freeze({
   }),
   context: Object.freeze({
     name: "context",
-    args: "<project>",
+    args: "<project> [--plan [<path>...]]",
     summary: "Show the architecture constraints that apply to a project",
     flagHelp: CONTEXT_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(CONTEXT_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    defaults: Object.freeze({ format: "text", output: null, config: null, plan: false }),
     formats: DESCRIBABLE_FORMATS,
+    presenceFlags: Object.freeze(["--plan"]),
     run: runContextCommand,
   }),
 });

@@ -262,6 +262,41 @@ Each `dependencies` entry:
 
 Each `violations` entry inside a dependency carries `messageId`, `constraint`, `source`, and `target` — the same shape `diff --format json` and `impact --format json` produce for edge-constraint violations.
 
+## `result` for `context --plan`
+
+`context <project> --plan` builds the same envelope as plain `context`. The
+`result.project/tags/constraints/dependencies` fields are present at the same
+top-level paths and carry the same shapes as the plain command, so a consumer
+that already reads the plain `context` envelope keeps working unchanged.
+`command` is still `"context"`; the plan's fields sit directly in `result`
+alongside the four base fields, and `result.variant` is `"plan"` so a consumer
+can tell a planning context from a plain one without guessing from field
+presence.
+
+| field               | type       | meaning                                                                                                                                                                                                     |
+| ------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `variant`           | string     | Always `"plan"` — marks this context envelope as a planning context.                                                                                                                                        |
+| `project`           | string     | The target project the change is about (same as the plain `result.project`).                                                                                                                                |
+| `tags`              | `string[]` | The target project's tags (same as the plain `result.tags`).                                                                                                                                                |
+| `constraints`       | `object[]` | The constraint rows that govern the target project (same as the plain `result.constraints`), each carrying the author's `description`/`remediation` — the workspace's Intent — when the config states them. |
+| `dependencies`      | `object[]` | The target project's dependencies with per-edge verdicts (same as the plain `result.dependencies`).                                                                                                         |
+| `policyFingerprint` | string     | SHA-256 fingerprint of the boundary policy (`depConstraints`/`options`/`suppressions`), so a later run can tell whether the rule table changed.                                                             |
+| `architecture`      | `object`   | The current graph snapshot (`projects`, `dependencies`) and which projects the change touches (`targets`).                                                                                                  |
+| `impact`            | `object[]` | Per affected project, who depends on it. Dependents are capped at 10; `dependentsTotal` and `hasMore` state the true total and overflow.                                                                    |
+| `violations`        | `object[]` | The full-workspace rule-engine verdict (`evaluate` over the whole analyzeable tree), scoped for reporting to the change's projects.                                                                         |
+| `drift`             | `object`   | `goWork` and `tsconfigPaths` drift — an absent manifest is `null` (not judged), never "no drift".                                                                                                           |
+| `verify`            | `string[]` | The deterministic commands an agent runs after the change. These are suggestions, not executed by Lattice.                                                                                                  |
+| `provenance`        | object     | null                                                                                                                                                                                                        | The same repository-provenance record the envelope's `workspace.provenance` carries. |
+
+The `coverage.notes` array carries planning-specific limitations: that the
+verdict is whole-tree scoped for reporting, that drift is keyed off manifest
+presence, that dependents are capped, and — when paths were given but matched
+no project-owned file — that the scope fell back to the whole workspace.
+
+History is deliberately out of scope for the planning context: it carries no
+before/after comparison. For architecture history between two graph
+snapshots, run `lattice diff <baseline>` separately.
+
 ## A worked example
 
 Run over this repository's own tree (`lattice`'s own CI step,
