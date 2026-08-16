@@ -85,6 +85,7 @@ import { contextCommand } from "./src/commands/context-command.mjs";
 import { planContextCommand } from "./src/commands/plan-context-command.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { driftCommand, driftForCheck } from "./src/commands/drift.mjs";
+import { fitnessCommand, fitnessForCheck } from "./src/commands/fitness.mjs";
 import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
 import { historyCommand } from "./src/commands/history.mjs";
 import { healthCommand } from "./src/commands/health.mjs";
@@ -416,7 +417,7 @@ export function parseCheckArgs(argv) {
  * verify — is the case that must not read `ok`, because `ok` is read as
  * "checked, and fine".
  *
- * The `decision` is the canonical 4-state verb of the same verdict
+* The `decision` is the canonical 4-state verb of the same verdict
  * (`src/report/evidence.mjs`), built from the same counts so the envelope's
  * `status` and its `decision.verdict` cannot disagree: `ok`→`pass`,
  * `findings`→`fail`, `no-verdict`→`unknown`. `buildDecision` throws on any
@@ -424,7 +425,7 @@ export function parseCheckArgs(argv) {
  * with no findings), which makes a regression in this mapping a loud error
  * rather than a silent one.
  *
- * @param {{violations: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, unchecked: number}} counts
+ * @param {{violations: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, unchecked: number, fitnessFail?: number, fitnessUnknown?: number}} counts
  * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3, decision: object}}
  */
 function verdictFor({
@@ -434,19 +435,28 @@ function verdictFor({
   intentFindings,
   intentUnresolved,
   unchecked,
+  fitnessFail = 0,
+  fitnessUnknown = 0,
 }) {
-  if (violations > 0 || goWorkDrift > 0 || tsconfigPathsDead > 0 || intentFindings > 0) {
+if (
+    violations > 0 ||
+    goWorkDrift > 0 ||
+    tsconfigPathsDead > 0 ||
+    intentFindings > 0 ||
+    fitnessFail > 0
+  ) {
     return {
       status: "findings",
       exitCode: EXIT.violations,
       decision: buildDecision({
         status: "findings",
         coverageComplete: unchecked === 0,
-        findings: violations + goWorkDrift + tsconfigPathsDead + intentFindings,
+        findings:
+          violations + goWorkDrift + tsconfigPathsDead + intentFindings + fitnessFail,
       }),
     };
   }
-  if (unchecked > 0 || intentUnresolved > 0) {
+  if (unchecked > 0 || intentUnresolved > 0 || fitnessUnknown > 0) {
     return {
       status: "no-verdict",
       exitCode: EXIT.error,
@@ -466,6 +476,9 @@ function verdictFor({
             : null,
           unchecked === 0 && intentUnresolved > 0
             ? `${intentUnresolved} architecture-intent boundary or row${intentUnresolved === 1 ? "" : "s"} could not be established`
+            : null,
+          intentUnresolved === 0 && fitnessUnknown > 0
+            ? `${fitnessUnknown} fitness function${fitnessUnknown === 1 ? "" : "s"} could not be determined`
             : null,
         ]
           .filter(Boolean)
@@ -509,7 +522,8 @@ function verdictFor({
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} context
  * @returns {Promise<{report: string, violations: number, goWorkDrift: number,
  *   tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number,
- *   analyzed: number, unchecked: number, waived?: number}>}
+*   fitnessFail: number, fitnessUnknown: number, analyzed: number, unchecked: number,
+ *   waived?: number}>}
  */
 export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
   const commandContext = resolveCommandContext(
@@ -534,7 +548,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // a native workspace's inline `boundaryConfig` is typed without it — left
   // inferred, `tsc` narrows the union to whichever arm's return type is
   // narrowest and refuses the `notes` read below on that narrower type.
-  /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }} */
+  /** @type {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }} */
   const config = options.config
     ? await loadBoundaryConfigFile(
         isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
@@ -680,6 +694,32 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   const tsconfigPathsDead = tsconfigPaths === null ? 0 : tsconfigPaths.findings.length;
   const intentFindings = intent === null ? 0 : intent.findings.length;
   const intentUnresolved = intent === null ? 0 : intent.unresolved.length;
+
+  // The fitness fold, keyed the same two ways every governance axis is: a
+  // policy that declares fitness (the `fitness` export on the boundary
+  // config) is judged against the run's own facts — the same graph, the same
+  // analysis, the same intent verdict, the same suppressions `check` already
+  // holds. Absence is a workspace decision (the key is omitted, never
+  // `null`); presence without a number of declared rows is impossible (the
+  // validator refuses an empty list). A declared function whose match selects
+  // no project is `skipped` — loud, never folded into `pass`; a function the
+  // run could not determine is `unknown`, which rides `fitnessUnknown`, the
+  // same no-verdict lane a zero-member boundary takes. `scoped` marks the
+  // path-scoped case (`check <path>`), where coverage over a matched
+  // project's whole file set is not determinable — the registry answers that
+  // `unknown`, never a partial-number verdict.
+  let fitness = null;
+  if (config.fitness !== undefined) {
+    const { decisions, overall } = fitnessForCheck(commandContext, {
+      rows: config.fitness,
+      intent,
+      suppressions: config.suppressions,
+      scoped: options.paths.length > 0,
+    });
+    fitness = { decisions, overall };
+  }
+  const fitnessFail = fitness === null ? 0 : fitness.overall.verdict === "fail" ? 1 : 0;
+  const fitnessUnknown = fitness === null ? 0 : fitness.overall.verdict === "unknown" ? 1 : 0;
   // Files the run produced no verdict about, counted here rather than
   // recomputed by the caller: the exit code, the text report and the JSON
   // envelope must all agree about which failures mean "not covered", and one
@@ -732,6 +772,8 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               intentFindings,
               intentUnresolved,
               unchecked,
+              fitnessFail,
+              fitnessUnknown,
             }),
             coverage: {
               complete: unchecked === 0,
@@ -780,6 +822,18 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
                       boundaries: intent.boundaries,
                     },
                   }),
+              // Fitness is a policy DECLARATION too, absent when the workspace
+              // chose not to declare functions — the same omitted-key-not-
+              // null discipline the intent block above states.
+              ...(fitness === null
+                ? {}
+                : {
+                    fitness: {
+                      checked: true,
+                      verdict: fitness.overall.verdict,
+                      functions: fitness.decisions,
+                    },
+                  }),
             },
           }),
         )
@@ -792,6 +846,8 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
           goWork,
           tsconfigPaths,
           intent,
+          fitness: fitness?.decisions,
+          fitnessOverall: fitness?.overall,
           // Only the ESLint boundaryConfig dialect ever produces one (see
           // `./src/eslint-config.mjs`'s `extractBoundaryRule`) — which entry it
           // bound when more than one configured the rule, or that the winning
@@ -811,6 +867,8 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     tsconfigPathsDead,
     intentFindings,
     intentUnresolved,
+    fitnessFail,
+    fitnessUnknown,
     analyzed,
     unchecked,
   };
@@ -1099,7 +1157,7 @@ async function runDrift(options, { cwd, env }) {
 }
 
 /**
- * `provenance`'s `run`: resolves the command context, drives
+* `provenance`'s `run`: resolves the command context, drives
  * `provenanceCommand`, writes the report where it belongs, and returns the
  * process's exit code.
  *
@@ -1235,6 +1293,88 @@ async function runWaivers(options, { cwd, env }) {
 }
 
 /**
+ * `fitness`'s `run`: resolves the command context, drives `fitnessCommand`,
+ * writes the report where it belongs, and returns the process's exit code.
+ *
+ * Like `drift`, fitness is descriptive: the verdict table prints and the
+ * command exits 0 when it completes, 3 when the run could not reach a
+ * verdict. Only `check` exits 1, and only `check` folds a `fail` into exit 1 —
+ * a descriptive command never claims a violation's exit code
+ * (`../src/commands/fitness.mjs` states the posture).
+ *
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runFitness(options, { cwd, env }) {
+  if (options.paths.length > 0) {
+    env.err(`lattice: fitness takes no positional arguments; got ${options.paths.join(", ")}`);
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    // Fitness is part of the run's boundary law, so the law is loaded the same
+    // way `check` loads it and `--config` wins the same way — resolved against
+    // the working directory, never against this tool's own location. A
+    // malformed law throws here, exit 3, exactly as in `check`.
+    /** @type {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }} */
+    const config = options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : typeof commandContext.options.boundaryConfig === "string"
+        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
+        : policyFrom(
+            commandContext.options.boundaryConfig,
+            `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+          );
+
+    result = await fitnessCommand(commandContext, { config });
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(
+      `lattice: ${result.fitness.functions.length} fitness function` +
+        `${result.fitness.functions.length === 1 ? "" : "s"} judged (${result.fitness.verdict}) ` +
+        `→ ${options.output}`,
+    );
+  } else {
+    env.out(report);
+  }
+
+  // Fitness is descriptive: the verdict table prints and the command exits 0
+  // when it completes; only `check` folds a `fail` into exit 1. 3 when the
+  // run could not reach a verdict (`../src/commands/fitness.mjs` states the
+  // posture).
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
+}
+
+/**
  * `impact`'s `run`: resolves the command context, drives `impactCommand`,
  * writes the report where it belongs, and returns the process's exit code.
  *
@@ -1350,7 +1490,7 @@ async function runExplain(options, { cwd, env }) {
     // The config's location is a separate fact from the workspace root.
     // Same loading logic as `check` — a `--config` overrides the workspace's
     // own `boundaryConfig`.
-    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }} */
+    /** @type {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }} */
     const config = options.config
       ? await loadBoundaryConfigFile(
           isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
@@ -1442,7 +1582,7 @@ async function runContextCommand(options, { cwd, env }) {
     // The config's location is a separate fact from the workspace root.
     // Same loading logic as `check` and `explain` — a `--config` overrides
     // the workspace's own `boundaryConfig`.
-    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }} */
+    /** @type {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }} */
     const config = options.config
       ? await loadBoundaryConfigFile(
           isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
@@ -1842,6 +1982,41 @@ const PROVENANCE_FLAG_HELP = Object.freeze([
 const WAIVERS_FLAG_HELP = DIFF_FLAG_HELP;
 
 /**
+ * `fitness`'s flags: text or JSON envelope, optional file output, and the
+ * `--config` override every policy-reading command shares.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const FITNESS_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: (options) => [
+      "Judge the fitness declared in this file",
+      `(the workspace names ${options.boundaryConfig}${
+        options.inline ? " — an inline policy object" : ""
+      })`,
+    ],
+  }),
+]);
+
+/**
  * `history`'s flags: text or JSON envelope, optional file output, and the
  * boolean `--capture` that appends a snapshot of the current workspace
  * before building the record.
@@ -2086,7 +2261,7 @@ const COMMANDS = Object.freeze({
     formats: DESCRIBABLE_FORMATS,
     run: runDrift,
   }),
-  waivers: Object.freeze({
+waivers: Object.freeze({
     name: "waivers",
     args: "",
     summary: "List the boundary waivers on the table, with their terms",
@@ -2095,6 +2270,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runWaivers,
+  }),
+  fitness: Object.freeze({
+    name: "fitness",
+    args: "",
+    summary: "Judge every declared fitness function against the workspace",
+    flagHelp: FITNESS_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(FITNESS_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runFitness,
   }),
   history: Object.freeze({
     name: "history",

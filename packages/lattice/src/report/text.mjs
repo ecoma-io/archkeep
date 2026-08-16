@@ -304,6 +304,38 @@ export function formatIntentSection(intent) {
 }
 
 /**
+ * The fitness section — one line per declared fitness function's verdict,
+ * rendered only when the run's policy declared any (`fitness === undefined`).
+ *
+ * This is a verdict table, not a findings list: every declared function gets
+ * its row, so "no fitness failed" always reads as a claim about the specific
+ * functions that were judged. The overall verdict is a fourth line naming the
+ * run's posture — `fail` wins, then `unknown`, then `pass`, exactly
+ * `fitnessVerdictFor`'s ordering (`../governance/fitness-registry.mjs`) — and
+ * a declared function whose `match` selected nothing shows `not_applicable`
+ * with its reason: loud, never absent.
+ *
+ * @param {object[]} decisions Per-function verdict records from
+ *   `evaluateFitness`.
+ * @param {{verdict: string}} overall The aggregate from `fitnessVerdictFor`.
+ * @returns {string} Empty exactly when the policy declared no fitness.
+ */
+export function formatFitnessSection(decisions, overall) {
+  if (decisions.length === 0) return "";
+  const verdictGlyph = { pass: "✔", fail: "✖", unknown: "⚠", not_applicable: "◌" };
+  const rows = decisions
+    .map((decision) => `${verdictGlyph[decision.verdict]} ${decision.name}  ${decision.message}`)
+    .join("\n");
+  const overallLabel = {
+    pass: `✔ fitness: ${decisions.length} function${decisions.length === 1 ? "" : "s"} passed`,
+    fail: `✖ fitness: ${overall.verdict} — the build fails`,
+    unknown: `⚠ fitness: ${decisions.length} function${decisions.length === 1 ? "" : "s"} judged, some could not be determined — the run cannot claim pass`,
+    not_applicable: `◌ fitness: every declared function matched nothing — nothing was judged`,
+  }[overall.verdict];
+  return `${rows}\n\n${overallLabel}`;
+}
+
+/**
  * The polyglot coverage gap section — rendered only when the Nx graph is known
  * to be missing polyglot edges that the checker's own analysis did cover.
  *
@@ -377,13 +409,13 @@ export function formatAcceptedViolations(waived) {
  * that indistinguishability is the defect this whole tool exists to end
  * (`../../CLAUDE.md`).
  *
- * Waived violations are still `violations` (the engine marks them `waivedBy`,
+* Waived violations are still `violations` (the engine marks them `waivedBy`,
  * it never removes them), so an all-waived run still renders non-zero — the
  * "waiving must not flip exit 1 → 0" invariant, in the report layer. The
  * summary line above only says "no boundary violations" when there is nothing
  * a waiver is covering either.
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, intent?: object|null, coverageGaps?: object[], notes?: string[]}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, intent?: object|null, fitness?: object|null, fitnessOverall?: {verdict: string}|null, coverageGaps?: object[], notes?: string[]}} run
  * @returns {string}
  */
 export function formatReport({
@@ -395,6 +427,8 @@ export function formatReport({
   goWork,
   tsconfigPaths,
   intent,
+  fitness,
+  fitnessOverall,
   coverageGaps = [],
   notes = [],
 }) {
@@ -443,6 +477,9 @@ export function formatReport({
 
   const intentSection = formatIntentSection(intent);
   if (intentSection !== "") sections.push(intentSection);
+
+  const fitnessSection = formatFitnessSection(fitness ?? [], fitnessOverall ?? { verdict: "pass" });
+  if (fitnessSection !== "") sections.push(fitnessSection);
 
   const coverageGapsSection = formatCoverageGaps(coverageGaps);
   if (coverageGapsSection !== "") sections.push(coverageGapsSection);

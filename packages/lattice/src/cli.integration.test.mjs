@@ -1155,6 +1155,91 @@ var _ = adapter.Name
     expect(written.coverage.complete).toBe(true);
   });
 
+  it("folds a declared fitness function into the check verdict — a coverage-minimum over owned files", async () => {
+    // A SEPARATE config filename, never `module-boundaries.config.mjs`: that
+    // file was already `import()`ed during the describe-block setup, and ES
+    // module import caching means a rewritten copy is not what the next
+    // `loadBoundaryConfig` call reads. A fresh filename is imported clean.
+    // The native fixture owns exactly two analyzable files (both `.go`), and
+    // the analysis analyzed both, so a 100%-coverage minimum passes.
+    writeNative(
+      "fitness-full.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "full-coverage",
+    match: ["*"],
+    condition: { type: "coverage-minimum", statement: 100 },
+    reason: "every owned file must be analyzed",
+  },
+];
+`,
+    );
+    const { report, violations, unchecked } = await check(
+      { format: "text", config: "fitness-full.config.mjs", paths: [] },
+      nativeContext,
+    );
+    // Both files are analyzed; the layer crossing (domain→adapter) is still
+    // a real boundary finding, and the fitness verdict is independent of it.
+    expect(violations).toBe(1);
+    expect(unchecked).toBe(0);
+    expect(report).toContain("✔ full-coverage");
+    expect(report).toContain("2/2 files analyzed (100%)");
+  });
+
+  it("exits 3 when a declared fitness function cannot be determined — never a pass", async () => {
+    writeNative(
+      "fitness-unknown.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "no-domain-yet",
+    match: ["*"],
+    condition: { type: "layer-dependency", from: "layer:service", to: "layer:domain", direction: "required" },
+    reason: "a service layer will need the domain",
+  },
+];
+`,
+    );
+    // Scoped to `libs/adapter` so the fixture's real domain→adapter crossing
+    // (a findings-axis red, which would win the verdict) is not selected for
+    // analysis — this test pins the no-verdict lane alone. The `--config`
+    // flag loads the fresh config by path.
+    const streams = nativeEnv();
+    expect(
+      await runCli(["check", "--config", "fitness-unknown.config.mjs", "libs/adapter"], streams),
+    ).toBe(EXIT.error);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("⚠ no-domain-yet");
+    expect(out).toContain("no matched project carries tag");
+  });
+
   it("says nothing about README.md, since it is not an analyzable file — the coverage near-miss that keeps the check usable", async () => {
     const { report, violations, unchecked } = await check(
       { format: "text", config: null, paths: [] },

@@ -87,19 +87,20 @@
  * share, so an extra key is a typo (`depConstraint` for `depConstraints`) far
  * more often than it is deliberate, and the `.mjs` dialect's tolerance would
  * make that typo pass in silence. The `.json` dialect therefore rejects any
- * top-level key beyond `depConstraints`, `moduleBoundaryOptions` and
- * `boundarySuppressions` by name, with one carve-out: `$schema`, which editors
- * write into a JSON file unasked for IDE validation and which states no rule
- * of its own. The ESLint dialect has no `boundarySuppressions` counterpart at
- * all — ESLint has its own `eslint-disable` convention for that, with no
- * equivalent this reader can read back — so it always reports an empty
- * suppression list; see `loadBoundaryConfigFile`'s ESLint branch.
+ * top-level key beyond `depConstraints`, `moduleBoundaryOptions`,
+ * `boundarySuppressions` and `fitness` by name, with one carve-out: `$schema`,
+ * which editors write into a JSON file unasked for IDE validation and which
+ * states no rule of its own. The ESLint dialect has no `boundarySuppressions`
+ * counterpart at all — ESLint has its own `eslint-disable` convention for
+ * that, with no equivalent this reader can read back — so it always reports
+ * an empty suppression list; see `loadBoundaryConfigFile`'s ESLint branch.
  */
 import { basename, extname, posix } from "node:path";
 import { readFile as readFileFromDisk } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { loadEslintBoundaryConfig } from "./eslint-config.mjs";
+import { findFitnessViolations } from "./governance/fitness-registry.mjs";
 import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "./governance/row-schema.mjs";
 import {
   globPatternError,
@@ -506,7 +507,16 @@ export function findBoundaryConfigViolations(module) {
   if (!isPlainObject(module)) return [`config: expected a module object, got ${describe(module)}`];
 
   const violations = [];
-  const { depConstraints, moduleBoundaryOptions, boundarySuppressions } = module;
+  const { depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness } = module;
+
+  // The fitness list — declared where every other executable policy is
+  // (`../governance/fitness-registry.mjs` owns the shape). Absent means "no
+  // fitness declared", which is a workspace decision the report states; a list
+  // present but malformed is refused here, loudly, the same way a malformed
+  // suppression is.
+  if (fitness !== undefined) {
+    violations.push(...findFitnessViolations(fitness));
+  }
 
   // Absent means "nothing is suppressed", which is the only default that fails
   // toward reporting — unlike the eight options above, where a missing value
@@ -590,8 +600,15 @@ export function findBoundaryConfigViolations(module) {
  * an ES module has no analogous editor-validation hook — so it is carved out
  * by name rather than folded into a general "ignore unknown" rule, which is
  * exactly the leniency this file's header argues a JSON object must not get.
+ * `fitness` is the fourth and newest: the boundary dialect's key for the
+ * fitness-functions list, validated as an array of fitness rows.
  */
-const JSON_POLICY_KEYS = ["depConstraints", "moduleBoundaryOptions", "boundarySuppressions"];
+const JSON_POLICY_KEYS = [
+  "depConstraints",
+  "moduleBoundaryOptions",
+  "boundarySuppressions",
+  "fitness",
+];
 
 /**
  * The `.json` dialect's own shape check, on top of `findBoundaryConfigViolations`:
@@ -656,7 +673,10 @@ export function policyKeyViolations(parsed, { allowSchema }) {
  *   inline one.
  * @param {string[]} [extraViolations] Violations the caller already found that
  *   `findBoundaryConfigViolations` does not check on its own.
- * @returns {{ depConstraints: object[], options: object, suppressions: object[] }}
+ * @returns {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[] }}
+ *   `fitness` is present only when the config declares a `fitness` list — a
+ *   workspace without one carries no key, the same "absent is a decision"
+ *   posture `cli.mjs`'s `check` uses for a missing architecture-intent file.
  * @throws {Error} `lattice: ${sourceLabel} is malformed:` followed by every
  *   violation found, when `extraViolations` or `findBoundaryConfigViolations`
  *   found any.
@@ -670,6 +690,7 @@ export function policyFrom(parsed, sourceLabel, extraViolations = []) {
     depConstraints: parsed.depConstraints,
     options: parsed.moduleBoundaryOptions,
     suppressions: parsed.boundarySuppressions ?? [],
+    ...(parsed.fitness === undefined ? {} : { fitness: parsed.fitness }),
   };
 }
 
@@ -678,7 +699,7 @@ export function policyFrom(parsed, sourceLabel, extraViolations = []) {
  * `findBoundaryConfigViolations` above reads by name.
  *
  * @param {string} path Absolute path of the config file.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[] }>}
  * @throws {Error} when the file is missing, unloadable, or malformed.
  */
 async function loadModulePolicy(path) {
@@ -704,7 +725,7 @@ async function loadModulePolicy(path) {
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Injectable read, defaulting to `node:fs/promises`' `readFile` — the only
  *   code in this function that reaches outside the process.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[] }>}
  * @throws {Error} when the file is missing, unreadable, not valid JSON, or
  *   malformed — either by `findBoundaryConfigViolations`' rules or by carrying
  *   a top-level key none of those rules knows about.
@@ -751,7 +772,7 @@ async function loadJsonPolicy(path, { readFile = readFileFromDisk } = {}) {
  * @param {string} path Absolute path of the config file.
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Injectable read, used only by the `.json` dialect — see `loadJsonPolicy`.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }>}
  *   `suppressions` is `[]` when the config declares none. `notes` is present
  *   only under the ESLint dialect, and only when `./eslint-config.mjs` has
  *   something worth telling a reader about which entry it bound — see
@@ -830,7 +851,7 @@ export async function loadBoundaryConfigFile(path, io = {}) {
  *   misconfigured tool.
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Forwarded to `loadBoundaryConfigFile` — see there.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }>}
  * @throws {Error} as `loadBoundaryConfigFile`.
  */
 export async function loadBoundaryConfig(workspaceRoot, boundaryConfig, io = {}) {
