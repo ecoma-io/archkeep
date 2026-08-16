@@ -67,12 +67,12 @@
  * shared rather than hand-rolled per command, so a new command is a new
  * row rather than a second copy of the dispatch and flag-parsing this file
  * used to own alone. The table is built for nine commands — `check`, `graph`,
- * `diff`, `drift`, `history`, `impact`, `explain`, `context`, `provenance` —
- * with three flags shared across all of them (`--format`, `--output`,
- * `--config`) and `history`'s boolean `--capture`, the first flag that takes
- * no value. No subcommand nesting, and no shell completion to generate, mean a
- * plain table gets there without a framework; reach for one only once a later
- * command needs something this table cannot express.
+ * `diff`, `drift`, `history`, `health`, `impact`, `explain`, `context`,
+ * `provenance` — with three flags shared across all of them (`--format`,
+ * `--output`, `--config`) and `history`'s boolean `--capture`, the first flag
+ * that takes no value. No subcommand nesting, and no shell completion to
+ * generate, mean a plain table gets there without a framework; reach for one
+ * only once a later command needs something this table cannot express.
  */
 import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -87,6 +87,7 @@ import { diffCommand } from "./src/commands/diff.mjs";
 import { driftCommand, driftForCheck } from "./src/commands/drift.mjs";
 import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
 import { historyCommand } from "./src/commands/history.mjs";
+import { healthCommand } from "./src/commands/health.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
 import { provenanceCommand } from "./src/commands/provenance-command.mjs";
@@ -1593,6 +1594,95 @@ async function runHistory(options, { cwd, env }) {
 }
 
 /**
+ * `health`'s `run`: resolves the command context, drives `healthCommand`,
+ * writes the report where it belongs, and returns the process's exit code.
+ *
+ * `health` takes no positional arguments — it measures the whole workspace.
+ * The snapshot directory for trends is the single optional positional
+ * argument, the same directory `history` reads.
+ *
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runHealth(options, { cwd, env }) {
+  if (options.paths.length > 1) {
+    env.err(
+      `lattice: health takes at most one positional argument (the snapshot directory for trends); ` +
+        `got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  const trendDir =
+    options.paths.length === 1
+      ? isAbsolute(options.paths[0])
+        ? options.paths[0]
+        : resolve(cwd, options.paths[0])
+      : null;
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    // The boundary law and the intent, the same loading every command does —
+    // a `--config` overrides the workspace's own `boundaryConfig`, and the
+    // intent is the tracked root `architecture-intent.json` (or absent).
+    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }|null} */
+    const config = options.config
+      ? await loadBoundaryConfigFile(
+          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
+        )
+      : typeof commandContext.options.boundaryConfig === "string"
+        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
+        : commandContext.options.boundaryConfig
+          ? policyFrom(
+              commandContext.options.boundaryConfig,
+              `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+            )
+          : null;
+
+    const intent = commandContext.tracked.includes(INTENT_FILE)
+      ? await loadIntent(commandContext.root, { tracked: commandContext.tracked })
+      : null;
+
+    result = healthCommand(commandContext, { config, intent, trendDir });
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(`lattice: health complete → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // Health is descriptive: 0 when it reaches a verdict, 3 when any metric
+  // reads unknown (the run could not fully inspect its own evidence).
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
+}
+
+/**
  * `check`'s own flags, described once — `usage()` renders this straight into
  * the Options block, and `flags` below (what `parseArgs` needs) is derived
  * from it rather than kept as a second list that could name a flag `--help`
@@ -1796,6 +1886,40 @@ const HISTORY_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `health`'s flags: text or JSON envelope, optional file output. The optional
+ * positional argument is the snapshot directory for trends, the same directory
+ * `history` reads.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const HEALTH_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: Object.freeze([
+      "Read the boundary law from here instead of",
+      "<workspace root>/module-boundaries.config.mjs",
+    ]),
+  }),
+]);
+
+/**
  * `impact`'s flags: text or JSON envelope, optional file output.
  * The project name is a positional argument.
  *
@@ -1982,6 +2106,16 @@ const COMMANDS = Object.freeze({
     formats: DESCRIBABLE_FORMATS,
     booleans: Object.freeze(["capture"]),
     run: runHistory,
+  }),
+  health: Object.freeze({
+    name: "health",
+    args: "[<snapshot-dir>]",
+    summary: "Describe architecture health metrics and trends",
+    flagHelp: HEALTH_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(HEALTH_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runHealth,
   }),
   impact: Object.freeze({
     name: "impact",
