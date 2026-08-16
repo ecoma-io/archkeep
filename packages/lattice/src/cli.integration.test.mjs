@@ -1152,6 +1152,226 @@ var _ = adapter.Name
   });
 });
 
+describe("architecture drift over a native tree with an intent file", () => {
+  // The drift fold is presence-keyed — presence ON DISK, not in git: when a
+  // file exists at the `intentConfig` name, `check` compares the observed
+  // architecture against it and counts findings into the verdict (exit 1),
+  // exactly like go.work. Absence of an intent file means no fold and no
+  // mention — a workspace without an intended architecture pays nothing and
+  // hears nothing. An intent that exists but is not yet committed is still a
+  // law the workspace is declaring, so `check` judges it rather than reading
+  // "no drift checked" from a git-truncated view.
+  //
+  // Each test builds its OWN tmpdir. `loadIntent` imports the intent module,
+  // and `import()` memoises a module URL for the life of the process — the
+  // same fact `src/lsp/boundary-config.mjs` documents for the boundary config.
+  // A single shared root whose intent file each test rewrites would judge,
+  // from the second test on, the FIRST file's content. A fresh root per test
+  // gives every intent a unique URL, so the rewrite is actually re-read — the
+  // exact way the CLI's fresh-process-per-run behaves.
+  const intent = (overrides) =>
+    `export default ${JSON.stringify(
+      {
+        projects: {
+          required: [
+            { name: "domain", tags: ["layer:domain"] },
+            { name: "adapter", tags: ["layer:adapter"] },
+          ],
+        },
+        ...overrides,
+      },
+      null,
+      2,
+    )}\n`;
+
+  // Builds a fresh native drift workspace: two Go projects (adapter imports
+  // domain) and a lattice.json whose coverage waiver covers the intent file —
+  // which is present because `loadIntent` needs something to import. Returns
+  // the streams to drive `runCli`, with `cleanup` to remove the tmpdir.
+  const newDriftRoot = (intentText, { withIntentFile = true } = {}) => {
+    const root = mkdtempSync(join(tmpdir(), "polyglot-cli-drift-"));
+    const write = (rel, text) => {
+      mkdirSync(join(root, rel, ".."), { recursive: true });
+      writeFileSync(join(root, rel), text);
+    };
+    const exempt = [{ path: "module-boundaries.config.mjs", reason: "root tooling config" }];
+    if (withIntentFile) {
+      exempt.push({ path: "architecture-intent.config.mjs", reason: "root tooling config" });
+    }
+    write(
+      "lattice.json",
+      JSON.stringify({
+        projects: {
+          declared: [
+            { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+            { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+          ],
+        },
+        coverage: { exempt },
+      }),
+    );
+    write(
+      "module-boundaries.config.mjs",
+      'export const depConstraints = [];\nexport const moduleBoundaryOptions = { allow: [], buildTargets: ["build"], enforceBuildableLibDependency: false, allowCircularSelfDependency: false, checkDynamicDependenciesExceptions: [], ignoredCircularDependencies: [], banTransitiveDependencies: false, checkNestedExternalImports: false };\n',
+    );
+    write("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+    write("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+    write(
+      "libs/adapter/adapter.go",
+      'package adapter\n\nimport "example.com/domain"\n\nvar _ = domain.Name\n',
+    );
+    const files = [
+      "lattice.json",
+      "module-boundaries.config.mjs",
+      "libs/domain/go.mod",
+      "libs/adapter/go.mod",
+      "libs/adapter/adapter.go",
+    ];
+    if (withIntentFile) {
+      write("architecture-intent.config.mjs", intentText);
+      files.splice(2, 0, "architecture-intent.config.mjs");
+    }
+    const streams = {
+      cwd: root,
+      listFiles: () => files,
+      out: () => {},
+      err: () => {},
+    };
+    const withCapture = () => {
+      const out = [];
+      const err = [];
+      return {
+        ...streams,
+        out: (t) => out.push(t),
+        err: (t) => err.push(t),
+        lines: { out, err },
+      };
+    };
+    return { root, cleanup: () => rmSync(root, { recursive: true, force: true }), withCapture };
+  };
+
+  it("leaves check byte-identical when no intent file is present", async () => {
+    // A workspace without an intended architecture pays nothing and hears
+    // nothing — no intent file, no waiver naming one, and no mention.
+    const { cleanup, withCapture } = newDriftRoot("", { withIntentFile: false });
+    try {
+      const streams = withCapture();
+      expect(await runCli(["check"], streams)).toBe(EXIT.ok);
+      expect(streams.lines.out.join("\n")).not.toContain("drift");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("is clean when the observed architecture matches the intent, and states it", async () => {
+    const { cleanup, withCapture } = newDriftRoot(intent({}));
+    try {
+      const streams = withCapture();
+      expect(await runCli(["check"], streams)).toBe(EXIT.ok);
+      const out = streams.lines.out.join("\n");
+      expect(out).toContain("the observed architecture matches the intended one");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("judges a present-but-untracked intent — presence on disk, not in git", async () => {
+    // Build the workspace with no intent in the tracked list, then write the
+    // intent to disk anyway: the fold reads the file off disk
+    // (workspace.readFile), not off the git view, so a workspace declaring a
+    // law must be judged by it — never treated as "no drift checked" because
+    // git has not seen the file.
+    const { root, cleanup, withCapture } = newDriftRoot("", { withIntentFile: false });
+    writeFileSync(
+      join(root, "architecture-intent.config.mjs"),
+      intent({ dependencies: { forbidden: [{ source: "adapter", target: "domain" }] } }),
+    );
+    const streams = withCapture();
+    try {
+      expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+      expect(streams.lines.out.join("\n")).toContain("dependencyForbidden");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("exits 1 when an observed edge is forbidden — drift folds into check's verdict", async () => {
+    const { cleanup, withCapture } = newDriftRoot(
+      intent({ dependencies: { forbidden: [{ source: "adapter", target: "domain" }] } }),
+    );
+    try {
+      const streams = withCapture();
+      expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+      const out = streams.lines.out.join("\n");
+      expect(out).toContain("dependencyForbidden");
+      expect(out).toContain("adapter → domain");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("exits 1 on a missing required project, and the descriptive drift command exits 0", async () => {
+    // A required project that the observed tree does not have — `not-there`
+    // appears nowhere in the fixture, so this is a genuine missing project
+    // rather than a required project that merely exists.
+    const { cleanup, withCapture } = newDriftRoot(
+      intent({ projects: { required: [{ name: "not-there", tags: [] }] } }),
+    );
+    try {
+      const streams = withCapture();
+      expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+      expect(streams.lines.out.join("\n")).toContain("projectMissing");
+
+      const describeStreams = withCapture();
+      expect(await runCli(["drift"], describeStreams)).toBe(EXIT.ok);
+      // The descriptive `drift` command renders the finding under its
+      // human-readable heading and the row (`not-there`), not the machine
+      // messageId — `check` is the face that labels findings `projectMissing`.
+      const describeOut = describeStreams.lines.out.join("\n");
+      expect(describeOut).toContain("projects the intent requires are missing");
+      expect(describeOut).toContain("not-there");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("exits 3 on a malformed intent, in check and in drift alike — never a silent no-drift", async () => {
+    const { cleanup, withCapture } = newDriftRoot(
+      "export default { dependencies: { allowed: [] } };\n",
+    );
+    try {
+      const checkStreams = withCapture();
+      expect(await runCli(["check"], checkStreams)).toBe(EXIT.error);
+      // check renders the whole-file failure inside the report (out), not on
+      // stderr — the failure names the intent file. Assert on the merged text.
+      const merged = checkStreams.lines.out.join("\n") + "\n" + checkStreams.lines.err.join("\n");
+      expect(merged).toMatch(/intent/);
+      expect(merged).toContain("architecture-intent.config.mjs");
+
+      const driftStreams = withCapture();
+      expect(await runCli(["drift"], driftStreams)).toBe(EXIT.error);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("reports the intent fingerprint and row count through the drift JSON envelope", async () => {
+    const { cleanup, withCapture } = newDriftRoot(intent({}));
+    try {
+      const streams = withCapture();
+      expect(await runCli(["drift", "--format", "json"], streams)).toBe(EXIT.ok);
+      const envelope = JSON.parse(streams.lines.out.join("\n"));
+      expect(envelope.command).toBe("drift");
+      expect(envelope.status).toBe("ok");
+      expect(envelope.result.intent.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+      expect(envelope.result.intent.rows).toBe(2);
+      expect(envelope.result.findings).toEqual([]);
+    } finally {
+      cleanup();
+    }
+  });
+});
+
 describe("the .json boundaryConfig dialect, end to end through the native provider", () => {
   // A third, independent tmpdir: same two-project layer-crossing shape as the
   // native `lattice.json` block above, but `boundaryConfig` names a `.json`
@@ -2119,7 +2339,9 @@ describe("the usage message", () => {
     expect(result.stdout).toContain("lattice check");
     expect(result.stdout).toContain("module-boundaries.config.mjs");
     expect(result.stdout).toContain("--format text|sarif");
-    expect(result.stdout).toContain("1 findings (violations, go.work drift, dead path aliases)");
+    expect(result.stdout).toContain(
+      "1 findings (violations, go.work drift, dead path aliases, architecture drift)",
+    );
   });
 });
 

@@ -281,6 +281,29 @@
         }
       ],
       "status": "proven"
+    },
+    {
+      "id": "M",
+      "name": "Drift — observed vs. declared intent, fail-closed",
+      "intent": "Drift compares the observed project graph against the workspace's declared intended architecture (the `intentConfig` module) and folds into `check` by presence — no opt-in flag, so a forgotten flag cannot masquerade as 'no drift'. Every check that cannot reach a drift verdict must fail closed (exit 3) rather than report clean. An empty drift finding list must mean the observed architecture matches the intended one.",
+      "evidence": [
+        {
+          "type": "behavioral-test",
+          "path": "src/drift/drift.test.mjs",
+          "assertion": "computeDrift: no-drift on matching tree, forbidden/project/tag findings, deterministic ordering, closed taxonomy of eight message ids"
+        },
+        {
+          "type": "behavioral-test",
+          "path": "src/cli.integration.test.mjs",
+          "assertion": "check folds drift by presence (no --drift flag): exit 1 on drift findings, exit 3 on a malformed or unreadable intent, byte-identical to a no-intent workspace"
+        },
+        {
+          "type": "e2e-test",
+          "path": "e2e/drift.e2e.mjs",
+          "assertion": "Real installed CLI over consumer trees: drift descriptive (exit 0 on findings, 3 on malformed intent), check exits 1 on drift, JSON envelope fingerprint/rows, provider-independent across the language fixtures"
+        }
+      ],
+      "status": "proven"
     }
   ],
   "bugsFixed": [

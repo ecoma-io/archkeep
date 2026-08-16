@@ -120,8 +120,9 @@ export function markersAt(root) {
  *   scoped-then-analyzed (nx/moon) result — see the branches below for why the
  *   order is not the same on all three.
  * @property {{boundaryConfig: string|object, tsConfig: object|undefined,
- *   inline?: boolean}} options What this workspace names its boundary law and
- *   its shared tsconfig — `check`'s `--config` flag, if given, still wins over
+ *   intentConfig: string, inline?: boolean}} options What this workspace names
+ *   its boundary law, its shared tsconfig, and its intended architecture —
+ *   `check`'s `--config` flag, if given, still wins over
  *   `options.boundaryConfig`; that override is `check`'s decision, not this
  *   module's.
  * @property {{registered: boolean, manifests: string[]}} pluginGap Whether
@@ -269,10 +270,15 @@ export function resolveCommandContext(
 
     options =
       typeof discovered.model.boundaryConfig === "string"
-        ? { boundaryConfig: discovered.model.boundaryConfig, tsConfig: discovered.model.tsConfig }
+        ? {
+            boundaryConfig: discovered.model.boundaryConfig,
+            tsConfig: discovered.model.tsConfig,
+            intentConfig: discovered.model.intentConfig,
+          }
         : {
             boundaryConfig: discovered.model.boundaryConfig,
             tsConfig: discovered.model.tsConfig,
+            intentConfig: discovered.model.intentConfig,
             inline: true,
           };
 
@@ -303,10 +309,11 @@ export function resolveCommandContext(
     // one-call contract as the Nx path: Moon already resolved projects, tags
     // and edges before this package ever asked. Options from defaults (no
     // `nx.json` to carry a plugins table, no `lattice.json` for inline
-    // options); a Moon workspace names the same two files by convention.
+    // options); a Moon workspace names the same three files by convention.
     options = {
       boundaryConfig: DEFAULT_OPTIONS.boundaryConfig,
       tsConfig: DEFAULT_OPTIONS.tsConfig,
+      intentConfig: DEFAULT_OPTIONS.intentConfig,
     };
 
     graph = effectiveReadGraph(root);
@@ -334,7 +341,11 @@ export function resolveCommandContext(
     // rather than contracts. Read before the graph, because it decides which
     // tsconfig `createWorkspace` resolves paths against.
     const pluginOptions = readPluginOptions(root);
-    options = { boundaryConfig: pluginOptions.boundaryConfig, tsConfig: pluginOptions.tsConfig };
+    options = {
+      boundaryConfig: pluginOptions.boundaryConfig,
+      tsConfig: pluginOptions.tsConfig,
+      intentConfig: pluginOptions.intentConfig,
+    };
 
     graph = effectiveReadGraph(root);
     ({ workspace, owned } = createWorkspace({

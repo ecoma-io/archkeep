@@ -10,7 +10,7 @@ For a workspace with no Nx at all. `nx.json` and `lattice.json` are
 alternatives -- a root carrying both is a usage error. A Moon workspace (`.moon/`
 directory present) also reads from `lattice.json` when no `nx.json` is present.
 Every field below is optional; an empty `{}` validates but declares zero projects.
-Six top-level keys are recognized; any other key is rejected by name.
+Seven top-level keys are recognized; any other key is rejected by name.
 
 ### `projects`
 
@@ -94,6 +94,24 @@ No second shape -- stays a filename. An Nx-registered workspace states this
 under `nx.json -> plugins[].options` instead. A Moon workspace states it in
 `lattice.json` alongside the native provider.
 
+### `intentConfig`
+
+| type   | default                            | meaning                                                     |
+| ------ | ---------------------------------- | ----------------------------------------------------------- |
+| string | `"architecture-intent.config.mjs"` | Filename of the workspace's declared intended architecture. |
+
+The file the `drift` command reads, and the file that makes `check` fold drift
+into its verdict when present. An intent is an `import()`ed plain-ESM module
+that default-exports the intended architecture: which projects must and must
+not exist (with the tags they must carry), which dependencies are permitted or
+forbidden, and which project→tag dependency pairs are forbidden. See
+[usage/drift.md](../usage/drift.md) for the schema and semantics.
+
+A filename only, like `tsConfig` -- an intent cannot be an inline object in
+`lattice.json`, because an inline value is not a module and the engine loads
+the intent by importing it. This option is read by `check` and `drift`; it does
+not affect the language server.
+
 ## `nx.json` plugin options
 
 For a workspace with an Nx root. Stated under `plugins[].options`:
@@ -105,17 +123,19 @@ For a workspace with an Nx root. Stated under `plugins[].options`:
       "plugin": "@ecoma-io/lattice/nx",
       "options": {
         "boundaryConfig": "module-boundaries.config.mjs",
-        "tsConfig": "tsconfig.base.json"
+        "tsConfig": "tsconfig.base.json",
+        "intentConfig": "architecture-intent.config.mjs"
       }
     }
   ]
 }
 ```
 
-| field            | type   | default                          | meaning                                             |
-| ---------------- | ------ | -------------------------------- | --------------------------------------------------- |
-| `boundaryConfig` | string | `"module-boundaries.config.mjs"` | Filename of the boundary law at the workspace root. |
-| `tsConfig`       | string | `"tsconfig.base.json"`           | Filename of the shared TypeScript config.           |
+| field            | type   | default                            | meaning                                             |
+| ---------------- | ------ | ---------------------------------- | --------------------------------------------------- |
+| `boundaryConfig` | string | `"module-boundaries.config.mjs"`   | Filename of the boundary law at the workspace root. |
+| `tsConfig`       | string | `"tsconfig.base.json"`             | Filename of the shared TypeScript config.           |
+| `intentConfig`   | string | `"architecture-intent.config.mjs"` | Filename of the declared intended architecture.     |
 
 Both default to the Nx conventions, so a workspace that follows them can
 register the plugin by name alone. An unknown key throws at every consumer --
@@ -124,7 +144,7 @@ default.
 
 ## CLI flags
 
-All five commands share the same flag-parsing rules. Both `--flag value` and
+All seven commands share the same flag-parsing rules. Both `--flag value` and
 `--flag=value` work. An unknown flag is a usage error rather than a path.
 
 ### Global flags (every command)
@@ -135,10 +155,10 @@ All five commands share the same flag-parsing rules. Both `--flag value` and
 
 ### `--format`
 
-| command                                         | values                  | default | meaning                                                                                               |
-| ----------------------------------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
-| `check`                                         | `text`, `sarif`, `json` | `text`  | Terminal report, SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope.                |
-| `graph`, `diff`, `impact`, `explain`, `context` | `text`, `json`          | `text`  | Terminal report or the versioned JSON envelope. No SARIF -- descriptive commands produce no findings. |
+| command                                                  | values                  | default | meaning                                                                                               |
+| -------------------------------------------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| `check`                                                  | `text`, `sarif`, `json` | `text`  | Terminal report, SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope.                |
+| `graph`, `diff`, `impact`, `explain`, `context`, `drift` | `text`, `json`          | `text`  | Terminal report or the versioned JSON envelope. No SARIF -- descriptive commands produce no findings. |
 
 `--format` changes no exit code and no byte of the other two formats. It is an
 additional rendering of the same verdict.

@@ -119,8 +119,8 @@ repository — Nx and Moon are providers of the project graph, not the only ones
 
 Fifteen violation types, eight options, and the same `messageId`s ESLint reports
 — so the two enforcers can be compared rather than merely both being red. Five
-languages today; six commands — `check`, `graph`, `diff`, `impact`, `explain`,
-`context`; [more is the direction](docs/doctrine/north-star.md).
+languages today; seven commands — `check`, `graph`, `diff`, `impact`, `explain`,
+`context`, `drift`; [more is the direction](docs/doctrine/north-star.md).
 
 ## Agent skills
 

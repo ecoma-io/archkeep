@@ -207,12 +207,12 @@ against the result rather than parse a terminal report or a SARIF log.
 
 Four exit codes, and the distinction that matters is **3** against **0**:
 
-| code | meaning                                                                    |
-| ---- | -------------------------------------------------------------------------- |
-| 0    | clean — and every selected file was analyzed                               |
-| 1    | findings — boundary violations, go.work drift, or dead tsconfig aliases    |
-| 2    | usage error                                                                |
-| 3    | no verdict — the run could not start, or a selected file could not be read |
+| code | meaning                                                                                     |
+| ---- | ------------------------------------------------------------------------------------------- |
+| 0    | clean — and every selected file was analyzed                                                |
+| 1    | findings — boundary violations, go.work drift, dead tsconfig aliases, or architecture drift |
+| 2    | usage error                                                                                 |
+| 3    | no verdict — the run could not start, or a selected file could not be read                  |
 
 A checker that could not look must never be mistaken for one that looked and
 found nothing, which is why exit 3 exists and why it covers a **partial** run as
@@ -249,6 +249,19 @@ not load, or a `paths` value that is not an array of strings, fails the run
 with exit 3 rather than being read as "no aliases". A workspace whose tsconfig
 declares no `paths` pays nothing and hears nothing, and this check too runs on
 the CLI only.
+
+When the workspace declares an intended architecture — an
+`architecture-intent.config.mjs` at the root, or whatever the `intentConfig`
+option names — `check` also folds **architecture drift** into its verdict: a
+required project that vanished, a forbidden one that appeared, or an edge that
+crosses a declared dependency/tag law each count toward exit 1, and a
+malformed intent is a whole-file failure worth exit 3. The fold is **by
+presence, not by flag** — there is no `--drift` flag to forget, and a workspace
+without an intent file pays nothing and hears nothing. The separate `drift`
+command is the descriptive face: it lists the same findings with the intent
+rows that explain them, and never exits 1. See
+[docs/usage/drift.md](../../docs/usage/drift.md) for the intent schema and the
+eight finding kinds.
 
 ## Running it in an editor
 

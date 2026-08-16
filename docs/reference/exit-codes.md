@@ -6,12 +6,12 @@ map to them.
 
 ## Process exit codes
 
-| code | meaning                                                                       | when                                                                                                                                                                                                             |
-| ---- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | clean -- and every selected file was analyzed                                 | No findings and no coverage gaps.                                                                                                                                                                                |
-| 1    | findings -- boundary violations, go.work drift, or dead tsconfig path aliases | `check` only. No other command can exit 1.                                                                                                                                                                       |
-| 2    | usage error                                                                   | Unknown command, unknown flag, missing argument, path outside the tree. Never reaches the JSON envelope.                                                                                                         |
-| 3    | no verdict -- the run could not start, or a selected file could not be read   | No workspace, both root markers present, malformed config, `nx graph`/`git` failed, unreadable file, no analyzer for a file, `tsconfig` that will not load, or (native provider) a tracked file no project owns. |
+| code | meaning                                                                                           | when                                                                                                                                                                                                                                                                                                             |
+| ---- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | clean -- and every selected file was analyzed                                                     | No findings and no coverage gaps.                                                                                                                                                                                                                                                                                |
+| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, or architecture drift | `check` only. No other command can exit 1.                                                                                                                                                                                                                                                                       |
+| 2    | usage error                                                                                       | Unknown command, unknown flag, missing argument, path outside the tree. Never reaches the JSON envelope.                                                                                                                                                                                                         |
+| 3    | no verdict -- the run could not start, or a selected file could not be read                       | No workspace, both root markers present, malformed config, `nx graph`/`git` failed, unreadable file, no analyzer for a file, `tsconfig` that will not load, (native provider) a tracked file no project owns, or — with an intent file present — a `drift` intent that cannot be read or whose shape is invalid. |
 
 ## Why 3 exists, and why it covers partial runs
 
@@ -62,7 +62,7 @@ enforced in code, not just documented:
 | `status`       | `exitCode` | meaning                                                                                                                 |
 | -------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `"ok"`         | 0          | No findings, and every selected file was analyzed.                                                                      |
-| `"findings"`   | 1          | Boundary violations, go.work drift, or dead tsconfig path aliases.                                                      |
+| `"findings"`   | 1          | Boundary violations, go.work drift, dead tsconfig path aliases, or architecture drift.                                  |
 | `"no-verdict"` | 3          | No findings, but the run could not fully read the tree (`coverage.complete` is `false`). Never mistake this for `"ok"`. |
 
 `exitCode` in the envelope is never 2: a usage error exits before the envelope
@@ -110,9 +110,18 @@ states and moves past.
 
 ## Descriptive commands
 
-`graph`, `diff`, `impact`, `explain`, and `context` are descriptive -- they never exit 1.
-They exit 0 when the run completes and 3 when coverage is incomplete. The
-envelope's `status` follows the same mapping: `"ok"` for 0, `"no-verdict"` for 3. `"findings"` never appears for a descriptive command.
+`graph`, `diff`, `impact`, `explain`, `context`, and `drift` are descriptive --
+they never exit 1. They exit 0 when the run completes and 3 when it cannot
+establish its answer (for `drift`: a malformed or unreadable intent file, or
+incomplete observed coverage). The envelope's `status` follows the same mapping:
+`"ok"` for 0, `"no-verdict"` for 3. `"findings"` never appears for a descriptive
+command.
+
+`drift` finds drift and `check` turns it into exit 1 — the same division
+`diff` and `check` already have. The two faces exist so CI can fail on drift
+(`check`, whose verdict a pipeline gates on) while a human inspecting an
+architecture gets the descriptive listing (`drift`, which never lies about
+findings by reducing them to a build status).
 
 `diff` also refuses an incomplete baseline or current workspace (exit 3, no
 diff), because every "removed" entry would be ambiguous between a real change

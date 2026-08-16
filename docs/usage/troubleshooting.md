@@ -170,6 +170,44 @@ read as an absent one.
 
 ---
 
+## Architecture drift findings
+
+These appear only in a workspace that declares an intended architecture — an
+`architecture-intent.config.mjs` (or whatever the `intentConfig` option names)
+at the workspace root — and they fail `check` with exit 1 exactly as a boundary
+violation does. The eight ids and what each asks for are in
+[usage/drift.md](drift.md):
+
+- **`projectMissing`** — a project the intent requires does not exist. Restore
+  it, or remove the intent row if the rewrite is intentional.
+- **`projectPresent`** — a project the intent forbids exists. Remove it, or
+  drop the forbid row.
+- **`projectTagMissing`** — a required project lacks a required tag. Re-tag it
+  in its `project.json`/manifest, or update the intent.
+- **`dependencyForbidden`** — an edge the intent (or a `tags.forbid` row) bans
+  exists. There are only two real fixes: remove the dependency, or change the
+  intent so the edge is no longer forbidden — and if you change the intent,
+  that is a contract change, visible as a new intent fingerprint.
+- **`dependencyNotAllowed`** — an edge exists outside an `allowed` whitelist.
+  Permit the edge in the intent, or remove it.
+- **`tagDependencyForbidden`** — an edge crosses a banned `from`→`to` tag pair.
+  Same two fixes as `dependencyForbidden`.
+- **`intentUnknownProject`** — an intent row names a project the architecture
+  does not have. Usually a typo in the intent's project name; fix the name so
+  the row can ever be judged.
+- **`intentUnknownTag`** — a `tags.forbid` row names a tag no project carries.
+  A rule that can never fire; fix the tag name or drop the dead row.
+
+The last two are the intent-equivalent of the shape rules: drift refuses to let
+a typo'd project or tag name read as "no drift" forever. A finding you believe
+is wrong is worth filing against the loud direction.
+
+The `drift` command is the descriptive face of the same findings — it lists
+them with the intent rows, and never exits 1. An intent the engine cannot read
+or whose shape is invalid is not a finding: it is exit 3, with the row named.
+
+---
+
 ## Exit 3 — "no verdict"
 
 The run could not reach an answer, either at all or for part of the tree. That is
@@ -197,7 +235,9 @@ must not be read as an empty one, because empty would mean "no drift". So does
 a `paths` value that is not an array of strings, naming its alias: TypeScript's
 own config parse accepts that shape without a diagnostic, and read as "no
 aliases" it would silence the dead-alias check exactly where the table is most
-broken.
+broken. And in a workspace that declares an intent file, a malformed or
+unreadable intent lands here the same way, naming the row: read as "no drift"
+it would vacate the architecture contract exactly where it is most needed.
 
 The fix is whatever the failure line names. What is _not_ a fix is treating exit
 3 as success; see [ci.md](ci.md) § _The exit codes_.

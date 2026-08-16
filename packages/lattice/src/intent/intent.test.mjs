@@ -5,7 +5,7 @@
  * implementation that satisfies it. An intent test fails when the intent no
  * longer holds, regardless of which implementation detail changed.
  *
- * Each test is named by contract letter (A–L). Where feasible, tests import
+ * Each test is named by contract letter (A–M). Where feasible, tests import
  * and call the actual code (behavioral proof). Where that is not practical
  * (circular imports, process-level tests), tests read source and verify
  * structural properties (source-evidence) — these are clearly labelled.
@@ -620,11 +620,16 @@ describe("Contract D — Architecture snapshot identity", () => {
   });
 
   it("computePolicyFingerprint canonicalizes JSON before hashing (key-order independent)", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "graph.mjs"), "utf-8");
-    // The fingerprint must sort keys at every depth so that insertion order
-    // does not affect the hash — two semantically identical policy objects
-    // constructed in different key order must produce the same fingerprint.
-    expect(content).toMatch(/Object\.keys\(value\)\s*\.sort\(\)/);
+    // The canonicalizer is shared (`canonical.mjs`), used by both the policy
+    // fingerprint in `graph.mjs` and the intent fingerprint in
+    // `drift/intent-fingerprint.mjs` — one implementation, so two
+    // serializations cannot drift. The fingerprint must sort keys at every
+    // depth so that insertion order does not affect the hash — two
+    // semantically identical policy objects constructed in different key
+    // order must produce the same fingerprint.
+    const canonical = readFileSync(join(ROOT, "src", "canonical.mjs"), "utf-8");
+    expect(canonical).toMatch(/Object\.keys\(current\)\.sort\(\)/);
+    expect(canonical).toMatch(/never re-ordered/);
   });
 
   it("INTERNAL_DATA_FIELDS covers every node.data field the snapshot strips", () => {

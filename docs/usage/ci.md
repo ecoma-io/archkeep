@@ -43,12 +43,12 @@ judged is still the consumer's.
 
 ## The exit codes, and the one that matters
 
-| code | meaning                                                                    |
-| ---- | -------------------------------------------------------------------------- |
-| `0`  | clean — **and** every selected file was analyzed                           |
-| `1`  | findings — boundary violations, go.work drift, or dead tsconfig aliases    |
-| `2`  | usage error                                                                |
-| `3`  | no verdict — the run could not start, or a selected file could not be read |
+| code | meaning                                                                                     |
+| ---- | ------------------------------------------------------------------------------------------- |
+| `0`  | clean — **and** every selected file was analyzed                                            |
+| `1`  | findings — boundary violations, go.work drift, dead tsconfig aliases, or architecture drift |
+| `2`  | usage error                                                                                 |
+| `3`  | no verdict — the run could not start, or a selected file could not be read                  |
 
 **Do not collapse 3 into 0.** A checker that could not look must never be
 mistaken for one that looked and found nothing — that is the single distinction
@@ -80,7 +80,7 @@ If you need to distinguish, distinguish explicitly:
 lattice check
 case $? in
   0) echo "clean" ;;
-  1) echo "boundary violations, go.work drift, or dead tsconfig aliases"; exit 1 ;;
+  1) echo "boundary violations, go.work drift, dead tsconfig aliases, or architecture drift"; exit 1 ;;
   3) echo "the checker could not reach a verdict"; exit 1 ;;
   *) echo "usage error"; exit 1 ;;
 esac
@@ -194,6 +194,11 @@ What the SARIF carries, and why each choice was made:
   reached the exit code would leave code scanning showing a red job with an
   empty upload. Both are workspace-level and positionless where nothing wrote
   the missing thing, so their locations may carry the artifact alone.
+- **Architecture drift findings are results too**, under their own rule ids —
+  the eight drift `messageId`s (`projectMissing`, `dependencyForbidden`, and
+  the rest, see [drift.md](drift.md)) each become a SARIF rule. They only
+  exist when the workspace declares an intent file — no intent, no drift, no
+  SARIF rows.
 
 That last point has a consequence worth stating plainly: **the SARIF upload does
 not carry the exit-3 signal.** Code scanning will show you violations, not

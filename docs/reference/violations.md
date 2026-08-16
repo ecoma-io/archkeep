@@ -326,12 +326,17 @@ section, and it **does** fail the run with exit 3. That distinction is the whole
 design: a checker that could not look must never be mistaken for one that looked
 and found nothing.
 
-**Workspace-level findings.** go.work drift (the `goWork*` ids) and a dead
-tsconfig paths alias (`tsconfigDeadPathAlias`) are judged against the
-workspace's own declarations rather than against any import, so no constraint
-row applies to them and no suppression removes them. They fail the run with
-exit 1 exactly as a violation does. [languages.md](languages.md) owns each
-check's semantics.
+**Workspace-level findings.** go.work drift (the `goWork*` ids), a dead
+tsconfig paths alias (`tsconfigDeadPathAlias`), and — when the workspace
+declares an intent file — the eight architecture drift findings (`projectMissing`,
+`projectPresent`, `projectTagMissing`, `dependencyForbidden`,
+`dependencyNotAllowed`, `tagDependencyForbidden`, `intentUnknownProject`,
+`intentUnknownTag`) are judged against the workspace's own declarations rather
+than against any import, so no constraint row applies to them and no
+suppression removes them. They fail the run with exit 1 exactly as a violation
+does. [languages.md](languages.md) owns each workspace check's semantics;
+[usage/drift.md](../usage/drift.md) owns the intent schema and each drift
+finding.
 
 All three, including what fixes each finding, are explained in
 [troubleshooting.md](../usage/troubleshooting.md).

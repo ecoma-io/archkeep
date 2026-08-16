@@ -21,16 +21,16 @@ version.
 
 ## Concepts
 
-| page                                                      | what it answers                                                                |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| [architecture.md](concepts/architecture.md)               | The engine, three faces, layer split — technology-neutral                      |
-| [graph.md](concepts/graph.md)                             | Project graph, edge identity, deterministic snapshots                          |
-| [boundaries.md](concepts/boundaries.md)                   | Layer/scope/license axes, constraint model, tag semantics, what "violation" is |
-| [policies.md](concepts/policies.md)                       | Three dialects, one table, stability contract                                  |
-| [projects.md](concepts/projects.md)                       | What a project is, discovery, naming                                           |
-| [drift.md](concepts/drift.md)                             | The three drift signals Lattice detects, and why drift is not one command      |
-| [agentic-development.md](concepts/agentic-development.md) | The three questions an agent asks, and the commands that answer them           |
-| [integrations.md](concepts/integrations.md)               | How integrations extend the core                                               |
+| page                                                      | what it answers                                                                  |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [architecture.md](concepts/architecture.md)               | The engine, three faces, layer split — technology-neutral                        |
+| [graph.md](concepts/graph.md)                             | Project graph, edge identity, deterministic snapshots                            |
+| [boundaries.md](concepts/boundaries.md)                   | Layer/scope/license axes, constraint model, tag semantics, what "violation" is   |
+| [policies.md](concepts/policies.md)                       | Three dialects, one table, stability contract                                    |
+| [projects.md](concepts/projects.md)                       | What a project is, discovery, naming                                             |
+| [drift.md](concepts/drift.md)                             | The four drift signals Lattice detects, and the three commands that surface them |
+| [agentic-development.md](concepts/agentic-development.md) | The three questions an agent asks, and the commands that answer them             |
+| [integrations.md](concepts/integrations.md)               | How integrations extend the core                                                 |
 
 ## Usage
 
@@ -43,6 +43,7 @@ version.
 | [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context               |
 | [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained          |
 | [context.md](usage/context.md)                 | The `context` command: architecture constraints for one project             |
+| [drift.md](usage/drift.md)                     | The `drift` command: observed architecture vs. the declared intended one    |
 | [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning               |
 | [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look                    |
 

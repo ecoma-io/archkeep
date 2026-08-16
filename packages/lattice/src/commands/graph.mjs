@@ -29,6 +29,7 @@
  */
 import { createHash } from "node:crypto";
 
+import { canonicalizeJson } from "../canonical.mjs";
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { DEFAULT_WORKSPACE_LAYOUT } from "../rules/specifiers.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
@@ -157,16 +158,7 @@ export function computePolicyFingerprint(config) {
   };
   // Canonicalise: sort object keys at every depth so insertion order does not
   // affect the hash. Semantic equality, not construction order, is the claim.
-  const canonical = JSON.stringify(policy, (_, value) =>
-    value !== null && typeof value === "object" && !Array.isArray(value)
-      ? Object.keys(value)
-          .sort()
-          .reduce((sorted, key) => {
-            sorted[key] = value[key];
-            return sorted;
-          }, {})
-      : value,
-  );
+  const canonical = canonicalizeJson(policy);
   return createHash("sha256").update(canonical).digest("hex");
 }
 

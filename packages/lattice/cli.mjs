@@ -34,12 +34,23 @@
  * resolves no import, so it fails the run the way a violation does. Same
  * workspace-level shape as go.work — a table is judged, not files analyzed.
  *
+ * When the workspace has an intent file at the `intentConfig` name
+ * (`architecture-intent.config.mjs` by default), `check` also compares the
+ * observed architecture against the declared intended one
+ * (`src/drift/` owns the mechanics): a finding means the tree has drifted from
+ * the architecture it committed to, so it fails the run the way a violation
+ * does. There is no flag to turn this off — presence-keyed, exactly like
+ * go.work and the tsconfig paths table, so a workspace without an intended
+ * architecture pays nothing and hears nothing. The descriptive `drift` command
+ * prints the same comparison and never exits 1.
+ *
  * Exit codes are part of the contract; a script calling this has to tell "your
  * tree is dirty" from "you typed it wrong" from "the checker itself broke":
  *   0  no violations, and every selected file was analyzed
- *   1  findings — boundary violations, go.work drift, or dead tsconfig path
- *      aliases. `check` is the only command that can produce this exit code —
- *      every other verb this table might grow only ever reads.
+ *   1  findings — boundary violations, go.work drift, dead tsconfig path
+ *      aliases, or architecture drift. `check` is the only command that can
+ *      produce this exit code — every other verb this table might grow only
+ *      ever reads.
  *   2  usage error — unknown command, unknown flag, missing argument, path
  *      outside the tree
  *   3  no verdict — no workspace, malformed config, the graph provider or git
@@ -64,12 +75,12 @@
  * `COMMANDS` below is a table rather than a `switch`, and `parseArgs` is
  * shared rather than hand-rolled per command, so a new command is a new
  * row rather than a second copy of the dispatch and flag-parsing this file
- * used to own alone. The table is built for six commands — `check`, `graph`,
- * `diff`, `impact`, `explain`, `context` — with three flags shared across
- * all of them (`--format`, `--output`, `--config`). No subcommand nesting,
- * and no shell completion to generate, mean a plain table gets there without
- * a framework; reach for one only once a later command needs something this
- * table cannot express.
+ * used to own alone. The table is built for seven commands — `check`, `graph`,
+ * `diff`, `impact`, `explain`, `context`, `drift` — with three flags shared
+ * across all of them (`--format`, `--output`, `--config`). No subcommand
+ * nesting, and no shell completion to generate, mean a plain table gets there
+ * without a framework; reach for one only once a later command needs something
+ * this table cannot express.
  */
 import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
@@ -80,6 +91,7 @@ import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/co
 import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
 import { contextCommand } from "./src/commands/context-command.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
+import { driftCommand, driftForCheck } from "./src/commands/drift.mjs";
 import { graphCommand } from "./src/commands/graph.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
@@ -258,7 +270,14 @@ exist resolves no import, so it fails the run the way a violation does. The
 table itself is never re-resolved — the check reads the same parsed tsconfig
 the import resolver uses.
 
-Exit codes: ${EXIT.ok} clean · ${EXIT.violations} findings (violations, go.work drift, dead path aliases) · ${EXIT.usage} usage error · ${EXIT.error} no verdict (a file could not be analyzed, or the run could not start)`;
+A workspace with an intent file at the intentConfig name (architecture-intent.config.mjs
+by default) also has its observed architecture compared against the declared intended
+one: a finding means the tree has drifted from the architecture it committed to, and it
+fails the run the way a violation does. The descriptive drift command prints the same
+comparison and never exits 1. There is no flag to turn the check fold off — presence-keyed,
+the same way go.work and the paths table are.
+
+Exit codes: ${EXIT.ok} clean · ${EXIT.violations} findings (violations, go.work drift, dead path aliases, architecture drift) · ${EXIT.usage} usage error · ${EXIT.error} no verdict (a file could not be analyzed, or the run could not start)`;
 };
 
 /**
@@ -385,18 +404,19 @@ export function parseCheckArgs(argv) {
  * `exitCode` fields — called once each, from the same counts, so the two can
  * never disagree about a run neither of them re-derives from the other.
  *
- * Findings first — boundary violations, go.work drift and dead tsconfig path
- * aliases alike are verdicts, and a caller that gets `findings` knows the tree
- * is dirty whatever else the run could not reach; the report lists the
- * unreached files either way. A clean run with a file nobody could analyze is
- * the case that must not read `ok`, because `ok` is read as "checked, and
- * fine".
+ * Findings first — boundary violations, go.work drift, dead tsconfig path
+ * aliases and architecture drift alike are verdicts, and a caller that gets
+ * `findings` knows the tree is dirty whatever else the run could not reach;
+ * the report lists the unreached files either way. A clean run with a file
+ * nobody could analyze is the case that must not read `ok`, because `ok` is
+ * read as "checked, and fine".
  *
- * @param {{violations: number, goWorkDrift: number, tsconfigPathsDead: number, unchecked: number}} counts
+ * @param {{violations: number, goWorkDrift: number, tsconfigPathsDead: number,
+ *   drift: number, unchecked: number}} counts
  * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3}}
  */
-function verdictFor({ violations, goWorkDrift, tsconfigPathsDead, unchecked }) {
-  if (violations > 0 || goWorkDrift > 0 || tsconfigPathsDead > 0) {
+function verdictFor({ violations, goWorkDrift, tsconfigPathsDead, drift, unchecked }) {
+  if (violations > 0 || goWorkDrift > 0 || tsconfigPathsDead > 0 || drift > 0) {
     return { status: "findings", exitCode: EXIT.violations };
   }
   return unchecked > 0
@@ -428,7 +448,7 @@ function verdictFor({ violations, goWorkDrift, tsconfigPathsDead, unchecked }) {
  * @param {{format: string, config: string|null, paths: string[]}} options
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} context
  * @returns {Promise<{report: string, violations: number, goWorkDrift: number,
- *   tsconfigPathsDead: number, analyzed: number, unchecked: number}>}
+ *   tsconfigPathsDead: number, drift: number, analyzed: number, unchecked: number}>}
  */
 export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
   const commandContext = resolveCommandContext(
@@ -538,6 +558,46 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     }
   }
 
+  // The architecture-drift fold, keyed off the intent file's presence the way
+  // go.work and tsconfig paths key off theirs — but presence ON DISK, not in
+  // git: an intent that exists but is not yet committed (a work-in-progress
+  // law, or a file added to .gitignore) is still a law this workspace is
+  // declaring, and `check` must judge it. An untracked-but-present intent
+  // silently skipped would read as "no drift checked", which is the silent
+  // direction the empty-result invariant exists to end. Presence on disk also
+  // matches how the boundary config loads and how `drift` the command reads
+  // the intent — the two agree about whether a file is there. Note `readFile`
+  // may return `null` for a file that exists but cannot be decoded; that is an
+  // unreadable intent, which the `import()` below turns into exit 3, never
+  // into "absent". No intent file, no fold and no mention — a workspace
+  // without an intended architecture pays nothing and hears nothing, and
+  // `check` is byte-identical to before this feature existed.
+  //
+  // Drift is judged over the whole graph, whatever `options.paths` scopes —
+  // an architecture verdict is about the tree, not the selected files — the
+  // same way the go.work and tsconfig-paths workspace facts ignore paths.
+  let drift = null;
+  if (workspace.readFile(commandContext.options.intentConfig) !== null) {
+    try {
+      const verdict = await driftForCheck(commandContext);
+      drift = {
+        checked: true,
+        intent: verdict.intent,
+        observed: verdict.observed,
+        findings: verdict.findings,
+      };
+    } catch (cause) {
+      failures.push(
+        fileFailure(
+          commandContext.options.intentConfig,
+          `${cause?.message ?? cause} — the intent could not be judged, so the drift check ` +
+            `reached no verdict and the run fails`,
+        ),
+      );
+      drift = { checked: true, intent: null, observed: null, findings: [] };
+    }
+  }
+
   const violations = evaluate(imports, graph, config);
   const goWorkDrift = goWork === null ? 0 : goWork.findings.length;
   const tsconfigPathsDead = tsconfigPaths === null ? 0 : tsconfigPaths.findings.length;
@@ -582,6 +642,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               violations: violations.length,
               goWorkDrift,
               tsconfigPathsDead,
+              drift: drift === null ? 0 : drift.findings.length,
               unchecked,
             }),
             coverage: {
@@ -608,6 +669,15 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               goWork: goWork === null ? null : { checked: true, findings: goWork.findings },
               tsconfigPaths:
                 tsconfigPaths === null ? null : { checked: true, findings: tsconfigPaths.findings },
+              drift:
+                drift === null
+                  ? null
+                  : {
+                      checked: true,
+                      intent: drift.intent,
+                      observed: drift.observed,
+                      findings: drift.findings,
+                    },
             },
           }),
         )
@@ -619,6 +689,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
           projects: Object.keys(graph.nodes).length,
           goWork,
           tsconfigPaths,
+          drift,
           // Only the ESLint boundaryConfig dialect ever produces one (see
           // `./src/eslint-config.mjs`'s `extractBoundaryRule`) — which entry it
           // bound when more than one configured the rule, or that the winning
@@ -635,6 +706,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     violations: violations.length,
     goWorkDrift,
     tsconfigPathsDead,
+    drift: drift === null ? 0 : drift.findings.length,
     analyzed,
     unchecked,
   };
@@ -700,6 +772,9 @@ async function runCheck(options, { cwd, env }) {
           : "") +
         (result.tsconfigPathsDead > 0
           ? `, ${result.tsconfigPathsDead} dead tsconfig path alias${result.tsconfigPathsDead === 1 ? "" : "es"}`
+          : "") +
+        (result.drift > 0
+          ? `, ${result.drift} drift finding${result.drift === 1 ? "" : "s"}`
           : "") +
         (result.unchecked > 0
           ? `, ${result.unchecked} file${result.unchecked === 1 ? "" : "s"} not analyzed`
@@ -1102,6 +1177,74 @@ async function runContextCommand(options, { cwd, env }) {
 }
 
 /**
+ * `drift`'s `run`: resolves the command context, drives `driftCommand`, writes
+ * the report where it belongs, and returns the process's exit code.
+ *
+ * Unlike `check`'s fold — which counts findings into a failing verdict —
+ * this command is descriptive, exactly like `graph` and `diff`: it prints the
+ * intent, the findings, and the intent fingerprint, and it never exits 1. It
+ * exits 3 on every condition the command cannot judge: incomplete analysis,
+ * an unregistered Nx plugin over polyglot manifests, a malformed intent, or
+ * an intent file that cannot be read or imported (`src/commands/drift.mjs`
+ * owns each refusal). No positional arguments: the intent comes from the
+ * workspace's own `intentConfig`, never from a path.
+ *
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runDrift(options, { cwd, env }) {
+  if (options.paths.length > 0) {
+    env.err(`lattice: drift takes no positional arguments; got ${options.paths.join(", ")}`);
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+    result = await driftCommand(commandContext);
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const tmpOutput = `${options.output}.tmp`;
+    try {
+      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
+      renameSync(tmpOutput, options.output);
+    } catch (cause) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing to clean up.
+      }
+      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
+      return EXIT.error;
+    }
+    env.err(
+      `lattice: ${result.drift.intent.rows} intent rows, ${result.drift.observed.projects} ` +
+        `projects, ${result.drift.observed.edges} edges` +
+        (result.drift.findings.length > 0
+          ? `, ${result.drift.findings.length} drift finding${result.drift.findings.length === 1 ? "" : "s"}`
+          : "") +
+        ` → ${options.output}`,
+    );
+  } else {
+    env.out(report);
+  }
+
+  // Drift is descriptive: 0 when it completes, never 1.
+  return EXIT.ok;
+}
+
+/**
  * `check`'s own flags, described once — `usage()` renders this straight into
  * the Options block, and `flags` below (what `parseArgs` needs) is derived
  * from it rather than kept as a second list that could name a flag `--help`
@@ -1299,6 +1442,30 @@ const CONTEXT_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `drift`'s flags: text or JSON envelope, optional file output.
+ * The intent comes from the workspace's own `intentConfig`, never a path.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const DRIFT_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+]);
+
+/**
  * The command table `usage()` and `runCli` both read from — a command added
  * later is a new entry here, not a new branch in either. `args` is the
  * placeholder `usage()` prints after the command name; `flagHelp` is the
@@ -1366,6 +1533,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runContextCommand,
+  }),
+  drift: Object.freeze({
+    name: "drift",
+    args: "",
+    summary: "Compare the observed architecture against the intended one",
+    flagHelp: DRIFT_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(DRIFT_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runDrift,
   }),
 });
 

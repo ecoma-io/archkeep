@@ -4,14 +4,14 @@ Architecture drifts. Not because anyone decides to violate a boundary, but becau
 the workspace changes faster than the constraints do — and because some forms of
 drift are invisible to a checker that only judges imports.
 
-Lattice surfaces three kinds of drift through two commands. Each is a different failure
-mode, and two of the three share a command. None requires a toolchain installed.
+Lattice surfaces four kinds of drift. Each is a different failure
+mode, and none requires a toolchain installed.
 
 ## What drift means here
 
 Drift is any divergence between what the workspace's architecture declares and what
 its files actually do. The boundary checker catches one class — an import that
-crosses a line the constraint table drew. But two other classes exist, and neither
+crosses a line the constraint table drew. Three other classes exist, and none
 produces a boundary violation:
 
 - **Structural drift** — the project graph itself has changed: edges appeared or
@@ -22,12 +22,17 @@ produces a boundary violation:
   that points to directories that no longer exist. These are not boundary
   violations, but they are build breakers or silent misresolutions that nothing
   else detects.
+- **Intent drift** — the observed architecture has diverged from the intended one
+  the workspace declared: a required project vanished, a forbidden one appeared,
+  an edge crosses a declared boundary. The boundary checker judges imports
+  against the constraint table; intent drift judges the graph itself against the
+  workspace's own law of architecture.
 
-A checker that only looks at imports misses both classes. Lattice surfaces all
-three through `check` and `diff`, because a gap in any one of them looks like
-"clean" from inside the other two.
+A checker that only looks at imports misses all three. Lattice surfaces the
+four through `check`, `diff`, and `drift`, because a gap in any one of them
+looks like "clean" from inside the other three.
 
-## The three drift signals
+## The four drift signals
 
 ### 1. Boundary violations — `check`
 
@@ -75,19 +80,36 @@ Both checks run on the CLI only — they describe the workspace, not any file be
 edited, so the language server does not publish them. Both are read statically;
 neither invokes `go` or `tsc`.
 
-## Why drift is a concept and not a command
+### 4. Intent drift — `drift` and `check`
 
-A `drift` command would suggest a single answer to a single question. Drift is
-not one question — it is three, surfaced through two commands, each with its own
-exit code semantics. The `check` command finds violations and
-configuration drift; the `diff` command finds structural drift and its rule
-impact. The concept ties them together; the commands answer the specific
-questions.
+When the workspace declares an intended architecture
+(`architecture-intent.config.mjs` at the root — which projects must and must not
+exist, which dependencies are permitted or forbidden, which tag pairs are
+forbidden — see [usage/drift.md](../usage/drift.md)), the observed graph is
+judged against it. `drift` is the descriptive face: it lists every finding with
+the intent row that explains it. `check` is the enforcement face: with an intent
+file present, it counts drift findings into its verdict (exit 1) and a malformed
+intent is a whole-file failure (exit 3).
+
+Intent drift is a verdict, not a prediction. Both sides are facts this tool
+computes — the observed graph and the declared contract — compared
+deterministically. There is no LLM and no probabilistic reasoning: every finding
+names the intent row and the observed fact that violates it.
+
+## Four signals, three commands, one concept
+
+Drift is more than one question, so it is surfaced through three commands, each
+with its own exit code semantics. `check` finds boundary violations,
+configuration drift, and — when an intent is declared — intent drift; `diff`
+finds structural drift and its rule impact; `drift` describes intent drift
+descriptively. The concept ties them together; each command answers a specific
+question. No single command is "the drift answer" because there is no single drift
+question.
 
 ## Where this is going
 
 [roadmap.md](../roadmap.md) owns the staged direction. The 2.x capability
-"drift and architectural-change intelligence" extends what `diff` and `check`
-already report: richer policies, fitness functions, and historical evolution of
-the architecture over time. Nothing in 1.x promises that; the three signals
-above are what ships today.
+"drift and architectural-change intelligence" extends what `diff`, `check`, and
+`drift` already report: richer policies, fitness functions, and historical
+evolution of the architecture over time. Nothing in 1.x promises that; the four
+signals above are what ships today.

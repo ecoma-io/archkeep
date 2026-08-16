@@ -102,7 +102,7 @@ return unchecked > 0 ? 3 : 0;
 Exit 0 was the bug. A checker that could not look must never be mistaken for one
 that looked and found nothing.
 
-## The six commands
+## The seven commands
 
 | command   | what it does                                                          | finds violations |
 | --------- | --------------------------------------------------------------------- | ---------------- |
@@ -112,14 +112,17 @@ that looked and found nothing.
 | `impact`  | Lists projects that depend on the named one, with constraint context¹ | no               |
 | `explain` | Explains the judgment for one import site                             | no               |
 | `context` | Shows the architecture constraints that apply to a project¹           | no               |
+| `drift`   | Compares the observed architecture against the declared intended one  | no               |
 
-`check` is the only command that exits 1. The other five are descriptive: they
+`check` is the only command that exits 1. The other six are descriptive: they
 answer questions about the architecture without claiming a violation. `context`
 answers the question an agent asks _before_ editing (what is this project
 allowed to reach?); `impact` answers the question during planning (what depends
 on this?); `explain` answers the question after a violation is reported (why
 did this one fail?). `diff` answers the question across time (what changed, and
-what boundary implications did the change carry?).
+what boundary implications did the change carry?); `drift` answers the question
+about the declared contract (does the tree still match the architecture it
+committed to?).
 
 ¹ Per-edge verdicts in `context` and `impact` cover only `depConstraints`
 (3 of 15 violation types). An edge with no violations in these commands may

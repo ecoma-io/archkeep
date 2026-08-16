@@ -141,14 +141,15 @@ verification is not possible.
 
 ## `result` (for `command: "check"`)
 
-| field           | type                                  | meaning                                                                                                                                                                                                                                                                                                                                                       |
-| --------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `violations`    | `Violation[]`                         | Every boundary-rule violation, in the shape `src/rules/index.mjs`'s `Violation` typedef defines: `sourceFile`, `line`, `column` (both 1-based), `specifier`, `kind`, `messageId`, `message`, `sourceProject`, `targetProject`, `constraint`, `data`.                                                                                                          |
-| `goWork`        | `null` \| `{checked: true, findings}` | `null` when the workspace has no tracked `go.work` — no check, no claim, same as the text report's silence. Otherwise `checked: true` and `findings` is the array `compareGoWork` (`src/go-work.mjs`) returns: `{messageId, file, line, column, directory, project, message}` each, `line`/`column` `null` for a workspace-level finding with no single site. |
-| `tsconfigPaths` | `null` \| `{checked: true, findings}` | `null` when the workspace tsconfig declares no `paths` table — same silence. Otherwise `checked: true` and `findings` is the array `judgeTsconfigPaths` (`src/tsconfig-paths.mjs`) returns: `{messageId: "tsconfigDeadPathAlias", file, line: null, column: null, alias, targets, message}` each.                                                             |
+| field           | type                                                    | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| --------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `violations`    | `Violation[]`                                           | Every boundary-rule violation, in the shape `src/rules/index.mjs`'s `Violation` typedef defines: `sourceFile`, `line`, `column` (both 1-based), `specifier`, `kind`, `messageId`, `message`, `sourceProject`, `targetProject`, `constraint`, `data`.                                                                                                                                                                                                                                                                            |
+| `goWork`        | `null` \| `{checked: true, findings}`                   | `null` when the workspace has no tracked `go.work` — no check, no claim, same as the text report's silence. Otherwise `checked: true` and `findings` is the array `compareGoWork` (`src/go-work.mjs`) returns: `{messageId, file, line, column, directory, project, message}` each, `line`/`column` `null` for a workspace-level finding with no single site.                                                                                                                                                                   |
+| `tsconfigPaths` | `null` \| `{checked: true, findings}`                   | `null` when the workspace tsconfig declares no `paths` table — same silence. Otherwise `checked: true` and `findings` is the array `judgeTsconfigPaths` (`src/tsconfig-paths.mjs`) returns: `{messageId: "tsconfigDeadPathAlias", file, line: null, column: null, alias, targets, message}` each.                                                                                                                                                                                                                               |
+| `drift`         | `null` \| `{checked: true, intent, observed, findings}` | `null` when the workspace has no intent file at the `intentConfig` name — no intent, no claim, same silence. Otherwise `checked: true`, `intent` is `{file, fingerprint, rows}`, `observed` is `{projects, edges, implicitEdges}`, and `findings` is the array `computeDrift` (`src/drift/drift.mjs`) returns: `{messageId, kind, row, detail, source, target}` each (edge kinds carry `source`/`target`; `detail` names a missing tag or tag rule). Folded by presence, not by flag — see [usage/drift.md](../usage/drift.md). |
 
-`goWork` and `tsconfigPaths` are `null` rather than an empty array with
-`checked: false` on purpose: a workspace with no `go.work` and one with a
+`goWork`, `tsconfigPaths`, and `drift` are `null` rather than an empty array
+with `checked: false` on purpose: a workspace with no `go.work` and one with a
 `go.work` that agrees with the graph both produce zero findings, and only the
 `null`/`{checked: true, findings: []}` split tells the two apart — the same
 "no manifest, no check, no claim" rule the text report and `docs/usage/ci.md`
@@ -261,6 +262,23 @@ Each `dependencies` entry:
 | `violations` | `object[]` | Constraint violations for this edge from `judgeEdge`. Empty means allowed by the constraint table. |
 
 Each `violations` entry inside a dependency carries `messageId`, `constraint`, `source`, and `target` — the same shape `diff --format json` and `impact --format json` produce for edge-constraint violations.
+
+## `result` (for `command: "drift"`)
+
+`drift` compares the observed project graph against the workspace's declared
+intended architecture. It is descriptive: it exits `0` when it completes (even
+with findings) and `3` when it cannot establish drift (a malformed or unreadable
+intent, or incomplete observed coverage).
+
+| field      | type                               | meaning                                                                                                                                                                                                                                                                                        |
+| ---------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `intent`   | `{file, fingerprint, rows}`        | The intent file's name (`file` is the resolved `intentConfig`), the canonical SHA-256 fingerprint of the parsed intent, and the number of intent rows. Compare two runs' fingerprints to tell "the tree drifted" from "the contract changed".                                                  |
+| `observed` | `{projects, edges, implicitEdges}` | The observed side: project count, judged edge count, and how many `implicit` edges were excluded (implicit edges are not judged — see [usage/drift.md](../usage/drift.md)).                                                                                                                    |
+| `findings` | `Finding[]`                        | Every drift finding, sorted by a total key. Each: `{messageId, kind, row, detail?, source?, target?}`. `kind` is the intent section ("projects.required", "dependencies.forbidden", …), `row` the intent row, `detail` a missing tag or dead tag rule, and edge kinds carry `source`/`target`. |
+
+The `status` is always `"ok"` for a completing `drift` run, never
+`"findings"` — a description is never a finding. `check` is the command that
+folds the same findings into a `"findings"` status and exit 1.
 
 ## A worked example
 

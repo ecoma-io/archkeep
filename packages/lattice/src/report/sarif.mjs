@@ -46,6 +46,7 @@
  * breaking even when no API moved, so it lands as its own decision rather than
  * as a side effect of a comment being corrected.
  */
+import { DRIFT_MESSAGE_IDS, DRIFT_MESSAGES } from "../drift/drift.mjs";
 import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
 import { MESSAGE_IDS, MESSAGES } from "../rules/messages.mjs";
 import { TSCONFIG_PATHS_MESSAGE_IDS, TSCONFIG_PATHS_MESSAGES } from "../tsconfig-paths.mjs";
@@ -87,8 +88,9 @@ export function toUriReference(path) {
  * `shortDescription` is the template's first line and `fullDescription` the
  * whole template, `{{placeholder}}`s intact — the placeholders are honest here:
  * they show which facts the message interpolates, which is exactly what a rule
- * description should say. The drift rules carry no `upstreamRule` property,
- * because they have none: ESLint has no notion of go.work.
+ * description should say. The go.work, tsconfig paths and drift rules carry no
+ * `upstreamRule` property, because they have none: ESLint has no notion of
+ * go.work, dead aliases, or architecture intent.
  *
  * @returns {object[]}
  */
@@ -114,6 +116,17 @@ export function sarifRules() {
       name: id,
       shortDescription: { text: TSCONFIG_PATHS_MESSAGES[id].split("\n")[0] },
       fullDescription: { text: TSCONFIG_PATHS_MESSAGES[id] },
+      defaultConfiguration: { level: "error" },
+    })),
+    ...DRIFT_MESSAGE_IDS.map((id) => ({
+      id,
+      name: id,
+      shortDescription: {
+        text: DRIFT_MESSAGES.find((m) => m.id === id).template,
+      },
+      fullDescription: {
+        text: DRIFT_MESSAGES.find((m) => m.id === id).template,
+      },
       defaultConfiguration: { level: "error" },
     })),
   ];
@@ -229,6 +242,50 @@ export function sarifTsconfigPathsResult(finding) {
 }
 
 /**
+ * One architecture-drift finding as a SARIF result.
+ *
+ * A result for the same reason a go.work drift finding is one: it is a verdict
+ * the run fails on. A finding is project- or edge-level by construction — the
+ * intent row names a project, a tag pair, or a `source -> target` dependency,
+ * never a source position — so the location carries the artifact (the intent
+ * file) alone rather than a fabricated line 1, the reasoning `sarifNotification`
+ * states. The message id, the intent row, and the observed fact all reach the
+ * property bag so a developer reading the alert has the whole comparison.
+ *
+ * @param {object} finding A finding from `../drift/drift.mjs` `computeDrift`.
+ * @param {string} intentFile The intent file the finding is about,
+ *   workspace-relative.
+ * @returns {object}
+ */
+export function sarifDriftResult(finding, intentFile) {
+  return {
+    ruleId: finding.messageId,
+    ruleIndex:
+      MESSAGE_IDS.length +
+      GO_WORK_MESSAGE_IDS.length +
+      TSCONFIG_PATHS_MESSAGE_IDS.length +
+      DRIFT_MESSAGE_IDS.indexOf(finding.messageId),
+    level: "error",
+    message: { text: finding.message },
+    locations: [
+      {
+        physicalLocation: {
+          artifactLocation: { uri: toUriReference(intentFile) },
+        },
+      },
+    ],
+    properties: {
+      kind: finding.kind,
+      row: finding.row,
+      ...(finding.detail !== "" ? { detail: finding.detail } : {}),
+      ...(finding.project !== null ? { project: finding.project } : {}),
+      ...(finding.source !== null ? { source: finding.source } : {}),
+      ...(finding.target !== null ? { target: finding.target } : {}),
+    },
+  };
+}
+
+/**
  * One analysis failure as a tool-execution notification.
  *
  * A failure with no position is about the file as a whole (`line`/`column`
@@ -256,10 +313,11 @@ export function sarifNotification(failure) {
  *
  * @param {{violations: object[], failures: object[],
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
- *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null}} run
+ *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
+ *   drift?: {intent: {file: string}|null, findings: object[]}|null}} run
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
-export function buildSarifLog({ violations, failures, goWork, tsconfigPaths }) {
+export function buildSarifLog({ violations, failures, goWork, tsconfigPaths, drift }) {
   return {
     $schema: SARIF_SCHEMA,
     version: SARIF_VERSION,
@@ -271,6 +329,9 @@ export function buildSarifLog({ violations, failures, goWork, tsconfigPaths }) {
           ...violations.map(sarifResult),
           ...(goWork?.findings ?? []).map(sarifGoWorkResult),
           ...(tsconfigPaths?.findings ?? []).map(sarifTsconfigPathsResult),
+          ...(drift?.findings ?? []).map((finding) =>
+            sarifDriftResult(finding, drift.intent?.file ?? "architecture-intent.config.mjs"),
+          ),
         ],
         invocations: [
           {
@@ -292,7 +353,8 @@ export function buildSarifLog({ violations, failures, goWork, tsconfigPaths }) {
  *
  * @param {{violations: object[], failures: object[],
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
- *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null}} run
+ *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
+ *   drift?: {intent: {file: string}|null, findings: object[]}|null}} run
  * @returns {string}
  */
 export function formatSarif(run) {

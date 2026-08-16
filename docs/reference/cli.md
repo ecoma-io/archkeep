@@ -4,14 +4,15 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 
 ## Commands
 
-| command   | positional args      | summary                                                   | finds violations |
-| --------- | -------------------- | --------------------------------------------------------- | ---------------- |
-| `check`   | `[<path>...]`        | Check imports against the boundary rules                  | yes -- exits 1   |
-| `graph`   | (none)               | Print the project graph as a deterministic snapshot       | no               |
-| `diff`    | `<baseline>`         | Compare two graph snapshots edge by edge                  | no               |
-| `impact`  | `<project>`          | List projects that depend on the named project            | no               |
-| `explain` | `<file:line:column>` | Explain the judgment for one import site                  | no               |
-| `context` | `<project>`          | Show the architecture constraints that apply to a project | no               |
+| command   | positional args      | summary                                                    | finds violations |
+| --------- | -------------------- | ---------------------------------------------------------- | ---------------- |
+| `check`   | `[<path>...]`        | Check imports against the boundary rules                   | yes -- exits 1   |
+| `graph`   | (none)               | Print the project graph as a deterministic snapshot        | no               |
+| `diff`    | `<baseline>`         | Compare two graph snapshots edge by edge                   | no               |
+| `impact`  | `<project>`          | List projects that depend on the named project             | no               |
+| `explain` | `<file:line:column>` | Explain the judgment for one import site                   | no               |
+| `context` | `<project>`          | Show the architecture constraints that apply to a project  | no               |
+| `drift`   | (none)               | Compare the observed architecture against the intended one | no               |
 
 `lattice --help` prints the help text and exits 0. An omitted command name is a
 usage error (exit 2). If the first positional argument names a path that exists
@@ -93,6 +94,21 @@ The project name is a single positional argument. `--config` is accepted because
 the answer depends on which boundary law is in effect — a different constraint
 table produces a different set of matching rows.
 
+### `drift`
+
+| flag       | argument       | default | meaning                                         |
+| ---------- | -------------- | ------- | ----------------------------------------------- |
+| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope. |
+| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.   |
+
+No positional arguments and no `--config` flag: the intended architecture comes
+from the workspace's own `intentConfig` (default `architecture-intent.config.mjs`),
+never from a path. The workspace's observed graph is compared against that
+declared intent — projects that must or must not exist, dependencies permitted
+or forbidden, tag pairs forbidden. `drift` is descriptive: it exits 0 when it
+completes (even with findings) and 3 when it cannot establish drift (a malformed
+or unreadable intent, or incomplete coverage — see [exit-codes.md](exit-codes.md)).
+
 ### Shared flag rules
 
 - Both `--flag value` and `--flag=value` work.
@@ -108,12 +124,12 @@ table produces a different set of matching rows.
 
 ## Exit codes
 
-| code | meaning                                                                       | when                                                                                                                                                 |
-| ---- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | clean -- and every selected file was analyzed                                 | No findings and no coverage gaps.                                                                                                                    |
-| 1    | findings -- boundary violations, go.work drift, or dead tsconfig path aliases | `check` only. No other command exits 1.                                                                                                              |
-| 2    | usage error                                                                   | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                      |
-| 3    | no verdict -- the run could not start, or a selected file could not be read   | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load. |
+| code | meaning                                                                                           | when                                                                                                                                                                                                                           |
+| ---- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | clean -- and every selected file was analyzed                                                     | No findings and no coverage gaps.                                                                                                                                                                                              |
+| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, or architecture drift | `check` only. No other command exits 1.                                                                                                                                                                                        |
+| 2    | usage error                                                                                       | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                                                                                                |
+| 3    | no verdict -- the run could not start, or a selected file could not be read                       | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load, or a malformed/unreadable intent file (with drift, a whole-file failure). |
 
 **Do not collapse 3 into 0.** A checker that could not look must never be
 mistaken for one that looked and found nothing. Both 1 and 3 must fail a CI
@@ -123,9 +139,9 @@ build; they differ in what you go and look at, not in whether you go and look.
 analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
-A descriptive command (`graph`, `diff`, `impact`, `explain`, `context`) exits 0
-when it completes, 3 when coverage is incomplete, and 2 on usage error. None
-exits 1, because a descriptive result is never a finding.
+A descriptive command (`graph`, `diff`, `impact`, `explain`, `context`, `drift`)
+exits 0 when it completes, 3 when it cannot establish its answer, and 2 on
+usage error. None exits 1, because a descriptive result is never a finding.
 
 ## What each command does
 
@@ -137,6 +153,14 @@ anything violates it. When the workspace has a tracked `go.work`, also compares
 its `use` list against every project's `go.mod`. When the workspace tsconfig
 declares a `paths` table, also judges each alias for life. Both are workspace-
 level checks that ignore path scoping.
+
+When the workspace has an intent file at the `intentConfig` name
+(`architecture-intent.config.mjs` by default), `check` also folds architecture
+drift into its verdict: drift findings count toward exit 1 exactly like
+violations and go.work drift do, and a malformed intent is a whole-file failure
+that makes the run exit 3. This is **by presence, not by flag** — there is no
+`--drift` flag to forget. A workspace without an intent file gets no drift
+check and no mention of drift, byte-identical to before the feature.
 
 ### `graph`
 
@@ -175,3 +199,14 @@ Constraint rows that carry `description` or `remediation` show those fields.
 Useful before editing a project — the same constraint table `check` judges
 from, rendered as a readable summary rather than as a list of violations.
 Descriptive.
+
+### `drift`
+
+Compares the observed architecture against the declared intended one. The
+observed side is the project graph — projects, tags, and dependency edges —
+from whichever provider the workspace uses. The intended side is the workspace's
+own intent file (see [configuration.md](configuration.md) for the `intentConfig`
+option). Prints the intent fingerprint, the observed counts, and every finding
+grouped by kind, or `✔ no drift` when the observed architecture matches the
+intended one. Descriptive — findings are a description, and `check` is the
+command that turns them into exit 1.

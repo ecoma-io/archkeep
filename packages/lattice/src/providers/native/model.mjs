@@ -463,6 +463,7 @@ const TOP_LEVEL_KEYS = [
   "coverage",
   "workspaceLayout",
   "boundaryConfig",
+  "intentConfig",
   "tsConfig",
 ];
 
@@ -626,13 +627,20 @@ export function normalizeNativeModel(raw) {
   const rawInfer = /** @type {Record<string, unknown>|undefined} */ (projects.infer);
 
   const inlineBoundaryConfig = isPlainObject(raw.boundaryConfig) ? raw.boundaryConfig : undefined;
+  // `intentConfig` is a filename-only option by construction — an intent is an
+  // `import()`ed module, never an inline object (see `../../drift/intent.mjs`'s
+  // header) — so it rides through `resolveOptions` like `tsConfig` does,
+  // validated by the one shared default table rather than a second copy here.
   const resolvedOptions = resolveOptions(
-    ("boundaryConfig" in raw && inlineBoundaryConfig === undefined) || "tsConfig" in raw
+    ("boundaryConfig" in raw && inlineBoundaryConfig === undefined) ||
+      "tsConfig" in raw ||
+      "intentConfig" in raw
       ? {
           ...("boundaryConfig" in raw && inlineBoundaryConfig === undefined
             ? { boundaryConfig: raw.boundaryConfig }
             : {}),
           ...("tsConfig" in raw ? { tsConfig: raw.tsConfig } : {}),
+          ...("intentConfig" in raw ? { intentConfig: raw.intentConfig } : {}),
         }
       : undefined,
   );
@@ -684,6 +692,7 @@ export function normalizeNativeModel(raw) {
       raw.workspaceLayout
     ),
     boundaryConfig: inlineBoundaryConfig ?? resolvedOptions.boundaryConfig,
+    intentConfig: resolvedOptions.intentConfig,
     tsConfig: resolvedOptions.tsConfig,
   };
 }

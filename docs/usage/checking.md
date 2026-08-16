@@ -18,7 +18,7 @@ identical to one that analyzed four hundred.
 
 ## What `check` judges
 
-One run combines three verdicts:
+One run combines four verdicts:
 
 1. **Import boundaries** — every import site in every tracked, supported source
    file is matched against the boundary law.
@@ -26,9 +26,16 @@ One run combines three verdicts:
    list is compared against every project's `go.mod`.
 3. **Dead tsconfig aliases** — when the workspace tsconfig declares a `paths`
    table, each alias is checked for at least one target directory that exists.
+4. **Architecture drift** — when the workspace declares an intended architecture
+   (`architecture-intent.config.mjs` at the root, or whatever `intentConfig`
+   names), the observed graph is judged against it: a required project that
+   vanished, a forbidden one that appeared, or an edge that crosses the declared
+   dependency/tag law is a finding. See [drift.md](drift.md).
 
-The second and third checks are workspace facts, so paths named on the command
-line do not scope them.
+The three workspace facts (2, 3, 4) are judged against the whole tree, so paths
+named on the command line do not scope them. The drift check is folded by the
+intent file's presence — no flag, so a workspace without an intent file pays
+nothing and hears nothing.
 
 ## A violation
 
@@ -95,12 +102,12 @@ promise are in [json-output.md](../reference/json-output.md).
 
 ## Exit codes
 
-| code | meaning                                                                      |
-| ---- | ---------------------------------------------------------------------------- |
-| `0`  | No findings, and every selected file was analyzed                            |
-| `1`  | Boundary violation, `go.work` drift, or dead tsconfig alias                  |
-| `2`  | Usage error — invalid arguments, unknown flag, or path outside the workspace |
-| `3`  | No verdict — the run could not look, or coverage is incomplete               |
+| code | meaning                                                                         |
+| ---- | ------------------------------------------------------------------------------- |
+| `0`  | No findings, and every selected file was analyzed                               |
+| `1`  | Boundary violation, `go.work` drift, dead tsconfig alias, or architecture drift |
+| `2`  | Usage error — invalid arguments, unknown flag, or path outside the workspace    |
+| `3`  | No verdict — the run could not look, or coverage is incomplete                  |
 
 Do not collapse 3 into 0. A checker that could not look must never be mistaken
 for one that looked and found nothing. [ci.md](ci.md) owns the full automation

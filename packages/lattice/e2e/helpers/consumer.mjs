@@ -23,6 +23,7 @@ import {
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
+import { driftConsumerFiles } from "../fixtures/drift-consumer.mjs";
 import { nxConsumerFiles } from "../fixtures/nx-consumer.mjs";
 import { nativeConsumerFiles } from "../fixtures/native-consumer.mjs";
 import { nativeMonorepoFiles } from "../fixtures/native-monorepo.mjs";
@@ -239,6 +240,49 @@ export function createNativeMonorepoConsumer(artifact) {
   if (nativeModules.includes("nx")) {
     rmSync(consumer, { recursive: true, force: true });
     throw new Error(`nx package resolved in native monorepo — peer is not optional in fact.`);
+  }
+
+  return {
+    root: consumer,
+    cleanup() {
+      rmSync(consumer, { recursive: true, force: true });
+    },
+  };
+}
+
+/**
+ * Creates a drift consumer workspace: the native monorepo (`app → api → core`)
+ * plus an `architecture-intent.config.mjs` at the root declaring the intended
+ * architecture. `intent` is default-exported by that module, the exact
+ * contract `loadIntent` recovers. No `nx` dependency.
+ *
+ * @param {{ tarballPath: string, peers: Record<string, string>, packageName: string, packageManager: string }} artifact
+ * @param {object} intent The intended-architecture object to default-export.
+ * @returns {ConsumerWorkspace}
+ */
+export function createDriftConsumer(artifact, intent) {
+  const { tarballPath, peers, packageName, packageManager } = artifact;
+  const consumer = realpathSync(mkdtempSync(join(tmpdir(), "lattice-e2e-drift-")));
+
+  const files = driftConsumerFiles(packageName, peers, packageManager, intent);
+  files["package.json"] = files["package.json"].replace(
+    '"*"',
+    JSON.stringify(`file:${tarballPath}`),
+  );
+  write(consumer, files);
+  writeFileSync(
+    join(consumer, "pnpm-workspace.yaml"),
+    "packages: []\nallowBuilds:\n  lefthook: false\n",
+    "utf8",
+  );
+  commitTree(consumer, "the clean tree", true);
+
+  const installed = run("pnpm", ["install", "--no-frozen-lockfile"], consumer);
+  if (installed.status !== 0) {
+    rmSync(consumer, { recursive: true, force: true });
+    throw new Error(
+      `pnpm install failed (drift consumer):\n${installed.stdout ?? ""}\n${installed.stderr ?? ""}`,
+    );
   }
 
   return {

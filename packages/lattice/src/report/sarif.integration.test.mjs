@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { DRIFT_MESSAGE_IDS } from "../drift/drift.mjs";
 import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
 import { MESSAGE_IDS, renderMessage } from "../rules/messages.mjs";
 import { TSCONFIG_PATHS_MESSAGE_IDS, TSCONFIG_PATHS_MESSAGES } from "../tsconfig-paths.mjs";
@@ -68,6 +69,23 @@ const everyDeadAliasFinding = () =>
     message: TSCONFIG_PATHS_MESSAGES[messageId],
   }));
 
+/**
+ * One architecture-drift finding per drift `messageId` — project/edge/tag
+ * level, none carrying a source position, so the artifact-only location branch
+ * (`sarifDriftResult`) is the one exercised.
+ */
+const everyArchDriftFinding = () =>
+  DRIFT_MESSAGE_IDS.map((messageId) => ({
+    messageId,
+    kind: "dependencyForbidden",
+    row: { source: "engine-domain", target: "engine-adapters", forbid: true },
+    detail: "",
+    project: null,
+    source: "engine-domain",
+    target: "engine-adapters",
+    message: "the architecture drift, spelled out",
+  }));
+
 const log = buildSarifLog({
   violations: everyViolation(),
   failures: [
@@ -76,6 +94,7 @@ const log = buildSarifLog({
   ],
   goWork: { findings: everyDriftFinding(), moduleProjects: 2 },
   tsconfigPaths: { findings: everyDeadAliasFinding(), aliases: 3, unjudged: 0 },
+  drift: { intent: { file: "architecture-intent.config.mjs" }, findings: everyArchDriftFinding() },
 });
 
 describe("the SARIF log against what GitHub requires of an upload", () => {
@@ -87,7 +106,12 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
 
   it("gives every rule the engine can report a descriptor with an id, so no finding is nameless", () => {
     const ids = log.runs[0].tool.driver.rules.map((rule) => rule.id);
-    expect(ids).toEqual([...MESSAGE_IDS, ...GO_WORK_MESSAGE_IDS, ...TSCONFIG_PATHS_MESSAGE_IDS]);
+    expect(ids).toEqual([
+      ...MESSAGE_IDS,
+      ...GO_WORK_MESSAGE_IDS,
+      ...TSCONFIG_PATHS_MESSAGE_IDS,
+      ...DRIFT_MESSAGE_IDS,
+    ]);
     expect(ids.every((id) => typeof id === "string" && id !== "")).toBe(true);
   });
 
@@ -115,11 +139,16 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
       expect(artifactLocation.uri.startsWith("/")).toBe(false);
       expect(artifactLocation.uri).not.toMatch(/^[a-z][a-z0-9+.-]*:/i);
       expect(artifactLocation.uri.split("/")).not.toContain("..");
-      if (result.ruleId === "goWorkMissingUse" || result.ruleId === "tsconfigDeadPathAlias") {
+      if (
+        result.ruleId === "goWorkMissingUse" ||
+        result.ruleId === "tsconfigDeadPathAlias" ||
+        DRIFT_MESSAGE_IDS.includes(result.ruleId)
+      ) {
         // The results about a thing that does not exist — a use entry never
-        // written, an alias with no position in the parsed options: no region,
-        // rather than a fabricated line 1 marking text the finding is not
-        // about.
+        // written, an alias with no position in the parsed options, an intent
+        // row judged against the whole tree rather than any file position — no
+        // region, rather than a fabricated line 1 marking text the finding is
+        // not about.
         expect(region).toBeUndefined();
         continue;
       }
@@ -130,7 +159,10 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
 
   it("reports one result per violation, drift finding and dead alias, and none for a failure", () => {
     expect(log.runs[0].results).toHaveLength(
-      MESSAGE_IDS.length + GO_WORK_MESSAGE_IDS.length + TSCONFIG_PATHS_MESSAGE_IDS.length,
+      MESSAGE_IDS.length +
+        GO_WORK_MESSAGE_IDS.length +
+        TSCONFIG_PATHS_MESSAGE_IDS.length +
+        DRIFT_MESSAGE_IDS.length,
     );
     expect(log.runs[0].invocations[0].toolExecutionNotifications).toHaveLength(2);
   });

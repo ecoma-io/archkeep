@@ -20,6 +20,12 @@ vi.mock("../tsconfig-paths.mjs", () => ({
   TSCONFIG_PATHS_MESSAGE_IDS: ["deadAliasRule"],
   TSCONFIG_PATHS_MESSAGES: { deadAliasRule: "Dead alias rule's summary line\n\nAnd its detail" },
 }));
+vi.mock("../drift/drift.mjs", () => ({
+  DRIFT_MESSAGE_IDS: ["archDriftRule"],
+  DRIFT_MESSAGES: [
+    { id: "archDriftRule", template: "Architecture drift rule's summary line\n\nAnd its detail" },
+  ],
+}));
 vi.mock("./text.mjs", () => ({ formatConstraint: () => "THE CONSTRAINT" }));
 
 import { buildSarifLog, formatSarif, sarifRules, toUriReference } from "./sarif.mjs";
@@ -71,8 +77,9 @@ describe("the rule catalogue", () => {
       "secondRule",
       "driftRule",
       "deadAliasRule",
+      "archDriftRule",
     ]);
-    expect(log().tool.driver.rules).toHaveLength(4);
+    expect(log().tool.driver.rules).toHaveLength(5);
   });
 
   it("keeps the whole template as the description and its first line as the summary", () => {

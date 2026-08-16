@@ -19,6 +19,7 @@ describe("resolveOptions", () => {
     expect(resolveOptions(undefined)).toEqual({
       boundaryConfig: "module-boundaries.config.mjs",
       tsConfig: "tsconfig.base.json",
+      intentConfig: "architecture-intent.config.mjs",
     });
     expect(resolveOptions(null)).toEqual(DEFAULT_OPTIONS);
     expect(resolveOptions({})).toEqual(DEFAULT_OPTIONS);
@@ -35,10 +36,17 @@ describe("resolveOptions", () => {
     expect(resolveOptions({ tsConfig: "tsconfig.json" })).toEqual({
       boundaryConfig: "module-boundaries.config.mjs",
       tsConfig: "tsconfig.json",
+      intentConfig: "architecture-intent.config.mjs",
     });
     expect(resolveOptions({ boundaryConfig: "boundaries.mjs" })).toEqual({
       boundaryConfig: "boundaries.mjs",
       tsConfig: "tsconfig.base.json",
+      intentConfig: "architecture-intent.config.mjs",
+    });
+    expect(resolveOptions({ intentConfig: "intent.mjs" })).toEqual({
+      boundaryConfig: "module-boundaries.config.mjs",
+      tsConfig: "tsconfig.base.json",
+      intentConfig: "intent.mjs",
     });
   });
 
@@ -104,6 +112,7 @@ describe("readPluginOptions", () => {
       expect(readPluginOptions("/w", treeWith({ "/w/nx.json": nxJson })), specifier).toEqual({
         boundaryConfig: "module-boundaries.config.mjs",
         tsConfig: "tsconfig.root.json",
+        intentConfig: "architecture-intent.config.mjs",
       });
     }
   });

@@ -235,6 +235,52 @@ export function formatTsconfigPaths(tsconfigPaths) {
 }
 
 /**
+ * The architecture-drift section — rendered only when the run HAS a drift
+ * verdict, decided nowhere here.
+ *
+ * `drift` is `null` (or absent) when the workspace has no intent file, and
+ * then this prints nothing: a workspace without a declared intended
+ * architecture pays nothing and hears nothing, the same bargain `formatGoWork`
+ * states. When the check ran, even a clean result is a line, because "the
+ * observed architecture matches the intended one" is a claim about coverage
+ * the reader cannot otherwise tell apart from "nothing looked" — and when the
+ * intent could not be judged, the whole-file failure already rendered above
+ * with `checked: true, findings: []`, so this section reports the judgment
+ * (or its absence) rather than pretending a verdict exists.
+ *
+ * @param {{checked: boolean, intent: {file: string, fingerprint: string, rows: number}|null,
+ *   observed: {projects: number, edges: number, implicitEdges: number}|null,
+ *   findings: object[]}|null|undefined} drift
+ * @returns {string} Empty exactly when there is no drift verdict to render.
+ */
+export function formatDrift(drift) {
+  if (drift == null) return "";
+  const { intent, findings } = drift;
+  if (findings.length === 0) {
+    if (intent === null) {
+      return "✔ no drift verdict — the intent could not be judged (see the failures above)";
+    }
+    return (
+      `✔ the observed architecture matches the intended one ` +
+      `(${intent.fingerprint.slice(0, 12)} · ${intent.rows} intent row${intent.rows === 1 ? "" : "s"})`
+    );
+  }
+  const entries = findings.map((finding) => {
+    const message = finding.message
+      .split("\n")
+      .map((line) => (line === "" ? "" : `${CONTINUED}${line}`))
+      .join("\n");
+    return [`${finding.messageId}  ${finding.row}`, message].join("\n");
+  });
+  const fingerprint = intent === null ? "" : ` (${intent.fingerprint.slice(0, 12)})`;
+  return [
+    entries.join("\n\n"),
+    `✖ the observed architecture drifts from the intended one: ${findings.length} ` +
+      `finding${findings.length === 1 ? "" : "s"}${fingerprint} — the run fails`,
+  ].join("\n\n");
+}
+
+/**
  * The polyglot coverage gap section — rendered only when the Nx graph is known
  * to be missing polyglot edges that the checker's own analysis did cover.
  *
@@ -276,7 +322,7 @@ export function formatCoverageGaps(coverageGaps) {
  * that indistinguishability is the defect this whole tool exists to end
  * (`../../CLAUDE.md`).
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, coverageGaps?: object[], notes?: string[]}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, drift?: object|null, coverageGaps?: object[], notes?: string[]}} run
  * @returns {string}
  */
 export function formatReport({
@@ -287,6 +333,7 @@ export function formatReport({
   imports,
   goWork,
   tsconfigPaths,
+  drift,
   coverageGaps = [],
   notes = [],
 }) {
@@ -316,6 +363,9 @@ export function formatReport({
 
   const tsconfigPathsSection = formatTsconfigPaths(tsconfigPaths);
   if (tsconfigPathsSection !== "") sections.push(tsconfigPathsSection);
+
+  const driftSection = formatDrift(drift);
+  if (driftSection !== "") sections.push(driftSection);
 
   const coverageGapsSection = formatCoverageGaps(coverageGaps);
   if (coverageGapsSection !== "") sections.push(coverageGapsSection);
