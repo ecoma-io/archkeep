@@ -152,6 +152,9 @@ pnpm exec lattice graph
 pnpm exec lattice graph --format json --output snapshot.json
 pnpm exec lattice diff snapshot.json
 pnpm exec lattice diff snapshot.json --config boundaries.mjs
+pnpm exec lattice history .lattice/history
+pnpm exec lattice history .lattice/history --capture
+pnpm exec lattice history .lattice/history --format json --output evolution.json
 pnpm exec lattice impact billing-core
 pnpm exec lattice impact billing-core --config boundaries.mjs
 pnpm exec lattice explain libs/billing/main.go:10:5
@@ -172,6 +175,17 @@ reports which boundary violations the added edges introduce and which the
 removed edges resolve. It refuses an incomplete baseline or head, because every
 "removed" entry would be ambiguous between "gone" and "never seen". It is
 descriptive and never exits 1.
+
+`history` takes a directory of `graph --format json` snapshots and describes how
+the architecture evolved across them — each snapshot in order and the transition
+between each consecutive pair, classified by what the snapshots actually carry:
+a changed graph is an architecture change, a changed `policy.fingerprint` is a
+policy/intent change, a changed `workspace.provider` is a provider change, and
+provenance advancing while neither changed is disclosed as code drift.
+`--capture` writes a snapshot of the current workspace into the directory first
+(`<sequence>-<sha8>.json`, so filename byte-sort is history order, deduplicating
+when the architecture has not moved). There is no index file and no database —
+the directory itself is the source of truth. It is descriptive and never exits 1.
 
 `impact` takes a project name and lists every project that transitively depends
 on it — the set a developer needs to consider before changing that project. It

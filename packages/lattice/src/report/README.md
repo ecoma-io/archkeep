@@ -37,6 +37,11 @@ dependencies)` for projects with no edges, and a coverage claim above the
   and the verdict (allowed/VIOLATION/UNRESOLVABLE), each indented. Coverage
   sits at the bottom, same shape as every other command. Renders the same
   payload `json.mjs` wraps; decides nothing.
+- `history-text.mjs` — the terminal report for `../../cli.mjs`'s `history`
+  command: the history directory, a capture line, each snapshot with its short
+  id, and each transition classified (architecture / policy / provider /
+  code drift / unchanged) with its changes and disclosure notes. Renders the
+  same payload `json.mjs` wraps; decides nothing.
 
 `json.mjs` is not a formatter in that sense — it does not turn violations into
 output. `jsonEnvelope` wraps whatever result object a command already computed

@@ -256,6 +256,20 @@ export function computeEvolution(files) {
     if (meta.crossRepo) {
       notes.push("provenance remotes differ — these snapshots may be from unrelated repositories");
     }
+    // The one-sided cases are the silent direction: a fingerprint or
+    // provenance on one snapshot and not the other cannot be asserted "the
+    // same", so it is disclosed rather than read as unchanged.
+    if (meta.policyOneSided) {
+      notes.push(
+        "policy (the declared architectural intent) could not be compared — one snapshot " +
+          "records the boundary law and the other does not",
+      );
+    }
+    if (meta.provenanceOneSided) {
+      notes.push(
+        "repository provenance could not be compared — one snapshot records its origin and the other does not",
+      );
+    }
 
     const diff = computeDiff(
       {

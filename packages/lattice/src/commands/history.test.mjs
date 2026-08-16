@@ -321,6 +321,26 @@ describe("computeEvolution", () => {
     expect(transitions[0].notes.some((n) => /provider changed/.test(n))).toBe(true);
   });
 
+  it("discloses a one-sided policy as incomparable rather than unchanged", () => {
+    const files = filesFor({
+      "0001-a.json": envelope({ policy: "p1" }),
+      "0002-b.json": envelope(),
+    });
+    const { transitions } = computeEvolution(files);
+    expect(transitions[0].policyChanged).toBeNull();
+    expect(transitions[0].notes.some((n) => /could not be compared/.test(n))).toBe(true);
+  });
+
+  it("discloses a one-sided provenance as incomparable rather than unchanged", () => {
+    const files = filesFor({
+      "0001-a.json": envelope({ commit: "aaa" }),
+      "0002-b.json": envelope({ commit: null }),
+    });
+    const { transitions } = computeEvolution(files);
+    expect(transitions[0].codeDrift).toBe(false);
+    expect(transitions[0].notes.some((n) => /provenance could not be compared/.test(n))).toBe(true);
+  });
+
   it("records an A → B → A evolution as two real transitions", () => {
     const files = filesFor({
       "0001-a.json": envelope({ dependencies: [] }),

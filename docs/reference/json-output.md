@@ -1,9 +1,9 @@
 # `--format json`
 
 `check --format json`, `graph --format json`, `diff --format json`,
-`impact --format json`, `explain --format json`, and `context --format json`
-wrap the same verdict the terminal report and SARIF already carry in one
-versioned envelope. They change no exit code and no byte
+`history --format json`, `impact --format json`, `explain --format json`, and
+`context --format json` wrap the same verdict the terminal report and SARIF
+already carry in one versioned envelope. They change no exit code and no byte
 of the other two formats — they are additional renderings of a verdict every
 format already computes, for a script that wants to branch on a field rather
 than scrape a report or walk a SARIF `runs[]` array.
@@ -15,6 +15,8 @@ lattice graph --format json
 lattice graph --format json --output snapshot.json
 lattice diff snapshot.json --format json
 lattice diff snapshot.json --format json --output delta.json
+lattice history .lattice/history --format json
+lattice history .lattice/history --format json --output evolution.json
 lattice impact billing-core --format json
 lattice impact billing-core --format json --output impact.json
 lattice explain libs/alpha/main.go:10:5 --format json
@@ -45,7 +47,8 @@ and no random identifier anywhere in it. That is what makes it diffable in a
 pull request the same way the SARIF output already is.
 
 `command` is the one field that varies by which command produced the envelope —
-`"check"`, `"graph"`, `"diff"`, `"impact"`, `"explain"`, or `"context"`. `src/report/json.mjs` (the module
+`"check"`, `"graph"`, `"diff"`, `"history"`, `"impact"`, `"explain"`, or
+`"context"`. `src/report/json.mjs` (the module
 that builds the envelope) and `src/commands/README.md` (the module layout it
 follows) are both written for each command to reuse the same wrapper.
 
@@ -55,7 +58,7 @@ follows) are both written for each command to reuse the same wrapper.
 | --------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                                                                                                                 |
 | `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                                                                                                                                                                |
-| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                                                                                          |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"history"`, `"impact"`, `"explain"`, or `"context"`.                                                                                                                                                                                             |
 | `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"lattice.json"`, `".moon"`, or `".config/moon"`). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                 |
 | `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                                                                                                          |
@@ -197,6 +200,25 @@ changes do not make it exit `1`; a completed comparison always exits `0`.
 | `removedEdges`    | `{source, target, type}[]`             | Edges present in the baseline but absent from the current workspace, sorted by the full edge identity.                                                                                                                                                                                                                      |
 | `policyMismatch`  | `{baseline, head}` or absent           | Present when both the baseline snapshot and the head run carry a policy fingerprint and they disagree. `baseline.fingerprint` and `head.fingerprint` are the SHA-256 hex strings. The rule-impact section may reflect the policy change rather than a structural change. Absent when no mismatch or no config was provided. |
 | `ruleImpact`      | `{introduced, resolved}` or absent     | Present when a boundary config with `depConstraints` was provided. `introduced` lists violations the added edges introduce; `resolved` lists violations the removed edges resolve. Covers only tag-based constraints (3 of 15 violation types) — see `coverage.notes`. Absent when no config was provided.                  |
+
+## `result` (for `command: "history"`)
+
+`history` reads a consumer-managed directory of `graph --format json` snapshots
+and describes the architecture's evolution: each snapshot in history order and
+the classified transition between consecutive snapshots. It is descriptive: it
+never exits `1`. An empty directory or an unreadable snapshot is a no-verdict
+run (exit 3) that produces no envelope, not a record of an empty history.
+
+| field         | type             | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`         | string           | The history directory that was read.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `captured`    | `null` \| object | `null` when the run did not `--capture`. Otherwise `{name, deduplicated?}` — the snapshot file written (or, when its architecture identity already was the last snapshot, the existing file it deduplicated against with `deduplicated: true`).                                                                                                                                                                                                                                                                                                     |
+| `snapshots`   | `{name, id}[]`   | Every snapshot, in filename byte-sort order (which is history order). `name` is `<sequence>-<sha8>.json`; `id` is the full SHA-256 architecture identity (the canonicalized `projects`/`dependencies`/`policy.fingerprint` — never the workspace header).                                                                                                                                                                                                                                                                                           |
+| `transitions` | `object[]`       | One entry per consecutive pair of snapshots, in order. Each `{from, to, architectureChanged, changes, policyChanged, providerChanged, codeDrift, notes}`. `changes` is the `diff`-style `{addedProjects, removedProjects, changedProjects, addedEdges, removedEdges}` when the graph or provider changed, else `null`. `policyChanged` is `true`/`false` or `null` when unverifiable (one snapshot carries a fingerprint and the other does not); `notes` discloses every one-sided or cross-repo caveat rather than reading the case as unchanged. |
+
+`history` never recomputes rule-impact from stored snapshots — a snapshot
+carries the graph and the policy fingerprint, not the constraint table or
+import sites — so `coverage.notes` states that limit on every record.
 
 ## `result` (for `command: "impact"`)
 

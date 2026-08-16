@@ -9,6 +9,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `check`   | `[<path>...]`        | Check imports against the boundary rules                  | yes -- exits 1   |
 | `graph`   | (none)               | Print the project graph as a deterministic snapshot       | no               |
 | `diff`    | `<baseline>`         | Compare two graph snapshots edge by edge                  | no               |
+| `history` | `<dir>`              | Describe how the architecture evolved across snapshots    | no               |
 | `impact`  | `<project>`          | List projects that depend on the named project            | no               |
 | `explain` | `<file:line:column>` | Explain the judgment for one import site                  | no               |
 | `context` | `<project>`          | Show the architecture constraints that apply to a project | no               |
@@ -93,7 +94,23 @@ The project name is a single positional argument. `--config` is accepted because
 the answer depends on which boundary law is in effect — a different constraint
 table produces a different set of matching rows.
 
-### Shared flag rules
+### `history`
+
+| flag        | argument       | default                  | meaning                                                                                                                                                                                         |
+| ----------- | -------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format`  | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                                                                                                                                                 |
+| `--output`  | `<file>`       | stdout                   | Write the report to a file instead of stdout.                                                                                                                                                   |
+| `--capture` | (none)         | off                      | Append a snapshot of the current workspace to the directory first, then describe the history that includes it.                                                                                  |
+| `--config`  | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Under `--capture`, the captured snapshot records the fingerprint of this law as the architectural intent in effect. |
+
+The directory is a single positional argument. It is a directory of `graph
+--format json` snapshots, not a git ref or an index file — the directory itself
+is the sole source of truth (see `docs/usage/history.md`). `--capture` writes
+`<sequence>-<sha8>.json` (zero-padded monotonic sequence plus the architecture
+identity's first eight hex chars, so filename byte-sort IS history order) and
+deduplicates when the current architecture identity already is the last
+snapshot. An empty directory, an unreadable snapshot, or a malformed snapshot
+is a no-verdict run (exit 3), never a record of nothing.
 
 - Both `--flag value` and `--flag=value` work.
 - An unknown flag is a usage error (exit 2) rather than treated as a path.
@@ -123,9 +140,9 @@ build; they differ in what you go and look at, not in whether you go and look.
 analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
-A descriptive command (`graph`, `diff`, `impact`, `explain`, `context`) exits 0
-when it completes, 3 when coverage is incomplete, and 2 on usage error. None
-exits 1, because a descriptive result is never a finding.
+A descriptive command (`graph`, `diff`, `history`, `impact`, `explain`,
+`context`) exits 0 when it completes, 3 when coverage is incomplete, and 2 on
+usage error. None exits 1, because a descriptive result is never a finding.
 
 ## What each command does
 
@@ -151,6 +168,19 @@ reporting projects and edges added or removed. When a boundary config is
 available, also reports which violations the added edges introduce and which
 the removed edges resolve. The baseline is a file, not a git ref. Both sides
 must be complete. Descriptive -- changes do not make it exit 1.
+
+### `history <dir>`
+
+Reads every `graph --format json` snapshot in a directory and describes how the
+architecture evolved across them: each snapshot in history order (filename
+byte-sort) and each transition between consecutive snapshots, classified by the
+signals the snapshots actually carry. A changed graph is an architecture
+change; a changed `policy.fingerprint` is a policy/intent change; a changed
+`workspace.provider` is a provider change; provenance (git commit) advancing
+while neither architecture nor policy changed is disclosed as code drift. What
+a snapshot does not carry is disclosed, never asserted. `--capture` appends a
+snapshot of the current workspace before describing the record.
+Descriptive -- evolution never makes it exit 1.
 
 ### `impact <project>`
 

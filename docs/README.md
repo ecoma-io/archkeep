@@ -40,6 +40,7 @@ version.
 | [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                         |
 | [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph            |
 | [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis |
+| [history.md](usage/history.md)                 | The `history` command: the architecture's evolution across snapshots        |
 | [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context               |
 | [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained          |
 | [context.md](usage/context.md)                 | The `context` command: architecture constraints for one project             |

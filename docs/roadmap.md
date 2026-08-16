@@ -45,8 +45,10 @@ repository, deterministically, with no build system as a precondition.
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer.
-- **`check`, `graph`, `impact`, `diff`, `explain` and `context`,** each with
-  output a script or an agent can consume without parsing prose.
+- **`check`, `graph`, `impact`, `diff`, `explain`, `history` and `context`,**
+  each with output a script or an agent can consume without parsing prose.
+  `history` records the architecture's evolution across captured snapshots —
+  the deterministic half of "how it got here".
 - **Nx as a first-class integration, not a dependency.** A workspace that has
   Nx gets graph reuse and `affected` integration; a repository that has never
   heard of Nx loses nothing.
@@ -71,8 +73,10 @@ is substantially produced by agents.
   diff meets the architecture before it meets a human.
 - **Deeper editor, LSP and forge integrations** (GitHub, GitLab, CI
   platforms), and a plugin surface for third-party providers and analyzers.
-- **Visualization and historical evolution** — the architecture as it is, as
-  it was, and how it got here.
+- **Visualization and interpretation of historical evolution** — the 1.x
+  `history` command records how the architecture got here deterministically
+  (see `usage/history.md`); 2.x adds the reading that comes after the record:
+  trend analysis, drift attribution, and the _intelligence_ layer over it.
 
 Nothing in 2.x weakens the 1.x contract: every intelligence feature sits on
 top of the deterministic core, never in place of it. A prediction is allowed
