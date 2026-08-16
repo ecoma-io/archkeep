@@ -7,14 +7,15 @@ What each field contains; not what to put in it (that is
 
 ## Top-level keys
 
-Three keys, same names in every dialect. A fourth, `$schema`, is tolerated in
+Four keys, same names in every dialect. A fifth, `$schema`, is tolerated in
 the `.json` dialect but does nothing.
 
-| key                     | type   | required | meaning                                               |
-| ----------------------- | ------ | -------- | ----------------------------------------------------- |
-| `depConstraints`        | array  | yes      | The constraint table.                                 |
-| `moduleBoundaryOptions` | object | yes      | The eight `@nx/enforce-module-boundaries` options.    |
-| `boundarySuppressions`  | array  | no       | Accepted violations. Absent means nothing suppressed. |
+| key                     | type   | required | meaning                                                           |
+| ----------------------- | ------ | -------- | ----------------------------------------------------------------- |
+| `depConstraints`        | array  | yes      | The constraint table.                                             |
+| `moduleBoundaryOptions` | object | yes      | The eight `@nx/enforce-module-boundaries` options.                |
+| `boundarySuppressions`  | array  | no       | Accepted violations. Absent means nothing suppressed.             |
+| `fitness`               | array  | no       | Named quality gates judged every run. Absent means none declared. |
 
 ## `depConstraints`
 
@@ -108,6 +109,40 @@ already expired.
 
 A suppression removes a **verdict**, never a failure. The file is still fully
 analyzed, and anything the analyzer could not read in it is still reported.
+
+## `fitness`
+
+An array of named quality-gate rows. Each row judges one condition over the
+projects its `match` selects, on every run.
+
+| field       | type     | required | meaning                                                                                                                                                   |
+| ----------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`      | string   | yes      | Letters, digits, `-` and `_` only -- no `:` (so a name can never collide with a selector label). Unique across the list.                                  |
+| `match`     | string[] | yes      | Non-empty list of project selectors (`name:x`, `tag:x`, `directory:x`, `*`, `!`). Zero selected projects is `not_applicable`, loudly.                     |
+| `condition` | object   | yes      | One condition type plus its fields. See the table below.                                                                                                  |
+| `reason`    | string   | yes      | Non-empty. A fitness function is a policy decision, and one with no reason written down is indistinguishable from a policy that quietly stopped applying. |
+
+An empty list is rejected -- a list present but empty reads as policy while
+deciding nothing. Unknown keys in a row, a duplicate name, or an ill-formed
+`condition` are rejected at load, naming the key.
+
+### Conditions
+
+| `type`                                        | fields                       | verdict contract                                                                                                                                              |
+| --------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cycle-free`                                  | —                            | `pass` when the matched subgraph has no dependency cycle.                                                                                                     |
+| `layer-dependency`                            | `from`, `to`, `direction`    | `direction` is `forbidden` (no edge from `from` to `to`) or `required` (at least one). A tag no matched project carries is `unknown`, never `pass` or `fail`. |
+| `tag-conformance`                             | `from`, `to`, `toDependents` | `toDependents` is `only` (edges from `from` may target only `to`) or `never` (may not target `to`).                                                           |
+| `coverage-minimum`                            | `statement`                  | At least `statement` percent of the matched projects' analyzable owned files were analyzed. Zero owned files or a path-scoped run is `unknown`.               |
+| `boundary-suppression-count-within-threshold` | `max`                        | The number of accepted `boundarySuppressions` is at most `max`.                                                                                               |
+| `drift-free`                                  | —                            | `pass` when the declared architecture intent judges clean; no intent file or a no-verdict intent is `unknown`.                                                |
+
+`from`/`to` are non-empty tag values; `direction` is one of
+`forbidden`/`required`; `toDependents` is one of `only`/`never`; `statement` is
+a percentage between 0 and 100; `max` is a non-negative integer.
+
+The verdict semantics and the two faces (`lattice fitness` and `check`'s fold)
+live in [fitness-functions.md](../concepts/fitness-functions.md).
 
 ## Three dialects
 

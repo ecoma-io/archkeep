@@ -53,11 +53,11 @@ export const VERDICT_FOR_STATUS = Object.freeze({
 /**
  * Whether a string names one of the four verdicts.
  *
- * @param {string} value
+ * @param {unknown} value
  * @returns {boolean}
  */
 export function isVerdict(value) {
-  return VERDICTS.includes(value);
+  return typeof value === "string" && VERDICTS.includes(value);
 }
 
 /**
@@ -79,4 +79,49 @@ export function verdictForStatus(status) {
     );
   }
   return verdict;
+}
+
+/**
+ * One function's verdict record — the evidence envelope every governance
+ * consumer (a fitness function, a waiver judge) reads.
+ *
+ * `evidence` is an object of deterministic facts the verdict is a claim over
+ * (the same facts a report row renders), and `message` is human text naming
+ * what was decided and why. `rows` is optional per-function observed detail
+ * (matched projects, judged edges); it rides along so a report can show the
+ * function's coverage without re-deriving it a second way.
+ *
+ * A `not_applicable` verdict carries its `notApplicableReason` (invariant I4):
+ * "did not apply" and "did not run" are indistinguishable otherwise, and a
+ * reader has to be told which one this was.
+ *
+ * @param {{verdict: (typeof VERDICTS)[number], name: string, evidence: object,
+ *   message: string, rows?: object[], notApplicableReason?: string}} decision
+ * @returns {object}
+ * @throws {Error} on a verdict outside the four — a programming error in the
+ *   function that built the decision, not a fact about the workspace — and on
+ *   a `not_applicable` verdict without its `notApplicableReason`.
+ */
+export function fitnessVerdict({ verdict, name, evidence, message, rows, notApplicableReason }) {
+  if (!isVerdict(verdict)) {
+    throw new Error(
+      `lattice: fitness function "${name}" returned verdict ${JSON.stringify(verdict)} — ` +
+        `expected one of ${VERDICTS.join(", ")}.`,
+    );
+  }
+  if (verdict === "not_applicable" && notApplicableReason === undefined) {
+    throw new Error(
+      `lattice: fitness function "${name}" returned "not_applicable" without ` +
+        `notApplicableReason — invariant I4: the reader must be told why the ` +
+        `function did not apply.`,
+    );
+  }
+  return {
+    verdict,
+    name,
+    evidence,
+    message,
+    ...(rows === undefined ? {} : { rows }),
+    ...(notApplicableReason === undefined ? {} : { notApplicableReason }),
+  };
 }

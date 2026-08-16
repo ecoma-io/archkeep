@@ -208,3 +208,31 @@ export const moduleBoundaryOptions = {
  * anything it could not resolve is still reported.
  */
 export const boundarySuppressions = [];
+
+/**
+ * The fitness functions this workspace holds itself to — every one judged by
+ * `packages/lattice/cli.mjs check` on the same observed facts as the constraint
+ * table above, each verdict a `pass`/`fail`/`unknown`/`skipped` row.
+ *
+ * Fitness is folded into `check` by presence — there is no flag to forget, so a
+ * workspace whose law declares a function is judged on every run. A function
+ * that cannot be determined answers `unknown`, never `pass`, and the run exits
+ * 3 (the same no-verdict machinery a malformed config uses); a failing function
+ * exits 1 like any other finding.
+ *
+ * `coverage-minimum` counts the workspace's own analyzable tracked files:
+ * Markdown, JSON and images are skipped before analysis (`languageOf`), and a
+ * file that was owned but not analyzed counts as uncovered. The 100% bar is
+ * the claim this repository makes about itself — every analyzable file it
+ * owns is analyzed by the checker it ships, so a `.go`/`.rs`/`.py` file added
+ * anywhere that is not analyzed turns this red by design.
+ */
+export const fitness = [
+  {
+    name: "own-tree-fully-analyzed",
+    match: ["*"],
+    condition: { type: "coverage-minimum", statement: 100 },
+    reason:
+      "this repository runs its own checker on itself in CI, so a tracked file its analysis does not read would be the silent direction this tool exists to end",
+  },
+];

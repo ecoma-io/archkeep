@@ -1155,6 +1155,255 @@ var _ = adapter.Name
     expect(written.coverage.complete).toBe(true);
   });
 
+  it("folds a declared fitness function into the check verdict — a coverage-minimum over owned files", async () => {
+    // A SEPARATE config filename, never `module-boundaries.config.mjs`: that
+    // file was already `import()`ed during the describe-block setup, and ES
+    // module import caching means a rewritten copy is not what the next
+    // `loadBoundaryConfig` call reads. A fresh filename is imported clean.
+    // The native fixture owns exactly two analyzable files (both `.go`), and
+    // the analysis analyzed both, so a 100%-coverage minimum passes.
+    writeNative(
+      "fitness-full.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "full-coverage",
+    match: ["*"],
+    condition: { type: "coverage-minimum", statement: 100 },
+    reason: "every owned file must be analyzed",
+  },
+];
+`,
+    );
+    const { report, violations, unchecked } = await check(
+      { format: "text", config: "fitness-full.config.mjs", paths: [] },
+      nativeContext,
+    );
+    // Both files are analyzed; the layer crossing (domain→adapter) is still
+    // a real boundary finding, and the fitness verdict is independent of it.
+    expect(violations).toBe(1);
+    expect(unchecked).toBe(0);
+    expect(report).toContain("✔ full-coverage");
+    expect(report).toContain("2/2 files analyzed (100%)");
+  });
+
+  it("exits 3 when a declared fitness function cannot be determined — never a pass", async () => {
+    writeNative(
+      "fitness-unknown.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "no-domain-yet",
+    match: ["*"],
+    condition: { type: "layer-dependency", from: "layer:service", to: "layer:domain", direction: "required" },
+    reason: "a service layer will need the domain",
+  },
+];
+`,
+    );
+    // Scoped to `libs/adapter` so the fixture's real domain→adapter crossing
+    // (a findings-axis red, which would win the verdict) is not selected for
+    // analysis — this test pins the no-verdict lane alone. The `--config`
+    // flag loads the fresh config by path.
+    const streams = nativeEnv();
+    expect(
+      await runCli(["check", "--config", "fitness-unknown.config.mjs", "libs/adapter"], streams),
+    ).toBe(EXIT.error);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("⚠ no-domain-yet");
+    expect(out).toContain("no matched project carries tag");
+  });
+
+  it("exits 3 when a path-scoped run hides whole-file coverage — the scoped flag must reach coverage-minimum as unknown, never pass", async () => {
+    // P0-1 regression: `fitnessSnapshot` used to put `scoped` on the snapshot's
+    // top level, where `judgeFitnessRow` never read it — so `check libs/adapter`
+    // over a `coverage-minimum` fitness claimed `pass` over the one file it
+    // actually analyzed, the silent direction. The flag now rides inside
+    // `analysis`, and the run must exit 3 naming scope instead of claiming full
+    // coverage.
+    writeNative(
+      "fitness-scoped.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "scoped-coverage",
+    match: ["*"],
+    condition: { type: "coverage-minimum", statement: 100 },
+    reason: "scoping must never read as full coverage",
+  },
+];
+`,
+    );
+    const streams = nativeEnv();
+    // `libs/adapter` scopes the run to one project's files; the other project's
+    // files were not analyzed, so whole-tree coverage is not determinable. The
+    // domain→adapter crossing is excluded the same way the no-verdict test
+    // excludes it, so exit 3 here is the scope verdict, not a boundary finding.
+    expect(
+      await runCli(["check", "--config", "fitness-scoped.config.mjs", "libs/adapter"], streams),
+    ).toBe(EXIT.error);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("⚠ scoped-coverage");
+    expect(out).toContain("was scoped to specific paths");
+  });
+
+  it("judges drift-free against the verdict-shaped intent, not the raw file — a clean intent passes, never fail", async () => {
+    // P0-2 regression: the `fitness` command used to hand `loadIntent`'s raw
+    // normalized model (no `verdict`/`findings`/`unresolved`) to the
+    // `drift-free` rule, whose final branch read `verdict === undefined` as
+    // `fail` — so a clean intent reported `✖ drift-free` over "0 findings".
+    // The command now reuses `driftForCheck`'s verdict-shaped intent, the same
+    // one `check`'s fold builds. The native fixture tracks an
+    // `architecture-intent.json` whose boundaries match the observed projects,
+    // so the comparison is clean and the function must PASS.
+    writeNative(
+      "fitness-drift.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "intent-clean",
+    match: ["*"],
+    condition: { type: "drift-free" },
+    reason: "this workspace declares an intent and must not drift from it",
+  },
+];
+`,
+    );
+    const streams = nativeEnv();
+    expect(await runCli(["fitness", "--config", "fitness-drift.config.mjs"], streams)).toBe(
+      EXIT.ok,
+    );
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("✔ intent-clean");
+    expect(out).toContain("matches the observed graph");
+  });
+
+  it("exits 3 when the graph cannot see the workspace — the fitness command must not fold an incomplete-graph refusal into a verdict", async () => {
+    // R2-Major regression: `fitnessCommand` used to wrap `driftForCheck` in a
+    // catch-all that converted its fail-closed throw (an Nx workspace whose
+    // `nx.json` does not register this plugin but whose tracked files include
+    // polyglot manifests) into a `no-verdict` intent with exit 0. Every other
+    // read-only command (`drift`, `graph`, `impact`, `explain`) exits 3 for
+    // this same condition — a graph that cannot see the workspace must never
+    // be judged as if it did. The command now lets the throw propagate, so the
+    // run exits 3 naming the refusal.
+    const root = mkdtempSync(join(tmpdir(), "fitness-cli-unregistered-"));
+    try {
+      const writeUnreg = (relativePath, text) => {
+        mkdirSync(join(root, relativePath, ".."), { recursive: true });
+        writeFileSync(join(root, relativePath), text);
+      };
+      writeUnreg("nx.json", JSON.stringify({})); // No plugins entry.
+      writeUnreg(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "intent-clean",
+    match: ["*"],
+    condition: { type: "drift-free" },
+    reason: "must not be judged over a graph that cannot see the workspace",
+  },
+];
+`,
+      );
+      writeUnreg("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeUnreg("libs/domain/doc.go", "package domain\n");
+      const graph = {
+        nodes: {
+          domain: {
+            name: "domain",
+            type: "lib",
+            data: { root: "libs/domain", tags: [] },
+          },
+        },
+        dependencies: { domain: [] },
+      };
+      const files = [
+        "nx.json",
+        "module-boundaries.config.mjs",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+      const streams = {
+        out: (t) => streams.lines.out.push(t),
+        err: (t) => streams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: root,
+        readGraph: () => graph,
+        listFiles: () => files,
+      };
+      expect(await runCli(["fitness"], streams)).toBe(EXIT.error);
+      const report = streams.lines.out.join("\n") + streams.lines.err.join("\n");
+      expect(report).toContain("refusing to judge drift");
+      expect(report).toContain("go.mod");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("says nothing about README.md, since it is not an analyzable file — the coverage near-miss that keeps the check usable", async () => {
     const { report, violations, unchecked } = await check(
       { format: "text", config: null, paths: [] },

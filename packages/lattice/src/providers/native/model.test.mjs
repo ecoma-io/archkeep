@@ -430,7 +430,7 @@ describe("findNativeModelViolations", () => {
           boundaryConfig: { ...wellFormedPolicy(), extra: "decorative" },
         }),
       ).toEqual([
-        "boundaryConfig.extra: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions",
+        "boundaryConfig.extra: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness",
       ]);
     });
 
@@ -447,7 +447,7 @@ describe("findNativeModelViolations", () => {
           boundaryConfig: { ...wellFormedPolicy(), $schema: "./schema.json" },
         }),
       ).toEqual([
-        "boundaryConfig.$schema: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions",
+        "boundaryConfig.$schema: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness",
       ]);
     });
 
