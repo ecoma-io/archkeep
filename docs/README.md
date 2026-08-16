@@ -31,6 +31,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [projects.md](concepts/projects.md)                       | What a project is, discovery, naming                                                   |
 | [drift.md](concepts/drift.md)                             | The four drift signals Lattice detects, and which command surfaces each                |
 | [evidence.md](concepts/evidence.md)                       | The one verdict vocabulary every judgment speaks, and the evidence each state requires |
+| [provenance.md](concepts/provenance.md)                   | The origin record, why `on` is optional, and why provenance never rules                |
 | [agentic-development.md](concepts/agentic-development.md) | The three questions an agent asks, and the commands that answer them                   |
 | [integrations.md](concepts/integrations.md)               | How integrations extend the core                                                       |
 
@@ -80,6 +81,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [json-output.md](reference/json-output.md)                 | `--format json`'s versioned envelope: every field, and the stability promise          |
 | [evidence.md](reference/evidence.md)                       | The four-state verdict vocabulary, the five invariants, and the `decision` shape      |
 | [architecture-intent.md](reference/architecture-intent.md) | The `architecture-intent.json` schema, the five sections, and the four verdict states |
+| [provenance.md](reference/provenance.md)                   | The `provenance` command: report shapes, the JSON envelope, exit codes                |
 | [languages.md](reference/languages.md)                     | What each analyzer reads, the shapes it cannot, and the two workspace checks          |
 | [violations.md](reference/violations.md)                   | Each of the fifteen violations: what it means, and what fixes it                      |
 

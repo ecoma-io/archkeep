@@ -39,6 +39,7 @@
 import { readFile as readFileFromDisk } from "node:fs/promises";
 
 import { isValidSelector, splitSelector } from "./selectors.mjs";
+import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "../governance/row-schema.mjs";
 
 /** The base name of the root file this module reads. */
 export const INTENT_FILE = "architecture-intent.json";
@@ -80,6 +81,32 @@ export const FORBIDDEN_PROJECT_KEYS = Object.freeze(["name"]);
 export const DEPENDENCY_ROW_KEYS = Object.freeze(["source", "target"]);
 /** The keys a `forbiddenTags[]` row may carry. */
 export const TAG_ROW_KEYS = Object.freeze(["from", "to"]);
+
+/**
+ * The shared governance-block check for any intent row (Contract 2): when the
+ * row carries at least one of `origin`/`rationale`/`decisionRef`/`fitnessBindings`,
+ * its shape is validated by the ONE schema `../governance/row-schema.mjs` —
+ * the same validator a `depConstraints` row uses, so no capability in this
+ * wave owns a second copy of what a governance key may hold. Additive: a row
+ * without the block is a legacy row and stays valid. Resolution of a
+ * `decisionRef`/`fitnessBinding` id is the registry capability's, injected
+ * there; shape is checked here, loudly.
+ *
+ * @param {object} row
+ * @param {string} at Dotted path of the row, for messages.
+ * @returns {string[]}
+ */
+function governanceRowViolations(row, at) {
+  if (
+    !("origin" in row) &&
+    !("rationale" in row) &&
+    !("decisionRef" in row) &&
+    !("fitnessBindings" in row)
+  ) {
+    return [];
+  }
+  return rowSchemaViolations(row, at);
+}
 
 /** The keys a boundary entry may carry. */
 const BOUNDARY_KEYS = Object.freeze(["name", "match"]);
@@ -248,9 +275,10 @@ export function findIntentViolations(raw) {
         violations.push(`${at}: must be an object, got ${describe(row)}`);
         return;
       }
-      for (const key of unknownKeys(row, ROW_KEYS)) {
+      for (const key of unknownKeys(row, [...ROW_KEYS, ...GOVERNANCE_ROW_KEYS])) {
         violations.push(`${at}.${key}: unknown key — a row may carry only ${ROW_KEYS.join(", ")}`);
       }
+      violations.push(...governanceRowViolations(row, at));
       if (!rowSideValid(row.from, names)) {
         violations.push(
           `${at}.from: must reference a declared boundary (${names.size > 0 ? [...names].join(", ") : "none declared"}) or a valid selector, got ${describe(row.from)}`,
@@ -342,11 +370,15 @@ export function findIntentViolations(raw) {
               violations.push(`${at}: must be an object, got ${describe(row)}`);
               return;
             }
-            for (const key of unknownKeys(row, REQUIRED_PROJECT_KEYS)) {
+            for (const key of unknownKeys(row, [
+              ...REQUIRED_PROJECT_KEYS,
+              ...GOVERNANCE_ROW_KEYS,
+            ])) {
               violations.push(
                 `${at}.${key}: unknown key — a required project may carry only ${REQUIRED_PROJECT_KEYS.join(", ")}`,
               );
             }
+            violations.push(...governanceRowViolations(row, at));
             if (typeof row.name !== "string" || row.name.trim() === "") {
               violations.push(`${at}.name: must be a non-empty string, got ${describe(row.name)}`);
             }
@@ -379,11 +411,15 @@ export function findIntentViolations(raw) {
               violations.push(`${at}: must be an object, got ${describe(row)}`);
               return;
             }
-            for (const key of unknownKeys(row, FORBIDDEN_PROJECT_KEYS)) {
+            for (const key of unknownKeys(row, [
+              ...FORBIDDEN_PROJECT_KEYS,
+              ...GOVERNANCE_ROW_KEYS,
+            ])) {
               violations.push(
                 `${at}.${key}: unknown key — a forbidden project may carry only ${FORBIDDEN_PROJECT_KEYS.join(", ")}`,
               );
             }
+            violations.push(...governanceRowViolations(row, at));
             if (typeof row.name !== "string" || row.name.trim() === "") {
               violations.push(`${at}.name: must be a non-empty string, got ${describe(row.name)}`);
             }
@@ -426,11 +462,12 @@ export function findIntentViolations(raw) {
             violations.push(`${at}: must be an object, got ${describe(row)}`);
             return;
           }
-          for (const key of unknownKeys(row, DEPENDENCY_ROW_KEYS)) {
+          for (const key of unknownKeys(row, [...DEPENDENCY_ROW_KEYS, ...GOVERNANCE_ROW_KEYS])) {
             violations.push(
               `${at}.${key}: unknown key — a dependency row may carry only ${DEPENDENCY_ROW_KEYS.join(", ")}`,
             );
           }
+          violations.push(...governanceRowViolations(row, at));
           for (const side of ["source", "target"]) {
             if (typeof row[side] !== "string" || row[side].trim() === "") {
               violations.push(
@@ -461,11 +498,12 @@ export function findIntentViolations(raw) {
           violations.push(`${at}: must be an object, got ${describe(row)}`);
           return;
         }
-        for (const key of unknownKeys(row, TAG_ROW_KEYS)) {
+        for (const key of unknownKeys(row, [...TAG_ROW_KEYS, ...GOVERNANCE_ROW_KEYS])) {
           violations.push(
             `${at}.${key}: unknown key — a tag row may carry only ${TAG_ROW_KEYS.join(", ")}`,
           );
         }
+        violations.push(...governanceRowViolations(row, at));
         for (const side of ["from", "to"]) {
           if (typeof row[side] !== "string" || row[side].trim() === "") {
             violations.push(

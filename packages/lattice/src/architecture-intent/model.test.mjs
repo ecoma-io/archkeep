@@ -220,6 +220,92 @@ describe("findIntentViolations — allowed/forbidden rows", () => {
   });
 });
 
+describe("findIntentViolations — the governance block (Contract 2), per row type", () => {
+  const governanceRow = (row) => ({ ...row, ...governanceBlock() });
+  const governanceBlock = (overrides = {}) => ({
+    origin: { by: "jane@example.com", tool: "lattice:v1" },
+    rationale: "decided in the March governance review",
+    decisionRef: "adr:0012",
+    ...overrides,
+  });
+
+  it("accepts a full governance block on every row type", () => {
+    const file = {
+      version: "1",
+      boundaries: [
+        { name: "packages", match: ["tag:type-package"] },
+        { name: "extensions", match: ["tag:type-extension"] },
+      ],
+      allowed: [governanceRow({ from: "packages", to: "packages" })],
+      forbidden: [governanceRow({ from: "packages", to: "extensions", reason: "x" })],
+      projects: {
+        required: [governanceRow({ name: "lattice", tags: ["type-package"] })],
+        forbidden: [governanceRow({ name: "stray" })],
+      },
+      dependencies: {
+        allowed: [governanceRow({ source: "a", target: "b" })],
+        forbidden: [governanceRow({ source: "a", target: "b" })],
+      },
+      forbiddenTags: [governanceRow({ from: "ui", to: "domain" })],
+    };
+    expect(violations(file)).toEqual([]);
+  });
+
+  it("keeps every legacy row valid without the block — byte-identical parse", () => {
+    expect(violations(VALID)).toEqual([]);
+  });
+
+  it("rejects an invalid origin on an allowed row, naming the row", () => {
+    const messages = violations({
+      ...VALID,
+      allowed: [{ from: "packages", to: "packages", origin: { tool: "l" } }],
+    });
+    expect(mentions(messages, "allowed[0].origin.by")).toBe(true);
+  });
+
+  it("accepts a committed `on` on an intent row — a static file fact needs no clock to read", () => {
+    const messages = violations({
+      ...VALID,
+      allowed: [
+        { from: "packages", to: "packages", origin: { by: "jane", tool: "l", on: "2026-08-16" } },
+      ],
+    });
+    expect(messages).toEqual([]);
+  });
+
+  it("rejects an empty rationale and an empty fitnessBindings list on a project row", () => {
+    const messages = violations({
+      ...VALID,
+      projects: {
+        required: [{ name: "lattice", rationale: "", fitnessBindings: [] }],
+      },
+    });
+    expect(mentions(messages, "rationale: must be a non-empty string")).toBe(true);
+    expect(mentions(messages, "fitnessBindings: must not be empty")).toBe(true);
+  });
+
+  it("rejects an unresolvable decisionRef when a registry is injected — but never here", () => {
+    // The intent loader validates shape only; RESOLUTION is injected by the
+    // capability that owns the registry. A shape-valid reference passes.
+    expect(
+      violations({
+        ...VALID,
+        forbidden: [{ from: "packages", to: "extensions", reason: "x", decisionRef: "adr:0012" }],
+      }),
+    ).toEqual([]);
+  });
+
+  it("does not reject the governance keys as unknown — every row-type allow-list grew", () => {
+    // Before Contract 2 a row carrying `origin` was rejected by name.
+    expect(
+      violations({
+        ...VALID,
+        forbiddenTags: [{ from: "ui", to: "domain", origin: { by: "j", tool: "l" } }],
+      }),
+    ).toEqual([]);
+  });
+});
+
 describe("loadIntent — reading and parsing", () => {
   /** @type {(contents: string) => (path: string, encoding: "utf8") => Promise<string>} */
   const read = (contents) => async (_path, _encoding) => contents;

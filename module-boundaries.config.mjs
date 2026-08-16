@@ -129,6 +129,18 @@ export const depConstraints = [
 ];
 
 /**
+ * The four governance keys a constraint row may carry, so a row's origin is
+ * never silently dropped by the loader (`packages/lattice/src/config.mjs`):
+ * `origin` (who decided, with which tool, optionally when — the provenance
+ * record `packages/lattice/src/governance/provenance-record.mjs` owns),
+ * `rationale` (why the rule exists), `decisionRef` (the decision that made it),
+ * and `fitnessBindings` (the fitness functions that hold it honest). A row
+ * without an origin is flagged by `lattice provenance` as unattestable rather
+ * than read as decided. The rows above carry no block because each was authored
+ * before the governance keys existed; they remain valid and byte-identical.
+ */
+
+/**
  * The eight non-table options of `@nx/enforce-module-boundaries`, stated at the
  * values this workspace runs on.
  *
