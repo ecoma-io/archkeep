@@ -93,7 +93,7 @@ Architecture model          projects, edges, tags — from a provider (Nx, Moon,
     ↓
 Policy / intent             the constraint table in your workspace
     ↓
-Deterministic evidence      graph · check · diff · drift · history · health · impact · explain · context · snapshots
+Deterministic evidence      check · graph · diff · discover · drift · reconcile · waivers · fitness · history · health · debt · impact · explain · context · provenance
     ↓
 Governance                  the verdict, as an exit code and a machine-readable report
     ↓
