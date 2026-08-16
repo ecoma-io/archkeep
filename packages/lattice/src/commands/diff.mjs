@@ -46,6 +46,7 @@ import { computeRuleImpact } from "./edge-constraints.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatDiffReport } from "../report/diff-text.mjs";
+import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 
 /**
@@ -155,7 +156,9 @@ export function parseBaseline(text, path) {
     );
   }
 
-  // Per-record validation: every project must have a name and root, every
+  // Per-record validation: every project must have a name, root, and — when
+  // present — a `tags` array (an absent tags is the pre-tags shape; a malformed
+  // one would make the diff and every renderer misread the record). Every
   // dependency must have source, target, and type. A malformed record would
   // make the diff silently miscompute which projects or edges changed.
   for (const [i, project] of envelope.result.projects.entries()) {
@@ -163,6 +166,12 @@ export function parseBaseline(text, path) {
       throw new Error(
         `lattice: the baseline snapshot at '${path}' has a result.projects[${i}] record ` +
           `missing 'name' or 'root' — it is not a valid lattice project record`,
+      );
+    }
+    if (project.tags !== undefined && !Array.isArray(project.tags)) {
+      throw new Error(
+        `lattice: the baseline snapshot at '${path}' has a result.projects[${i}] record whose ` +
+          `'tags' is not an array — it is not a valid lattice project record`,
       );
     }
   }
@@ -397,69 +406,58 @@ export function diffCommand(
     removedEdges: diff.removedEdges,
   };
 
-  // Provider mismatch detection: when the baseline and head come from
-  // different providers, structural differences may be provider-artefacts
-  // rather than real architectural changes. A provider migration is a
-  // legitimate use case, so this is a warning (coverage.note), not a
-  // refusal.
-  const baselineProvider = baseline.provider;
-  if (baselineProvider && baselineProvider !== provider) {
+  // Provider, provenance, and policy comparison — the same facts `history`
+  // classifies as changes, compared here through the shared
+  // `./snapshot-meta.mjs` so the two commands cannot disagree about them.
+  // Each mismatch becomes a `coverage.notes` warning rather than a refusal:
+  // a provider migration, a cross-repository diff, or a policy change between
+  // baseline and head are all legitimate states a consumer must be told about.
+  const headProvenance = resolveProvenance(root);
+  const headFingerprint = config ? computePolicyFingerprint(config) : null;
+  const meta = compareSnapshotMetadata({
+    baselineProvider: baseline.provider,
+    headProvider: provider,
+    baselineProvenance: baseline.provenance,
+    headProvenance,
+    baselineFingerprint: baseline.policy?.fingerprint ?? null,
+    headFingerprint,
+  });
+
+  if (meta.providerChanged) {
     coverage.notes.push(
-      `baseline provider (${baselineProvider}) differs from head provider (${provider}) — ` +
+      `baseline provider (${baseline.provider}) differs from head provider (${provider}) — ` +
         `structural differences may be provider-artefacts rather than real architectural changes`,
     );
   }
 
-  // Provenance mismatch: when both sides carry provenance with commit hashes,
-  // a consumer can verify the baseline came from the same repository (or at
-  // least the same commit). When the commits differ but the remote matches,
-  // the diff is between two revisions of the same repository (the expected
-  // case). When the remotes differ, the diff may be across unrelated
-  // repositories — a coverage.note warns the consumer.
-  const headProvenance = resolveProvenance(root);
-  const baselineProvenance = baseline.provenance;
-
-  if (baselineProvenance && headProvenance) {
-    if (
-      baselineProvenance.remote &&
-      headProvenance.remote &&
-      baselineProvenance.remote !== headProvenance.remote
-    ) {
-      coverage.notes.push(
-        `baseline provenance remote (${baselineProvenance.remote}) differs from head provenance remote (${headProvenance.remote}) — ` +
-          `the diff may be across unrelated repositories rather than two revisions of the same one`,
-      );
-    }
-  } else if (baselineProvenance && !headProvenance) {
+  if (meta.crossRepo) {
+    coverage.notes.push(
+      `baseline provenance remote (${baseline.provenance.remote}) differs from head provenance remote (${headProvenance.remote}) — ` +
+        `the diff may be across unrelated repositories rather than two revisions of the same one`,
+    );
+  } else if (baseline.provenance && !headProvenance) {
     coverage.notes.push(
       `baseline carries provenance but the head does not — the consumer cannot verify the diff is between revisions of the same repository`,
     );
-  } else if (!baselineProvenance && headProvenance) {
+  } else if (!baseline.provenance && headProvenance) {
     coverage.notes.push(
       `head carries provenance but the baseline does not — the consumer cannot verify the diff is between revisions of the same repository`,
     );
   }
 
-  // Policy mismatch detection: when both the baseline and the head carry a
-  // policy fingerprint and they disagree, the diff is computed against a
-  // different policy than the one the baseline was judged under. Every
-  // "introduced" or "resolved" violation in the rule-impact analysis may be an
-  // artefact of the policy change, not of a structural change. Record the
-  // mismatch so the consumer knows to interpret the diff with caution.
-  const baselineFingerprint = baseline.policy?.fingerprint ?? null;
-  const headFingerprint = config ? computePolicyFingerprint(config) : null;
-  if (baselineFingerprint && headFingerprint && baselineFingerprint !== headFingerprint) {
-    result.policyMismatch = {
-      baseline: { fingerprint: baselineFingerprint },
-      head: { fingerprint: headFingerprint },
-    };
+  if (meta.policyChanged === true) {
+    // A policy change between baseline and head means every "introduced" or
+    // "resolved" violation in the rule-impact analysis may be an artefact of
+    // the policy change, not of a structural change — recorded so the
+    // consumer knows to interpret the diff with caution.
+    result.policyMismatch = meta.policyMismatch;
   }
 
-  // One-sided policy warning: when only one side carries a policy fingerprint,
-  // rule-impact numbers (if any) are based on an incomplete picture. The
-  // consumer should interpret them with caution.
-  if ((!baselineFingerprint && headFingerprint) || (baselineFingerprint && !headFingerprint)) {
-    const side = baselineFingerprint ? "baseline" : "head";
+  if (meta.policyOneSided) {
+    // One-sided policy warning: when only one side carries a policy
+    // fingerprint, rule-impact numbers (if any) are based on an incomplete
+    // picture. The consumer should interpret them with caution.
+    const side = baseline.policy?.fingerprint ? "baseline" : "head";
     coverage.notes.push(
       `policy fingerprint is present only on the ${side} side — ` +
         `rule-impact results may not reflect the policy the other side was judged under`,

@@ -102,24 +102,27 @@ return unchecked > 0 ? 3 : 0;
 Exit 0 was the bug. A checker that could not look must never be mistaken for one
 that looked and found nothing.
 
-## The six commands
+## The seven commands
 
-| command   | what it does                                                          | finds violations |
-| --------- | --------------------------------------------------------------------- | ---------------- |
-| `check`   | Judges every import site against the boundary law                     | yes — exits 1    |
-| `graph`   | Prints the project graph as a deterministic snapshot                  | no               |
-| `diff`    | Compares two graph snapshots, with optional rule-impact analysis      | no               |
-| `impact`  | Lists projects that depend on the named one, with constraint context¹ | no               |
-| `explain` | Explains the judgment for one import site                             | no               |
-| `context` | Shows the architecture constraints that apply to a project¹           | no               |
+| command   | what it does                                                           | finds violations |
+| --------- | ---------------------------------------------------------------------- | ---------------- |
+| `check`   | Judges every import site against the boundary law                      | yes — exits 1    |
+| `graph`   | Prints the project graph as a deterministic snapshot                   | no               |
+| `diff`    | Compares two graph snapshots, with optional rule-impact analysis       | no               |
+| `history` | Describes how the architecture evolved across a directory of snapshots | no               |
+| `impact`  | Lists projects that depend on the named one, with constraint context¹  | no               |
+| `explain` | Explains the judgment for one import site                              | no               |
+| `context` | Shows the architecture constraints that apply to a project¹            | no               |
 
-`check` is the only command that exits 1. The other five are descriptive: they
+`check` is the only command that exits 1. The other six are descriptive: they
 answer questions about the architecture without claiming a violation. `context`
 answers the question an agent asks _before_ editing (what is this project
 allowed to reach?); `impact` answers the question during planning (what depends
 on this?); `explain` answers the question after a violation is reported (why
-did this one fail?). `diff` answers the question across time (what changed, and
-what boundary implications did the change carry?).
+did this one fail?). `diff` answers the question across a single change (what
+changed, and what boundary implications did the change carry?); `history`
+answers it across time (how did the architecture evolve, and which of those
+changes were architectural, policy, or provider?).
 
 ¹ Per-edge verdicts in `context` and `impact` cover only `depConstraints`
 (3 of 15 violation types). An edge with no violations in these commands may
