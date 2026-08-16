@@ -144,6 +144,20 @@ describe("parseBaseline", () => {
     );
   });
 
+  it("throws when a project record's tags is not an array", () => {
+    // A malformed tags would crash downstream renderers instead of refusing —
+    // the malicious direction of the crafted-snapshot review finding.
+    const envelope = validEnvelope({
+      result: {
+        projects: [{ name: "a", root: "libs/a", tags: "layer:core" }],
+        dependencies: [],
+      },
+    });
+    expect(() => parseBaseline(envelope, "/bad-tags.json")).toThrow(
+      /result\.projects\[0\].*'tags' is not an array/,
+    );
+  });
+
   it("throws when a dependency record is missing 'source'", () => {
     const envelope = validEnvelope({
       result: {

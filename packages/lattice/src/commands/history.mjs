@@ -68,7 +68,7 @@
  * owns those (`./README.md`).
  */
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
@@ -85,29 +85,42 @@ import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
  * workspace root, or which provider revision read it.
  *
  * The identity is a SHA-256 of the canonicalized JSON of the fields
- * `computeDiff` compares — projects and dependencies — plus the policy
- * fingerprint when the snapshot carries one. The policy fingerprint is
+ * `computeDiff` actually compares — projects and dependencies — plus the
+ * policy fingerprint when the snapshot carries one. The policy fingerprint is
  * included because a policy is architectural intent: `--capture` must write a
- * new snapshot when the law changes even if the graph did not move. The
- * workspace header (`root`, `provider`, `marker`, `provenance`) is excluded —
- * the root is a local path that varies by machine, and provider/provenance
- * are facts about the reading, not the architecture. Provider and provenance
- * changes surface through the transition classification instead.
+ * new snapshot when the law changes even if the graph did not move.
+ *
+ * The project serialization deliberately drops every field beyond the graph
+ * diff's four (`name`, `root`, `type`, `tags`), so "identity moved" always
+ * coincides with "the diff sees an architectural change" — and a build-target
+ * change (which `buildProjects` emits but `computeDiff` deliberately ignores)
+ * neither moves the identity nor manufacturers an empty transition. The same
+ * lossiness is what keeps future graph fields from fabricating a false
+ * architecture change. The workspace header (`root`, `provider`, `marker`,
+ * `provenance`) is excluded — the root is a local path that varies by machine,
+ * and provider/provenance are facts about the reading, not the architecture.
+ * Provider and provenance changes surface through the transition
+ * classification instead.
  *
  * @param {{projects: object[], dependencies: object[], policy?: {fingerprint: string}|null}} snapshot
  * @returns {string} A hex-encoded SHA-256.
  */
 export function snapshotIdentity({ projects, dependencies, policy }) {
+  const identityProjects = projects.map(({ name, root, type, tags }) => ({
+    name,
+    root,
+    type,
+    tags,
+  }));
   const canonical = JSON.stringify(
-    { projects, dependencies, policy: policy?.fingerprint ?? null },
+    { projects: identityProjects, dependencies, policy: policy?.fingerprint ?? null },
     (_, value) =>
       value !== null && typeof value === "object" && !Array.isArray(value)
-        ? Object.keys(value)
-            .sort()
-            .reduce((sorted, key) => {
-              sorted[key] = value[key];
-              return sorted;
-            }, {})
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, value[key]]),
+          )
         : value,
   );
   return createHash("sha256").update(canonical).digest("hex");
@@ -191,16 +204,25 @@ export function shortId(id) {
  * The zero-padded sequence number for `--capture`, taken from the highest
  * existing snapshot filename. `0001` for a fresh directory.
  *
+ * The width widens from a four-digit minimum rather than overflowing: a
+ * `10000` that padded to four digits would byte-sort *before* `9999-…` and
+ * silently rewind history order, and the sequence regex would stop seeing the
+ * 5-digit name so repeated captures would clobber the same file. Fresh
+ * directories start at `0001`; each subsequent capture pads to at least the
+ * width the next number needs, so the sequence always advances and no two
+ * captures ever target the same file.
+ *
  * @param {{files: {name: string}[]}} read From `readSnapshots`.
- * @returns {string} Four digits, zero-padded.
+ * @returns {string} Zero-padded sequence, at least four digits.
  */
 export function nextSequence(read) {
   let max = 0;
   for (const file of read.files) {
-    const match = /^(\d{4})-/.exec(file.name);
+    const match = /^(\d+)-/.exec(file.name);
     if (match) max = Math.max(max, Number.parseInt(match[1], 10));
   }
-  return String(max + 1).padStart(4, "0");
+  const width = Math.max(4, String(max + 1).length);
+  return String(max + 1).padStart(width, "0");
 }
 
 /**
@@ -270,6 +292,23 @@ export function computeEvolution(files) {
         "repository provenance could not be compared — one snapshot records its origin and the other does not",
       );
     }
+    // A snapshot taken from a dirty tree is not a reproducible claim about the
+    // commit it names, so the transition says which side came from one rather
+    // than reading it as a claim about committed history.
+    if (meta.dirtyBaseline) {
+      const commit = from.envelope.workspace.provenance?.commit;
+      notes.push(
+        "the baseline snapshot was captured from an uncommitted (dirty) tree — its architecture " +
+          `is a claim about uncommitted state${typeof commit === "string" ? `, not about commit '${commit}'` : ""}`,
+      );
+    }
+    if (meta.dirtyHead) {
+      const commit = to.envelope.workspace.provenance?.commit;
+      notes.push(
+        "the head snapshot was captured from an uncommitted (dirty) tree — its architecture " +
+          `is a claim about uncommitted state${typeof commit === "string" ? `, not about commit '${commit}'` : ""}`,
+      );
+    }
 
     const diff = computeDiff(
       {
@@ -288,13 +327,24 @@ export function computeEvolution(files) {
       diff.addedEdges.length > 0 ||
       diff.removedEdges.length > 0;
 
+    // Code drift is a disclosure, so it is only asserted when every signal
+    // that could refute it is verifiable and unchanged: the architecture did
+    // not move, the policy was actually compared and did not change, and
+    // provenance advanced. A `null` policyChanged (one-sided, or neither
+    // snapshot carries a fingerprint) is "could not be compared", not "the
+    // same" — asserting code drift on an unverifiable policy would report a
+    // clean transition where the tool cannot look.
     const codeDrift =
-      !architectureChanged && meta.policyChanged !== true && meta.provenanceChanged === true;
+      !architectureChanged && meta.policyChanged === false && meta.provenanceChanged === true;
 
     transitions.push({
       from: from.name,
       to: to.name,
       architectureChanged,
+      // A provider change is rendered with an empty diff (no graph change on
+      // top of a carrier change), a policy-only transition with null — so a
+      // consumer can tell "the carrier changed" from "only the record's
+      // interpretation changed".
       changes: architectureChanged || meta.providerChanged ? diff : null,
       policyChanged: meta.policyChanged,
       providerChanged: meta.providerChanged,
@@ -337,7 +387,16 @@ export function historyCommand(
   { capture = false, policyFingerprint = null, io = {} } = {},
 ) {
   const readSnapshotsFromDisk = io.readSnapshots ?? readSnapshots;
-  const writeSnapshotFile = io.writeFile ?? ((path, text) => writeFileSync(path, text));
+  // Default write is atomic: write the full snapshot to `<name>.json.tmp`,
+  // then rename over the final name. `readSnapshots` filters `.json.tmp` out,
+  // so an interrupted capture leaves a partial file the record will never read.
+  const writeSnapshotFile =
+    io.writeFile ??
+    ((path, text) => {
+      const tmp = `${path}.tmp`;
+      writeFileSync(tmp, text);
+      renameSync(tmp, path);
+    });
   const provenanceResolver = io.resolveProvenance ?? resolveProvenance;
 
   let read;
@@ -364,10 +423,13 @@ export function historyCommand(
     const id = snapshotIdentity({ ...head, policy: headPolicy });
 
     const last = read.files[read.files.length - 1];
-    if (last && last.id === id) {
-      // Same architecture identity as the last snapshot — writing a new file
-      // would manufacture a transition that does not exist. The record covers
-      // what the directory already holds.
+    if (last && last.id === id && last.envelope.workspace.provider === commandContext.provider) {
+      // Same architecture identity AND the same provider as the last snapshot —
+      // writing a new file would manufacture a transition that does not exist.
+      // A changed provider is not deduplicated: a pure provider migration
+      // (nx → moon with an identical graph and policy) changes how the
+      // architecture is read, so it must surface as a transition rather than be
+      // swallowed by the identity match.
       captured = { name: last.name, id, deduplicated: true };
     } else {
       const sequence = nextSequence(read);
@@ -404,7 +466,7 @@ export function historyCommand(
       });
       writeSnapshotFile(path, renderJson(envelope));
       captured = { name, id };
-      read.files.push(envelopeToSnapshot(envelope, path));
+      read.files.push(envelopeToSnapshot(envelope, path, id));
     }
   } else {
     read = readSnapshotsFromDisk(dir);
@@ -477,9 +539,12 @@ export function historyCommand(
  *
  * @param {object} envelope The envelope `jsonEnvelope` built for the capture.
  * @param {string} path The absolute path it was written to.
+ * @param {string} id The identity already computed for this snapshot — passed
+ *   through rather than recomputed, so a capture hashes the architecture once
+ *   and the record and the filename share that one hash.
  * @returns {{name: string, path: string, envelope: object, id: string}}
  */
-function envelopeToSnapshot(envelope, path) {
+function envelopeToSnapshot(envelope, path, id) {
   return {
     name: basename(path),
     path,
@@ -491,10 +556,6 @@ function envelopeToSnapshot(envelope, path) {
         provenance: envelope.workspace.provenance,
       },
     },
-    id: snapshotIdentity({
-      projects: envelope.result.projects,
-      dependencies: envelope.result.dependencies,
-      policy: envelope.result.policy ?? null,
-    }),
+    id,
   };
 }

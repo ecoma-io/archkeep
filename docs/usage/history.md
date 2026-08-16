@@ -67,10 +67,20 @@ read.
 Capture deduplicates: when the current architecture identity already is the
 last snapshot, no new file is written and no empty transition is manufactured —
 a new file for an unchanged architecture would make history lie about the space
-between snapshots.
+between snapshots. A **changed provider** is not deduplicated: a pure provider
+migration (nx → moon with an identical graph and policy) changes how the
+architecture is read, so it must surface as a transition rather than be
+swallowed by the identity match.
+
+The write is atomic: the snapshot is first written to `<name>.json.tmp` and then
+renamed over the final name, so an interrupted capture leaves a partial file
+that `history` ignores rather than reads as a snapshot.
 
 Capture refuses to run when the head graph has incomplete coverage: a snapshot
-that under-represents the real architecture would corrupt the history.
+that under-represents the real architecture would corrupt the history. A
+snapshot captured from a dirty (uncommitted) tree is not a reproducible claim —
+the record discloses it rather than presenting it as a claim about committed
+history.
 
 ## The directory is the source of truth
 
@@ -92,11 +102,11 @@ server, or a database.
 
 ## Exit codes
 
-| code | meaning                                                                                                                                     |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | The record was produced.                                                                                                                    |
-| 2    | Usage error: wrong argument count, unknown flag.                                                                                            |
-| 3    | The directory is empty or unreadable, a snapshot is unreadable or malformed, or (under `--capture`) the head graph has incomplete coverage. |
+| code | meaning                                                                                                                                             |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | The record was produced.                                                                                                                            |
+| 2    | Usage error: wrong argument count, unknown flag, or `--output` pointing inside the history directory (the report would be read back as a snapshot). |
+| 3    | The directory is empty or unreadable, a snapshot is unreadable or malformed, or (under `--capture`) the head graph has incomplete coverage.         |
 
 `history` never exits 1. Evolution is not a finding — only `check` exits 1.
 

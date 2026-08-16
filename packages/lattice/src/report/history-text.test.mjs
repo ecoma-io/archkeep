@@ -139,7 +139,11 @@ describe("formatHistoryReport", () => {
     });
     expect(text).toContain("(policy)");
     expect(text).toContain("  policy changed");
-    expect(text).toContain("1 transition recorded an architectural change");
+    // A policy-only transition is not an architectural change — the footer
+    // says so rather than counting it as one.
+    expect(text).toContain(
+      "✔ no architectural change recorded across the snapshots (only policy, provider, or drift signals)",
+    );
   });
 
   it("classifies a provider change", () => {
@@ -194,5 +198,50 @@ describe("formatHistoryReport", () => {
     });
     expect(text).toContain("1 snapshot, 0 transitions");
     expect(text).toContain("✔ one snapshot, no transitions yet");
+  });
+
+  it("counts only true architecture change in the footer, not policy signals", () => {
+    // A policy-only transition is a change to the record's interpretation, not
+    // to the architecture — the footer must not read as "N transitions
+    // recorded an architectural change".
+    const text = formatHistoryReport({
+      evolution: {
+        dir: "/ws/hist",
+        captured: null,
+        snapshots,
+        transitions: [transition({ policyChanged: true, notes: ["policy changed"] })],
+      },
+      coverage,
+    });
+    expect(text).toContain("(policy)");
+    expect(text).toContain(
+      "✔ no architectural change recorded across the snapshots (only policy, provider, or drift signals)",
+    );
+  });
+
+  it("neutralises control and escape sequences in rendered names", () => {
+    const changes = {
+      addedProjects: [
+        { name: "esc[31mred[0m", root: "libs/esc", tags: [] },
+        { name: "ok", root: "libs/ok", tags: ["tagbell"] },
+      ],
+      removedProjects: [],
+      changedProjects: [],
+      addedEdges: [{ source: "a", target: "ok", type: "static" }],
+      removedEdges: [],
+    };
+    const text = formatHistoryReport({
+      evolution: {
+        dir: "/ws/hist",
+        captured: null,
+        snapshots,
+        transitions: [transition({ architectureChanged: true, changes, notes: [] })],
+      },
+      coverage,
+    });
+    // No raw ESC byte may reach the output.
+    expect(text).not.toContain("");
+    expect(text).toContain("\\x1b[31mred\\x1b[0m");
+    expect(text).toContain("tag\\x07bell");
   });
 });

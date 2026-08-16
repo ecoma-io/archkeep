@@ -156,7 +156,9 @@ export function parseBaseline(text, path) {
     );
   }
 
-  // Per-record validation: every project must have a name and root, every
+  // Per-record validation: every project must have a name, root, and — when
+  // present — a `tags` array (an absent tags is the pre-tags shape; a malformed
+  // one would make the diff and every renderer misread the record). Every
   // dependency must have source, target, and type. A malformed record would
   // make the diff silently miscompute which projects or edges changed.
   for (const [i, project] of envelope.result.projects.entries()) {
@@ -164,6 +166,12 @@ export function parseBaseline(text, path) {
       throw new Error(
         `lattice: the baseline snapshot at '${path}' has a result.projects[${i}] record ` +
           `missing 'name' or 'root' — it is not a valid lattice project record`,
+      );
+    }
+    if (project.tags !== undefined && !Array.isArray(project.tags)) {
+      throw new Error(
+        `lattice: the baseline snapshot at '${path}' has a result.projects[${i}] record whose ` +
+          `'tags' is not an array — it is not a valid lattice project record`,
       );
     }
   }

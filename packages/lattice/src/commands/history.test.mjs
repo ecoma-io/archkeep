@@ -16,7 +16,12 @@ import { SCHEMA_VERSION } from "../report/json.mjs";
 // computation are pinned without touching disk. `historyCommand`'s own
 // capture path uses injected IO seams (same pattern as `diff`'s
 // `readBaseline` seam), so it needs no fs at all.
-vi.mock("node:fs", () => ({ readdirSync: vi.fn(), readFileSync: vi.fn() }));
+vi.mock("node:fs", () => ({
+  readdirSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  renameSync: vi.fn(),
+}));
 
 /** The real overloads would pin these to `Dirent[]`/`PathOrFileDescriptor`;
  * the mocks are loose vitest `Mock`s so a test controls the return freely. */
@@ -24,6 +29,10 @@ vi.mock("node:fs", () => ({ readdirSync: vi.fn(), readFileSync: vi.fn() }));
 const readdirSync = vi.mocked((await import("node:fs")).readdirSync);
 /** @type {ReturnType<typeof vi.fn>} */
 const readFileSync = vi.mocked((await import("node:fs")).readFileSync);
+/** @type {ReturnType<typeof vi.fn>} */
+const writeFileSync = vi.mocked((await import("node:fs")).writeFileSync);
+/** @type {ReturnType<typeof vi.fn>} */
+const renameSync = vi.mocked((await import("node:fs")).renameSync);
 
 /**
  * A complete graph envelope, malformed nowhere. The default project carries
@@ -147,6 +156,30 @@ describe("snapshotIdentity", () => {
     expect(a).not.toBe(b);
   });
 
+  it("ignores fields computeDiff does not compare, so identity and diff agree", () => {
+    // `buildProjects` emits `targets` (build targets) and a future provider
+    // may emit more model fields, but the graph diff only detects tags/type/
+    // root. A build-target change must neither move the identity (writing a
+    // snapshot that classifies as "unchanged" would be a manufactured
+    // transition) nor a future unknown field fabricate an architecture change.
+    expect(
+      snapshotIdentity({
+        projects: [{ name: "a", root: "libs/a", tags: [], targets: ["build"] }],
+        dependencies: [],
+      }),
+    ).toBe(
+      snapshotIdentity({ projects: [{ name: "a", root: "libs/a", tags: [] }], dependencies: [] }),
+    );
+    expect(
+      snapshotIdentity({
+        projects: [{ name: "a", root: "libs/a", tags: [], someFutureField: 1 }],
+        dependencies: [],
+      }),
+    ).toBe(
+      snapshotIdentity({ projects: [{ name: "a", root: "libs/a", tags: [] }], dependencies: [] }),
+    );
+  });
+
   it("includes the policy fingerprint so a policy change is an identity change", () => {
     const base = { projects: [{ name: "a", root: "libs/a", tags: [] }], dependencies: [] };
     expect(snapshotIdentity({ ...base, policy: { fingerprint: "p1" } })).not.toBe(
@@ -235,6 +268,19 @@ describe("nextSequence", () => {
     });
     expect(nextSequence({ files: Object.values(read) })).toBe("0008");
   });
+
+  it("widens the width past nine-thousand nine-hundred and ninety-nine so byte-sort never rewinds history order", () => {
+    // A sequence fixed forever at four digits would byte-sort "10000-…"
+    // before "9999-…" and rewind the record. The width must grow with the
+    // sequence so the next name stays after the last real snapshot.
+    const read = snapshotsFrom({ "9999-a.json": envelope() });
+    expect(nextSequence({ files: Object.values(read) })).toBe("10000");
+  });
+
+  it("keeps the four-digit minimum for a small history", () => {
+    const read = snapshotsFrom({ "0001-a.json": envelope() });
+    expect(nextSequence({ files: Object.values(read) })).toBe("0002");
+  });
 });
 
 describe("computeEvolution", () => {
@@ -293,22 +339,68 @@ describe("computeEvolution", () => {
 
   it("discloses code drift when provenance advances but architecture and policy do not", () => {
     const files = filesFor({
-      "0001-a.json": envelope({ commit: "aaa" }),
-      "0002-b.json": envelope({ commit: "bbb" }),
+      "0001-a.json": envelope({ commit: "aaa", policy: "p1" }),
+      "0002-b.json": envelope({ commit: "bbb", policy: "p1" }),
     });
     const { transitions } = computeEvolution(files);
     expect(transitions[0].architectureChanged).toBe(false);
-    expect(transitions[0].policyChanged).toBeNull();
+    expect(transitions[0].policyChanged).toBe(false);
     expect(transitions[0].codeDrift).toBe(true);
   });
 
   it("does not report code drift when provenance is missing on both sides", () => {
     const files = filesFor({
-      "0001-a.json": envelope({ commit: null }),
-      "0002-b.json": envelope({ commit: null }),
+      "0001-a.json": envelope({ commit: null, policy: "p1" }),
+      "0002-b.json": envelope({ commit: null, policy: "p1" }),
     });
     const { transitions } = computeEvolution(files);
     expect(transitions[0].codeDrift).toBe(false);
+  });
+
+  it("does not assert code drift when the policy cannot be compared", () => {
+    // A one-sided (or absent) policy is "could not be compared", not "the
+    // same" — asserting code drift on an unverifiable policy would report a
+    // clean transition where the tool cannot look.
+    const files = filesFor({
+      "0001-a.json": envelope({ commit: "aaa", policy: "p1" }),
+      "0002-b.json": envelope({ commit: "bbb" }),
+    });
+    const { transitions } = computeEvolution(files);
+    expect(transitions[0].policyChanged).toBeNull();
+    expect(transitions[0].codeDrift).toBe(false);
+  });
+
+  it("discloses a snapshot captured from a dirty tree", () => {
+    const files = [
+      {
+        name: "0001-a.json",
+        path: "/ws/hist/0001-a.json",
+        envelope: {
+          coverage: {},
+          result: { projects: [], dependencies: [] },
+          workspace: {
+            provider: "native",
+            provenance: { commit: "aaa", remote: "r", dirty: true },
+          },
+        },
+        id: "x",
+      },
+      {
+        name: "0002-b.json",
+        path: "/ws/hist/0002-b.json",
+        envelope: {
+          coverage: {},
+          result: { projects: [], dependencies: [] },
+          workspace: {
+            provider: "native",
+            provenance: { commit: "bbb", remote: "r", dirty: false },
+          },
+        },
+        id: "y",
+      },
+    ];
+    const { transitions } = computeEvolution(files);
+    expect(transitions[0].notes.some((n) => /uncommitted \(dirty\) tree/.test(n))).toBe(true);
   });
 
   it("reports a provider change with a disclosure note", () => {
@@ -319,6 +411,24 @@ describe("computeEvolution", () => {
     const { transitions } = computeEvolution(files);
     expect(transitions[0].providerChanged).toBe(true);
     expect(transitions[0].notes.some((n) => /provider changed/.test(n))).toBe(true);
+  });
+
+  it("renders a provider change with an empty diff, not null", () => {
+    const files = filesFor({
+      "0001-a.json": envelope({ provider: "native", commit: "aaa", dependencies: [] }),
+      "0002-b.json": envelope({ provider: "nx", commit: "bbb", dependencies: [] }),
+    });
+    const { transitions } = computeEvolution(files);
+    expect(transitions[0].architectureChanged).toBe(false);
+    expect(transitions[0].providerChanged).toBe(true);
+    // Empty-change object: the carrier changed, nothing on top of it.
+    expect(transitions[0].changes).toEqual({
+      addedProjects: [],
+      removedProjects: [],
+      changedProjects: [],
+      addedEdges: [],
+      removedEdges: [],
+    });
   });
 
   it("discloses a one-sided policy as incomparable rather than unchanged", () => {
@@ -439,6 +549,59 @@ describe("historyCommand", () => {
     expect(writes).toHaveLength(0);
     expect(result.evolution.captured.deduplicated).toBe(true);
     expect(result.evolution.snapshots).toHaveLength(1);
+  });
+
+  it("records a capture even when the identity matches but the provider changed", () => {
+    // A pure provider migration (identical graph and policy) changes how the
+    // architecture is read; swallowing it via the identity match would erase a
+    // change the transition taxonomy exists to surface.
+    const read = snapshotsFrom({ "0001-a.json": envelope({ provider: "nx" }) });
+    const writes = [];
+    const result = historyCommand("/ws/hist", baseContext(), {
+      capture: true,
+      io: {
+        readSnapshots: readSnapshotsFromMap(read),
+        writeFile: (path, text) => writes.push({ path, text }),
+      },
+    });
+    expect(writes).toHaveLength(1);
+    expect(result.evolution.captured.deduplicated).toBeFalsy();
+    expect(result.evolution.captured.name).toMatch(/^0002-/);
+    expect(result.evolution.transitions[0].providerChanged).toBe(true);
+  });
+
+  it("writes an atomic snapshot through the default writer", () => {
+    // Without an injected `io.writeFile`, the default writer must stage to
+    // `<name>.json.tmp` and rename over the final name — so an interrupted
+    // write leaves a file `readSnapshots` filters, never a snapshot the record
+    // would read as half a capture.
+    writeFileSync.mockClear();
+    renameSync.mockClear();
+    const read = snapshotsFrom({ "0001-a.json": envelope({ dependencies: [], commit: "aaa" }) });
+    const result = historyCommand(
+      "/ws/hist",
+      baseContext({
+        nodes: {
+          a: { name: "a", type: "lib", data: { root: "libs/a", tags: [] } },
+          b: { name: "b", type: "lib", data: { root: "libs/b", tags: [] } },
+        },
+        dependencies: {
+          a: [{ source: "a", target: "b", type: "static" }],
+        },
+      }),
+      {
+        capture: true,
+        io: { readSnapshots: readSnapshotsFromMap(read) },
+      },
+    );
+    expect(writeFileSync).toHaveBeenCalledTimes(1);
+    expect(renameSync).toHaveBeenCalledTimes(1);
+    const tmpPath = writeFileSync.mock.calls[0][0];
+    const finalPath = renameSync.mock.calls[0][1];
+    expect(tmpPath.endsWith(".json.tmp")).toBe(true);
+    expect(finalPath.endsWith(".json")).toBe(true);
+    expect(tmpPath.replace(/\.tmp$/, "")).toBe(finalPath);
+    expect(result.evolution.captured.deduplicated).toBeFalsy();
   });
 
   it("throws on an empty directory", () => {

@@ -73,7 +73,7 @@
  * table cannot express.
  */
 import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs";
 import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
@@ -1136,6 +1136,22 @@ async function runHistory(options, { cwd, env }) {
   }
 
   const dir = isAbsolute(options.paths[0]) ? options.paths[0] : resolve(cwd, options.paths[0]);
+
+  // A self-footgun guard: writing the history report back into the very
+  // directory `history` reads would poison every later run (the report envelope
+  // is a `history` envelope, which `parseBaseline` refuses as a non-`graph`
+  // snapshot). Refuse loudly instead of eventually failing on a poisoned dir.
+  if (options.output) {
+    const outputAbs = isAbsolute(options.output) ? options.output : resolve(cwd, options.output);
+    if (dirname(outputAbs) === dir) {
+      env.err(
+        `lattice: --output '${options.output}' is inside the history directory '${dir}' — ` +
+          `writing the report there would be read back as a snapshot on the next run. ` +
+          `Write it somewhere else.`,
+      );
+      return EXIT.usage;
+    }
+  }
 
   let result;
   try {

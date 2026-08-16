@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -2803,6 +2811,41 @@ describe("`history` capture and describe against the Nx fixture", () => {
     );
     expect(files).toHaveLength(1);
     expect(streams.lines.out.join("\n")).toContain("already the last snapshot");
+  });
+
+  it("refuses to write the report back into the history directory it reads", async () => {
+    // The self-footgun guard: --output inside the history dir would be read
+    // back as a (refused) snapshot on the next run, so it must be a usage
+    // error rather than a silent poison.
+    const streams = env();
+    expect(
+      await runCli(
+        ["history", histDir, "--format", "json", "--output", join(histDir, "report.json")],
+        streams,
+      ),
+    ).toBe(EXIT.usage);
+    expect(streams.lines.err.join("\n")).toContain("inside the history directory");
+    expect(existsSync(join(histDir, "report.json"))).toBe(false);
+  });
+
+  it("ignores a .json.tmp left by an interrupted capture", async () => {
+    // Atomic capture writes `<name>.json.tmp` then renames; an interrupted
+    // write leaves the tmp behind, and that must never count as a snapshot.
+    const streams = env();
+    const leaveTmp = mkdtempSync(join(tmpdir(), "polyglot-cli-hist-tmp-"));
+    try {
+      writeFileSync(join(leaveTmp, "0001-deadbeef.json.tmp"), "partial garbage");
+      expect(await runCli(["history", leaveTmp, "--capture"], streams)).toBe(EXIT.ok);
+      const names = readdirSync(leaveTmp).sort();
+      // The stray tmp remains (it is not deleted), and the capture wrote one
+      // real snapshot that is not the tmp itself.
+      expect(names).toContain("0001-deadbeef.json.tmp");
+      const snapshots = names.filter((n) => n.endsWith(".json") && !n.endsWith(".json.tmp"));
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0]).toMatch(/^0001-[0-9a-f]{8}\.json$/);
+    } finally {
+      rmSync(leaveTmp, { recursive: true, force: true });
+    }
   });
 
   it("exits 3 on a history directory with no snapshots", async () => {

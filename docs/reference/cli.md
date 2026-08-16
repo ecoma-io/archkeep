@@ -109,8 +109,10 @@ is the sole source of truth (see `docs/usage/history.md`). `--capture` writes
 `<sequence>-<sha8>.json` (zero-padded monotonic sequence plus the architecture
 identity's first eight hex chars, so filename byte-sort IS history order) and
 deduplicates when the current architecture identity already is the last
-snapshot. An empty directory, an unreadable snapshot, or a malformed snapshot
-is a no-verdict run (exit 3), never a record of nothing.
+snapshot and the provider has not changed — a pure provider migration surfaces
+as a transition rather than being swallowed by the identity match. An empty
+directory, an unreadable snapshot, or a malformed snapshot is a no-verdict run
+(exit 3), never a record of nothing.
 
 - Both `--flag value` and `--flag=value` work.
 - An unknown flag is a usage error (exit 2) rather than treated as a path.
@@ -119,7 +121,9 @@ is a no-verdict run (exit 3), never a record of nothing.
 - `--format` changes no exit code and no byte of the other formats. It is an
   additional rendering of the same verdict.
 - `--output` writes atomically (write to `.tmp`, then rename) so a reader
-  never sees a truncated file. A write failure is exit 3.
+  never sees a truncated file. A write failure is exit 3. For `history`,
+  pointing `--output` at a file inside the history directory is a usage error
+  (exit 2) — the report would be read back as a snapshot on the next run.
 - `--config` does not move the workspace root. The tree being judged is still
   the consumer's.
 

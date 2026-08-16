@@ -12,14 +12,35 @@
  */
 
 /**
+ * Neutralises control and terminal-escape sequences in a name or value before
+ * it is printed, so a crafted project/tag/edge name cannot inject escape
+ * sequences into a consumer's terminal (`SECURITY.md`). Real project names are
+ * ordinary characters and pass through untouched; only C0 control characters
+ * (which includes the ESC byte) and DEL become visible escapes.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function sanitize(text) {
+  // eslint-disable-next-line no-control-regex
+  return String(text).replace(/[\x00-\x1F\x7F]/g, (c) => {
+    if (c === "\n") return "\\n";
+    if (c === "\t") return "\\t";
+    if (c === "\r") return "\\r";
+    return `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`;
+  });
+}
+
+/**
  * One project as a line, same shape as `graph-text.mjs`.
  *
  * @param {{name: string, root: string, tags: string[]}} project
  * @returns {string}
  */
 function formatProject(project) {
-  const tags = project.tags.length > 0 ? ` [${project.tags.join(", ")}]` : "";
-  return `  ${project.name}  ${project.root}${tags}`;
+  const tags =
+    project.tags.length > 0 ? ` [${project.tags.map((t) => sanitize(t)).join(", ")}]` : "";
+  return `  ${sanitize(project.name)}  ${sanitize(project.root)}${tags}`;
 }
 
 /**
@@ -29,7 +50,7 @@ function formatProject(project) {
  * @returns {string}
  */
 function formatEdge(edge) {
-  return `  ${edge.source} → ${edge.target} (${edge.type})`;
+  return `  ${sanitize(edge.source)} → ${sanitize(edge.target)} (${sanitize(edge.type)})`;
 }
 
 /**
@@ -40,9 +61,9 @@ function formatEdge(edge) {
  */
 function formatChange(change) {
   const formatValue = (v) => {
-    if (Array.isArray(v)) return v.length > 0 ? v.join(", ") : "(none)";
+    if (Array.isArray(v)) return v.length > 0 ? v.map((x) => sanitize(x)).join(", ") : "(none)";
     if (v === null || v === undefined) return "(none)";
-    return String(v);
+    return sanitize(String(v));
   };
   return `  ${change.field}  ${formatValue(change.baseline)} → ${formatValue(change.head)}`;
 }
@@ -141,15 +162,13 @@ export function formatHistoryReport({ evolution, coverage }) {
     sections.push(`${i}  ${snapshot.name}  ${snapshot.id.slice(0, 8)}`);
   }
 
+  // The footer counts true architectural change only — a transition classified
+  // as policy or provider is a change to the record's interpretation, not to
+  // the architecture, so a policy-only history must not read as "N transitions
+  // recorded an architectural change".
   let changed = 0;
   for (const transition of evolution.transitions) {
-    if (
-      transition.architectureChanged ||
-      transition.policyChanged === true ||
-      transition.providerChanged
-    ) {
-      changed += 1;
-    }
+    if (transition.architectureChanged) changed += 1;
     const kind = transitionKind(transition);
     sections.push(`~ ${transition.from} → ${transition.to}  (${kind})`);
     if (transition.changes) {
@@ -167,7 +186,14 @@ export function formatHistoryReport({ evolution, coverage }) {
       "✔ one snapshot, no transitions yet — capture again after an architectural change",
     );
   } else if (changed === 0) {
-    sections.push("✔ no architectural change recorded across the snapshots");
+    const anySignal = evolution.transitions.some(
+      (t) => t.policyChanged === true || t.providerChanged || t.codeDrift,
+    );
+    sections.push(
+      anySignal
+        ? "✔ no architectural change recorded across the snapshots (only policy, provider, or drift signals)"
+        : "✔ no architectural change recorded across the snapshots",
+    );
   } else {
     sections.push(
       `${changed} transition${changed === 1 ? "" : "s"} recorded an architectural change`,

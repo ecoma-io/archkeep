@@ -33,6 +33,7 @@
  *   baselineFingerprint: string|null, headFingerprint: string|null}} input
  * @returns {{providerChanged: boolean,
  *   provenanceChanged: boolean|null, provenanceOneSided: boolean, crossRepo: boolean,
+ *   dirtyBaseline: boolean, dirtyHead: boolean,
  *   policyChanged: boolean|null, policyOneSided: boolean,
  *   policyMismatch: {baseline: {fingerprint: string}, head: {fingerprint: string}}|null}}
  */
@@ -81,11 +82,21 @@ export function compareSnapshotMetadata({
   // Both sides carrying no fingerprint: policyChanged stays null — no config
   // was ever provided, so neither "changed" nor a one-sided warning applies.
 
+  // A snapshot taken from a dirty (uncommitted) tree is not a reproducible
+  // claim about the commit it names (`../../commands/provenance.mjs`'s header),
+  // so each consumer is told when either side came from one. Consumers decide
+  // what the fact means — `history` discloses it, `diff` leaves it to its own
+  // notes.
+  const dirtyBaseline = baselineProvenance?.dirty === true;
+  const dirtyHead = headProvenance?.dirty === true;
+
   return {
     providerChanged,
     provenanceChanged,
     provenanceOneSided,
     crossRepo,
+    dirtyBaseline,
+    dirtyHead,
     policyChanged,
     policyOneSided,
     policyMismatch:

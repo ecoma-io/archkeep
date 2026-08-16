@@ -84,43 +84,64 @@ console.log(
   "--------------------------------------------------------------------------------------",
 );
 console.log(
-  "  projects   edges   identity/op    identity/elem     diff/op    compare/pair   diff/elem ",
+  "  projects   edges   identity/op    identity/elem   history/op  per-transition  diff/elem",
 );
 console.log(
   "--------------------------------------------------------------------------------------",
 );
 
-for (const { projects, edges } of SIZES) {
-  const baseline = makeSnapshot(projects, edges);
-  // A head with a handful of edges changed, so comparison does real work.
-  const head = { ...makeSnapshot(projects, edges) };
-  const elements = projects + edges;
+// The number of snapshots in the history, kept small relative to the element
+// counts because the real scaling question is per-element cost. Consecutive
+// snapshots alternate between baseline and a head with a handful of edges
+// changed, so every comparison does real work.
+const SNAPSHOT_COUNT = 8;
 
-  const identityMs = time(() => snapshotIdentity(baseline), REPS);
+for (const { projects, edges } of SIZES) {
+  const elements = projects + edges;
+  const identityMs = time(() => snapshotIdentity(makeSnapshot(projects, edges)), REPS);
   const identityPerElement = identityMs / elements;
 
-  // Two-snapshot evolution: pairs the two snapshots in sequence.
-  const from = baseline;
-  const to = head;
-  const fileFor = (name, snapshot, commit) => ({
-    name,
-    path: `/ws/hist/${name}`,
-    id: snapshotIdentity(snapshot),
-    envelope: {
-      workspace: { provider: "native", provenance: { commit, remote: "r", dirty: false } },
-      result: { projects: snapshot.projects, dependencies: snapshot.dependencies },
-    },
-  });
-  const files = [fileFor("0001-a.json", from, "aaa"), fileFor("0002-b.json", to, "bbb")];
+  // A K-snapshot history: odd snapshots are baseline-shaped, even ones carry a
+  // handful of changed edges, so each of the K-1 comparisons does real work.
+  // Scaling K here is what catches an accidental quadratic (O(num comparisons))
+  // planner, which a fixed two-snapshot bench could never see.
+  const files = [];
+  for (let i = 0; i < SNAPSHOT_COUNT; i++) {
+    const isHead = i % 2 === 1;
+    const snapshot = makeSnapshot(projects, edges);
+    if (isHead) {
+      snapshot.dependencies = snapshot.dependencies.slice(
+        0,
+        Math.min(5, snapshot.dependencies.length),
+      );
+      snapshot.dependencies = [
+        ...snapshot.dependencies,
+        { source: "p-new", target: "p0", type: "dynamic" },
+        { source: "p0", target: "p-new", type: "static" },
+      ];
+    }
+    files.push({
+      name: `${String(i + 1).padStart(4, "0")}-${snapshotIdentity(snapshot).slice(0, 8)}.json`,
+      path: `/ws/hist/${String(i + 1).padStart(4, "0")}.json`,
+      id: snapshotIdentity(snapshot),
+      envelope: {
+        workspace: {
+          provider: "native",
+          provenance: { commit: `c${i}`, remote: "r", dirty: false },
+        },
+        result: { projects: snapshot.projects, dependencies: snapshot.dependencies },
+      },
+    });
+  }
 
-  const diffMs = time(() => computeEvolution(files), REPS);
-  const compareMs = diffMs / (files.length - 1);
-  const diffPerElement = compareMs / elements;
+  const compareMs = time(() => computeEvolution(files), REPS);
+  const perTransitionMs = compareMs / (files.length - 1);
+  const diffPerElement = perTransitionMs / elements;
 
   console.log(
     `${String(projects).padStart(6)} ${String(edges).padStart(8)} ` +
       `${identityMs.toFixed(3).padStart(12)} ${identityPerElement.toExponential(2).padStart(14)} ` +
-      `${diffMs.toFixed(3).padStart(10)} ${compareMs.toFixed(3).padStart(12)} ${diffPerElement.toExponential(2).padStart(11)}`,
+      `${compareMs.toFixed(3).padStart(10)} ${perTransitionMs.toFixed(3).padStart(12)} ${diffPerElement.toExponential(2).padStart(11)}`,
   );
 }
 
