@@ -10,6 +10,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `graph`      | (none)               | Print the project graph as a deterministic snapshot                      | no               |
 | `diff`       | `<baseline>`         | Compare two graph snapshots edge by edge                                 | no               |
 | `drift`      | (none)               | Compare the observed architecture to the declared intent                 | no               |
+| `fitness`    | (none)               | Judge every declared fitness function against the workspace              | no               |
 | `waivers`    | (none)               | List the boundary waivers on the table, with their terms                 | no               |
 | `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                   | no               |
 | `health`     | `[<snapshot-dir>]`   | Describe architecture health metrics and trends                          | no               |
@@ -89,6 +90,20 @@ reports the current run's metrics without a trend. Health is descriptive — it
 never exits 1 — and it exits 3 whenever any metric reads `unknown`: a run that
 could not fully inspect its own evidence is not a healthy run, and "cannot
 look" must never read as "clean".
+
+### `fitness`
+
+| flag       | argument       | default                  | meaning                                                                     |
+| ---------- | -------------- | ------------------------ | --------------------------------------------------------------------------- |
+| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                             |
+| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                               |
+| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. |
+
+No positional arguments. Fitness is descriptive — it never exits 1, only 0 on a
+completed judgment and 3 when coverage is incomplete or the policy declares no
+`fitness` at all. Each declared function is judged against the observed
+workspace and printed as a verdict row; `check` folds the same verdicts in by
+presence.
 
 ### `impact`
 
@@ -282,6 +297,15 @@ Constraint rows that carry `description` or `remediation` show those fields.
 Useful before editing a project — the same constraint table `check` judges
 from, rendered as a readable summary rather than as a list of violations.
 Descriptive.
+
+### `fitness`
+
+Judges every declared fitness function against the observed workspace: one line
+per function `✔ / ✖ / ⚠ / ◌`, then an overall posture, all deterministic and
+clock-free. Descriptive — it never exits 1. `check` folds fitness in by
+presence: a workspace whose policy declares a `fitness` export gets the same
+per-function verdicts counted into its exit code — 1 for any `fail`, 3 for any
+`unknown`, never a new code.
 
 ### `context <project> --plan [<path>...]`
 

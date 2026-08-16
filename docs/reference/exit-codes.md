@@ -115,10 +115,18 @@ states and moves past.
 
 ## Descriptive commands
 
-`graph`, `diff`, `drift`, `history`, `impact`, `explain`, and `context` are descriptive -- they never exit 1.
+`graph`, `diff`, `drift`, `fitness`, `history`, `impact`, `explain`, and `context` are descriptive -- they never exit 1.
 They exit 0 when the run completes and 3 when coverage is incomplete. The
 envelope's `status` follows the same mapping: `"ok"` for 0, `"no-verdict"` for 3. `"findings"` never appears for a descriptive command.
 
 `diff` also refuses an incomplete baseline or current workspace (exit 3, no
 diff), because every "removed" entry would be ambiguous between a real change
 and a coverage gap.
+
+`fitness` also exits 3 when the policy declares no `fitness` at all -- judging
+nothing is not the same as judging an empty table, and a `--config` pointing at
+a policy that declares none names that loudly instead of printing an empty
+verdict table. Its per-function verdicts, when present, fold into `check`
+instead: `check` exits 1 when a declared fitness function `fail`s and 3 when any
+function is `unknown`, same machinery as boundary findings and no-verdicts,
+never a new code.

@@ -34,6 +34,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [evidence.md](concepts/evidence.md)                       | The one verdict vocabulary every judgment speaks, and the evidence each state requires |
 | [provenance.md](concepts/provenance.md)                   | The origin record, why `on` is optional, and why provenance never rules                |
 | [waivers.md](concepts/waivers.md)                         | Temporary acceptance of a boundary breach, the lifecycle, and the deadline             |
+| [fitness-functions.md](concepts/fitness-functions.md)     | Named quality gates — the verdict contract and what each condition judges              |
 | [agentic-development.md](concepts/agentic-development.md) | The three questions an agent asks, and the commands that answer them                   |
 | [integrations.md](concepts/integrations.md)               | How integrations extend the core                                                       |
 
@@ -46,6 +47,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph            |
 | [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis |
 | [drift.md](usage/drift.md)                     | The `drift` command: observed architecture against the declared intent      |
+| [fitness.md](usage/fitness.md)                 | The `fitness` command: every declared quality gate judged, as a verdict table |
 | [history.md](usage/history.md)                 | The `history` command: the architecture's evolution across snapshots        |
 | [health.md](usage/health.md)                   | The `health` command: per-metric verdicts, trends, and the status contract  |
 | [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context               |
@@ -78,7 +80,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | page                                                       | what it answers                                                                       |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | [configuration.md](reference/configuration.md)             | `lattice.json` fields, `nx.json` options, Moon options, inline boundary config        |
-| [policy-schema.md](reference/policy-schema.md)             | Constraint table schema: every key, every value                                       |
+| [policy-schema.md](reference/policy-schema.md)             | Constraint table schema: every key of `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, `fitness` |
 | [cli.md](reference/cli.md)                                 | All commands, all flags, all exit codes                                               |
 | [exit-codes.md](reference/exit-codes.md)                   | The four exit codes with exact meaning                                                |
 | [json-output.md](reference/json-output.md)                 | `--format json`'s versioned envelope: every field, and the stability promise          |
@@ -127,10 +129,10 @@ allowed to say it". That table:
 | [`docs/doctrine/principles.md`](doctrine/principles.md)                         | The seven binding principles                                                                                                        |
 | [`docs/roadmap.md`](roadmap.md)                                                 | The staged path: what ships today, which capabilities belong to which major version, and in what order                              |
 | `docs/getting-started/`                                                         | Installation, first project, first policy                                                                                           |
-| `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, projects, drift, evidence, waivers, health, agentic development, integrations |
+| `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, projects, drift, evidence, waivers, health, fitness functions, agentic development, integrations |
 | `docs/usage/`                                                                   | How a consumer runs it and reads its answers                                                                                        |
 | `docs/integrations/`                                                            | The provider and editor integrations at the edge — Nx, Moon, and the VS Code extension                                              |
-| `docs/reference/`                                                               | Schemas, exit codes, language limits, violation catalogue                                                                           |
+| `docs/reference/`                                                               | Schemas, exit codes, command reference, language limits, violation catalogue                                                       |
 | `docs/development/`                                                             | How it works inside, and how to extend it                                                                                           |
 | `docs/skills/`                                                                  | Agent architecture skills: overview, installation, hosts, authoring, versioning                                                     |
 | `CONTRIBUTING.md`                                                               | The contribution bar, the commands, hooks, commits, review, release                                                                 |

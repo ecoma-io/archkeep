@@ -225,12 +225,12 @@ against the result rather than parse a terminal report or a SARIF log.
 
 Four exit codes, and the distinction that matters is **3** against **0**:
 
-| code | meaning                                                                    |
-| ---- | -------------------------------------------------------------------------- |
-| 0    | clean — and every selected file was analyzed                               |
-| 1    | findings — boundary violations, go.work drift, or dead tsconfig aliases    |
-| 2    | usage error                                                                |
-| 3    | no verdict — the run could not start, or a selected file could not be read |
+| code | meaning                                                                                                                         |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | clean — and every selected file was analyzed                                                                                    |
+| 1    | findings — boundary violations, go.work drift, dead tsconfig aliases, or a failing fitness function                             |
+| 2    | usage error                                                                                                                     |
+| 3    | no verdict — the run could not start, a selected file could not be read, or a declared fitness function could not be determined |
 
 A checker that could not look must never be mistaken for one that looked and
 found nothing, which is why exit 3 exists and why it covers a **partial** run as
