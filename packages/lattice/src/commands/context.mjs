@@ -132,6 +132,11 @@ export function markersAt(root) {
  *   Computed and returned, but not consulted by `check`'s refusal logic —
  *   `../../../../docs/usage/` names the gap this fills and the issue tracking it
  *   wiring it in.
+ * @property {{file: string, project: string}[]} owned Every tracked file that
+ *   belongs to a project, paired with its owning project — the ownership map
+ *   `createWorkspace` already built. A command that needs to know WHICH project
+ *   owns a file (the planning context's path→project scoping, `./plan-context-command.mjs`)
+ *   reads this rather than re-deriving ownership a second way.
  */
 
 /**
@@ -380,6 +385,12 @@ export function resolveCommandContext(
     analysis: { imports, failures, analyzed, analyzedFiles },
     options,
     pluginGap,
+    // Every tracked file that belongs to a project, paired with its project —
+    // the ownership map `createWorkspace` already built (`own ./workspace.mjs`).
+    // A command that needs to know WHICH project owns a file (the planning
+    // context's path→project scoping) reads this rather than re-deriving
+    // ownership a second way. Not part of any existing command's consumption.
+    owned,
   };
 }
 

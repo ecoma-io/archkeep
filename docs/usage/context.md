@@ -49,10 +49,43 @@ rather than as a list of violations.
 | `--format` | `text`\|`json` | `text`                   | Terminal report (default) or the versioned JSON envelope.                   |
 | `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                               |
 | `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. |
+| `--plan`   | (presence)     | off                      | Request the agent architecture planning context (see below).                |
 
 The project name is a single positional argument. `--config` is accepted
 because the answer depends on which boundary law is in effect — a different
 constraint table produces a different set of matching rows.
+
+## The planning context (`--plan`)
+
+```
+lattice context billing-core --plan
+lattice context billing-core --plan path/to/file.go path/to/other.rs
+```
+
+`--plan` requests the **agent architecture planning context**: the
+deterministic facts a coding agent needs before planning a change to a
+project. Trailing paths scope the change (which project roots or files it
+touches); with no paths, the whole workspace is in scope.
+
+The planning context is facts, not a plan — Lattice reports the current
+architecture snapshot, the applicable policy with the author's Intent
+(`description`/`remediation`), the impact of a change to the target project
+(dependents capped at 10 with an explicit overflow note), the current
+violations (the full-workspace rule-engine verdict, scoped for reporting),
+drift (`null` when no manifest exists to read), coverage with the exact files
+that could not be analyzed, and the deterministic commands that verify the
+change afterwards. It never generates an LLM plan, decides an implementation
+strategy, or modifies source code — an agent reasons over these facts.
+
+`--plan` is strictly additive: it changes no exit code and no byte of the
+plain `context` text output. In JSON the plan's fields sit under
+`result.plan` alongside the unchanged `result.project/tags/constraints/`
+`dependencies`, and `result.plan.variant` is `"plan"` so a consumer can tell
+the two apart. The rule verdict is computed over the whole analyzeable tree
+(so whole-graph rules such as circular-dependency and lazy-load are correct on
+every provider); on Nx and Moon workspaces this is a second analysis pass,
+which costs more than a plain `context` run. The JSON output is deterministic:
+two runs over an unchanged tree produce byte-identical bytes.
 
 ## Exit codes
 

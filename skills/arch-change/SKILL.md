@@ -20,8 +20,16 @@ introduction rather than in CI.
 
 ## How
 
-1. **Before the change** — run `arch-context` for the target project. Understand
-   which dependency directions are allowed and which are forbidden.
+1. **Before the change** — run `arch-context` for the target project, and where
+   the change is non-trivial, request the planning context:
+
+   ```
+   lattice context <project> --plan path/to/file.go
+   ```
+
+   Understand which dependency directions are allowed and which are forbidden,
+   who depends on the project, current violations in scope, any drift, and the
+   commands that will verify the change.
 
 2. **Make the change** — modify code respecting the constraints identified above.
 

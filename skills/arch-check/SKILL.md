@@ -80,6 +80,12 @@ the architecture is sound.
 - **Empty output from a scoped check does NOT mean the workspace is safe.**
   Cycle rules and lazy-load rules judge the whole file graph, not individual
   files. A scoped check is a fast filter; a full check is the gate.
+- **`context --plan` reports the same verdict a full `check` would.** The
+  planning context's violations are the full-workspace rule-engine verdict
+  (`evaluate` over the whole analyzeable tree), scoped only for reporting to
+  the change's projects — so a plan showing no in-scope violations is a
+  whole-graph claim, not a scoped guess. It is still advisory; the authoritative
+  gate after the change is `lattice check`.
 - **Exit 3 is never "clean."** A check that could not look must never be mistaken
   for one that looked and found nothing. If Lattice could not analyze a file,
   the verdict for that file is unknown — not absent.
