@@ -4,16 +4,17 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 
 ## Commands
 
-| command   | positional args      | summary                                                   | finds violations |
-| --------- | -------------------- | --------------------------------------------------------- | ---------------- |
-| `check`   | `[<path>...]`        | Check imports against the boundary rules                  | yes -- exits 1   |
-| `graph`   | (none)               | Print the project graph as a deterministic snapshot       | no               |
-| `diff`    | `<baseline>`         | Compare two graph snapshots edge by edge                  | no               |
-| `drift`   | (none)               | Compare the observed architecture to the declared intent  | no               |
-| `history` | `<dir>`              | Describe how the architecture evolved across snapshots    | no               |
-| `impact`  | `<project>`          | List projects that depend on the named project            | no               |
-| `explain` | `<file:line:column>` | Explain the judgment for one import site                  | no               |
-| `context` | `<project>`          | Show the architecture constraints that apply to a project | no               |
+| command      | positional args      | summary                                                                  | finds violations |
+| ------------ | -------------------- | ------------------------------------------------------------------------ | ---------------- |
+| `check`      | `[<path>...]`        | Check imports against the boundary rules                                 | yes -- exits 1   |
+| `graph`      | (none)               | Print the project graph as a deterministic snapshot                      | no               |
+| `diff`       | `<baseline>`         | Compare two graph snapshots edge by edge                                 | no               |
+| `drift`      | (none)               | Compare the observed architecture to the declared intent                 | no               |
+| `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                   | no               |
+| `impact`     | `<project>`          | List projects that depend on the named project                           | no               |
+| `explain`    | `<file:line:column>` | Explain the judgment for one import site                                 | no               |
+| `context`    | `<project>`          | Show the architecture constraints that apply to a project                | no               |
+| `provenance` | (none)               | Describe where this run's facts came from and which rows carry an origin | no               |
 
 `lattice --help` prints the help text and exits 0. An omitted command name is a
 usage error (exit 2). If the first positional argument names a path that exists
@@ -257,3 +258,32 @@ every provider); on Nx and Moon workspaces this is a second analysis pass,
 which costs more than a plain `context` run. The JSON output is deterministic:
 two runs over an unchanged tree produce byte-identical bytes.
 Descriptive.
+
+### `provenance`
+
+| flag       | argument       | default | meaning                                         |
+| ---------- | -------------- | ------- | ----------------------------------------------- |
+| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope. |
+| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.   |
+
+No positional arguments. `provenance` takes no `--config` flag — it reads the
+workspace's own declared files.
+
+`provenance` answers two questions:
+
+- **Repository provenance** — the git commit, remote, and dirty state of the
+  tree this run judged, the same `workspace.provenance` block the JSON envelope
+  already carries for `graph`/`diff`/`drift`/`history`, made a first-class
+  report.
+- **Decision provenance** — for every governance row in the workspace's
+  declared intent (`architecture-intent.json`) and boundary config (the
+  `depConstraints` table), whether the row carries an `origin` block. A row
+  without one is flagged `no origin recorded — cannot attest`, because a row
+  whose decision nobody recorded is indistinguishable from a rule that
+  appeared by editing the file directly.
+
+Descriptive. `provenance` never changes a verdict and never exits 1 — its
+finding is about documentation, not about the architecture. It exits 0 when it
+completes, 3 when a declared file is malformed (a row list built from a file it
+could not read would be a claim about rows that do not exist), and 2 on usage
+error.
