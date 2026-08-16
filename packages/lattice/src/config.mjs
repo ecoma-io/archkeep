@@ -391,6 +391,10 @@ export function suppressionCovers(suppression, violation) {
  * nothing, which is the safe direction, but it also reads as a decision that
  * has been taken when it has not.
  */
+/**
+ * @param {object} row
+ * @param {number} index
+ */
 function suppressionRowViolations(row, index) {
   const at = `boundarySuppressions[${index}]`;
   if (!isPlainObject(row)) return [`${at}: must be an object, got ${describe(row)}`];
@@ -426,13 +430,13 @@ function suppressionRowViolations(row, index) {
     // machines' `TZ`. A waiver whose term means different things to different
     // machines is not a term; an instant-bearing spelling means the same
     // instant everywhere.
-    const expiryMatch =
-      typeof row.expiresAt === "string"
-        ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(
-            row.expiresAt,
-          )
-        : null;
-    const expiry = expiryMatch ? Date.parse(row.expiresAt) : NaN;
+    const expiryMatches = typeof row.expiresAt === "string" ? row.expiresAt : null;
+    const expiryMatch = expiryMatches
+      ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(
+          expiryMatches,
+        )
+      : null;
+    const expiry = expiryMatch ? Date.parse(expiryMatches) : NaN;
     // A calendar-impossible instant like `2026-02-30` passes the shape regex
     // AND `Date.parse`, which silently normalises it to a different calendar
     // day (`2026-03-02`) — a term that quietly extends acceptance past what
@@ -440,19 +444,21 @@ function suppressionRowViolations(row, index) {
     // The written calendar fields are checked against the same fields of the
     // instant they claim, independent of the string's timezone: `Date.UTC`
     // normalises the impossible and the round-trip no longer matches.
-    const [, y, mo, d, h, mi, s] = expiryMatch ?? [];
+    // The capture groups destructure as `unknown` under tsc's strict JSDoc
+    // checking (the regex `.exec` return type does not name them), so each is
+    // coerced here — the calendar comparison wants numbers anyway.
+    const [, ...captures] = expiryMatch ?? [];
+    const [y, mo, d, h, mi, s] = captures.map(Number);
     const normalized =
-      expiryMatch && !Number.isNaN(expiry)
-        ? new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s))
-        : null;
+      expiryMatch && !Number.isNaN(expiry) ? new Date(Date.UTC(y, mo - 1, d, h, mi, s)) : null;
     const impossibleCalendar =
       normalized !== null &&
-      (normalized.getUTCFullYear() !== +y ||
-        normalized.getUTCMonth() !== +mo - 1 ||
-        normalized.getUTCDate() !== +d ||
-        normalized.getUTCHours() !== +h ||
-        normalized.getUTCMinutes() !== +mi ||
-        normalized.getUTCSeconds() !== +s);
+      (normalized.getUTCFullYear() !== y ||
+        normalized.getUTCMonth() !== mo - 1 ||
+        normalized.getUTCDate() !== d ||
+        normalized.getUTCHours() !== h ||
+        normalized.getUTCMinutes() !== mi ||
+        normalized.getUTCSeconds() !== s);
     if (!expiryMatch || Number.isNaN(expiry) || impossibleCalendar) {
       violations.push(
         `${at}.expiresAt: must be a full ISO-8601 instant with an explicit UTC/offset, ` +
