@@ -539,7 +539,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     { readGraph, listFiles },
   );
   const { root, graph, workspace, tracked } = commandContext;
-  const { imports } = commandContext.analysis;
+  const { imports, exemptedFiles } = commandContext.analysis;
   const failures = [...commandContext.analysis.failures];
   const analyzed = commandContext.analysis.analyzed;
 
@@ -751,11 +751,29 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   const unchecked = new Set(
     failures.filter(isWholeFileFailure).map((failure) => failure.sourceFile),
   ).size;
+  // A `coverage.exempt` row removes a file from `unclaimed` before this run
+  // ever sees it — legitimately, for vendored or generated code — but nothing
+  // that removal produces was ever named in any report: an exempted file and
+  // a genuinely covered one read identically in every surface `check`
+  // produces. Stated as a note for the same reason the polyglot coverage gap
+  // below is: the exit code and verdict are unchanged (this is what
+  // `coverage.exempt` is FOR), but the silent direction — a reader unable to
+  // tell that coverage narrowed at all — is closed.
+  const exemptionNote =
+    exemptedFiles.length > 0
+      ? `${exemptedFiles.length} file${exemptedFiles.length === 1 ? "" : "s"} exempted from ` +
+        `coverage by ${LATTICE_MODEL_FILE}'s coverage.exempt`
+      : null;
+
   // Ready-to-ship policy facts have always been sourced from `boundaryConfig`
   // via `src/config.mjs`'s `notes`; the intent check's own coverage notes ride
   // the same seam so both surfaces (text and JSON) thread them identically —
   // today only an `"optional": true` allowed row whose statement is absent.
-  const notes = [...(config.notes ?? []), ...(intent === null ? [] : intent.notes)];
+  const notes = [
+    ...(config.notes ?? []),
+    ...(intent === null ? [] : intent.notes),
+    ...(exemptionNote === null ? [] : [exemptionNote]),
+  ];
 
   // A polyglot coverage gap: the Nx graph carries no polyglot edges because
   // the plugin is not registered, but polyglot manifests exist under project

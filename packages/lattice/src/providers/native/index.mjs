@@ -56,7 +56,7 @@ function projectOfFactory(projects) {
  * `fileFailure` already uses, so nothing about either path is native-specific.
  *
  * @param {{root: string, files: string[], readFile: (path: string) => string|null}} args
- * @returns {{projects: {name: string, root: string, type: string, tags: string[], tagOrigins: Record<string, string[]>, implicitDependencies: string[], targets: string[]}[], projectOf: (file: string) => string|undefined, model: object, failures: object[]}}
+ * @returns {{projects: {name: string, root: string, type: string, tags: string[], tagOrigins: Record<string, string[]>, implicitDependencies: string[], targets: string[]}[], projectOf: (file: string) => string|undefined, model: object, failures: object[], exempted: string[]}}
  * @throws {Error} on a malformed `lattice.json`, a discovery defect, or a
  *   stale `coverage.exempt` row.
  */
@@ -85,7 +85,27 @@ export function discover({ root, files, readFile }) {
     );
   }
 
-  return { projects, projectOf, model, failures: [...discoveryFailures, ...coverage.failures] };
+  // `coverage.exempted` used to stop here: `judgeCoverage` computed which
+  // files a `coverage.exempt` row removed from `unclaimed`, and nothing past
+  // this function ever read the list back — so a workspace could exempt an
+  // unbounded number of files from coverage, forever, with no command, no
+  // report line, and no JSON field ever naming a single one of them. An
+  // exempted file and a genuinely covered one were byte-for-byte
+  // indistinguishable in every surface this tool produces, which is exactly
+  // the silent direction `../../../../../AGENTS.md`'s invariant forbids —
+  // `check`'s own comment two lines above threatens a stale-exemption throw,
+  // but nothing threatened the opposite failure: an exemption nobody could see.
+  // `../../commands/context.mjs` threads this onto `CommandContext.analysis`
+  // and `../../../cli.mjs`'s `check` reports the count beside every verdict,
+  // the same "no violations is a claim about coverage too" treatment the
+  // import/file/project counts already get.
+  return {
+    projects,
+    projectOf,
+    model,
+    failures: [...discoveryFailures, ...coverage.failures],
+    exempted: coverage.exempted,
+  };
 }
 
 /**

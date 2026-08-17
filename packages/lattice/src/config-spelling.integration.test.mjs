@@ -673,10 +673,23 @@ describe("A3 — marker: the nx.json route and the lattice.json route judge the 
     );
     expect(viaNx.violations).toBe(1);
     expect(viaNative.violations).toBe(1);
+    // One expected, provider-specific difference: `buildSimpleNativeTree`
+    // exempts its own boundary-config file from coverage (the native model's
+    // "every analyzable file must be owned" rule has no Nx equivalent), and
+    // `../commands/context.mjs`'s `check` now names that exemption on the
+    // summary line. Stripped here, loudly — `toContain` first, so a change to
+    // the note's wording fails this test instead of silently widening what
+    // "identical" means for every other line.
+    const exemptionNote = "; 1 file exempted from coverage by lattice.json's coverage.exempt";
+    expect(viaNative.report).toContain(exemptionNote);
+    const nativeReportWithoutExemptionNote = viaNative.report.replace(exemptionNote, "");
     expectReportsEqual(
       [
         { spelling: "nx.json marker", report: viaNx.report },
-        { spelling: "lattice.json marker", report: viaNative.report },
+        {
+          spelling: "lattice.json marker (exemption note stripped)",
+          report: nativeReportWithoutExemptionNote,
+        },
       ],
       2,
     );
