@@ -619,6 +619,28 @@ export const moduleBoundaryOptions = {
     expect(report).not.toContain("goWorkMissingUse");
   });
 
+  it("exits 3 on a go.work that is not a go.work file at all, not a clean agreement — audit P1-03", async () => {
+    // The exact shape the audit reported: a go.work fetched through a
+    // redirect that actually served an HTML error page tokenizes with no
+    // unterminated block or string, so before the keyword validation this
+    // fix adds, every line fell through the "future directive" skip and the
+    // file read as zero `use` entries — exit 0, "go.work agrees with the
+    // project graph", an affirmative claim about a file that was never
+    // really read (the finding's own evidence). It must refuse a verdict
+    // instead, the same as the unclosed-block case above.
+    writeWork(
+      "go.work",
+      "<!DOCTYPE html>\n<html><head><title>404 Not Found</title></head>\n<body>404 Not Found</body></html>\n",
+    );
+    const streams = workEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("could not be analyzed at all");
+    expect(report).toContain("go.work:1: unknown directive: <!DOCTYPE");
+    expect(report).not.toContain("goWorkMissingUse");
+    expect(report).not.toContain("agrees with the project graph");
+  });
+
   it("carries drift into the SARIF report as results, so a code-scanning consumer sees the red", async () => {
     writeWork("go.work", "go 1.24\n\nuse ./libs/store\n");
     const { report, violations, goWorkDrift } = await check(
@@ -642,6 +664,85 @@ export const moduleBoundaryOptions = {
       EXIT.violations,
     );
     expect(streams.lines.err.join("\n")).toContain("1 go.work drift finding");
+  });
+});
+
+describe("the go.work drift check in a workspace with no Go projects at all", () => {
+  // Audit finding P1-03's exact evidence, reproduced end to end rather than
+  // only at the parser: a workspace whose graph carries zero go.mod projects
+  // has nothing on either side of `compareGoWork` to disagree about, so
+  // before the keyword validation this fix adds, an unparseable go.work here
+  // — HTML from a redirect, say — parsed to zero `use` entries and compared
+  // clean against zero module projects: exit 0, "✔ go.work agrees with the
+  // project graph", `checked: true` in the JSON envelope. An affirmative
+  // claim about a file the run never actually read. This fixture has no
+  // go.mod anywhere, on purpose, so that false agreement is the ONLY way
+  // this go.work could have read as clean.
+  const noGoRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-gowork-notgowork-"));
+  afterAll(() => rmSync(noGoRoot, { recursive: true, force: true }));
+
+  const writeNoGo = (relativePath, text) => {
+    mkdirSync(join(noGoRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(noGoRoot, relativePath), text);
+  };
+
+  writeNoGo("nx.json", "{}\n");
+  writeNoGo(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeNoGo(
+    "go.work",
+    "<!DOCTYPE html>\n<html><head><title>404 Not Found</title></head>\n<body>404 Not Found</body></html>\n",
+  );
+
+  const noGoContext = {
+    cwd: noGoRoot,
+    readGraph: () => ({ nodes: {}, dependencies: {} }),
+    listFiles: () => ["nx.json", "module-boundaries.config.mjs", "go.work"],
+  };
+
+  const noGoEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      ...noGoContext,
+    };
+  };
+
+  it("exits 3 instead of the false 'agrees with the project graph' the finding reported", async () => {
+    const streams = noGoEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("could not be analyzed at all");
+    expect(report).toContain("go.work:1: unknown directive: <!DOCTYPE");
+    expect(report).not.toContain("agrees with the project graph");
+  });
+
+  it("counts the refusal as an uncovered file in the JSON envelope, never a silent checked: true", async () => {
+    // `goWork` itself reads `null` either way — the same value a workspace
+    // with no go.work at all would carry — so `unchecked` is the field that
+    // must disambiguate "nothing to check" from "could not check this".
+    const { goWorkDrift, unchecked } = await check(
+      { format: "json", config: null, paths: [] },
+      noGoContext,
+    );
+    expect(goWorkDrift).toBe(0);
+    expect(unchecked).toBeGreaterThan(0);
   });
 });
 
