@@ -124,21 +124,37 @@ export async function fitnessCommand(commandContext, io = {}) {
   // disagree about whether the declared intent matches the observed graph. A
   // drift comparison that cannot be completed surfaces as an `unknown` verdict
   // on the function, never a `fail` reading "0 findings" over an intent the
-  // command never actually judged. `driftForCheck` is NOT caught here: an
-  // intent that is simply absent resolves to `undefined` (a quiet, `unknown`
-  // drift-free), while the fail-closed throws — an unregistered plugin over
-  // polyglot manifests, an unreadable or invalid intent — must exit 3 exactly
-  // as they do for `drift`/`graph`/`impact`/`explain`, not fold into a
-  // verdict-bearing run over a graph that cannot see the workspace.
+  // command never actually judged. `driftForCheck` is called UNCONDITIONALLY —
+  // never gated on `tracked` the way `check`/`plan-context-command.mjs` gate
+  // their own calls — because this command must still reach
+  // `driftForCheck`'s `refuseIncompleteGraph` guard whether or not intent is
+  // declared: an Nx workspace with an unregistered plugin over polyglot
+  // manifests must refuse loudly regardless of intent. `driftForCheck` itself
+  // resolves an absent intent (`drift.intent === undefined`) to a quiet
+  // result rather than judging one, which is what makes this unconditional
+  // call safe; that signal becomes `intent: null` here, the same value
+  // `check`'s fold passes when no intent file is tracked at all, and
+  // `drift-free` below reads it as `unknown`. `driftForCheck` is NOT caught
+  // here: every OTHER fail-closed condition — that same unregistered-plugin
+  // refusal, an unreadable or invalid intent — must exit 3 exactly as they do
+  // for `drift`/`graph`/`impact`/`explain`, not fold into a verdict-bearing
+  // run over a graph that cannot see the workspace.
   const drift = await driftForCheck(commandContext);
-  const intent = {
-    verdict:
-      drift.findings.length > 0 ? "findings" : drift.unresolved.length > 0 ? "no-verdict" : "ok",
-    boundaries: drift.boundaries,
-    findings: drift.findings,
-    unresolved: drift.unresolved,
-    notes: drift.notes,
-  };
+  const intent =
+    drift.intent === undefined
+      ? null
+      : {
+          verdict:
+            drift.findings.length > 0
+              ? "findings"
+              : drift.unresolved.length > 0
+                ? "no-verdict"
+                : "ok",
+          boundaries: drift.boundaries,
+          findings: drift.findings,
+          unresolved: drift.unresolved,
+          notes: drift.notes,
+        };
   const snapshot = fitnessSnapshot(commandContext, {
     intent,
     suppressions: config.suppressions,

@@ -4,6 +4,13 @@ Set up a workspace with no Nx at all. Lattice's native provider discovers
 projects and builds the graph from the tree itself -- no `nx.json`, no Nx
 installation, no build system as a precondition.
 
+It does still need the workspace root to be a single git repository: file
+discovery reads `git ls-files`, not the filesystem directly, so `git init`
+there before step 1 if it is not one already. Keep that repository at the
+root -- nothing below needs a `git init` of its own, and running one inside a
+project directory nests a second repository there, which hides that
+directory's files from the root's `git ls-files` instead of tracking them.
+
 If your workspace already has `nx.json` at its root, this is not the page you
 need: [../integrations/nx.md](../integrations/nx.md) covers the Nx path.
 
@@ -36,6 +43,16 @@ row already claims. Omit `projects.infer` entirely to declare every project by
 hand; omit `projects.declared` to infer everything. Both together compose rather
 than compete.
 
+A declared row needs at least one tracked file under its root, the same way an
+inferred one needs its manifest -- git does not track empty directories, and a
+project backed by nothing is indistinguishable from a typo'd path. Back this
+one before moving on:
+
+```shell
+mkdir -p apps/api
+touch apps/api/.gitkeep
+```
+
 The full field reference -- `projectRules`, `coverage.exempt`,
 `workspaceLayout`, the inline `boundaryConfig` object -- is in
 [../reference/configuration.md](../reference/configuration.md).
@@ -48,7 +65,7 @@ directory:
 ```shell
 mkdir -p libs/billing-core
 cd libs/billing-core
-git init && go mod init github.com/acme/billing-core
+go mod init github.com/acme/billing-core
 ```
 
 Or a Rust crate:
@@ -157,7 +174,40 @@ what to put in the table is in
 page in this sequence walks through writing and running it step by step:
 [first-policy.md](first-policy.md).
 
+`module-boundaries.config.mjs` is itself a tracked `.mjs` file, and it sits at
+the workspace root -- above every project this walkthrough created, the same
+"analyzable but unowned" shape as any stray script would have. Left alone, the
+next step's check refuses over exactly this one file: coverage incomplete.
+Exempt it in `lattice.json`, with the reason on record:
+
+```jsonc
+{
+  "projects": {/* ... */},
+  "projectRules": [/* ... */],
+  "coverage": {
+    "exempt": [
+      {
+        "path": "module-boundaries.config.mjs",
+        "reason": "boundary law itself, not a project source file",
+      },
+    ],
+  },
+}
+```
+
+`coverage.exempt` is the general answer for any tracked, analyzable file that
+sits outside every project root, not only this one --
+[../reference/configuration.md](../reference/configuration.md) has the full
+field.
+
 ## 5. Run the check
+
+Stage what the steps above created -- an untracked file is invisible to
+`git ls-files`, and this workspace has not tracked anything yet:
+
+```shell
+git add lattice.json module-boundaries.config.mjs apps/api libs/billing-core
+```
 
 ```shell
 pnpm exec lattice check

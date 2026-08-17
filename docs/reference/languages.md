@@ -111,9 +111,11 @@ Reading is static, per the documented `go.work` grammar (single-line and block
 `use`, `//` comments, quoted and raw string paths, absolute and relative
 paths); `go` is never invoked, the same refusal as everything else on this
 page. A `go.work` the parser cannot read — an unclosed block, an unterminated
-string, a `use` without a path — **fails the run with exit 3** rather than
-being read as an empty `use` list, because an empty list here would mean "no
-drift". Two declared parse limits: a string may not span a line, and paths are
+string, a `use` without a path, or a keyword outside `go.work`'s own five
+(`go`, `toolchain`, `use`, `replace`, `godebug`), which rules out text that is
+not a go.work file at all — **fails the run with exit 3** rather than being
+read as an empty `use` list, because an empty list here would mean "no drift".
+Two declared parse limits: a string may not span a line, and paths are
 compared with `/` separators, so a `\`-separated Windows path surfaces as a
 drift finding naming the text the file contains — loud, never silent.
 
