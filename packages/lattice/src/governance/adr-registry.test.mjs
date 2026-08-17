@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  ADR_DIR,
   ADR_ID_PATTERN,
   adrsBinding,
   boundFitnessIds,
@@ -265,5 +270,147 @@ describe("ADR_ID_PATTERN", () => {
     expect(ADR_ID_PATTERN.test("0012-api")).toBe(true);
     expect(ADR_ID_PATTERN.test("01-api")).toBe(false);
     expect(ADR_ID_PATTERN.test("12-api")).toBe(false);
+  });
+});
+
+// P1-21: the registry used to read whatever `.md` files sat in `docs/adr/`
+// regardless of git, and never looked at whether a directory entry was a
+// symlink. A gitignored scratch file with an ADR-shaped name resolved
+// exactly like a real record, and so did a symlink pointing outside the
+// workspace — with manual lookup the only thing that would ever have caught
+// it. `../architecture-intent/model.mjs`'s `loadIntent` already refuses an
+// untracked `architecture-intent.json`; these cases hold `loadAdrRegistry` to
+// the identical discipline.
+describe("tracked-only registry (P1-21)", () => {
+  it("keeps every entry when `tracked` is not supplied — existing callers unchanged", () => {
+    const io = treeWith({ "0099-untracked.md": "---\nstatus: accepted\n---\n" });
+    const { byId } = loadAdrRegistry("/tmp/x", io);
+    expect(byId.has("0099-untracked")).toBe(true);
+  });
+
+  it("excludes a directory entry the tracked tree does not know about", () => {
+    // A gitignored scratch file sitting right beside a real, tracked record.
+    const io = treeWith({ "0099-untracked.md": "---\nstatus: accepted\n---\n" });
+    const { records, byId } = loadAdrRegistry("/tmp/x", {
+      ...io,
+      // Only the VALID fixture's own path is tracked — 0099 is invisible to
+      // git, exactly as a `.gitignore`d file would be. Built from `ADR_DIR`
+      // rather than spelled whole, the same reason `cli.integration.test.mjs`'s
+      // ADR fixture does — a literal `docs/adr/<id>.md` here would read to
+      // `check-docs-links` as this file citing a decision record in THIS
+      // repository, on a path that resolves nowhere.
+      tracked: [`${ADR_DIR}/0001-bind-collaboration.md`],
+    });
+    expect(byId.has("0099-untracked")).toBe(false);
+    expect(records.map((r) => r.id)).toEqual(["0001-bind-collaboration"]);
+    // The invariant end to end: a decisionRef naming the untracked file
+    // resolves unknown — the same answer a name nobody ever wrote gets, never
+    // `adr`, no matter how closely a planted file's id matches.
+    expect(resolveDecisionRef(byId, boundFitnessIds(records), "0099-untracked")).toBe("unknown");
+  });
+
+  it("never validates an untracked file's shape — a malformed one is excluded, not a load error", () => {
+    // Silence here is the honest answer (this module's header): an untracked
+    // file is treated as though it were never there at all, so it must not
+    // even reach `validateRecord` — a malformed untracked file must not turn
+    // "no such record" into "cannot read the registry" for every OTHER record
+    // beside it.
+    const io = treeWith({ "0099-untracked.md": "---\nstatus: not-a-real-status\n---\n" });
+    expect(() =>
+      loadAdrRegistry("/tmp/x", { ...io, tracked: [`${ADR_DIR}/0001-bind-collaboration.md`] }),
+    ).not.toThrow();
+  });
+});
+
+describe("symlink escape (P1-21) — real filesystem", () => {
+  let root;
+  let outside;
+
+  beforeAll(() => {
+    // `realpathSync` because a temp directory may itself be handed out
+    // through a symlink (macOS `/tmp`), and the containment check this guards
+    // compares real, canonical paths — `entry-point.test.mjs` and
+    // `lsp.integration.test.mjs` take the identical precaution for the
+    // identical reason.
+    root = realpathSync(mkdtempSync(join(tmpdir(), "lattice-adr-registry-")));
+    outside = realpathSync(mkdtempSync(join(tmpdir(), "lattice-adr-registry-outside-")));
+    mkdirSync(join(root, ADR_DIR), { recursive: true });
+    // The external, attacker-controlled file: shaped exactly like a valid
+    // ADR, sitting entirely outside `root`.
+    writeFileSync(join(outside, "0099-planted.md"), "---\nstatus: accepted\n---\n");
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  });
+
+  it("excludes a tracked-named file whose bytes are a symlink resolving outside the workspace", () => {
+    // The tracked-name filter alone cannot catch this: `git ls-files` reports
+    // paths, never modes, so a symlink committed at this path — or one
+    // swapped in locally after the tracked-name check ran — passes it by name
+    // alone. Only reading the file itself, past the symlink, tells the two
+    // apart, the read-side twin of the write-side guard
+    // `../../cli.mjs`'s `writeOutputReport` documents (P0-03).
+    const escaping = join(root, ADR_DIR, "0099-planted.md");
+    symlinkSync(join(outside, "0099-planted.md"), escaping);
+    try {
+      const { records, byId } = loadAdrRegistry(root, {
+        tracked: [`${ADR_DIR}/0099-planted.md`],
+      });
+      expect(byId.has("0099-planted")).toBe(false);
+      expect(records).toEqual([]);
+      expect(resolveDecisionRef(byId, boundFitnessIds(records), "0099-planted")).toBe("unknown");
+    } finally {
+      rmSync(escaping);
+    }
+  });
+
+  it("still reads a real, in-workspace record normally", () => {
+    // The guard is specific to an escaping symlink, not to the directory in
+    // general — a genuine tracked record still loads even while the escaping
+    // symlink case above is exercised in the same suite.
+    const real = join(root, ADR_DIR, "0001-real.md");
+    writeFileSync(real, "---\nstatus: accepted\n---\n");
+    try {
+      const { records } = loadAdrRegistry(root, { tracked: [`${ADR_DIR}/0001-real.md`] });
+      expect(records.map((r) => r.id)).toEqual(["0001-real"]);
+    } finally {
+      rmSync(real);
+    }
+  });
+
+  it("still resolves a symlink whose target stays inside the workspace", () => {
+    // Not every symlink is a threat — one resolving to another tracked file
+    // INSIDE the tree is unremarkable and must keep working.
+    const inside = join(root, ADR_DIR, "0002-inside-target.md");
+    writeFileSync(inside, "---\nstatus: accepted\n---\n");
+    const link = join(root, ADR_DIR, "0003-inside-link.md");
+    symlinkSync(inside, link);
+    try {
+      const { records } = loadAdrRegistry(root, {
+        tracked: [`${ADR_DIR}/0002-inside-target.md`, `${ADR_DIR}/0003-inside-link.md`],
+      });
+      expect(records.map((r) => r.id).sort()).toEqual(["0002-inside-target", "0003-inside-link"]);
+    } finally {
+      rmSync(link);
+      rmSync(inside);
+    }
+  });
+
+  it("excludes a dangling symlink the same way an unreadable file already throws", () => {
+    // Not this fix's threat model (the bytes were never reachable either way),
+    // but it must not regress: a dangling symlink still fails the read with
+    // ENOENT, which the existing "cannot read" branch turns into the same
+    // loud error it always has.
+    const dangling = join(root, ADR_DIR, "0004-dangling.md");
+    symlinkSync(join(root, ADR_DIR, "nowhere.md"), dangling);
+    try {
+      expect(() => loadAdrRegistry(root, { tracked: [`${ADR_DIR}/0004-dangling.md`] })).toThrow(
+        /cannot read docs\/adr/,
+      );
+    } finally {
+      rmSync(dangling);
+    }
   });
 });

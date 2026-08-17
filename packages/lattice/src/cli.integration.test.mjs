@@ -3257,6 +3257,138 @@ var _ = a.Name
   });
 });
 
+describe("a path scoped to an untracked file must not read as clean (P1-04)", () => {
+  // The audit's exact reproduction: this tool's whole file universe is
+  // `git ls-files` (`../workspace.mjs`'s header), so a file that exists on
+  // disk but was never `git add`ed is invisible to it. `selectFiles` used to
+  // fall through silently to an empty selection, and a scoped `check` over a
+  // path that matched nothing analyzed 0 files and reported a clean tree —
+  // byte-for-byte indistinguishable from a workspace with no violation at
+  // all. Same fixture shape as the cycle-scoping describe block above, reused
+  // here because a circular-dependency finding is exactly the violation class
+  // the audit's own reproduction hit, and it is what proves this is the SAME
+  // bytes on disk, not a different, cleaner file.
+  const untrackedRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-untracked-"));
+  afterAll(() => rmSync(untrackedRoot, { recursive: true, force: true }));
+
+  const writeUntracked = (relativePath, text) => {
+    mkdirSync(join(untrackedRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(untrackedRoot, relativePath), text);
+  };
+
+  writeUntracked(
+    "lattice.json",
+    JSON.stringify({
+      projects: {
+        declared: [
+          { root: "libs/a", name: "a", tags: ["layer:x"] },
+          { root: "libs/b", name: "b", tags: ["layer:x"] },
+        ],
+      },
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "workspace tooling config at the root, not itself a project",
+          },
+        ],
+      },
+    }),
+  );
+  writeUntracked(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:x", onlyDependOnLibsWithTags: ["layer:x"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeUntracked("libs/a/go.mod", "module example.com/a\n\ngo 1.24\n");
+  // Written to disk exactly like every other fixture file below — the bug is
+  // that `listFiles` (standing in for `git ls-files`) can omit it below while
+  // it still exists here, the same as a file that was never `git add`ed.
+  writeUntracked(
+    "libs/a/doc.go",
+    `// Package a is one half of a cycle that only closes through b.
+package a
+
+import (
+	"example.com/b"
+)
+
+var _ = b.Name
+`,
+  );
+  writeUntracked("libs/b/go.mod", "module example.com/b\n\ngo 1.24\n");
+  writeUntracked(
+    "libs/b/doc.go",
+    `// Package b closes the cycle back to a.
+package b
+
+import (
+	"example.com/a"
+)
+
+var _ = a.Name
+`,
+  );
+
+  const trackedFiles = [
+    "lattice.json",
+    "module-boundaries.config.mjs",
+    "libs/a/go.mod",
+    "libs/a/doc.go",
+    "libs/b/go.mod",
+    "libs/b/doc.go",
+  ];
+  // `libs/a/doc.go` — the file carrying the cycle-closing import — is on disk
+  // (written above) but absent here: the exact shape `git ls-files` answers
+  // for a file that exists but has never been `git add`ed.
+  const untrackedFileList = trackedFiles.filter((file) => file !== "libs/a/doc.go");
+
+  it("exits usage rather than clean when the scoped path matches no tracked file", async () => {
+    const streams = { ...env(), cwd: untrackedRoot, listFiles: () => untrackedFileList };
+    expect(await runCli(["check", "libs/a/doc.go"], streams)).toBe(EXIT.usage);
+    expect(streams.lines.err.join("\n")).toContain("matches no tracked file");
+    // Not the silent old behaviour: no clean report was ever printed for a
+    // run that never actually inspected the file.
+    expect(streams.lines.out.join("\n")).not.toContain("no boundary violations");
+  });
+
+  it("finds the real circular-dependency violation once the exact same bytes are tracked", async () => {
+    // The audit's contrast, reproduced: identical file content at the same
+    // path — the only difference from the case above is whether `listFiles`
+    // (standing in for `git ls-files`) names it.
+    const streams = { ...env(), cwd: untrackedRoot, listFiles: () => trackedFiles };
+    expect(await runCli(["check", "libs/a/doc.go"], streams)).toBe(EXIT.violations);
+    expect(streams.lines.out.join("\n")).toContain("noCircularDependencies");
+  });
+
+  it("exits usage on a scoped path that does not exist at all, the typo case", async () => {
+    const streams = { ...env(), cwd: untrackedRoot, listFiles: () => trackedFiles };
+    expect(await runCli(["check", "libs/nonexistent"], streams)).toBe(EXIT.usage);
+    expect(streams.lines.err.join("\n")).toContain("matches no tracked file");
+  });
+
+  it("still selects cleanly when scoped to a real, tracked, merely unowned path", async () => {
+    // `module-boundaries.config.mjs` is tracked but owned by no project (no
+    // declared project's root covers it) — a legitimate, genuinely empty
+    // slice, and must not be refused the way the untracked case above is.
+    const streams = { ...env(), cwd: untrackedRoot, listFiles: () => trackedFiles };
+    expect(await runCli(["check", "module-boundaries.config.mjs"], streams)).toBe(EXIT.ok);
+    expect(streams.lines.out.join("\n")).toContain("no boundary violations");
+  });
+});
+
 describe("a declared workspaceLayout must reach the rule engine, not just validate and vanish", () => {
   // The silent-direction bug: `lattice.json`'s `workspaceLayout` used to be
   // validated by `./src/providers/native/model.mjs` and then dropped —
@@ -4508,6 +4640,11 @@ describe("adr resolves a workspace root by every marker a root may carry", () =>
           join(adrRoot, ADR_FIXTURE_DIR, "0001-layering.md"),
           "---\nstatus: accepted\n---\n\n# Layering\n",
         );
+        // The registry reads only git-tracked files (P1-21) — `git ls-files`
+        // has to see this fixture's own record, or the fix under test would
+        // exclude it exactly like the untracked scratch file it is not.
+        spawnSync("git", ["init", "--quiet"], { cwd: adrRoot, encoding: "utf8" });
+        spawnSync("git", ["add", "-A"], { cwd: adrRoot, encoding: "utf8" });
 
         const result = spawnSync(process.execPath, [CLI, "adr"], {
           cwd: adrRoot,
