@@ -142,6 +142,66 @@ describe("analyzeVue — a malformed SFC must not blank a run", () => {
   });
 });
 
+describe("analyzeVue — an unrecovered script block is a whole-file failure, not silence", () => {
+  // P0-05: an unclosed <script>/<script setup> tag is still a TRUTHY block —
+  // compiler-sfc's own `ignoreEmpty` only nulls out a genuinely empty,
+  // well-formed block — but its `content` is "" and its `loc` is zero-width,
+  // because the parser never found the end tag. Isolating a zero-width span
+  // blanks the whole file, which used to read exactly like a template-only
+  // component with no imports: a real, lost import goes undetected and
+  // `coverage.complete` reads `true` over a file that was never analyzed.
+  it("reports a whole-file failure for an unclosed <script>, and never hands it to TypeScript", () => {
+    const { imports, failures } = analyze(
+      "<template><div>ok</div></template>\n<script>\nimport foo from './foo'\n",
+    );
+    expect(imports).toEqual([]);
+    expect(analyzeTypeScript).not.toHaveBeenCalled();
+    // compiler-sfc's own "Element is missing end tag." error ALSO rides the
+    // pre-existing generic errors-loop as a second, site-classified entry —
+    // expected and harmless (it still points at the exact broken tag); the
+    // one that matters for coverage is the whole-file entry this fix adds.
+    const wholeFile = failures.filter((failure) => failure.line === null);
+    expect(wholeFile).toHaveLength(1);
+    expect(wholeFile[0].column).toBeNull();
+    expect(wholeFile[0].reason).toContain("<script>");
+    expect(wholeFile[0].reason).toContain("could not be recovered");
+  });
+
+  it("reports a whole-file failure for an unclosed <script setup>, naming it by name", () => {
+    const { failures } = analyze(
+      "<template><div>ok</div></template>\n<script setup>\nimport foo from './foo'\n",
+    );
+    const wholeFile = failures.filter((failure) => failure.line === null);
+    expect(wholeFile).toHaveLength(1);
+    expect(wholeFile[0].reason).toContain("<script setup>");
+  });
+
+  it("still analyzes a healthy block when only the other one is unrecovered", () => {
+    const text = [
+      '<script lang="ts">',
+      'import { defineComponent } from "vue";',
+      "</scr" + "ipt>",
+      "<script setup>",
+      "import foo from './foo'",
+    ].join("\n");
+    const { failures } = analyze(text);
+    // The healthy <script> block was still handed to TypeScript...
+    expect(analyzeTypeScript).toHaveBeenCalledTimes(1);
+    expect(handedOver().text).toContain('import { defineComponent } from "vue"');
+    // ...and the unrecovered <script setup> still fails the run rather than
+    // silently contributing zero imports.
+    expect(failures.some((failure) => failure.line === null)).toBe(true);
+  });
+
+  it("does not flag a <script src> reference — its content lives in a file this analyzer does not read", () => {
+    // A self-closing `src` reference is ALSO a truthy, zero-width block (no
+    // inline body to speak of), and must not collide with the unrecovered-tag
+    // signal above: `!block.src` is what tells the two apart.
+    const { failures } = analyze('<template><div /></template>\n<script src="./external.ts" />\n');
+    expect(failures.some((failure) => /could not be recovered/.test(failure.reason))).toBe(false);
+  });
+});
+
 describe("analyzeVue — order", () => {
   it("returns records in source order even though the blocks are analyzed one after another", () => {
     // `<script setup>` is analyzed second but can be written first; the
