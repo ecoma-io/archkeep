@@ -899,6 +899,67 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
 }
 
 /**
+ * Writes a rendered report to `--output`'s path, atomically and without
+ * following a symlink planted at the temp path — the one function every
+ * `run*` below calls rather than the 16 near-identical inline copies this
+ * replaces.
+ *
+ * Written to a sibling `.tmp` file first, then renamed onto the target — a
+ * rename within one directory is atomic, so a reader of `outputPath` (this
+ * process crashing mid-write, or a second run racing this one) sees either
+ * the previous complete file or the new complete one, never a truncated or
+ * half-written report. No fsync: the guarantee this buys is "never a torn
+ * file", not "survives a power loss".
+ *
+ * The temp write uses `{flag: "wx"}` — `O_CREAT|O_EXCL`, which POSIX
+ * guarantees fails on a path that already exists WITHOUT following it if it
+ * is a symlink, dangling or not. Every value in `--output` and every value in
+ * a report body — a project name, a directory, an import specifier — comes
+ * from the tree being judged and is attacker-supplied the moment a pull
+ * request adds one (`../SECURITY.md`'s threat model). Before this guard, a
+ * tracked symlink at `<target>.tmp` pointing outside the workspace made this
+ * write follow it and overwrite whatever the symlink named, with
+ * attacker-chosen bytes, while reporting success — the documented CI recipe
+ * (`../docs/usage/ci.md`) run against such a pull request was a runner-write
+ * primitive. The same flag closes a second hole for free: a stray `.tmp` left
+ * by a crashed prior run — or a file that happens to collide with the name —
+ * used to be silently truncated and then renamed away; now the write refuses
+ * with EEXIST, loud, rather than destroying a file this run did not create.
+ * `renameSync` itself needs no equivalent guard: POSIX `rename(2)` replaces
+ * whatever sits at the destination path — including a symlink there — as a
+ * single directory-entry swap, and never dereferences it to write through.
+ *
+ * @param {string} outputPath Resolved `--output` path.
+ * @param {string} text The rendered report, newline-terminated by the caller.
+ * @param {{err: Function}} env
+ * @returns {boolean} `true` on success; `false` after reporting the failure
+ *   to `env.err` — the caller's cue to return its own no-verdict exit code.
+ */
+function writeOutputReport(outputPath, text, env) {
+  const tmpOutput = `${outputPath}.tmp`;
+  let tmpCreated = false;
+  try {
+    writeFileSync(tmpOutput, text, { flag: "wx" });
+    tmpCreated = true;
+    renameSync(tmpOutput, outputPath);
+    return true;
+  } catch (cause) {
+    // Only clean up a `.tmp` THIS call created — an `EEXIST` from `wx` means
+    // nothing was written, so there is nothing here to remove, and the path
+    // may be attacker- or accident-owned rather than this run's own leftover.
+    if (tmpCreated) {
+      try {
+        unlinkSync(tmpOutput);
+      } catch {
+        // Nothing this run can do about it either way.
+      }
+    }
+    env.err(`lattice: could not write --output '${outputPath}': ${cause?.message ?? cause}`);
+    return false;
+  }
+}
+
+/**
  * `COMMANDS.check`'s `run`: drives `check`, writes the report where it
  * belongs, and returns the process's exit code. Everything about argv parsing
  * and where output goes lives here, not in `check` itself — `src/commands/README.md`'s
@@ -922,32 +983,10 @@ async function runCheck(options, { cwd, env }) {
   }
 
   if (options.output) {
-    // Written to a sibling `.tmp` file first, then renamed onto the target —
-    // a rename within one directory is atomic, so a reader of `options.output`
-    // (this process crashing mid-write, or a second run racing this one) sees
-    // either the previous complete file or the new complete one, never a
-    // truncated or half-written report. No fsync: the guarantee this buys is
-    // "never a torn file", not "survives a power loss".
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, result.report.endsWith("\n") ? result.report : `${result.report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      // Best-effort cleanup so a failed write does not leave a stray `.tmp`
-      // file beside the target — swallowed on purpose, since the write above
-      // already failed and this is cleanup, not the operation being reported.
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up, or nothing this run can do about it either way.
-      }
-      // The report exists in memory but the consumer will never see it — that
-      // is precisely a silent success if this returned 0 or 1 instead. Named
-      // as a no-verdict run, the same as every other "could not complete"
-      // condition this tool refuses to answer past.
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = result.report.endsWith("\n") ? result.report : `${result.report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     // The report went to a file, so the log would otherwise say nothing at all
     // about a run that just failed the build.
     env.err(
@@ -1032,19 +1071,10 @@ async function runGraph(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(
       `lattice: ${result.projects.length} projects, ${result.dependencies.length} edges ` +
         `→ ${options.output}`,
@@ -1114,19 +1144,10 @@ async function runDiff(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(`lattice: diff complete → ${options.output}`);
   } else {
     env.out(report);
@@ -1169,19 +1190,10 @@ async function runDrift(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(
       `lattice: ${result.drift.observed.projects} projects, ${result.drift.observed.edges} edges ` +
         `→ ${options.output}`,
@@ -1231,19 +1243,10 @@ async function runProvenance(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(`lattice: ${result.rows.length} governance rows → ${options.output}`);
   } else {
     env.out(report);
@@ -1290,19 +1293,10 @@ async function runReconcile(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(
       `lattice: ${result.reconcile.observed.projects} projects, ${result.reconcile.observed.edges} edges ` +
         `→ ${options.output}`,
@@ -1367,19 +1361,10 @@ async function runWaivers(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(
       `lattice: ${result.waivers.waivers.length} waivers on the table ` + `→ ${options.output}`,
     );
@@ -1444,19 +1429,10 @@ async function runFitness(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(
       `lattice: ${result.fitness.functions.length} fitness function` +
         `${result.fitness.functions.length === 1 ? "" : "s"} judged (${result.fitness.verdict}) ` +
@@ -1529,19 +1505,10 @@ async function runImpact(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(
       `lattice: ${result.impact.dependents.length} project` +
         `${result.impact.dependents.length === 1 ? "" : "s"}` +
@@ -1613,19 +1580,10 @@ async function runExplain(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(`lattice: explain complete → ${options.output}`);
   } else {
     env.out(report);
@@ -1707,19 +1665,10 @@ async function runContextCommand(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(`lattice: context complete → ${options.output}`);
   } else {
     env.out(report);
@@ -1773,19 +1722,10 @@ async function runAdr(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(`lattice: adr complete → ${options.output}`);
   } else {
     env.out(report);
@@ -1876,19 +1816,10 @@ async function runHistory(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(`lattice: history complete → ${options.output}`);
   } else {
     env.out(report);
@@ -1954,19 +1885,10 @@ async function runDebt(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(
       `lattice: ${result.ledger.total} debt entr` +
         `${result.ledger.total === 1 ? "y" : "ies"} → ${options.output}`,
@@ -2014,19 +1936,10 @@ async function runDiscover(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(
       `lattice: ${result.discovery.projects.length} projects, ${result.discovery.edges.length} ` +
         `edges` +
@@ -2111,19 +2024,10 @@ async function runHealth(options, { cwd, env }) {
   const report = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
-    const tmpOutput = `${options.output}.tmp`;
-    try {
-      writeFileSync(tmpOutput, report.endsWith("\n") ? report : `${report}\n`);
-      renameSync(tmpOutput, options.output);
-    } catch (cause) {
-      try {
-        unlinkSync(tmpOutput);
-      } catch {
-        // Nothing to clean up.
-      }
-      env.err(`lattice: could not write --output '${options.output}': ${cause?.message ?? cause}`);
-      return EXIT.error;
-    }
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
     env.err(`lattice: health complete → ${options.output}`);
   } else {
     env.out(report);
