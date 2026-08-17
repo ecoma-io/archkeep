@@ -100,3 +100,33 @@ describe("analyzeVue over the real TypeScript analyzer", () => {
     expect(result.imports[1].resolved.target).toBe("domain");
   });
 });
+
+describe("analyzeVue — an unclosed <script> tag over the REAL SFC parser", () => {
+  // P0-05: pinned against the real `vue/compiler-sfc`, not the mocked unit
+  // tier, because the exact fact this fix depends on — an unrecovered block
+  // is a TRUTHY, zero-width `descriptor.script`, not `null` — is the real
+  // parser's own behavior, not something this package controls.
+  const lostImport = 'import Button from "./Button.vue";';
+  const brokenSfc = [
+    "<template>",
+    "  <section><p>a</p></section>",
+    "</template>",
+    "",
+    '<script lang="ts">',
+    lostImport,
+    // Deliberately no closing </script> tag anywhere in the file.
+  ].join("\n");
+
+  const result = analyzeVue({ sourceFile: "libs/ui/src/Broken.vue", text: brokenSfc, workspace });
+
+  it("recovers no imports — the real import statement is genuinely unreachable", () => {
+    expect(result.imports).toEqual([]);
+  });
+
+  it("fails the whole file rather than reporting a clean, empty component", () => {
+    const wholeFile = result.failures.filter((failure) => failure.line === null);
+    expect(wholeFile).toHaveLength(1);
+    expect(wholeFile[0].sourceFile).toBe("libs/ui/src/Broken.vue");
+    expect(wholeFile[0].reason).toContain("could not be recovered");
+  });
+});

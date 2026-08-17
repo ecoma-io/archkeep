@@ -77,11 +77,29 @@ function resolveMoonEnv(workspaceRoot, { env = process.env } = {}) {
 }
 
 /**
- * Moon dependency scope → Lattice edge type.
+ * Moon dependency scope (plus, where known, its `source`) → Lattice edge type.
  *
- * Moon's `project-graph --json` labels each edge with a scope:
- * - `"production"` — a runtime dependency. Maps to `"static"`, the same type
- *   an Nx `implicitDependencies` edge carries.
+ * `source` is checked first and wins: Moon's own `"implicit"`/`"explicit"`
+ * marks whether a dependency was declared (`moon.yml`'s `dependsOn`) or
+ * inferred by Moon itself with no author-written declaration behind it — the
+ * same "no code-level backing" fact Nx's `implicitDependencies` and the
+ * native provider's own `implicitDependencies` row both carry, and the exact
+ * criterion `check`'s `declaredEdgeViolationsForCheck`
+ * (`../commands/edge-constraints.mjs`) and `drift.mjs`'s/`discover.mjs`'s own
+ * exclusions already key off: `edge.type === "implicit"`. Before this
+ * function read `source` at all, EVERY Moon-sourced edge — implicit or not —
+ * fell through to a `scope`-derived type (`"static"`/`"dynamic"`), so an
+ * implicit Moon dependency was structurally indistinguishable from a real,
+ * code-derived one to every one of those callers.
+ *
+ * `source` is only available on a project node's own `dependencies[]` array
+ * (`transformMoonGraph`'s second edge-building loop) — `raw.graph.edges`'
+ * `[source, target, scope]` tuples carry no such field, so that loop's call
+ * always passes `source: undefined` and this function's behavior there is
+ * unchanged.
+ *
+ * Once `source` is not `"implicit"` (or is unknown), Moon's `scope` decides:
+ * - `"production"` — a runtime dependency. Maps to `"static"`.
  * - `"development"` — a build-time-only dependency. Maps to `"dynamic"`,
  *   because `noImportsOfLazyLoadedLibraries` is decided on exactly that
  *   distinction (`../../rules/topology.mjs`).
@@ -90,12 +108,22 @@ function resolveMoonEnv(workspaceRoot, { env = process.env } = {}) {
  *   not build graphs.
  * - `"peer"` — a peer dependency. Maps to `"static"`.
  * - `"root"` — the root workspace depends on a project. These are not
- *   project-to-project edges Lattice judges, so they are omitted.
+ *   project-to-project edges Lattice judges, so they are omitted — checked
+ *   before `source`, because a root-to-project edge is not a boundary either
+ *   way.
  *
  * @param {string} scope
+ * @param {string} [source] Moon's own `"implicit"`/`"explicit"` marker for
+ *   this specific dependency, when the caller has one.
  * @returns {string|undefined} Lattice edge type, or `undefined` to skip.
  */
-function edgeTypeFromScope(scope) {
+function edgeTypeFromScope(scope, source) {
+  if (scope === "root") {
+    // Root-to-project edges are not project-to-project boundaries, implicit
+    // or not.
+    return undefined;
+  }
+  if (source === "implicit") return "implicit";
   switch (scope) {
     case "production":
       return "static";
@@ -104,9 +132,6 @@ function edgeTypeFromScope(scope) {
     case "build":
     case "peer":
       return "static";
-    case "root":
-      // Root-to-project edges are not project-to-project boundaries.
-      return undefined;
     default:
       // Unknown scopes become "static" — conservative, and never silent.
       return "static";
@@ -311,11 +336,13 @@ export function transformMoonGraph(raw) {
   // Also add dependencies from each project node's own `dependencies` array,
   // which carries `scope` and `source` metadata. This covers implicit
   // dependencies that the graph edges may not explicitly represent as edges.
+  // `dep.source` is this loop's own reason to exist over the one above: it is
+  // the only place this function's `source` argument is ever real.
   for (const node of projectNodes) {
     if (!node.id || !Array.isArray(node.dependencies)) continue;
     for (const dep of node.dependencies) {
       if (!dep.id) continue;
-      const type = edgeTypeFromScope(dep.scope);
+      const type = edgeTypeFromScope(dep.scope, dep.source);
       if (type === undefined) continue;
       add(node.id, dep.id, type);
     }

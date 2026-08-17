@@ -416,6 +416,61 @@ describe("transformMoonGraph — implicit dependencies", () => {
     const result = transformMoonGraph(raw);
     expect(result.nodes.web.data.implicitDependencies).toEqual([]);
   });
+
+  // P0-06: `implicitDependencies` bookkeeping (above) is not the only consumer
+  // of `source` — the EDGE this same dependency produces must also carry
+  // `type: "implicit"`, because that is the one criterion `check`'s
+  // `declaredEdgeViolationsForCheck` (`../commands/edge-constraints.mjs`) and
+  // `drift.mjs`'s/`discover.mjs`'s own architecture-edge exclusion already key
+  // off. Before this fix, every Moon-sourced edge fell through to a
+  // `scope`-derived `"static"`/`"dynamic"`, so an implicit dependency was
+  // structurally indistinguishable from a real, code-derived one to every one
+  // of those callers — the same edge Nx's/the native provider's own
+  // `implicitDependencies` already types `"implicit"` for.
+  it("types the edge itself implicit, not the scope-derived type, when source is implicit", () => {
+    const raw = twoProjectGraph();
+    // graph.edges carries no source info at all — only this project node's
+    // own dependencies[] entry does, so this is the one path that can type
+    // the edge "implicit" in the first place.
+    raw.graph.edges = [];
+    raw.data["0"].dependencies = [{ id: "api", scope: "production", source: "implicit" }];
+    const result = transformMoonGraph(raw);
+    expect(result.dependencies.web).toEqual([{ source: "web", target: "api", type: "implicit" }]);
+  });
+
+  it("still types the edge by scope when source is explicit", () => {
+    const raw = twoProjectGraph();
+    raw.graph.edges = [];
+    raw.data["0"].dependencies = [{ id: "api", scope: "development", source: "explicit" }];
+    const result = transformMoonGraph(raw);
+    expect(result.dependencies.web).toEqual([{ source: "web", target: "api", type: "dynamic" }]);
+  });
+
+  it("still types the edge by scope when source is absent, the raw.graph.edges shape", () => {
+    // raw.graph.edges' own [source, target, scope] tuples carry no `source`
+    // field at all — the call site for that loop always passes `undefined`,
+    // and this pins that the function still behaves exactly as before there.
+    const raw = twoProjectGraph();
+    raw.graph.edges = [[0, 1, "production"]];
+    raw.data["0"].dependencies = [];
+    const result = transformMoonGraph(raw);
+    expect(result.dependencies.web).toEqual([{ source: "web", target: "api", type: "static" }]);
+  });
+
+  it("still skips a root-scoped edge even when its source is implicit", () => {
+    // scope === "root" is checked first: a root-to-project edge is not a
+    // project-to-project boundary either way, implicit or not.
+    const raw = twoProjectGraph();
+    raw.graph.nodes.push(2);
+    raw.data["2"] = {
+      id: "root-marker",
+      layer: "configuration",
+      source: ".",
+      dependencies: [{ id: "api", scope: "root", source: "implicit" }],
+    };
+    const result = transformMoonGraph(raw);
+    expect(result.dependencies["root-marker"]).toBeUndefined();
+  });
 });
 
 describe("transformMoonGraph — task targets", () => {
