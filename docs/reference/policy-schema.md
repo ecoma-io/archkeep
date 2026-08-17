@@ -101,13 +101,13 @@ which imports escape.
 
 An array of `{ path, reason, messageId?, expiresAt?, origin? }` rows.
 
-| field       | type   | required | meaning                                                                                                                                                                             |
-| ----------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path`      | string | yes      | Glob over the workspace-relative path of the importing file.                                                                                                                        |
-| `reason`    | string | yes      | Non-empty. An unexplained suppression is indistinguishable from a boundary that stopped being enforced.                                                                             |
-| `messageId` | string | no       | Narrows which check the entry covers. Validated against the fifteen violation ids -- a typo suppresses nothing.                                                                     |
-| `expiresAt` | string | no       | Makes the row a **waiver** instead of a suppression. A parseable ISO-8601 instant. An expired waiver re-asserts the violation it covered. See [waivers.md](../concepts/waivers.md). |
-| `origin`    | string | no       | Non-empty. Where the row came from -- a ticket id, a decision record. Never shown in a verdict, only in the waiver's surface and the acceptance report.                             |
+| field       | type   | required | meaning                                                                                                                                                                                                   |
+| ----------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`      | string | yes      | Glob over the workspace-relative path of the importing file, matched with `path.posix.matchesGlob` and capped at 512 brace-driven alternatives -- see [configuration.md](configuration.md#projectsinfer). |
+| `reason`    | string | yes      | Non-empty. An unexplained suppression is indistinguishable from a boundary that stopped being enforced.                                                                                                   |
+| `messageId` | string | no       | Narrows which check the entry covers. Validated against the fifteen violation ids -- a typo suppresses nothing.                                                                                           |
+| `expiresAt` | string | no       | Makes the row a **waiver** instead of a suppression. A parseable ISO-8601 instant. An expired waiver re-asserts the violation it covered. See [waivers.md](../concepts/waivers.md).                       |
+| `origin`    | string | no       | Non-empty. Where the row came from -- a ticket id, a decision record. Never shown in a verdict, only in the waiver's surface and the acceptance report.                                                   |
 
 A row with **no** `expiresAt` is a suppression and removes the violation from
 the run's findings -- the existing behavior. A row **with** `expiresAt` is a

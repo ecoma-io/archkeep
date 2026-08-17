@@ -43,9 +43,7 @@
  * because a reader fixing one typo at a time against a tool that only ever
  * shows the first is the slower way to get to a working config.
  */
-import { posix } from "node:path";
-
-import { projectPatternError } from "../../rules/match.mjs";
+import { globComplexityError, projectPatternError, safeMatchesGlob } from "../../rules/match.mjs";
 import { resolveOptions } from "../../options.mjs";
 import { findBoundaryConfigViolations, policyKeyViolations } from "../../config.mjs";
 
@@ -329,8 +327,8 @@ function inferViolations(value) {
   if (!isPlainObject(value)) return [`projects.infer: must be an object, got ${describe(value)}`];
   const violations = [
     ...stringListViolations(value.manifests, "projects.infer.manifests"),
-    ...stringListViolations(value.include, "projects.infer.include"),
-    ...stringListViolations(value.exclude, "projects.infer.exclude"),
+    ...stringListViolations(value.include, "projects.infer.include", globComplexityError),
+    ...stringListViolations(value.exclude, "projects.infer.exclude", globComplexityError),
   ];
   // `[]` and "omit the key" both validate against `stringListViolations` above
   // — a list is still a list at length zero — but they must not mean the same
@@ -371,6 +369,9 @@ function projectRuleViolations(row, index) {
       `${at}.match: must be a non-empty glob over a project's root — matched with ` +
         `\`path.posix.matchesGlob\`, got ${describe(row.match)}`,
     );
+  } else {
+    const problem = globComplexityError(row.match);
+    if (problem) violations.push(`${at}.match: '${row.match}' ${problem}`);
   }
   if (!("tags" in row) && !("type" in row)) {
     violations.push(
@@ -416,6 +417,9 @@ function exemptRowViolations(row, index) {
       `${at}.path: must be a non-empty glob over a workspace-relative path, matched with ` +
         `\`path.posix.matchesGlob\`, got ${describe(row.path)}`,
     );
+  } else {
+    const problem = globComplexityError(row.path);
+    if (problem) violations.push(`${at}.path: '${row.path}' ${problem}`);
   }
   if (typeof row.reason !== "string" || row.reason.trim() === "") {
     violations.push(
@@ -724,5 +728,10 @@ export function loadNativeModel(root, { readFile }) {
 
 // Re-exported so a caller matching a project root against a glob (discovery,
 // coverage) reaches for the one matcher `lattice.json` uses throughout,
-// rather than importing `node:path` a second time for the same job.
-export const matchesGlob = posix.matchesGlob;
+// rather than importing `../../rules/match.mjs` a second time for the same
+// job. `safeMatchesGlob`, not a bare `path.posix.matchesGlob`: `projectRules`
+// and `coverage.exempt` are validated against `globComplexityError` above at
+// config load (`projectRuleViolations`, `exemptRowViolations`), and this
+// export is the backstop for any pattern that reaches matching without going
+// through that validation — see `../../rules/match.mjs`'s own doc comment.
+export const matchesGlob = safeMatchesGlob;

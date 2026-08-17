@@ -1,15 +1,34 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  braceExpansionCount,
   findMatchingProjects,
+  globComplexityError,
   globPatternError,
   importPatternError,
   mapGlobToRegExp,
   matchImportWithWildcard,
+  MAX_GLOB_EXPANSIONS,
   projectPatternError,
+  safeMatchesGlob,
   tagMatches,
   tagPatternError,
 } from "./match.mjs";
+
+/**
+ * A pattern shaped exactly like the one this file's own measurement used:
+ * thirteen sequential two-way brace groups, an expansion count of 2**13 =
+ * 8192 — comfortably past `MAX_GLOB_EXPANSIONS` (512). Before
+ * `globComplexityError`/`safeMatchesGlob` existed, handing this straight to
+ * `path.posix.matchesGlob` cost around 600ms for ONE call on this engine's
+ * own hardware (confirmed by hand: `git stash` the fix, drop this file's
+ * import of the new exports, and call `require("node:path").posix
+ * .matchesGlob("x-nomatch-y", bracePattern())` directly — every test below
+ * that asserts speed would time out or visibly stall without the guard).
+ */
+function bracePattern(groups = 13) {
+  return "x" + Array.from({ length: groups }, (_, i) => `{a${i},b${i}}`).join("") + "y";
+}
 
 /**
  * These are the three dialects a reimplementation gets wrong quietly. Each test
@@ -228,5 +247,123 @@ describe("findMatchingProjects", () => {
     // tag pattern simply does not select it.
     const sparse = { untagged: { data: { root: "area/untagged" } } };
     expect(findMatchingProjects(["tag:zone:x"], sparse)).toEqual([]);
+  });
+});
+
+describe("braceExpansionCount", () => {
+  it("counts a pattern with no braces as one alternative", () => {
+    expect(braceExpansionCount("plain/path.ts", 1000)).toBe(1);
+    expect(braceExpansionCount("", 1000)).toBe(1);
+  });
+
+  it("multiplies across a concatenation of groups", () => {
+    expect(braceExpansionCount("x{a,b}y", 1000)).toBe(2);
+    expect(braceExpansionCount("x{a,b}{c,d}y", 1000)).toBe(4);
+    expect(braceExpansionCount("{a,b}{c,d}{e,f}", 1000)).toBe(8);
+  });
+
+  it("sums across a nested union instead of re-multiplying it", () => {
+    // {{a,b},c} is the union {a,b,c} (3 alternatives), not 2*2 — the failure
+    // mode a naive "count every comma" heuristic falls into.
+    expect(braceExpansionCount("{{a,b},c}", 1000)).toBe(3);
+    expect(braceExpansionCount("{{{a,b},c},d}", 1000)).toBe(4);
+  });
+
+  it("saturates at cap + 1 once the running total would exceed cap, rather than the exact count", () => {
+    expect(braceExpansionCount("{a,b}{c,d}{e,f}", 4)).toBe(5); // exact total is 8
+    expect(braceExpansionCount("{a,b}{c,d}", 4)).toBe(4); // exact total, still at the cap
+  });
+
+  it("stays fast on a pattern engineered to make counting itself expensive", () => {
+    // 5000 sequential groups: real brace expansion would need 2**5000
+    // alternatives — a number with no realistic finite completion time at
+    // all, let alone a fast one. The counter must never try to represent it;
+    // it has to saturate and return almost immediately, or this guard
+    // becomes the DoS it exists to prevent. The bound below is generous
+    // (shared-machine scheduling noise, not this function's own cost,
+    // dominates a number this small) and still overwhelming proof: ANY
+    // finite completion time is only possible because the guard never
+    // attempted the real expansion.
+    const pattern = bracePattern(5000);
+    const start = performance.now();
+    const count = braceExpansionCount(pattern, MAX_GLOB_EXPANSIONS);
+    const elapsed = performance.now() - start;
+    expect(count).toBe(MAX_GLOB_EXPANSIONS + 1);
+    expect(elapsed).toBeLessThan(2000);
+  });
+
+  it("does not stack-overflow on a deeply nested pattern", () => {
+    let pattern = "a";
+    for (let i = 0; i < 20_000; i++) pattern = `{${pattern}}`;
+    expect(() => braceExpansionCount(pattern, MAX_GLOB_EXPANSIONS)).not.toThrow();
+  });
+});
+
+describe("globComplexityError", () => {
+  it("accepts a realistic, small brace pattern", () => {
+    expect(globComplexityError("src/**/*.{ts,tsx,js,jsx}")).toBeNull();
+    expect(globComplexityError("{apps,libs,packages}/*/README.md")).toBeNull();
+    expect(globComplexityError(bracePattern(1))).toBeNull();
+  });
+
+  it("refuses a pattern whose brace groups expand past the cap, naming the limit", () => {
+    const error = globComplexityError(bracePattern(13));
+    expect(error).toMatch(new RegExp(`more than ${MAX_GLOB_EXPANSIONS} brace-driven alternatives`));
+    expect(error).toMatch(/narrow the brace groups/);
+  });
+
+  it("refuses the brace-bomb pattern quickly — the guard must fire before expansion runs away", () => {
+    // Before this guard existed, this exact 13-group pattern took around
+    // 600ms for path.posix.matchesGlob to resolve ONE call (measured
+    // directly against Node 22.22.2 on ordinary hardware — see
+    // `MAX_GLOB_EXPANSIONS`'s own doc comment in ./match.mjs) — the audit
+    // this fix responds to measured the same shape growing to ~30 minutes at
+    // sixteen groups. A guard that took anywhere near that long would not
+    // have closed the finding; this asserts it does not.
+    const bomb = bracePattern(13);
+    const start = performance.now();
+    const error = globComplexityError(bomb);
+    const elapsed = performance.now() - start;
+    expect(error).not.toBeNull();
+    // `globComplexityError` never reaches `path.posix.matchesGlob` for a
+    // refused pattern — it only ever runs `braceExpansionCount`'s linear
+    // scan — so this has no reason to be anywhere near the ~600ms-2.6s this
+    // exact pattern cost `path.posix.matchesGlob` per call before this guard
+    // existed. Bounded generously against shared-machine scheduling noise,
+    // not against this function's own (near-zero) cost.
+    expect(elapsed).toBeLessThan(500);
+  });
+});
+
+describe("safeMatchesGlob", () => {
+  it("matches the same way path.posix.matchesGlob does for a pattern under the cap", () => {
+    expect(safeMatchesGlob("apps/a/x.go", "apps/**")).toBe(true);
+    expect(safeMatchesGlob("libs/a/x.go", "apps/**")).toBe(false);
+    expect(safeMatchesGlob("src/index.ts", "src/**/*.{ts,tsx}")).toBe(true);
+    expect(safeMatchesGlob("src/index.css", "src/**/*.{ts,tsx}")).toBe(false);
+  });
+
+  it("throws quickly on a brace-bomb pattern instead of hanging", () => {
+    // `globComplexityError` refuses this pattern before `safeMatchesGlob`
+    // ever calls the real matcher — same reasoning as `globComplexityError`'s
+    // own timing test above.
+    const bomb = bracePattern(13);
+    const start = performance.now();
+    expect(() => safeMatchesGlob("x-nomatch-y", bomb)).toThrow(/brace-driven alternatives/);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it("stays fast on a normal pattern right at the cap", () => {
+    // Unlike the two tests above, an ALLOWED pattern (at, not past, the cap)
+    // does reach the real `path.posix.matchesGlob` — so this bound also has
+    // to absorb whatever that call itself costs, which this fix does not
+    // control. Still two-plus orders of magnitude below the multi-second
+    // territory an unguarded brace bomb reaches, so "fast" is not a close
+    // call either way.
+    const atCap = bracePattern(9); // 2**9 = 512 == MAX_GLOB_EXPANSIONS
+    const start = performance.now();
+    expect(() => safeMatchesGlob("x-nomatch-y", atCap)).not.toThrow();
+    expect(performance.now() - start).toBeLessThan(1500);
   });
 });

@@ -5,6 +5,18 @@ import {
   loadBoundaryConfigFile,
   suppressionCovers,
 } from "./config.mjs";
+import { MAX_GLOB_EXPANSIONS } from "./rules/match.mjs";
+
+/**
+ * Thirteen sequential two-way brace groups — an expansion count of 2**13 =
+ * 8192, comfortably past `MAX_GLOB_EXPANSIONS` (512). Before
+ * `globComplexityError` existed, handing this straight to
+ * `path.posix.matchesGlob` cost around 600ms for ONE call, measured directly
+ * against this engine's own copy of it (see `./rules/match.mjs`'s
+ * `MAX_GLOB_EXPANSIONS` doc comment for the full measurement).
+ */
+const bracePattern = () =>
+  "x" + Array.from({ length: 13 }, (_, i) => `{a${i},b${i}}`).join("") + "y";
 
 /** A minimal well-formed config; each test bends exactly one thing. */
 const wellFormed = () => ({
@@ -376,6 +388,29 @@ describe("boundarySuppressions", () => {
     ).toMatch(/path: must be a non-empty glob/);
   });
 
+  // P1-16: a brace-bomb path glob is a denial-of-service, not an ordinary bad
+  // pattern — `path.posix.matchesGlob`'s brace-group expansion is
+  // combinatorial, and this is the only check standing between a crafted
+  // `boundarySuppressions[].path` and a CI run that hangs for minutes.
+  it("rejects a path whose brace groups would expand past the cap", () => {
+    const violations = findBoundaryConfigViolations(
+      withSuppressions([{ path: bracePattern(), reason: "why" }]),
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(/boundarySuppressions\[0\]\.path:/);
+    expect(violations[0]).toMatch(new RegExp(`more than ${MAX_GLOB_EXPANSIONS} brace-driven`));
+  });
+
+  it("accepts a real, small brace pattern for a path — a regression guard against over-refusing", () => {
+    expect(
+      findBoundaryConfigViolations(
+        withSuppressions([
+          { path: "area/**/*.config.{js,mjs,cjs}", reason: "loader cannot resolve the alias" },
+        ]),
+      ),
+    ).toEqual([]);
+  });
+
   it("rejects a messageId this engine cannot report, which would suppress nothing", () => {
     expect(
       findBoundaryConfigViolations(
@@ -554,6 +589,26 @@ describe("suppressionCovers", () => {
     expect(
       suppressionCovers({ path: "a.js", messageId: "noImportsOfApps" }, violation("a.js")),
     ).toBe(false);
+  });
+
+  // Defence in depth for P1-16: `suppressionRowViolations` already refuses a
+  // brace-bomb path at config load (see the `boundarySuppressions` describe
+  // above), but `suppressionCovers` is the actual call site that would reach
+  // `path.posix.matchesGlob` — it must refuse the same pattern on its own,
+  // quickly, rather than trust that validation already ran.
+  it("throws quickly on a brace-bomb path instead of hanging", () => {
+    const start = performance.now();
+    expect(() => suppressionCovers({ path: bracePattern() }, violation("x-nomatch-y"))).toThrow(
+      /brace-driven alternatives/,
+    );
+    const elapsed = performance.now() - start;
+    // `globComplexityError` refuses this pattern before `safeMatchesGlob`
+    // (which `suppressionCovers` now calls) ever reaches the real matcher, so
+    // this has no reason to be anywhere near the ~600ms-1.6s this exact
+    // pattern cost per call before the guard existed (measured directly, both
+    // standalone and inside this suite). Bounded generously against
+    // shared-machine scheduling noise, not against this call's own cost.
+    expect(elapsed).toBeLessThan(500);
   });
 });
 
