@@ -103,6 +103,42 @@ function directEdges(graph) {
 }
 
 /**
+ * `graph.dependencies`, minus every `implicit`-typed edge — a build-ordering
+ * declaration (`implicitDependencies` in Nx's `project.json`, Moon's own
+ * `source: "implicit"` marker, or `lattice.json`'s native equivalent), not a
+ * dependency derived from code. This is the exact exclusion
+ * `../../src/commands/drift.mjs`'s `buildObserved` already applies to what a
+ * drift report COUNTS ("N implicit edges excluded"); every edge this judge
+ * reads must come from the same filtered set, or the report's claim and the
+ * judge's verdict can disagree on the same run — a `forbidden`/`allowed` row,
+ * a `dependencies.forbidden`/`dependencies.allowed` row, or a `forbiddenTags`
+ * row firing (or, for `allowed`, silently NOT firing) on an edge the report
+ * just said it excluded. Applied once, here, rather than at each of
+ * `directEdges`/`observedEdgePairs`/`buildReachability`'s call sites below —
+ * three copies of the same filter is how one of them drifts.
+ *
+ * `../../src/rules/reachability.mjs`'s `buildReachability` itself stays
+ * type-agnostic on purpose: `../../src/commands/edge-constraints.mjs`'s
+ * `declaredEdgeViolationsForCheck` and `../../src/rules/index.mjs`'s
+ * `evaluate()` both deliberately hand it the UNFILTERED graph, because
+ * `depConstraints`' `notDependOnLibsWithTags` is a different, tag-based
+ * question that intentionally treats a declared build-ordering edge as a real
+ * coupling. Architecture intent's `allowed`/`forbidden` rows ask a narrower
+ * question — "is this actually being built in code" — and a build-ordering
+ * declaration is precisely not an answer to it.
+ *
+ * @param {{dependencies?: object}} graph
+ * @returns {object}
+ */
+function codeDependencies(graph) {
+  const filtered = {};
+  for (const [source, dependencies] of Object.entries(graph.dependencies ?? {})) {
+    filtered[source] = (dependencies ?? []).filter((dependency) => dependency.type !== "implicit");
+  }
+  return filtered;
+}
+
+/**
  * Judge an intent model against a graph.
  *
  * @param {object} intent The normalized model from `./model.mjs`.
@@ -117,13 +153,16 @@ function directEdges(graph) {
  */
 export function judgeIntent(intent, graph) {
   const nodes = graph.nodes ?? {};
+  // Every edge this judge reads goes through `dependencies`, never
+  // `graph.dependencies` directly — see `codeDependencies` above for why.
+  const dependencies = codeDependencies(graph);
   const boundaries = intent.boundaries.map((b) => ({
     name: b.name,
     projects: resolveMembers(b.match, nodes),
   }));
   const byName = new Map(boundaries.map((b) => [b.name, b.projects]));
-  const reach = buildReachability({ nodes, dependencies: graph.dependencies });
-  const edges = directEdges({ nodes, dependencies: graph.dependencies });
+  const reach = buildReachability({ nodes, dependencies });
+  const edges = directEdges({ nodes, dependencies });
 
   const findings = [];
   const unresolved = [];
@@ -292,12 +331,14 @@ export function judgeIntent(intent, graph) {
    * The observed direct edges as `[source, target]` pairs, built with the same
    * traversal `directEdges` above uses — the drift sections read the pair list
    * rather than parse `edgeKey` strings back apart. Order is irrelevant: the
-   * final sort below is total.
+   * final sort below is total. Reads the same `dependencies` — implicit edges
+   * already filtered — as `directEdges`/`buildReachability` above, never
+   * `graph.dependencies` directly.
    */
   const observedEdgePairs = [];
-  for (const [source, dependencies] of Object.entries(graph.dependencies ?? {})) {
-    for (const dependency of dependencies ?? []) {
-      if (graph.nodes[dependency.target] !== undefined) {
+  for (const [source, sourceDependencies] of Object.entries(dependencies)) {
+    for (const dependency of sourceDependencies) {
+      if (nodes[dependency.target] !== undefined) {
         observedEdgePairs.push([source, dependency.target]);
       }
     }
@@ -305,14 +346,23 @@ export function judgeIntent(intent, graph) {
 
   for (const row of intent.dependencies?.forbidden ?? []) {
     const { source, target } = row;
-    if (edges.has(edgeKey(source, target))) {
+    // Transitive, like the `forbidden` row above and `notDependOnLibsWithTags`
+    // in `../../src/rules/tags.mjs` — a dependency reached through an
+    // intermediate project (A imports B imports the forbidden C) is still the
+    // forbidden dependency; checking DIRECT edges only was the silent
+    // direction this file's header is about. Self-pairs are excluded, matching
+    // the row-based check above: `pathExists` treats every project as reaching
+    // itself, and a project cannot depend on itself.
+    if (source !== target && pathExists(reach, source, target)) {
+      const path = getPath(reach, { nodes }, source, target).map((n) => n.name);
+      const witness = path.length > 1 ? path.join(" → ") : `${source} → ${target}`;
       findings.push({
         source,
         target,
         rule: "dependencyForbidden",
         boundaryFrom: null,
         boundaryTo: null,
-        message: `${source} → ${target} — architecture-intent.json forbids this dependency, but the observed graph contains it`,
+        message: `${witness} — architecture-intent.json forbids this dependency, but the observed graph contains it`,
       });
     }
   }
@@ -350,16 +400,29 @@ export function judgeIntent(intent, graph) {
         message: `architecture-intent.json forbids a dependency from tag "${from}" to tag "${to}", but no observed project carries ${missing}`,
       });
     }
-    for (const [source, target] of observedEdgePairs) {
-      if (!known(source) || !known(target)) continue;
-      if (tagsOf(source).includes(from) && tagsOf(target).includes(to)) {
+    // Transitive, for the same reason as `dependencies.forbidden` above: a
+    // project carrying `from` that reaches (directly or transitively) a
+    // project carrying `to` is still the forbidden relationship. Self-pairs
+    // are excluded — one project may legitimately carry both tags, and
+    // `pathExists` treats every project as reaching itself.
+    const fromProjects = [...projectsByName.values()]
+      .filter((project) => project.tags.includes(from))
+      .map((project) => project.name);
+    const toProjects = [...projectsByName.values()]
+      .filter((project) => project.tags.includes(to))
+      .map((project) => project.name);
+    for (const source of fromProjects) {
+      for (const target of toProjects) {
+        if (source === target || !pathExists(reach, source, target)) continue;
+        const path = getPath(reach, { nodes }, source, target).map((n) => n.name);
+        const witness = path.length > 1 ? path.join(" → ") : `${source} → ${target}`;
         findings.push({
           source,
           target,
           rule: "tagDependencyForbidden",
           boundaryFrom: null,
           boundaryTo: null,
-          message: `${source} → ${target} — architecture-intent.json forbids a dependency from any project carrying tag "${from}" to any project carrying tag "${to}"`,
+          message: `${witness} — architecture-intent.json forbids a dependency from any project carrying tag "${from}" to any project carrying tag "${to}"`,
         });
       }
     }
