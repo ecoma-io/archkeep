@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { computeImpactConstraints, computeRuleImpact, judgeEdge } from "./edge-constraints.mjs";
+import {
+  computeImpactConstraints,
+  computeRuleImpact,
+  declaredEdgeViolationsForCheck,
+  judgeEdge,
+} from "./edge-constraints.mjs";
 
 /**
  * What edge-constraint analysis guarantees:
@@ -155,14 +160,21 @@ describe("judgeEdge", () => {
       { beta: [{ target: "adapter", type: "static" }] },
       customConfig.depConstraints,
     );
-    expect(violations).toEqual([
-      {
-        messageId: "notTagsConstraintViolation",
-        constraint: customConfig.depConstraints[0],
-        source: "alpha",
-        target: "beta",
-      },
-    ]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      messageId: "notTagsConstraintViolation",
+      constraint: customConfig.depConstraints[0],
+      source: "alpha",
+      target: "beta",
+    });
+    // `data`/`message` are the same rendering `evaluate()`'s import-site path
+    // produces (`renderMessage`) — asserted by content rather than duplicating
+    // `stringifyTags`/`findDependenciesWithTags`'s own formatting here, which
+    // those functions' own tests already pin.
+    expect(violations[0].data).toMatchObject({ sourceTag: "layer:domain" });
+    expect(violations[0].message).toContain("layer:domain");
+    expect(violations[0].message).toContain("layer:adapter");
+    expect(violations[0].message).not.toContain("{{");
   });
 
   it("reports emptyOnlyTagsConstraintViolation when onlyDependOnLibsWithTags is an empty list", () => {
@@ -180,6 +192,77 @@ describe("judgeEdge", () => {
     );
     expect(violations).toHaveLength(1);
     expect(violations[0].messageId).toBe("emptyOnlyTagsConstraintViolation");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// declaredEdgeViolationsForCheck
+// ---------------------------------------------------------------------------
+
+describe("declaredEdgeViolationsForCheck", () => {
+  const depConstraints = [
+    { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain", "layer:util"] },
+  ];
+  const nodes = {
+    alpha: { name: "alpha", data: { root: "libs/alpha", tags: ["layer:domain"] } },
+    gamma: { name: "gamma", data: { root: "libs/gamma", tags: ["layer:app"] } },
+  };
+
+  it("judges an implicit-typed edge — the silent-direction case check's own evaluate() cannot reach", () => {
+    // alpha -> gamma with no import site anywhere, only a declared edge — the
+    // exact shape `implicitDependencies` produces and `evaluate()` never sees,
+    // because it iterates import sites, not graph.dependencies.
+    const graph = {
+      nodes,
+      dependencies: { alpha: [{ source: "alpha", target: "gamma", type: "implicit" }] },
+    };
+    const violations = declaredEdgeViolationsForCheck(graph, depConstraints);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      messageId: "onlyTagsConstraintViolation",
+      source: "alpha",
+      target: "gamma",
+    });
+  });
+
+  it("ignores a static (import-derived) edge — evaluate() already judges those", () => {
+    const graph = {
+      nodes,
+      dependencies: { alpha: [{ source: "alpha", target: "gamma", type: "static" }] },
+    };
+    expect(declaredEdgeViolationsForCheck(graph, depConstraints)).toEqual([]);
+  });
+
+  it("returns empty rather than throwing on a graph with no dependencies", () => {
+    expect(declaredEdgeViolationsForCheck({ nodes, dependencies: {} }, depConstraints)).toEqual([]);
+  });
+
+  it("judges every implicit edge, not just the first", () => {
+    const threeNodes = {
+      ...nodes,
+      delta: { name: "delta", data: { root: "libs/delta", tags: ["layer:domain"] } },
+    };
+    const graph = {
+      nodes: threeNodes,
+      dependencies: {
+        alpha: [{ source: "alpha", target: "gamma", type: "implicit" }],
+        delta: [{ source: "delta", target: "gamma", type: "implicit" }],
+      },
+    };
+    const violations = declaredEdgeViolationsForCheck(graph, depConstraints);
+    expect(violations.map((v) => v.source).sort()).toEqual(["alpha", "delta"]);
+  });
+
+  it("stays silent on an empty depConstraints table — the same opt-out evaluate() honors", () => {
+    // Without this guard, `judgeEdge`'s "no matching constraint row" branch
+    // would fire `projectWithoutTagsCannotHaveDependencies` on every implicit
+    // edge here, disagreeing with `evaluate()`'s own early exit for the same
+    // opted-out workspace.
+    const graph = {
+      nodes,
+      dependencies: { alpha: [{ source: "alpha", target: "gamma", type: "implicit" }] },
+    };
+    expect(declaredEdgeViolationsForCheck(graph, [])).toEqual([]);
   });
 });
 

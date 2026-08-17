@@ -197,6 +197,54 @@ export function formatGoWork(goWork) {
 }
 
 /**
+ * The declared-edge section — rendered only when the graph has at least one
+ * `implicit`-typed edge, decided nowhere here.
+ *
+ * `declaredEdges` is `null` when the graph has no `implicit` edges at all,
+ * and then this prints nothing: a workspace that never uses
+ * `implicitDependencies` pays nothing and hears nothing, the same bargain
+ * `formatGoWork` states. When at least one exists, even a clean result is a
+ * line that counts how many were judged, because "no declared-edge
+ * violations" is a claim about coverage the reader cannot otherwise tell
+ * apart from "nothing looked" — go.work's own reasoning.
+ *
+ * These findings have no import site by construction — an `implicit` edge is
+ * declared, not written as an import — so every entry renders the file that
+ * declared it alone, never a fabricated line 1, the same convention
+ * `formatGoWork`'s missing-use findings use.
+ *
+ * @param {{findings: object[], judged: number}|null|undefined} declaredEdges
+ * @returns {string} Empty exactly when there is no declared-edge verdict to render.
+ */
+export function formatDeclaredEdges(declaredEdges) {
+  if (declaredEdges == null) return "";
+  const { findings, judged } = declaredEdges;
+  const label = `${judged} implicit edge${judged === 1 ? "" : "s"} judged`;
+  if (findings.length === 0) {
+    return `✔ no declared-edge violations (${label})`;
+  }
+  const entries = findings.map((finding) => {
+    const message = finding.message
+      .split("\n")
+      .map((line) => (line === "" ? "" : `${CONTINUED}${line}`))
+      .join("\n");
+    return [
+      `${finding.file}  ${finding.messageId}`,
+      message,
+      `${DETAIL}edge        ${finding.source} → ${finding.target}`,
+      `${DETAIL}constraint  ${formatConstraint(finding.constraint)}`,
+    ].join("\n");
+  });
+  return [
+    entries.join("\n\n"),
+    `✖ declared-edge violations: ${findings.length} ` +
+      `finding${findings.length === 1 ? "" : "s"} (${label}) — an implicitDependencies edge ` +
+      `crosses a boundary depConstraints forbids, with no import site to remove; the ` +
+      `dependency itself needs removing or its tags reconciled, and the run fails`,
+  ].join("\n\n");
+}
+
+/**
  * The tsconfig paths hygiene section — rendered only when the run HAS a paths
  * verdict, decided nowhere here.
  *
@@ -415,7 +463,7 @@ export function formatAcceptedViolations(waived) {
  * summary line above only says "no boundary violations" when there is nothing
  * a waiver is covering either.
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, intent?: object|null, fitness?: object|null, fitnessOverall?: {verdict: string}|null, coverageGaps?: object[], notes?: string[]}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, declaredEdges?: object|null, intent?: object|null, fitness?: object|null, fitnessOverall?: {verdict: string}|null, coverageGaps?: object[], notes?: string[]}} run
  * @returns {string}
  */
 export function formatReport({
@@ -426,6 +474,7 @@ export function formatReport({
   imports,
   goWork,
   tsconfigPaths,
+  declaredEdges,
   intent,
   fitness,
   fitnessOverall,
@@ -474,6 +523,9 @@ export function formatReport({
 
   const tsconfigPathsSection = formatTsconfigPaths(tsconfigPaths);
   if (tsconfigPathsSection !== "") sections.push(tsconfigPathsSection);
+
+  const declaredEdgesSection = formatDeclaredEdges(declaredEdges);
+  if (declaredEdgesSection !== "") sections.push(declaredEdgesSection);
 
   const intentSection = formatIntentSection(intent);
   if (intentSection !== "") sections.push(intentSection);
