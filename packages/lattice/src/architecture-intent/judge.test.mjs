@@ -430,6 +430,25 @@ describe("judgeIntent — dependencies (drift edges)", () => {
     expect(result.findings[0].target).toBe("site");
   });
 
+  it("reports a dependencies.forbidden pair connected only TRANSITIVELY — core→ui→site, no direct edge", () => {
+    // P1-09: the forbidden row names core/site by exact project name; the
+    // observed graph carries no DIRECT core→site edge, only core→ui→site. A
+    // direct-edge-only check (this rule's pre-fix behavior) would read this
+    // as clean — byte-identical to a workspace with no such path at all — the
+    // silent direction `../../../../AGENTS.md` is about. `forbidden` (the
+    // boundary-row shape, above) already catches this transitively; this rule
+    // must not disagree with it about the same underlying claim.
+    const result = judgeIntent(
+      intent({ dependencies: { forbidden: [{ source: "core", target: "site" }] } }),
+      graph({ ...pkgs, site: exts.site }, { core: [{ target: "ui" }], ui: [{ target: "site" }] }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings.map((f) => f.rule)).toEqual(["dependencyForbidden"]);
+    expect(result.findings[0].source).toBe("core");
+    expect(result.findings[0].target).toBe("site");
+    expect(result.findings[0].message).toContain("→");
+  });
+
   it("reports an edge outside the exhaustive allowlist as dependencyNotAllowed", () => {
     // `site` is a real observed project (an extension) but is not on the
     // allowlist, so the observed edge core→site must be drift. A target with
@@ -479,6 +498,27 @@ describe("judgeIntent — dependencies (drift edges)", () => {
     );
     expect(result.verdict).toBe("findings");
     expect(result.findings.some((f) => f.rule === "tagDependencyForbidden")).toBe(true);
+  });
+
+  it("reports a forbiddenTags pair connected only TRANSITIVELY — no direct edge between the tagged projects", () => {
+    // P1-09: `core` (type-package) reaches `site` (type-extension) only
+    // through `adapter`, an untagged intermediate project — no type-package
+    // project has a DIRECT edge to a type-extension one. A direct-edge-only
+    // check (this rule's pre-fix behavior) would read this as clean, the
+    // same silent miss as the dependencies.forbidden case above.
+    const nodes = {
+      core: node(["type-package"]),
+      adapter: node([]),
+      site: node(["type-extension"]),
+    };
+    const result = judgeIntent(
+      intent({ forbiddenTags: [{ from: "type-package", to: "type-extension" }] }),
+      graph(nodes, { core: [{ target: "adapter" }], adapter: [{ target: "site" }] }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings.map((f) => f.rule)).toEqual(["tagDependencyForbidden"]);
+    expect(result.findings[0].source).toBe("core");
+    expect(result.findings[0].target).toBe("site");
   });
 
   it("reports a tag rule no project carries as intentUnknownTag", () => {
