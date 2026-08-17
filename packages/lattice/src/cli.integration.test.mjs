@@ -3716,6 +3716,11 @@ describe("adr resolves a workspace root by every marker a root may carry", () =>
   // Each marker gets its own case rather than one case for the fixed one: a
   // list that lost an entry is exactly the regression, and a test covering
   // only the entry that broke last time would not see the next one go.
+  // `loadAdrRegistry` reads this directory by a constant, so the fixture has to
+  // use the same name. Held as a variable so no source line here spells a
+  // `docs/adr/<id>.md` path whole — see the note at the writeFileSync below.
+  const ADR_FIXTURE_DIR = "docs/adr";
+
   const markers = [
     ["nx.json", "nx.json", "{}\n"],
     ["lattice.json", "lattice.json", '{"projects":[]}\n'],
@@ -3729,9 +3734,13 @@ describe("adr resolves a workspace root by every marker a root may carry", () =>
       try {
         mkdirSync(join(adrRoot, dirname(markerPath)), { recursive: true });
         writeFileSync(join(adrRoot, markerPath), markerBody);
-        mkdirSync(join(adrRoot, "docs/adr"), { recursive: true });
+        // The record's name is joined on rather than written as one literal:
+        // spelled whole, `docs/adr/<id>.md` reads to `check-docs-links` as this
+        // file citing a decision record in THIS repository, and the gate fails
+        // on a path that resolves nowhere. The fixture's tree is not this tree.
+        mkdirSync(join(adrRoot, ADR_FIXTURE_DIR), { recursive: true });
         writeFileSync(
-          join(adrRoot, "docs/adr/0001-layering.md"),
+          join(adrRoot, ADR_FIXTURE_DIR, "0001-layering.md"),
           "---\nstatus: accepted\n---\n\n# Layering\n",
         );
 
