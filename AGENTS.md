@@ -27,7 +27,9 @@ host-independent behavioral protocols that teach an AI agent when and how to use
 Lattice commands. See `docs/skills/overview.md` for the architecture and
 `scripts/check-skills.mjs` for the CI gate that validates them — including the
 single-version chain `docs/skills/versioning.md` owns, so a version bump that
-lands in the package but nowhere else is a red gate, not a silent drift.
+lands in the package but nowhere else is a red gate, not a silent drift. The
+skills themselves carry no version by decision; the plugin manifest is the
+version that matters (`docs/skills/versioning.md`).
 
 ## The invariant everything is judged against
 
@@ -224,9 +226,11 @@ another.
 - **Release (`release.yml`)** — release-please keeps one pull request open
   holding the next version of the root component `"."`, which is every package
   and skill this repository ships at once. That single version is written into
-  six places by `extra-files` (the chain `docs/skills/versioning.md` owns), and
-  `check-skills` on every PR holds the same six to each other, so a bump cannot
-  land half-applied. The publish jobs — npm and the VS Code extension, which
+  five places by `extra-files` (the chain `docs/skills/versioning.md` owns), and
+  `check-skills` on every PR holds the same five to each other, so a bump cannot
+  land half-applied. A reformat step then re-applies Prettier to those files,
+  because release-please re-serializes JSON in a layout that fails
+  `format:check`. The publish jobs — npm and the VS Code extension, which
   share the engine's version by decision — steer on the un-prefixed
   `release_created` and `tag_name` outputs only a root component emits, and a
   tripwire compares `paths_released` — the one output carrying no prefix to get
@@ -295,7 +299,7 @@ pnpm lint               # ESLint, zero warnings
 pnpm test               # node --test over scripts/*.test.mjs — the gate scripts only
 pnpm typecheck          # tsc --noEmit over scripts/ — each package has its own target
 pnpm check-packages     # every packages/* directory, and which CI targets it runs
-node scripts/check-skills.mjs    # skills gate: shape, cites, and the version chain
+node scripts/check-skills.mjs    # skills gate: shape, cites, and the manifest version chain
 node scripts/check-docs-links.mjs # doc-reference gate: links, #anchors, citations
 moon run ...:lint ...:test ...:typecheck   # each package's own suite
 node packages/lattice/cli.mjs check        # this tree's own boundaries

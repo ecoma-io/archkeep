@@ -61,11 +61,10 @@ Body`;
 });
 
 describe("evaluate", () => {
-  const goodSkill = (dir, name, version = "0.4.0") => ({
+  const goodSkill = (dir, name) => ({
     dir,
     name,
     description: `Skill ${name}`,
-    metadataVersion: version,
     compatibility: "Requires @ecoma-io/lattice CLI",
     hostFields: [],
   });
@@ -112,23 +111,12 @@ describe("evaluate", () => {
     assert.ok(result.failures.some((f) => f.includes("must match its directory name")));
   });
 
-  it("fails when skill version does not match package version", () => {
-    const skills = allGood();
-    skills[0] = goodSkill("arch-context", "arch-context", "0.3.0");
-    const result = evaluate({
-      ...baseFacts,
-      skills,
-    });
-    assert.ok(result.failures.some((f) => f.includes("0.3.0") && f.includes("0.4.0")));
-  });
-
   it("fails when skill has no name", () => {
     const skills = allGood();
     skills[0] = {
       dir: "arch-context",
       name: null,
       description: "x",
-      metadataVersion: "0.4.0",
       compatibility: "lattice",
       hostFields: [],
     };
@@ -145,7 +133,6 @@ describe("evaluate", () => {
       dir: "arch-context",
       name: "arch-context",
       description: null,
-      metadataVersion: "0.4.0",
       compatibility: "lattice",
       hostFields: [],
     };
@@ -154,23 +141,6 @@ describe("evaluate", () => {
       skills,
     });
     assert.ok(result.failures.some((f) => f.includes("no `description`")));
-  });
-
-  it("fails when skill has no metadata.version", () => {
-    const skills = allGood();
-    skills[0] = {
-      dir: "arch-context",
-      name: "arch-context",
-      description: "d",
-      metadataVersion: null,
-      compatibility: "lattice",
-      hostFields: [],
-    };
-    const result = evaluate({
-      ...baseFacts,
-      skills,
-    });
-    assert.ok(result.failures.some((f) => f.includes("no `metadata.version`")));
   });
 
   it("fails when skill has host-specific frontmatter fields", () => {

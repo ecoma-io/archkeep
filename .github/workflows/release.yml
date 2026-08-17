@@ -103,6 +103,71 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+      # release-please re-serializes every JSON `extra-file` it bumps, and its
+      # layout is not Prettier's: a one-line array it writes as multiple lines,
+      # where `printWidth: 100` keeps it on one. Without a fix, the release pull
+      # request fails CI's `format:check` on the files this very lane just wrote
+      # — the same defect as `CHANGELOG.md` (which `.prettierignore` already
+      # exempts) but for five files no human wrote. Fix them in place, on the
+      # branch release-please pushed, before CI ever sees the pull request.
+      #
+      # The branch is read from the `pr` output rather than named: release-please
+      # creates `release-please--branches--<base>--components--<component>`, and
+      # the manifest keys a component by its path, so naming it here would be a
+      # second copy that drifts. The output is a serialized JSON object carrying
+      # `headBranchName` — and it is empty exactly when release-please found
+      # nothing to change (a release-less push), which is also when there is
+      # nothing to reformat, so the gate is the same condition and the checkout,
+      # install and reformat all key off it.
+      #
+      # The commit identity is deliberately `github-actions[bot]` — the same
+      # actor that pushed the release commit — so the reformat lands as part of
+      # the release, not as a contributor edit. The push reuses the credentials
+      # `actions/checkout` configured from the SAME token the action used, so the
+      # workflow's token budget is unchanged.
+      - name: Reformat release-please extra-files
+        if: steps.release.outputs.pr != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        if: steps.release.outputs.pr != ''
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.release.outputs.pr != ''
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Reformat release-please extra-files and push
+        if: steps.release.outputs.pr != ''
+        run: |
+          pnpm install --frozen-lockfile
+
+          pnpm exec prettier --write \
+            .claude-plugin/plugin.json \
+            .claude-plugin/marketplace.json \
+            .codex-plugin/plugin.json \
+            packages/lattice/package.json \
+            packages/lattice-vscode/package.json
+
+          if git diff --quiet; then
+            echo "no reformatting needed; nothing to push"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add \
+              .claude-plugin/plugin.json \
+              .claude-plugin/marketplace.json \
+              .codex-plugin/plugin.json \
+              packages/lattice/package.json \
+              packages/lattice-vscode/package.json
+            git commit -m "chore: reformat release-please extra-files"
+            git push
+          fi
+
       # The tripwire for the defect above coming back by another spelling.
       # `paths_released` is the top-level output naming every path release-please
       # cut a release for, and it carries no prefix to get wrong. So it and the

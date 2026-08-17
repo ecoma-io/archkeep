@@ -19,9 +19,10 @@
  * `package.json` version. This is enforced by the conformance test below and by
  * release-please's `extra-files` configuration, which bumps the manifest versions
  * in lockstep with the package release. The sync exists because the plugin now
- * carries `arch-*` agent skills that must ship at the same version as the tool,
- * and a mismatch would mean a consumer's skills claim a version the engine does
- * not match.
+ * carries `arch-*` agent skills: an installed plugin is cached per version, and a
+ * consumer's skills pair with the engine they ship beside — so the version that
+ * matters is the plugin's, and the skills themselves carry none
+ * (`docs/skills/versioning.md`).
  *
  * `../lsp/editor-config.integration.test.mjs` owns the other half — that the
  * routed extensions match the analyzer registry and that the entry point exists.
