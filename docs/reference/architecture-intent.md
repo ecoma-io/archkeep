@@ -127,8 +127,9 @@ only a pair of relationship lists.
 }
 ```
 
-- **`dependencies.forbidden`** — a dependency that must not appear. A present
-  `source → target` is `dependencyForbidden`.
+- **`dependencies.forbidden`** — a dependency that must not appear, judged by
+  the same any-path closure as `forbidden` above: a `source → target` path,
+  direct or transitive, is `dependencyForbidden`.
 - **`dependencies.allowed`** — when present, an allowlist: an _observed_ `source
 → target` pair not in the list is `dependencyNotAllowed`. Unlike
   `allowed`/`forbidden`, this is a full-closure declaration — an observed
@@ -155,7 +156,8 @@ legacy row that stays valid byte-identical.
 }
 ```
 
-A dependency forbidden between _tag values_: any observed edge from a project
+A dependency forbidden between _tag values_, judged by the same any-path
+closure as `forbidden` above: any path — direct or transitive — from a project
 carrying `from` to a project carrying `to` is `tagDependencyForbidden`. A tag no
 observed project carries is `intentUnknownTag`.
 
