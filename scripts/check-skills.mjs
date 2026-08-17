@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Validates the arch-* agent skills: structure, frontmatter, versions, and
-// that the canonical skills have not drifted from the host integrations.
+// Validates the arch-* agent skills: structure, frontmatter, and that the
+// canonical skills have not drifted from the host integrations.
 //
-// WHY this script exists. A skill whose frontmatter is malformed, whose version
-// does not match the package, or whose name disagrees with its directory is not
-// a skill an agent can reliably discover or invoke. And a skill that carries
-// host-specific frontmatter fields (Claude Code's `context`, `model`, `effort`)
-// has violated the host-independence contract the skills layer depends on.
+// WHY this script exists. A skill whose frontmatter is malformed, or whose name
+// disagrees with its directory, is not a skill an agent can reliably discover
+// or invoke. And a skill that carries host-specific frontmatter fields (Claude
+// Code's `context`, `model`, `effort`) has violated the host-independence
+// contract the skills layer depends on.
 //
 // The facts this script judges are READ FROM THE FILESYSTEM by `readSkillFacts`;
 // the evaluation itself is the pure function `evaluate`, which takes those facts
@@ -15,10 +15,12 @@
 // without a filesystem and without a mocking library.
 //
 // The version it checks against comes from `packages/lattice/package.json` —
-// the single source of truth for the Lattice release version. All skill
-// metadata.version fields, the Claude Code plugin manifest version, the
-// marketplace entry version, the Codex plugin manifest version, and the VS
-// Code extension's package.json version must match it.
+// the single source of truth for the Lattice release version. The Claude Code
+// plugin manifest version, the marketplace entry version, the Codex plugin
+// manifest version, and the VS Code extension's package.json version must all
+// match it. Skills themselves carry no version by decision — a consumer's
+// installed skills pair with the engine they ship beside, so the version that
+// matters is the plugin's, not a per-skill one (docs/skills/versioning.md).
 
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -64,7 +66,7 @@ export function parseSkillFrontmatter(text) {
     const line = rawLine.trimEnd();
     if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
 
-    // Indented line under a parent key (e.g. metadata.version: "0.4.0")
+    // Indented line under a parent key (e.g. any nested key)
     const indentMatch = /^(\s+)([\w-]+):\s*(.*)$/.exec(line);
     if (indentMatch && currentObj !== null) {
       const [, , key, value] = indentMatch;
@@ -127,7 +129,7 @@ function unquote(value) {
  * @param {string} input.marketplaceVersion version from the marketplace.json entry
  * @param {string} input.codexPluginVersion version from the Codex plugin manifest
  * @param {string} input.vscodeVersion version from packages/lattice-vscode/package.json
- * @param {{dir: string, name: string|null, description: string|null, metadataVersion: string|null, compatibility: string|null, hostFields: string[]}[]} input.skills
+ * @param {{dir: string, name: string|null, description: string|null, compatibility: string|null, hostFields: string[]}[]} input.skills
  *   parsed frontmatter for each skill
  * @returns {{lines: string[], failures: string[]}}
  */
@@ -189,23 +191,7 @@ export function evaluate({
       lines.push(`FAIL ${skill.dir} — name mismatch`);
     }
 
-    // 5. metadata.version must exist
-    if (skill.metadataVersion === null) {
-      failures.push(
-        `${SKILLS_DIR}/${skill.dir}/SKILL.md has no \`metadata.version\`. ` +
-          `All skills must carry the Lattice package version so consumers can detect drift.`,
-      );
-      lines.push(`FAIL ${skill.dir} — missing version`);
-    } else if (skill.metadataVersion !== packageVersion) {
-      failures.push(
-        `${SKILLS_DIR}/${skill.dir}/SKILL.md version is "${skill.metadataVersion}" ` +
-          `but the package version is "${packageVersion}". All skill versions must match ` +
-          `the Lattice package version.`,
-      );
-      lines.push(`FAIL ${skill.dir} — version mismatch`);
-    }
-
-    // 6. No host-specific frontmatter fields
+    // 5. No host-specific frontmatter fields
     if (skill.hostFields.length > 0) {
       failures.push(
         `${SKILLS_DIR}/${skill.dir}/SKILL.md has host-specific frontmatter fields: ` +
@@ -215,19 +201,18 @@ export function evaluate({
       lines.push(`FAIL ${skill.dir} — host-specific fields`);
     }
 
-    // 7. compatibility field should mention lattice
+    // 6. compatibility field should mention lattice
     if (skill.compatibility !== null && !skill.compatibility.toLowerCase().includes("lattice")) {
       lines.push(`note ${skill.dir} — compatibility does not mention lattice`);
     }
 
-    // 8. OK line if no failures for this skill
+    // 7. OK line if no failures for this skill
     if (!failures.some((f) => f.includes(`${skill.dir}`))) {
-      const ver = skill.metadataVersion ?? "?";
-      lines.push(`ok   ${skill.dir} — v${ver}`);
+      lines.push(`ok   ${skill.dir}`);
     }
   }
 
-  // 9. Plugin version must match package version
+  // 8. Plugin version must match package version
   if (pluginVersion !== packageVersion) {
     failures.push(
       `plugin.json version is "${pluginVersion}" but package version is ` +
@@ -236,7 +221,7 @@ export function evaluate({
     lines.push(`FAIL plugin.json — version mismatch`);
   }
 
-  // 10. Marketplace entry version must match package version
+  // 9. Marketplace entry version must match package version
   if (marketplaceVersion !== packageVersion) {
     failures.push(
       `marketplace.json version is "${marketplaceVersion}" but package version is ` +
@@ -245,7 +230,7 @@ export function evaluate({
     lines.push(`FAIL marketplace.json — version mismatch`);
   }
 
-  // 11. Codex plugin manifest version must match package version
+  // 10. Codex plugin manifest version must match package version
   if (codexPluginVersion !== packageVersion) {
     failures.push(
       `codex-plugin/plugin.json version is "${codexPluginVersion}" but package version is ` +
@@ -254,7 +239,7 @@ export function evaluate({
     lines.push(`FAIL codex-plugin/plugin.json — version mismatch`);
   }
 
-  // 12. VS Code extension version must match package version
+  // 11. VS Code extension version must match package version
   if (vscodeVersion !== packageVersion) {
     failures.push(
       `packages/lattice-vscode/package.json version is "${vscodeVersion}" but package version is ` +
@@ -317,7 +302,6 @@ export function readSkillFacts() {
         dir,
         name: null,
         description: null,
-        metadataVersion: null,
         compatibility: null,
         hostFields: [],
       };
@@ -325,14 +309,12 @@ export function readSkillFacts() {
     const text = readFileSync(skillPath, "utf8");
     const fm = parseSkillFrontmatter(text);
 
-    const metadata = fm?.metadata && typeof fm.metadata === "object" ? fm.metadata : {};
     const hostFields = Object.keys(fm ?? {}).filter((k) => HOST_SPECIFIC_FIELDS.includes(k));
 
     return {
       dir,
       name: fm?.name ?? null,
       description: fm?.description ?? null,
-      metadataVersion: metadata.version ?? null,
       compatibility: fm?.compatibility ?? null,
       hostFields,
     };

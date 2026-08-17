@@ -24,11 +24,6 @@ compatibility: Requires @ecoma-io/lattice CLI
 - **`description`** — one line, human-readable, describing what the skill teaches
   (not what the agent does).
 
-### Required nested fields
-
-- **`metadata.version`** — must match the Lattice package version
-  (`packages/lattice/package.json`). This is enforced by CI.
-
 ### Optional fields
 
 - **`compatibility`** — describes what the skill requires. Should mention
