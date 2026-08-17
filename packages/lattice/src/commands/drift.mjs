@@ -128,19 +128,32 @@ export function refuseIncompleteGraph(commandContext) {
 
 /**
  * The drift verdict for `check`'s fold — the intent loaded, the observed side
- * compared, the findings counted. `check` calls this only when the workspace
- * actually HAS an intent file; absence of an intent is a workspace choice, not
- * a finding (`../../../../AGENTS.md`: an empty result must mean exactly "no
- * drift"). It throws on the same fail-closed conditions the descriptive
- * command does, so `check` turns a malformed intent into exit 3 exactly like a
- * malformed go.work.
+ * compared, the findings counted. `check` and `../commands/plan-context-command.mjs`
+ * call this only when the workspace actually HAS an intent file, but that is
+ * their own choice, not a precondition this function requires: absence of an
+ * intent is a workspace choice, not a finding (`../../../../AGENTS.md`: an
+ * empty result must mean exactly "no drift"), so `intent === undefined` (no
+ * tracked architecture-intent.json) returns a quiet result — `intent:
+ * undefined` on the return, every list empty — instead of judging one, rather
+ * than reaching `judgeIntent`, which assumes a normalized model and has no
+ * absent case of its own. That is what lets `../commands/fitness.mjs`'s
+ * `fitnessCommand` call this UNCONDITIONALLY: it must still reach the
+ * `refuseIncompleteGraph` guard below whether or not intent is declared, so an
+ * Nx workspace with an unregistered plugin over polyglot manifests refuses
+ * loudly regardless. Every OTHER fail-closed condition — that same
+ * unregistered-plugin refusal, an unreadable or invalid intent — still throws,
+ * so `check` turns a malformed intent into exit 3 exactly like a malformed
+ * go.work.
  *
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{loadIntentOverride?: (root: string) => Promise<object>}} [io]
- * @returns {Promise<{intent: {file: string, fingerprint: string, rows: number},
+ * @returns {Promise<{intent: {file: string, fingerprint: string, rows: number}|undefined,
  *   observed: {projects: number, edges: number, implicitEdges: number},
  *   findings: object[], unresolved: object[], boundaries: object[],
- *   notes: string[]}>}
+ *   notes: string[]}>} `intent` is `undefined` exactly when no
+ *   architecture-intent.json is tracked — a caller building its own
+ *   verdict-shaped intent reads that as "no intent declared", never as
+ *   "declared and clean".
  */
 export async function driftForCheck(commandContext, io = {}) {
   refuseIncompleteGraph(commandContext);
@@ -148,6 +161,21 @@ export async function driftForCheck(commandContext, io = {}) {
     tracked: commandContext.tracked,
   });
   const observed = buildObserved(commandContext);
+  const observedSummary = {
+    projects: observed.projects.length,
+    edges: observed.edges.length,
+    implicitEdges: observed.implicitEdges,
+  };
+  if (intent === undefined) {
+    return {
+      intent: undefined,
+      observed: observedSummary,
+      findings: [],
+      unresolved: [],
+      boundaries: [],
+      notes: [],
+    };
+  }
   const verdict = judgeIntent(intent, {
     nodes: commandContext.graph.nodes,
     dependencies: commandContext.graph.dependencies,
@@ -158,11 +186,7 @@ export async function driftForCheck(commandContext, io = {}) {
       fingerprint: computeIntentFingerprint(intent),
       rows: intentRows(intent),
     },
-    observed: {
-      projects: observed.projects.length,
-      edges: observed.edges.length,
-      implicitEdges: observed.implicitEdges,
-    },
+    observed: observedSummary,
     findings: verdict.findings,
     unresolved: verdict.unresolved,
     boundaries: verdict.boundaries,
