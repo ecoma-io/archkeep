@@ -67,7 +67,7 @@ import { readSnapshots } from "./history.mjs";
  * @param {string} dir Absolute path to the history directory.
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config?: {depConstraints: object[], options: object,
- *   suppressions: object[]}|null, referenceTime?: number,
+ *   suppressions: object[]}|null, referenceTime?: number|string,
  *   io?: {readSnapshots?: Function, loadIntentOverride?: Function,
  *   resolveProvenance?: Function}}} [options] Injectable seams for tests,
  *   mirroring the `history`/`drift` pattern.
