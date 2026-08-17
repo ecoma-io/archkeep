@@ -181,6 +181,7 @@ verification is not possible.
 
 | field           | type                                                                   | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | --------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `policy`        | `{profile, source, fingerprint}`                                       | Which law governed this run, named first — a verdict is a claim about which policy produced it too. `profile` is the active profile's name, or `null` when the workspace did not select one by name ([profiles.md](../concepts/profiles.md)). `source` is the workspace-relative path this run actually read the policy from: the `--config` file, the declared `boundaryConfig` file, the profile registry, or (an inline `lattice.json` policy has no file of its own) `lattice.json` itself. `fingerprint` is the same SHA-256 hex `graph`'s own `policy.fingerprint` computes, below — two runs under the identical effective policy always agree, regardless of `source`. Always present: `check` cannot judge anything without loading exactly one policy first.  |
 | `violations`    | `Violation[]`                                                          | Every boundary-rule violation, in the shape `src/rules/index.mjs`'s `Violation` typedef defines: `sourceFile`, `line`, `column` (both 1-based), `specifier`, `kind`, `messageId`, `message`, `sourceProject`, `targetProject`, `constraint`, `data`. A violation an ACTIVE waiver accepted additionally carries `waivedBy` (the suppressing row) and one re-asserted by an EXPIRED waiver carries `evidence` (`"expired waiver"`) — a waived violation is still `violations`, so the exit code stays 1.                                                                                                                                                                                                                                                                 |
 | `waived`        | number (optional)                                                      | How many violations an ACTIVE waiver accepted, present only when non-zero — an unchanged tree's envelope is unchanged, and the accepted count is a tracked decision, never a new error kind.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `goWork`        | `null` \| `{checked: true, findings}`                                  | `null` when the workspace has no tracked `go.work` — no check, no claim, same as the text report's silence. Otherwise `checked: true` and `findings` is the array `compareGoWork` (`src/go-work.mjs`) returns: `{messageId, file, line, column, directory, project, message}` each, `line`/`column` `null` for a workspace-level finding with no single site.                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -542,6 +543,11 @@ three declared blind spots and nothing else to say:
     "coverageGaps": []
   },
   "result": {
+    "policy": {
+      "profile": null,
+      "source": "module-boundaries.config.mjs",
+      "fingerprint": "c2f0a1e79b3d4568e2f1a0c9d8b7e6f5a4c3b2d1e0f9a8b7c6d5e4f3a2b1c0d9"
+    },
     "violations": [],
     "goWork": null,
     "tsconfigPaths": null
@@ -554,7 +560,10 @@ Three declared blind spots, zero violations, `goWork`/`tsconfigPaths` both
 and `status: "ok"` because every one of the 120 analyzed files reached a
 verdict; the three blind spots are site-level, not whole-file, so they never
 touch `coverage.complete`. `decision` renders the same verdict in the
-vocabulary: `{ "verdict": "pass" }`.
+vocabulary: `{ "verdict": "pass" }`. `policy` names the law behind all of it:
+no profile, the repository's own `module-boundaries.config.mjs`, and its
+fingerprint — so this exact clean verdict is tied to this exact policy, not
+merely to "whatever ran".
 
 ## What this is not, yet
 

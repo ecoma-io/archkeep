@@ -417,6 +417,33 @@ export function formatCoverageGaps(coverageGaps) {
 }
 
 /**
+ * The policy-identity line — which law this run enforced — rendered FIRST,
+ * ahead of every verdict below it: a reader has to know WHICH law produced a
+ * result before the result itself means anything. A violating tree under a
+ * weak policy and a clean tree under a strict one used to print the exact
+ * same "no boundary violations" sentence, with nothing anywhere in the report
+ * saying which law had run (P1-01, `../../../../AGENTS.md`'s empty-result
+ * invariant applied to the law itself, not only to the verdict).
+ *
+ * `policy` is `null`/absent only for a caller that has nothing to say about
+ * one — a unit test exercising some other section of this report. `cli.mjs`'s
+ * `check` always supplies it, because `check` always loads exactly one
+ * boundary law before it can judge anything; `profile` inside it is `null`,
+ * stated rather than omitted, on every run that is not profile-selected — the
+ * same "no fact, no claim" bargain `formatGoWork`/`formatTsconfigPaths` keep
+ * for a feature a workspace does not use either.
+ *
+ * @param {{profile: string|null, source: string, fingerprint: string}|null|undefined} policy
+ * @returns {string} Empty exactly when no policy identity was supplied.
+ */
+export function formatPolicy(policy) {
+  if (policy == null) return "";
+  const { profile, source, fingerprint } = policy;
+  const law = profile === null ? source : `profile "${profile}" from ${source}`;
+  return `policy  ${law} — fingerprint ${fingerprint}`;
+}
+
+/**
  * The accepted-violations section: every violation an ACTIVE waiver covered,
  * rendered with the waiver that accepts it and its expiry.
  *
@@ -463,7 +490,7 @@ export function formatAcceptedViolations(waived) {
  * summary line above only says "no boundary violations" when there is nothing
  * a waiver is covering either.
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, declaredEdges?: object|null, intent?: object|null, fitness?: object|null, fitnessOverall?: {verdict: string}|null, coverageGaps?: object[], notes?: string[]}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, declaredEdges?: object|null, intent?: object|null, fitness?: object|null, fitnessOverall?: {verdict: string}|null, coverageGaps?: object[], notes?: string[], policy?: {profile: string|null, source: string, fingerprint: string}|null}} run
  * @returns {string}
  */
 export function formatReport({
@@ -480,6 +507,7 @@ export function formatReport({
   fitnessOverall,
   coverageGaps = [],
   notes = [],
+  policy = null,
 }) {
   const inspected =
     `${imports} import${imports === 1 ? "" : "s"} in ${analyzed} file${analyzed === 1 ? "" : "s"} ` +
@@ -490,6 +518,9 @@ export function formatReport({
     // among several configuring the rule was binding.
     (notes.length > 0 ? `; ${notes.join("; ")}` : "");
   const sections = [];
+
+  const policySection = formatPolicy(policy);
+  if (policySection !== "") sections.push(policySection);
 
   const waived = violations.filter((violation) => violation.waivedBy);
   const live = violations.filter((violation) => !violation.waivedBy);

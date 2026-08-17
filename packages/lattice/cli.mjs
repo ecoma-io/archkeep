@@ -75,7 +75,7 @@
  * only once a later command needs something this table cannot express.
  */
 import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs";
 import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
@@ -594,6 +594,22 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // kind of policy that could disagree with a file about the same row
   // (`./src/governance/profile-registry.mjs`).
   //
+  // `policyProfile`/`policySource` are captured in the SAME branch that loads
+  // `config` — never a second conditional over the same options — so the
+  // identity `check`'s report carries can never name a different policy than
+  // the one it actually ran: a violating tree under a weak policy and a clean
+  // tree under a strict one used to produce byte-identical output, with
+  // nothing anywhere in the report saying which law had run (P1-01).
+  // `policyProfile` is `null` on every branch but the profile one — stated,
+  // not omitted, the same "no fact, no claim" bargain `goWork`/`tsconfigPaths`
+  // keep below for a feature a workspace does not use either. `policySource`
+  // is always workspace-relative, the convention every other file reference in
+  // this report already keeps (`sourceFile`, `tsConfig`, intent's `file`) —
+  // `relative` resolves a `--config` pointed outside the tree the same way, as
+  // a `../`-prefixed path, and a native workspace's inline policy — which has
+  // no file of its own — reports `lattice.json` itself, where the inline
+  // object lives.
+  //
   // Typed explicitly because the four producers below disagree: the two
   // calls into `./src/config.mjs` (`loadBoundaryConfig`/`loadBoundaryConfigFile`)
   // are typed with the optional `notes`, the direct `policyFrom` call for a
@@ -602,22 +618,49 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // inferred, `tsc` narrows the union to whichever arm's return type is
   // narrowest and refuses the `notes` read below on that narrower type.
   /** @type {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }} */
-  const config = hasProfiles(commandContext.options)
-    ? profilePolicy(
-        resolve(root, commandContext.options.profiles),
-        String(options.config ?? commandContext.options.boundaryConfig),
-        options.config ?? commandContext.options.boundaryConfig,
-      )
-    : options.config
-      ? await loadBoundaryConfigFile(
-          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-        )
-      : typeof commandContext.options.boundaryConfig === "string"
-        ? await loadBoundaryConfig(root, commandContext.options.boundaryConfig)
-        : policyFrom(
-            commandContext.options.boundaryConfig,
-            `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-          );
+  let config;
+  /** @type {string|null} */
+  let policyProfile = null;
+  /** @type {string} */
+  let policySource;
+  if (hasProfiles(commandContext.options)) {
+    const profileName = String(options.config ?? commandContext.options.boundaryConfig);
+    const registryPath = resolve(root, commandContext.options.profiles);
+    config = profilePolicy(
+      registryPath,
+      profileName,
+      options.config ?? commandContext.options.boundaryConfig,
+    );
+    policyProfile = profileName;
+    policySource = relative(root, registryPath);
+  } else if (options.config) {
+    const configPath = isAbsolute(options.config) ? options.config : resolve(cwd, options.config);
+    config = await loadBoundaryConfigFile(configPath);
+    policySource = relative(root, configPath);
+  } else if (typeof commandContext.options.boundaryConfig === "string") {
+    config = await loadBoundaryConfig(root, commandContext.options.boundaryConfig);
+    policySource = relative(root, resolve(root, commandContext.options.boundaryConfig));
+  } else {
+    config = policyFrom(
+      commandContext.options.boundaryConfig,
+      `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+    );
+    policySource = LATTICE_MODEL_FILE;
+  }
+  // The policy's own fingerprint, alongside its source — the SHA-256 of the
+  // canonicalized policy (`depConstraints`/`options`/`suppressions`) that
+  // `graph`/`diff`/`history` already share (`computePolicyFingerprint`,
+  // `./src/commands/graph.mjs`), reused here rather than recomputed by hand so
+  // two runs under the identical effective policy always agree, whichever of
+  // the four branches above produced it. Unlike `graph`'s own optional
+  // `result.policy` — absent when no config was given — `check` always loads
+  // exactly one policy before it can judge anything, so `policy` below is
+  // never absent.
+  const policy = {
+    profile: policyProfile,
+    source: policySource,
+    fingerprint: computePolicyFingerprint(config),
+  };
 
   // The go.work drift check, keyed off the manifest's presence the way every
   // resolver keys off its language's manifest: no tracked root go.work, no
@@ -900,6 +943,12 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               coverageGaps,
             },
             result: {
+              // Named first: which law produced everything below it (P1-01).
+              // Always present — `check` cannot judge anything without
+              // loading exactly one policy — unlike `graph`'s own `policy`,
+              // which is absent when no config was given to a purely
+              // descriptive run.
+              policy,
               violations,
               // Additive and optional: absent when the tree has no active
               // waivers, so an unchanged tree's JSON is unchanged. Never `!` —
@@ -954,6 +1003,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
           }),
         )
       : FORMATS[options.format]({
+          policy,
           violations,
           failures,
           analyzed,

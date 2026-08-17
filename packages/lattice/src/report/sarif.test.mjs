@@ -70,6 +70,36 @@ describe("the SARIF envelope", () => {
     const [invocation] = log({ violations: [violation()] }).invocations;
     expect(invocation.executionSuccessful).toBe(true);
   });
+
+  it("names the law that governed the run in the run-level property bag (P1-01)", () => {
+    // A code-scanning consumer reading two uploads side by side could not
+    // otherwise tell a strict run from one under a weaker policy — both a
+    // clean and a violating log carried nothing naming the config, profile,
+    // or fingerprint that produced it.
+    const built = log({
+      policy: { profile: "strict", source: "law-profiles.json", fingerprint: "deadbeef" },
+    });
+    expect(built.properties.policy).toEqual({
+      profile: "strict",
+      source: "law-profiles.json",
+      fingerprint: "deadbeef",
+    });
+  });
+
+  it("states a file-selected (non-profile) policy the same way, with profile null", () => {
+    const built = log({
+      policy: { profile: null, source: "module-boundaries.config.mjs", fingerprint: "cafef00d" },
+    });
+    expect(built.properties.policy).toEqual({
+      profile: null,
+      source: "module-boundaries.config.mjs",
+      fingerprint: "cafef00d",
+    });
+  });
+
+  it("carries no properties bag at all when no caller supplied a policy — unchanged bytes for any caller that predates it", () => {
+    expect(log()).not.toHaveProperty("properties");
+  });
 });
 
 describe("the rule catalogue", () => {

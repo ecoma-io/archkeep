@@ -169,10 +169,13 @@ file that was never meant to be one; `graph` fails the same way, since it too
 loads `boundaryConfig` for the policy fingerprint. Profile semantics exist
 only inside `check`; plan against the active law with
 `lattice check --config <active> --format json`, and read the registry file
-for the selected profile's effective block. Because the tool's own report
-never names which profile it enforced, anything a change report cites as "the
-check" must name the `--config <NAME>` it ran with — the reader of a
-profile-selected run cannot otherwise tell which law produced the verdict.
+for the selected profile's effective block. `check`'s own report names which
+profile it enforced — `result.policy.profile` in `--format json`, and a
+`policy` line first in the text and SARIF reports
+([json-output.md](../reference/json-output.md)) — so a change report can
+still cite the `--config <NAME>` it ran with, but can also simply be read back
+against the report itself: the reader of a profile-selected run no longer has
+to take a change report's word for which law produced the verdict.
 
 A profile's `block` carries exactly three keys — `depConstraints`,
 `moduleBoundaryOptions`, `boundarySuppressions` — so a profile-selected run
