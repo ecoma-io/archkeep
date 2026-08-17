@@ -44,6 +44,13 @@ intentional.
 the silent direction. Omit `projects.infer` entirely to get that effect on
 purpose.
 
+Every `path.posix.matchesGlob` pattern in this file -- `include`/`exclude`
+here, and `projectRules[].match`/`coverage.exempt[].path` below -- is capped
+at 512 brace-driven alternatives. The matcher's `{a,b,c}` brace-group support
+expands combinatorially, so an unbounded pattern is a denial-of-service risk
+in a file a pull request can edit, not just an unusual one; a pattern past the
+cap is rejected at load, naming it.
+
 ### `projectRules`
 
 An array of `{ match, tags?, type? }` rows. Each row is a glob over a
