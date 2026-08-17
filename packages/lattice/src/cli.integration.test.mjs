@@ -2982,6 +2982,164 @@ var _ = adapter.Name
   });
 });
 
+describe("an inline boundaryConfig's policy fingerprint survives graph into history (P1-25)", () => {
+  // `runGraph`'s own copy of the file/inline config-resolution ladder stopped
+  // at the file-string arm: a native workspace's INLINE `boundaryConfig` fell
+  // through to `null`, so `graph --output` never wrote a `result.policy`
+  // fingerprint for one — unlike every other command's copy of this ladder
+  // (`diff`, `history --capture`, `check`, ...), which all carry the third
+  // "inline object" arm alongside the "file string" one. Two such fingerprint-less
+  // snapshots, captured on either side of a real inline-policy edit, carried
+  // the same "no policy" identity, so `history` classified the transition
+  // "unchanged" and reported "no architectural change recorded" — silently,
+  // exactly as if the law had never moved. The same edit made to a
+  // FILE-named `boundaryConfig` was already reported correctly, because that
+  // copy of the ladder was never missing the arm.
+  const policyWith = (banTransitiveDependencies) => ({
+    depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+    moduleBoundaryOptions: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies,
+      checkNestedExternalImports: false,
+    },
+  });
+
+  const trackedFiles = [
+    "lattice.json",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "libs/adapter/go.mod",
+    "libs/adapter/adapter.go",
+  ];
+
+  /** Builds a fresh tmpdir native workspace carrying the given inline policy. */
+  const buildRoot = (boundaryConfig) => {
+    const root = mkdtempSync(join(tmpdir(), "polyglot-cli-inline-policy-history-"));
+    const write = (relativePath, text) => {
+      mkdirSync(join(root, relativePath, ".."), { recursive: true });
+      writeFileSync(join(root, relativePath), text);
+    };
+    write(
+      "lattice.json",
+      JSON.stringify({
+        boundaryConfig,
+        projects: {
+          declared: [
+            { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+            { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+          ],
+        },
+      }),
+    );
+    write("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+    write("libs/domain/doc.go", "package domain\n");
+    write("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+    write("libs/adapter/adapter.go", "package adapter\n");
+    return root;
+  };
+
+  /** A fresh stream pair per call, so one call's captured output never bleeds into another's assertions. */
+  const streamsFor = (root) => {
+    const out = [];
+    const err = [];
+    return {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      cwd: root,
+      listFiles: () => trackedFiles,
+    };
+  };
+
+  it("graph --output carries a policy.fingerprint for an inline boundaryConfig, the same as a file-named one", async () => {
+    const root = buildRoot(policyWith(false));
+    const histDir = mkdtempSync(join(tmpdir(), "polyglot-cli-inline-policy-history-dir-"));
+    try {
+      const snapshotPath = join(histDir, "0001-baseline.json");
+      expect(
+        await runCli(["graph", "--format", "json", "--output", snapshotPath], streamsFor(root)),
+      ).toBe(EXIT.ok);
+      const envelope = JSON.parse(readFileSync(snapshotPath, "utf8"));
+      expect(envelope.result.policy).toBeDefined();
+      expect(typeof envelope.result.policy.fingerprint).toBe("string");
+      expect(envelope.result.policy.fingerprint.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(histDir, { recursive: true, force: true });
+    }
+  });
+
+  it("history reports a policy change across two inline-boundaryConfig graph snapshots, instead of silently claiming none", async () => {
+    const root = buildRoot(policyWith(false));
+    const histDir = mkdtempSync(join(tmpdir(), "polyglot-cli-inline-policy-history-dir-"));
+    try {
+      expect(
+        await runCli(
+          ["graph", "--format", "json", "--output", join(histDir, "0001-baseline.json")],
+          streamsFor(root),
+        ),
+      ).toBe(EXIT.ok);
+
+      // A real architectural-law edit: the graph (projects, edges) does not
+      // move, only the policy — `banTransitiveDependencies` flips from false
+      // to true. No project or edge is added, removed, or retagged.
+      writeFileSync(
+        join(root, "lattice.json"),
+        JSON.stringify({
+          boundaryConfig: policyWith(true),
+          projects: {
+            declared: [
+              { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+              { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+            ],
+          },
+        }),
+      );
+
+      expect(
+        await runCli(
+          ["graph", "--format", "json", "--output", join(histDir, "0002-head.json")],
+          streamsFor(root),
+        ),
+      ).toBe(EXIT.ok);
+
+      // The JSON record: the structured signal a consumer's tooling reads.
+      const jsonStreams = streamsFor(root);
+      expect(await runCli(["history", histDir, "--format", "json"], jsonStreams)).toBe(EXIT.ok);
+      const record = JSON.parse(jsonStreams.lines.out.join("\n"));
+      const [transition] = record.result.transitions;
+      // The silent-direction assertion: before the fix this is `null` — both
+      // snapshots carry no fingerprint at all, so the comparison could not be
+      // made, which is indistinguishable from a workspace that never captured
+      // a policy in the first place.
+      expect(transition.policyChanged).toBe(true);
+      expect(transition.architectureChanged).toBe(false);
+
+      // The terminal report: the exact human-facing claim the audit measured.
+      // Before the fix this reads "✔ no architectural change recorded across
+      // the snapshots" with no policy signal at all — byte-for-byte what an
+      // unedited workspace would print.
+      const textStreams = streamsFor(root);
+      expect(await runCli(["history", histDir], textStreams)).toBe(EXIT.ok);
+      const report = textStreams.lines.out.join("\n");
+      expect(report).toContain(
+        "policy (the declared architectural intent) changed between these snapshots",
+      );
+      expect(report).toContain(
+        "✔ no architectural change recorded across the snapshots (only policy, provider, or drift signals)",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(histDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("scoping a native check must not narrow the graph it is judged against", () => {
   // The silent-direction bug this guards: on the native path `graph.dependencies`
   // is DERIVED from analyzed import sites (`./src/providers/native/graph.mjs`),
