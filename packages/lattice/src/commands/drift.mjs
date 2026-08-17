@@ -56,7 +56,7 @@ import { resolveProvenance } from "./provenance.mjs";
 import { judgeIntent } from "../architecture-intent/judge.mjs";
 import { computeIntentFingerprint } from "../architecture-intent/intent-fingerprint.mjs";
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
-import { formatDriftReport } from "../drift/drift-text.mjs";
+import { formatDriftReport } from "../report/drift-text.mjs";
 
 /**
  * The observed side of the comparison: the same project model `graph` builds.

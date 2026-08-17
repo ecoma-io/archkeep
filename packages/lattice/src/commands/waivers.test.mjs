@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { computeWaivers, formatWaiversReport, waiversCommand } from "./waivers.mjs";
+import { computeWaivers, waiversCommand } from "./waivers.mjs";
 
 // `resolveProvenance` reaches the FS; the report row it fills is "where this
 // run came from", not a waiver fact, so it is pinned to a constant as the
@@ -131,35 +131,6 @@ describe("computeWaivers", () => {
       NOW,
     );
     expect(waivers.map((w) => w.path)).toEqual(["AB/main.ts", "ab/main.ts"]);
-  });
-});
-
-describe("formatWaiversReport", () => {
-  it("says no waivers when the surface is empty, naming what that means", () => {
-    expect(formatWaiversReport({ waivers: [], covered: 0, expired: 0, stale: 0 })).toMatch(
-      /no waivers — every boundary is enforced/,
-    );
-  });
-
-  it("renders the term, the coverage, and the reason for each waiver", () => {
-    const { waivers, covered, expired, stale } = computeWaivers(
-      [waiver({ origin: "ticket-1234" })],
-      [violation("area/app/some.config.ts")],
-      NOW,
-    );
-    const text = formatWaiversReport({ waivers, covered, expired, stale });
-    expect(text).toContain("currently covers a violation");
-    expect(text).toContain("1 current violation");
-    expect(text).toContain("reason: the loader resolves no alias here");
-    expect(text).toContain("expires: 2026-09-01T00:00:00.000Z");
-    expect(text).toContain("origin: ticket-1234");
-  });
-
-  it("flags a waiver that covers nothing as stale, loudly", () => {
-    const { waivers, covered, expired, stale } = computeWaivers([waiver()], [], NOW);
-    const text = formatWaiversReport({ waivers, covered, expired, stale });
-    expect(text).toContain("covers nothing right now");
-    expect(text).toContain("consider removing it");
   });
 });
 

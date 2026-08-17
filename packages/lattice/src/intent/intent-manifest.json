@@ -294,7 +294,7 @@
         },
         {
           "type": "behavioral-test",
-          "path": "src/drift/drift-text.test.mjs",
+          "path": "src/report/drift-text.test.mjs",
           "assertion": "formatDriftReport states comparison facts even when clean (no-drift is a claim about coverage); groups findings by rule in taxonomy order; byte-identical determinism"
         },
         {
