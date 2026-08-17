@@ -92,23 +92,39 @@ export function selectProjects(selector, nodes) {
 
 /**
  * The members of a boundary: the union of its positive selectors, minus
- * whatever its `!` selectors carve out. A list opening with an exclusion means
- * "everything except…", so `["!tag:type-package"]` prepends an implicit `*` —
- * the same rule `findMatchingProjects` reproduces in `../rules/match.mjs`.
+ * whatever its `!` selectors carve out — order-independent, because
+ * `docs/reference/architecture-intent.md` documents `match[]` as a set
+ * expression ("the union of its positive selectors minus its `!` selectors"),
+ * not a sequence of edits applied left to right. A list with NO positive
+ * selector at all, like `["!tag:type-package"]`, means "everything except…",
+ * so an implicit `*` seeds the union in that case only — decided by whether
+ * any entry lacks `!`, never by which entry the list happens to start with.
+ *
+ * This deliberately does NOT reuse `findMatchingProjects`'s
+ * (`../rules/match.mjs`) upstream-Nx rule of checking only `patterns[0]`:
+ * that check is a faithful port of Nx's own `find-matching-projects.js`
+ * (`isExcludePattern(patterns[0])`), and it makes the result depend on
+ * selector ORDER — `["!tag:legacy", "tag:layer:app"]` seeds the wildcard
+ * (exclusion first) and then the later positive selector re-adds a legacy
+ * project the exclusion just removed, while the reverse order never seeds the
+ * wildcard and correctly excludes it. That is upstream Nx's documented
+ * behaviour and stays correct in `../rules/match.mjs`, which exists to match
+ * Nx byte-for-byte; it would be wrong here, where the same list must resolve
+ * the same way regardless of how the author happened to order it.
  *
  * @param {string[]} patterns A boundary's `match[]`, already validated.
  * @param {Record<string, {data?: {root?: string, tags?: string[]}}>} nodes
  * @returns {string[]} Sorted member names.
  */
 export function resolveMembers(patterns, nodes) {
-  const effective = patterns[0].startsWith("!") ? ["*", ...patterns] : patterns;
+  const positives = patterns.filter((pattern) => !pattern.startsWith("!"));
+  const negatives = patterns.filter((pattern) => pattern.startsWith("!"));
   const members = new Set();
-  for (const pattern of effective) {
-    const exclude = pattern.startsWith("!");
-    for (const name of selectProjects(pattern, nodes)) {
-      if (exclude) members.delete(name);
-      else members.add(name);
-    }
+  for (const pattern of positives.length > 0 ? positives : ["*"]) {
+    for (const name of selectProjects(pattern, nodes)) members.add(name);
+  }
+  for (const pattern of negatives) {
+    for (const name of selectProjects(pattern, nodes)) members.delete(name);
   }
   return Array.from(members).sort();
 }
