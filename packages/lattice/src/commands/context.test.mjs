@@ -242,7 +242,7 @@ describe("resolveCommandContext — the Nx branch scopes before it analyzes", ()
   });
 });
 
-describe("resolveCommandContext — the two loud refusals it owns", () => {
+describe("resolveCommandContext — the loud refusals it owns", () => {
   it("throws when the root carries both nx.json and lattice.json, naming the tree", () => {
     const { root, write } = fixture("context-both-markers-");
     write("nx.json", "{}\n");
@@ -273,6 +273,55 @@ describe("resolveCommandContext — the two loud refusals it owns", () => {
         },
       ),
     ).toThrow(/outside the workspace/);
+  });
+
+  it("throws when a requested path matches no tracked file — the untracked-new-file case", () => {
+    // The audit's exact reproduction: the file exists on disk under the
+    // scoped path but `listFiles` (standing in for `git ls-files`) never
+    // named it, mirroring a file that exists but was never `git add`ed. The
+    // committed twin of this same path, byte for byte, would be selected and
+    // judged instead of silently selecting nothing.
+    const { root, write } = fixture("context-untracked-path-");
+    write("nx.json", "{}\n");
+    write("libs/a/a.go", "package a\n");
+    write("libs/a/untracked.go", "package a\n");
+
+    expect(() =>
+      resolveCommandContext(
+        { cwd: root, paths: ["libs/a/untracked.go"] },
+        {
+          readGraph: () => ({
+            nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+            dependencies: { a: [] },
+          }),
+          // `untracked.go` is on disk (written above) but not in this list —
+          // the exact shape `git ls-files` would answer before `git add`.
+          listFiles: () => ["nx.json", "libs/a/a.go"],
+        },
+      ),
+    ).toThrow(/matches no tracked file/);
+  });
+
+  it("does not throw when a requested path is tracked but owned by no project — a real, empty slice", () => {
+    // `docs/` is tracked (it is in `listFiles`) but no declared project's root
+    // covers it, so it is legitimately empty — not a usage mistake, and must
+    // select cleanly rather than join the refusal above.
+    const { root, write } = fixture("context-tracked-unowned-path-");
+    write("nx.json", "{}\n");
+    write("libs/a/a.go", "package a\n");
+    write("docs/readme.md", "# docs\n");
+
+    const context = resolveCommandContext(
+      { cwd: root, paths: ["docs"] },
+      {
+        readGraph: () => ({
+          nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+          dependencies: { a: [] },
+        }),
+        listFiles: () => ["nx.json", "libs/a/a.go", "docs/readme.md"],
+      },
+    );
+    expect(context.analysis.analyzedFiles).toEqual([]);
   });
 });
 
