@@ -25,7 +25,16 @@
  * here rather than approximated. The `…Error` helpers exist so `../config.mjs`
  * can reject a pattern that will not compile at load, naming it, instead of
  * throwing from inside a rule halfway through a run.
+ *
+ * A fourth dialect lives at the bottom of this file, unrelated to Nx:
+ * `path.posix.matchesGlob`, the Node built-in `boundarySuppressions[].path`,
+ * `coverage.exempt[].path`, `projectRules[].match` and
+ * `projects.infer.include`/`exclude` are matched with. `safeMatchesGlob` and
+ * its `globComplexityError` guard live here for the same reason the three
+ * dialects above do: one shared implementation every caller reaches through,
+ * rather than each one reimplementing the check.
  */
+import { posix } from "node:path";
 
 /**
  * Does `extractedImport` match the wildcard pattern `allowableImport`?
@@ -267,4 +276,136 @@ export function findMatchingProjects(patterns, nodes) {
     applyDirectory(nodes, pattern, matched);
   }
   return Array.from(matched);
+}
+
+/**
+ * The most brace-driven alternatives one glob pattern may expand to before
+ * `globComplexityError` refuses it — chosen from measurement, not guessed.
+ *
+ * Against this engine's own `path.posix.matchesGlob` (Node 22.22.2, ordinary
+ * hardware): thirteen sequential two-way brace groups
+ * (`{a0,b0}{a1,b1}…{a12,b12}`, an expansion count of 2**13 = 8192) already
+ * cost around 600ms in a single call, and three groups of forty alternatives
+ * each (an expansion count of 40**3 = 64000) cost around 21 SECONDS — the
+ * cost grows far faster than the expansion count does, and the same way
+ * whether the alternatives arrive as many small groups or a few large ones.
+ * Capping the count at 512 keeps an ALLOWED pattern's worst single call under
+ * ten milliseconds in that same measurement, with generous headroom over
+ * anything a real suppression, exemption or project rule plausibly needs to
+ * name from ONE glob string.
+ */
+export const MAX_GLOB_EXPANSIONS = 512;
+
+/**
+ * The number of literal strings `pattern`'s brace groups would expand to,
+ * without ever generating them: multiplied across a concatenation (`{a,b}c`
+ * is 2, `{a,b}{c,d}` is 4) and summed across a `,`-separated union
+ * (`{a,{b,c}}` is 2 — `a`, plus the nested pair) — the same arithmetic real
+ * brace expansion performs, so the number returned is never smaller than what
+ * `path.posix.matchesGlob` would actually have to work through.
+ *
+ * An explicit stack, not recursion: a pattern built from thousands of nested
+ * `{` would otherwise make counting itself recurse thousands of frames deep,
+ * trading the DoS this function exists to prevent for a stack overflow
+ * instead. Saturates at `cap + 1` the moment any open frame's own running
+ * total would exceed `cap`, so neither a wide pattern (many alternatives) nor
+ * a deep one (many nested groups) costs this function more than the linear
+ * scan already in flight — the property `globComplexityError` needs from it
+ * to be a cheap gate in front of the real, unbounded matcher.
+ *
+ * An unbalanced `{` with no closing `}` is folded in as though the string had
+ * ended there. This function only ever needs to REFUSE a pattern that really
+ * would explode, never to reproduce `path.posix.matchesGlob`'s exact grammar
+ * (escapes, a `{`/`}` meant literally inside a `[...]` class) — so treating
+ * anything that looks like brace syntax as brace syntax is the safe
+ * direction: it can only make this function refuse a pattern that would
+ * actually have been cheap, never the reverse.
+ *
+ * @param {string} pattern
+ * @param {number} cap
+ * @returns {number} The exact count when it is at most `cap`, or `cap + 1` —
+ *   a sentinel, not a precise count past that point — once the pattern is
+ *   certain to exceed `cap`.
+ */
+export function braceExpansionCount(pattern, cap) {
+  const limit = cap + 1;
+  /** @type {{alternatives: number, branchProduct: number}[]} */
+  const frames = [{ alternatives: 0, branchProduct: 1 }];
+  for (let i = 0; i < pattern.length; i++) {
+    const nested = frames.length > 1;
+    const top = frames[frames.length - 1];
+    const ch = pattern[i];
+    if (nested && ch === "}") {
+      top.alternatives += top.branchProduct;
+      frames.pop();
+      const parent = frames[frames.length - 1];
+      parent.branchProduct = Math.min(parent.branchProduct * top.alternatives, limit);
+    } else if (nested && ch === ",") {
+      top.alternatives += top.branchProduct;
+      top.branchProduct = 1;
+    } else if (ch === "{") {
+      frames.push({ alternatives: 0, branchProduct: 1 });
+    }
+    const current = frames[frames.length - 1];
+    if (current.alternatives + current.branchProduct > cap) return limit;
+  }
+  // An unbalanced '{' leaves frames still open — close each one as though the
+  // pattern had ended right there, folding its count into its parent.
+  while (frames.length > 1) {
+    const frame = frames.pop();
+    frame.alternatives += frame.branchProduct;
+    const parent = frames[frames.length - 1];
+    parent.branchProduct = Math.min(parent.branchProduct * frame.alternatives, limit);
+    if (parent.alternatives + parent.branchProduct > cap) return limit;
+  }
+  const root = frames[0];
+  return Math.min(root.alternatives + root.branchProduct, limit);
+}
+
+/**
+ * Why `pattern` cannot be handed to `path.posix.matchesGlob`, or `null`.
+ *
+ * `path.posix.matchesGlob`'s brace-group support expands combinatorially
+ * (`braceExpansionCount`'s own doc comment carries the measurement), and
+ * `boundarySuppressions[].path`, `coverage.exempt[].path`,
+ * `projectRules[].match` and `projects.infer.include`/`exclude` are all
+ * matched with it while validating only that the string is non-empty. Every
+ * one of those four fields is attacker-controlled the moment a pull request
+ * edits `lattice.json` or the boundary config (`../../../../SECURITY.md`), so a
+ * crafted pattern reaching the real matcher unchecked is a denial of
+ * service — refusing it here, loudly, at config load is both the security
+ * fix and the "empty result is a claim, not a shrug" fix
+ * (`../../../../AGENTS.md`): a config that fails to validate must never be
+ * silently treated as "no suppressions/exemptions/rules declared."
+ *
+ * @param {string} pattern
+ * @returns {string|null}
+ */
+export function globComplexityError(pattern) {
+  if (braceExpansionCount(pattern, MAX_GLOB_EXPANSIONS) <= MAX_GLOB_EXPANSIONS) return null;
+  return (
+    `expands to more than ${MAX_GLOB_EXPANSIONS} brace-driven alternatives for ` +
+    `'path.posix.matchesGlob' to match without the combinatorial cost this engine refuses to ` +
+    `pay — narrow the brace groups`
+  );
+}
+
+/**
+ * `path.posix.matchesGlob`, guarded by `globComplexityError` first — the one
+ * place `boundarySuppressions` (`../config.mjs`'s `suppressionCovers`),
+ * `coverage.exempt`, `projectRules` and `projects.infer.include`/`exclude`
+ * (`../providers/native/model.mjs`'s `matchesGlob` export) reach the real
+ * matcher, so a pattern that slipped past config-load validation — or a
+ * future caller that never validates — still cannot reach the expensive call
+ * uncounted.
+ *
+ * @param {string} path
+ * @param {string} pattern
+ * @returns {boolean}
+ * @throws {Error} when `pattern` fails `globComplexityError`.
+ */
+export function safeMatchesGlob(path, pattern) {
+  const problem = globComplexityError(pattern);
+  if (problem) throw new Error(`lattice: glob pattern '${pattern}' ${problem}`);
+  return posix.matchesGlob(path, pattern);
 }

@@ -18,25 +18,40 @@ vi.mock("../analysis/analyze.mjs", () => ({
   analyzeFile: vi.fn(() => ({ imports: [], failures: [] })),
   languageOf: (file) => (file.endsWith(".go") ? "go" : null),
 }));
-vi.mock("../rules/match.mjs", () => ({
-  findMatchingProjects: (patterns) => patterns.filter((p) => !p.startsWith("!")),
-  // `../providers/native/model.mjs`'s `declaredProjectViolations` imports this
-  // to validate `implicitDependencies` entries — needed the moment a test
-  // drives the native branch (`buildNativeWorkspaceIndex`), which loads that
-  // module transitively. `null` means "no problem with this pattern", the same
-  // permissive answer the real function gives every non-glob pattern.
-  projectPatternError: () => null,
-  // `../config.mjs` imports these three alongside `projectPatternError` above,
-  // and `model.mjs` now imports `../../config.mjs` for
-  // `findBoundaryConfigViolations` (the one shared validator both the
-  // `boundaryConfig` file dialects and an inline policy object route through)
-  // — so loading `model.mjs` at all pulls `../rules/match.mjs`'s whole
-  // export surface in, not just the one name this suite used to need. Same
-  // permissive "no problem" stub as `projectPatternError` above.
-  importPatternError: () => null,
-  globPatternError: () => null,
-  tagPatternError: () => null,
-}));
+vi.mock("../rules/match.mjs", async () => {
+  const { posix } = await import("node:path");
+  return {
+    findMatchingProjects: (patterns) => patterns.filter((p) => !p.startsWith("!")),
+    // `../providers/native/model.mjs`'s `declaredProjectViolations` imports this
+    // to validate `implicitDependencies` entries — needed the moment a test
+    // drives the native branch (`buildNativeWorkspaceIndex`), which loads that
+    // module transitively. `null` means "no problem with this pattern", the same
+    // permissive answer the real function gives every non-glob pattern.
+    projectPatternError: () => null,
+    // `../config.mjs` imports these three alongside `projectPatternError` above,
+    // and `model.mjs` now imports `../../config.mjs` for
+    // `findBoundaryConfigViolations` (the one shared validator both the
+    // `boundaryConfig` file dialects and an inline policy object route through)
+    // — so loading `model.mjs` at all pulls `../rules/match.mjs`'s whole
+    // export surface in, not just the one name this suite used to need. Same
+    // permissive "no problem" stub as `projectPatternError` above.
+    importPatternError: () => null,
+    globPatternError: () => null,
+    tagPatternError: () => null,
+    // `model.mjs`'s `projectRuleViolations`/`exemptRowViolations`/
+    // `inferViolations` call this to validate a `projectRules[].match`/
+    // `coverage.exempt[].path`/`projects.infer.include`/`exclude` entry the
+    // moment `loadNativeModel` runs; its own `matchesGlob` export assigns
+    // `safeMatchesGlob` at module scope, evaluated the moment `model.mjs`
+    // loads at all, not only when a test calls it. Neither fixture in this
+    // file exercises a brace-bomb pattern, so both stubs delegate straight to
+    // the real, un-guarded `path.posix.matchesGlob`/"no problem" rather than
+    // reproducing the cap — this is the unit tier, and the guard itself is
+    // `rules/match.test.mjs`'s to prove.
+    globComplexityError: () => null,
+    safeMatchesGlob: (path, pattern) => posix.matchesGlob(path, pattern),
+  };
+});
 
 const analyzeFile = vi.mocked((await import("../analysis/analyze.mjs")).analyzeFile);
 

@@ -7,9 +7,24 @@ import {
   matchesGlob,
   normalizeNativeModel,
 } from "./model.mjs";
+import { MAX_GLOB_EXPANSIONS } from "../../rules/match.mjs";
 
 /** A minimal well-formed document; each test bends exactly one thing. */
 const wellFormed = () => ({ projects: { declared: [] } });
+
+/**
+ * Thirteen sequential two-way brace groups — an expansion count of 2**13 =
+ * 8192, comfortably past `MAX_GLOB_EXPANSIONS` (512). Before
+ * `globComplexityError` existed, handing this straight to
+ * `path.posix.matchesGlob` cost around 600ms for ONE call, measured directly
+ * against this engine's own copy of it (see `../../rules/match.mjs`'s
+ * `MAX_GLOB_EXPANSIONS` doc comment for the full measurement) — every
+ * `projectRules`/`coverage.exempt`/`projects.infer` field this pattern is
+ * used against below (`match`, `path`, `include`, `exclude`) reaches that
+ * same matcher.
+ */
+const bracePattern = () =>
+  "x" + Array.from({ length: 13 }, (_, i) => `{a${i},b${i}}`).join("") + "y";
 
 describe("findNativeModelViolations", () => {
   it("accepts a well-formed, mostly-empty document", () => {
@@ -168,6 +183,33 @@ describe("findNativeModelViolations", () => {
         findNativeModelViolations({ projects: { infer: { manifest: ["go.mod"] } } })[0],
       ).toMatch(/projects\.infer\.manifest: not an infer field/);
     });
+
+    // P1-16: `include`/`exclude` reach `path.posix.matchesGlob` for every
+    // tracked file a workspace has, so a brace-bomb entry here is the same
+    // denial-of-service `projectRules`/`coverage.exempt` are guarded against
+    // below — see this file's `bracePattern` doc comment for the measurement.
+    it("rejects an include or exclude entry whose brace groups would expand past the cap", () => {
+      const includeViolations = findNativeModelViolations({
+        projects: { infer: { include: [bracePattern()] } },
+      });
+      expect(includeViolations.some((v) => v.startsWith("projects.infer.include[0]"))).toBe(true);
+      expect(includeViolations.some((v) => v.includes(`more than ${MAX_GLOB_EXPANSIONS}`))).toBe(
+        true,
+      );
+
+      const excludeViolations = findNativeModelViolations({
+        projects: { infer: { include: ["**"], exclude: [bracePattern()] } },
+      });
+      expect(excludeViolations.some((v) => v.startsWith("projects.infer.exclude[0]"))).toBe(true);
+    });
+
+    it("accepts a real, small brace pattern for include/exclude — a regression guard against over-refusing", () => {
+      expect(
+        findNativeModelViolations({
+          projects: { infer: { include: ["libs/**/*.{go,rs}"], exclude: ["libs/vendor/**"] } },
+        }),
+      ).toEqual([]);
+    });
   });
 
   describe("projectRules rows", () => {
@@ -298,6 +340,20 @@ describe("findNativeModelViolations", () => {
         }),
       ).toEqual([]);
     });
+
+    // P1-16: `match` is matched against every discovered project's root with
+    // `path.posix.matchesGlob` (`./discover.mjs`) — a brace-bomb entry here is
+    // a denial-of-service, and this validator's non-empty-string check alone
+    // used to let one through uncaught.
+    it("rejects a match glob whose brace groups would expand past the cap", () => {
+      const violations = findNativeModelViolations({
+        ...wellFormed(),
+        projectRules: [{ match: bracePattern(), type: "app" }],
+      });
+      expect(violations).toHaveLength(1);
+      expect(violations[0]).toMatch(/projectRules\[0\]\.match:/);
+      expect(violations[0]).toMatch(new RegExp(`more than ${MAX_GLOB_EXPANSIONS} brace-driven`));
+    });
   });
 
   describe("coverage.exempt rows", () => {
@@ -338,6 +394,20 @@ describe("findNativeModelViolations", () => {
           coverage: { exempt: [{ path: "x", reason: "vendored, not ours to own" }] },
         }),
       ).toEqual([]);
+    });
+
+    // P1-16: `path` is matched against every unowned tracked file with
+    // `path.posix.matchesGlob` (`./coverage.mjs`) — a brace-bomb entry here is
+    // the same denial-of-service `projectRules[].match` is guarded against
+    // above.
+    it("rejects a path whose brace groups would expand past the cap", () => {
+      const violations = findNativeModelViolations({
+        ...wellFormed(),
+        coverage: { exempt: [{ path: bracePattern(), reason: "generated" }] },
+      });
+      expect(violations).toHaveLength(1);
+      expect(violations[0]).toMatch(/coverage\.exempt\[0\]\.path:/);
+      expect(violations[0]).toMatch(new RegExp(`more than ${MAX_GLOB_EXPANSIONS} brace-driven`));
     });
   });
 
@@ -755,11 +825,31 @@ describe("loadNativeModel", () => {
 });
 
 describe("matchesGlob", () => {
-  // A thin re-export of `path.posix.matchesGlob` — this proves the export
-  // wires to the real thing, not a second implementation of glob matching.
+  // `../../rules/match.mjs`'s `safeMatchesGlob`, not a bare re-export — this
+  // proves it still wires to the real `path.posix.matchesGlob` for an
+  // ordinary pattern, not a second implementation of glob matching.
   it("matches the same way path.posix.matchesGlob does", () => {
     expect(matchesGlob("apps/a/x.go", "apps/**")).toBe(true);
     expect(matchesGlob("libs/a/x.go", "apps/**")).toBe(false);
     expect(matchesGlob("README.md", "README.md")).toBe(true);
+  });
+
+  // P1-16: this export is what `./discover.mjs` (projectRules,
+  // projects.infer) and `./coverage.mjs` (coverage.exempt) actually call —
+  // the backstop that must refuse a brace-bomb pattern quickly even if it
+  // somehow reached matching without going through `findNativeModelViolations`
+  // first.
+  it("throws quickly on a brace-bomb pattern instead of hanging", () => {
+    const bomb = "x" + Array.from({ length: 13 }, (_, i) => `{a${i},b${i}}`).join("") + "y";
+    const start = performance.now();
+    expect(() => matchesGlob("x-nomatch-y", bomb)).toThrow(/brace-driven alternatives/);
+    const elapsed = performance.now() - start;
+    // `globComplexityError` refuses this pattern before `safeMatchesGlob`
+    // (this export) ever reaches the real matcher, so this has no reason to
+    // be anywhere near the ~1.4s this exact pattern cost per call before the
+    // guard existed (measured directly, inside this suite). Bounded
+    // generously against shared-machine scheduling noise, not against this
+    // call's own cost.
+    expect(elapsed).toBeLessThan(500);
   });
 });
