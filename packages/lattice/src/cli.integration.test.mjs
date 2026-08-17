@@ -619,6 +619,28 @@ export const moduleBoundaryOptions = {
     expect(report).not.toContain("goWorkMissingUse");
   });
 
+  it("exits 3 on a go.work that is not a go.work file at all, not a clean agreement — audit P1-03", async () => {
+    // The exact shape the audit reported: a go.work fetched through a
+    // redirect that actually served an HTML error page tokenizes with no
+    // unterminated block or string, so before the keyword validation this
+    // fix adds, every line fell through the "future directive" skip and the
+    // file read as zero `use` entries — exit 0, "go.work agrees with the
+    // project graph", an affirmative claim about a file that was never
+    // really read (the finding's own evidence). It must refuse a verdict
+    // instead, the same as the unclosed-block case above.
+    writeWork(
+      "go.work",
+      "<!DOCTYPE html>\n<html><head><title>404 Not Found</title></head>\n<body>404 Not Found</body></html>\n",
+    );
+    const streams = workEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("could not be analyzed at all");
+    expect(report).toContain("go.work:1: unknown directive: <!DOCTYPE");
+    expect(report).not.toContain("goWorkMissingUse");
+    expect(report).not.toContain("agrees with the project graph");
+  });
+
   it("carries drift into the SARIF report as results, so a code-scanning consumer sees the red", async () => {
     writeWork("go.work", "go 1.24\n\nuse ./libs/store\n");
     const { report, violations, goWorkDrift } = await check(
@@ -642,6 +664,85 @@ export const moduleBoundaryOptions = {
       EXIT.violations,
     );
     expect(streams.lines.err.join("\n")).toContain("1 go.work drift finding");
+  });
+});
+
+describe("the go.work drift check in a workspace with no Go projects at all", () => {
+  // Audit finding P1-03's exact evidence, reproduced end to end rather than
+  // only at the parser: a workspace whose graph carries zero go.mod projects
+  // has nothing on either side of `compareGoWork` to disagree about, so
+  // before the keyword validation this fix adds, an unparseable go.work here
+  // — HTML from a redirect, say — parsed to zero `use` entries and compared
+  // clean against zero module projects: exit 0, "✔ go.work agrees with the
+  // project graph", `checked: true` in the JSON envelope. An affirmative
+  // claim about a file the run never actually read. This fixture has no
+  // go.mod anywhere, on purpose, so that false agreement is the ONLY way
+  // this go.work could have read as clean.
+  const noGoRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-gowork-notgowork-"));
+  afterAll(() => rmSync(noGoRoot, { recursive: true, force: true }));
+
+  const writeNoGo = (relativePath, text) => {
+    mkdirSync(join(noGoRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(noGoRoot, relativePath), text);
+  };
+
+  writeNoGo("nx.json", "{}\n");
+  writeNoGo(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeNoGo(
+    "go.work",
+    "<!DOCTYPE html>\n<html><head><title>404 Not Found</title></head>\n<body>404 Not Found</body></html>\n",
+  );
+
+  const noGoContext = {
+    cwd: noGoRoot,
+    readGraph: () => ({ nodes: {}, dependencies: {} }),
+    listFiles: () => ["nx.json", "module-boundaries.config.mjs", "go.work"],
+  };
+
+  const noGoEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      ...noGoContext,
+    };
+  };
+
+  it("exits 3 instead of the false 'agrees with the project graph' the finding reported", async () => {
+    const streams = noGoEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("could not be analyzed at all");
+    expect(report).toContain("go.work:1: unknown directive: <!DOCTYPE");
+    expect(report).not.toContain("agrees with the project graph");
+  });
+
+  it("counts the refusal as an uncovered file in the JSON envelope, never a silent checked: true", async () => {
+    // `goWork` itself reads `null` either way — the same value a workspace
+    // with no go.work at all would carry — so `unchecked` is the field that
+    // must disambiguate "nothing to check" from "could not check this".
+    const { goWorkDrift, unchecked } = await check(
+      { format: "json", config: null, paths: [] },
+      noGoContext,
+    );
+    expect(goWorkDrift).toBe(0);
+    expect(unchecked).toBeGreaterThan(0);
   });
 });
 
@@ -1451,6 +1552,106 @@ export const fitness = [
       const report = streams.lines.out.join("\n") + streams.lines.err.join("\n");
       expect(report).toContain("refusing to judge drift");
       expect(report).toContain("go.mod");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not crash when fitness is declared with no architecture-intent.json anywhere — the supported configuration where fitness lives in the policy file alone", async () => {
+    // P1-14 regression: `fitnessCommand` called `driftForCheck` unconditionally
+    // and built its own verdict-shaped `intent` straight from the result, so a
+    // workspace that legitimately has no architecture-intent.json (fully
+    // supported — fitness needs no intent file to run) reached
+    // `judgeIntent(undefined, ...)` inside `driftForCheck`, which dereferenced
+    // `intent.boundaries` on `undefined` and threw a raw, unhandled
+    // `TypeError: Cannot read properties of undefined (reading 'boundaries')`
+    // straight out to the operator instead of a verdict or a named refusal.
+    // A self-contained fixture — never the shared `nativeRoot`/`nativeContext`
+    // above, which always tracks an architecture-intent.json for the drift
+    // tests — is the only way to exercise "fitness declared, no intent file at
+    // all". One row needs no intent (`coverage-minimum`) and must still
+    // evaluate normally; one row DOES need intent (`drift-free`) and must read
+    // `unknown` — "cannot judge" — never a crash and never a false `pass`.
+    const root = mkdtempSync(join(tmpdir(), "fitness-no-intent-"));
+    try {
+      const writeFixture = (relativePath, text) => {
+        mkdirSync(join(root, relativePath, ".."), { recursive: true });
+        writeFileSync(join(root, relativePath), text);
+      };
+      writeFixture(
+        "lattice.json",
+        JSON.stringify({
+          projects: {
+            declared: [{ root: "libs/domain", name: "domain", tags: ["layer:domain"] }],
+          },
+          // `module-boundaries.config.mjs` sits at the workspace root, which no
+          // declared project owns — the same waiver the shared native fixture
+          // above needs and explains.
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeFixture(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "full-coverage",
+    match: ["*"],
+    condition: { type: "coverage-minimum", statement: 100 },
+    reason: "every owned file must be analyzed",
+  },
+  {
+    name: "intent-clean",
+    match: ["*"],
+    condition: { type: "drift-free" },
+    reason: "must read unknown, never crash and never pass, with no intent file declared",
+  },
+];
+`,
+      );
+      writeFixture("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeFixture("libs/domain/doc.go", "package domain\n");
+      // No architecture-intent.json anywhere in the fixture or its tracked-file
+      // list — the exact condition the audit named.
+      const files = [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+      const streams = {
+        out: (t) => streams.lines.out.push(t),
+        err: (t) => streams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: root,
+        listFiles: () => files,
+      };
+      expect(await runCli(["fitness"], streams)).toBe(EXIT.ok);
+      const report = streams.lines.out.join("\n") + streams.lines.err.join("\n");
+      expect(report).not.toContain("Cannot read properties of undefined");
+      expect(report).not.toContain("TypeError");
+      expect(report).toContain("✔ full-coverage");
+      expect(report).toContain("⚠ intent-clean");
+      expect(report).toContain("cannot judge drift-free — no architecture-intent.json is declared");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -2628,6 +2829,164 @@ var _ = adapter.Name
       );
     } finally {
       rmSync(inlineRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("an inline boundaryConfig's policy fingerprint survives graph into history (P1-25)", () => {
+  // `runGraph`'s own copy of the file/inline config-resolution ladder stopped
+  // at the file-string arm: a native workspace's INLINE `boundaryConfig` fell
+  // through to `null`, so `graph --output` never wrote a `result.policy`
+  // fingerprint for one — unlike every other command's copy of this ladder
+  // (`diff`, `history --capture`, `check`, ...), which all carry the third
+  // "inline object" arm alongside the "file string" one. Two such fingerprint-less
+  // snapshots, captured on either side of a real inline-policy edit, carried
+  // the same "no policy" identity, so `history` classified the transition
+  // "unchanged" and reported "no architectural change recorded" — silently,
+  // exactly as if the law had never moved. The same edit made to a
+  // FILE-named `boundaryConfig` was already reported correctly, because that
+  // copy of the ladder was never missing the arm.
+  const policyWith = (banTransitiveDependencies) => ({
+    depConstraints: [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }],
+    moduleBoundaryOptions: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies,
+      checkNestedExternalImports: false,
+    },
+  });
+
+  const trackedFiles = [
+    "lattice.json",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "libs/adapter/go.mod",
+    "libs/adapter/adapter.go",
+  ];
+
+  /** Builds a fresh tmpdir native workspace carrying the given inline policy. */
+  const buildRoot = (boundaryConfig) => {
+    const root = mkdtempSync(join(tmpdir(), "polyglot-cli-inline-policy-history-"));
+    const write = (relativePath, text) => {
+      mkdirSync(join(root, relativePath, ".."), { recursive: true });
+      writeFileSync(join(root, relativePath), text);
+    };
+    write(
+      "lattice.json",
+      JSON.stringify({
+        boundaryConfig,
+        projects: {
+          declared: [
+            { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+            { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+          ],
+        },
+      }),
+    );
+    write("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+    write("libs/domain/doc.go", "package domain\n");
+    write("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+    write("libs/adapter/adapter.go", "package adapter\n");
+    return root;
+  };
+
+  /** A fresh stream pair per call, so one call's captured output never bleeds into another's assertions. */
+  const streamsFor = (root) => {
+    const out = [];
+    const err = [];
+    return {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      cwd: root,
+      listFiles: () => trackedFiles,
+    };
+  };
+
+  it("graph --output carries a policy.fingerprint for an inline boundaryConfig, the same as a file-named one", async () => {
+    const root = buildRoot(policyWith(false));
+    const histDir = mkdtempSync(join(tmpdir(), "polyglot-cli-inline-policy-history-dir-"));
+    try {
+      const snapshotPath = join(histDir, "0001-baseline.json");
+      expect(
+        await runCli(["graph", "--format", "json", "--output", snapshotPath], streamsFor(root)),
+      ).toBe(EXIT.ok);
+      const envelope = JSON.parse(readFileSync(snapshotPath, "utf8"));
+      expect(envelope.result.policy).toBeDefined();
+      expect(typeof envelope.result.policy.fingerprint).toBe("string");
+      expect(envelope.result.policy.fingerprint.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(histDir, { recursive: true, force: true });
+    }
+  });
+
+  it("history reports a policy change across two inline-boundaryConfig graph snapshots, instead of silently claiming none", async () => {
+    const root = buildRoot(policyWith(false));
+    const histDir = mkdtempSync(join(tmpdir(), "polyglot-cli-inline-policy-history-dir-"));
+    try {
+      expect(
+        await runCli(
+          ["graph", "--format", "json", "--output", join(histDir, "0001-baseline.json")],
+          streamsFor(root),
+        ),
+      ).toBe(EXIT.ok);
+
+      // A real architectural-law edit: the graph (projects, edges) does not
+      // move, only the policy — `banTransitiveDependencies` flips from false
+      // to true. No project or edge is added, removed, or retagged.
+      writeFileSync(
+        join(root, "lattice.json"),
+        JSON.stringify({
+          boundaryConfig: policyWith(true),
+          projects: {
+            declared: [
+              { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+              { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+            ],
+          },
+        }),
+      );
+
+      expect(
+        await runCli(
+          ["graph", "--format", "json", "--output", join(histDir, "0002-head.json")],
+          streamsFor(root),
+        ),
+      ).toBe(EXIT.ok);
+
+      // The JSON record: the structured signal a consumer's tooling reads.
+      const jsonStreams = streamsFor(root);
+      expect(await runCli(["history", histDir, "--format", "json"], jsonStreams)).toBe(EXIT.ok);
+      const record = JSON.parse(jsonStreams.lines.out.join("\n"));
+      const [transition] = record.result.transitions;
+      // The silent-direction assertion: before the fix this is `null` — both
+      // snapshots carry no fingerprint at all, so the comparison could not be
+      // made, which is indistinguishable from a workspace that never captured
+      // a policy in the first place.
+      expect(transition.policyChanged).toBe(true);
+      expect(transition.architectureChanged).toBe(false);
+
+      // The terminal report: the exact human-facing claim the audit measured.
+      // Before the fix this reads "✔ no architectural change recorded across
+      // the snapshots" with no policy signal at all — byte-for-byte what an
+      // unedited workspace would print.
+      const textStreams = streamsFor(root);
+      expect(await runCli(["history", histDir], textStreams)).toBe(EXIT.ok);
+      const report = textStreams.lines.out.join("\n");
+      expect(report).toContain(
+        "policy (the declared architectural intent) changed between these snapshots",
+      );
+      expect(report).toContain(
+        "✔ no architectural change recorded across the snapshots (only policy, provider, or drift signals)",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(histDir, { recursive: true, force: true });
     }
   });
 });

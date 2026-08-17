@@ -39,15 +39,21 @@
  * drift" is exactly the false green this check exists to remove:
  *
  * - **A `go.work` this parser cannot read throws, never returns fewer
- *   entries.** An unterminated block or string, a `use` without a path, or
- *   stray tokens each name their line; `../cli.mjs` turns the throw into a
- *   whole-file failure, so the run exits 3 (no verdict), not 0.
+ *   entries.** An unterminated block or string, a `use` without a path, stray
+ *   tokens, or a keyword outside go.work's five (below) each name their line;
+ *   `../cli.mjs` turns the throw into a whole-file failure, so the run exits 3
+ *   (no verdict), not 0.
  * - **A string may not span a line.** Legal `go.mod` syntax keeps strings on
  *   one line; a raw string left open runs to the end of the line and throws as
  *   unterminated rather than silently swallowing the directives below it.
- * - **Unknown directives are skipped, blocks included.** Only `use` is read;
- *   `go`, `toolchain`, `godebug`, `replace` and anything the format grows later
- *   are passed over without being mistaken for paths.
+ * - **Only go.work's own five directive keywords are skipped as unread,
+ *   blocks included.** `use` is read; `go`, `toolchain`, `godebug` and
+ *   `replace` are recognized and passed over without being mistaken for
+ *   paths. Any other keyword throws — verified against `go work edit` itself
+ *   (go1.24.7), which rejects one as `"unknown directive"` rather than
+ *   skipping it, so text that is not a go.work file at all (an HTML error
+ *   page from a bad download, a truncated checkout) is read as unparseable,
+ *   never as zero `use` entries.
  * - **Paths are compared with `/` separators.** A `\`-separated Windows path
  *   or a drive-letter absolute path matches no project root and surfaces as a
  *   drift finding naming the text the file really contains — loud, never
@@ -158,13 +164,26 @@ export function tokenizeGoWorkLine(line, lineNumber) {
 }
 
 /**
+ * go.work's own directive keywords — verified against `go work edit` itself
+ * (go1.24.7): a keyword outside this set is `go`'s own `"unknown directive"`
+ * parse error, not a directive the format tolerates. `use` is the only one
+ * this parser reads; the other four are recognized so their lines (and, for
+ * `replace`, their block bodies) can be skipped without being mistaken for
+ * paths — the header's "only five keywords are skipped as unread" limit.
+ */
+const KNOWN_DIRECTIVES = new Set(["go", "toolchain", "use", "replace", "godebug"]);
+
+/**
  * Every `use` directive in a go.work, single-line and block form, with the
  * position of each path as written.
  *
  * Malformed input **throws** rather than returning what was readable so far:
  * this list's emptiness is the fact the drift check turns on, and a use list
  * truncated by a parse problem would read as projects the developer removed —
- * or, worse, as no drift at all (the header's first limit).
+ * or, worse, as no drift at all (the header's first limit). A keyword outside
+ * go.work's own five throws for the same reason: text that only coincidentally
+ * tokenizes (an HTML error page, a truncated download) must not read as a
+ * go.work with zero `use` entries.
  *
  * @param {string} text The go.work file's contents.
  * @returns {{ path: string, line: number, column: number }[]} In file order;
@@ -202,10 +221,18 @@ export function parseGoWorkUse(text) {
       throw parseError(lineNumber, `unexpected '${keyword.value}' outside any block`);
     }
     if (rest.length === 1 && rest[0].punct && rest[0].value === "(") {
+      if (!KNOWN_DIRECTIVES.has(keyword.value)) {
+        throw parseError(lineNumber, `unknown block type: ${keyword.value}`);
+      }
       block = { keyword: keyword.value, line: lineNumber };
       continue;
     }
-    if (keyword.value !== "use") continue; // go, toolchain, replace one-liners, future directives
+    if (keyword.value !== "use") {
+      if (!KNOWN_DIRECTIVES.has(keyword.value)) {
+        throw parseError(lineNumber, `unknown directive: ${keyword.value}`);
+      }
+      continue; // go, toolchain, replace, godebug one-liners
+    }
     if (rest.length !== 1 || rest[0].punct) {
       throw parseError(
         lineNumber,
