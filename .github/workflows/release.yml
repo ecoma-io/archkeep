@@ -296,8 +296,30 @@ jobs:
     # skipped job reports as Success on the checks UI. Keep this expression
     # identical to `publish-vsix`'s — a divergence ships one destination and
     # not the other.
+    #
+    # `!cancelled()` is load-bearing, not decoration. GitHub ANDs an implicit
+    # `success()` onto any `if:` that names no status-check function
+    # (`success`/`failure`/`always`/`cancelled`), and a job's implicit
+    # `success()` requires every job it `needs` — `verify-conformance`
+    # included — to have itself concluded `success`. `verify-conformance`'s
+    # own header says its job "fails TOO" on the infra class, not only the
+    # findings class, so `needs.verify-conformance.outputs.exit_class ==
+    # 'infra'` and an implicit `success()` can never both hold: without an
+    # explicit status check here, the waiver this expression exists to grant
+    # is exactly the case GitHub's own implicit gate forecloses first, and
+    # this job would silently skip every time the waiver was meant to fire.
+    # `!cancelled()` is the documented way to opt out of that implicit gate —
+    # preferred over `always()` because `always()` would also proceed
+    # through a run an operator cancelled, which this must not. It sits at
+    # the END of the expression rather than the front for a YAML reason: a
+    # bare scalar (every `if:` in this workflow is one) cannot START with
+    # `!`, the tag indicator, and `&&` does not care about operand order.
+    # `needs.prepare.result == 'success'` is restated explicitly for the
+    # same reason `!cancelled()` is: it was riding on the implicit
+    # `success()` too, and simply opting out would have silently dropped
+    # that protection along with the bug.
     needs: [prepare, verify-conformance]
-    if: needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra')
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -380,7 +402,7 @@ jobs:
     # divergence between the two is a release that ships to one destination
     # and not the other.
     needs: [prepare, verify-conformance]
-    if: needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra')
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
