@@ -305,14 +305,23 @@ export function judgeIntent(intent, graph) {
 
   for (const row of intent.dependencies?.forbidden ?? []) {
     const { source, target } = row;
-    if (edges.has(edgeKey(source, target))) {
+    // Transitive, like the `forbidden` row above and `notDependOnLibsWithTags`
+    // in `../../src/rules/tags.mjs` — a dependency reached through an
+    // intermediate project (A imports B imports the forbidden C) is still the
+    // forbidden dependency; checking DIRECT edges only was the silent
+    // direction this file's header is about. Self-pairs are excluded, matching
+    // the row-based check above: `pathExists` treats every project as reaching
+    // itself, and a project cannot depend on itself.
+    if (source !== target && pathExists(reach, source, target)) {
+      const path = getPath(reach, { nodes }, source, target).map((n) => n.name);
+      const witness = path.length > 1 ? path.join(" → ") : `${source} → ${target}`;
       findings.push({
         source,
         target,
         rule: "dependencyForbidden",
         boundaryFrom: null,
         boundaryTo: null,
-        message: `${source} → ${target} — architecture-intent.json forbids this dependency, but the observed graph contains it`,
+        message: `${witness} — architecture-intent.json forbids this dependency, but the observed graph contains it`,
       });
     }
   }
@@ -350,16 +359,29 @@ export function judgeIntent(intent, graph) {
         message: `architecture-intent.json forbids a dependency from tag "${from}" to tag "${to}", but no observed project carries ${missing}`,
       });
     }
-    for (const [source, target] of observedEdgePairs) {
-      if (!known(source) || !known(target)) continue;
-      if (tagsOf(source).includes(from) && tagsOf(target).includes(to)) {
+    // Transitive, for the same reason as `dependencies.forbidden` above: a
+    // project carrying `from` that reaches (directly or transitively) a
+    // project carrying `to` is still the forbidden relationship. Self-pairs
+    // are excluded — one project may legitimately carry both tags, and
+    // `pathExists` treats every project as reaching itself.
+    const fromProjects = [...projectsByName.values()]
+      .filter((project) => project.tags.includes(from))
+      .map((project) => project.name);
+    const toProjects = [...projectsByName.values()]
+      .filter((project) => project.tags.includes(to))
+      .map((project) => project.name);
+    for (const source of fromProjects) {
+      for (const target of toProjects) {
+        if (source === target || !pathExists(reach, source, target)) continue;
+        const path = getPath(reach, { nodes }, source, target).map((n) => n.name);
+        const witness = path.length > 1 ? path.join(" → ") : `${source} → ${target}`;
         findings.push({
           source,
           target,
           rule: "tagDependencyForbidden",
           boundaryFrom: null,
           boundaryTo: null,
-          message: `${source} → ${target} — architecture-intent.json forbids a dependency from any project carrying tag "${from}" to any project carrying tag "${to}"`,
+          message: `${witness} — architecture-intent.json forbids a dependency from any project carrying tag "${from}" to any project carrying tag "${to}"`,
         });
       }
     }
