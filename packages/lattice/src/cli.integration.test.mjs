@@ -1540,6 +1540,124 @@ export const moduleBoundaryOptions = {
   });
 });
 
+describe("check judges a declared edge with no import site behind it", () => {
+  // `evaluate()` iterates only import sites (`src/rules/README.md`: "analysis
+  // records and the loaded config, nothing else"), so an `implicitDependencies`
+  // edge — declared, never written as an import — reached no rule at all
+  // before this fix: `check` reported a clean tree while `context`/`impact`
+  // (walking `graph.dependencies` directly) already showed the same edge as a
+  // tag violation. `domain` here declares `implicitDependencies: ["adapter"]`
+  // and carries NO Go import of `adapter` anywhere — the fixture's only edge
+  // is the declared one — so a violation only appears if `check` judges
+  // declared edges at all.
+  const declaredRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-declared-edge-"));
+  afterAll(() => rmSync(declaredRoot, { recursive: true, force: true }));
+
+  const writeDeclared = (relativePath, text) => {
+    mkdirSync(join(declaredRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(declaredRoot, relativePath), text);
+  };
+
+  writeDeclared(
+    "lattice.json",
+    JSON.stringify({
+      projects: {
+        declared: [
+          {
+            root: "libs/domain",
+            name: "domain",
+            tags: ["layer:domain"],
+            implicitDependencies: ["adapter"],
+          },
+          { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+        ],
+      },
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "workspace tooling config at the root, not itself a project",
+          },
+        ],
+      },
+    }),
+  );
+  writeDeclared(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeDeclared("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  // No import of adapter anywhere — the only edge this fixture has is the
+  // `implicitDependencies` row above.
+  writeDeclared("libs/domain/doc.go", "package domain\n");
+  writeDeclared("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writeDeclared("libs/adapter/adapter.go", "package adapter\n");
+
+  const declaredContext = {
+    cwd: declaredRoot,
+    listFiles: () => [
+      "lattice.json",
+      "module-boundaries.config.mjs",
+      "libs/domain/go.mod",
+      "libs/domain/doc.go",
+      "libs/adapter/go.mod",
+      "libs/adapter/adapter.go",
+    ],
+  };
+
+  it("fails the run and names the declared edge, with no import-site violations", async () => {
+    const { report, violations, declaredEdgeFindings } = await check(
+      { format: "text", config: null, paths: [] },
+      declaredContext,
+    );
+    // The silent-direction proof: evaluate()'s own import-site path finds
+    // nothing (there is no import), yet the run still fails.
+    expect(violations).toBe(0);
+    expect(declaredEdgeFindings).toBe(1);
+    expect(report).toContain("onlyTagsConstraintViolation");
+    expect(report).toContain("domain → adapter");
+    expect(report).toContain("declared-edge violations: 1 finding");
+  });
+
+  it("carries the finding in the JSON envelope's result.declaredEdges, exit 1", async () => {
+    const { report } = await check({ format: "json", config: null, paths: [] }, declaredContext);
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("findings");
+    expect(envelope.exitCode).toBe(EXIT.violations);
+    expect(envelope.result.violations).toEqual([]);
+    expect(envelope.result.declaredEdges.judged).toBe(1);
+    expect(envelope.result.declaredEdges.findings).toHaveLength(1);
+    expect(envelope.result.declaredEdges.findings[0]).toMatchObject({
+      messageId: "onlyTagsConstraintViolation",
+      source: "domain",
+      target: "adapter",
+      file: "lattice.json",
+    });
+  });
+
+  it("runCli exits 1 through the same real dispatch a CI pipeline uses", async () => {
+    const out = [];
+    const err = [];
+    const env = { out: (t) => out.push(t), err: (t) => err.push(t), ...declaredContext };
+    const exitCode = await runCli(["check"], env);
+    expect(exitCode).toBe(EXIT.violations);
+    expect(out.join("\n")).toContain("onlyTagsConstraintViolation");
+  });
+});
+
 describe("the waivers surface, end to end", () => {
   // A third native tmpdir whose boundary law carries a `boundarySuppressions`
   // waiver row over the same layer-crossing import, so the whole pipeline is

@@ -91,6 +91,7 @@ import { contextCommand } from "./src/commands/context-command.mjs";
 import { planContextCommand } from "./src/commands/plan-context-command.mjs";
 import { adrCommand } from "./src/commands/adr.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
+import { declaredEdgeViolationsForCheck } from "./src/commands/edge-constraints.mjs";
 import { discoverCommand } from "./src/commands/discover.mjs";
 import { driftCommand, driftForCheck } from "./src/commands/drift.mjs";
 import { fitnessCommand, fitnessForCheck } from "./src/commands/fitness.mjs";
@@ -434,11 +435,12 @@ export function parseCheckArgs(argv) {
  * with no findings), which makes a regression in this mapping a loud error
  * rather than a silent one.
  *
- * @param {{violations: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, unchecked: number, fitnessFail?: number, fitnessUnknown?: number}} counts
+ * @param {{violations: number, declaredEdgeFindings: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, unchecked: number, fitnessFail?: number, fitnessUnknown?: number}} counts
  * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3, decision: object}}
  */
 function verdictFor({
   violations,
+  declaredEdgeFindings,
   goWorkDrift,
   tsconfigPathsDead,
   intentFindings,
@@ -449,6 +451,7 @@ function verdictFor({
 }) {
   if (
     violations > 0 ||
+    declaredEdgeFindings > 0 ||
     goWorkDrift > 0 ||
     tsconfigPathsDead > 0 ||
     intentFindings > 0 ||
@@ -460,7 +463,13 @@ function verdictFor({
       decision: buildDecision({
         status: "findings",
         coverageComplete: unchecked === 0,
-        findings: violations + goWorkDrift + tsconfigPathsDead + intentFindings + fitnessFail,
+        findings:
+          violations +
+          declaredEdgeFindings +
+          goWorkDrift +
+          tsconfigPathsDead +
+          intentFindings +
+          fitnessFail,
       }),
     };
   }
@@ -506,6 +515,32 @@ function verdictFor({
 }
 
 /**
+ * Where a declared-edge finding's `implicitDependencies` entry lives, so the
+ * finding can point somewhere real despite having no import site.
+ *
+ * Nx declares it per-project, in that project's own `project.json`. The
+ * native provider validates it off `lattice.json` regardless of whether the
+ * row itself sits in `lattice.json`'s `projects.declared` or a tracked
+ * `project.json` (`src/providers/native/discover.mjs`'s union of the two) —
+ * `lattice.json` is still the workspace's single source of truth that opted
+ * either one in, the same reasoning `coverage.exempt`'s attribution above
+ * uses. Moon cannot reach this function today: its edges never carry
+ * `type: "implicit"` (a separate, tracked gap in the Moon provider), so
+ * `declaredEdgeViolationsForCheck`'s filter never matches on a Moon graph.
+ *
+ * @param {{provider: string, graph: {nodes: object}}} commandContext
+ * @param {string} sourceProject
+ * @returns {string}
+ */
+function declaredEdgeManifest({ provider, graph }, sourceProject) {
+  if (provider === "nx") {
+    const root = graph.nodes[sourceProject]?.data?.root;
+    return root ? `${root}/project.json` : "project.json";
+  }
+  return LATTICE_MODEL_FILE;
+}
+
+/**
  * Runs one `check`: workspace, analysis, rules, report.
  *
  * Returns the report and the counts rather than printing, so the caller owns
@@ -528,10 +563,10 @@ function verdictFor({
  *
  * @param {{format: string, config: string|null, paths: string[]}} options
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} context
- * @returns {Promise<{report: string, violations: number, goWorkDrift: number,
- *   tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number,
- *   fitnessFail: number, fitnessUnknown: number, analyzed: number, unchecked: number,
- *   waived?: number}>}
+ * @returns {Promise<{report: string, violations: number, declaredEdgeFindings: number,
+ *   goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number,
+ *   intentUnresolved: number, fitnessFail: number, fitnessUnknown: number,
+ *   analyzed: number, unchecked: number, waived?: number}>}
  */
 export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
   const commandContext = resolveCommandContext(
@@ -714,6 +749,33 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // the report surfaces. Expired waivers re-assert in full (evidence
   // "expired waiver"), so they are ordinary violations here, never waived.
   const waived = violations.filter((violation) => violation.waivedBy).length;
+
+  // `evaluate()` above judges only import sites, by design (`src/rules/README.md`:
+  // "analysis records and the loaded config, nothing else"). An `implicit`-typed
+  // graph edge — `implicitDependencies` in a `project.json`/`lattice.json` row —
+  // has no import site behind it and so never reaches that loop, which used to
+  // mean `check` reported nothing about it while `context`/`impact` (walking
+  // `graph.dependencies` directly through the same `judgeEdge`) showed it as a
+  // tag violation: an empty result that was not actually a clean verdict, the
+  // exact defect this project's invariant forbids (`../../AGENTS.md`). Reusing
+  // `judgeEdge` here — rather than a second implementation — is what guarantees
+  // `check` can never disagree with what those commands already display for the
+  // identical edge.
+  const implicitEdges = Object.values(graph.dependencies ?? {})
+    .flat()
+    .filter((edge) => edge.type === "implicit").length;
+  const declaredEdgeViolations = declaredEdgeViolationsForCheck(graph, config.depConstraints).map(
+    (violation) => ({ ...violation, file: declaredEdgeManifest(commandContext, violation.source) }),
+  );
+  const declaredEdgeFindings = declaredEdgeViolations.length;
+  // `null` — not `{checked: true, findings: []}` — when the graph has no
+  // `implicit` edges at all: the same "no fact, no claim" bargain go.work and
+  // tsconfig-paths state for a workspace that never uses the feature either,
+  // so a workspace with no `implicitDependencies` anywhere pays nothing and
+  // hears nothing, rather than a near-universal "0 implicit edges" line.
+  const declaredEdges =
+    implicitEdges === 0 ? null : { findings: declaredEdgeViolations, judged: implicitEdges };
+
   const goWorkDrift = goWork === null ? 0 : goWork.findings.length;
   const tsconfigPathsDead = tsconfigPaths === null ? 0 : tsconfigPaths.findings.length;
   const intentFindings = intent === null ? 0 : intent.findings.length;
@@ -809,6 +871,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
             // exactly one computation and can never disagree.
             ...verdictFor({
               violations: violations.length,
+              declaredEdgeFindings,
               goWorkDrift,
               tsconfigPathsDead,
               intentFindings,
@@ -845,6 +908,17 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               goWork: goWork === null ? null : { checked: true, findings: goWork.findings },
               tsconfigPaths:
                 tsconfigPaths === null ? null : { checked: true, findings: tsconfigPaths.findings },
+              // `declaredEdges` is `null` under the same "no fact, no claim"
+              // bargain as goWork/tsconfigPaths above — computed once, right
+              // where `implicitEdges` is counted.
+              declaredEdges:
+                declaredEdges === null
+                  ? null
+                  : {
+                      checked: true,
+                      judged: declaredEdges.judged,
+                      findings: declaredEdges.findings,
+                    },
               // Intent is a governance DECLARATION, absent when the workspace
               // chose not to make one: the key is omitted, never written as
               // null — the design contract `docs/reference/json-output.md` will
@@ -887,6 +961,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
           projects: Object.keys(graph.nodes).length,
           goWork,
           tsconfigPaths,
+          declaredEdges,
           intent,
           fitness: fitness?.decisions,
           fitnessOverall: fitness?.overall,
@@ -905,6 +980,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     report,
     violations: violations.length,
     waived,
+    declaredEdgeFindings,
     goWorkDrift,
     tsconfigPathsDead,
     intentFindings,
@@ -972,6 +1048,9 @@ async function runCheck(options, { cwd, env }) {
       `lattice: ${result.violations} violation${result.violations === 1 ? "" : "s"} ` +
         `over ${result.analyzed} analyzed file${result.analyzed === 1 ? "" : "s"}` +
         (result.waived > 0 ? ` (${result.waived} waived until their expiry)` : "") +
+        (result.declaredEdgeFindings > 0
+          ? `, ${result.declaredEdgeFindings} declared-edge finding${result.declaredEdgeFindings === 1 ? "" : "s"}`
+          : "") +
         (result.goWorkDrift > 0
           ? `, ${result.goWorkDrift} go.work drift finding${result.goWorkDrift === 1 ? "" : "s"}`
           : "") +
