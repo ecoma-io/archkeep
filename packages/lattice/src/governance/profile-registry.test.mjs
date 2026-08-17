@@ -83,6 +83,37 @@ describe("profileRegistryViolations", () => {
     expect(violations.some((v) => /declared more than once/.test(v))).toBe(true);
   });
 
+  // P1-06 (adversarial hardening audit): the duplicate check above compares
+  // the raw string, so before NAME_PATTERN existed a name that read as
+  // "strict" but carried a hidden zero-width character or a homoglyph from
+  // another script was byte-distinct from a real "strict" — both were
+  // accepted as "unique" and `--config strict` then resolved to whichever one
+  // exactly matched the operator's literal argument, silently enforcing
+  // whatever the OTHER, identical-looking profile declared. This is the
+  // silent direction this repository runs on: it used to return `[]` for a
+  // registry a human reading it would see as declaring "strict" twice.
+  it('rejects a name that reads as "strict" but hides a zero-width character', () => {
+    const violations = profileRegistryViolations({
+      profiles: [
+        { name: "strict", block: wellFormed().profiles[0].block },
+        { name: "stri​ct", block: wellFormed().profiles[0].block }, // ZERO WIDTH SPACE
+      ],
+    });
+    expect(violations).not.toEqual([]);
+    expect(violations.some((v) => /profiles\[1\].name.*non-empty string/.test(v))).toBe(true);
+  });
+
+  it('rejects a name that reads as "strict" but substitutes a Cyrillic homoglyph', () => {
+    const violations = profileRegistryViolations({
+      profiles: [
+        { name: "strict", block: wellFormed().profiles[0].block },
+        { name: "striсt", block: wellFormed().profiles[0].block }, // U+0441 CYRILLIC ES
+      ],
+    });
+    expect(violations).not.toEqual([]);
+    expect(violations.some((v) => /profiles\[1\].name.*non-empty string/.test(v))).toBe(true);
+  });
+
   it("rejects a profile with no block — parses as an empty policy", () => {
     const violations = profileRegistryViolations({
       profiles: [{ name: "ghost" }],
@@ -260,6 +291,29 @@ describe("loadProfileRegistry", () => {
         treeWith({
           "/w/profiles.json": JSON.stringify({
             profiles: [{ name: "a", base: "ghost", block: wellFormed().profiles[0].block }],
+          }),
+        }),
+      ),
+    ).toThrow(/is malformed/);
+  });
+
+  // P1-06: reproduces the audit's exact finding end to end, at the loader
+  // `../../cli.mjs`'s `check` actually calls. Before NAME_PATTERN, this file
+  // loaded successfully — two profiles named "strict" (one with a zero-width
+  // space after "stri") were both accepted as unique, so
+  // `profilePolicy(path, "strict", …)` deterministically resolved the one
+  // whose bytes exactly matched, with nothing ever having surfaced that a
+  // second, indistinguishable-looking "strict" existed in the same file.
+  it("throws rather than silently loading two profiles whose names are visually indistinguishable", () => {
+    expect(() =>
+      loadProfileRegistry(
+        "/w/profiles.json",
+        treeWith({
+          "/w/profiles.json": JSON.stringify({
+            profiles: [
+              { name: "strict", block: wellFormed().profiles[0].block },
+              { name: "stri​ct", block: wellFormed().profiles[0].block }, // ZERO WIDTH SPACE
+            ],
           }),
         }),
       ),

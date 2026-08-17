@@ -45,11 +45,11 @@ Any other top-level key is rejected by name.
 
 ### A profile
 
-| key     | type   | required | meaning                                                                               |
-| ------- | ------ | -------- | ------------------------------------------------------------------------------------- |
-| `name`  | string | yes      | Non-empty. Unique across the registry. The value `boundaryConfig`/`--config` selects. |
-| `base`  | string | no       | Non-empty. The name of another profile whose effective block this one inherits.       |
-| `block` | object | yes      | The policy block — `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`. |
+| key     | type   | required | meaning                                                                                                      |
+| ------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `name`  | string | yes      | Letters, digits, `-` or `_` only. Unique across the registry. The value `boundaryConfig`/`--config` selects. |
+| `base`  | string | no       | Non-empty. The name of another profile whose effective block this one inherits.                              |
+| `block` | object | yes      | The policy block — `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`.                        |
 
 Only those three keys are recognized on a profile; any other key is rejected by
 name. A profile with no `block` is rejected — it would otherwise parse as an
