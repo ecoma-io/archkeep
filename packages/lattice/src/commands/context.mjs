@@ -25,6 +25,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { languageOf } from "../analysis/registry.mjs";
+import { fileFailure } from "../analysis/source-util.mjs";
 import {
   DEFAULT_OPTIONS,
   NX_CONFIG_FILE,
@@ -157,6 +159,92 @@ export const WORKSPACE_MARKERS = [NX_CONFIG_FILE, LATTICE_MODEL_FILE, MOON_DIR, 
  *   owns a file (the planning context's path→project scoping, `./plan-context-command.mjs`)
  *   reads this rather than re-deriving ownership a second way.
  */
+
+/**
+ * The languages Nx cannot draw an edge for and ESLint cannot parse at all —
+ * `../../../AGENTS.md`'s own opening line: "Nx reads TypeScript and
+ * JavaScript imports and so `nx affected` and `@nx/enforce-module-boundaries`
+ * work there; for the other three both go quiet." TypeScript, JavaScript
+ * (and their `.mjs`/`.cjs`/`.jsx`/`.tsx` siblings) and Vue are deliberately
+ * OUTSIDE this set: Nx's own graph already draws their edges from real
+ * imports, and `@nx/enforce-module-boundaries` already lints them through
+ * ESLint's normal file scoping, so a root-level tooling script in one of
+ * those languages sitting outside every declared project is the ordinary,
+ * unremarkable shape of an Nx or Moon workspace — this very repository's own
+ * root carries a whole `scripts/` directory of them, plus `.opencode/plugins/`
+ * and `commitlint.config.mjs`, inside neither of its two Moon projects — not
+ * a gap this tool introduces. `../workspace.mjs`'s `polyglotManifests` already
+ * draws this exact same line for the unregistered-plugin coverage gap, over
+ * the three languages' manifests rather than their sources; this is that
+ * same boundary restated for `unclaimedFileFailures` below, which has no
+ * manifest to key off since an unclaimed file is, by definition, one with no
+ * project (and so no `go.mod`/`Cargo.toml`/`pyproject.toml`) to belong to.
+ *
+ * Scoping to these three is not a smaller fix chosen for convenience — it is
+ * the fix: widening this to every analyzable language turns `check` into a
+ * breaking change for nearly every real Nx/Moon consumer, measured by running
+ * it over this repository's own tree, whose tooling layer is exactly this
+ * shape and whose own `check` must keep exiting 0.
+ */
+const UNCLAIMED_CHECK_LANGUAGES = new Set(["go", "rust", "python"]);
+
+/**
+ * Tracked Go, Rust or Python files that no project in `owned` claims — the
+ * same "unclaimed file" question `../providers/native/coverage.mjs`'s
+ * `judgeCoverage` answers for a native workspace (over every analyzable
+ * language there, `UNCLAIMED_CHECK_LANGUAGES` above argues why this narrower
+ * set is the right one here), asked for the Nx and Moon branches below,
+ * neither of which has a discovery step of its own to answer it from: both
+ * build their graph from `nx graph`/`moon project-graph` rather than from
+ * `lattice.json`, and `../providers/native/coverage.mjs`'s own header names
+ * the gap this closes — "this package's Nx path ... has no unclaimed-file
+ * check of its own: both compute imports and violations only for files a
+ * project already claims."
+ *
+ * `owned` already IS the claimed half of this question: `createWorkspace`
+ * (`../workspace.mjs`) computed it over the FULL tracked-file list by the
+ * same longest-root-prefix match `../providers/native/coverage.mjs`'s
+ * `projectOf` uses, silently dropping any file that matched no project
+ * (`../workspace.mjs`'s own header — "A file no project owns ... is dropped
+ * here rather than read and analyzed for a verdict that cannot exist").
+ * Comparing against the set `createWorkspace` already produced, rather than
+ * matching roots a second time, is what keeps this answer from being able to
+ * disagree with what "owned" already means for this graph.
+ *
+ * A file this returns is exactly the silent hole `../../../../AGENTS.md`'s
+ * invariant refuses: analyzed by nothing, judged by nothing, and an empty
+ * violation list reading identically to a file that really was clean. It
+ * ignores path scoping on purpose — `tracked`, not the caller's scoped
+ * selection — the same workspace-wide posture native's own unclaimed check
+ * already has (its failures ride in `discovered.failures` below, unfiltered
+ * by `paths`), because a `check <path>` run must not be able to hide an
+ * orphan file elsewhere in the tree by naming a path that excludes it.
+ *
+ * Returns the SAME whole-file `fileFailure` shape (`../analysis/source-util.mjs`)
+ * a language analyzer produces for a file it could not read, so `../../cli.mjs`'s
+ * existing `unchecked`/`coverage.complete` logic — already built to treat any
+ * whole-file failure as a coverage hole — picks these up with no change of its
+ * own, exactly as it already does for native's. The wording names
+ * `providerLabel` rather than native's `lattice.json`/`coverage.exempt`
+ * vocabulary, because neither Nx nor Moon has an exemption mechanism this
+ * tool reads — inventing one is out of scope here; this only detects and
+ * reports.
+ *
+ * @param {{tracked: string[], owned: {file: string, project: string}[], providerLabel: string}} args
+ * @returns {object[]}
+ */
+function unclaimedFileFailures({ tracked, owned, providerLabel }) {
+  const ownedFiles = new Set(owned.map(({ file }) => file));
+  return tracked
+    .filter((file) => UNCLAIMED_CHECK_LANGUAGES.has(languageOf(file)) && !ownedFiles.has(file))
+    .map((file) =>
+      fileFailure(
+        file,
+        `is not owned by any project in ${providerLabel} — every tracked Go, Rust or Python file ` +
+          `must belong to exactly one declared project, so its cross-project imports can be checked`,
+      ),
+    );
+}
 
 /**
  * Resolves everything a command needs before it can ask its own question:
@@ -309,9 +397,14 @@ export function resolveCommandContext(
     );
     const selectedFiles = new Set(selected);
     imports = wholeTreeAnalysis.imports.filter((site) => selectedFiles.has(site.sourceFile));
-    // Unclaimed analyzable files — a native-only fact; the Nx path has no
-    // unclaimed-file check of its own (`../providers/native/coverage.mjs`'s
-    // header) — join the SAME whole-file failure shape a language analyzer
+    // Unclaimed analyzable files — this branch's own source is native
+    // discovery's `discovered.failures` (`../providers/native/coverage.mjs`'s
+    // `judgeCoverage`, reached through `nativeProvider.discover` above), which
+    // already carries the unclaimed-file list alongside any unparseable-
+    // manifest failure. The Nx and Moon branches below have no such discovery
+    // step to answer the same question from, so they compute the equivalent
+    // list themselves (`unclaimedFileFailures` above) — three different
+    // sources feeding the SAME whole-file failure shape a language analyzer
     // produces for an unreadable file, so nothing downstream needs to know
     // which provider found the gap.
     failures = [
@@ -395,9 +488,15 @@ export function resolveCommandContext(
     );
     const selectedFiles = new Set(selected);
     imports = wholeTreeAnalysis.imports.filter((site) => selectedFiles.has(site.sourceFile));
-    failures = wholeTreeAnalysis.failures.filter((failure) =>
-      selectedFiles.has(failure.sourceFile),
-    );
+    // Unclaimed analyzable files — `unclaimedFileFailures` above — join the
+    // scoped read failures unconditionally, the same workspace-wide posture
+    // native's own `discovered.failures` has (this branch's header already
+    // analyzes the whole tree before `paths` narrows anything, for the same
+    // reason).
+    failures = [
+      ...wholeTreeAnalysis.failures.filter((failure) => selectedFiles.has(failure.sourceFile)),
+      ...unclaimedFileFailures({ tracked, owned, providerLabel: "the Moon project graph" }),
+    ];
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
     analyzed = analyzedFiles.length;
     // `coverage.exempt` is a native-only key (`../providers/native/coverage.mjs`'s
@@ -440,6 +539,14 @@ export function resolveCommandContext(
       { root, cwd, tracked },
     );
     ({ imports, failures, analyzed, analyzedFiles } = analyzeWorkspace(workspace, selected));
+    // Unclaimed analyzable files — `unclaimedFileFailures` above — join
+    // unconditionally, the same workspace-wide posture native's own
+    // `discovered.failures` has, so a scoped `check <path>` cannot hide an
+    // orphan file elsewhere in the tree by naming a path that excludes it.
+    failures = [
+      ...failures,
+      ...unclaimedFileFailures({ tracked, owned, providerLabel: "the Nx project graph" }),
+    ];
     // Same reason as the Moon branch above: `coverage.exempt` is a native-only
     // concept, so an Nx workspace has nothing to report here.
     exemptedFiles = [];
