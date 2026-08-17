@@ -105,6 +105,21 @@ export function markersAt(root) {
 }
 
 /**
+ * Every marker a workspace root may be recognised by, as one list.
+ *
+ * Exported because `cli.mjs` walks for a root a second time — `--help` and
+ * `adr` need one before a `CommandContext` exists — and that walk kept its own
+ * copy of this list. The copy went stale: it named `nx.json` and `lattice.json`
+ * only, so `adr` answered "no workspace root" on every Moon tree while naming
+ * `.moon` in the very message, and `--help` fell back to defaults there. The
+ * two callers still differ in posture — one throws where the other returns a
+ * default — but they may not differ in what a workspace root IS.
+ *
+ * @type {string[]}
+ */
+export const WORKSPACE_MARKERS = [NX_CONFIG_FILE, LATTICE_MODEL_FILE, MOON_DIR, MOON_ALT_DIR];
+
+/**
  * @typedef {object} CommandContext
  * @property {string} root Absolute workspace root.
  * @property {"nx"|"native"|"moon"} provider Which project-model provider answered.
@@ -173,7 +188,7 @@ export function resolveCommandContext(
   // marker(s) the returned directory actually carries is then read back
   // below, because a walk that STOPPED at the first marker it saw could never
   // tell "only lattice.json here" from "both, one level up".
-  const root = findWorkspaceRoot(cwd, [NX_CONFIG_FILE, LATTICE_MODEL_FILE, MOON_DIR, MOON_ALT_DIR]);
+  const root = findWorkspaceRoot(cwd, WORKSPACE_MARKERS);
   if (root === null) {
     throw new Error(
       `lattice: no workspace root above ${cwd} — looked for an nx.json, a lattice.json, or a ` +
