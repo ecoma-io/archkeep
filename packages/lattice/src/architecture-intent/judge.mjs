@@ -103,6 +103,42 @@ function directEdges(graph) {
 }
 
 /**
+ * `graph.dependencies`, minus every `implicit`-typed edge — a build-ordering
+ * declaration (`implicitDependencies` in Nx's `project.json`, Moon's own
+ * `source: "implicit"` marker, or `lattice.json`'s native equivalent), not a
+ * dependency derived from code. This is the exact exclusion
+ * `../../src/commands/drift.mjs`'s `buildObserved` already applies to what a
+ * drift report COUNTS ("N implicit edges excluded"); every edge this judge
+ * reads must come from the same filtered set, or the report's claim and the
+ * judge's verdict can disagree on the same run — a `forbidden`/`allowed` row,
+ * a `dependencies.forbidden`/`dependencies.allowed` row, or a `forbiddenTags`
+ * row firing (or, for `allowed`, silently NOT firing) on an edge the report
+ * just said it excluded. Applied once, here, rather than at each of
+ * `directEdges`/`observedEdgePairs`/`buildReachability`'s call sites below —
+ * three copies of the same filter is how one of them drifts.
+ *
+ * `../../src/rules/reachability.mjs`'s `buildReachability` itself stays
+ * type-agnostic on purpose: `../../src/commands/edge-constraints.mjs`'s
+ * `declaredEdgeViolationsForCheck` and `../../src/rules/index.mjs`'s
+ * `evaluate()` both deliberately hand it the UNFILTERED graph, because
+ * `depConstraints`' `notDependOnLibsWithTags` is a different, tag-based
+ * question that intentionally treats a declared build-ordering edge as a real
+ * coupling. Architecture intent's `allowed`/`forbidden` rows ask a narrower
+ * question — "is this actually being built in code" — and a build-ordering
+ * declaration is precisely not an answer to it.
+ *
+ * @param {{dependencies?: object}} graph
+ * @returns {object}
+ */
+function codeDependencies(graph) {
+  const filtered = {};
+  for (const [source, dependencies] of Object.entries(graph.dependencies ?? {})) {
+    filtered[source] = (dependencies ?? []).filter((dependency) => dependency.type !== "implicit");
+  }
+  return filtered;
+}
+
+/**
  * Judge an intent model against a graph.
  *
  * @param {object} intent The normalized model from `./model.mjs`.
@@ -117,13 +153,16 @@ function directEdges(graph) {
  */
 export function judgeIntent(intent, graph) {
   const nodes = graph.nodes ?? {};
+  // Every edge this judge reads goes through `dependencies`, never
+  // `graph.dependencies` directly — see `codeDependencies` above for why.
+  const dependencies = codeDependencies(graph);
   const boundaries = intent.boundaries.map((b) => ({
     name: b.name,
     projects: resolveMembers(b.match, nodes),
   }));
   const byName = new Map(boundaries.map((b) => [b.name, b.projects]));
-  const reach = buildReachability({ nodes, dependencies: graph.dependencies });
-  const edges = directEdges({ nodes, dependencies: graph.dependencies });
+  const reach = buildReachability({ nodes, dependencies });
+  const edges = directEdges({ nodes, dependencies });
 
   const findings = [];
   const unresolved = [];
@@ -292,12 +331,14 @@ export function judgeIntent(intent, graph) {
    * The observed direct edges as `[source, target]` pairs, built with the same
    * traversal `directEdges` above uses — the drift sections read the pair list
    * rather than parse `edgeKey` strings back apart. Order is irrelevant: the
-   * final sort below is total.
+   * final sort below is total. Reads the same `dependencies` — implicit edges
+   * already filtered — as `directEdges`/`buildReachability` above, never
+   * `graph.dependencies` directly.
    */
   const observedEdgePairs = [];
-  for (const [source, dependencies] of Object.entries(graph.dependencies ?? {})) {
-    for (const dependency of dependencies ?? []) {
-      if (graph.nodes[dependency.target] !== undefined) {
+  for (const [source, sourceDependencies] of Object.entries(dependencies)) {
+    for (const dependency of sourceDependencies) {
+      if (nodes[dependency.target] !== undefined) {
         observedEdgePairs.push([source, dependency.target]);
       }
     }
