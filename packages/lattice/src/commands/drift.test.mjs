@@ -197,6 +197,83 @@ describe("driftCommand", () => {
     expect(result.report.text).toContain("3 drift findings");
   });
 
+  it("never reports a finding derived from the edge the report's own header calls excluded (P1-11)", async () => {
+    // `core`'s only edge to `app` is `implicit` — a build-ordering
+    // declaration, not a real import — and the forbidden row below spans
+    // exactly that pair. Before the fix, `buildObserved`'s count correctly
+    // excluded the edge while `judgeIntent` still judged it from the raw
+    // graph, so the report's "N implicit edges excluded" line and a finding
+    // derived from that very edge appeared on adjacent lines, contradicting
+    // each other. The whole tree carries zero non-implicit edges, so a clean
+    // verdict here is the only claim that agrees with what the report states
+    // it looked at.
+    const result = await driftCommand(
+      commandContext({
+        graph: {
+          nodes: {
+            core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
+            app: { name: "app", data: { root: "apps/app", tags: ["type-application"] } },
+          },
+          dependencies: {
+            core: [{ source: "core", target: "app", type: "implicit" }],
+          },
+        },
+      }),
+      ioWithIntent(
+        intent({
+          boundaries: [
+            { name: "packages", match: ["tag:type-package"] },
+            { name: "apps", match: ["tag:type-application"] },
+          ],
+          forbidden: [{ from: "packages", to: "apps", reason: "the engine must not reach out" }],
+        }),
+      ),
+    );
+    expect(result.drift.observed.edges).toBe(0);
+    expect(result.drift.observed.implicitEdges).toBe(1);
+    expect(result.drift.findings).toEqual([]);
+    expect(result.report.text).toContain("(1 implicit edge excluded)");
+    expect(result.report.text).toContain("✔ no drift");
+    expect(result.report.text).not.toContain("intentForbiddenEdge");
+    expect(result.report.text).not.toContain("finding");
+  });
+
+  it("does not let an allowed row be satisfied by a build-ordering declaration alone (P1-11)", async () => {
+    // The only edge from `app` to `core` is `implicit`. An `allowed` row
+    // declares an architecture statement the team intends to BUILD — a
+    // dependency declared only for build ordering is not that, so the row
+    // must still report `intentAllowedMissing` rather than reading as held.
+    const result = await driftCommand(
+      commandContext({
+        graph: {
+          nodes: {
+            core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
+            app: { name: "app", data: { root: "apps/app", tags: ["type-application"] } },
+          },
+          dependencies: {
+            app: [{ source: "app", target: "core", type: "implicit" }],
+          },
+        },
+      }),
+      ioWithIntent(
+        intent({
+          boundaries: [
+            { name: "packages", match: ["tag:type-package"] },
+            { name: "apps", match: ["tag:type-application"] },
+          ],
+          allowed: [{ from: "apps", to: "packages" }],
+        }),
+      ),
+    );
+    expect(result.drift.observed.edges).toBe(0);
+    expect(result.drift.observed.implicitEdges).toBe(1);
+    expect(result.drift.findings).toHaveLength(1);
+    expect(result.drift.findings[0].rule).toBe("intentAllowedMissing");
+    expect(result.report.text).toContain(
+      "1 finding: dependencies the intended architecture allows are not being built",
+    );
+  });
+
   it("refuses over incomplete coverage — every 'project missing' would be ambiguous", async () => {
     await expect(
       driftCommand(

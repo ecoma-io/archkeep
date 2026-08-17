@@ -8,7 +8,7 @@ import { INTENT_MESSAGE_IDS, judgeIntent } from "./judge.mjs";
  * under `data`, the same shape the selector engine reads.
  *
  * @param {Record<string, {data?: {root?: string, tags?: string[]}}>} nodes
- * @param {Record<string, Array<{target: string}>>} [dependencies]
+ * @param {Record<string, Array<{target: string, type?: string}>>} [dependencies]
  */
 const graph = (nodes, dependencies = {}) => ({ nodes, dependencies });
 
@@ -124,6 +124,102 @@ describe("judgeIntent — allowed", () => {
       allowed: [{ from: "app", to: "app" }],
     });
     const result = judgeIntent(oneProject, graph({ site: exts.site }, {}));
+    expect(result.verdict).toBe("ok");
+    expect(result.findings).toEqual([]);
+  });
+});
+
+describe("judgeIntent — implicit edges are excluded, matching drift's own exclusion (P1-11)", () => {
+  // `../../src/commands/drift.mjs`'s `buildObserved` drops `implicit`-typed
+  // edges (a build-ordering declaration, not a dependency derived from code)
+  // and reports how many it excluded. Before this fix, `judgeIntent` read
+  // `graph.dependencies` directly and never applied that same exclusion, so a
+  // drift report could claim "N implicit edges excluded" on one line and show
+  // a finding derived from exactly one of them on the next — and, in the
+  // other direction, an `allowed` row could read as satisfied from nothing
+  // but a build-ordering declaration, with no real dependency ever observed.
+  // These cases pin both directions at the judge itself, the root cause both
+  // symptoms share.
+  const declared = intent({
+    boundaries: [
+      { name: "packages", match: ["tag:type-package"] },
+      { name: "extensions", match: ["tag:type-extension"] },
+    ],
+    forbidden: [{ from: "packages", to: "extensions", reason: "the engine must not reach out" }],
+  });
+
+  it("does not report a forbidden row violated only by a direct implicit edge", () => {
+    const result = judgeIntent(
+      declared,
+      graph({ ...pkgs, site: exts.site }, { core: [{ target: "site", type: "implicit" }] }),
+    );
+    expect(result.verdict).toBe("ok");
+    expect(result.findings).toEqual([]);
+  });
+
+  it("does not treat a transitive path through an implicit hop as closing a forbidden path", () => {
+    // engine (packages) → util (extensions) is forbidden. The only path is
+    // engine → broker (real) → util (implicit) — the SAME shape the
+    // "violated only TRANSITIVELY" test above pins for a real edge, but the
+    // last hop here is a declaration, not code, so no path should be found.
+    const nodes = {
+      engine: node(["type-package"]),
+      broker: node(["type-package"]),
+      util: node(["type-extension"]),
+    };
+    const result = judgeIntent(
+      declared,
+      graph(nodes, {
+        engine: [{ target: "broker", type: "static" }],
+        broker: [{ target: "util", type: "implicit" }],
+      }),
+    );
+    expect(result.verdict).toBe("ok");
+    expect(result.findings).toEqual([]);
+  });
+
+  it("reports intentAllowedMissing when the only observed edge is implicit — an allowed row is not satisfied by a build-ordering declaration", () => {
+    const both = intent({
+      boundaries: [
+        { name: "packages", match: ["tag:type-package"] },
+        { name: "extensions", match: ["tag:type-extension"] },
+      ],
+      allowed: [{ from: "extensions", to: "packages" }],
+    });
+    const result = judgeIntent(
+      both,
+      graph({ ...pkgs, site: exts.site }, { site: [{ target: "core", type: "implicit" }] }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].rule).toBe("intentAllowedMissing");
+    expect(result.findings[0].source).toBe("site");
+    expect(result.findings[0].target).toBe("core");
+  });
+
+  it("does not report dependencyForbidden for an edge that is only declared, never imported", () => {
+    const result = judgeIntent(
+      intent({ dependencies: { forbidden: [{ source: "core", target: "site" }] } }),
+      graph({ ...pkgs, site: exts.site }, { core: [{ target: "site", type: "implicit" }] }),
+    );
+    expect(result.verdict).toBe("ok");
+    expect(result.findings).toEqual([]);
+  });
+
+  it("does not report dependencyNotAllowed for an observed-only-implicit edge outside the allowlist", () => {
+    const result = judgeIntent(
+      intent({ dependencies: { allowed: [{ source: "core", target: "ui" }] } }),
+      graph({ ...pkgs, site: exts.site }, { core: [{ target: "site", type: "implicit" }] }),
+    );
+    expect(result.verdict).toBe("ok");
+    expect(result.findings).toEqual([]);
+  });
+
+  it("does not report tagDependencyForbidden for an implicit-only edge crossing the forbidden tag pair", () => {
+    const result = judgeIntent(
+      intent({ forbiddenTags: [{ from: "type-package", to: "type-extension" }] }),
+      graph({ ...pkgs, site: exts.site }, { core: [{ target: "site", type: "implicit" }] }),
+    );
     expect(result.verdict).toBe("ok");
     expect(result.findings).toEqual([]);
   });
@@ -334,6 +430,25 @@ describe("judgeIntent — dependencies (drift edges)", () => {
     expect(result.findings[0].target).toBe("site");
   });
 
+  it("reports a dependencies.forbidden pair connected only TRANSITIVELY — core→ui→site, no direct edge", () => {
+    // P1-09: the forbidden row names core/site by exact project name; the
+    // observed graph carries no DIRECT core→site edge, only core→ui→site. A
+    // direct-edge-only check (this rule's pre-fix behavior) would read this
+    // as clean — byte-identical to a workspace with no such path at all — the
+    // silent direction `../../../../AGENTS.md` is about. `forbidden` (the
+    // boundary-row shape, above) already catches this transitively; this rule
+    // must not disagree with it about the same underlying claim.
+    const result = judgeIntent(
+      intent({ dependencies: { forbidden: [{ source: "core", target: "site" }] } }),
+      graph({ ...pkgs, site: exts.site }, { core: [{ target: "ui" }], ui: [{ target: "site" }] }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings.map((f) => f.rule)).toEqual(["dependencyForbidden"]);
+    expect(result.findings[0].source).toBe("core");
+    expect(result.findings[0].target).toBe("site");
+    expect(result.findings[0].message).toContain("→");
+  });
+
   it("reports an edge outside the exhaustive allowlist as dependencyNotAllowed", () => {
     // `site` is a real observed project (an extension) but is not on the
     // allowlist, so the observed edge core→site must be drift. A target with
@@ -383,6 +498,27 @@ describe("judgeIntent — dependencies (drift edges)", () => {
     );
     expect(result.verdict).toBe("findings");
     expect(result.findings.some((f) => f.rule === "tagDependencyForbidden")).toBe(true);
+  });
+
+  it("reports a forbiddenTags pair connected only TRANSITIVELY — no direct edge between the tagged projects", () => {
+    // P1-09: `core` (type-package) reaches `site` (type-extension) only
+    // through `adapter`, an untagged intermediate project — no type-package
+    // project has a DIRECT edge to a type-extension one. A direct-edge-only
+    // check (this rule's pre-fix behavior) would read this as clean, the
+    // same silent miss as the dependencies.forbidden case above.
+    const nodes = {
+      core: node(["type-package"]),
+      adapter: node([]),
+      site: node(["type-extension"]),
+    };
+    const result = judgeIntent(
+      intent({ forbiddenTags: [{ from: "type-package", to: "type-extension" }] }),
+      graph(nodes, { core: [{ target: "adapter" }], adapter: [{ target: "site" }] }),
+    );
+    expect(result.verdict).toBe("findings");
+    expect(result.findings.map((f) => f.rule)).toEqual(["tagDependencyForbidden"]);
+    expect(result.findings[0].source).toBe("core");
+    expect(result.findings[0].target).toBe("site");
   });
 
   it("reports a tag rule no project carries as intentUnknownTag", () => {

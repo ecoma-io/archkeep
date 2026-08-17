@@ -119,12 +119,19 @@ function stripInlineComment(value) {
  * Parse the frontmatter block into a field map. The dialect is strict:
  * `key: value` for scalars, `key:` followed by `- item` lines for lists, `#`
  * for comments. Anything else is a loud parse error — a frontmatter line an
- * enforcer cannot trust must never be silently dropped.
+ * enforcer cannot trust must never be silently dropped. That includes a key
+ * repeated within the same block: an unconditional `fields[key] = …` write
+ * would let the second occurrence silently discard the first — a scalar's
+ * earlier value, or, worse, an entire earlier `bindings`/`supersedes` list,
+ * since a second `key:` line resets `fields[key]` to a fresh empty array that
+ * the following `- item` lines then fill from nothing. So a repeated key
+ * throws instead of overwriting.
  *
  * @param {string} text The block between the two `---` delimiters.
  * @param {string} at The record's id, for the message.
  * @returns {Record<string, string|string[]|undefined>}
- * @throws {Error} on a line that is not part of the dialect.
+ * @throws {Error} on a line that is not part of the dialect, including a key
+ *   that already appears earlier in the same block.
  */
 export function parseFrontmatterFields(text, at) {
   /** @type {Record<string, string|string[]|undefined>} */
@@ -145,6 +152,11 @@ export function parseFrontmatterFields(text, at) {
 
     const key = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/u.exec(trimmed);
     if (key) {
+      if (Object.hasOwn(fields, key[1])) {
+        throw new Error(
+          `${at}: duplicate frontmatter key "${key[1]}" — the first occurrence would be silently overwritten`,
+        );
+      }
       const raw = key[2].trim();
       if (raw === "") {
         fields[key[1]] = [];

@@ -95,7 +95,7 @@
  * that, with no equivalent this reader can read back — so it always reports
  * an empty suppression list; see `loadBoundaryConfigFile`'s ESLint branch.
  */
-import { basename, extname, posix } from "node:path";
+import { basename, extname } from "node:path";
 import { readFile as readFileFromDisk } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
@@ -103,9 +103,11 @@ import { loadEslintBoundaryConfig } from "./eslint-config.mjs";
 import { findFitnessViolations } from "./governance/fitness-registry.mjs";
 import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "./governance/row-schema.mjs";
 import {
+  globComplexityError,
   globPatternError,
   importPatternError,
   projectPatternError,
+  safeMatchesGlob,
   tagPatternError,
 } from "./rules/match.mjs";
 import { MESSAGE_IDS } from "./rules/messages.mjs";
@@ -350,12 +352,17 @@ const SUPPRESSION_KEYS = ["path", "messageId", "reason", "expiresAt", "origin"];
  * Does this suppression cover a violation at `sourceFile` with `messageId`?
  *
  * `path` is a glob over the workspace-relative path of the importing file,
- * matched with `node:path`'s own `matchesGlob`. The stdlib, deliberately: this
- * project may import no third-party matcher (project `CLAUDE.md`), and the
- * alternative — hand-rolling an almost-minimatch — is exactly what
- * `projectPatternError` already refuses to do for `ignoredCircularDependencies`.
- * A pattern it cannot parse returns false rather than throwing, which for a
- * suppression fails toward reporting.
+ * matched with `node:path`'s own `matchesGlob`, through `./rules/match.mjs`'s
+ * `safeMatchesGlob` — the stdlib, deliberately: this project may import no
+ * third-party matcher (project `CLAUDE.md`), and the alternative —
+ * hand-rolling an almost-minimatch — is exactly what `projectPatternError`
+ * already refuses to do for `ignoredCircularDependencies`. A pattern it
+ * cannot parse returns false rather than throwing, which for a suppression
+ * fails toward reporting; a pattern whose brace groups expand combinatorially
+ * throws instead, guarded by `safeMatchesGlob` — `suppressionRowViolations`
+ * below refuses the same pattern at config load, so this throw is a backstop
+ * for a suppression that reached matching without going through it, not the
+ * primary defence.
  *
  * `posix` and not the platform default: every path in an analysis record is
  * workspace-relative and `/`-separated (`analysis/contract.md`), so there is no
@@ -374,7 +381,7 @@ export function suppressionCovers(suppression, violation) {
   if (suppression.messageId !== undefined && suppression.messageId !== violation.messageId) {
     return false;
   }
-  return posix.matchesGlob(violation.sourceFile, suppression.path);
+  return safeMatchesGlob(violation.sourceFile, suppression.path);
 }
 
 /**
@@ -406,6 +413,9 @@ function suppressionRowViolations(row, index) {
       `${at}.path: must be a non-empty glob over the workspace-relative path of the ` +
         `importing file, got ${describe(row.path)}`,
     );
+  } else {
+    const problem = globComplexityError(row.path);
+    if (problem) violations.push(`${at}.path: '${row.path}' ${problem}`);
   }
   if (typeof row.reason !== "string" || row.reason.trim() === "") {
     violations.push(

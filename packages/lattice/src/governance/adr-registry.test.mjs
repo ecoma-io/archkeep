@@ -80,6 +80,30 @@ describe("parseFrontmatterFields", () => {
       /cannot parse frontmatter line/,
     );
   });
+
+  // P1-22: a repeated key used to hit the plain `fields[key] = …` write twice
+  // and the second write won silently — no error, no warning, the first
+  // occurrence just gone. That is exactly the "silently dropped" line this
+  // function's own header says the strict dialect must never allow.
+  describe("duplicate key (P1-22) — a repeat must never silently overwrite", () => {
+    it("throws on a duplicate scalar key, instead of letting the second value win", () => {
+      expect(() =>
+        parseFrontmatterFields("status: proposed\nstatus: accepted\n", "0001-x"),
+      ).toThrow(/duplicate frontmatter key "status"/);
+    });
+
+    it("throws on a duplicate list key, instead of discarding the first list", () => {
+      expect(() =>
+        parseFrontmatterFields("bindings:\n  - rule:one\nbindings:\n  - rule:two\n", "0001-x"),
+      ).toThrow(/duplicate frontmatter key "bindings"/);
+    });
+
+    it("throws on the second of three repeats, naming the key — not just any later line", () => {
+      expect(() =>
+        parseFrontmatterFields("id: 0001-x\nid: 0002-x\nid: 0003-x\n", "0001-x"),
+      ).toThrow(/duplicate frontmatter key "id"/);
+    });
+  });
 });
 
 describe("validateRecord", () => {
@@ -153,6 +177,20 @@ describe("loadAdrRegistry", () => {
   it("throws on a malformed record file", () => {
     const io = treeWith({ "0001-bind-collaboration.md": "---\nstatus: bad\n---\n" });
     expect(() => loadAdrRegistry("/tmp/x", io)).toThrow(/status "bad"/);
+  });
+
+  // P1-22: end to end, a duplicate key must fail the whole registry load the
+  // same way any other malformed record does — never a record read from the
+  // last-value-wins guess. Both consumers of `loadAdrRegistry` (`resolveDecisionRef`
+  // via `byId`, and `lattice adr`'s report via `records`) sit downstream of this
+  // one load, so a loud throw here is what keeps a duplicated `status`/`bindings`
+  // from ever reaching either as a quietly-flipped verdict.
+  it("throws on a record whose frontmatter repeats a key, rather than reading the last value (P1-22)", () => {
+    const io = treeWith({
+      "0001-bind-collaboration.md":
+        "---\nid: 0001-bind-collaboration\nstatus: proposed\nstatus: accepted\n---\n",
+    });
+    expect(() => loadAdrRegistry("/tmp/x", io)).toThrow(/duplicate frontmatter key "status"/);
   });
 
   it("throws when the registry cannot be read at all (unreadable ≠ empty)", () => {

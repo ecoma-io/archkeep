@@ -74,6 +74,24 @@ export const PROFILE_REGISTRY_SCHEMA_VERSION = 1;
 /** The three keys a profile's `block` may carry, exactly those `policyFrom` reads. */
 const BLOCK_KEYS = ["depConstraints", "moduleBoundaryOptions", "boundarySuppressions"];
 
+/**
+ * A profile `name`, matched exactly by `resolveProfile` and typed by an
+ * operator at `--config`/`boundaryConfig`. Restricted to the same safe set
+ * `../architecture-intent/model.mjs`'s boundary names and
+ * `./fitness-registry.mjs`'s fitness names already use, and for the identical
+ * reason: a name is a selector, not a label, so two names that a human reads
+ * as identical must not be able to exist as two different values. Unicode
+ * (a zero-width character, a homoglyph from another script, two normalisation
+ * forms of the same visible glyph) can make two byte-distinct strings render
+ * identically — the duplicate check below compares the raw string, which
+ * would accept both as "unique" and then resolve whichever one an operator's
+ * literal `--config` argument happened to byte-match, silently enforcing the
+ * OTHER one's block. Refusing every character outside this set closes that
+ * off at the source: two names that display the same are now always the same
+ * string, so the existing duplicate check is sufficient again.
+ */
+const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/u;
+
 /** @type {(value: unknown) => value is Record<string, unknown>} */
 const isPlainObject = (value) =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -134,8 +152,10 @@ export function profileRegistryViolations(raw) {
         `${at}.${key}: not a profile field — a profile may carry only name, base, block`,
       );
     }
-    if (typeof profile.name !== "string" || profile.name.trim() === "") {
-      violations.push(`${at}.name: must be a non-empty string, got ${describe(profile.name)}`);
+    if (typeof profile.name !== "string" || !NAME_PATTERN.test(profile.name)) {
+      violations.push(
+        `${at}.name: must be a non-empty string of letters, digits, "-" or "_", got ${describe(profile.name)}`,
+      );
     } else if (names.has(profile.name)) {
       violations.push(
         `${at}.name: "${profile.name}" is declared more than once — every profile name must be unique`,
