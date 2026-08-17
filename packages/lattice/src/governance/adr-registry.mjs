@@ -27,7 +27,7 @@
  * parser leniency for this tool's own files).
  *
  * The invariant (`../../../../AGENTS.md`): an empty result must mean "no
- * violation", and nothing else. For the registry that means three things:
+ * violation", and nothing else. For the registry that means four things:
  *
  * - **The registry is deterministic.** Files are read in byte-sorted filename
  *   order and every emitted list is sorted, so two runs over an unchanged
@@ -42,6 +42,22 @@
  *   registry's `resolveDecisionRef` answers the two-name space — an ADR id
  *   (matching a file) or a rule/fitness id the workspace declares. Anything
  *   else is unknown, and the caller reports unknown (never clean).
+ * - **The registry trusts only git-tracked, in-workspace bytes.** A
+ *   `docs/adr/` directory entry the tracked tree does not know about — a
+ *   gitignored scratch file with an ADR-shaped name — is excluded exactly as
+ *   if it were never there: no record, no id claimed, no error. So is a
+ *   directory entry whose NAME is tracked but whose current bytes are not: a
+ *   symlink (committed as one, or swapped in locally after the tracked-name
+ *   check ran) whose target resolves outside the workspace root. Either way
+ *   `resolveDecisionRef` answers `unknown` for the id, never `adr` — the same
+ *   answer a name nobody ever wrote gets, so a planted file cannot make a
+ *   `decisionRef` resolve against bytes this workspace never reviewed, with
+ *   manual lookup the only thing that would otherwise have caught it.
+ *   `../architecture-intent/model.mjs`'s `loadIntent` makes the identical call
+ *   for `architecture-intent.json` (see its own header), and its `tracked`
+ *   parameter is this module's `io.tracked` by another name. `docs/reference/adr.md`
+ *   and `docs/usage/adr.md` already describe the registry as reading "the
+ *   tracked `docs/adr/`" — this is what makes that sentence true.
  *
  * ## Remote lookup is opt-in and must never change local resolution
  *
@@ -54,8 +70,8 @@
  * fetch so a remote answer carries the moment it was taken.
  */
 
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { isAbsolute, join, relative } from "node:path";
 
 /** The directory, relative to a workspace root, where ADR files live. */
 export const ADR_DIR = "docs/adr";
@@ -222,6 +238,42 @@ export function validateRecord({ id, frontmatter }) {
 }
 
 /**
+ * Whether `path` — a directory entry `loadAdrRegistry` already knows exists —
+ * is a symlink whose target resolves outside `root`. Not a symlink: `false`,
+ * the common case. A DANGLING symlink is not this function's concern either
+ * (`false`): the read that follows fails on it with `ENOENT`, which the
+ * existing "cannot read" branch already turns into a loud error, unchanged.
+ * What this catches is the symlink that resolves just fine — silently handing
+ * back bytes this workspace never committed, the read-side twin of the
+ * write-side guard `../../cli.mjs`'s `writeOutputReport` documents.
+ *
+ * @param {string} root Absolute, already-canonical workspace root — resolving
+ *   symlinks out of it is the caller's job (`findWorkspaceRoot` and this
+ *   project's own fixtures both hand down a root with no symlink component of
+ *   its own), so this function only resolves the candidate file.
+ * @param {string} path Absolute path of the candidate file.
+ * @param {{lstatSync: (path: string) => {isSymbolicLink: () => boolean}, realpathSync: (path: string) => string}} io
+ * @returns {boolean}
+ */
+function escapesWorkspace(root, path, io) {
+  let stat;
+  try {
+    stat = io.lstatSync(path);
+  } catch {
+    return false;
+  }
+  if (!stat.isSymbolicLink()) return false;
+  let real;
+  try {
+    real = io.realpathSync(path);
+  } catch {
+    return false;
+  }
+  const rel = relative(root, real);
+  return rel.startsWith("..") || isAbsolute(rel);
+}
+
+/**
  * Read and index every ADR file under `root/docs/adr/`. Deterministic:
  * filenames are byte-sorted, and every list in the returned records is already
  * in the order the source file stated (kept stable — the registry never
@@ -233,16 +285,24 @@ export function validateRecord({ id, frontmatter }) {
  * id throws; the caller maps that to exit 3, never to an empty list.
  *
  * @param {string} root Absolute workspace root.
- * @param {{readdirSync?: (path: string) => string[], readFileSync?: (path: string, encoding: "utf8") => string}} [io]
+ * @param {{readdirSync?: (path: string) => string[], readFileSync?: (path: string, encoding: "utf8") => string,
+ *   lstatSync?: (path: string) => {isSymbolicLink: () => boolean}, realpathSync?: (path: string) => string,
+ *   tracked?: string[]}} [io]
  *   Injectable filesystem seams, defaulting to the sync `node:fs` calls this
  *   module uses so the CLI stays event-loop-simple. Tests inject an in-memory
- *   tree.
+ *   tree. `tracked` is the `git ls-files` list (`../workspace.mjs`'s
+ *   `listTrackedFiles`); when provided, a directory entry whose `docs/adr/<name>`
+ *   path is not in it is excluded before it is ever validated — see this
+ *   module's header for why, and `../architecture-intent/model.mjs`'s
+ *   `loadIntent` for the identical `tracked` contract this one mirrors.
  * @returns {{records: object[], byId: Map<string, object>}}
  * @throws {Error} on an unreadable registry.
  */
 export function loadAdrRegistry(root, io = {}) {
   const readDir = io.readdirSync ?? readdirSync;
   const readFile = io.readFileSync ?? readFileSync;
+  const lstat = io.lstatSync ?? lstatSync;
+  const realpath = io.realpathSync ?? realpathSync;
   const dir = join(root, ADR_DIR);
 
   /** @type {string[]} */
@@ -254,6 +314,11 @@ export function loadAdrRegistry(root, io = {}) {
     throw new Error(`lattice: cannot read ${ADR_DIR}: ${cause?.message ?? cause}`, { cause });
   }
   names.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
+  if (io.tracked !== undefined) {
+    const tracked = new Set(io.tracked);
+    names = names.filter((name) => tracked.has(`${ADR_DIR}/${name}`));
+  }
 
   const records = [];
   const byId = new Map();
@@ -269,9 +334,18 @@ export function loadAdrRegistry(root, io = {}) {
     if (byId.has(id)) {
       throw new Error(`lattice: ${ADR_DIR} holds more than one file for id "${id}"`);
     }
+    const filePath = join(dir, name);
+    // A tracked NAME says nothing about what currently sits on disk at that
+    // path: a symlink committed at mode 120000, or one swapped in locally
+    // after the `tracked` filter above ran, still passes it by name alone.
+    // Excluded exactly like an untracked file — this module's header explains
+    // why silence here is the honest answer rather than a thrown error.
+    if (escapesWorkspace(root, filePath, { lstatSync: lstat, realpathSync: realpath })) {
+      continue;
+    }
     let text;
     try {
-      text = readFile(join(dir, name), "utf8");
+      text = readFile(filePath, "utf8");
     } catch (cause) {
       throw new Error(`lattice: cannot read ${ADR_DIR}/${name}: ${cause?.message ?? cause}`, {
         cause,

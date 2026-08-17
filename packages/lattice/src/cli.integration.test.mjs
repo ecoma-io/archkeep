@@ -4000,6 +4000,11 @@ describe("adr resolves a workspace root by every marker a root may carry", () =>
           join(adrRoot, ADR_FIXTURE_DIR, "0001-layering.md"),
           "---\nstatus: accepted\n---\n\n# Layering\n",
         );
+        // The registry reads only git-tracked files (P1-21) — `git ls-files`
+        // has to see this fixture's own record, or the fix under test would
+        // exclude it exactly like the untracked scratch file it is not.
+        spawnSync("git", ["init", "--quiet"], { cwd: adrRoot, encoding: "utf8" });
+        spawnSync("git", ["add", "-A"], { cwd: adrRoot, encoding: "utf8" });
 
         const result = spawnSync(process.execPath, [CLI, "adr"], {
           cwd: adrRoot,
