@@ -389,9 +389,32 @@ export function adrsBinding(records, fitnessId) {
 }
 
 /**
+ * Strips the `adr:` prefix this tool's own governance-row docs recommend as
+ * an alternate ADR-id spelling (`../governance/row-schema.mjs`'s
+ * `decisionRef` field docs and its "does not resolve" error text both show
+ * `"adr:0012"` beside the bare `0012-slug` form as an equally valid ADR id).
+ * The registry never keys a record on that spelling — `validateRecord`
+ * derives every `byId` key from the filename alone, and a frontmatter `id`
+ * carrying the prefix would already fail the "must equal the filename" check
+ * — so a lookup that does not strip it first can never match, no matter how
+ * real the record is: the one spelling this tool itself suggests would be the
+ * one spelling that silently fails to resolve. Any other ref — including one
+ * that merely differs in case, like `ADR:` — is returned unchanged: only the
+ * exact documented spelling is an alias, never a fuzzy match that would hide
+ * a genuine typo behind a "resolved" answer.
+ *
+ * @param {string} ref
+ * @returns {string}
+ */
+export function stripAdrPrefix(ref) {
+  return ref.startsWith("adr:") ? ref.slice(4) : ref;
+}
+
+/**
  * The two-name-space resolution a `decisionRef` answers. Local knowledge
- * always wins: an ADR id (matching a file in the registry) or a rule/fitness
- * id the workspace declares in `knownFitness`. Anything else is unknown.
+ * always wins: an ADR id (matching a file in the registry, written bare or
+ * with the `adr:` prefix `stripAdrPrefix` strips) or a rule/fitness id the
+ * workspace declares in `knownFitness`. Anything else is unknown.
  *
  * @param {Map<string, object>} byId The local registry index.
  * @param {Set<string>} knownFitness Rule/fitness ids the workspace declares.
@@ -399,7 +422,7 @@ export function adrsBinding(records, fitnessId) {
  * @returns {"adr"|"fitness"|"unknown"}
  */
 export function resolveDecisionRef(byId, knownFitness, ref) {
-  if (byId.has(ref)) return "adr";
+  if (byId.has(stripAdrPrefix(ref))) return "adr";
   if (knownFitness.has(ref)) return "fitness";
   return "unknown";
 }
