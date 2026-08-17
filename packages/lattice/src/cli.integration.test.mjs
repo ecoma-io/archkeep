@@ -1557,6 +1557,106 @@ export const fitness = [
     }
   });
 
+  it("does not crash when fitness is declared with no architecture-intent.json anywhere — the supported configuration where fitness lives in the policy file alone", async () => {
+    // P1-14 regression: `fitnessCommand` called `driftForCheck` unconditionally
+    // and built its own verdict-shaped `intent` straight from the result, so a
+    // workspace that legitimately has no architecture-intent.json (fully
+    // supported — fitness needs no intent file to run) reached
+    // `judgeIntent(undefined, ...)` inside `driftForCheck`, which dereferenced
+    // `intent.boundaries` on `undefined` and threw a raw, unhandled
+    // `TypeError: Cannot read properties of undefined (reading 'boundaries')`
+    // straight out to the operator instead of a verdict or a named refusal.
+    // A self-contained fixture — never the shared `nativeRoot`/`nativeContext`
+    // above, which always tracks an architecture-intent.json for the drift
+    // tests — is the only way to exercise "fitness declared, no intent file at
+    // all". One row needs no intent (`coverage-minimum`) and must still
+    // evaluate normally; one row DOES need intent (`drift-free`) and must read
+    // `unknown` — "cannot judge" — never a crash and never a false `pass`.
+    const root = mkdtempSync(join(tmpdir(), "fitness-no-intent-"));
+    try {
+      const writeFixture = (relativePath, text) => {
+        mkdirSync(join(root, relativePath, ".."), { recursive: true });
+        writeFileSync(join(root, relativePath), text);
+      };
+      writeFixture(
+        "lattice.json",
+        JSON.stringify({
+          projects: {
+            declared: [{ root: "libs/domain", name: "domain", tags: ["layer:domain"] }],
+          },
+          // `module-boundaries.config.mjs` sits at the workspace root, which no
+          // declared project owns — the same waiver the shared native fixture
+          // above needs and explains.
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeFixture(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "full-coverage",
+    match: ["*"],
+    condition: { type: "coverage-minimum", statement: 100 },
+    reason: "every owned file must be analyzed",
+  },
+  {
+    name: "intent-clean",
+    match: ["*"],
+    condition: { type: "drift-free" },
+    reason: "must read unknown, never crash and never pass, with no intent file declared",
+  },
+];
+`,
+      );
+      writeFixture("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeFixture("libs/domain/doc.go", "package domain\n");
+      // No architecture-intent.json anywhere in the fixture or its tracked-file
+      // list — the exact condition the audit named.
+      const files = [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+      const streams = {
+        out: (t) => streams.lines.out.push(t),
+        err: (t) => streams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: root,
+        listFiles: () => files,
+      };
+      expect(await runCli(["fitness"], streams)).toBe(EXIT.ok);
+      const report = streams.lines.out.join("\n") + streams.lines.err.join("\n");
+      expect(report).not.toContain("Cannot read properties of undefined");
+      expect(report).not.toContain("TypeError");
+      expect(report).toContain("✔ full-coverage");
+      expect(report).toContain("⚠ intent-clean");
+      expect(report).toContain("cannot judge drift-free — no architecture-intent.json is declared");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("says nothing about README.md, since it is not an analyzable file — the coverage near-miss that keeps the check usable", async () => {
     const { report, violations, unchecked } = await check(
       { format: "text", config: null, paths: [] },
