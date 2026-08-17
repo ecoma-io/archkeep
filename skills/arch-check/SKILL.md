@@ -112,10 +112,10 @@ leave it sound must show the check green.
    into `check`'s exit code (`1` for any `fail`, `3` for any `unknown`). A
    profile cannot carry fitness: a profile's block is exactly
    `depConstraints`/`moduleBoundaryOptions`/`boundarySuppressions`, so a
-   profile-selected run folds no fitness functions. `check` is also the one
-   command that resolves a `profiles` registry; the descriptive commands beside
-   it do not. An _unverifiable_ intent is never a _satisfied_ one, and an
-   unresolved profile is never a satisfied law.
+   profile-selected run folds no fitness functions — the one capability that
+   stays file-only even though every command now resolves the profile itself.
+   An _unverifiable_ intent is never a _satisfied_ one, and an unresolved
+   profile is never a satisfied law.
 
 7. **For CI: generate SARIF.**
 
@@ -186,10 +186,7 @@ Those two inform a verdict; the rest only inform the reader. A build fails on
   detected, malformed boundary config, missing language manifests, an intent
   that cannot be established, or — in a profile-selected workspace — a profile
   that could not be resolved (unknown name, unknown `base`, a `base` cycle, an
-  unreadable registry). Remember that in a profile workspace `boundaryConfig`
-  holds a name, not a file, so a message about a boundary config with no
-  extension is pointing at profile selection, not a missing file. Do not re-run
-  until the gap is understood.
+  unreadable registry). Do not re-run until the gap is understood.
 - **Unexpected violations** — use `lattice explain` to understand why each import
   was flagged before deciding how to respond.
 - **No violations but expected some** — verify the boundary config applies to the
