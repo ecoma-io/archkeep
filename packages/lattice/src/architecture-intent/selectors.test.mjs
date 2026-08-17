@@ -124,4 +124,30 @@ describe("resolveMembers", () => {
       resolveMembers(["*", "!tag:type-package"], NODES),
     );
   });
+
+  it("excludes a project matching both a positive and a negative selector, regardless of list order", () => {
+    // The P1-10 regression: a boundary meant to exclude anything tagged
+    // `legacy` must not silently readmit a legacy project just because the
+    // list also carries a positive selector that project happens to match
+    // too. Before the fix, ONLY `patterns[0]` decided whether an implicit '*'
+    // seeded the union — so `["!tag:legacy", "tag:layer:app"]` (exclusion
+    // first) seeded the wildcard, and the later `tag:layer:app` selector then
+    // re-added `legacyApp` right after the exclusion had removed it, while
+    // the reverse order never seeded the wildcard and correctly dropped it.
+    // A project that should be excluded silently reappearing is the exact
+    // silent direction `AGENTS.md`'s empty-result invariant refuses.
+    const legacyApp = {
+      name: "legacyApp",
+      data: { root: "apps/legacy-app", tags: ["layer:app", "legacy"] },
+    };
+    const freshApp = { name: "freshApp", data: { root: "apps/fresh-app", tags: ["layer:app"] } };
+    const nodes = { legacyApp, freshApp };
+
+    const exclusionFirst = resolveMembers(["!tag:legacy", "tag:layer:app"], nodes);
+    const inclusionFirst = resolveMembers(["tag:layer:app", "!tag:legacy"], nodes);
+
+    expect(exclusionFirst).toEqual(["freshApp"]);
+    expect(inclusionFirst).toEqual(["freshApp"]);
+    expect(exclusionFirst).toEqual(inclusionFirst);
+  });
 });
