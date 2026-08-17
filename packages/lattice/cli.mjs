@@ -993,10 +993,78 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
 }
 
 /**
+ * The fixed names `--output` may never resolve to, resolved the same ways
+ * this file already resolves each of them elsewhere: `INTENT_FILE` and
+ * `LATTICE_MODEL_FILE` are workspace-root-relative constants read at
+ * `resolve(root, …)` wherever `check`/`drift` load them; the boundary law is
+ * `options.config` resolved `isAbsolute(...) ? ... : resolve(cwd, ...)` — the
+ * exact expression repeated at every other `options.config` read in this
+ * file — falling back to `DEFAULT_OPTIONS.boundaryConfig` at the workspace
+ * root when no `--config` override was given, because that un-overridden
+ * default is what `check` would load too.
+ *
+ * Deliberately narrow: a workspace that renamed its boundary law via
+ * `nx.json`'s `plugins[].options.boundaryConfig` (or the equivalent
+ * `lattice.json` field) and is run with no `--config` override is not
+ * covered by the third entry — resolving that name needs the full
+ * per-provider options read (`readPluginOptions`, or `lattice.json`'s own
+ * inline-vs-filename `boundaryConfig`) that only `resolveCommandContext`
+ * does today, and duplicating that here to cover one more name was judged
+ * not worth the risk of this guard itself gaining a new, unrelated failure
+ * mode. The two fixed names and the un-overridden default close the finding's
+ * own examples; a renamed boundary config is the residual gap.
+ *
+ * `root === null` (no workspace reachable from `cwd`) returns an empty map
+ * rather than throwing: every caller of `writeOutputReport` below already
+ * resolved a workspace earlier in its own run, from this same `cwd`, or it
+ * would not have reached the point of writing a report at all — this is a
+ * defensive fallback, not a path any command here takes today.
+ *
+ * @param {string} cwd
+ * @param {string|null|undefined} configOption This run's `options.config`.
+ * @returns {Map<string, string>} absolute path → the name to name back in a
+ *   refusal, for every fixed name that resolved.
+ */
+function governanceOutputTargets(cwd, configOption) {
+  const root = resolveWorkspaceRootForUsage(cwd);
+  if (root === null) return new Map();
+  const boundaryConfigName = configOption ?? DEFAULT_OPTIONS.boundaryConfig;
+  const boundaryConfigAbs = configOption
+    ? isAbsolute(configOption)
+      ? configOption
+      : resolve(cwd, configOption)
+    : resolve(root, DEFAULT_OPTIONS.boundaryConfig);
+  return new Map([
+    [resolve(root, INTENT_FILE), INTENT_FILE],
+    [resolve(root, LATTICE_MODEL_FILE), LATTICE_MODEL_FILE],
+    [boundaryConfigAbs, boundaryConfigName],
+  ]);
+}
+
+/**
  * Writes a rendered report to `--output`'s path, atomically and without
  * following a symlink planted at the temp path — the one function every
  * `run*` below calls rather than the 16 near-identical inline copies this
  * replaces.
+ *
+ * Refuses first, before any write is attempted, when `outputPath` resolves to
+ * a name `governanceOutputTargets` above guards: the workspace's declared
+ * architecture intent, its native model file, or its boundary law. `{flag:
+ * "wx"}` below stops the temp write from following or truncating through
+ * whatever already sits at `<target>.tmp`; it says nothing about the FINAL
+ * name, and `renameSync` replaces whatever is there unconditionally — which
+ * is exactly what makes an ordinary `--output` reusable across runs
+ * (`docs/usage/ci.md`'s own recipe reruns `--output boundaries.json` on every
+ * push, relying on the previous run's file being silently replaced). That
+ * reuse is fine for a report; it is never fine for a file THIS TOOL reads as
+ * the workspace's own declared fact — `lattice check --output
+ * architecture-intent.json` (a copy-pasted flag, a typo'd path, or a CI
+ * script a pull request edited) would otherwise silently replace a tracked
+ * governance file with a report, exit 0, with the loss surfacing only later
+ * and elsewhere, the first time something else tries to read the file it used
+ * to be. Deliberately narrow: an arbitrary tracked file this tool never
+ * assigns a meaning to is not refused, because refusing every pre-existing
+ * target would break the documented reuse above.
  *
  * Written to a sibling `.tmp` file first, then renamed onto the target — a
  * rename within one directory is atomic, so a reader of `outputPath` (this
@@ -1019,17 +1087,32 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
  * by a crashed prior run — or a file that happens to collide with the name —
  * used to be silently truncated and then renamed away; now the write refuses
  * with EEXIST, loud, rather than destroying a file this run did not create.
- * `renameSync` itself needs no equivalent guard: POSIX `rename(2)` replaces
- * whatever sits at the destination path — including a symlink there — as a
- * single directory-entry swap, and never dereferences it to write through.
+ * `renameSync` itself needs no equivalent guard against a SYMLINK: POSIX
+ * `rename(2)` replaces whatever sits at the destination path — including a
+ * symlink there — as a single directory-entry swap, and never dereferences it
+ * to write through. It needs the governance guard above instead, because a
+ * symlink was never the only thing worth protecting at that destination.
  *
  * @param {string} outputPath Resolved `--output` path.
  * @param {string} text The rendered report, newline-terminated by the caller.
  * @param {{err: Function}} env
+ * @param {string} cwd This run's working directory, for resolving both
+ *   `outputPath` and the governance names above the same way.
+ * @param {string|null|undefined} configOption This run's `options.config`.
  * @returns {boolean} `true` on success; `false` after reporting the failure
  *   to `env.err` — the caller's cue to return its own no-verdict exit code.
  */
-function writeOutputReport(outputPath, text, env) {
+function writeOutputReport(outputPath, text, env, cwd, configOption) {
+  const outputAbs = isAbsolute(outputPath) ? outputPath : resolve(cwd, outputPath);
+  const guardedName = governanceOutputTargets(cwd, configOption).get(outputAbs);
+  if (guardedName !== undefined) {
+    env.err(
+      `lattice: --output '${outputPath}' resolves to '${guardedName}' — this tool reads that ` +
+        `file as the workspace's own declared fact, and overwriting it with a report would ` +
+        `destroy the declaration instead. Write the report somewhere else.`,
+    );
+    return false;
+  }
   const tmpOutput = `${outputPath}.tmp`;
   let tmpCreated = false;
   try {
@@ -1084,7 +1167,7 @@ async function runCheck(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = result.report.endsWith("\n") ? result.report : `${result.report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
     // The report went to a file, so the log would otherwise say nothing at all
     // about a run that just failed the build.
     env.err(
@@ -1184,7 +1267,9 @@ async function runGraph(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    // `graph` has no `--config` flag (`GRAPH_FLAG_HELP`) — there is no
+    // override to pass, only the workspace's un-overridden default to guard.
+    if (!writeOutputReport(options.output, reportText, env, cwd, null)) return EXIT.error;
     env.err(
       `lattice: ${result.projects.length} projects, ${result.dependencies.length} edges ` +
         `→ ${options.output}`,
@@ -1257,7 +1342,7 @@ async function runDiff(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
     env.err(`lattice: diff complete → ${options.output}`);
   } else {
     env.out(report);
@@ -1303,7 +1388,9 @@ async function runDrift(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    // `drift` has no `--config` flag (`DRIFT_FLAG_HELP`) — there is no
+    // override to pass, only the workspace's un-overridden default to guard.
+    if (!writeOutputReport(options.output, reportText, env, cwd, null)) return EXIT.error;
     env.err(
       `lattice: ${result.drift.observed.projects} projects, ${result.drift.observed.edges} edges ` +
         `→ ${options.output}`,
@@ -1356,7 +1443,9 @@ async function runProvenance(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    // `provenance` has no `--config` flag (`PROVENANCE_FLAG_HELP`) — there is
+    // no override to pass, only the workspace's un-overridden default to guard.
+    if (!writeOutputReport(options.output, reportText, env, cwd, null)) return EXIT.error;
     env.err(`lattice: ${result.rows.length} governance rows → ${options.output}`);
   } else {
     env.out(report);
@@ -1406,7 +1495,9 @@ async function runReconcile(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    // `reconcile` has no `--config` flag (`RECONCILE_FLAG_HELP`) — there is no
+    // override to pass, only the workspace's un-overridden default to guard.
+    if (!writeOutputReport(options.output, reportText, env, cwd, null)) return EXIT.error;
     env.err(
       `lattice: ${result.reconcile.observed.projects} projects, ${result.reconcile.observed.edges} edges ` +
         `→ ${options.output}`,
@@ -1474,7 +1565,7 @@ async function runWaivers(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
     env.err(
       `lattice: ${result.waivers.waivers.length} waivers on the table ` + `→ ${options.output}`,
     );
@@ -1542,7 +1633,7 @@ async function runFitness(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
     env.err(
       `lattice: ${result.fitness.functions.length} fitness function` +
         `${result.fitness.functions.length === 1 ? "" : "s"} judged (${result.fitness.verdict}) ` +
@@ -1618,7 +1709,7 @@ async function runImpact(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
     env.err(
       `lattice: ${result.impact.dependents.length} project` +
         `${result.impact.dependents.length === 1 ? "" : "s"}` +
@@ -1693,7 +1784,7 @@ async function runExplain(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
     env.err(`lattice: explain complete → ${options.output}`);
   } else {
     env.out(report);
@@ -1778,7 +1869,7 @@ async function runContextCommand(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
     env.err(`lattice: context complete → ${options.output}`);
   } else {
     env.out(report);
@@ -1843,7 +1934,9 @@ async function runAdr(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    // `adr` has no `--config` flag (`ADR_FLAG_HELP`) — there is no override to
+    // pass, only the workspace's un-overridden default to guard.
+    if (!writeOutputReport(options.output, reportText, env, cwd, null)) return EXIT.error;
     env.err(`lattice: adr complete → ${options.output}`);
   } else {
     env.out(report);
@@ -1937,7 +2030,7 @@ async function runHistory(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
     env.err(`lattice: history complete → ${options.output}`);
   } else {
     env.out(report);
@@ -2006,7 +2099,7 @@ async function runDebt(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
     env.err(
       `lattice: ${result.ledger.total} debt entr` +
         `${result.ledger.total === 1 ? "y" : "ies"} → ${options.output}`,
@@ -2057,7 +2150,9 @@ async function runDiscover(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    // `discover` has no `--config` flag (`DISCOVER_FLAG_HELP`) — there is no
+    // override to pass, only the workspace's un-overridden default to guard.
+    if (!writeOutputReport(options.output, reportText, env, cwd, null)) return EXIT.error;
     env.err(
       `lattice: ${result.discovery.projects.length} projects, ${result.discovery.edges.length} ` +
         `edges` +
@@ -2145,7 +2240,7 @@ async function runHealth(options, { cwd, env }) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
-    if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
     env.err(`lattice: health complete → ${options.output}`);
   } else {
     env.out(report);
