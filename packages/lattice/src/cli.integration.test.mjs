@@ -1393,13 +1393,28 @@ export const fitness = [
     expect(out).toContain("no matched project carries tag");
   });
 
-  it("exits 3 when a path-scoped run hides whole-file coverage — the scoped flag must reach coverage-minimum as unknown, never pass", async () => {
-    // P0-1 regression: `fitnessSnapshot` used to put `scoped` on the snapshot's
-    // top level, where `judgeFitnessRow` never read it — so `check libs/adapter`
-    // over a `coverage-minimum` fitness claimed `pass` over the one file it
-    // actually analyzed, the silent direction. The flag now rides inside
-    // `analysis`, and the run must exit 3 naming scope instead of claiming full
-    // coverage.
+  it("a path-scoped run reports coverage-minimum not_applicable rather than a partial number, and — since P1-19 — that alone no longer exits 3", async () => {
+    // P0-1 regression (still guarded here): `fitnessSnapshot` used to put
+    // `scoped` on the snapshot's top level, where `judgeFitnessRow` never read
+    // it — so `check libs/adapter` over a `coverage-minimum` fitness claimed
+    // `pass` over the one file it actually analyzed, the silent direction. The
+    // flag now rides inside `analysis`, and `coverage-minimum` must never read
+    // that partial view as a real number.
+    //
+    // P1-19 regression (this test's own reason to exist now): the fix for
+    // P0-1 answered `unknown`, which folds into `check`'s exit code the same
+    // as a genuine coverage hole — so `check libs/adapter` exited 3 here even
+    // though the scoped subtree (`libs/adapter/adapter.go`, no imports at all)
+    // has no problem of its own, and every other axis (boundary violations,
+    // the tracked intent) is clean. The audit found this made `check <path>`
+    // exit 3 UNCONDITIONALLY in any `coverage-minimum`-declaring workspace —
+    // exactly the shape this repository's own root `module-boundaries.config.mjs`
+    // declares — while four documentation/skill surfaces recommend a scoped
+    // run as a fast pre-commit check with no warning that the combination
+    // always failed. `coverage-minimum` now answers `not_applicable` instead:
+    // still never `pass` (P0-1 stays fixed) and still a loud, named row (never
+    // silent), but no longer folded into `fitnessFail`/`fitnessUnknown`, so
+    // this clean scoped run now exits 0.
     writeNative(
       "fitness-scoped.config.mjs",
       `export const depConstraints = [
@@ -1427,16 +1442,64 @@ export const fitness = [
 `,
     );
     const streams = nativeEnv();
-    // `libs/adapter` scopes the run to one project's files; the other project's
-    // files were not analyzed, so whole-tree coverage is not determinable. The
-    // domain→adapter crossing is excluded the same way the no-verdict test
-    // excludes it, so exit 3 here is the scope verdict, not a boundary finding.
+    // `libs/adapter` scopes the run to one project's files; the other
+    // project's files were not analyzed, so whole-tree coverage is not
+    // determinable — but `libs/adapter/adapter.go` itself has no import at
+    // all, so the scoped subset genuinely has nothing wrong with it.
     expect(
       await runCli(["check", "--config", "fitness-scoped.config.mjs", "libs/adapter"], streams),
-    ).toBe(EXIT.error);
+    ).toBe(EXIT.ok);
     const out = streams.lines.out.join("\n");
-    expect(out).toContain("⚠ scoped-coverage");
-    expect(out).toContain("was scoped to specific paths");
+    expect(out).toContain("◌ scoped-coverage");
+    expect(out).toContain("does not apply to a path-scoped run");
+    // Never the silent direction either: a scoped run must not be read as a
+    // measured full-coverage pass.
+    expect(out).not.toContain("✔ scoped-coverage");
+  });
+
+  it("a real violation inside a scoped path still exits 1 in a coverage-minimum-declaring workspace — not_applicable never masks a finding (P1-19)", async () => {
+    // The other silent direction P1-19's fix must not open: `not_applicable`
+    // must never outrank a real finding. Scoped to `libs/domain` instead —
+    // the side of the fixture's real domain→adapter crossing — so the
+    // boundary violation is squarely IN scope this time, and the run must
+    // still fail on it despite the very same `coverage-minimum` row being
+    // declared and equally unable to judge a scoped run.
+    writeNative(
+      "fitness-scoped-violation.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "scoped-coverage",
+    match: ["*"],
+    condition: { type: "coverage-minimum", statement: 100 },
+    reason: "scoping must never read as full coverage",
+  },
+];
+`,
+    );
+    const streams = nativeEnv();
+    expect(
+      await runCli(
+        ["check", "--config", "fitness-scoped-violation.config.mjs", "libs/domain"],
+        streams,
+      ),
+    ).toBe(EXIT.violations);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("onlyTagsConstraintViolation");
+    expect(out).toContain("◌ scoped-coverage");
   });
 
   it("judges drift-free against the verdict-shaped intent, not the raw file — a clean intent passes, never fail", async () => {

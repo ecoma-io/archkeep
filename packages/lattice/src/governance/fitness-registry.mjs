@@ -329,8 +329,13 @@ export function judgeFitnessRow(row, graph, analysis, intent, suppressions) {
  * A path-scoped run (`lattice check <path>`) analyzes a subset of owned files,
  * so coverage over those projects' whole file sets is not determinable from it;
  * the snapshot marks that with `scoped`, and `coverage-minimum` answers
- * `unknown` there, never a low-looking number that is really "we only looked
- * at part of the tree".
+ * `not_applicable` there (`./fitness-rules.mjs`), never a
+ * low-looking number that is really "we only looked at part of the tree" —
+ * and, unlike `unknown`, `not_applicable` does not by itself fail `check`
+ * (P1-19: it used to answer `unknown`, which folded into `check`'s exit code
+ * the same as a real coverage hole, so a scoped run exited 3 in ANY
+ * `coverage-minimum`-declaring workspace regardless of what the scoped path
+ * held).
  *
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{analysis?: object, intent?: object|null, suppressions?: object[],

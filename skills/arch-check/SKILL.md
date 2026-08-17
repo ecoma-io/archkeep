@@ -149,7 +149,11 @@ leave it sound must show the check green.
   is asking `lattice adr` the id.
 - **Empty output from a scoped check does NOT mean the workspace is safe.**
   Cycle rules and lazy-load rules judge the whole file graph. A scoped check is
-  a fast filter; a full check is the gate.
+  a fast filter; a full check is the gate. A fitness function that needs the
+  whole tree (`coverage-minimum` today) reports `not_applicable` in a scoped
+  run rather than a real verdict — that is expected, not a coverage gap to
+  chase, and it does not by itself fail the run. Only an unscoped `check`
+  actually judges it.
 
 ## Beyond import edges: the workspace-level checks
 

@@ -793,7 +793,13 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // same no-verdict lane a zero-member boundary takes. `scoped` marks the
   // path-scoped case (`check <path>`), where coverage over a matched
   // project's whole file set is not determinable — the registry answers that
-  // `unknown`, never a partial-number verdict.
+  // `not_applicable`, never a partial-number verdict and never `unknown`
+  // either (P1-19): `coverage-minimum` cannot be judged by ANY scoped run,
+  // which is a fact about the run mode, not evidence of a coverage hole, so it
+  // joins `skipped` in NOT riding `fitnessFail`/`fitnessUnknown` below — a
+  // scoped run over an otherwise-clean subtree in a workspace that declares
+  // `coverage-minimum` no longer exits 3 for a question this run was never in
+  // a position to answer.
   let fitness = null;
   if (config.fitness !== undefined) {
     const { decisions, overall } = fitnessForCheck(commandContext, {
