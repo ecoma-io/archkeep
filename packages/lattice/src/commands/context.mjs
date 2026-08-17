@@ -32,6 +32,7 @@ import {
   readPluginOptions,
 } from "../options.mjs";
 import { readProjectGraph } from "../providers/nx.mjs";
+import { buildDependencies } from "../providers/native/graph.mjs";
 import { LATTICE_MODEL_FILE } from "../providers/native/model.mjs";
 import { MOON_DIR, MOON_ALT_DIR, moonProvider } from "../providers/moon.mjs";
 import { nativeProvider } from "../providers/native/index.mjs";
@@ -348,12 +349,56 @@ export function resolveCommandContext(
     annotateMFERemotes(graph.nodes, workspace.readFile);
     annotatePackageFacts(graph.nodes, workspace.readFile);
 
+    // Unlike the Nx path, Moon's own graph carries NO edge this package's own
+    // analysis found: `moon project-graph --json` only knows a project
+    // depends on another when `moon.yml` says `dependsOn`, because Moon has no
+    // plugin hook this package can register the way `../nx.mjs`'s
+    // `createDependencies` registers into Nx's own graph computation. A Go,
+    // Rust or Python import crossing a project boundary with no hand-written
+    // `dependsOn` entry is therefore invisible to `graph.dependencies` and to
+    // every verdict computed from it — architecture-intent, drift, cycles,
+    // `impact`, `diff` — while `check`'s own import-site rules judge it fine,
+    // because those read analysis records directly rather than the graph.
+    // Analyzing the whole tree first, before `paths` narrows anything, mirrors
+    // the native branch above for the same reason it states there: an edge
+    // from a project outside the scoped paths is still part of the graph a
+    // cycle or a transitive violation is judged against.
+    const wholeTreeAnalysis = analyzeWorkspace(
+      workspace,
+      owned.map(({ file }) => file),
+    );
+    const projectOfFile = new Map(owned.map(({ file, project }) => [file, project]));
+    const importEdges = buildDependencies({
+      importSites: wholeTreeAnalysis.imports,
+      nodes: graph.nodes,
+      projectOf: (file) => projectOfFile.get(file),
+    });
+    const seenEdges = new Set(
+      Object.values(graph.dependencies)
+        .flat()
+        .map((edge) => JSON.stringify([edge.source, edge.target, edge.type])),
+    );
+    for (const [source, edges] of Object.entries(importEdges)) {
+      for (const edge of edges) {
+        const key = JSON.stringify([edge.source, edge.target, edge.type]);
+        if (seenEdges.has(key)) continue;
+        seenEdges.add(key);
+        (graph.dependencies[source] ??= []).push(edge);
+      }
+    }
+
     const selected = selectFiles(
       owned.map(({ file }) => file),
       paths,
       { root, cwd },
     );
-    ({ imports, failures, analyzed, analyzedFiles } = analyzeWorkspace(workspace, selected));
+    const selectedFiles = new Set(selected);
+    imports = wholeTreeAnalysis.imports.filter((site) => selectedFiles.has(site.sourceFile));
+    failures = wholeTreeAnalysis.failures.filter((failure) =>
+      selectedFiles.has(failure.sourceFile),
+    );
+    analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
+    analyzed = analyzedFiles.length;
     // `coverage.exempt` is a native-only key (`../providers/native/coverage.mjs`'s
     // header: "Nx has no equivalent question") — Moon carries no such list.
     exemptedFiles = [];
