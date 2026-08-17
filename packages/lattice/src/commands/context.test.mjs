@@ -475,3 +475,157 @@ describe("resolveCommandContext — the Moon branch scopes before it analyzes", 
     expect(context.pluginGap).toEqual({ registered: true, manifests: [] });
   });
 });
+
+describe("resolveCommandContext — the unclaimed-file coverage hole, on the Nx and Moon branches too", () => {
+  // P1-12: the native branch's own unclaimed-file check ("the native branch
+  // analyzes the whole tree before scoping" above draws on the same
+  // `discovered.failures`) had no equivalent here — `createWorkspace` drops a
+  // file no project owns (`../workspace.mjs`'s own header), and neither the
+  // Nx nor the Moon branch ever looked at what got dropped. A tracked,
+  // analyzable file outside every declared project's root was simply never
+  // selected for analysis, never counted, and never mentioned — `analysis.failures`
+  // stayed exactly as populated as a workspace where every file really was
+  // owned.
+  it("adds a whole-file failure for a tracked Go file outside every declared Nx project", () => {
+    const { root, write } = fixture("context-nx-unclaimed-");
+    write("nx.json", "{}\n");
+    write("libs/a/a.go", "package a\n");
+    write("libs/orphan/orphan.go", "package orphan\n");
+
+    const graph = {
+      nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+      dependencies: { a: [] },
+    };
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      {
+        readGraph: () => graph,
+        listFiles: () => ["nx.json", "libs/a/a.go", "libs/orphan/orphan.go"],
+      },
+    );
+
+    expect(context.provider).toBe("nx");
+    const unclaimed = context.analysis.failures.filter(
+      (failure) => failure.sourceFile === "libs/orphan/orphan.go",
+    );
+    expect(unclaimed).toHaveLength(1);
+    // Whole-file, not one position in it — the same shape a language
+    // analyzer produces for a file it could not read at all.
+    expect(unclaimed[0].line).toBeNull();
+    expect(unclaimed[0].reason).toContain("not owned by any project");
+    // Never handed to the analyzer as if some project claimed it.
+    expect(context.analysis.analyzedFiles).not.toContain("libs/orphan/orphan.go");
+  });
+
+  it("adds a whole-file failure for a tracked Go file outside every declared Moon project", () => {
+    const { root, write } = fixture("context-moon-unclaimed-");
+    write(".moon/tool.yml", " ");
+    write("libs/a/a.go", "package a\n");
+    write("libs/orphan/orphan.go", "package orphan\n");
+
+    const graph = {
+      nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+      dependencies: { a: [] },
+    };
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      {
+        readGraph: () => graph,
+        listFiles: () => [".moon/tool.yml", "libs/a/a.go", "libs/orphan/orphan.go"],
+      },
+    );
+
+    expect(context.provider).toBe("moon");
+    const unclaimed = context.analysis.failures.filter(
+      (failure) => failure.sourceFile === "libs/orphan/orphan.go",
+    );
+    expect(unclaimed).toHaveLength(1);
+    expect(unclaimed[0].line).toBeNull();
+    expect(unclaimed[0].reason).toContain("not owned by any project");
+    expect(context.analysis.analyzedFiles).not.toContain("libs/orphan/orphan.go");
+  });
+
+  it("still reports the Nx orphan when the run is scoped away from it, same as native's own posture", () => {
+    // The scoped-run regression, mirrored from native: a `check <path>` that
+    // excludes the orphan's directory must not be able to make it disappear.
+    // `unclaimedFileFailures` is computed from `tracked`, never from the
+    // scoped selection, for exactly this reason.
+    const { root, write } = fixture("context-nx-unclaimed-scoped-");
+    write("nx.json", "{}\n");
+    write("libs/a/a.go", "package a\n");
+    write("libs/orphan/orphan.go", "package orphan\n");
+
+    const graph = {
+      nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+      dependencies: { a: [] },
+    };
+
+    const context = resolveCommandContext(
+      { cwd: root, paths: ["libs/a"] },
+      {
+        readGraph: () => graph,
+        listFiles: () => ["nx.json", "libs/a/a.go", "libs/orphan/orphan.go"],
+      },
+    );
+
+    expect(
+      context.analysis.failures.some((failure) => failure.sourceFile === "libs/orphan/orphan.go"),
+    ).toBe(true);
+  });
+
+  it("claims a file under a declared project's root, so only the true orphan is reported", () => {
+    // The negative case every positive one above needs: a file that IS inside
+    // a declared project's directory must never be reported as unclaimed,
+    // whichever provider answered.
+    const { root, write } = fixture("context-nx-unclaimed-negative-");
+    write("nx.json", "{}\n");
+    write("libs/a/a.go", "package a\n");
+
+    const graph = {
+      nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+      dependencies: { a: [] },
+    };
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      {
+        readGraph: () => graph,
+        listFiles: () => ["nx.json", "libs/a/a.go"],
+      },
+    );
+
+    expect(context.analysis.failures).toEqual([]);
+  });
+
+  it("does not flag a root-level .mjs tooling script — Nx's own graph and @nx/enforce-module-boundaries already cover that language", () => {
+    // The scope this check deliberately does NOT widen to: TypeScript,
+    // JavaScript and Vue already have Nx's own edge-drawing and ESLint's own
+    // boundary enforcement, so a config file living outside every declared
+    // project is the everyday shape of a real Nx workspace (this
+    // repository's own root is exactly this shape), not a silent hole this
+    // tool introduces. Widening `UNCLAIMED_CHECK_LANGUAGES` back to "every
+    // analyzable file" is the regression this test exists to catch — it
+    // broke this repository's own `moon`-driven `check` when tried.
+    const { root, write } = fixture("context-nx-unclaimed-js-excluded-");
+    write("nx.json", "{}\n");
+    write("libs/a/a.go", "package a\n");
+    write("tooling.config.mjs", "export const x = 1;\n");
+
+    const graph = {
+      nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+      dependencies: { a: [] },
+    };
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      {
+        readGraph: () => graph,
+        listFiles: () => ["nx.json", "libs/a/a.go", "tooling.config.mjs"],
+      },
+    );
+
+    expect(context.analysis.failures).toEqual([]);
+  });
+});

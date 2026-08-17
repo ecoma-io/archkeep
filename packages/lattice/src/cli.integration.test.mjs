@@ -1592,6 +1592,155 @@ export const moduleBoundaryOptions = {
   });
 });
 
+describe("the unclaimed-file coverage hole, on the Nx and Moon providers too", () => {
+  // P1-12: the native fixture above ("exits 3 over a file no declared project
+  // owns, naming it") already proves native's own posture; this block proves
+  // the Nx and Moon branches now reach the identical verdict over the
+  // identical shape of tree, where they used to exit 0 with `coverage.complete:
+  // true` — a tracked, analyzable file no declared project's root covers was
+  // simply never selected for analysis, never counted, and never mentioned.
+  // Each fixture is a small, self-contained tmpdir with one project and one
+  // file sitting outside it — scoped to the declared project's own directory,
+  // the same scoped-run rigor the native fixture's regression test applies,
+  // so the orphan elsewhere in the tree cannot be hidden by naming a path
+  // that excludes it.
+  const permissiveBoundaryConfig = `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`;
+
+  it("exits 3 over a tracked Go file outside every declared Nx project, naming it — same posture as native", async () => {
+    const nxRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-nx-unclaimed-"));
+    try {
+      const writeNx = (relativePath, text) => {
+        mkdirSync(join(nxRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(nxRoot, relativePath), text);
+      };
+      writeNx("nx.json", "{}\n");
+      writeNx("module-boundaries.config.mjs", permissiveBoundaryConfig);
+      writeNx("libs/a/a.go", "package a\n");
+      writeNx("libs/orphan/orphan.go", "package orphan\n");
+      const graph = {
+        nodes: { a: { name: "a", type: "lib", data: { root: "libs/a", tags: [] } } },
+        dependencies: { a: [] },
+      };
+      const streams = {
+        out: (t) => streams.lines.out.push(t),
+        err: (t) => streams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: nxRoot,
+        readGraph: () => graph,
+        listFiles: () => [
+          "nx.json",
+          "module-boundaries.config.mjs",
+          "libs/a/a.go",
+          "libs/orphan/orphan.go",
+        ],
+      };
+      expect(await runCli(["check", "libs/a"], streams)).toBe(EXIT.error);
+      const out = streams.lines.out.join("\n");
+      expect(out).toContain("libs/orphan/orphan.go");
+      expect(out).toContain("not owned by any project");
+    } finally {
+      rmSync(nxRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("exits 3 over a tracked Go file outside every declared Moon project, naming it — same posture as native", async () => {
+    const moonRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-moon-unclaimed-"));
+    try {
+      const writeMoon = (relativePath, text) => {
+        mkdirSync(join(moonRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(moonRoot, relativePath), text);
+      };
+      writeMoon(".moon/workspace.yml", "projects:\n  a: libs/a\n");
+      writeMoon("module-boundaries.config.mjs", permissiveBoundaryConfig);
+      writeMoon("libs/a/a.go", "package a\n");
+      writeMoon("libs/orphan/orphan.go", "package orphan\n");
+      const graph = {
+        nodes: { a: { name: "a", type: "lib", data: { root: "libs/a", tags: [] } } },
+        dependencies: { a: [] },
+      };
+      const streams = {
+        out: (t) => streams.lines.out.push(t),
+        err: (t) => streams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: moonRoot,
+        readGraph: () => graph,
+        listFiles: () => [
+          ".moon/workspace.yml",
+          "module-boundaries.config.mjs",
+          "libs/a/a.go",
+          "libs/orphan/orphan.go",
+        ],
+      };
+      expect(await runCli(["check", "libs/a"], streams)).toBe(EXIT.error);
+      const out = streams.lines.out.join("\n");
+      expect(out).toContain("libs/orphan/orphan.go");
+      expect(out).toContain("not owned by any project");
+    } finally {
+      rmSync(moonRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports coverage.complete: false and status no-verdict in the JSON envelope over the Nx orphan, never status ok", async () => {
+    // The JSON twin of the exit-code assertion above: a caller branching on
+    // `coverage.complete` or `status` alone must see the same refusal a
+    // caller branching on the exit code sees — this is the exact asymmetry
+    // the finding names ("exit 3 under native and exit 0 with complete: true
+    // under Nx and Moon").
+    const nxRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-nx-unclaimed-json-"));
+    try {
+      const writeNx = (relativePath, text) => {
+        mkdirSync(join(nxRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(nxRoot, relativePath), text);
+      };
+      writeNx("nx.json", "{}\n");
+      writeNx("module-boundaries.config.mjs", permissiveBoundaryConfig);
+      writeNx("libs/a/a.go", "package a\n");
+      writeNx("libs/orphan/orphan.go", "package orphan\n");
+      const graph = {
+        nodes: { a: { name: "a", type: "lib", data: { root: "libs/a", tags: [] } } },
+        dependencies: { a: [] },
+      };
+      const { report } = await check(
+        { format: "json", config: null, paths: [] },
+        {
+          cwd: nxRoot,
+          readGraph: () => graph,
+          listFiles: () => [
+            "nx.json",
+            "module-boundaries.config.mjs",
+            "libs/a/a.go",
+            "libs/orphan/orphan.go",
+          ],
+        },
+      );
+      const envelope = JSON.parse(report);
+      expect(envelope.status).toBe("no-verdict");
+      expect(envelope.exitCode).toBe(3);
+      expect(envelope.coverage.complete).toBe(false);
+      expect(envelope.coverage.notAnalyzed).toEqual([
+        {
+          file: "libs/orphan/orphan.go",
+          reason: expect.stringContaining("not owned by any project"),
+        },
+      ]);
+      expect(envelope.decision.verdict).toBe("unknown");
+    } finally {
+      rmSync(nxRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("check judges a declared edge with no import site behind it", () => {
   // `evaluate()` iterates only import sites (`src/rules/README.md`: "analysis
   // records and the loaded config, nothing else"), so an `implicitDependencies`
