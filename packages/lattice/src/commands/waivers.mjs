@@ -135,7 +135,18 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
     blindSpots: analysis.failures
       .filter((failure) => !isWholeFileFailure(failure))
       .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
-    notes: [],
+    // `remainingMs` reflects the wall clock at the moment of THIS run, not the
+    // workspace — it is expected to differ between two runs of an unchanged
+    // tree, by design (`../governance/clock.mjs`). Disclosed here, in-band,
+    // so a consumer diffing or hashing two envelopes to detect real drift
+    // knows to exclude it rather than read clock drift as architectural
+    // change; every other field is deterministic given the same law and tree.
+    notes: [
+      "remainingMs is the wall clock at the moment of this run, not a fact about the " +
+        "workspace — it is expected to differ between two runs of an unchanged tree and " +
+        "should be excluded from any diff or hash meant to detect real change. Every other " +
+        "field here is deterministic given the same law and the same tree.",
+    ],
   };
 
   const context = { root, provider, marker, provenance: resolveProvenance(root) };

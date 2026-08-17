@@ -142,11 +142,22 @@ export async function debtCommand(dir, commandContext, options = {}) {
       .filter((failure) => !isWholeFileFailure(failure))
       .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
     // The ledger names what it could not age — a reader can tell "aged" from
-    // "observed, not yet aged".
+    // "observed, not yet aged". The second note discloses `sampleTime`'s own
+    // nature: it reflects the wall clock at the moment of THIS run, not the
+    // workspace, so it is expected to differ between two runs of an unchanged
+    // tree, by design (`../governance/clock.mjs`) — disclosed here, in-band,
+    // so a consumer diffing or hashing two envelopes to detect real drift
+    // knows to exclude it rather than read clock drift as architectural
+    // change; every other field is deterministic given the same law, history
+    // directory and tree.
     notes: [
       `ledger ages are snapshot-relative; ${ledger.entries.length} entr` +
         `${ledger.entries.length === 1 ? "y" : "ies"} derived across ${read.files.length} snapshot` +
         `${read.files.length === 1 ? "" : "s"}`,
+      "sampleTime is the wall clock at the moment of this run, not a fact about the " +
+        "workspace — it is expected to differ between two runs of an unchanged tree and " +
+        "should be excluded from any diff or hash meant to detect real change. Every other " +
+        "field here is deterministic given the same law, history directory and tree.",
     ],
   };
 
