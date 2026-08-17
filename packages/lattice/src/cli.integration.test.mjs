@@ -2060,6 +2060,136 @@ export const moduleBoundaryOptions = {
   });
 });
 
+describe("check quotes an unresolved decisionRef loudly rather than as a confirmed authority (P1-02)", () => {
+  // The audit's own reproduction: a depConstraints row's decisionRef names an
+  // ADR id nothing records, `resolveDecisionRef`
+  // (`./governance/adr-registry.mjs`) had zero production call sites, and a
+  // live violation quoted the citation verbatim — exactly as if it were a
+  // confirmed authority. `docs/adr/` here holds one REAL record, bound to a
+  // DIFFERENT id, so the registry read this fixture drives is genuine (not
+  // an ENOENT-to-empty-registry shortcut) and still answers "unknown" for
+  // the row's own id.
+  const decisionRefRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-decisionref-"));
+  afterAll(() => rmSync(decisionRefRoot, { recursive: true, force: true }));
+
+  const writeDecisionRef = (relativePath, text) => {
+    mkdirSync(join(decisionRefRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(decisionRefRoot, relativePath), text);
+  };
+
+  // `loadAdrRegistry` reads this directory by a constant, so the fixture has
+  // to use the same name. Held as a variable — the same reason the ADR
+  // marker-resolution block above does — so no source line here spells a
+  // `docs/adr/<id>.md` path whole: that reads to `check-docs-links` as this
+  // file citing a decision record in THIS repository, on a path that
+  // resolves nowhere. The fixture's tree is not this tree.
+  const DECISIONREF_ADR_DIR = "docs/adr";
+  const DECISIONREF_ADR_FILE = "0001-unrelated.md";
+
+  writeDecisionRef(
+    "lattice.json",
+    JSON.stringify({
+      projects: {
+        declared: [
+          { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+          { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+        ],
+      },
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "workspace tooling config at the root, not itself a project",
+          },
+        ],
+      },
+    }),
+  );
+  writeDecisionRef(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  {
+    sourceTag: "layer:domain",
+    onlyDependOnLibsWithTags: ["layer:domain"],
+    decisionRef: "9999-does-not-exist",
+  },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeDecisionRef("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeDecisionRef(
+    "libs/domain/doc.go",
+    'package domain\n\nimport "example.com/adapter"\n\nvar _ = adapter.Name\n',
+  );
+  writeDecisionRef("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writeDecisionRef("libs/adapter/adapter.go", "package adapter\n\nvar Name string\n");
+  // A real, valid ADR — proves the registry this fixture reads is genuine:
+  // the row's citation still fails to resolve against it, because its id is
+  // a different one.
+  writeDecisionRef(
+    `${DECISIONREF_ADR_DIR}/${DECISIONREF_ADR_FILE}`,
+    "---\nid: 0001-unrelated\nstatus: accepted\n---\n\n# Unrelated decision\n",
+  );
+
+  const decisionRefContext = {
+    cwd: decisionRefRoot,
+    listFiles: () => [
+      "lattice.json",
+      "module-boundaries.config.mjs",
+      "libs/domain/go.mod",
+      "libs/domain/doc.go",
+      "libs/adapter/go.mod",
+      "libs/adapter/adapter.go",
+      `${DECISIONREF_ADR_DIR}/${DECISIONREF_ADR_FILE}`,
+    ],
+  };
+
+  it("fires the real violation and flags the citation as UNRESOLVED, never as a confirmed authority", async () => {
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: [] },
+      decisionRefContext,
+    );
+    expect(violations).toBe(1);
+    expect(report).toContain("onlyTagsConstraintViolation");
+    expect(report).toContain("decisionRef [9999-does-not-exist]");
+    expect(report).toContain("UNRESOLVED");
+    expect(report).toContain("no matching ADR, rule, or fitness record");
+  });
+
+  it("carries the same fact in the JSON envelope, additively, without touching exit code or status", async () => {
+    const { report } = await check({ format: "json", config: null, paths: [] }, decisionRefContext);
+    const envelope = JSON.parse(report);
+    // Findings still drive the exit code — an unresolved citation is a
+    // documentation fact about the row, not a second reason to fail the run.
+    expect(envelope.status).toBe("findings");
+    expect(envelope.exitCode).toBe(EXIT.violations);
+    expect(envelope.result.unresolvedDecisionRefs).toEqual(["9999-does-not-exist"]);
+    // The row itself is untouched — a consumer already parsing
+    // `result.violations[].constraint.decisionRef` sees the same raw value
+    // it always did.
+    expect(envelope.result.violations[0].constraint.decisionRef).toBe("9999-does-not-exist");
+  });
+
+  it("runCli still exits 1 through the same real dispatch a CI pipeline uses", async () => {
+    const out = [];
+    const err = [];
+    const env = { out: (t) => out.push(t), err: (t) => err.push(t), ...decisionRefContext };
+    const exitCode = await runCli(["check"], env);
+    expect(exitCode).toBe(EXIT.violations);
+    expect(out.join("\n")).toContain("UNRESOLVED");
+  });
+});
+
 describe("the waivers surface, end to end", () => {
   // A third native tmpdir whose boundary law carries a `boundarySuppressions`
   // waiver row over the same layer-crossing import, so the whole pipeline is

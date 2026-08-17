@@ -24,11 +24,14 @@ const DETAIL = "  ";
 /**
  * The whole planning-context report.
  *
- * @param {{project: object, coverage: object}} input The `result` object the
- *   plan command built, plus its coverage.
+ * @param {{project: object, coverage: object, unresolvedDecisionRefs?: Set<string>}} input
+ *   The `result` object the plan command built, plus its coverage.
+ *   `unresolvedDecisionRefs` — `decisionRef` values a matched constraint row
+ *   cites that do not resolve to any ADR, rule, or fitness record — is
+ *   forwarded to `formatConstraint`, the same seam `context`'s report uses.
  * @returns {string}
  */
-export function formatPlanContextReport({ project, coverage }) {
+export function formatPlanContextReport({ project, coverage, unresolvedDecisionRefs }) {
   const sections = [];
 
   const inspected =
@@ -59,7 +62,7 @@ export function formatPlanContextReport({ project, coverage }) {
     const count = project.constraints.length;
     sections.push(`Constraints (${count} row${count === 1 ? "" : "s"} govern this project):`);
     for (const constraint of project.constraints) {
-      sections.push(`${DETAIL}${formatConstraint(constraint)}`);
+      sections.push(`${DETAIL}${formatConstraint(constraint, unresolvedDecisionRefs)}`);
       if (constraint.description) {
         sections.push(`${DETAIL}  description  ${constraint.description}`);
       }

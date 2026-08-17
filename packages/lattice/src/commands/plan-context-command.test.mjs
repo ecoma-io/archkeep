@@ -423,4 +423,41 @@ describe("planContextCommand", () => {
     expect(result.report.json).toContain('"plan"');
     expect(result.report.json).toContain('"variant": "plan"');
   });
+
+  // P1-02: `context --plan` shares `collectProjectContext` and
+  // `formatConstraint` with the plain `context` command, so it carries the
+  // identical bug — a matched constraint row's decisionRef rendered verbatim,
+  // unverified. `commandContext()`'s root ("/workspace") has no real
+  // `docs/adr/` behind it, so this drives the REAL `readAdrContext` through
+  // its natural "no registry → unknown" path, the same answer a genuinely
+  // nonexistent ADR id gets on a real tree.
+  describe("decisionRef resolution (P1-02)", () => {
+    it("flags a matched constraint row's decisionRef when it cannot resolve, same as plain context", async () => {
+      const result = await planContextCommand(
+        "alpha",
+        [],
+        commandContext(),
+        config({
+          depConstraints: [
+            {
+              sourceTag: "layer:domain",
+              onlyDependOnLibsWithTags: ["layer:domain"],
+              decisionRef: "9999-does-not-exist",
+            },
+          ],
+        }),
+      );
+      expect(result.report.text).toContain("decisionRef [9999-does-not-exist]");
+      expect(result.report.text).toContain("UNRESOLVED");
+      expect(result.result.unresolvedDecisionRefs).toEqual(["9999-does-not-exist"]);
+      // Report-only: the plan is descriptive and never exits 1 on its own.
+      expect(result.status).toBe("ok");
+    });
+
+    it("carries no unresolvedDecisionRefs field when no matched row cites one", async () => {
+      const result = await planContextCommand("alpha", [], commandContext(), config());
+      expect(result.report.text).not.toContain("decisionRef");
+      expect(result.result.unresolvedDecisionRefs).toBeUndefined();
+    });
+  });
 });

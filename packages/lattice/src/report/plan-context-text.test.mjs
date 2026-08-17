@@ -86,6 +86,44 @@ describe("formatPlanContextReport", () => {
     expect(text).toContain("no matching constraint rows");
   });
 
+  // P1-02: a matched constraint row's decisionRef used to render verbatim,
+  // unverified — the same bug the plain `context` command had, since both
+  // share `formatConstraint`.
+  it("flags a matched constraint row's decisionRef when it is unresolved", () => {
+    const text = formatPlanContextReport({
+      project: result({
+        constraints: [
+          {
+            sourceTag: "layer:domain",
+            onlyDependOnLibsWithTags: ["layer:domain"],
+            decisionRef: "9999-does-not-exist",
+          },
+        ],
+      }),
+      coverage: coverage(),
+      unresolvedDecisionRefs: new Set(["9999-does-not-exist"]),
+    });
+    expect(text).toContain("decisionRef [9999-does-not-exist]");
+    expect(text).toContain("UNRESOLVED");
+  });
+
+  it("renders a decisionRef verbatim when no unresolved set is passed — unchanged from before this existed", () => {
+    const text = formatPlanContextReport({
+      project: result({
+        constraints: [
+          {
+            sourceTag: "layer:domain",
+            onlyDependOnLibsWithTags: ["layer:domain"],
+            decisionRef: "9999-does-not-exist",
+          },
+        ],
+      }),
+      coverage: coverage(),
+    });
+    expect(text).toContain("decisionRef [9999-does-not-exist]");
+    expect(text).not.toContain("UNRESOLVED");
+  });
+
   it("shows the affected projects when paths were given", () => {
     const text = formatPlanContextReport({
       project: result({

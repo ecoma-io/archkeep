@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatConstraint,
   formatCoverageGaps,
+  formatDeclaredEdges,
   formatFailures,
   formatGoWork,
   formatReport,
@@ -142,6 +143,113 @@ describe("the constraint line", () => {
 
   it("explains an absent row rather than printing nothing, which would read as a missing field", () => {
     expect(formatConstraint(null)).toContain("not driven by a depConstraints row");
+  });
+});
+
+// P1-02: a row's decisionRef used to render verbatim, unverified — a live
+// violation quoted a completely nonexistent ADR id as if it were a confirmed
+// authority. `formatConstraint` stays pure (no filesystem access of its
+// own): the caller resolves every decisionRef ONCE against the workspace's
+// ADR registry and hands back the VALUES that did not resolve.
+describe("the constraint line — decisionRef resolution (P1-02)", () => {
+  it("renders a decisionRef verbatim when no unresolved set is passed — unchanged from before this existed", () => {
+    expect(formatConstraint({ sourceTag: "layer:view", decisionRef: "adr:0012" })).toBe(
+      "sourceTag layer:view → decisionRef [adr:0012]",
+    );
+  });
+
+  it("renders a decisionRef verbatim when it is not a member of the unresolved set", () => {
+    const resolved = new Set(["9999-does-not-exist"]);
+    expect(formatConstraint({ sourceTag: "layer:view", decisionRef: "0001-real" }, resolved)).toBe(
+      "sourceTag layer:view → decisionRef [0001-real]",
+    );
+  });
+
+  it("flags a decisionRef in the unresolved set, loudly, instead of quoting it as a confirmed authority", () => {
+    const unresolved = new Set(["9999-does-not-exist"]);
+    const text = formatConstraint(
+      { sourceTag: "scope:app", decisionRef: "9999-does-not-exist" },
+      unresolved,
+    );
+    expect(text).toContain("decisionRef [9999-does-not-exist]");
+    expect(text).toContain("UNRESOLVED");
+    expect(text).toContain("no matching ADR, rule, or fitness record");
+  });
+
+  it("leaves every other key's rendering untouched by the unresolved set", () => {
+    const unresolved = new Set(["9999-does-not-exist"]);
+    expect(
+      formatConstraint(
+        { sourceTag: "scope:app", onlyDependOnLibsWithTags: ["scope:allowed"] },
+        unresolved,
+      ),
+    ).toBe("sourceTag scope:app → onlyDependOnLibsWithTags [scope:allowed]");
+  });
+});
+
+describe("a violation entry — decisionRef resolution (P1-02)", () => {
+  it("quotes an unresolved decisionRef as UNRESOLVED in the constraint line of a live violation", () => {
+    // The audit's own reproduction: `check` exits 1 on a real violation, and
+    // the report used to quote the row's bogus decisionRef as if legitimate.
+    const text = formatViolation(
+      violation({
+        constraint: {
+          sourceTag: "scope:app",
+          onlyDependOnLibsWithTags: ["scope:allowed"],
+          decisionRef: "9999-does-not-exist",
+        },
+      }),
+      new Set(["9999-does-not-exist"]),
+    );
+    expect(text).toContain(
+      "constraint  sourceTag scope:app → onlyDependOnLibsWithTags [scope:allowed]",
+    );
+    expect(text).toContain("decisionRef [9999-does-not-exist]");
+    expect(text).toContain("UNRESOLVED");
+  });
+
+  it("renders exactly as before when no unresolved set is passed", () => {
+    const text = formatViolation(
+      violation({
+        constraint: {
+          sourceTag: "scope:app",
+          onlyDependOnLibsWithTags: ["scope:allowed"],
+          decisionRef: "9999-does-not-exist",
+        },
+      }),
+    );
+    expect(text).not.toContain("UNRESOLVED");
+  });
+});
+
+describe("formatDeclaredEdges — decisionRef resolution (P1-02)", () => {
+  const declaredEdgeFinding = (overrides = {}) => ({
+    messageId: "onlyTagsConstraintViolation",
+    file: "libs/app/project.json",
+    source: "app",
+    target: "lib",
+    message:
+      'A project tagged with "scope:app" can only depend on libs tagged with "scope:allowed"',
+    constraint: {
+      sourceTag: "scope:app",
+      onlyDependOnLibsWithTags: ["scope:allowed"],
+      decisionRef: "9999-does-not-exist",
+    },
+    ...overrides,
+  });
+
+  it("flags an unresolved decisionRef on a declared-edge (implicitDependencies) finding too", () => {
+    const text = formatDeclaredEdges(
+      { findings: [declaredEdgeFinding()], judged: 1 },
+      new Set(["9999-does-not-exist"]),
+    );
+    expect(text).toContain("decisionRef [9999-does-not-exist]");
+    expect(text).toContain("UNRESOLVED");
+  });
+
+  it("renders exactly as before when no unresolved set is passed", () => {
+    const text = formatDeclaredEdges({ findings: [declaredEdgeFinding()], judged: 1 });
+    expect(text).not.toContain("UNRESOLVED");
   });
 });
 
@@ -383,6 +491,49 @@ describe("the report as a whole", () => {
     expect(text).toContain("✖ 1 boundary violation");
     expect(text).toContain("blind spots inside files that were analyzed");
     expect(text).toContain("could not be analyzed at all");
+  });
+
+  it("forwards unresolvedDecisionRefs through to a live violation's constraint line (P1-02)", () => {
+    const text = formatReport(
+      run({
+        violations: [
+          violation({
+            constraint: {
+              sourceTag: "scope:app",
+              onlyDependOnLibsWithTags: ["scope:allowed"],
+              decisionRef: "9999-does-not-exist",
+            },
+          }),
+        ],
+        unresolvedDecisionRefs: new Set(["9999-does-not-exist"]),
+      }),
+    );
+    expect(text).toContain("✖ 1 boundary violation");
+    expect(text).toContain("decisionRef [9999-does-not-exist]");
+    expect(text).toContain("UNRESOLVED");
+  });
+
+  it("forwards unresolvedDecisionRefs through to a waived violation's constraint line too", () => {
+    const text = formatReport(
+      run({
+        violations: [
+          violation({
+            constraint: {
+              sourceTag: "scope:app",
+              onlyDependOnLibsWithTags: ["scope:allowed"],
+              decisionRef: "9999-does-not-exist",
+            },
+            waivedBy: {
+              path: "acme/libs/engine-domain/doc.go",
+              reason: "waiting on the ADR",
+              expiresAt: "2026-09-01T00:00:00.000Z",
+            },
+          }),
+        ],
+        unresolvedDecisionRefs: new Set(["9999-does-not-exist"]),
+      }),
+    );
+    expect(text).toContain("UNRESOLVED");
   });
 
   it("splits actively-waived violations into an accepted-violations section, with the waiver's term and reason", () => {

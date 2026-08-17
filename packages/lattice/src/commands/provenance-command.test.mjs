@@ -48,12 +48,22 @@ const config = (rows = []) => ({ depConstraints: rows });
 /**
  * `io` playing both the intent and config loaders off these payloads.
  *
- * @param {{intent?: object, config?: object}} payload
+ * @param {{intent?: object, config?: object, adrRecords?: object[]}} payload
+ *   `adrRecords` are `loadAdrRegistry`-shaped records (each an `{id, bindings}`
+ *   at minimum) — `readAdrContext` derives both `byId` and `knownFitness`
+ *   from them, the same way it would from a real `docs/adr/` tree.
  */
-function ioWith({ intent: file, config: cfg }) {
+function ioWith({ intent: file, config: cfg, adrRecords = [] }) {
   return {
     loadIntentOverride: async () => file,
     loadConfigOverride: async () => cfg,
+    // Defaults to an empty registry — a `/workspace` root has no real
+    // `docs/adr/` behind it in these tests either way, so this only matters
+    // for a case that injects a non-empty one.
+    loadAdrRegistryOverride: () => ({
+      records: adrRecords,
+      byId: new Map(adrRecords.map((record) => [record.id, record])),
+    }),
   };
 }
 
@@ -259,5 +269,103 @@ describe("provenanceCommand", () => {
     ]);
     expect(a.report.json).toBe(b.report.json);
     expect(a.report.text).toBe(b.report.text);
+  });
+
+  // P1-02: `resolveDecisionRef` (`../governance/adr-registry.mjs`) had zero
+  // production call sites — a row's decisionRef passed through every report
+  // unverified. This command already walked every governance row for
+  // attestation; these cases hold the SAME walk to the identical discipline
+  // for the decisionRef citation.
+  describe("decisionRef resolution (P1-02)", () => {
+    it("names a row whose decisionRef resolves to no known ADR, rule, or fitness record", async () => {
+      const result = await provenanceCommand(
+        commandContext(),
+        ioWith({
+          intent: intent({
+            forbidden: [
+              {
+                from: "a",
+                to: "b",
+                reason: "x",
+                origin: { by: "j", tool: "l" },
+                decisionRef: "9999-does-not-exist",
+              },
+            ],
+          }),
+          config: config([{ sourceTag: "x", decisionRef: "9999-also-missing" }]),
+        }),
+      );
+      // Verdict-neutral, the same as an unattested row: still exit 0.
+      expect(result.status).toBe("ok");
+      expect(result.report.json).not.toContain('"exitCode": 1');
+      expect(result.unresolvedDecisionRefs.map((r) => r.kind).sort()).toEqual([
+        "depConstraints[0]",
+        "forbidden[0]",
+      ]);
+      expect(result.unresolvedDecisionRefs.find((r) => r.kind === "forbidden[0]").decisionRef).toBe(
+        "9999-does-not-exist",
+      );
+      expect(result.report.text).toContain("unresolved decisionRefs");
+      expect(result.report.text).toContain('forbidden[0] — "9999-does-not-exist"');
+      expect(result.report.text).toContain('depConstraints[0] — "9999-also-missing"');
+    });
+
+    it("resolves a decisionRef naming a real ADR id in the workspace's registry", async () => {
+      const result = await provenanceCommand(
+        commandContext(),
+        ioWith({
+          intent: intent({
+            forbidden: [
+              { from: "a", to: "b", reason: "x", decisionRef: "0001-bind-collaboration" },
+            ],
+          }),
+          adrRecords: [{ id: "0001-bind-collaboration", bindings: [] }],
+        }),
+      );
+      expect(result.unresolvedDecisionRefs).toEqual([]);
+      expect(result.report.text).toContain(
+        "✔ every decisionRef citation (1) resolves to a known ADR, rule, or fitness record",
+      );
+    });
+
+    it("resolves a decisionRef naming a rule/fitness id an ADR record binds", async () => {
+      const result = await provenanceCommand(
+        commandContext(),
+        ioWith({
+          config: config([{ sourceTag: "x", decisionRef: "rule:no-direct-dep" }]),
+          adrRecords: [{ id: "0001-bind-collaboration", bindings: ["rule:no-direct-dep"] }],
+        }),
+      );
+      expect(result.unresolvedDecisionRefs).toEqual([]);
+    });
+
+    it("says nothing about decisionRefs when no row carries one — 'no fact, no claim'", async () => {
+      const result = await provenanceCommand(
+        commandContext(),
+        ioWith({ intent: intent({ forbidden: [{ from: "a", to: "b", reason: "x" }] }) }),
+      );
+      expect(result.unresolvedDecisionRefs).toEqual([]);
+      expect(result.report.text).not.toContain("decisionRef");
+    });
+
+    it("serializes unresolvedDecisionRefs in the JSON envelope, unconditionally like unattested", async () => {
+      const result = await provenanceCommand(
+        commandContext(),
+        ioWith({ intent: intent({ forbidden: [{ from: "a", to: "b", reason: "x" }] }) }),
+      );
+      const envelope = JSON.parse(result.report.json);
+      expect(envelope.result.unresolvedDecisionRefs).toEqual([]);
+    });
+
+    it("surfaces a malformed ADR registry loudly — exit 3, the same refusal a malformed intent gets", async () => {
+      await expect(
+        provenanceCommand(commandContext(), {
+          ...ioWith({ intent: intent({ forbidden: [{ from: "a", to: "b", reason: "x" }] }) }),
+          loadAdrRegistryOverride: () => {
+            throw new Error("lattice: malformed ADR registry: 0001-x: unknown frontmatter key");
+          },
+        }),
+      ).rejects.toThrow(/malformed ADR registry/);
+    });
   });
 });

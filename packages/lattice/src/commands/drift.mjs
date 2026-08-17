@@ -43,6 +43,18 @@
  * An empty finding list must mean exactly "the observed architecture matches
  * the intended one".
  *
+ * ## decisionRef resolution is a separate, non-verdict axis
+ *
+ * An intent row's `decisionRef` names the ADR (or rule/fitness id) that
+ * supposedly authorizes it — unverified until now, because `resolveDecisionRef`
+ * (`../governance/adr-registry.mjs`) had no production caller anywhere in this
+ * package. `driftCommand` checks every row that carries one against the
+ * workspace's ADR registry (`readAdrContext`, `./adr.mjs`) and lists what does
+ * not resolve. This is a fact about the row's documentation, not about the
+ * architecture: it never becomes a finding and never changes the exit code —
+ * the same posture `./provenance-command.mjs` states for the identical axis,
+ * for the identical reason `hasOrigin` never does either.
+ *
  * ## Determinism
  *
  * Findings are sorted by the judge's total key — plain string comparison
@@ -57,6 +69,9 @@ import { judgeIntent } from "../architecture-intent/judge.mjs";
 import { computeIntentFingerprint } from "../architecture-intent/intent-fingerprint.mjs";
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
 import { formatDriftReport } from "../drift/drift-text.mjs";
+import { readAdrContext } from "./adr.mjs";
+import { intentRows as governanceIntentRows } from "./provenance-command.mjs";
+import { unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 
 /**
  * The observed side of the comparison: the same project model `graph` builds.
@@ -222,10 +237,17 @@ function intentRows(intent) {
  *
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{loadIntentOverride?: (root: string) => Promise<object>,
- *   config?: object|null}} [io] Injectable intent loader for tests.
+ *   config?: object|null, readAdrContextOverride?: typeof import("./adr.mjs").readAdrContext,
+ *   loadAdrRegistryOverride?: typeof import("../governance/adr-registry.mjs").loadAdrRegistry}} [io]
+ *   Injectable intent loader for tests. `readAdrContextOverride` (or the
+ *   narrower `loadAdrRegistryOverride`, forwarded to the real
+ *   `readAdrContext`) stands in for the ADR registry read that resolves each
+ *   row's `decisionRef`.
  * @returns {Promise<{status: "ok", drift: object, coverage: object,
  *   report: {text: string, json: string}}>}
- * @throws {Error} on every condition the header lists, all exit-3 class.
+ * @throws {Error} on every condition the header lists, all exit-3 class, plus
+ *   a malformed ADR registry — the same loud refusal `provenance` makes for
+ *   the identical read.
  */
 export async function driftCommand(commandContext, io = {}) {
   const { root, provider, marker, analysis } = commandContext;
@@ -274,6 +296,31 @@ export async function driftCommand(commandContext, io = {}) {
     );
   }
 
+  // A row's `decisionRef` names the ADR (or rule/fitness id) that supposedly
+  // authorizes it — unverified until now, the same gap `provenance` closes
+  // for the identical rows through the identical `readAdrContext`/
+  // `unresolvedDecisionRefRows` (`../governance/adr-registry.mjs`). This is a
+  // documentation fact about the row, not about the architecture: it changes
+  // no finding and no exit code, the same "descriptive, never a verdict"
+  // posture `provenance` states for the exact same axis. Only the rows that
+  // actually carry one are checked; a workspace that never uses the field
+  // pays no extra read.
+  const decisionRefRows = governanceIntentRows(intent).filter(
+    ({ row }) => typeof row?.decisionRef === "string" && row.decisionRef.trim() !== "",
+  );
+  let unresolvedDecisionRefs = [];
+  if (decisionRefRows.length > 0) {
+    const adrContext = (io.readAdrContextOverride ?? readAdrContext)(root, {
+      tracked: commandContext.tracked,
+      loadAdrRegistryOverride: io.loadAdrRegistryOverride,
+    });
+    unresolvedDecisionRefs = unresolvedDecisionRefRows(
+      decisionRefRows,
+      adrContext.byId,
+      adrContext.knownFitness,
+    ).map(({ kind, decisionRef }) => ({ kind, decisionRef }));
+  }
+
   const coverage = {
     complete: true,
     projects: observed.projects.length,
@@ -304,6 +351,12 @@ export async function driftCommand(commandContext, io = {}) {
       implicitEdges: observed.implicitEdges,
     },
     findings: verdict.findings,
+    // Additive and optional: absent when every intent row's decisionRef
+    // resolves (or none carries one) — a workspace that never uses the field
+    // reads exactly as it did before this axis existed. A documentation fact
+    // about the rows, never a drift finding: `verdict.findings` above is the
+    // only thing this envelope's `status`/`exitCode` are a claim about.
+    ...(unresolvedDecisionRefs.length > 0 ? { unresolvedDecisionRefs } : {}),
   };
 
   // Drift is descriptive — always status "ok" when it completes, never
@@ -329,6 +382,8 @@ export async function driftCommand(commandContext, io = {}) {
       text: formatDriftReport({
         findings: verdict.findings,
         intent: { fingerprint: result.intent.fingerprint, rows: result.intent.rows },
+        unresolvedDecisionRefs,
+        decisionRefsChecked: decisionRefRows.length,
         observed: {
           projects: result.observed.projects,
           edges: result.observed.edges,

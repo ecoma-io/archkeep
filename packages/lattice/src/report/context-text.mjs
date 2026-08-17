@@ -38,10 +38,13 @@ const DETAIL = "  ";
  *
  * @param {{projectContext: {project: string, tags: string[], constraints: object[],
  *   dependencies: {target: string, type: string, violations: object[]}[]},
- *   coverage: object}} input
+ *   coverage: object, unresolvedDecisionRefs?: Set<string>}} input
+ *   `unresolvedDecisionRefs` — `decisionRef` values a matched constraint row
+ *   cites that do not resolve to any ADR, rule, or fitness record — is
+ *   forwarded to `formatConstraint`, the same seam `check`'s report uses.
  * @returns {string}
  */
-export function formatContextReport({ projectContext, coverage }) {
+export function formatContextReport({ projectContext, coverage, unresolvedDecisionRefs }) {
   const sections = [];
 
   // Coverage claim goes FIRST — above the listing — so the reader knows
@@ -73,7 +76,7 @@ export function formatContextReport({ projectContext, coverage }) {
       `Constraints (${count} row${count === 1 ? "" : "s"} match${count === 1 ? "es" : ""}):`,
     );
     for (const constraint of projectContext.constraints) {
-      sections.push(`${DETAIL}${formatConstraint(constraint)}`);
+      sections.push(`${DETAIL}${formatConstraint(constraint, unresolvedDecisionRefs)}`);
       if (constraint.description) {
         sections.push(`${DETAIL}  description  ${constraint.description}`);
       }

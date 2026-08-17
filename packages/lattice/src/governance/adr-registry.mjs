@@ -417,6 +417,38 @@ export function resolveDecisionRef(byId, knownFitness, ref) {
 }
 
 /**
+ * `resolveDecisionRef`, applied across a list of governance rows in one pass
+ * — the bulk form a report walks once per run rather than re-deriving the
+ * same two-name-space check per row owner. `check`'s violations, `context`'s
+ * matched constraints, and `drift`'s/`provenance`'s intent and config rows
+ * all share this one function, so a `decisionRef` is judged identically
+ * everywhere it is rendered. A row with no `decisionRef` — or an empty one,
+ * a shape `../governance/row-schema.mjs` already refuses at load time — is
+ * skipped: this answers "which CITATIONS are unverifiable", not "which rows
+ * are incomplete" (a different question `provenance`'s `hasOrigin` answers).
+ *
+ * @param {{kind: string, row: object}[]} rows Each row paired with the label
+ *   its owner uses to identify it (`depConstraints[0]`, `forbidden[2]`, …).
+ * @param {Map<string, object>} byId The local ADR registry index.
+ * @param {Set<string>} knownFitness Rule/fitness ids the workspace declares.
+ * @returns {{kind: string, row: object, decisionRef: string}[]} Empty when
+ *   every citation resolves — a list, not a bare boolean, so a caller can
+ *   name which row is unverifiable rather than only that one is
+ *   (`../../../../AGENTS.md`: an empty result must mean "no violation").
+ */
+export function unresolvedDecisionRefRows(rows, byId, knownFitness) {
+  const unresolved = [];
+  for (const { kind, row } of rows) {
+    const ref = row?.decisionRef;
+    if (typeof ref !== "string" || ref.trim() === "") continue;
+    if (resolveDecisionRef(byId, knownFitness, ref) === "unknown") {
+      unresolved.push({ kind, row, decisionRef: ref });
+    }
+  }
+  return unresolved;
+}
+
+/**
  * Resolves a reference against the local registry plus an OPT-IN remote
  * catalog. The remote answer applies only when the local answer was unknown,
  * and a remote failure resolves nothing rather than throwing: an opt-in

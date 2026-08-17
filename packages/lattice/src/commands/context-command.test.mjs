@@ -500,6 +500,42 @@ describe("contextCommand", () => {
     expect(result.report.text).toContain("beta (static) VIOLATION");
   });
 
+  // P1-02: a matched constraint row's decisionRef used to render verbatim,
+  // unverified — the finding's own reproduction, for the `context` command
+  // specifically. `commandContext()`'s root ("/workspace") has no real
+  // `docs/adr/` behind it, so this drives the REAL `readAdrContext` (not a
+  // mock) through its natural "no registry → every citation unknown" path —
+  // the same answer a genuinely nonexistent ADR id gets on a real tree.
+  describe("decisionRef resolution (P1-02)", () => {
+    it("flags a matched constraint row's decisionRef when it cannot resolve", () => {
+      const result = contextCommand(
+        "alpha",
+        commandContext(),
+        config({
+          depConstraints: [
+            {
+              sourceTag: "layer:domain",
+              onlyDependOnLibsWithTags: ["layer:domain"],
+              decisionRef: "9999-does-not-exist",
+            },
+          ],
+        }),
+      );
+      expect(result.report.text).toContain("decisionRef [9999-does-not-exist]");
+      expect(result.report.text).toContain("UNRESOLVED");
+      expect(result.projectContext.unresolvedDecisionRefs).toEqual(["9999-does-not-exist"]);
+      // Report-only: context is descriptive and never exits 1; an unresolved
+      // citation is a documentation fact, not a coverage or graph problem.
+      expect(result.status).toBe("ok");
+    });
+
+    it("never reads the ADR registry, and carries no unresolvedDecisionRefs field, when no matched row cites one", () => {
+      const result = contextCommand("alpha", commandContext(), config());
+      expect(result.report.text).not.toContain("decisionRef");
+      expect(result.projectContext.unresolvedDecisionRefs).toBeUndefined();
+    });
+  });
+
   it("renders (none) when the project has no dependencies", () => {
     const ctx = commandContext({
       graph: {

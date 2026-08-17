@@ -33,10 +33,22 @@ const CONTINUED = "    ";
  * constraint field, and a renderer enumerating today's four would silently drop
  * the new one from every report.
  *
+ * A `decisionRef` is rendered specially: this is the one key whose value is a
+ * CLAIM ("this row is authorized by decision X") rather than a fact about the
+ * rule itself, and `resolveDecisionRef` (`../governance/adr-registry.mjs`) is
+ * the only thing that can check the claim — a pure renderer cannot, so the
+ * caller resolves every row's `decisionRef` once (against the workspace's ADR
+ * registry) and hands back the unresolved VALUES here. A ref this function
+ * cannot place in `unresolvedDecisionRefs` renders exactly as before —
+ * verbatim, the same as every other key — so a caller with nothing to check
+ * (no registry consulted) changes no byte of output.
+ *
  * @param {object|null} constraint A `depConstraints` row, or `null`.
+ * @param {Set<string>} [unresolvedDecisionRefs] `decisionRef` values known not
+ *   to resolve to any ADR, rule, or fitness record this run's registry knows.
  * @returns {string}
  */
-export function formatConstraint(constraint) {
+export function formatConstraint(constraint, unresolvedDecisionRefs) {
   if (!constraint) {
     // Nine of the fifteen checks are decided before the constraint table is
     // consulted — a relative path across projects, an import of an app, a
@@ -49,7 +61,12 @@ export function formatConstraint(constraint) {
       : `sourceTag ${constraint.sourceTag}`;
   const rest = Object.entries(constraint)
     .filter(([key]) => key !== "sourceTag" && key !== "allSourceTags")
-    .map(([key, value]) => `${key} [${(Array.isArray(value) ? value : [value]).join(", ")}]`);
+    .map(([key, value]) => {
+      if (key === "decisionRef" && unresolvedDecisionRefs?.has(value)) {
+        return `${key} [${value}] (UNRESOLVED — no matching ADR, rule, or fitness record)`;
+      }
+      return `${key} [${(Array.isArray(value) ? value : [value]).join(", ")}]`;
+    });
   return [source, ...rest].join(" → ");
 }
 
@@ -69,9 +86,10 @@ function formatEdge(violation) {
  * a file called whatever the wrapped text started with.
  *
  * @param {object} violation A `Violation` from `../rules/`.
+ * @param {Set<string>} [unresolvedDecisionRefs] Forwarded to `formatConstraint`.
  * @returns {string}
  */
-export function formatViolation(violation) {
+export function formatViolation(violation, unresolvedDecisionRefs) {
   const message = violation.message
     .split("\n")
     .map((line) => (line === "" ? "" : `${CONTINUED}${line}`))
@@ -80,7 +98,7 @@ export function formatViolation(violation) {
     `${violation.sourceFile}:${violation.line}:${violation.column}  ${violation.messageId}`,
     message,
     `${DETAIL}import      ${JSON.stringify(violation.specifier)} (${violation.kind})  ${formatEdge(violation)}`,
-    `${DETAIL}constraint  ${formatConstraint(violation.constraint)}`,
+    `${DETAIL}constraint  ${formatConstraint(violation.constraint, unresolvedDecisionRefs)}`,
   ];
   if (violation.constraint?.description) {
     lines.push(`${DETAIL}rule        ${violation.constraint.description}`);
@@ -214,9 +232,10 @@ export function formatGoWork(goWork) {
  * `formatGoWork`'s missing-use findings use.
  *
  * @param {{findings: object[], judged: number}|null|undefined} declaredEdges
+ * @param {Set<string>} [unresolvedDecisionRefs] Forwarded to `formatConstraint`.
  * @returns {string} Empty exactly when there is no declared-edge verdict to render.
  */
-export function formatDeclaredEdges(declaredEdges) {
+export function formatDeclaredEdges(declaredEdges, unresolvedDecisionRefs) {
   if (declaredEdges == null) return "";
   const { findings, judged } = declaredEdges;
   const label = `${judged} implicit edge${judged === 1 ? "" : "s"} judged`;
@@ -232,7 +251,7 @@ export function formatDeclaredEdges(declaredEdges) {
       `${finding.file}  ${finding.messageId}`,
       message,
       `${DETAIL}edge        ${finding.source} → ${finding.target}`,
-      `${DETAIL}constraint  ${formatConstraint(finding.constraint)}`,
+      `${DETAIL}constraint  ${formatConstraint(finding.constraint, unresolvedDecisionRefs)}`,
     ].join("\n");
   });
   return [
@@ -427,13 +446,14 @@ export function formatCoverageGaps(coverageGaps) {
  * carries.
  *
  * @param {object[]} waived Violations carrying `waivedBy`.
+ * @param {Set<string>} [unresolvedDecisionRefs] Forwarded to `formatViolation`.
  * @returns {string}
  */
-export function formatAcceptedViolations(waived) {
+export function formatAcceptedViolations(waived, unresolvedDecisionRefs) {
   const rows = waived.map((violation) => {
     const waiver = violation.waivedBy;
     return [
-      formatViolation(violation),
+      formatViolation(violation, unresolvedDecisionRefs),
       `${DETAIL}waiver    accepted until ${waiver.expiresAt}` +
         (waiver.origin ? ` (origin: ${waiver.origin})` : ""),
       `${DETAIL}reason    ${waiver.reason}`,
@@ -463,7 +483,7 @@ export function formatAcceptedViolations(waived) {
  * summary line above only says "no boundary violations" when there is nothing
  * a waiver is covering either.
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, declaredEdges?: object|null, intent?: object|null, fitness?: object|null, fitnessOverall?: {verdict: string}|null, coverageGaps?: object[], notes?: string[]}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, declaredEdges?: object|null, intent?: object|null, fitness?: object|null, fitnessOverall?: {verdict: string}|null, coverageGaps?: object[], notes?: string[], unresolvedDecisionRefs?: Set<string>}} run
  * @returns {string}
  */
 export function formatReport({
@@ -480,6 +500,7 @@ export function formatReport({
   fitnessOverall,
   coverageGaps = [],
   notes = [],
+  unresolvedDecisionRefs,
 }) {
   const inspected =
     `${imports} import${imports === 1 ? "" : "s"} in ${analyzed} file${analyzed === 1 ? "" : "s"} ` +
@@ -495,7 +516,9 @@ export function formatReport({
   const live = violations.filter((violation) => !violation.waivedBy);
 
   if (live.length > 0) {
-    sections.push(live.map(formatViolation).join("\n\n"));
+    sections.push(
+      live.map((violation) => formatViolation(violation, unresolvedDecisionRefs)).join("\n\n"),
+    );
     const files = new Set(live.map((violation) => violation.sourceFile)).size;
     sections.push(
       `✖ ${live.length} boundary violation${live.length === 1 ? "" : "s"} ` +
@@ -506,7 +529,7 @@ export function formatReport({
   }
 
   if (waived.length > 0) {
-    sections.push(formatAcceptedViolations(waived));
+    sections.push(formatAcceptedViolations(waived, unresolvedDecisionRefs));
     // When every finding is waived the run is still NOT clean (exit 1), so the
     // summary says so rather than letting the accepted section read as a clean
     // tree. `waived` is the count word, deliberately not `!` — the finding is
@@ -524,7 +547,7 @@ export function formatReport({
   const tsconfigPathsSection = formatTsconfigPaths(tsconfigPaths);
   if (tsconfigPathsSection !== "") sections.push(tsconfigPathsSection);
 
-  const declaredEdgesSection = formatDeclaredEdges(declaredEdges);
+  const declaredEdgesSection = formatDeclaredEdges(declaredEdges, unresolvedDecisionRefs);
   if (declaredEdgesSection !== "") sections.push(declaredEdgesSection);
 
   const intentSection = formatIntentSection(intent);
