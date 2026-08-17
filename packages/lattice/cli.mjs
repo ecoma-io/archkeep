@@ -920,7 +920,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
  * tracked symlink at `<target>.tmp` pointing outside the workspace made this
  * write follow it and overwrite whatever the symlink named, with
  * attacker-chosen bytes, while reporting success — the documented CI recipe
- * (`../docs/usage/ci.md`) run against such a pull request was a runner-write
+ * (`docs/usage/ci.md`) run against such a pull request was a runner-write
  * primitive. The same flag closes a second hole for free: a stray `.tmp` left
  * by a crashed prior run — or a file that happens to collide with the name —
  * used to be silently truncated and then renamed away; now the write refuses
