@@ -123,7 +123,10 @@ NAME selected from that registry, not as a filename:
 `check` resolves the named profile to its effective block and enforces exactly
 as if that block were a file: a profile is a way to name a policy, never a
 second kind of policy. Override for one run the same way a file is overridden —
-`lattice check --config strict` selects the `strict` profile.
+`lattice check --config strict` selects the `strict` profile. A one-run override
+that resolves a different law than the one in effect is a review of that law,
+not a verification of the change — when you report it, name the profile and say
+it is not the law in effect.
 
 ## What is loud, and why
 
@@ -156,3 +159,24 @@ The language server does not read a profile-selected law yet; it refuses
 loudly rather than watching a name as though it were a file, for the same
 reason it refuses an inline law — see the reference page's "The `profiles`
 plugin option".
+
+Only `check` resolves a profile by name. The descriptive commands (`context`,
+`graph`, `explain`, `impact`, `diff`, `fitness`, `waivers`, `debt`, `health`,
+`history`) read `boundaryConfig`/`--config` as a file path, so in a
+profile-selected workspace they cannot see the profile-resolved law — a
+`--config`-carrying one fails loudly (exit 3) with a message pointing at a
+file that was never meant to be one; `graph` fails the same way, since it too
+loads `boundaryConfig` for the policy fingerprint. Profile semantics exist
+only inside `check`; plan against the active law with
+`lattice check --config <active> --format json`, and read the registry file
+for the selected profile's effective block. Because the tool's own report
+never names which profile it enforced, anything a change report cites as "the
+check" must name the `--config <NAME>` it ran with — the reader of a
+profile-selected run cannot otherwise tell which law produced the verdict.
+
+A profile's `block` carries exactly three keys — `depConstraints`,
+`moduleBoundaryOptions`, `boundarySuppressions` — so a profile-selected run
+folds no fitness functions and no governance-origin rows it cannot carry: a
+`fitness` export exists only on a boundary-config **file** (`policyFrom`
+requires the export there). What a profile cannot express is a file-only
+capability, stated as such rather than silently shortened.

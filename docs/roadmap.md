@@ -43,6 +43,14 @@ A new reader should find these capabilities described as present, not promised.
 - **Architecture as code.** Layers, boundaries, dependency constraints and
   ownership declared in a machine-readable model that is reviewed like code, in
   the repository it governs. ([concepts/boundaries.md](concepts/boundaries.md))
+- **Named law profiles.** A workspace may keep several boundary laws in a
+  `profiles` registry and select one by name at check time, stacked on a shared
+  `base` — resolved loudly, with no silent fallback to a quieter law.
+  ([concepts/profiles.md](concepts/profiles.md))
+- **ADR / decision registry.** `docs/adr/` records name the recorded
+  architecture decision a rule, fitness gate, or intent row leans on through a
+  `decisionRef`, read with `lattice adr`; a reference that resolves to nothing
+  is `unknown`, never a pass. ([concepts/adr.md](concepts/adr.md))
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer. ([reference/exit-codes.md](reference/exit-codes.md))

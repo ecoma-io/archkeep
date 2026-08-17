@@ -32,7 +32,7 @@ A row may carry the governance block, of which `origin` is the first key:
 {
   "origin": { "by": "jane@example.com", "tool": "lattice:v1" },
   "rationale": "why this row exists",
-  "decisionRef": "adr:0012",
+  "decisionRef": "0012-bind-collaboration",
   "fitnessBindings": ["fitness:hotspot"]
 }
 ```

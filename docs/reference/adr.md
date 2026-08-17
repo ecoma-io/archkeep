@@ -78,11 +78,11 @@ be resolved and why.
 
 ## Exit codes
 
-| code | meaning                                                               |
-| ---- | --------------------------------------------------------------------- |
-| 0    | completed and every reference resolved — the dump, a record, a lookup |
-| 2    | usage error — more than one positional argument                       |
-| 3    | no verdict — an unknown ADR id, or a registry that could not be read  |
+| code | meaning                                                                                                                                                                        |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | completed — the dump, a record, or a lookup answered. A reverse lookup naming a rule/fitness id no ADR binds is still 0: a sentence stating the fact, not a resolved reference |
+| 2    | usage error — more than one positional argument                                                                                                                                |
+| 3    | no verdict — an unknown ADR id, or a registry that could not be read                                                                                                           |
 
 `adr` never exits 1: a description of what is recorded is never a finding; only
 `check` exits 1. The two exit-3 paths are the command's obligations to the

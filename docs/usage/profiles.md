@@ -33,7 +33,10 @@ lattice check --config migration
 
 `--config` decides the same way it decides a filename: the value overrides
 `boundaryConfig`, and a profile workspace resolves it by name. This is the way
-a proposed law is reviewed without touching the registered one.
+a proposed law is reviewed without touching the registered one. A run that
+resolves a different profile than in effect is a review of that profile, not a
+verification of the change — when you report it, name the profile and say it is
+not the law in effect.
 
 ## What a profile-selected run reports
 
@@ -41,7 +44,9 @@ Nothing distinct. The verdict, the exit codes, the report formats, and the
 counts are the same ones [checking.md](checking.md) documents, because the
 enforcement path is the same: a profile resolves to a policy block, and the
 block is judged like any other. The only difference is what the report's stderr
-naming shows when the registry is malformed.
+naming shows when the registry is malformed. Because the tool never names the
+profile it enforced, the change report must: the reader of a profile-selected
+run cannot otherwise tell which law produced the verdict.
 
 ## What fails loudly
 

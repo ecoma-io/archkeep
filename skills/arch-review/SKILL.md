@@ -11,7 +11,8 @@ compatibility: Requires @ecoma-io/lattice CLI
 When reviewing a change, pull request, or diff for architecture impact —
 especially changes that touch cross-project imports, add dependencies, move
 code between projects, or modify anything that declares architecture
-(`module-boundaries.config.*`, `architecture-intent.json`, project manifests).
+(`module-boundaries.config.*`, a profiles registry, `architecture-intent.json`,
+project manifests, `docs/adr/` records).
 For a trivial edit (whitespace, comments, string constants in an isolated
 module), `arch-check` alone may suffice — this skill is for changes where the
 architecture consequences matter.
@@ -38,9 +39,14 @@ lattice context <project> --format json
 
 Understand what constraints apply — which dependency directions are allowed and
 which are forbidden. If a project has no constraints, that is an unknown, not a
-green light. For a change whose architecture consequences matter, request the
-planning context too — it bundles the current architecture, policy with Intent,
-impact, current violations, drift, and verification commands in one document:
+green light. **Name the law the verdict depends on before reading it**: check
+whether the workspace enforces by file or by named profile (see `arch-context`,
+"Know which law is in effect"), and state which one the change was made
+against. A review that does not say which law it judged the change against
+cannot be reproduced. For a change whose architecture consequences matter,
+request the planning context too — it bundles the current architecture, policy
+with Intent, impact, current violations, drift, and verification commands in
+one document:
 
 ```
 lattice context <project> --plan path/to/file.go
@@ -52,9 +58,14 @@ Read the diff and decide whether it is an **architecture change** — a move the
 next step must treat as such — or an ordinary source change. Architecture
 changes include: project boundaries touched, dependency direction reversed, a
 project created or removed, ownership boundaries moved, the policy changed, the
-declared Intent changed, or the provider migrated. If the change is none of
-those, the review is: context → check → verdict, and you can skip the heavy
-steps.
+profile registry changed (a profile's `block`, its `base` chain, or the default
+profile a `boundaryConfig` selects), the declared Intent changed, or the
+provider migrated. When a reviewed rule carries a `decisionRef`, cite the
+decision it leans on — `lattice adr rule:<id>` names the record that binds it,
+and its status and rationale are review evidence. A change that satisfies the
+rule table but contradicts the recorded decision is a finding, not a pass.
+If the change is none of those, the review is: context → check → verdict, and
+you can skip the heavy steps.
 
 ### 3. Determine whether the architecture changed
 
@@ -90,10 +101,21 @@ by a change to this one.
 lattice check --format json
 ```
 
-This is the gate — boundary violations **and** the declared Intent, in one run.
-Exit 1 names findings the change introduced or resolved; exit 3 means the gate
-could not reach a verdict on part of the workspace, and the review must say so
-instead of reporting "no findings".
+This is the gate — boundary violations **and** the declared Intent, in one run,
+against the law in effect (the profile `boundaryConfig`/`--config` selects in a
+profile-selected workspace). Exit 1 names findings the change introduced or
+resolved; exit 3 means the gate could not reach a verdict on part of the
+workspace — including a profile that could not be resolved — and the review
+must say so instead of reporting "no findings". When the change is itself a
+profile under review, judge it without touching the live law:
+
+```
+lattice check --config <candidate-profile>
+```
+
+That run resolves a different law than the one in effect — it is a review of
+the candidate, never a verification of the change, and the review must label
+it as such and name the `--config <NAME>` it ran with (see step 11).
 
 ### 6. Evaluate drift when Intent or architecture differs
 
@@ -136,6 +158,22 @@ cites when it says "the declared architecture no longer matches the code".
   drift) by the evidence snapshots carry; `lattice provenance` reports the
   governance row schema. Provenance is a property of snapshots — a command
   reports it, it does not pluralize it.
+- **ADR / decision references** — when a reviewed constraint or intent row
+  carries a `decisionRef` (a fitness gate cannot: a fitness row accepts exactly
+  `name`/`match`/`condition`/`reason`), verify the decision it leans on
+  (`lattice adr rule:no-direct-dep` finds the binding ADR; `lattice adr
+0001-bind-collaboration` confirms the record's status and its bindings — the
+  decision's rationale and context live in the record file, `docs/adr/NNN-slug.md`,
+  so open it and read the prose before judging the rule against it). A resolved
+  decision is review evidence: the rule is enforced because a recorded decision
+  made it so. An ADR id the registry does not know exits 3 — the record is
+  missing, and the rule's governance grounding is `unknown`; the review must
+  say so, never read it as bound. The reverse lookup inverts that: `lattice
+adr rule:orphan` names a rule no ADR binds and exits 0 with a sentence —
+  verify the rule row's exact spelling against the registry before reading it
+  as "not governed". The rationale matters: a rule that contradicts the
+  decision it cites, or a superseded record, is a finding the review should
+  name.
 
 ### 8. Inspect history when the change follows architectural evolution
 
@@ -166,8 +204,8 @@ disagreement element by element, `lattice reconcile --propose` scores every
 observed project and edge against the declared model and derives the edits that
 would make them agree; `lattice discover --propose` derives candidate
 architecture from what is observed. Both mark their output as proposals that
-are never written — no command writes to the Intent, and proposed is never
-authoritative.
+are never written — no command writes to the Intent, no command writes an ADR,
+and proposed is never authoritative.
 
 ### 11. Produce the review
 
@@ -176,7 +214,8 @@ Report, each half with evidence:
 - **Architecture state**: whether the change is architectural; the projects and
   edges it added or removed (`diff`); the Intent comparison (`drift`);
   dependents affected (`impact`).
-- **Gate verdict**: the `check` exit code, every finding with its
+- **Gate verdict**: the `check` exit code, the `--config <NAME>` (or
+  `boundaryConfig` value) the gate resolved, every finding with its
   `file:line:column`, the coverage gaps that withheld a verdict, and whether
   the change introduced, resolved, or is silent about each.
 - **Coverage honesty**: any run that exited 3, any missing baseline, any
@@ -185,11 +224,18 @@ Report, each half with evidence:
 ## Decision tree
 
 - **Did the architecture change?** (boundaries, dependencies, projects, provider)
-  - **NO — and no Intent / policy touch** → `context` → `check` → verdict.
-    Done.
-  - **NO — but the Intent or policy changed** → `context` → `diff`
-    (rule-impact) → re-`check` → `drift` → verdict.
+  - **NO — and no Intent / policy / profile touch** → `context` → `check` →
+    verdict. Done.
+  - **NO — but the Intent or policy (file or profile) changed** → `context` →
+    `diff` (rule-impact) → re-`check` → `drift` → verdict. A profile change
+    also means naming the profile that was in effect before and after, and
+    judging the change against the one that binds.
   - **YES** → `context` → `diff` → `impact` → `check` → `drift` → verdict.
+- **Does a reviewed rule carry a `decisionRef`?** → `context` → inspect the
+  reference (`lattice adr <ref>`, whichever shape the row's `decisionRef`
+  holds — an ADR id `NNN-slug` reads the record, a `rule:`/`fitness:` id is the
+  reverse lookup) → `check` → verdict. An unresolved reference is `unknown`,
+  never valid evidence; say so.
 - **Is the architecture model itself stale** (declared differs from observed)?
   → report the finding, `drift` for the full direction, `reconcile --propose`
   for the element-by-element shape of the disagreement, and escalate the
@@ -203,7 +249,18 @@ Report, each half with evidence:
 - **`lattice impact` returns empty dependents** — that is a claim, not a shrug.
   Nothing in the workspace depends on this project. Verify this is expected.
 - **`lattice check` exit 3** — coverage is incomplete. The review cannot reach a
-  verdict on the unchecked files. State this in the review summary.
+  verdict on the unchecked files. State this in the review summary — and in a
+  profile-selected workspace check whether the selected profile could be
+  resolved before blaming the files: an unknown profile name, an unknown
+  `base`, a `base` cycle, or an unreadable registry are all exit 3 with no
+  fallback to another law.
+- **`lattice adr` exit 3** — an ADR-pattern id the registry does not know, or a
+  registry that could not be read. A `decisionRef` naming a missing record is
+  `unknown`, never a pass; the review says the rule's grounding is unverifiable
+  rather than citing it as evidence. A reverse lookup that exits 0 with `no ADR
+binds rule:X` is a different answer — it names a rule id the registry binds
+  nothing — so verify the exact spelling against the rule row before treating
+  the rule as ungoverned.
 - **`lattice drift` exit 3** — the Intent cannot be verified. The governance
   status is unknown; the review must say so, not pass on it.
 - **`lattice reconcile --propose` refuses** — `reconcile` exits 3 loudly on

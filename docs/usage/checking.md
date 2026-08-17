@@ -131,4 +131,13 @@ without replacing the workspace's current one.
 A workspace that names a `profiles` option selects a law by name instead: the
 same `--config` then names a profile from the registry, and the run enforces
 that profile's effective block for one run
-([profiles.md](profiles.md) has the workflow).
+([profiles.md](profiles.md) has the workflow). A one-run override that resolves
+a different law than the one in effect is a review of that law, not a
+verification of the change — when you report it, name the profile and say it is
+not the law in effect.
+
+What `--config` means depends entirely on whether the workspace's plugin
+options declare a `profiles` registry: with one, `--config` is a profile NAME;
+without one, it is a file path resolved from the workspace root. The two do not
+mix, and `check` does not guess — an unknown name in a profile workspace and a
+missing file without one both exit 3.

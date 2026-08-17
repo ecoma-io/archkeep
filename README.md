@@ -125,6 +125,15 @@ exit code, and [**docs/concepts/**](docs/concepts/architecture.md) for the model
 - **Policy** — the boundary law: one constraint table in the workspace, in the
   shape `@nx/enforce-module-boundaries` already takes, extended to every
   supported language. [**docs/reference/policy-schema.md**](docs/reference/policy-schema.md)
+- **Named law profiles** — a `profiles` registry in the Nx plugin options lets
+  a workspace keep several boundary laws and select one by name at check time,
+  stacked on a shared `base` and resolved with no silent fallback — an
+  unresolvable profile is a no-verdict (exit 3), never a quieter law.
+  [**docs/concepts/profiles.md**](docs/concepts/profiles.md)
+- **ADR / decision bindings** — a constraint or intent row may carry a
+  `decisionRef` naming the recorded architecture decision it leans on, read
+  through `lattice adr`; a reference that resolves to nothing is `unknown`,
+  never a pass. [**docs/concepts/adr.md**](docs/concepts/adr.md)
 - **Check** — the authoritative governance gate. `check` judges every import
   site against the boundary law **and** folds the intent comparison in by
   presence. Four exit codes: 0 clean, 1 findings, 2 usage error, 3 could not
@@ -319,6 +328,7 @@ in [**docs/doctrine/north-star.md**](docs/doctrine/north-star.md).
 | [**Getting started**](docs/getting-started/installation.md)                                                                                            | Install, configure, first violation                                                                                                                                                            |
 | [**North star**](docs/doctrine/north-star.md) · [**Roadmap**](docs/roadmap.md)                                                                         | The direction, and the staged path (1.x governance → 2.x intelligence)                                                                                                                         |
 | [Designing boundaries](docs/concepts/boundaries.md)                                                                                                    | The constraint table, and the five semantics that surprise people                                                                                                                              |
+| [Named law profiles](docs/concepts/profiles.md) · [ADR / decisions](docs/concepts/adr.md)                                                              | Keeping several boundary laws and selecting one by name · recording and reading the decision a rule leans on                                                                                   |
 | [The fifteen violations](docs/reference/violations.md)                                                                                                 | What each `messageId` means, and what fixes it                                                                                                                                                 |
 | [What each language sees](docs/reference/languages.md)                                                                                                 | Per-language coverage and every declared parse limit                                                                                                                                           |
 | [Commands](docs/reference/cli.md)                                                                                                                      | All sixteen: `check` · `graph` · `diff` · `discover` · `drift` · `reconcile` · `waivers` · `fitness` · `history` · `health` · `debt` · `impact` · `explain` · `context` · `provenance` · `adr` |

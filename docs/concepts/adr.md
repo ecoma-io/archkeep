@@ -26,9 +26,13 @@ four keys:
   objects whose existence the decision is _why_.
 
 An ADR with no `bindings` is recorded but **not yet enforceable** — the report
-names it exactly that. The moment a rule/fitness row carries a `decisionRef`
-naming the ADR, the two sides of the binding exist: the row declares it leans on
-the decision, and the ADR declares the decision covers the row.
+names it exactly that. The moment a rule row (a `depConstraints` row or an
+intent row) carries a `decisionRef` naming the ADR, the two sides of the
+binding exist: the row declares it leans on the decision, and the ADR declares
+the decision covers the row. (A fitness row cannot carry a `decisionRef` — it
+accepts exactly `name`/`match`/`condition`/`reason` — but an ADR's `bindings`
+may still name a fitness id, binding the gate to the decision from the ADR's
+side only.)
 
 ## The dialect is strict on purpose
 
@@ -42,9 +46,10 @@ parses, validates, and indexes every record.
 
 ## Determinism, and the two refusals
 
-The registry is deterministic: files are read in byte-sorted filename order and
-every emitted list is sorted, so two runs over an unchanged `docs/adr/` produce
-byte-identical output.
+The registry is deterministic: files are read in byte-sorted filename order,
+and a record's own `bindings`/`supersedes` keep the source order the file
+stated — the registry never reorders what a record declares — so two runs over
+an unchanged `docs/adr/` produce byte-identical output.
 
 The invariant everything is judged against (an empty result must mean "no
 violation", and nothing else) binds the registry two ways:
@@ -56,12 +61,22 @@ violation", and nothing else) binds the registry two ways:
   a caller can never mistake "could not read the registry" for "no ADRs".
   An absent `docs/adr/` is the one quiet path, on purpose: a workspace that has
   not adopted ADRs yet has nothing to resolve, and the report says so in a
-  sentence rather than a table.
+  sentence rather than a table. That exit-0 sentence is not a verdict that any
+  rule is or is not governed — it means nothing is _recorded_, so every
+  `decisionRef` in the tree is dangling, and rule governance is entirely
+  unanchored until someone writes the record.
 - **A `decisionRef` that does not resolve is `unknown`, never `pass`.** The
   registry answers the two-name space — an ADR id (matching a file) or a
   rule/fitness id the workspace's ADRs bind. Anything else is unknown, and the
-  caller reports unknown (exit 3, never clean): a rule that reads as bound while
-  nothing binds it is the silent direction.
+  `adr` command reports it the loud way: a requested ADR id it does not know is
+  exit 3, never clean — a rule that reads as bound while nothing binds it is the
+  silent direction. That resolution happens only when an id is _explicitly
+  requested_ of `lattice adr`: today the config and intent loaders validate a
+  `decisionRef`'s shape only and resolve nothing, and no check gate — `check`,
+  `drift`, or a descriptive command — ever turns a row's `decisionRef` into a
+  verdict. A `decisionRef` that no gate has resolved is not system "unknown";
+  it is simply unexamined, and the only action that makes it a named fact is
+  asking `lattice adr` the id.
 
 ## Remote lookup does not change local resolution
 

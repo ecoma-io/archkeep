@@ -51,6 +51,10 @@ evidence commands open the verdict:
 - **Provenance** — every graph snapshot carries the git origin of the run;
   `history` discloses provenance advancing while nothing architectural changed
   as _code drift_. Evidence is attributable, never anonymous.
+- **`adr <id>`** — reads the recorded decision a rule's `decisionRef` names:
+  the record's status and rationale are the governance grounding of that rule.
+  A reference that resolves to nothing is `unknown` — see
+  [adr.md](adr.md).
 
 ## Evolution
 
@@ -77,8 +81,21 @@ rather than print "no drift". [concepts/drift.md](../concepts/drift.md)
 
 Everything above ships today. Several steps sit **beside** the gate rather than
 in it, and none of them exits 1 on its own — describing or proposing is not a
-finding:
+finding. Two of these are the law's own selectors, not observations of it:
 
+- **Named law profiles** — a `profiles` registry in the plugin options turns
+  the gate into a selection: `check` resolves `boundaryConfig`/`--config` as a
+  profile _name_ rather than a file path, and a profile that cannot be resolved
+  exits 3. The other commands never resolve a profile — they read their
+  configured file and fail loudly in a profile-selected workspace — so the
+  profile's effective block is a planning fact read from the registry, and the
+  report of any `check` names the `--config <NAME>` it ran with
+  ([profiles.md](../concepts/profiles.md) is the full model).
+- **ADR / decision records** — a rule's `decisionRef` points at a recorded
+  decision in `docs/adr/`, read by `lattice adr` (the evidence bullet above).
+  The record is committed governance like the rule itself; authoring one is a
+  human decision, and a `decisionRef` that resolves to nothing is `unknown`
+  unless the record exists to ground it.
 - **Waivers** — a boundary violation accepted for a fixed term. It lives in
   `boundarySuppressions` as a row with an `expiresAt`, is listed by
   `lattice waivers`, and stays a finding in `check` (exit 1, under "accepted

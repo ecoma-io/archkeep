@@ -16,7 +16,9 @@ profile name: it loads the registry, resolves the named profile to its
 effective block, and runs that through the same `policyFrom` tail every
 boundary-config dialect uses — one enforcement path, named. The value of
 `--config` overrides `boundaryConfig` for one run the way it overrides a
-filename.
+filename; a one-run override that resolves a different law than the one in
+effect is a review of that law, never a verification of the change, and a
+report of it names the profile and says it is not the law in effect.
 
 The language server does not read this option yet. A workspace whose
 `nx.json` options name a `profiles` registry is refused loudly at `initialize`
