@@ -97,6 +97,17 @@ describe("parsing use directives", () => {
   it("returns no entries for a go.work with no use directives, which is a parse, not a failure", () => {
     expect(parseGoWorkUse("go 1.24\n")).toEqual([]);
   });
+
+  it.each([
+    ["an empty file", ""],
+    ["a file with only blank lines", "\n\n\n"],
+    ["a file with only comments", "// nothing to see here\n// just a comment\n"],
+  ])(
+    "also returns no entries for %s, matching `go work edit`'s own tolerance (verified go1.24.7)",
+    (_shape, text) => {
+      expect(parseGoWorkUse(text)).toEqual([]);
+    },
+  );
 });
 
 describe("refusing a go.work it cannot read", () => {
@@ -115,6 +126,29 @@ describe("refusing a go.work it cannot read", () => {
     ["an unterminated raw string", "use `./half\n", /unterminated raw string/],
     ["a stray closing paren", ")\n", /unexpected '\)' outside any block/],
     ["text after a block's closing paren", "use (\n) ./late\n", /after the '\)'/],
+    // Audit finding P1-03: a go.work fetched through a redirect that actually
+    // served an HTML error page tokenizes cleanly — no unterminated block or
+    // string — so every line used to fall through the "future directive"
+    // skip and the file read as zero `use` entries. `go work edit` itself
+    // (go1.24.7) refuses every one of these lines as `"unknown directive"`;
+    // this parser must refuse the whole file the same way, not read it as a
+    // go.work with nothing declared.
+    [
+      "an HTML error page in place of go.work",
+      "<!DOCTYPE html>\n<html><head><title>404 Not Found</title></head>\n<body>404 Not Found</body></html>\n",
+      /go\.work:1: unknown directive: <!DOCTYPE/,
+    ],
+    // The general mechanism behind the HTML case above: any keyword outside
+    // go.work's own five (`go`, `toolchain`, `use`, `replace`, `godebug`) is
+    // refused, single-line or as a block header, so a corrupt or truncated
+    // file with plausible-looking-but-wrong directives fails loudly too, not
+    // only literal markup.
+    ["a keyword go.work does not define", "banana 1.24\n", /unknown directive: banana/],
+    [
+      "a block opened under a keyword go.work does not define",
+      "banana (\n\t./libs/domain\n)\n",
+      /unknown block type: banana/,
+    ],
   ];
 
   it.each(malformed)("throws on %s, naming the line", (_shape, text, message) => {
