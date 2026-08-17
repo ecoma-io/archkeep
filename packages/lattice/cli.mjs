@@ -81,7 +81,12 @@ import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs"
 import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/config.mjs";
 import { profilePolicy } from "./src/governance/profile-registry.mjs";
-import { DEFAULT_OPTIONS, markersAt, resolveCommandContext } from "./src/commands/context.mjs";
+import {
+  DEFAULT_OPTIONS,
+  WORKSPACE_MARKERS,
+  markersAt,
+  resolveCommandContext,
+} from "./src/commands/context.mjs";
 import { contextCommand } from "./src/commands/context-command.mjs";
 import { planContextCommand } from "./src/commands/plan-context-command.mjs";
 import { adrCommand } from "./src/commands/adr.mjs";
@@ -101,7 +106,7 @@ import { waiversCommand } from "./src/commands/waivers.mjs";
 import { INTENT_FILE, loadIntent } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { compareGoWork, parseGoWorkUse } from "./src/go-work.mjs";
-import { NX_CONFIG_FILE, readPluginOptions } from "./src/options.mjs";
+import { readPluginOptions } from "./src/options.mjs";
 import { buildDecision } from "./src/report/evidence.mjs";
 import { jsonEnvelope, renderJson } from "./src/report/json.mjs";
 import { formatSarif } from "./src/report/sarif.mjs";
@@ -110,7 +115,7 @@ import { formatReport } from "./src/report/text.mjs";
 import { LATTICE_MODEL_FILE, loadNativeModel } from "./src/providers/native/model.mjs";
 import { evaluate } from "./src/rules/index.mjs";
 import { judgeTsconfigPaths } from "./src/tsconfig-paths.mjs";
-import { listTrackedFiles } from "./src/workspace.mjs";
+import { findWorkspaceRoot, listTrackedFiles } from "./src/workspace.mjs";
 
 /**
  * Workspace-relative read from `root`, the same default `createWorkspace`
@@ -314,25 +319,24 @@ function optionsForUsage(cwd) {
 }
 
 /**
- * Walks up from `cwd` looking for either root marker — the same walk
- * `resolveCommandContext` does, duplicated here because `--help` has to work
+ * Walks up from `cwd` looking for any root marker — the same walk
+ * `resolveCommandContext` does, kept separate here because `--help` has to work
  * with no workspace at all (returning `DEFAULT_OPTIONS`) while `check` throws
  * on exactly that condition; the two callers cannot share one function without
  * one of them losing its posture.
+ *
+ * They share the marker LIST all the same (`WORKSPACE_MARKERS`), because
+ * differing postures are the reason for two functions and differing answers to
+ * "what is a workspace root" never were. This walk used to hold its own copy
+ * naming `nx.json` and `lattice.json` only, and the omission of `.moon` made
+ * `adr` unusable on every Moon workspace — this repository included — while
+ * its own error message named `.moon` as something it had looked for.
  *
  * @param {string} cwd
  * @returns {string|null}
  */
 function resolveWorkspaceRootForUsage(cwd) {
-  let dir = resolve(cwd);
-  for (;;) {
-    if (existsSync(join(dir, NX_CONFIG_FILE)) || existsSync(join(dir, LATTICE_MODEL_FILE))) {
-      return dir;
-    }
-    const parent = resolve(dir, "..");
-    if (parent === dir) return null;
-    dir = parent;
-  }
+  return findWorkspaceRoot(cwd, WORKSPACE_MARKERS);
 }
 
 /**

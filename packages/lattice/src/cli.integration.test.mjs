@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterAll, describe, expect, it } from "vitest";
@@ -3701,4 +3701,56 @@ describe("`history` capture and describe against the Nx fixture", () => {
       rmSync(emptyDir, { recursive: true, force: true });
     }
   });
+});
+
+describe("adr resolves a workspace root by every marker a root may carry", () => {
+  // The command had no end-to-end test at all, and the gap hid a real defect:
+  // `resolveWorkspaceRootForUsage` kept its own copy of the marker list naming
+  // `nx.json` and `lattice.json` only, so `adr` answered "needs a workspace
+  // root — no nx.json, lattice.json, or .moon marker found" on every Moon tree
+  // — naming `.moon` in the very sentence that proved it had not looked for it.
+  // This repository is a Moon workspace whose every architecture-intent row
+  // carries `decisionRef: "0001-boundary-levels"`, so the one command that can
+  // resolve that reference could never run on the tree it governs.
+  //
+  // Each marker gets its own case rather than one case for the fixed one: a
+  // list that lost an entry is exactly the regression, and a test covering
+  // only the entry that broke last time would not see the next one go.
+  const markers = [
+    ["nx.json", "nx.json", "{}\n"],
+    ["lattice.json", "lattice.json", '{"projects":[]}\n'],
+    [".moon", ".moon/workspace.yml", "projects: []\n"],
+    [".config/moon", ".config/moon/workspace.yml", "projects: []\n"],
+  ];
+
+  for (const [label, markerPath, markerBody] of markers) {
+    it(`reads the registry in a workspace rooted by ${label}`, () => {
+      const adrRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-adr-"));
+      try {
+        mkdirSync(join(adrRoot, dirname(markerPath)), { recursive: true });
+        writeFileSync(join(adrRoot, markerPath), markerBody);
+        mkdirSync(join(adrRoot, "docs/adr"), { recursive: true });
+        writeFileSync(
+          join(adrRoot, "docs/adr/0001-layering.md"),
+          "---\nstatus: accepted\n---\n\n# Layering\n",
+        );
+
+        const result = spawnSync(process.execPath, [CLI, "adr"], {
+          cwd: adrRoot,
+          encoding: "utf8",
+          timeout: 30_000,
+          killSignal: "SIGKILL",
+        });
+
+        // The silent direction here is exit 3 with an empty registry read as
+        // "nothing recorded": both this assertion and the next have to hold,
+        // because a run that could not find the root and a run that found a
+        // root with no ADRs both print no record.
+        expect(result.status, `${label}: ${result.stderr}`).toBe(0);
+        expect(result.stdout).toContain("0001-layering");
+      } finally {
+        rmSync(adrRoot, { recursive: true, force: true });
+      }
+    });
+  }
 });
