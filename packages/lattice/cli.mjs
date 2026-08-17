@@ -1799,8 +1799,15 @@ async function runContextCommand(options, { cwd, env }) {
  * unreadable file, a bad filename) throws → exit 3; an id the user asked
  * about that the registry does not know → exit 3, the invariant.
  *
+ * The tracked-file list is read the same way every other command reads it —
+ * `env.listFiles ?? listTrackedFiles`, so a test can inject a fake the same
+ * way `runCheck` and its siblings do — and handed to `adrCommand` so the
+ * registry resolves only git-tracked records (`src/governance/adr-registry.mjs`'s
+ * header). A `git ls-files` failure here throws the same as any other
+ * unreadable registry, mapped to exit 3 below.
+ *
  * @param {{format: string, output: string|null, paths: string[]}} options
- * @param {{cwd: string, env: {out: Function, err: Function}}} runContext
+ * @param {{cwd: string, env: {out: Function, err: Function, listFiles?: typeof listTrackedFiles}}} runContext
  * @returns {Promise<number>}
  */
 async function runAdr(options, { cwd, env }) {
@@ -1823,7 +1830,8 @@ async function runAdr(options, { cwd, env }) {
 
   let result;
   try {
-    result = adrCommand(root, { id: options.paths[0] });
+    const tracked = (env.listFiles ?? listTrackedFiles)(root);
+    result = adrCommand(root, { id: options.paths[0] }, { tracked });
   } catch (error) {
     env.err(String(error?.message ?? error));
     return EXIT.error;

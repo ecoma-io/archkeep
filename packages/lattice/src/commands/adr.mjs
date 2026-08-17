@@ -58,11 +58,19 @@ import { adrsBinding, boundFitnessIds, loadAdrRegistry } from "../governance/adr
  * unreadable registry — the caller (cli.mjs) maps that to exit 3.
  *
  * @param {string} root
- * @param {{loadAdrRegistryOverride?: typeof loadAdrRegistry}} [io]
+ * @param {{loadAdrRegistryOverride?: typeof loadAdrRegistry, tracked?: string[],
+ *   lstatSync?: (path: string) => {isSymbolicLink: () => boolean},
+ *   realpathSync?: (path: string) => string}} [io] `tracked`, `lstatSync` and
+ *   `realpathSync` are forwarded to `loadAdrRegistry` unchanged — see its own
+ *   header for what they guard against.
  * @returns {AdrContext}
  */
 export function readAdrContext(root, io = {}) {
-  const registry = (io.loadAdrRegistryOverride ?? loadAdrRegistry)(root);
+  const registry = (io.loadAdrRegistryOverride ?? loadAdrRegistry)(root, {
+    tracked: io.tracked,
+    lstatSync: io.lstatSync,
+    realpathSync: io.realpathSync,
+  });
   return {
     records: registry.records,
     byId: registry.byId,
@@ -76,7 +84,10 @@ export function readAdrContext(root, io = {}) {
  *
  * @param {string} root
  * @param {{id?: string}} options
- * @param {{loadAdrRegistryOverride?: typeof loadAdrRegistry}} [io]
+ * @param {{loadAdrRegistryOverride?: typeof loadAdrRegistry, tracked?: string[],
+ *   lstatSync?: (path: string) => {isSymbolicLink: () => boolean},
+ *   realpathSync?: (path: string) => string}} [io] Forwarded to
+ *   `readAdrContext` unchanged.
  * @returns {{status: "ok"|"no-verdict", result: object, coverage: object,
  *   report: {text: string, json: string}}}
  * @throws {Error} on an unreadable registry (exit-3 class).
