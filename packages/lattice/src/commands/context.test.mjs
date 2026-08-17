@@ -76,6 +76,137 @@ describe("resolveCommandContext — the native branch analyzes the whole tree be
   });
 });
 
+describe("resolveCommandContext — the Moon branch derives edges from imports, not only from dependsOn", () => {
+  // `moon project-graph --json` only carries an edge Moon itself resolved from
+  // a hand-written `dependsOn` in `moon.yml` — it has no plugin hook this
+  // package can register into the way `../nx.mjs`'s `createDependencies`
+  // registers into Nx's own graph computation, so a real Go/Rust/Python import
+  // crossing a project boundary with no `dependsOn` entry used to leave
+  // `graph.dependencies` exactly as Moon declared it: empty. Every verdict
+  // computed FROM the graph — architecture-intent, drift, cycles, `impact`,
+  // `diff` — read that as "no dependency" while `check`'s own import-site
+  // rules (which read analysis records directly) judged the same import fine,
+  // so a workspace with a real cross-project dependency reported it as
+  // unrelated in every one of those commands. This is the silent direction
+  // `AGENTS.md`'s invariant forbids: the graph claimed completeness it never
+  // had.
+  it("adds an edge for a real cross-project import the Moon graph never declared", () => {
+    const { root, write } = fixture("context-moon-imports-");
+    write(".moon/workspace.yml", "projects:\n  a: libs/a\n  b: libs/b\n");
+    write("libs/a/go.mod", "module example.com/a\n\ngo 1.24\n");
+    write("libs/a/a.go", 'package a\n\nimport "example.com/b"\n\nvar _ = b.Name\n');
+    write("libs/b/go.mod", "module example.com/b\n\ngo 1.24\n");
+    write("libs/b/b.go", "package b\n");
+
+    const context = resolveCommandContext(
+      { cwd: root, paths: [] },
+      {
+        // The injected graph is exactly what `moon project-graph --json`
+        // would answer for a workspace with no `dependsOn` anywhere: nodes,
+        // and an empty dependency list for each — Moon knows the projects
+        // exist and knows nothing about how they relate.
+        readGraph: () => ({
+          nodes: {
+            a: { name: "a", type: "lib", data: { root: "libs/a", tags: [] } },
+            b: { name: "b", type: "lib", data: { root: "libs/b", tags: [] } },
+          },
+          dependencies: { a: [], b: [] },
+        }),
+        listFiles: () => [
+          ".moon/workspace.yml",
+          "libs/a/go.mod",
+          "libs/a/a.go",
+          "libs/b/go.mod",
+          "libs/b/b.go",
+        ],
+      },
+    );
+
+    expect(context.provider).toBe("moon");
+    expect(context.graph.dependencies.a).toEqual([{ source: "a", target: "b", type: "static" }]);
+  });
+
+  it("analyzes the whole tree before scoping, so an edge outside the requested scope still survives", () => {
+    // Same asymmetry the native branch's own test above names: a Moon
+    // workspace derives `dependencies` from import sites the same way native
+    // does now, so analyzing only the scoped project first would drop every
+    // other project's imports from the graph entirely rather than merely
+    // from the report.
+    const { root, write } = fixture("context-moon-scope-");
+    write(".moon/workspace.yml", "projects:\n  a: libs/a\n  b: libs/b\n  c: libs/c\n");
+    write("libs/a/go.mod", "module example.com/a\n\ngo 1.24\n");
+    write("libs/a/a.go", "package a\n");
+    write("libs/b/go.mod", "module example.com/b\n\ngo 1.24\n");
+    write("libs/b/b.go", 'package b\n\nimport "example.com/c"\n\nvar _ = c.Name\n');
+    write("libs/c/go.mod", "module example.com/c\n\ngo 1.24\n");
+    write("libs/c/c.go", "package c\n");
+
+    const context = resolveCommandContext(
+      { cwd: root, paths: ["libs/a"] },
+      {
+        readGraph: () => ({
+          nodes: {
+            a: { name: "a", type: "lib", data: { root: "libs/a", tags: [] } },
+            b: { name: "b", type: "lib", data: { root: "libs/b", tags: [] } },
+            c: { name: "c", type: "lib", data: { root: "libs/c", tags: [] } },
+          },
+          dependencies: { a: [], b: [], c: [] },
+        }),
+        listFiles: () => [
+          ".moon/workspace.yml",
+          "libs/a/go.mod",
+          "libs/a/a.go",
+          "libs/b/go.mod",
+          "libs/b/b.go",
+          "libs/c/go.mod",
+          "libs/c/c.go",
+        ],
+      },
+    );
+
+    expect(context.provider).toBe("moon");
+    expect(context.analysis.analyzedFiles).toEqual(["libs/a/a.go"]);
+    expect(context.graph.dependencies.b).toEqual([{ source: "b", target: "c", type: "static" }]);
+  });
+
+  it("keeps a Moon-declared edge that no import site backs, additively rather than replacing it", () => {
+    // `dependsOn` can be true without a matching source import — a build-order
+    // or task dependency, or a language this package does not analyze. The
+    // merge must be additive: a declared edge with no import behind it is
+    // still a fact Moon asserted, not something this package gets to discard
+    // because its own analysis found no corroborating site.
+    const { root, write } = fixture("context-moon-declared-only-");
+    write(".moon/workspace.yml", "projects:\n  a: libs/a\n  b: libs/b\n");
+    write("libs/a/go.mod", "module example.com/a\n\ngo 1.24\n");
+    write("libs/a/a.go", "package a\n");
+    write("libs/b/go.mod", "module example.com/b\n\ngo 1.24\n");
+    write("libs/b/b.go", "package b\n");
+
+    const context = resolveCommandContext(
+      { cwd: root, paths: [] },
+      {
+        readGraph: () => ({
+          nodes: {
+            a: { name: "a", type: "lib", data: { root: "libs/a", tags: [] } },
+            b: { name: "b", type: "lib", data: { root: "libs/b", tags: [] } },
+          },
+          dependencies: { a: [{ source: "a", target: "b", type: "static" }], b: [] },
+        }),
+        listFiles: () => [
+          ".moon/workspace.yml",
+          "libs/a/go.mod",
+          "libs/a/a.go",
+          "libs/b/go.mod",
+          "libs/b/b.go",
+        ],
+      },
+    );
+
+    expect(context.provider).toBe("moon");
+    expect(context.graph.dependencies.a).toEqual([{ source: "a", target: "b", type: "static" }]);
+  });
+});
+
 describe("resolveCommandContext — the Nx branch scopes before it analyzes", () => {
   it("never analyzes a file outside the requested scope at all", () => {
     // The opposite order from the native branch, and load-bearing for the
