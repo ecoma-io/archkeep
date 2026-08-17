@@ -62,7 +62,9 @@ Name paths after `check` to narrow source analysis:
 lattice check apps/payments libs/ledger/src/lib.rs
 ```
 
-A path outside the workspace is a usage error, not a silent empty selection.
+A path outside the workspace, or one that matches no tracked file at all (a
+typo, the wrong working directory, or a file not yet `git add`ed), is a usage
+error, not a silent empty selection.
 
 A scoped run is a fast local pre-check and **not the gate**: cycle and lazy-load
 rules judge the file graph as a whole, so a scoped run can miss what a
@@ -100,12 +102,12 @@ promise are in [json-output.md](../reference/json-output.md).
 
 ## Exit codes
 
-| code | meaning                                                                                         |
-| ---- | ----------------------------------------------------------------------------------------------- |
-| `0`  | No findings, and every selected file was analyzed                                               |
-| `1`  | Boundary violation, `go.work` drift, dead tsconfig alias, or an architecture-intent finding     |
-| `2`  | Usage error — invalid arguments, unknown flag, or path outside the workspace                    |
-| `3`  | No verdict — the run could not look, coverage is incomplete, or intent could not be established |
+| code | meaning                                                                                                         |
+| ---- | --------------------------------------------------------------------------------------------------------------- |
+| `0`  | No findings, and every selected file was analyzed                                                               |
+| `1`  | Boundary violation, `go.work` drift, dead tsconfig alias, or an architecture-intent finding                     |
+| `2`  | Usage error — invalid arguments, unknown flag, a path outside the workspace, or a path matching no tracked file |
+| `3`  | No verdict — the run could not look, coverage is incomplete, or intent could not be established                 |
 
 A violation an active waiver accepts is still exit `1`: waiving a boundary
 breach for a fixed term is a tracked decision, not a fix, so accepting it
