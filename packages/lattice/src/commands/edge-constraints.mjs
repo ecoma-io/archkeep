@@ -9,6 +9,15 @@
  * table, which is the part of the boundary rules that depends only on project
  * tags (not on npm imports, circular dependencies, lazy loading, etc.).
  *
+ * `check` is a third caller, through `declaredEdgeViolationsForCheck` below —
+ * not for every edge, only the ones `evaluate()` structurally cannot reach: an
+ * `implicit`-typed edge (Nx's/`lattice.json`'s `implicitDependencies`) has no
+ * import site behind it at all, so it never becomes an `importSites` record for
+ * `evaluate()` to iterate. Without this, `check` could report a clean tree
+ * while `context`/`impact` showed the exact same edge as a tag violation — the
+ * "empty result is a claim, not a shrug" invariant (`../../../AGENTS.md`)
+ * broken by omission rather than by a wrong answer.
+ *
  * ## What it checks and what it does not
  *
  * It checks the three `depConstraints` verdicts:
@@ -20,8 +29,10 @@
  *
  * It does NOT check npm/external imports, circular dependencies, lazy-loading,
  * or the `allow` list. Those checks depend on import-site details (specifier
- * text, import kind, file path) that graph edges do not carry. A consumer who
- * needs the full verdict should run `check`.
+ * text, import kind, file path) that graph edges do not carry — true of every
+ * edge `judgeEdge` judges, `check`'s own `implicit`-edge callers included: an
+ * edge with no import site cannot gain one by being judged from `check` rather
+ * than `impact`. A consumer who needs the full verdict should run `check`.
  *
  * ## Why this lives here and not in `src/rules/`
  *
@@ -31,6 +42,7 @@
  * enough that merging them would blur the layer boundary the CLAUDE.md guards.
  */
 
+import { renderMessage } from "../rules/messages.mjs";
 import { buildReachability } from "../rules/reachability.mjs";
 import {
   emptyOnlyTagsViolation,
@@ -55,7 +67,7 @@ import {
  *   When omitted, it is built on demand (the slow path for single-edge callers).
  *   When provided by a batch caller like `computeRuleImpact`, it is reused across
  *   all edges in the same graph, avoiding O(E) rebuilds of the same structure.
- * @returns {{messageId: string, constraint: object, source: string, target: string}[]}
+ * @returns {{messageId: string, constraint: object|null, source: string, target: string, data: object, message: string}[]}
  */
 export function judgeEdge(edge, nodes, dependencies, depConstraints, reachability) {
   const sourceNode = nodes[edge.source];
@@ -72,12 +84,15 @@ export function judgeEdge(edge, nodes, dependencies, depConstraints, reachabilit
   // This is the same semantics `findConstraintsFor` documents: an empty list
   // is an error, not a pass.
   if (matchedConstraints.length === 0) {
+    const messageId = "projectWithoutTagsCannotHaveDependencies";
     return [
       {
-        messageId: "projectWithoutTagsCannotHaveDependencies",
+        messageId,
         constraint: null,
         source: edge.source,
         target: edge.target,
+        data: {},
+        message: renderMessage(messageId, {}),
       },
     ];
   }
@@ -92,6 +107,8 @@ export function judgeEdge(edge, nodes, dependencies, depConstraints, reachabilit
         constraint,
         source: edge.source,
         target: edge.target,
+        data: onlyTags.data,
+        message: renderMessage(onlyTags.messageId, onlyTags.data),
       });
       continue;
     }
@@ -103,6 +120,8 @@ export function judgeEdge(edge, nodes, dependencies, depConstraints, reachabilit
         constraint,
         source: edge.source,
         target: edge.target,
+        data: emptyOnly.data,
+        message: renderMessage(emptyOnly.messageId, emptyOnly.data),
       });
       continue;
     }
@@ -117,11 +136,69 @@ export function judgeEdge(edge, nodes, dependencies, depConstraints, reachabilit
           constraint,
           source: edge.source,
           target: edge.target,
+          data: notTags.data,
+          message: renderMessage(notTags.messageId, notTags.data),
         });
       }
     }
   }
 
+  return violations;
+}
+
+/**
+ * Judges every `implicit`-typed edge in the graph against `depConstraints` —
+ * the declaration-only counterpart to `evaluate()`'s import-site judgment,
+ * for `check` specifically.
+ *
+ * `implicit` is the one edge type this package's own providers agree means
+ * "declared, not derived from code" — Nx emits it for a `project.json`'s
+ * `implicitDependencies` (verified against a real `nx graph --file=` run),
+ * and the native provider's `buildDependencies` (`../providers/native/graph.mjs`)
+ * assigns it for `lattice.json`'s/`project.json`'s own `implicitDependencies`
+ * row. It is also the exact criterion `drift.mjs`'s `buildObserved` and
+ * `discover.mjs` already exclude architecture edges by — reused here rather
+ * than re-derived, so this check and `drift`'s exclusion can never disagree
+ * about which edges count as "declared".
+ *
+ * Only the three `depConstraints` verdicts `judgeEdge` covers are judged —
+ * the same 3-of-15 limit `context`/`impact` already document, and for the same
+ * reason: the other twelve rules need import-site details a declaration-only
+ * edge structurally does not carry.
+ *
+ * An empty `depConstraints` table returns no violations, matching
+ * `evaluate()`'s own early exit in `../rules/index.mjs`'s `evaluateConstraints`
+ * — a workspace declaring no constraint table has opted out of dep-constraint
+ * enforcement entirely, on both the import-site and the declared-edge path.
+ * `judgeEdge` itself has no such guard (an empty table makes every project's
+ * `findConstraintsFor` return `[]`, i.e. `projectWithoutTagsCannotHaveDependencies`
+ * on every edge) because `context`/`impact` intentionally show that as a
+ * per-edge fact; folding the same into `check`'s pass/fail verdict would flag
+ * an opted-out workspace on every implicit edge for a reason `check`'s own
+ * import-site rules never would.
+ *
+ * @param {{nodes: object, dependencies: object}} graph
+ * @param {object[]} depConstraints The constraint table from the boundary config.
+ * @returns {{messageId: string, constraint: object|null, source: string, target: string, data: object, message: string}[]}
+ */
+export function declaredEdgeViolationsForCheck(graph, depConstraints) {
+  if (depConstraints.length === 0) return [];
+  const reachability = buildReachability(graph);
+  const violations = [];
+  for (const [source, edges] of Object.entries(graph.dependencies ?? {})) {
+    for (const edge of edges) {
+      if (edge.type !== "implicit") continue;
+      violations.push(
+        ...judgeEdge(
+          { source, target: edge.target },
+          graph.nodes,
+          graph.dependencies,
+          depConstraints,
+          reachability,
+        ),
+      );
+    }
+  }
   return violations;
 }
 

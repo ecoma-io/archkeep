@@ -249,6 +249,42 @@ export function sarifTsconfigPathsResult(finding) {
 }
 
 /**
+ * One declared-edge violation as a SARIF result — an `implicit`-typed graph
+ * edge (`implicitDependencies`) that crosses a `depConstraints` boundary with
+ * no import site behind it.
+ *
+ * `messageId` is one of the same three `depConstraints` ids `sarifResult`
+ * already catalogues (`onlyTagsConstraintViolation`,
+ * `notTagsConstraintViolation`, `projectWithoutTagsCannotHaveDependencies`) —
+ * `judgeEdge` (`../commands/edge-constraints.mjs`) reuses the identical
+ * tag-matching functions `evaluate()`'s import-site path does, so the rule IS
+ * the same rule and needs no second entry in `sarifRules()`; only the
+ * `ruleIndex` lookup is shared, via `MESSAGE_IDS` rather than a second table.
+ *
+ * Positionless by construction — a declaration has no import statement to
+ * point a `region` at — so the location carries the declaring manifest alone,
+ * the same convention `sarifIntentResult` uses for a graph-edge finding with
+ * no source site of its own.
+ *
+ * @param {object} finding A finding from `../commands/edge-constraints.mjs`'s
+ *   `declaredEdgeViolationsForCheck`, extended with `file`.
+ * @returns {object}
+ */
+export function sarifDeclaredEdgeResult(finding) {
+  return {
+    ruleId: finding.messageId,
+    ruleIndex: MESSAGE_IDS.indexOf(finding.messageId),
+    level: "error",
+    message: { text: finding.message },
+    locations: [{ physicalLocation: { artifactLocation: { uri: toUriReference(finding.file) } } }],
+    properties: {
+      source: finding.source,
+      target: finding.target,
+    },
+  };
+}
+
+/**
  * One architecture-intent finding as a SARIF result.
  *
  * A result for the same reason a go.work drift finding is one: it is a verdict
@@ -314,10 +350,18 @@ export function sarifNotification(failure) {
  * @param {{violations: object[], failures: object[],
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
  *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
+ *   declaredEdges?: {findings: object[], judged?: number}|null,
  *   intent?: {findings: object[]}|null}} run
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
-export function buildSarifLog({ violations, failures, goWork, tsconfigPaths, intent }) {
+export function buildSarifLog({
+  violations,
+  failures,
+  goWork,
+  tsconfigPaths,
+  declaredEdges,
+  intent,
+}) {
   const waived = violations.filter((violation) => violation.waivedBy);
   // A waived count rides as a notification so a consumer scanning for "did
   // this run accept anything" finds it without reading every result's
@@ -350,6 +394,7 @@ export function buildSarifLog({ violations, failures, goWork, tsconfigPaths, int
           ...violations.map(sarifResult),
           ...(goWork?.findings ?? []).map(sarifGoWorkResult),
           ...(tsconfigPaths?.findings ?? []).map(sarifTsconfigPathsResult),
+          ...(declaredEdges?.findings ?? []).map(sarifDeclaredEdgeResult),
           ...(intent?.findings ?? []).map(sarifIntentResult),
         ],
         invocations: [
