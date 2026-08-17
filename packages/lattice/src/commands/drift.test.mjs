@@ -295,4 +295,30 @@ describe("driftForCheck — the check fold", () => {
     expect(verdict.unresolved).toEqual([]);
     expect(verdict.notes).toEqual([]);
   });
+
+  it("resolves a quiet, empty result when no architecture-intent.json is tracked, rather than judging an absent intent", async () => {
+    // P1-14 regression: `judgeIntent` assumes a normalized model and
+    // dereferences `intent.boundaries` unconditionally — calling it with
+    // `undefined` (what `loadIntent` returns for "file not tracked") threw a
+    // raw `TypeError: Cannot read properties of undefined (reading
+    // 'boundaries')`. `driftForCheck` must recognize the absence itself,
+    // before ever reaching `judgeIntent`, and return a quiet result instead —
+    // `intent: undefined` on the return is the signal that lets
+    // `../commands/fitness.mjs`'s `fitnessCommand` call this UNCONDITIONALLY
+    // (it must still reach the `refuseIncompleteGraph` guard above whether or
+    // not intent is declared) without crashing on a workspace that
+    // legitimately has no intent file — the supported configuration where
+    // fitness lives in the policy file alone.
+    const verdict = await driftForCheck(commandContext({ tracked: ["lattice.json"] }), {
+      loadIntentOverride: async () => undefined,
+    });
+    expect(verdict.intent).toBeUndefined();
+    expect(verdict.findings).toEqual([]);
+    expect(verdict.unresolved).toEqual([]);
+    expect(verdict.boundaries).toEqual([]);
+    expect(verdict.notes).toEqual([]);
+    // The observed side is still computed — absence of an intent says nothing
+    // about whether the graph itself was read.
+    expect(verdict.observed.projects).toBe(2);
+  });
 });
