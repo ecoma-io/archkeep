@@ -480,6 +480,35 @@ describe("scoping a run to named paths", () => {
       /outside the workspace/,
     );
   });
+
+  it("refuses a path that matches no tracked file, instead of selecting nothing", () => {
+    // The untracked-new-file case a pre-commit hook hits: a path with nothing
+    // under it in `files` AND nothing under it in the wider tracked universe
+    // (defaulted to `files` here) is a typo, the wrong cwd, or a file that was
+    // never `git add`ed — not a legitimately empty slice, so this must be loud
+    // exactly the way an out-of-workspace path already is.
+    expect(() => selectFiles(files, ["libs/gamma"], location)).toThrow(/matches no tracked file/);
+  });
+
+  it("does not refuse a path that is tracked but merely owns none of the files given", () => {
+    // `docs/` is real and tracked — it simply is not in the (already
+    // ownership-narrowed) `files` list a caller like `check` passes. Widening
+    // the check to the raw `tracked` universe is what tells this apart from
+    // the case above: a legitimately empty slice must still select cleanly.
+    const tracked = [...files, "docs/readme.md"];
+    expect(selectFiles(files, ["docs"], { ...location, tracked })).toEqual([]);
+  });
+
+  it("checks each named path against the tracked universe, not the narrowed one", () => {
+    // `tracked` may be a strict superset of `files` (project-owned files are a
+    // subset of every tracked file) — a path matching only the untracked part
+    // of that gap must still throw, proving the check reads `tracked` and not
+    // silently falls back to `files` when both are given.
+    const tracked = [...files, "docs/readme.md"];
+    expect(() => selectFiles(files, ["libs/gamma"], { ...location, tracked })).toThrow(
+      /matches no tracked file/,
+    );
+  });
 });
 
 describe("analyzing the selection", () => {

@@ -1068,10 +1068,14 @@ async function runCheck(options, { cwd, env }) {
   try {
     result = await check(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
-    // A path outside the tree is the user's typo, everything else is the run
-    // failing; the two get different codes because only one is worth retrying
-    // with different arguments.
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    // A bad path argument — outside the tree, or matching no tracked file at
+    // all (a typo, the wrong cwd, or a file not yet `git add`ed) — is the
+    // user's mistake to retype; everything else is the run failing. The two
+    // get different codes because only one is worth retrying with different
+    // arguments.
+    const usageError = /is outside the workspace|matches no tracked file/.test(
+      error?.message ?? "",
+    );
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }

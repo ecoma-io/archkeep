@@ -442,15 +442,30 @@ export function annotatePackageFacts(nodes, readFile) {
  * a whole and the engine's index describes what was analyzed rather than what
  * exists (`rules/index.mjs` → `createFileDependencyIndex`).
  *
- * @param {string[]} files Workspace-relative tracked files.
+ * @param {string[]} files Workspace-relative tracked files to select from —
+ *   typically already narrowed to the files a project owns.
  * @param {string[]} paths As typed on the command line.
- * @param {{ root: string, cwd: string }} location
+ * @param {{ root: string, cwd: string, tracked?: string[] }} location `tracked`
+ *   is the wider, ownership-independent universe a named path is checked
+ *   against before `files` is filtered — defaults to `files` itself. The two
+ *   differ for a caller like `check`, whose `files` is already narrowed to
+ *   project-owned files: a path into a real, tracked-but-unowned area (a
+ *   `docs/` directory, a root `README.md`) would match zero of `files` even
+ *   though it names a legitimate, merely-empty slice — not a usage mistake.
+ *   Testing the raw path against the untrimmed tracked set is what tells that
+ *   apart from a path git has never heard of at all: a typo, the wrong `cwd`,
+ *   or a file that was created but never `git add`ed — the case that made
+ *   `lattice check` exit 0 clean on a file whose committed twin, byte for
+ *   byte, reported a real violation.
  * @returns {string[]} A subset of `files`.
- * @throws {Error} when a path lies outside the workspace — silently selecting
- *   nothing would report a clean tree for a run that inspected none of it.
+ * @throws {Error} when a path lies outside the workspace, or matches no
+ *   tracked file at all — silently selecting nothing would report a clean tree
+ *   for a run that inspected none of it.
  */
-export function selectFiles(files, paths, { root, cwd }) {
+export function selectFiles(files, paths, { root, cwd, tracked = files }) {
   if (paths.length === 0) return files;
+  const withinPrefix = (file, prefix) =>
+    prefix === "" || file === prefix || file.startsWith(`${prefix}/`);
   const prefixes = paths.map((path) => {
     const absolute = isAbsolute(path) ? path : resolve(cwd, path);
     const rel = relative(root, absolute);
@@ -461,11 +476,15 @@ export function selectFiles(files, paths, { root, cwd }) {
           `there is nothing there this tool could check`,
       );
     }
+    if (!tracked.some((file) => withinPrefix(file, rel))) {
+      throw new Error(
+        `lattice: '${path}' matches no tracked file at ${root} — check the ` +
+          `path and the working directory, or 'git add' it first if it is new`,
+      );
+    }
     return rel;
   });
-  return files.filter((file) =>
-    prefixes.some((prefix) => prefix === "" || file === prefix || file.startsWith(`${prefix}/`)),
-  );
+  return files.filter((file) => prefixes.some((prefix) => withinPrefix(file, prefix)));
 }
 
 /**
