@@ -71,6 +71,19 @@ violations it covers. Coverage is judged against the full finding set — the
 table removed — so a row that names a file the tree never visits reads as
 covers-nothing, not as quietly doing its job.
 
+It also lists the OTHER half of `boundarySuppressions` — every row with no
+`expiresAt` — because a permanent suppression never appears in `check`'s
+findings at all (that removal is the mechanism working as designed) and this
+command is the only surface that names one. A single suppression row can
+cover an unbounded number of violations forever, with no term to force a
+second look, so the report states which permanent rows exist and how many
+violations each is currently hiding — the same "recorded, never silently
+deleted" treatment a waiver gets, extended to the row that has no expiry to
+make that treatment automatic. A tree with no waivers but at least one
+permanent suppression does **not** read as "every boundary is enforced": that
+claim is true only when this command measured both halves of the table and
+found each one empty.
+
 A `waivers` run is descriptive, like `graph` or `drift`: it exits 0 whenever
 the surface could be read, never 1. The failing verdict is `check`'s alone —
 but a run of only waivers shows its own not-clean summary, because a surface
