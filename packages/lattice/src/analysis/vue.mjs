@@ -92,7 +92,10 @@ function sfcFailure(sourceFile, error) {
  * Both script blocks are analyzed when both exist — `<script>` and
  * `<script setup>` legitimately coexist, and an import in either is an import
  * of the component. A file with no script block yields the empty envelope and
- * no failure: a template-only SFC imports nothing, which is not an error.
+ * no failure: a template-only SFC imports nothing, which is not an error. A
+ * `<script>`/`<script setup>` tag the SFC parser could not recover to EOF is
+ * different — its content is unknown, not empty — and yields a whole-file
+ * failure rather than a silently clean result.
  *
  * @param {{ sourceFile: string, text: string, workspace: object }} request
  * @returns {{ imports: object[], failures: object[] }}
@@ -106,6 +109,30 @@ export function analyzeVue({ sourceFile, text, workspace }) {
 
     for (const block of [descriptor.script, descriptor.scriptSetup]) {
       if (!block) continue;
+      // `ignoreEmpty` (compiler-sfc's own default) already drops a genuinely
+      // empty, well-formed `<script>`/`<script setup>` to `null` before this
+      // loop ever sees it — verified against the installed compiler-sfc's own
+      // source. The only way a truthy block reaches here with a zero-width
+      // span (`loc.start.offset === loc.end.offset`) and no `src` is the SFC
+      // parser failing to find the block's end tag before EOF: it still
+      // returns a block object, but one carrying none of the file's bytes,
+      // which `isolate` below would otherwise blank to nothing and read as
+      // "no imports" — indistinguishable from a legitimate template-only
+      // component. `!block.src` is required because `<script src="./x.ts" />`
+      // legitimately has an empty inline body and the SAME zero-width span —
+      // its content lives in a file this analyzer does not read, an
+      // already-accepted limit, not this failure.
+      if (block.loc.start.offset === block.loc.end.offset && !block.src) {
+        result.failures.push(
+          fileFailure(
+            sourceFile,
+            `Vue SFC parse error: a <script${block === descriptor.scriptSetup ? " setup" : ""}> ` +
+              `block could not be recovered (its end tag was not found), so any imports inside ` +
+              `it are unknown`,
+          ),
+        );
+        continue;
+      }
       const isolated = isolate(text, block.loc.start.offset, block.loc.end.offset);
       const analyzed = analyzeTypeScript({
         sourceFile,
