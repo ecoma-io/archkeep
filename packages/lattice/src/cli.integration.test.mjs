@@ -1453,6 +1453,93 @@ export const fitness = [
   });
 });
 
+describe("coverage.exempt is disclosed, not only enforced", () => {
+  // `judgeCoverage` (`./providers/native/coverage.mjs`) always computed which
+  // files a `coverage.exempt` row removed from `unclaimed` — the list existed
+  // three layers deep and stopped there: `discover()` dropped it before
+  // `check()` ever saw it, so an exempted file and a genuinely covered one
+  // were byte-for-byte indistinguishable in the text report and in
+  // `--format json`. A workspace could exempt an unbounded number of files,
+  // forever, and nothing would ever say so. This block proves the count now
+  // reaches both surfaces, without changing the exit code `coverage.exempt`
+  // is meant to produce — the fixture below is otherwise clean, so exit 0 is
+  // correct both before and after; what changes is whether the run says why
+  // one of its two tracked files was never analyzed.
+  const exemptRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-exempt-"));
+  afterAll(() => rmSync(exemptRoot, { recursive: true, force: true }));
+
+  const writeExempt = (relativePath, text) => {
+    mkdirSync(join(exemptRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(exemptRoot, relativePath), text);
+  };
+
+  writeExempt(
+    "lattice.json",
+    JSON.stringify({
+      projects: { declared: [{ root: "libs/kept", name: "kept", tags: [] }] },
+      // The boundary law's own config file sits at the workspace root, which
+      // no declared project owns — exempted here too, or it would be a
+      // second, unrelated unclaimed file this fixture never meant to test.
+      coverage: {
+        exempt: [
+          { path: "module-boundaries.config.mjs", reason: "workspace tooling, not a project" },
+          { path: "libs/vendored/**", reason: "vendored third-party, checked upstream" },
+        ],
+      },
+    }),
+  );
+  writeExempt(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeExempt("libs/kept/go.mod", "module example.com/kept\n\ngo 1.24\n");
+  writeExempt("libs/kept/kept.go", "package kept\n");
+  // Owned by no declared project, and would fail the run (exit 3, "not owned
+  // by any project") without the exempt row above — this is the file the
+  // exemption is legitimately for, not a fixture mistake.
+  writeExempt("libs/vendored/vendored.go", "package vendored\n");
+
+  const exemptContext = {
+    cwd: exemptRoot,
+    listFiles: () => [
+      "lattice.json",
+      "module-boundaries.config.mjs",
+      "libs/kept/go.mod",
+      "libs/kept/kept.go",
+      "libs/vendored/vendored.go",
+    ],
+  };
+
+  it("names the exempted count on the summary line", async () => {
+    const { report, violations } = await check(
+      { format: "text", config: null, paths: [] },
+      exemptContext,
+    );
+    expect(violations).toBe(0);
+    expect(report).toContain("2 files exempted from coverage by lattice.json's coverage.exempt");
+  });
+
+  it("carries the same note in the JSON envelope's coverage.notes", async () => {
+    const { report } = await check({ format: "json", config: null, paths: [] }, exemptContext);
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("ok");
+    expect(envelope.coverage.notes).toContain(
+      "2 files exempted from coverage by lattice.json's coverage.exempt",
+    );
+  });
+});
+
 describe("the waivers surface, end to end", () => {
   // A third native tmpdir whose boundary law carries a `boundarySuppressions`
   // waiver row over the same layer-crossing import, so the whole pipeline is

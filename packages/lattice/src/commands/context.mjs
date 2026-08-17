@@ -131,9 +131,11 @@ export const WORKSPACE_MARKERS = [NX_CONFIG_FILE, LATTICE_MODEL_FILE, MOON_DIR, 
  *   `createWorkspace` returns.
  * @property {string[]} tracked Every tracked file, from `listFiles(root)`.
  * @property {{imports: object[], failures: object[], analyzed: number,
- *   analyzedFiles: string[]}} analysis The whole-tree-then-scoped (native) or
- *   scoped-then-analyzed (nx/moon) result — see the branches below for why the
- *   order is not the same on all three.
+ *   analyzedFiles: string[], exemptedFiles: string[]}} analysis The
+ *   whole-tree-then-scoped (native) or scoped-then-analyzed (nx/moon) result —
+ *   see the branches below for why the order is not the same on all three.
+ *   `exemptedFiles` is always `[]` on nx/moon: `coverage.exempt` is a
+ *   native-only `lattice.json` key.
  * @property {{boundaryConfig: string|object, tsConfig: object|undefined,
  *   profiles?: string, inline?: boolean}} options What this workspace names its
  *   boundary law, its shared tsconfig, and — when it uses one — its named
@@ -240,6 +242,7 @@ export function resolveCommandContext(
   let analyzed;
   let analyzedFiles;
   let pluginGap;
+  let exemptedFiles;
 
   if (hasNative) {
     // No `nx graph`, no `nx.json`, and — verified by this branch existing at
@@ -315,6 +318,11 @@ export function resolveCommandContext(
     ];
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
     analyzed = analyzedFiles.length;
+    // Unaffected by `paths`: an exempted file is by definition unowned by any
+    // project, so it was never a candidate for `owned`/`selected` in the
+    // first place — the same reason `pluginGap` below is a workspace-wide
+    // fact rather than a scoped one.
+    exemptedFiles = discovered.exempted;
 
     // There is no Nx plugin registration to be missing on a workspace that
     // has no `nx.json` at all.
@@ -346,6 +354,9 @@ export function resolveCommandContext(
       { root, cwd },
     );
     ({ imports, failures, analyzed, analyzedFiles } = analyzeWorkspace(workspace, selected));
+    // `coverage.exempt` is a native-only key (`../providers/native/coverage.mjs`'s
+    // header: "Nx has no equivalent question") — Moon carries no such list.
+    exemptedFiles = [];
 
     // There is no Nx plugin registration to be missing on a workspace that
     // has no `nx.json` at all.
@@ -383,6 +394,9 @@ export function resolveCommandContext(
       { root, cwd },
     );
     ({ imports, failures, analyzed, analyzedFiles } = analyzeWorkspace(workspace, selected));
+    // Same reason as the Moon branch above: `coverage.exempt` is a native-only
+    // concept, so an Nx workspace has nothing to report here.
+    exemptedFiles = [];
 
     pluginGap = {
       registered: pluginIsRegistered(root, { readFile }),
@@ -402,7 +416,7 @@ export function resolveCommandContext(
     graph,
     workspace,
     tracked,
-    analysis: { imports, failures, analyzed, analyzedFiles },
+    analysis: { imports, failures, analyzed, analyzedFiles, exemptedFiles },
     options,
     pluginGap,
     // Every tracked file that belongs to a project, paired with its project —
