@@ -1,8 +1,6 @@
 ---
 name: arch-review
 description: Review a change or PR for architecture governance — establish context, inspect the change, run the authoritative gate, and produce an evidence-backed review
-metadata:
-  version: "0.4.0"
 compatibility: Requires @ecoma-io/lattice CLI
 ---
 

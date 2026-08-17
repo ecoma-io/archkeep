@@ -1,8 +1,6 @@
 ---
 name: arch-change
 description: Make an architecture-aware change — inspect context and declared Intent first, change code inside the constraints, and produce verifiable evidence
-metadata:
-  version: "0.4.0"
 compatibility: Requires @ecoma-io/lattice CLI
 ---
 

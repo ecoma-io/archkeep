@@ -1,8 +1,6 @@
 ---
 name: arch-check
 description: Run the authoritative governance gate after a change — boundary rules and declared Intent, as a fail-closed deterministic verdict
-metadata:
-  version: "0.4.0"
 compatibility: Requires @ecoma-io/lattice CLI
 ---
 

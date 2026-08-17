@@ -1,8 +1,6 @@
 ---
 name: arch-context
 description: Establish the architectural facts and governance constraints relevant to a change before modifying code in a Lattice-governed project
-metadata:
-  version: "0.4.0"
 compatibility: Requires @ecoma-io/lattice CLI
 ---
 

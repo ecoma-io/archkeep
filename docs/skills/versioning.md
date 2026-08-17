@@ -1,8 +1,8 @@
 # Version synchronization
 
-Every `arch-*` skill carries a `metadata.version` in its frontmatter, and that
-version must match the Lattice package version. This page documents how the sync
-works, what enforces it, and what happens on release.
+Every version-bearing file that ships together carries the Lattice package
+version, and the same mechanism keeps them in lockstep. This page documents
+how the sync works, what enforces it, and what happens on release.
 
 ## The version chain
 
@@ -12,24 +12,27 @@ packages/lattice/package.json (source of truth)
   = .claude-plugin/marketplace.json (entry version)
   = .codex-plugin/plugin.json
   = packages/lattice-vscode/package.json
-  = skills/*/SKILL.md (metadata.version)
 ```
 
-All six must agree. A mismatch means a consumer's skills claim a version the
-engine does not match — which is worse than no version at all, because it reads
-as current. The extension is on the list for the same reason: it pairs with the
+All five must agree. The extension is on the list because it pairs with the
 engine it is released with, and one version is what makes the pairing visible.
+
+The `arch-*` skills carry **no version** by decision. A consumer's skills are
+installed with the plugin that ships them, so the version that matters is the
+plugin's — a per-skill `metadata.version` would have to be bumped by hand on
+every release, and a version that drifts is worse than none, because it reads
+as current. If a skill needs to be paired with a specific engine, the plugin
+version is the pairing.
 
 ## CI enforcement
 
 `scripts/check-skills.mjs` runs in CI and validates:
 
-1. Every SKILL.md `metadata.version` matches the package version
-2. `.claude-plugin/plugin.json` version matches the package version
-3. `.claude-plugin/marketplace.json` entry version matches the package version
-4. `.codex-plugin/plugin.json` version matches the package version
-5. `packages/lattice-vscode/package.json` version matches the package version
-6. No host-specific frontmatter fields have leaked into canonical skills
+1. `.claude-plugin/plugin.json` version matches the package version
+2. `.claude-plugin/marketplace.json` entry version matches the package version
+3. `.codex-plugin/plugin.json` version matches the package version
+4. `packages/lattice-vscode/package.json` version matches the package version
+5. No host-specific frontmatter fields have leaked into canonical skills
 
 A version mismatch fails the build. There is no warning tier.
 
@@ -50,29 +53,7 @@ the `extra-files` configuration in `release-please-config.json` also bumps:
 - `packages/lattice/package.json` (`$.version`)
 - `packages/lattice-vscode/package.json` (`$.version`)
 
-These five files are bumped automatically. The `SKILL.md` files in `skills/` are
-YAML frontmatter and are not covered by release-please's generic updater.
-
-## Manual SKILL.md version update
-
-When a release PR is created, the gate script will fail if the `SKILL.md`
-versions have not been updated to match the new package version. To fix:
-
-1. Update `metadata.version` in each `skills/*/SKILL.md` to the new version
-2. Push the update to the release PR branch
-3. CI will pass once the versions match
-
-This manual step is deliberate: it ensures a human reviews the skill content
-when the version changes, rather than having the version bumped mechanically
-without anyone reading the skills.
-
-## Why skill versions match the package version
-
-Skills call `lattice` CLI commands. If a skill references a command or a
-`--format json` field that does not exist in the installed version, the agent
-following it will fail in ways that are hard to diagnose — the skill says "run
-this" and the CLI says "unknown flag."
-
-By pinning skill versions to the package version, a consumer can tell at a
-glance whether their skills match their CLI. A mismatch is a signal to update
-one or the other.
+These five files are bumped automatically, and `release.yml` reformats the
+`extra-files` after release-please writes them — release-please re-serializes a
+JSON file it touches, which does not match this repository's Prettier layout, so
+the reformat step keeps `format:check` green on the release pull request.
