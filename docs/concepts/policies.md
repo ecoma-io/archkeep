@@ -30,13 +30,15 @@ mistake, not a missing file.
 There is no codemod between dialects, and none is planned: a workspace picks the
 one that fits how it already writes configuration and keeps it.
 
-## The three keys
+## The four keys
 
-Every dialect holds the same three things, under the same names — only the
-syntax around them changes:
+Every dialect holds the same things, under the same names — only the syntax
+around them changes:
 
 - **`depConstraints`** — the constraint table. Which `sourceTag`/`allSourceTags`
-  may depend on which.
+  may depend on which. A row may also carry the shared governance block
+  (`origin`, `rationale`, `decisionRef`, `fitnessBindings`) — [provenance.md](provenance.md)
+  owns those keys.
 - **`moduleBoundaryOptions`** — the eight options (`allow`, `buildTargets`,
   `enforceBuildableLibDependency`, `allowCircularSelfDependency`,
   `checkDynamicDependenciesExceptions`, `ignoredCircularDependencies`,
@@ -48,10 +50,13 @@ syntax around them changes:
   an `expiresAt` is a **waiver** — an acceptance with a deadline — whose
   lifecycle [waivers.md](waivers.md) owns; without one it is a permanent
   suppression.
+- **`fitness`** — optional; absent means no named quality gates are declared.
+  Each row is `{ name, match, condition, reason }` — a fitness gate cannot
+  carry a `decisionRef`. See [fitness-functions.md](fitness-functions.md).
 
 ## The ES module dialect (`.mjs` / `.js`)
 
-The default. A plain ES module exporting up to three names:
+The default. A plain ES module exporting up to four names:
 
 ```js
 export const depConstraints = [
@@ -68,10 +73,11 @@ export const moduleBoundaryOptions = {
   checkNestedExternalImports: false,
 };
 export const boundarySuppressions = [];
+export const fitness = [];
 ```
 
 Being a real ES module, it may export other names too — a shared constant, a
-helper the table is built from. The loader reads exactly the three names above
+helper the table is built from. The loader reads exactly the four names above
 and ignores the rest.
 
 ## The JSON dialect (`.json`)
@@ -79,9 +85,10 @@ and ignores the rest.
 A plain JSON object, read with `JSON.parse` — never JSONC, never `import()`.
 No comments, no trailing commas.
 
-Exactly three top-level keys are recognized — `depConstraints`,
-`moduleBoundaryOptions`, `boundarySuppressions` — plus `$schema`, which is
-tolerated but does nothing. Any other top-level key is **rejected by name.**
+Exactly four top-level keys are recognized — `depConstraints`,
+`moduleBoundaryOptions`, `boundarySuppressions`, `fitness` — plus `$schema`,
+which is tolerated but does nothing. Any other top-level key is **rejected by
+name.**
 
 That is deliberately asymmetric with the ES module dialect's tolerance for extra
 exports. A JSON object has no namespace to share, so an unrecognized key is

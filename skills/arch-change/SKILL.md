@@ -11,7 +11,8 @@ compatibility: Requires @ecoma-io/lattice CLI
 Before and after modifying code in a Lattice-governed project — when adding or
 removing imports, creating new files, changing cross-project dependencies, or
 touching anything that declares or moves architecture (policy files,
-`architecture-intent.json`, project manifests).
+`architecture-intent.json`, a profiles registry, `docs/adr/` records, project
+manifests).
 
 ## Why
 
@@ -34,21 +35,60 @@ confirm it.
    Understand which dependency directions are allowed and which are forbidden,
    who depends on the project, current violations in scope, any drift, the
    declared Intent when one exists, and the commands that will verify the change.
+   In a profile-selected workspace `context --plan` exits 3 by design — the
+   profile's effective block lives only in the registry file (resolve its `base`
+   chain by hand), and its `impact`/`graph` verify commands are not runnable
+   there; `check` still is — run `lattice check --config <active-profile>` as
+   the gate instead.
 
-2. **Understand the Intent and policy.** Read the constraint rows the context
+2. **Understand the Intent and policy — and which law is in effect.** First
+   confirm whether the workspace enforces by file or by named profile (see
+   `arch-context`, step "Know which law is in effect"): when a `profiles`
+   registry is active, the constraint rows you are reading are the selected
+   profile's effective block, not a file. Then read the rows the context
    named, and check whether the workspace declares `architecture-intent.json`
    (`lattice drift --format json` shows it and whether the observed graph
    agrees). The Intent states what the architecture _is_, not merely what the
    rule table allows. Do not change code that an existing Intent row
-   forbids without first resolving that conflict with the team.
+   forbids without first resolving that conflict with the team. When a
+   constraint or intent row in the change's path carries a `decisionRef`, run
+   `lattice adr rule:no-direct-dep` (the reverse lookup: which ADR binds this
+   rule?) and `lattice adr 0001-bind-collaboration` (that record's status and
+   rationale) before changing code the rule binds. The `decisionRef` literal
+   names a record by its bare `NNN-slug` id — a `rule:`/`fitness:` id is the
+   reverse lookup, and anything else (an `adr:`-prefixed literal, a bare slug
+   in no registry) falls to the reverse-lookup arm and reads as a false
+   "not enforced" exit 0, never a bound answer: verify the literal against
+   the registry with `lattice adr <id>`, or open `docs/adr/NNN-slug.md`.
+   `lattice adr <id>` confirms the binding and the record's status, but the
+   decision itself — the rationale, the context, the consequences — lives in
+   the record file: open `docs/adr/NNN-slug.md` and read the prose before
+   changing code the rule binds.
+   An ADR a rule references is committed governance, and changing the code it
+   binds is a governance decision: a change that satisfies the rule table but
+   contradicts the recorded decision is a review finding waiting to happen.
+   An ADR id the registry does not know exits 3 — the grounding is `unknown`,
+   never a pass. A fitness row cannot carry a `decisionRef` (it accepts
+   exactly `name`/`match`/`condition`/`reason`), and a record whose status is
+   `superseded` still binds its rows until a replacement is authored.
 
 3. **Make the smallest coherent change.** Change the code, staying inside the
    import directions the context described. A source-code change is **not**
    automatically an architecture change; an _architecture_ change is one that
    moves the graph or its laws: project boundaries, dependency direction,
-   project creation or removal, ownership boundaries, policy changes, Intent
-   changes, or a provider migration. If the change is not of that kind, you are
-   done once the check is green — do not invoke the heavier machinery.
+   project creation or removal, ownership boundaries, policy changes, the
+   profile registry or the selected profile (a `profiles` registry edit, a
+   profile's `block`, a `base` chain, or the default profile a `boundaryConfig`
+   selects), Intent changes, or a provider migration. If the change is not of
+   that kind, you are done once the check is green — do not invoke the heavier
+   machinery. When the change adds or rewrites a rule the team will enforce,
+   the decision behind it belongs in a recorded ADR — a new
+   `docs/adr/NNN-slug.md` with `status: proposed`, `bindings` naming the rule
+   id, reviewed like code (no command writes it; `lattice adr` only reads).
+   The rule row then carries that decision's `decisionRef`; a change that
+   creates an enforceable rule without a recorded decision is governance
+   debt, and `arch-review` will flag a rule whose `decisionRef` is missing or
+   unresolvable.
 
 4. **Inspect the architectural diff when the change is architectural.** If a
    baseline graph snapshot exists (from a prior
@@ -70,6 +110,14 @@ confirm it.
 
    A full-workspace check is the verdict. A scoped check on the changed files is
    faster but omits cycle and lazy-load rules — it is a pre-check, not the gate.
+   The check enforces the law in effect: the profile `boundaryConfig` selects in
+   a profile-selected workspace (a one-run `lattice check --config <name>`
+   overrides the selection). Read the `boundaryConfig` value in `nx.json`'s
+   plugin options — that string IS the active profile name — and verify the
+   check resolves exactly it; a check that resolves a different profile than the
+   one in effect is not the verdict the change needs. Write the law down at the
+   start of the change — `--config <NAME>` in effect — so the evaluation step 9
+   reports is the one the change was actually made against.
 
 6. **Inspect drift when the architecture changed or the Intent is at stake.**
    If the change created or removed projects or edges, or touches anything the
@@ -103,7 +151,12 @@ confirm it.
 
 9. **Report what changed and why.** State the projects and edges the change
    introduced or removed, the evidence commands that verified it, and any
-   coverage gap (exit 3) you could not clear.
+   coverage gap (exit 3) you could not clear. State the law the gate ran with —
+   the exact `--config <NAME>` (or the `boundaryConfig` value) the check
+   resolved — so a report reading "check green" still carries the name of the
+   law it was green under. A report that names no law cannot be reproduced, and
+   in a profile-selected workspace it hides the one fact that makes a
+   profile-swap detectable.
 
 ## Interpreting exit codes
 
@@ -115,16 +168,28 @@ confirm it.
   allowed relationship is missing — which may point at a code change, not a
   policy one.
 - **Exit 3** — the run could not complete. This is NOT "clean." Investigate the
-  coverage gap before proceeding.
+  coverage gap before proceeding — including a profile that could not be
+  resolved: unknown profile name, unknown `base`, a `base` cycle, or an
+  unreadable registry. None of these falls back to another law.
 - **Exit 2** — usage error. Fix the invocation.
 
 ## Safety constraints
 
-- **Never modify the boundary policy or the Intent to make a check pass.** The
-  policy (`module-boundaries.config.*`) and `architecture-intent.json` are the
-  authority — reviewed like code, owned by the team. If the code cannot comply,
-  change the code or escalate. An Intent change is a governance decision, read
-  `arch-check` on the difference, and confirm with a human.
+- **Never modify the boundary policy, the profile registry, or the Intent to
+  make a check pass.** The policy (`module-boundaries.config.*`), a `profiles`
+  registry (every profile's `block`, the `base` chain, and the default profile
+  `boundaryConfig` selects), and `architecture-intent.json` are the authority —
+  reviewed like code, owned by the team. The name that selects the law is part
+  of the law: the plugin option that names the `profiles` registry, and the
+  `boundaryConfig`/`--config` value that selects a profile, are governance
+  state, not a flag you may flip to get a green run. If the code cannot comply,
+  change the code or escalate. An Intent or profile change is a governance
+  decision, read `arch-check` on the difference, and confirm with a human.
+  **Never switch the active profile merely to make a check pass** — that is
+  editing the law under a different name, and it is the one move that lets a
+  violation vanish while the boundary table looks untouched. Report the exact
+  `--config <NAME>` the gate ran with; a red under the team's active profile is
+  a violation to fix in code or escalate, not a law to swap.
 - **A scoped check is not the gate.** `lattice check <paths>` judges only the
   listed files; cycle and lazy-load rules need the whole graph. Use it for speed,
   but run a full check before committing.
@@ -139,7 +204,8 @@ confirm it.
 ## What to do if it fails
 
 - **Exit 3 after change** — coverage is incomplete. Do not assume the workspace
-  is clean. Investigate what Lattice could not analyze.
+  is clean. Investigate what Lattice could not analyze — including a profile
+  resolution failure in a profile-selected workspace.
 - **Violations in unrelated files** — your change may have exposed pre-existing
   violations. These still need attention, but they are not caused by your edit;
   say so in the report.

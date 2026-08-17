@@ -52,6 +52,16 @@ sections of `impact` and `diff` can understand both what the rule means and how
 to bring their import back into compliance without consulting the config file
 directly.
 
+### Governance block (optional)
+
+A row may carry the shared governance block — `origin`, `rationale`,
+`decisionRef`, `fitnessBindings` — the same four keys an intent row may carry,
+validated by the one shared schema ([provenance.md](../concepts/provenance.md)
+owns the block). A `decisionRef` names the recorded architecture decision the
+row leans on: `lattice adr <id>` reads it, and a reference that resolves to
+nothing is `unknown`, never a pass. A row without the block is a legacy row and
+stays valid byte-identical.
+
 `onlyDependOnLibsWithTags: []` is a rule, not an empty setting -- it means the
 project may not depend on any library carrying tags at all. If you meant "no
 restriction on this axis," omit the field.

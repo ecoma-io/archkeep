@@ -137,10 +137,10 @@ All commands share the same flag-parsing rules. Both `--flag value` and
 
 ### `--format`
 
-| command                                                                                                                                            | values                  | default | meaning                                                                                               |
-| -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
-| `check`                                                                                                                                            | `text`, `sarif`, `json` | `text`  | Terminal report, SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope.                |
-| `graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`, `explain`, `context`, `provenance` | `text`, `json`          | `text`  | Terminal report or the versioned JSON envelope. No SARIF -- descriptive commands produce no findings. |
+| command                                                                                                                                                   | values                  | default | meaning                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| `check`                                                                                                                                                   | `text`, `sarif`, `json` | `text`  | Terminal report, SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope.                |
+| `graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`, `explain`, `context`, `provenance`, `adr` | `text`, `json`          | `text`  | Terminal report or the versioned JSON envelope. No SARIF -- descriptive commands produce no findings. |
 
 `--format` changes no exit code and no byte of the other two formats. It is an
 additional rendering of the same verdict.
@@ -168,9 +168,11 @@ may live in the same boundary file), the evolution narrative (`history` — the
 captured snapshot records the fingerprint of the law in effect), the per-metric
 verdicts (`health`), the debt ledger (`debt`), constraint context (`impact`),
 and matching rows (`context`) all depend on which boundary law is in effect.
-`graph`, `discover`, `drift`, `reconcile`, and `provenance` take no `--config`
-because they describe structure or compare against the declared intent, not
-against any boundary law. Does not move the workspace root — the tree being
+`graph`, `discover`, `drift`, `reconcile`, `provenance`, and `adr` take no
+`--config` because they describe structure or compare against the declared
+intent, not against any boundary law — `adr` reads only the tracked
+`docs/adr/` at the workspace root, so a description of what is recorded needs
+no boundary law to frame it. Does not move the workspace root — the tree being
 judged is still the consumer's.
 
 ## What is deliberately not configurable

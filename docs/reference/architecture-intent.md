@@ -138,6 +138,15 @@ only a pair of relationship lists.
 names, never selectors** — a typo'd name is a load-provable
 `intentUnknownProject`, never a boundary that silently matches nothing.
 
+Any intent row — a `boundaries`, `allowed`/`forbidden`, `projects.required`,
+`projects.forbidden`, `dependencies.*`, or `forbiddenTags` row — may also carry
+the shared governance block, the same four keys a constraint row may carry:
+`origin`, `rationale`, `decisionRef`, `fitnessBindings`. A `decisionRef` names
+the recorded architecture decision the row states; `lattice adr <id>` reads it
+([adr.md](../concepts/adr.md)). The block is validated by the one shared schema
+([provenance.md](../concepts/provenance.md) owns it), and a row without it is a
+legacy row that stays valid byte-identical.
+
 ### `forbiddenTags`
 
 ```json

@@ -31,11 +31,11 @@ on disk, it is treated as `check` scoped to that path, the same as `lattice chec
 
 ### `check`
 
-| flag       | argument                | default                  | meaning                                                                                          |
-| ---------- | ----------------------- | ------------------------ | ------------------------------------------------------------------------------------------------ |
-| `--format` | `text`\|`sarif`\|`json` | `text`                   | Terminal report (default), SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope. |
-| `--output` | `<file>`                | stdout                   | Write the report to a file instead of stdout.                                                    |
-| `--config` | `<file>`                | (from workspace options) | Read the boundary law from here instead of the workspace's configured file.                      |
+| flag       | argument                | default                  | meaning                                                                                                                                                                                        |
+| ---------- | ----------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format` | `text`\|`sarif`\|`json` | `text`                   | Terminal report (default), SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope.                                                                                               |
+| `--output` | `<file>`                | stdout                   | Write the report to a file instead of stdout.                                                                                                                                                  |
+| `--config` | `<file>`                | (from workspace options) | Read the boundary law from here instead of the workspace's configured file — which, when the workspace names a `profiles` registry, is a profile NAME selected from that registry, not a path. |
 
 Naming paths scopes the run to those files. A scoped run is a fast local
 pre-check, not the gate: the cycle and lazy-load rules judge the file graph as
@@ -249,12 +249,12 @@ or verified must never read as "no debt".
 
 ## Exit codes
 
-| code | meaning                                                                                                                | when                                                                                                                                                 |
-| ---- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | clean -- and every selected file was analyzed                                                                          | No findings and no coverage gaps.                                                                                                                    |
-| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, intent findings, or a failing fitness gate | `check` only. No other command exits 1.                                                                                                              |
-| 2    | usage error                                                                                                            | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                      |
-| 3    | no verdict -- the run could not start, or a selected file could not be read                                            | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load. |
+| code | meaning                                                                                                                | when                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | clean -- and every selected file was analyzed                                                                          | No findings and no coverage gaps.                                                                                                                                                                                                                                                                                                                                                                                                    |
+| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, intent findings, or a failing fitness gate | `check` only. No other command exits 1.                                                                                                                                                                                                                                                                                                                                                                                              |
+| 2    | usage error                                                                                                            | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                                                                                                                                                                                                                                                                                                      |
+| 3    | no verdict -- the run could not start, a selected file could not be read, or the law itself could not be established   | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load, a tracked `architecture-intent.json` that will not parse or whose boundaries match no project, or -- on `check` in a profile-selected workspace -- a profile that could not be resolved: an unknown profile name, an unknown `base`, a `base` cycle, or an unreadable registry. |
 
 **Do not collapse 3 into 0.** A checker that could not look must never be
 mistaken for one that looked and found nothing. Both 1 and 3 must fail a CI
@@ -266,7 +266,7 @@ counts but no rule ever judged, and that is enough to withhold the verdict.
 
 A descriptive command (`graph`, `diff`, `drift`, `discover`, `reconcile`,
 `fitness`, `waivers`, `history`, `health`, `debt`, `impact`, `explain`,
-`context`, `provenance`) exits 0 when it completes, 3 when coverage is
+`context`, `provenance`, `adr`) exits 0 when it completes, 3 when coverage is
 incomplete or a metric is `unknown`, and 2 on usage error. None exits 1,
 because a descriptive result is never a finding.
 
@@ -454,3 +454,26 @@ finding is about documentation, not about the architecture. It exits 0 when it
 completes, 3 when a declared file is malformed (a row list built from a file it
 could not read would be a claim about rows that do not exist), and 2 on usage
 error.
+
+### `adr [<id>]`
+
+| flag       | argument       | default | meaning                                         |
+| ---------- | -------------- | ------- | ----------------------------------------------- |
+| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope. |
+| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.   |
+
+With no argument, dumps the whole ADR registry — every recorded architecture
+decision, its status, its supersession chain, and which rule/fitness ids it
+binds. With one argument, answers that id: an ADR id (`NNN-slug`) shows the
+record, a `rule:…`/`fitness:…` id is the reverse lookup naming which ADRs bind
+it. `adr` takes no `--config` — a description of what is recorded needs no
+boundary law.
+
+Descriptive, never a gate: `adr` never exits 1. Exit 0 (a) when every requested
+ADR-pattern id resolves to a record, or (b) when the request was a reverse
+lookup — `rule:`/`fitness:` ids answer with a sentence naming which ADRs bind
+that id, or `no ADR binds it`; that sentence is exit 0, never a gate verdict.
+Exit 3 when an ADR-pattern id resolves to nothing or the registry could not be
+read (a `decisionRef` that does not resolve is `unknown`, never clean), and 2
+on usage error. See [adr.md](adr.md) for the report shapes and the concept in
+[concepts/adr.md](../concepts/adr.md).

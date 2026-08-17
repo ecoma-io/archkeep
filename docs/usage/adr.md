@@ -41,7 +41,16 @@ read from the tree being described, and needs no boundary law to frame it.
 by: 0001-bind-collaboration`. An id no ADR binds reads
   `no ADR in docs/adr/ binds rule:orphan — it is not enforced by any recorded
 decision`: a fact about the registry, reported in a sentence, never as a
-  silent empty list.
+  silent empty list. Note what it answers: _does the registry bind that exact
+  id?_ — not _is that rule enforceable?_ A rule id the registry binds nothing is
+  the loud unenforced-fact spelling, and in an agent workflow it is a reason to
+  verify the rule row's exact spelling against the config, not a clean result.
+  `context` — and `context --plan`, and `impact` — display a constraint row as
+  it is written, including its `decisionRef` when the row carries one; `check`
+  and `drift` never replay it. The exact string to verify lives in the row: read
+  the `decisionRef` literal in the boundary config or `architecture-intent.json`
+  (or copy it from `context`'s output), and ask `lattice adr` that string, byte
+  for byte.
 - **An ADR-pattern id the registry does not know** — `no ADR 0999-ghost in
 docs/adr/ …`: the record is missing, and the run reports **no-verdict**,
   never clean.
@@ -51,11 +60,11 @@ docs/adr/ …`: the record is missing, and the run reports **no-verdict**,
 `adr` is descriptive: it never exits 1 — a description of what is recorded is
 never a finding. Only `check` exits 1.
 
-| code | meaning                                                              |
-| ---- | -------------------------------------------------------------------- |
-| 0    | completed and every reference resolved                               |
-| 2    | usage error — more than one positional argument                      |
-| 3    | no verdict — an unknown ADR id, or a registry that could not be read |
+| code | meaning                                                                                                                                                                        |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | completed — the dump, a record, or a lookup answered. A reverse lookup naming a rule/fitness id no ADR binds is still 0: a sentence stating the fact, not a resolved reference |
+| 2    | usage error — more than one positional argument                                                                                                                                |
+| 3    | no verdict — an unknown ADR id, or a registry that could not be read                                                                                                           |
 
 The exit-3 paths are the command's obligations to the invariant. A `decisionRef`
 (or an `adr` argument) naming an ADR id that does not exist must read as _cannot
@@ -69,8 +78,14 @@ way: "could not read the registry" must never read as "no ADRs".
 `adr` is a description, so a red build on a violating workspace is not its
 job — but a `3` in CI _is_ a real signal worth failing on the same way
 `check`'s could-not-look exit is. Wire `2` and `3` as failures in the same
-places `ci.md` tells `check`'s to. The JSON envelope carries the same status
-and exit code, with the records under `result.*`.
+places [ci.md](ci.md) tells `check`'s to. Treat an unresolved ADR id (exit 3)
+in an agent workflow the same way `check`'s exit 3 is treated: investigate,
+never read as "nothing to see". The asymmetry cuts the other way too: a reverse
+lookup that answers `no ADR binds rule:X` with exit 0 is not a CI failure, but
+it is not a governance-clean result either — a rule the registry binds nothing
+is unanchored, and the sentence exists so a human or agent inspects it, not so
+a pipeline can call it done. The JSON envelope carries the same status and exit
+code, with the records under `result.*`.
 
 ## The concept
 
