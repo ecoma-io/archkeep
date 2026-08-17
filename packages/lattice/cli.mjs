@@ -1150,13 +1150,22 @@ async function runGraph(options, { cwd, env }) {
     // declares one, so the snapshot carries a policy fingerprint that `diff`
     // can use to warn when the policy changed between runs. Without a config,
     // the snapshot carries no policy identity — the consumer did not provide one.
+    // A native workspace's own `boundaryConfig` may be the policy inline, as an
+    // object rather than a filename — the same third arm every other command's
+    // copy of this ladder carries, so an inline policy's snapshot fingerprint
+    // moves with it the same way a file-based policy's does.
     const config = options.config
       ? await loadBoundaryConfigFile(
           isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
         )
       : typeof commandContext.options.boundaryConfig === "string"
         ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
-        : null;
+        : commandContext.options.boundaryConfig
+          ? policyFrom(
+              commandContext.options.boundaryConfig,
+              `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+            )
+          : null;
 
     result = graphCommand(commandContext, { config });
   } catch (error) {
