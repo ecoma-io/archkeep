@@ -1,11 +1,13 @@
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1153,6 +1155,56 @@ var _ = adapter.Name
     expect(written.result.intent.file).toBe("architecture-intent.json");
     expect(written.result.findings).toHaveLength(0);
     expect(written.coverage.complete).toBe(true);
+  });
+
+  it("--output refuses rather than writes through a symlink planted at <target>.tmp", async () => {
+    // Every value in `--output` and every value in a report body — a project
+    // name, an import specifier — comes from the tree being judged and is
+    // attacker-supplied the moment a pull request adds one. Before
+    // `writeOutputReport`'s `{flag: "wx"}` guard, a tracked symlink at
+    // `<target>.tmp` made the write follow it and overwrite whatever the
+    // symlink named, with attacker-chosen bytes, while reporting success.
+    const outside = mkdtempSync(join(tmpdir(), "polyglot-cli-output-outside-"));
+    const secret = join(outside, "secret.txt");
+    writeFileSync(secret, "must not be touched\n");
+    const target = join(nativeRoot, "planted.json");
+    symlinkSync(secret, `${target}.tmp`);
+    try {
+      const streams = nativeEnv();
+      expect(await runCli(["graph", "--format", "json", "--output", target], streams)).toBe(
+        EXIT.error,
+      );
+      expect(streams.lines.err.join("\n")).toContain("could not write --output");
+      // The symlink is left exactly as it was — refusing means never opening
+      // the write, so there is nothing this run created to clean up.
+      expect(lstatSync(`${target}.tmp`).isSymbolicLink()).toBe(true);
+      expect(readFileSync(secret, "utf8")).toBe("must not be touched\n");
+      expect(existsSync(target)).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+      rmSync(`${target}.tmp`, { force: true });
+    }
+  });
+
+  it("--output refuses rather than silently truncating a pre-existing <target>.tmp", async () => {
+    // The same guard's other half: a stray `.tmp` from a crashed prior run —
+    // or any file that happens to collide with the name — used to be
+    // silently overwritten and then renamed away. It must survive instead,
+    // and the run must say so rather than reporting success over it.
+    const target = join(nativeRoot, "collides.json");
+    writeFileSync(`${target}.tmp`, "pre-existing data, not this run's to destroy\n");
+    try {
+      const streams = nativeEnv();
+      expect(await runCli(["graph", "--format", "json", "--output", target], streams)).toBe(
+        EXIT.error,
+      );
+      expect(readFileSync(`${target}.tmp`, "utf8")).toBe(
+        "pre-existing data, not this run's to destroy\n",
+      );
+      expect(existsSync(target)).toBe(false);
+    } finally {
+      rmSync(`${target}.tmp`, { force: true });
+    }
   });
 
   it("folds a declared fitness function into the check verdict — a coverage-minimum over owned files", async () => {

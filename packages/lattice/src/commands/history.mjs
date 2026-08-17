@@ -390,11 +390,16 @@ export function historyCommand(
   // Default write is atomic: write the full snapshot to `<name>.json.tmp`,
   // then rename over the final name. `readSnapshots` filters `.json.tmp` out,
   // so an interrupted capture leaves a partial file the record will never read.
+  // `{flag: "wx"}` refuses rather than follows a symlink already sitting at
+  // the `.tmp` path — `../../cli.mjs`'s `writeOutputReport` docstring owns the
+  // full mechanism and the threat it closes; `--capture`'s snapshot name is
+  // predictable from the observed graph, which is exactly what makes a
+  // planted `.tmp` symlink here practical rather than theoretical.
   const writeSnapshotFile =
     io.writeFile ??
     ((path, text) => {
       const tmp = `${path}.tmp`;
-      writeFileSync(tmp, text);
+      writeFileSync(tmp, text, { flag: "wx" });
       renameSync(tmp, path);
     });
   const provenanceResolver = io.resolveProvenance ?? resolveProvenance;
