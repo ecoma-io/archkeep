@@ -166,10 +166,11 @@ export const WORKSPACE_MARKERS = [NX_CONFIG_FILE, LATTICE_MODEL_FILE, MOON_DIR, 
  * Throws rather than returning a partial context on every condition that
  * would otherwise leave a caller building a verdict over a tree it could not
  * fully read — no workspace root, both markers present, or a requested path
- * outside the workspace (`../workspace.mjs`'s `selectFiles`). That is the
- * empty-result invariant (`../../../../AGENTS.md`) applied one layer before any
- * command's own report: a context half-built is exactly the silent direction
- * the invariant refuses.
+ * outside the workspace or matching no tracked file at all
+ * (`../workspace.mjs`'s `selectFiles`). That is the empty-result invariant
+ * (`../../../../AGENTS.md`) applied one layer before any command's own
+ * report: a context half-built is exactly the silent direction the invariant
+ * refuses.
  *
  * @param {{cwd: string, paths?: string[]}} request
  * @param {{readGraph?: Function, listFiles?: Function, readFile?: (path: string) => string|null}} [io]
@@ -304,7 +305,7 @@ export function resolveCommandContext(
     const selected = selectFiles(
       owned.map(({ file }) => file),
       paths,
-      { root, cwd },
+      { root, cwd, tracked },
     );
     const selectedFiles = new Set(selected);
     imports = wholeTreeAnalysis.imports.filter((site) => selectedFiles.has(site.sourceFile));
@@ -390,7 +391,7 @@ export function resolveCommandContext(
     const selected = selectFiles(
       owned.map(({ file }) => file),
       paths,
-      { root, cwd },
+      { root, cwd, tracked },
     );
     const selectedFiles = new Set(selected);
     imports = wholeTreeAnalysis.imports.filter((site) => selectedFiles.has(site.sourceFile));
@@ -436,7 +437,7 @@ export function resolveCommandContext(
     const selected = selectFiles(
       owned.map(({ file }) => file),
       paths,
-      { root, cwd },
+      { root, cwd, tracked },
     );
     ({ imports, failures, analyzed, analyzedFiles } = analyzeWorkspace(workspace, selected));
     // Same reason as the Moon branch above: `coverage.exempt` is a native-only
