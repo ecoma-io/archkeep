@@ -165,3 +165,22 @@ jobs:
           # to an organization account. Without it the action exits 1 at
           # validation.
           GITLEAKS_LICENSE: ${{ secrets.ECOMA_GITLEAKS_LICENSE }}
+
+  analysis-gate:
+    name: analysis-gate
+    # The single check name a branch ruleset requires, mirroring `ci-gate`: the
+    # required-check name stays stable while the job list is not — add a job to
+    # `needs` and the gate tightens without editing repository settings, and
+    # forgetting to add it is the only way to widen what green means.
+    # `needs` names the job IDs, so the matrix job `codeql` is one entry even
+    # though it reports two check contexts (one per language).
+    needs: [codeql, semgrep, gitleaks]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # `needs` alone would let a skipped or cancelled job pass as green, since
+      # only `failure` blocks a dependent job by default.
+      - name: Fail unless every job succeeded
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1
