@@ -40,6 +40,7 @@ import { findNxRoot } from "./src/workspace-root.mjs";
 import { locateServer, SERVER_PACKAGE } from "./src/server-module.mjs";
 import { planSession } from "./src/session.mjs";
 import { describeStatus } from "./src/status.mjs";
+import { traceOptions } from "./src/trace.mjs";
 
 const { LanguageClient, RevealOutputChannelOn, State, TransportKind } = languageClient;
 
@@ -156,7 +157,10 @@ async function openSession(folder) {
       // marker before starting: a folder opened below the workspace root would
       // otherwise be analyzed as if it were the root, and find nothing.
       initializationOptions: { workspaceRoot: plan.root },
-      outputChannel: output ?? undefined,
+      // `traceOutputChannel` must be EXPLICIT for `lattice.trace.server` to
+      // be live (see `src/trace.mjs` for why), and both channels are the
+      // same LogOutputChannel so the trace shows where the log does.
+      ...traceOptions(output),
       diagnosticCollectionName: "lattice",
       // Never steal focus. A boundary violation is reported as a diagnostic at
       // the import; an output panel that jumped to the front on every server
