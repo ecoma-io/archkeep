@@ -71,6 +71,13 @@ rules judge the file graph as a whole, so a scoped run can miss what a
 whole-workspace run would find. CI should always run `lattice check` with no
 paths.
 
+A fitness function that needs the whole tree (`coverage-minimum` today, see
+[fitness-functions.md](../concepts/fitness-functions.md)) cannot be judged from
+a scoped run either. It reports `not_applicable` — named as needing a full run,
+never silently skipped — and, unlike a real `unknown`, that does not fail the
+run by itself. A workspace that declares `coverage-minimum` still needs an
+unscoped `check` to actually enforce it.
+
 ## Formats
 
 ### Text

@@ -56,17 +56,20 @@ conventionally carries, `_ "github.com/lib/pq" // register the driver (postgres)
 — would close an `import (…)` block early and make every import below it vanish.
 No edge, no record, and the file reports clean with a violation sitting in it.
 
+**`import` opens its line, after indentation only, or follows a `;` on the same
+line** — the same statement separator `gofmt` inserts automatically at a
+newline, so `import "a"; import "b"` reads both, the same as one per line, and
+so does `import ("a"; "b")` inside a block. The path itself may be quoted or,
+since Go treats a raw string as an equally legal string literal, backtick-
+delimited; both spellings are read the same way, though only the quoted form
+is what `gofmt` ever writes.
+
 ### Limits
 
 - A **raw string literal** containing what looks like an import declaration at
   the start of one of its lines is read as one. This is the only limit a
   `gofmt`-clean tree still meets — the mask keeps raw strings intact deliberately,
   because an import path _is_ a string literal.
-- `import` must open its line, after indentation only. `import "a"; import "b"`
-  yields the first alone, and inside a block each import needs its own line.
-  `gofmt` rewrites both shapes.
-- An import path spelled as a raw string rather than a quoted one is not read.
-  Legal Go; `gofmt` rewrites it.
 
 ### What the record deliberately leaves null
 
@@ -141,6 +144,16 @@ entry must itself be a path dependency to point at a project. Registry
 `[lib] name = "app_lib"` makes that the only spelling its own `main.rs` can use.
 `[lib] name` wins when present.
 
+**A renamed dependency IS followed, scoped to the project that renamed it.**
+`dep = { package = "real", path = "../real" }` in a project's own manifest
+makes `use dep::…` — and a bare `dep::item` path with no `use` at all —
+resolve to `real`'s project from THAT project's sources. Rust builds a
+crate's `extern` prelude from its own `Cargo.toml` alone, so a sibling project
+renaming some other dependency to `dep` too has no bearing on what this one's
+sources mean by it; the manifest entry is read the same `path`/
+`workspace = true` way the edge resolver already reads it, so a `use` naming
+the rename lands on the same project the graph edge already points at.
+
 ### Limits
 
 - **`use` is matched at the start of a line**, after optional indentation and an
@@ -155,10 +168,6 @@ entry must itself be a path dependency to point at a project. Registry
   can name an extern crate or a local `mod foo`. A first segment matching another
   project's crate name is read as that crate, so a local module deliberately
   named after a sibling crate produces a spurious record.
-- **A renamed dependency is not followed at source level.**
-  `dep = { package = "real" }` makes the source spell `dep` while the crate is
-  `real`. The manifest resolver still draws the edge, so the dependency is never
-  lost — only its source-level location is.
 - **`mod` is not an import.** It names a file inside the same crate and crosses
   no boundary.
 
@@ -253,8 +262,18 @@ that is reported as an ambiguity with `resolved: null` — Python resolves it by
 
 - **Imports are matched per line**, at any indentation. That is deliberate: it is
   what catches a function-local import and an import under `if TYPE_CHECKING:`,
-  both of which cross a boundary. A line continued with `\`, or a second statement
-  after `;`, is not followed.
+  both of which cross a boundary. Python's own statement separators are
+  followed rather than dropped at: a `;` opens a fresh statement to check on
+  the same line, and a line ending in a bare `\` is joined with the next one
+  first, the same explicit line-joining Python itself does — starting only
+  from a line that already opens with `from`/`import`, so an unrelated line
+  elsewhere that happens to end in `\` (a comment noting a Windows path, say)
+  is never pulled into a statement it has nothing to do with.
+- **A continuation that still does not parse once joined is a failure, not a
+  dropped record.** A backslash landing inside the dotted module name itself —
+  between two of its segments, rather than after the whole name or inside the
+  name list — is not reassembled into one contiguous name, so this reader
+  says it cannot follow the statement instead of silently reading nothing.
 - **A triple-quoted string containing a line that looks like an import** is read
   as one. `#` comments are not, since the `#` precedes the keyword.
 - **`if TYPE_CHECKING:` imports stay `kind: "static"`.** They are erased at

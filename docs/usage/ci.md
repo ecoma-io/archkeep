@@ -269,6 +269,9 @@ lattice check $(git diff --cached --name-only --diff-filter=ACM)
 ```
 
 The cycle and lazy-load rules will not see what a whole-workspace run sees, so a
-hook that passes is not a promise CI will.
+hook that passes is not a promise CI will — and neither does a fitness function
+that needs the whole tree (`coverage-minimum` today): the hook reports it
+`not_applicable`, not evaluated, so a workspace that declares one still needs
+an unscoped `check` in CI to actually enforce it.
 
 [bad](../README.md)
