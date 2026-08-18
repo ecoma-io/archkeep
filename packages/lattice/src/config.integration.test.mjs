@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -131,5 +131,40 @@ describe("loadBoundaryConfig over this workspace", () => {
     await expect(loadBoundaryConfig(workspaceRoot, "boundaries.not-here.mjs")).rejects.toThrow(
       /cannot load .*boundaries\.not-here\.mjs/u,
     );
+  });
+
+  it("refuses a boundaryConfig whose symlinked intermediate resolves outside the workspace (G-10, law read)", async () => {
+    // Silent direction: `boundaryConfig` is tree-derived (`nx.json`/`lattice.json`
+    // options), so a committed symlink in an intermediate component of that name
+    // handed OUTSIDE constraint rows in as the workspace's law, judged as clean —
+    // byte-identical to a workspace with no law at all. Before the containment
+    // closure in `loadBoundaryConfig`, this resolved the outside module, whose
+    // law (here: no constraints) enforced nothing and reported pass.
+    const lawRoot = mkdtempSync(join(tmpdir(), "polyglot-law-read-"));
+    const outside = mkdtempSync(join(tmpdir(), "polyglot-law-read-outside-"));
+    afterAll(() => {
+      rmSync(lawRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    });
+
+    // The outside "law": constraints that would judge the tree wrong if adopted.
+    writeFileSync(
+      join(outside, "config.mjs"),
+      "export const depConstraints = [];\nexport const moduleBoundaryOptions = [];\n",
+      "utf8",
+    );
+    // The committed tracked symlink: `sub -> <outside>`, so `sub/config.mjs`
+    // is really `<outside>/config.mjs`.
+    mkdirSync(join(lawRoot, "sub"), { recursive: true });
+    rmSync(join(lawRoot, "sub"), { recursive: true, force: true });
+    symlinkSync(outside, join(lawRoot, "sub"));
+    try {
+      await expect(loadBoundaryConfig(lawRoot, "sub/config.mjs")).rejects.toThrow(
+        /cannot load .*sub[\\/]config\.mjs.*outside the workspace root/u,
+      );
+    } finally {
+      rmSync(lawRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });

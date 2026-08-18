@@ -96,9 +96,12 @@
  * read back — so it always reports an empty suppression list; see
  * `loadBoundaryConfigFile`'s ESLint branch.
  */
-import { basename, extname } from "node:path";
+import { basename, extname, resolve } from "node:path";
+import { existsSync } from "node:fs";
 import { readFile as readFileFromDisk } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+
+import { containmentViolation } from "./containment.mjs";
 
 import { loadEslintBoundaryConfig } from "./eslint-config.mjs";
 import { findFitnessViolations } from "./governance/fitness-registry.mjs";
@@ -920,5 +923,26 @@ export async function loadBoundaryConfigFile(path, io = {}) {
  * @throws {Error} as `loadBoundaryConfigFile`.
  */
 export async function loadBoundaryConfig(workspaceRoot, boundaryConfig, io = {}) {
-  return loadBoundaryConfigFile(`${workspaceRoot.replace(/\/$/, "")}/${boundaryConfig}`, io);
+  const path = `${workspaceRoot.replace(/\/$/, "")}/${boundaryConfig}`;
+  // Resolved ONCE, and the IDENTICAL string feeds the containment check and
+  // the read (`loadBoundaryConfigFile`). The boundary law is the workspace's
+  // own declared fact, and the name `boundaryConfig` is tree-derived
+  // (`nx.json`/`lattice.json` options) — so a tracked symlink in an
+  // intermediate component of that name would hand outside constraint rows in
+  // as the workspace's law, judged with zeros. The `--config` override is the
+  // caller's explicit choice and takes the path-taking form, NOT this
+  // function, so refusing here traps exactly the tree-derived case and leaves
+  // the explicit override alone. Resolving first (rather than checking the
+  // raw spelling) is the resolve-first contract `../containment.mjs`'s
+  // `containsDotDot` refusal exists for: a `..` in the raw name would be
+  // normalised away by `resolve` for the check while the read still followed
+  // it (`./containment.mjs`, the read-side G-10 closure).
+  const resolved = resolve(path);
+  if (existsSync(workspaceRoot)) {
+    const violation = containmentViolation(workspaceRoot, resolved);
+    if (violation !== null) {
+      throw new Error(`lattice: cannot load ${path}: ${violation}`);
+    }
+  }
+  return loadBoundaryConfigFile(resolved, io);
 }

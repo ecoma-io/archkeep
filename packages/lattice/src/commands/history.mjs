@@ -71,10 +71,11 @@
  * owns those (`./README.md`).
  */
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import { containmentViolation } from "../containment.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatHistoryReport } from "../report/history-text.mjs";
 import { computeDiff, parseBaseline } from "./diff.mjs";
@@ -141,11 +142,33 @@ export function snapshotIdentity({ projects, dependencies, policy }) {
  * evolution is real history); only capture dedups, against the last file.
  *
  * @param {string} dir Absolute path to the history directory.
+ * @param {string} [root] The workspace root, when the caller has one. A
+ *   directory whose STRING lies inside the workspace but whose realpath
+ *   escapes it — a workspace-controlled symlink in an intermediate component,
+ *   the `.lattice/history -> /tmp/out` case — is refused loudly here, the
+ *   read-side half of the write guard `writeSnapshotFile` below enforces on
+ *   capture (G-10). A directory the caller names OUTSIDE the workspace is the
+ *   caller's explicit choice and is left untouched, exactly like `--output
+ *   /tmp` (`../containment.mjs`).
  * @returns {{files: {name: string, path: string, envelope: object, id: string}[]}}
- * @throws {Error} when the directory cannot be read, or on the first
- *   unreadable or malformed snapshot.
+ * @throws {Error} when the directory cannot be read, when its realpath leaves
+ *   the workspace, or on the first unreadable or malformed snapshot.
  */
-export function readSnapshots(dir) {
+export function readSnapshots(dir, root) {
+  // The dir's realpath is the whole containment question: `readdirSync`
+  // succeeded on it below, so the directory (or its deepest existing ancestor)
+  // exists, and `containmentViolation` resolves that through every intermediate
+  // component. The `forWrite` policy is applied deliberately — the WRITE side
+  // of this same command family refuses a workspace-inside history dir whose
+  // intermediate components are symlinks, and a read of the same dir must not
+  // accept what its own capture would refuse (G-10). The `existsSync(root)`
+  // gate keeps the probe off in-memory fixture roots.
+  if (root !== undefined && existsSync(root)) {
+    const violation = containmentViolation(root, resolve(dir), { forWrite: true });
+    if (violation !== null) {
+      throw new Error(`lattice: cannot read the history directory '${dir}': ${violation}`);
+    }
+  }
   let names;
   try {
     names = readdirSync(dir);
@@ -389,7 +412,8 @@ export function historyCommand(
   commandContext,
   { capture = false, policyFingerprint = null, io = {} } = {},
 ) {
-  const readSnapshotsFromDisk = io.readSnapshots ?? readSnapshots;
+  const readSnapshotsFromDisk = (dir) =>
+    (io.readSnapshots ?? readSnapshots)(dir, commandContext.root);
   // Default write is atomic: write the full snapshot to `<name>.json.tmp`,
   // then rename over the final name. `readSnapshots` filters `.json.tmp` out,
   // so an interrupted capture leaves a partial file the record will never read.
@@ -398,9 +422,23 @@ export function historyCommand(
   // full mechanism and the threat it closes; `--capture`'s snapshot name is
   // predictable from the observed graph, which is exactly what makes a
   // planted `.tmp` symlink here practical rather than theoretical.
+  //
+  // Containment is checked against the WORKSPACE root, not the named
+  // directory — the same policy as `--output` (`../containment.mjs`): a
+  // history dir the user names OUTSIDE the workspace (`/var/lattice/history`
+  // on a symlinked mount) is the caller's explicit choice and proceeds, while
+  // a history dir INSIDE the workspace whose intermediate components are
+  // workspace-controlled symlinks (`lattice history .lattice/history
+  // --capture` on a PR that committed `.lattice/history -> /tmp/out`) is the
+  // same runner-write escape as G-02 and is refused loudly. A refusal throws —
+  // capture failing loudly beats a snapshot landing outside the tree.
   const writeSnapshotFile =
     io.writeFile ??
     ((path, text) => {
+      const violation = containmentViolation(commandContext.root, path, { forWrite: true });
+      if (violation !== null) {
+        throw new Error(`lattice: refusing to write the history snapshot '${path}': ${violation}`);
+      }
       const tmp = `${path}.tmp`;
       writeFileSync(tmp, text, { flag: "wx" });
       renameSync(tmp, path);

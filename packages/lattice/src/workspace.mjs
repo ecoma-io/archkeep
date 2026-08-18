@@ -31,6 +31,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
 
+import { containmentViolation } from "./containment.mjs";
 import { analyzeFile, languageOf } from "./analysis/analyze.mjs";
 import { fileFailure, projectOwning } from "./analysis/source-util.mjs";
 import { parseNxJson } from "./nx-json.mjs";
@@ -139,8 +140,15 @@ export function createWorkspace({ root, graph, files, tsConfig, read }) {
   const readFile =
     read ??
     ((path) => {
+      const abs = join(root, path);
+      // A tracked symlink whose realpath leaves the workspace is outside code
+      // reached as if it were the workspace's own source (`../AGENTS.md`'s
+      // empty-result invariant: bytes read into the verdict from outside the
+      // tree, reported clean). Returning null makes the file a whole-file
+      // failure — loud, never a silent read-and-judge (`containment.mjs`).
+      if (containmentViolation(root, abs) !== null) return null;
       try {
-        return readFileSync(join(root, path), "utf8");
+        return readFileSync(abs, "utf8");
       } catch {
         return null;
       }

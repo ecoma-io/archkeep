@@ -34,10 +34,12 @@
  * failing on an unrelated "not a module object" a reader could not connect
  * back to "this is an ESLint config".
  */
+import { existsSync } from "node:fs";
 import { readFile as readFileFromDisk } from "node:fs/promises";
-import { basename, extname } from "node:path";
+import { basename, extname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { containmentViolation } from "../containment.mjs";
 import {
   ESLINT_FLAT_CONFIG_BASENAME,
   LEGACY_ESLINTRC_BASENAME,
@@ -152,7 +154,23 @@ export async function readBoundaryConfig(
   { readFile = readFileFromDisk } = {},
 ) {
   const path = `${workspaceRoot.replace(/\/$/, "")}/${boundaryConfig}`;
-  const name = basename(path);
+  // Resolved ONCE, and the IDENTICAL string feeds the containment check and
+  // the read below. The law name is tree-derived (`nx.json`/`lattice.json`
+  // options), so a tracked symlink in an intermediate component of it would
+  // hand outside constraint rows in as the workspace's law — the same read
+  // escape `../config.mjs`'s `loadBoundaryConfig` now refuses; this is that
+  // check held on the language-server face. Resolving first is the
+  // resolve-first contract `../containment.mjs`'s `containsDotDot` refusal
+  // exists for: a `..` in the raw name would be normalised away for the check
+  // while the read still followed it (`../containment.mjs`, read-side G-10).
+  const resolved = resolve(path);
+  if (existsSync(workspaceRoot)) {
+    const violation = containmentViolation(workspaceRoot, resolved);
+    if (violation !== null) {
+      throw new Error(`lattice: cannot load ${path}: ${violation}`);
+    }
+  }
+  const name = basename(resolved);
   if (ESLINT_FLAT_CONFIG_BASENAME.test(name) || LEGACY_ESLINTRC_BASENAME.test(name)) {
     throw new Error(
       `lattice: ${path} names an ESLint config (${name}) as boundaryConfig — the language ` +
@@ -162,9 +180,9 @@ export async function readBoundaryConfig(
         "boundary-law file to use it from the editor.",
     );
   }
-  const extension = extname(path);
-  if (extension === ".mjs" || extension === ".js") return readModulePolicy(path, revision);
-  if (extension === ".json") return readJsonPolicy(path, readFile);
+  const extension = extname(resolved);
+  if (extension === ".mjs" || extension === ".js") return readModulePolicy(resolved, revision);
+  if (extension === ".json") return readJsonPolicy(resolved, readFile);
   throw new Error(
     `lattice: ${path} names an unsupported boundaryConfig extension '${extension || "(none)"}' — ` +
       `expected .mjs, .js, or .json`,

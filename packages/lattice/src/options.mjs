@@ -52,8 +52,9 @@
  * default would produce a full green run against a rule nobody wrote. The
  * failure has to arrive at the first `nx` invocation, naming the key.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
+import { containmentViolation } from "./containment.mjs";
 import { parseNxJson } from "./nx-json.mjs";
 
 /**
@@ -169,6 +170,19 @@ function namesThisPlugin(entry) {
  */
 function readNxJsonOrNull(workspaceRoot, readFile) {
   const path = `${String(workspaceRoot).replace(/\/$/u, "")}/${NX_CONFIG_FILE}`;
+  // A tracked symlink at `nx.json` whose realpath leaves the workspace would
+  // hand outside bytes in as the workspace's own registration — a whole
+  // options read, and every verdict downstream of it, built on
+  // attacker-controlled input and reported clean. Refusing turns that silent
+  // read into a loud "cannot read" throw (`../containment.mjs`'s
+  // `containmentViolation`, the read-side G-10 closure). The check applies to
+  // every read of a real root: an injected in-memory reader a test drives is
+  // keyed by a fixture path (`/w`, `/fixture`) that does not exist on disk, so
+  // `existsSync(workspaceRoot)` is what keeps that seam untrodden, not a sentinel
+  // on the reader — `pluginIsRegistered`'s real-fs `readFileAbsolute` is a
+  // different function from `readFileOrNull` and must be contained too.
+  const violation = existsSync(workspaceRoot) ? containmentViolation(workspaceRoot, path) : null;
+  if (violation !== null) throw new Error(`lattice: cannot read ${path}: ${violation}`);
   const text = readFile(path);
   if (text === null) return null;
   try {

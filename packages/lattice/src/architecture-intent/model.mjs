@@ -36,7 +36,11 @@
  *     empty — loudly — rather than fail to load at all.
  */
 
+import { existsSync } from "node:fs";
 import { readFile as readFileFromDisk } from "node:fs/promises";
+import { resolve } from "node:path";
+
+import { containmentViolation } from "../containment.mjs";
 
 import { isValidSelector, splitSelector } from "./selectors.mjs";
 import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "../governance/row-schema.mjs";
@@ -585,6 +589,19 @@ export async function loadIntent(root, { read = readFileFromDisk, tracked } = {}
   const path = `${root}/${INTENT_FILE}`;
   if (tracked !== undefined && !tracked.includes(INTENT_FILE)) {
     return undefined;
+  }
+  // `architecture-intent.json` is the workspace's own declared fact, and the
+  // name is fixed — so a TRACKED symlink at that path (`git ls-files` lists
+  // it, the `tracked` filter passes) resolving outside the tree hands outside
+  // intent bytes in as the workspace's, an "intent: ok" verdict from bytes
+  // this tree never committed (`../containment.mjs`, the read-side G-10
+  // closure). The real-fs default reader only: an injected in-memory reader a
+  // test drives is keyed by a fixture path that does not exist on disk.
+  if (existsSync(root)) {
+    const violation = containmentViolation(root, resolve(path));
+    if (violation !== null) {
+      throw new Error(`lattice: ${INTENT_FILE}: ${violation}`);
+    }
   }
   let text;
   try {
