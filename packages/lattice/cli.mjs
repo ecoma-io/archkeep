@@ -1481,8 +1481,20 @@ async function runWaivers(options, { cwd, env }) {
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
     if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    // This clause only, not the JSON envelope: a workspace with no permanent
+    // suppressions sees this stderr line unchanged from before. A reader who
+    // only glances at this confirmation must not see "N waivers on the
+    // table" and conclude that is the whole surface when a
+    // `boundarySuppressions` row with no `expiresAt` is hiding something the
+    // file --output just wrote down.
+    const suppressionNote =
+      result.waivers.suppressions.length > 0
+        ? `, ${result.waivers.suppressions.length} permanent suppression` +
+          `${result.waivers.suppressions.length === 1 ? "" : "s"}`
+        : "";
     env.err(
-      `lattice: ${result.waivers.waivers.length} waivers on the table ` + `→ ${options.output}`,
+      `lattice: ${result.waivers.waivers.length} waivers${suppressionNote} on the table ` +
+        `→ ${options.output}`,
     );
   } else {
     env.out(report);
@@ -2752,7 +2764,7 @@ const COMMANDS = Object.freeze({
   waivers: Object.freeze({
     name: "waivers",
     args: "",
-    summary: "List the boundary waivers on the table, with their terms",
+    summary: "List the boundary waivers and permanent suppressions on the table",
     flagHelp: WAIVERS_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(WAIVERS_FLAG_HELP.map((f) => [f.flag, f.key]))),
     defaults: Object.freeze({ format: "text", output: null, config: null }),
