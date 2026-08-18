@@ -13,7 +13,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `discover`   | (none)               | Report observed facts, and optionally propose candidates                                           | no               |
 | `reconcile`  | (none)               | Score the declared intent against the observed architecture, with proposed edits under `--propose` | no               |
 | `fitness`    | (none)               | Judge every declared fitness function against the workspace                                        | no               |
-| `waivers`    | (none)               | List the boundary waivers on the table, with their terms                                           | no               |
+| `waivers`    | (none)               | List the boundary waivers and permanent suppressions on the table                                  | no               |
 | `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                                             | no               |
 | `health`     | `[<snapshot-dir>]`   | Describe architecture health metrics and trends                                                    | no               |
 | `debt`       | `<dir>`              | Print the architecture-debt ledger across snapshots                                                | no               |
@@ -190,10 +190,14 @@ table produces a different set of matching rows.
 | `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. The surface listed is the one this law carries. |
 
 No positional arguments. Lists every `boundarySuppressions` row carrying an
-`expiresAt` — a waiver — with its term and the current violations it covers.
-Coverage is judged against the full finding set with the suppression table
-removed, so a row that covers nothing reads as stale. Descriptive: it exits 0
-whenever the surface could be read, never 1.
+`expiresAt` — a waiver — with its term and the current violations it covers, and
+every row with no `expiresAt` — a permanent suppression — with the violations it
+is currently hiding. Coverage is judged against the full finding set with the
+suppression table removed, so a row that covers nothing reads as stale. A tree
+whose only violations are permanently suppressed does not read as "no
+waivers — every boundary is enforced": this command names the suppression and
+what it hides instead. Descriptive: it exits 0 whenever the surface could be
+read, never 1.
 
 ### `history`
 
@@ -311,9 +315,17 @@ with its term and the current violations it covers. Coverage is judged against
 the full finding set (the table removed), so a row that covers nothing is
 flagged as stale rather than silently doing nothing. A waiver that has lapsed
 is listed as expired with its remaining time; it covers nothing and the
-violation it accepted re-asserts. A `waivers` run is descriptive and never
-modifies the table — waivers are removed by an explicit edit, never by the
-tool. Descriptive.
+violation it accepted re-asserts.
+
+It also lists every row with no `expiresAt` — a permanent suppression — and how
+many violations each is currently hiding: that removal never appears in
+`check`'s findings at all, so this is the only command that names it.
+`result.suppressions` carries the rows, `result.suppressed` the count of
+distinct violations they hide, and the text report never collapses "no
+waivers" into "every boundary is enforced" while a permanent suppression is
+covering something this run measured. A `waivers` run is descriptive and never
+modifies the table — waivers and suppressions are both removed only by an
+explicit edit, never by the tool. Descriptive.
 
 ### `history <dir>`
 
