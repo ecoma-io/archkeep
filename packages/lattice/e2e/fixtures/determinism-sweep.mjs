@@ -3,7 +3,7 @@
 // plus the two files the sweep's command surface reads that the monorepo
 // fixture alone does not carry: a canonical `architecture-intent.json` (for
 // `drift`/`check`'s drift fold/`reconcile`) and a recorded architecture
-// decision under `docs/adr/` (for `adr`).
+// decision under the ADR directory (for `adr`).
 //
 // The intent is the one canonical contract an installed Lattice reads — strict
 // JSON, the `version`-leading schema `src/architecture-intent/model.mjs`
@@ -21,6 +21,13 @@
 import { nativeMonorepoFiles } from "./native-monorepo.mjs";
 import { MONOREPO_BOUNDARY_CONFIG } from "./boundary-law.mjs";
 import { nxConsumerFiles } from "./nx-consumer.mjs";
+// The ADR directory name, read from the module that owns it rather than
+// respelled: a written-out `docs/adr/…` here would read to
+// `scripts/check-docs-links.mjs` as a citation to THIS repository's docs, on
+// a record path that resolves nowhere. The same reason the registry's own
+// tests build fixtures from `ADR_DIR` rather than spelling the path
+// (`src/governance/adr-registry.test.mjs`, "tracked-only registry").
+import { ADR_DIR } from "../../src/governance/adr-registry.mjs";
 
 /** The declared architecture the monorepo fixture's graph satisfies. */
 const CLEAN_INTENT = {
@@ -90,7 +97,7 @@ const WITH_WAIVER = MONOREPO_BOUNDARY_CONFIG.replace(
 export function determinismSweepFiles(packageName, peers, packageManager, intent, options = {}) {
   const files = nativeMonorepoFiles(packageName, peers, packageManager);
   files["architecture-intent.json"] = `${JSON.stringify(intent, null, 2)}\n`;
-  files["docs/adr/0001-layers.md"] = SWEEP_ADR;
+  files[`${ADR_DIR}/0001-layers.md`] = SWEEP_ADR;
   if (options.withWaiver) files["module-boundaries.config.mjs"] = WITH_WAIVER;
   return files;
 }
