@@ -257,6 +257,40 @@ describe("parseRustUseSites", () => {
     const [site] = parseRustUseSites(source);
     expect(source.slice(site.offset)).toBe("engine_core::Task;\n");
   });
+
+  it("reads a use that shares its line with a same-line attribute (D-08), as the full specifier", () => {
+    // The silent-miss directions of WSX-D08: before the fix, a same-line
+    // `#[cfg(...)] use b::helper;` was excluded by the line anchor and the
+    // bare-crate fallback claimed a truncated `b::` — a record naming text the
+    // file does not contain.
+    const source = '#[cfg(feature = "net")] use b::helper;\n';
+    expect(parseRustUseSites(source, new Set(["b"])).map((site) => site.specifier)).toEqual([
+      "b::helper",
+    ]);
+  });
+
+  it("reads a use that follows a statement on the same line (C-03), for a crate the workspace does not declare", () => {
+    // The silent direction of C-03: before the fix, a `; use` after a statement
+    // vanished with no record and no failure at all. `inner` is not a known
+    // crate, so the bare-form fallback cannot have been the source of the
+    // record either — only the `use` pass itself.
+    const source = "pub fn f(){}; use inner::Thing;\n";
+    const sites = parseRustUseSites(source, new Set());
+    expect(sites.map((site) => site.specifier)).toEqual(["inner::Thing"]);
+    expect(sites[0].root).toBe("inner");
+  });
+
+  it("reads a use inside a function body, preceded by `{` (C-03)", () => {
+    const source = 'fn main() { println!("hi"); use inner::Thing; }\n';
+    expect(parseRustUseSites(source).map((site) => site.specifier)).toEqual(["inner::Thing"]);
+  });
+
+  it("does not let a string literal that is not a use create a record (C-03)", () => {
+    // The same-line statement boundary only opens a `use`; text after a `{` or
+    // `;` that merely calls a method must not be read as one.
+    const source = "fn main() { let s = f(); s.trim(); }\n";
+    expect(parseRustUseSites(source)).toEqual([]);
+  });
 });
 
 describe("analyzeRust", () => {
@@ -281,6 +315,26 @@ describe("analyzeRust", () => {
   };
   const analyze = (text, sourceFile = "acme/apps/shell/src-tauri/src/main.rs") =>
     analyzeRust({ sourceFile, text, workspace });
+
+  it("crosses a boundary written after a statement on the same line (C-03)", () => {
+    // The silent-miss direction: before the fix, a `; use` after a statement
+    // produced no record and no failure — the crossing reported exactly like a
+    // clean file, even with the crate declared.
+    const { imports, failures } = analyze("pub fn f(){}; use engine_core::task::Task;\n");
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved.target).toBe("core");
+    expect(imports[0].specifier).toBe("engine_core::task::Task");
+  });
+
+  it("crosses a boundary written behind a same-line attribute, with the full specifier (D-08)", () => {
+    // D-08's truncation: before the fix, the same-line `#[cfg] use` was line-
+    // anchored out and the bare fallback read `engine_core::` — a record naming
+    // text the file does not contain. The record must name the full path.
+    const { imports, failures } = analyze('#[cfg(feature = "net")] use engine_core::task::Task;\n');
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved.target).toBe("core");
+    expect(imports[0].specifier).toBe("engine_core::task::Task");
+  });
 
   it("resolves a hyphenated package to the project a source spells with underscores", () => {
     // `engine-core` in Cargo.toml, `engine_core` in every `.rs` file. A
@@ -520,6 +574,60 @@ describe('analyzeRust — a dependency renamed via `package = "…"`', () => {
     const { imports, failures } = analyze("fn main() {\n    dep::widget();\n}\n");
     expect(failures).toEqual([]);
     expect(imports[0].resolved.target).toBe("engine");
+  });
+
+  it("crosses the boundary when a workspace dep is inherited under an alias (C-02)", () => {
+    // The C-02 silent-miss: the workspace table keys its entries by the member's
+    // LOCAL name — `as_real = { path = "libs/real", package = "real" }` — so the
+    // inherited member entry carries NO `package` key at all
+    // (`as_real = { workspace = true }`; measured against cargo 1.96, the
+    // `package` + `workspace = true` spelling fails to parse). The rename lives
+    // in the WORKSPACE spec. OLD behavior: `renamedDepsOf` skipped the member
+    // entry (`typeof spec.package !== "string"`), so `use as_real::widget`
+    // resolved `external: true, target: null` — a boundary crossing read as an
+    // external crate, byte-identical to a real external import.
+    const ws = {
+      root: "/w",
+      projects: [
+        { name: "real", root: "acme/libs/real" },
+        { name: "app", root: "acme/apps/app" },
+      ],
+      filesOf: (name) =>
+        ({
+          real: ["acme/libs/real/Cargo.toml"],
+          app: ["acme/apps/app/Cargo.toml", "acme/apps/app/src/main.rs"],
+        })[name] ?? [],
+      readFile: (path) =>
+        ({
+          "acme/Cargo.toml":
+            '[workspace]\nmembers = ["libs/real", "apps/app"]\n' +
+            '[workspace.dependencies]\nas_real = { path = "libs/real", package = "real" }\n',
+          "acme/libs/real/Cargo.toml": '[package]\nname = "real"\nversion = "0.1.0"\n',
+          "acme/apps/app/Cargo.toml":
+            '[package]\nname = "app"\nversion = "0.1.0"\n\n[dependencies]\n' +
+            "as_real = { workspace = true }\n",
+        })[path] ?? null,
+    };
+    expect(resolveRustDependencies(ws.projects, ws.filesOf, ws.readFile)).toEqual([
+      {
+        source: "app",
+        target: "real",
+        sourceFile: "acme/apps/app/Cargo.toml",
+        type: "static",
+      },
+    ]);
+    const { imports, failures } = analyzeRust({
+      sourceFile: "acme/apps/app/src/main.rs",
+      text: "use as_real::widget;\n",
+      workspace: ws,
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toEqual({
+      target: "real",
+      file: null,
+      external: false,
+      packageName: null,
+    });
   });
 
   it("scopes the rename to the project that declared it — a sibling's own `dep` reaches a different crate", () => {
