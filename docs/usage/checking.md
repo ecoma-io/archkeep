@@ -6,15 +6,25 @@ Run the boundary law against the workspace.
 pnpm exec lattice check
 ```
 
-A clean tree prints what it inspected, not just that it found nothing:
+A clean tree prints what it inspected, not just that it found nothing — and
+which law it inspected it against:
 
 ```text
+policy  module-boundaries.config.mjs — fingerprint 3f9a2b7c1d4e5f608a1b2c3d4e5f6078b1e2d3c4f5a6b7c8d9e0f1a2b3c4d5e6
+
 ✔ no boundary violations (264 imports in 78 files across 12 projects)
 ```
 
 Those counts are the point. "No violations" is a claim about coverage as much
 as correctness, and a run that analyzed four files would otherwise look
-identical to one that analyzed four hundred.
+identical to one that analyzed four hundred. The `policy` line above it is the
+same claim applied to the law itself: a clean run under a permissive
+`--config` and a clean run under the workspace's real one print the exact same
+"no boundary violations" sentence, so the file (or profile) and the
+fingerprint of the policy that produced it are named first, every time —
+[json-output.md](../reference/json-output.md) documents the same two facts as
+`result.policy` in `--format json`, and as a `properties.policy` entry on the
+SARIF run.
 
 ## What `check` judges
 
@@ -135,7 +145,9 @@ lattice check --config proposed-boundaries.mjs
 
 The file is resolved from the workspace root. It changes the boundary law, not
 the workspace root or provider. This is useful when reviewing a proposed policy
-without replacing the workspace's current one.
+without replacing the workspace's current one — and the run's own `policy`
+line names `proposed-boundaries.mjs`, not the workspace's default file, so a
+report generated this way is never mistaken for one the default law produced.
 
 A workspace that names a `profiles` option selects a law by name instead: the
 same `--config` then names a profile from the registry, and the run enforces

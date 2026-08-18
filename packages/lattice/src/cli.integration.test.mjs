@@ -17,6 +17,8 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { check, EXIT, parseCheckArgs, runCli } from "../cli.mjs";
+import { computePolicyFingerprint } from "./commands/graph.mjs";
+import { loadBoundaryConfigFile } from "./config.mjs";
 import { readProjectGraph } from "./providers/nx.mjs";
 
 const CLI = fileURLToPath(new URL("../cli.mjs", import.meta.url));
@@ -234,8 +236,16 @@ describe("checking a real tree", () => {
     // one checks the whole thing, so a change that reorders a line or drops a
     // space between two of them — invisible to `toContain` — still goes red.
     const { report } = await check({ format: "text", config: null, paths: [] }, context);
+    // Computed from the real fixture and the real fingerprint function, not
+    // written as a literal — pinning a copy of the hash here would let the two
+    // drift apart silently the moment either one changed.
+    const fingerprint = computePolicyFingerprint(
+      await loadBoundaryConfigFile(join(root, "module-boundaries.config.mjs")),
+    );
     expect(report).toBe(
       [
+        `policy  module-boundaries.config.mjs — fingerprint ${fingerprint}`,
+        "",
         "libs/domain/doc.go:5:2  onlyTagsConstraintViolation",
         '    A project tagged with "layer:domain" can only depend on libs tagged with "layer:domain"',
         '  import      "example.com/adapter" (static)  domain → adapter',
@@ -310,6 +320,104 @@ describe("checking a real tree", () => {
     // A fully-read, clean tree carries the `pass` decision — complete
     // coverage plus zero findings, the only counts that earn it.
     expect(envelope.decision).toEqual({ verdict: "pass" });
+  });
+
+  describe("naming the law that governed a clean run (P1-01)", () => {
+    // The audit's own reproduction: two DIFFERENT policies over the IDENTICAL
+    // tree, both permissive enough to report zero violations — the exact
+    // silent pair a weak `--config` substituted for a strict one would
+    // produce. Before this, the two reports were byte-identical in every
+    // format: nothing anywhere said which law had actually run, so a reader
+    // could not tell a clean run under the strict law from one whose gate had
+    // quietly been swapped for a weaker one.
+    const weak = join(root, "weak.config.mjs");
+    writeFileSync(
+      weak,
+      `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+    );
+    const satisfied = join(root, "satisfied.config.mjs");
+    writeFileSync(
+      satisfied,
+      readFileSync(join(root, "module-boundaries.config.mjs"), "utf8").replace(
+        '{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] }',
+        '{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] }',
+      ),
+    );
+
+    it("prints a different text report for each policy, both clean, each naming its own file", async () => {
+      const under = async (config) =>
+        (await check({ format: "text", config, paths: [] }, context)).report;
+      const weakReport = await under(weak);
+      const satisfiedReport = await under(satisfied);
+
+      expect(weakReport).toContain("✔ no boundary violations");
+      expect(satisfiedReport).toContain("✔ no boundary violations");
+      // The silent-direction assertion itself: same tree, same zero-violation
+      // verdict, but NOT the same bytes — the policy line is what tells them
+      // apart, and it is the first line of each report.
+      expect(weakReport).not.toBe(satisfiedReport);
+      const weakFirstLine = weakReport.split("\n\n")[0];
+      const satisfiedFirstLine = satisfiedReport.split("\n\n")[0];
+      expect(weakFirstLine).not.toBe(satisfiedFirstLine);
+      expect(weakFirstLine).toMatch(/^policy {2}weak\.config\.mjs — fingerprint [0-9a-f]{64}$/);
+      expect(satisfiedFirstLine).toMatch(
+        /^policy {2}satisfied\.config\.mjs — fingerprint [0-9a-f]{64}$/,
+      );
+    });
+
+    it("carries a different result.policy in the JSON envelope for each policy, both status ok", async () => {
+      const envelopeUnder = async (config) =>
+        JSON.parse((await check({ format: "json", config, paths: [] }, context)).report);
+      const weakEnvelope = await envelopeUnder(weak);
+      const satisfiedEnvelope = await envelopeUnder(satisfied);
+
+      expect(weakEnvelope.status).toBe("ok");
+      expect(satisfiedEnvelope.status).toBe("ok");
+      expect(weakEnvelope.result.violations).toEqual([]);
+      expect(satisfiedEnvelope.result.violations).toEqual([]);
+      // Before P1-01's fix, `result` carried no `policy` key at all, so these
+      // two envelopes' `result` objects were `{violations: []}` — identical —
+      // regardless of which config produced them.
+      expect(weakEnvelope.result.policy).toEqual({
+        profile: null,
+        source: "weak.config.mjs",
+        fingerprint: expect.any(String),
+      });
+      expect(satisfiedEnvelope.result.policy).toEqual({
+        profile: null,
+        source: "satisfied.config.mjs",
+        fingerprint: expect.any(String),
+      });
+      expect(weakEnvelope.result.policy.fingerprint).not.toBe(
+        satisfiedEnvelope.result.policy.fingerprint,
+      );
+    });
+
+    it("carries a different policy in the SARIF run-level properties for each policy", async () => {
+      const runUnder = async (config) =>
+        JSON.parse((await check({ format: "sarif", config, paths: [] }, context)).report).runs[0];
+      const weakRun = await runUnder(weak);
+      const satisfiedRun = await runUnder(satisfied);
+
+      expect(weakRun.results).toEqual([]);
+      expect(satisfiedRun.results).toEqual([]);
+      expect(weakRun.properties.policy.source).toBe("weak.config.mjs");
+      expect(satisfiedRun.properties.policy.source).toBe("satisfied.config.mjs");
+      expect(weakRun.properties.policy.fingerprint).not.toBe(
+        satisfiedRun.properties.policy.fingerprint,
+      );
+    });
   });
 
   it("pins every field of the violation object in the JSON envelope", async () => {
