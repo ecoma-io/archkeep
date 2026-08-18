@@ -63,6 +63,75 @@ describe("buildReachability", () => {
     const graph = graphOf(["a"], { a: undefined });
     expect(() => buildReachability(graph)).not.toThrow();
   });
+
+  it("keeps a project literally named __proto__ in the closure, like every other name", () => {
+    // G-01 sibling: `adjList` and `matrix` are keyed by project NAME, and names
+    // come from attacker-controlled manifests. A plain `{}` answered
+    // `adjList["__proto__"] = []` by repointing the map's OWN prototype, so
+    // the project vanished from the closure and `adjList["__proto__"]` read a
+    // poisoned prototype back — a Node object, whose `.filter`/`.push` are not
+    // functions. That is the exact `adjList[current].filter is not a function`
+    // diagnostic an LSP editor published in place of a boundary verdict. The
+    // graph fixture itself must be null-prototype too, or `Object.keys` drops
+    // the name before this function ever sees it.
+    const nodes = Object.create(null);
+    nodes.child = node("child");
+    nodes.__proto__ = node("__proto__");
+    const dependencies = Object.create(null);
+    dependencies.child = [edge("child", "__proto__")];
+    const graph = { nodes, dependencies };
+
+    const reach = buildReachability(graph);
+
+    expect(pathExists(reach, "child", "__proto__")).toBe(true);
+    expect(pathExists(reach, "__proto__", "__proto__")).toBe(true);
+    expect(pathExists(reach, "__proto__", "child")).toBe(false);
+    expect(Object.keys(reach.adjList)).toContain("__proto__");
+    expect(Object.keys(reach.matrix)).toContain("__proto__");
+    expect(reach.adjList.__proto__).toEqual([]);
+  });
+
+  it("does not invent reach into a __proto__ project no edge leads to", () => {
+    // The silent-direction half the previous case cannot see: with NO edge into
+    // `__proto__`, a plain `{}` matrix row answers `matrix.child.__proto__`
+    // with the inherited accessor (truthy `Object.prototype`), so a
+    // `notDependOnLibsWithTags` check against an unreachable `__proto__`
+    // project would report a violation that is not real — a born-again
+    // prototype pollution exactly one key deeper than the outer maps. With
+    // null-prototype rows the read is `undefined` and the answer is the false
+    // that matches there being no path.
+    const nodes = Object.create(null);
+    nodes.child = node("child");
+    nodes.__proto__ = node("__proto__");
+    const reach = buildReachability({ nodes, dependencies: Object.create(null) });
+
+    expect(pathExists(reach, "child", "__proto__")).toBe(false);
+    expect(Object.keys(reach.matrix.child)).not.toContain("__proto__");
+  });
+
+  it("walks a route through a __proto__ project instead of skipping it", () => {
+    // The other silent direction: a route that RUNS THROUGH a `__proto__`
+    // project. With plain `{}` rows the walk's `if (matrix[start][adj])` sees
+    // `__proto__` as already-reached on every read (inherited accessor again),
+    // bails, and declares `grandchild` unreachable from `child` — dropping a
+    // real violation. A null-prototype row records the real `__proto__`-indexed
+    // writes, so the closure completes.
+    const nodes = Object.create(null);
+    nodes.child = node("child");
+    nodes.__proto__ = node("__proto__");
+    nodes.grandchild = node("grandchild");
+    const dependencies = Object.create(null);
+    dependencies.child = [edge("child", "__proto__")];
+    dependencies.__proto__ = [edge("__proto__", "grandchild")];
+    const reach = buildReachability({ nodes, dependencies });
+
+    expect(pathExists(reach, "child", "__proto__")).toBe(true);
+    expect(pathExists(reach, "__proto__", "grandchild")).toBe(true);
+    expect(pathExists(reach, "child", "grandchild")).toBe(true);
+    // The hop was recorded as an own entry in the row, not skipped.
+    expect(reach.matrix.child.__proto__).toBe(true);
+    expect(Object.keys(reach.matrix.child)).toContain("__proto__");
+  });
 });
 
 describe("getPath", () => {

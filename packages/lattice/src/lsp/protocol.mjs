@@ -77,16 +77,44 @@ export const DIAGNOSTIC_SEVERITY = Object.freeze({
 });
 
 /**
+ * The largest `Content-Length` this server accepts.
+ *
+ * The base protocol places no upper bound on a frame's declared body size, and
+ * an unbounded one is a denial handle on the session: a header declaring
+ * `Content-Length: 99999999999` never completes, so `frameMessages` returns
+ * `{ messages: [], rest: <everything> }` forever and every following frame —
+ * `initialize` included — is swallowed behind it. The server holds the whole
+ * `pending` buffer too, so a 1-byte trickle drives O(n²) copying. One
+ * `\r\n\r\n` followed by an implausible length is indistinguishable in the
+ * stream from a client that died mid-frame, and the server must pick one
+ * loudly (a terminal protocol error, `../../lsp.mjs`), never a silent
+ * hold-open.
+ *
+ * The cap is deliberately generous: no real LSP frame from any editor comes
+ * near it, so nothing a working client sends is refused. A frame that needs
+ * more is not a supported conversation, and saying so beats waiting for bytes
+ * that will never arrive.
+ */
+export const MAX_CONTENT_LENGTH = 64 * 1024 * 1024;
+
+/**
  * Splits a byte stream into LSP messages. Returns the messages it could frame
  * plus whatever tail is not yet a whole message, which the caller feeds back
- * in with the next chunk.
+ * in with the next chunk — or, when a header declared an implausible body size,
+ * a TERMINAL protocol error: the stream is poisoned and the caller must close
+ * the session loudly, never feed `rest` back on. When `protocolError` is set,
+ * `rest` is deliberately empty and `messages` empty too: nothing the caller
+ * could do with either would be correct, so neither carries a usable value.
+ * That a caller OTHER than `../../lsp.mjs` must read this and refuse to
+ * continue is the handshake, and it lives here rather than in the caller so no
+ * future consumer can treat the error as a recoverable pause.
  *
  * `Content-Length` counts BYTES, not characters, so the buffer is sliced
  * before it is decoded — measuring a decoded string would mis-split any
  * message containing a non-ASCII path.
  *
  * @param {Buffer} buffer
- * @returns {{ messages: object[], rest: Buffer }}
+ * @returns {{ messages: object[], rest: Buffer, protocolError?: string }}
  */
 export function frameMessages(buffer) {
   const messages = [];
@@ -102,6 +130,19 @@ export function frameMessages(buffer) {
       // resynchronise on the next boundary rather than guess a length.
       rest = rest.subarray(headerEnd + 4);
       continue;
+    }
+    if (length > MAX_CONTENT_LENGTH) {
+      // A declared body larger than the server's budget is not a partial frame
+      // arriving — it is a stream that will never complete (or a peer trying
+      // to hold it open). Return a terminal error instead of `{rest: …}` so
+      // the caller closes the session loudly rather than buffering forever.
+      // The framing is still in sync: the header was parsed, the body is
+      // simply not coming, and no later frame can be framed behind it.
+      return {
+        messages: [],
+        rest: Buffer.alloc(0),
+        protocolError: `lattice: Content-Length ${length} exceeds the ${MAX_CONTENT_LENGTH}-byte maximum; closing the session rather than waiting for a body that will never arrive`,
+      };
     }
     const bodyStart = headerEnd + 4;
     if (rest.length < bodyStart + length) break; // body still arriving

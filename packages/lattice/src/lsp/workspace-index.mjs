@@ -217,7 +217,18 @@ export function discoverProjects({ files, readFile }) {
  * @returns {Record<string, object>}
  */
 export function buildNodes(projects) {
-  const nodes = {};
+  // Null-prototype for the same reason `../providers/native/graph.mjs` and
+  // `../providers/moon.mjs` use them: every key here is a project NAME, and
+  // project names come from a `project.json`'s own `name` field —
+  // attacker-supplied the moment a pull request adds a project called
+  // `__proto__`. A plain `{}` answers `nodes["__proto__"] = …` by repointing
+  // the object's OWN prototype rather than adding an entry, so the project
+  // vanishes from `graph.nodes` while `filesOf` still attributes it files — a
+  // real cross-project import into it then read a poisoned Node as a graph
+  // node and flips/throws on every rule that touches it. `Object.create(null)`
+  // has no inherited `__proto__` accessor to collide with, so the name behaves
+  // like every other project name: a real, own, enumerable entry.
+  const nodes = Object.create(null);
   for (const { name, root, config } of projects) {
     nodes[name] = {
       name,
@@ -412,7 +423,7 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
       root,
       files,
       workspace,
-      graph: { nodes: {}, dependencies: {} },
+      graph: { nodes: Object.create(null), dependencies: Object.create(null) },
       skippedProjects: [],
       fileFailures: [],
       nativeMarker: true,

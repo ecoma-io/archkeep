@@ -39,19 +39,36 @@ function exitAfterFlush(output, code) {
 
 /** Wires a server to a pair of streams and returns it. */
 export function serve(input = process.stdin, output = process.stdout, onExit = null) {
-  const server = createServer({
-    send: (message) => output.write(encodeMessage(message)),
-    exit: onExit ?? ((code) => exitAfterFlush(output, code)),
-    log: (text) => process.stderr.write(`${text}\n`),
-  });
+  const send = (message) => output.write(encodeMessage(message));
+  const exit = onExit ?? ((code) => exitAfterFlush(output, code));
+  const log = (text) => process.stderr.write(`${text}\n`);
+  const server = createServer({ send, exit, log });
 
   /** @type {Buffer} */
   let pending = Buffer.alloc(0);
   // No encoding is ever set on `input`, so a data chunk is always a Buffer.
   input.on("data", (/** @type {Buffer} */ chunk) => {
-    const { messages, rest } = frameMessages(Buffer.concat([pending, chunk]));
-    pending = rest;
-    for (const message of messages) server.handle(message);
+    const framed = frameMessages(Buffer.concat([pending, chunk]));
+    // An implausible `Content-Length` is a poisoned stream, not a client that
+    // will send more bytes — see `MAX_CONTENT_LENGTH` in `./src/lsp/protocol.mjs`.
+    // The session is closed loudly (a log line naming the length, and a
+    // non-zero exit) rather than held open forever on a body that will never
+    // arrive: a frame that cannot be framed must never look like a clean,
+    // empty conversation.
+    if (framed.protocolError !== undefined) {
+      pending = Buffer.alloc(0);
+      log(framed.protocolError);
+      // Exit 2 is deliberate, and not the CLI's usage-error 2 — that is a
+      // different process (`docs/reference/exit-codes.md`). The server's own
+      // contract (`./src/lsp/server.mjs`) ends a session 0 after a clean
+      // `shutdown` and 1 when the pipe closed without one; a poisoned protocol
+      // stream is neither, and sharing either code would read as a clean or
+      // merely-dirty shutdown to whatever supervised the process.
+      exit(2);
+      return;
+    }
+    pending = framed.rest;
+    for (const message of framed.messages) server.handle(message);
   });
   // A client that closed the pipe without saying `exit` did not shut the server
   // down; reporting that as a clean stop would hide a crashed editor.

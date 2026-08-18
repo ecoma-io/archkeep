@@ -349,6 +349,60 @@ describe("building the index over a whole tree", () => {
       }),
     ).toThrow(/not a git repository/u);
   });
+
+  it("makes a project literally named __proto__ a first-class graph node", () => {
+    // G-01: `buildNodes` keyed by project NAME, and names come from
+    // attacker-controlled `project.json`s. A plain `{}` answered
+    // `nodes["__proto__"] = …` by repointing the object's OWN prototype, so
+    // the project vanished from `graph.nodes` while `filesOf` still attributed
+    // it files — a real cross-project import into it then produced
+    // `adjList[current].filter is not a function` (or a silent non-verdict)
+    // instead of a boundary diagnostic. The null-prototype map makes the name
+    // behave like every other: present, own, enumerable.
+    const withProto = {
+      [`libs/child/${PROJECT_CONFIG_FILE}`]: '{"name":"child","tags":["scope:child"]}',
+      "libs/child/main.go": "package child\n",
+      [`libs/__proto__/${PROJECT_CONFIG_FILE}`]: '{"name":"__proto__","tags":["scope:shared"]}',
+      "libs/__proto__/s.go": "package proto\n",
+    };
+    analyzeFile.mockImplementation(({ sourceFile }) =>
+      sourceFile === "libs/child/main.go"
+        ? {
+            imports: [
+              {
+                sourceFile,
+                line: 2,
+                column: 1,
+                specifier: "libs/shared",
+                spelling: { path: false, relative: false },
+                kind: "static",
+                resolved: { target: "__proto__", file: null, external: false, packageName: null },
+              },
+            ],
+            failures: [],
+          }
+        : { imports: [], failures: [] },
+    );
+    const index = buildWorkspaceIndex({
+      root: "/fixture",
+      listFiles: () => Object.keys(withProto),
+      readFileAt: (_root, path) => withProto[path] ?? null,
+    });
+    analyzeFile.mockImplementation(() => ({ imports: [], failures: [] }));
+
+    expect(Object.keys(index.graph.nodes)).toContain("__proto__");
+    expect(index.graph.nodes.__proto__.data.tags).toEqual(["scope:shared"]);
+    expect(index.workspace.filesOf("__proto__")).toContain("libs/__proto__/s.go");
+    // The import edge from the sibling into `__proto__` is recorded, so a rule
+    // engine run can judge it. With the old `{}` map the node was absent AND
+    // its own reachability key vanished — the edge led nowhere and the verdict
+    // flipped or threw instead.
+    expect(index.graph.dependencies.child).toContainEqual({
+      source: "child",
+      target: "__proto__",
+      type: "static",
+    });
+  });
 });
 
 describe("nx.json's workspaceLayout reaching the rule engine (Nx-shaped branch)", () => {
