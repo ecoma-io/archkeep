@@ -208,6 +208,42 @@ function createContext(importSites, graph, config) {
   // silently everywhere the check does not happen to fall.
   for (const site of importSites) spellingOf(site);
 
+  // A `buildTargets` entry that matches NO project's declared targets is a
+  // silent no-op — `hasBuildExecutor` compares exactly, so the entry selects
+  // no project, and when `enforceBuildableLibDependency` is on the check
+  // reads as live while no project can possibly satisfy it. That is the
+  // exact silent direction this repository's invariant forbids, and it is
+  // only answerable here, where the graph is in the room: `config.mjs` has
+  // already refused entries carrying glob syntax at load (`targetPatternError`),
+  // so anything reaching this check is a plain NAME that happens not to be
+  // declared by any project — a typo, or a target the workspace renamed
+  // without updating the option. Both are reported by name, loudly, rather
+  // than judged into a rule that can never fire. When the flag is OFF the
+  // entries are never read (`docs/reference/policy-schema.md`, "moduleBoundaryOptions"),
+  // so there is nothing to check and no claim to make.
+  const optionsValue = /** @type {object} */ (config?.options);
+  if (optionsValue.enforceBuildableLibDependency === true && Object.keys(graph.nodes).length > 0) {
+    // `graph.nodes` being empty is a genuinely empty tree — no project exists
+    // for an entry to select, so there is no claim to make and no silent no-op
+    // (an option that judges nothing on no projects is not a trap; one that
+    // judges nothing while projects exist is). The check is only answerable
+    // against a non-empty graph, and an empty one skips it rather than
+    // refusing every command on a workspace that has nothing to judge.
+    const declaredTargets = new Set(
+      Object.values(graph.nodes).flatMap((node) => Object.keys(node.data?.targets ?? {}) ?? []),
+    );
+    for (const entry of /** @type {string[]} */ (optionsValue.buildTargets ?? [])) {
+      if (!declaredTargets.has(entry)) {
+        throw new Error(
+          `lattice: buildTargets entry '${entry}' matches no target declared by any project ` +
+            `in the graph — under enforceBuildableLibDependency this entry is a silent no-op. ` +
+            `Declare a target named '${entry}' on some project, or remove the entry. ` +
+            `Declared targets: ${[...declaredTargets].join(", ") || "(none)"}`,
+        );
+      }
+    }
+  }
+
   const mappings = createProjectRootMappings(graph.nodes);
   const reach = buildReachability(graph);
   // The file index describes what was analyzed, not what exists — see

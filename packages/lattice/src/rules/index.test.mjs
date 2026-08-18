@@ -597,6 +597,61 @@ describe("evaluate", () => {
       ]);
       expect(evaluate([site()], graph, config(permissive))).toEqual([]);
     });
+
+    // B-F20/D-15's graph-time half: `config.mjs` refuses glob syntax at load,
+    // but a plain NAME that no project declares is only answerable here,
+    // where the graph is in the room. Under the flag, an entry that matches
+    // no project target is a silent no-op — the check reads as live while no
+    // project can possibly satisfy it — and must be refused by name.
+    it("refuses a buildTargets entry that matches no project target, naming the entry", () => {
+      const graph = graphOf([
+        project("alpha", { tags: ["zone:x"], targets: buildable }),
+        project("beta", { tags: ["zone:y"] }),
+      ]);
+      expect(() =>
+        evaluate(
+          [site()],
+          graph,
+          config(permissive, {
+            enforceBuildableLibDependency: true,
+            buildTargets: ["build", "renamed-target"],
+          }),
+        ),
+      ).toThrow(/buildTargets entry 'renamed-target' matches no target declared by any project/);
+    });
+
+    it("does not refuse a buildTargets entry when the flag is off — the entries are never read", () => {
+      const graph = graphOf([
+        project("alpha", { tags: ["zone:x"] }),
+        project("beta", { tags: ["zone:y"] }),
+      ]);
+      expect(
+        evaluate(
+          [site()],
+          graph,
+          config(permissive, { buildTargets: ["build", "renamed-target"] }),
+        ),
+      ).toEqual([]);
+    });
+
+    it("does not refuse on a genuinely empty graph — no project exists for an entry to silently miss", () => {
+      // An empty tree has nothing for `buildTargets` to select against, so the
+      // "entry matches no project target" refusal has no claim to make: the
+      // trap it exists to name needs projects that exist and still cannot be
+      // selected. Skipping the empty case keeps a fresh native workspace (a
+      // `lattice.json` with zero declared projects) from failing every command
+      // over an option that judges nothing.
+      expect(
+        evaluate(
+          [site()],
+          graphOf([]),
+          config(permissive, {
+            enforceBuildableLibDependency: true,
+            buildTargets: ["build", "renamed-target"],
+          }),
+        ),
+      ).toEqual([]);
+    });
   });
 
   describe("noImportsOfLazyLoadedLibraries", () => {

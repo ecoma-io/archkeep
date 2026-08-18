@@ -121,6 +121,25 @@ describe("reading a boundary config that outlives the process reading it", () =>
     await expect(readBoundaryConfig(root, 2, CONFIG_FILE)).rejects.toThrow(/is malformed/u);
   });
 
+  it("refuses an unknown top-level export in the .mjs dialect, the same law the CLI's loader applies", async () => {
+    // The silent-direction failure this guards: the editor arm of the `.mjs`
+    // dialect used to load a misspelled export and diagnose every open file
+    // against the no-op law it left behind — a typo'd rule that looked live.
+    // The CLI's `loadBoundaryConfigFile` already refused the identical typo
+    // at `../config.mjs`; the editor reads through the same two validators
+    // now (`../config.mjs`'s `policyFrom` + `policyKeyViolations`), and a
+    // config the CLI refuses must not load clean in the editor.
+    write(`
+      export const depConstraints = [];
+      export const moduleBoundaryOptions = ${JSON.stringify(MODULE_BOUNDARY_OPTIONS)};
+      export const moduleBoundaryOption = [];
+    `);
+
+    return expect(readBoundaryConfig(root, 4, CONFIG_FILE)).rejects.toThrow(
+      /moduleBoundaryOption: not a recognised top-level key/,
+    );
+  });
+
   it("names the file it could not load, since a missing law enforces nothing silently", async () => {
     const empty = mkdtempSync(join(tmpdir(), "lattice-config-empty-"));
     try {
