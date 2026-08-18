@@ -45,7 +45,7 @@
             "verbose"
           ],
           "default": "off",
-          "description": "Log the conversation with the boundary server to the Lattice output channel."
+          "description": "Log the conversation with the boundary server to the Lattice output channel. The channel's log-level dropdown (Output panel gear icon) is the master switch: set it to Trace, then choose messages or verbose here."
         }
       }
     },

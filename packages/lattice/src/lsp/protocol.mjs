@@ -76,13 +76,6 @@ export const DIAGNOSTIC_SEVERITY = Object.freeze({
   hint: 4,
 });
 
-/** LSP `FileChangeType`, as `workspace/didChangeWatchedFiles` reports it. */
-export const FILE_CHANGE_TYPE = Object.freeze({
-  created: 1,
-  changed: 2,
-  deleted: 3,
-});
-
 /**
  * The largest `Content-Length` this server accepts.
  *
