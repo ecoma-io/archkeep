@@ -5394,3 +5394,119 @@ describe("adr resolves a workspace root by every marker a root may carry", () =>
     });
   }
 });
+
+describe("checking a tree with a pyproject.toml analysis cannot read (audit D-03)", () => {
+  // Audit finding D-03's exact evidence, reproduced end to end: a Python
+  // project whose `pyproject.toml` is malformed TOML — `[project` with no
+  // closing `]` — while its `.py` imports still resolve. Before the fix, the
+  // layout reader reported the project unmodelled and the run exited 0 with
+  // coverage "complete": a green verdict about a workspace whose manifest
+  // said nothing this tool could read. The silent direction is not an empty
+  // result but an affirmative one — the run's own text said "no boundary
+  // violations" and "coverage complete" while the module index was missing a
+  // whole project. A malformed manifest is a hole in every run, so the whole
+  // file becomes a failure (exit 3), regardless of the boundary config and
+  // regardless of which paths a scoped run names.
+  const d03Root = mkdtempSync(join(tmpdir(), "polyglot-cli-d03-"));
+  afterAll(() => rmSync(d03Root, { recursive: true, force: true }));
+
+  const writeD03 = (relativePath, text) => {
+    mkdirSync(join(d03Root, relativePath, ".."), { recursive: true });
+    writeFileSync(join(d03Root, relativePath), text);
+  };
+
+  writeD03(
+    "lattice.json",
+    JSON.stringify({
+      projects: {
+        declared: [
+          { root: "apps/a", name: "a", type: "lib", tags: [] },
+          { root: "apps/b", name: "b", type: "lib", tags: [] },
+        ],
+      },
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "audit fixture policy file",
+          },
+        ],
+      },
+    }),
+  );
+  writeD03(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [{ sourceTag: "*", onlyDependOnLibsWithTags: ["*"] }];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: [],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  // The audit fixture's malformed manifest: `[project` never closes.
+  writeD03("apps/a/pyproject.toml", '[project\nname = "a"\n');
+  writeD03("apps/a/src/a_main.py", "import bpkg\nprint(bpkg.VALUE)\n");
+  writeD03(
+    "apps/b/pyproject.toml",
+    '[project]\nname = "b"\ndependencies = ["c @ file:///not/root-anchored"]\n',
+  );
+  writeD03("apps/b/src/bpkg/__init__.py", "VALUE = 1\n");
+
+  const d03Files = [
+    "lattice.json",
+    "module-boundaries.config.mjs",
+    "apps/a/pyproject.toml",
+    "apps/a/src/a_main.py",
+    "apps/b/pyproject.toml",
+    "apps/b/src/bpkg/__init__.py",
+  ];
+
+  // The import still resolves — `bpkg` is the OTHER project, the one whose
+  // manifest is fine — so this is a workspace whose imports work while one
+  // manifest cannot be read. The malformed manifest must be the reason the
+  // run fails, not a miss by the resolver.
+  const d03Context = { cwd: d03Root, listFiles: () => d03Files };
+
+  it("exits 3 instead of the 'no boundary violations, coverage complete' the finding reported", async () => {
+    const out = [];
+    const err = [];
+    const streams = {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      ...d03Context,
+    };
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("could not be analyzed at all");
+    expect(report).toContain("apps/a/pyproject.toml");
+    expect(report).toContain("not valid TOML");
+    // The affirmative half of the old silent run — "no boundary violations,
+    // coverage complete" — must not survive: the failure line may sit beside
+    // a counted-imports line, but nothing may claim the run is complete.
+    expect(report).not.toContain("coverage complete");
+  });
+
+  it("carries the unreadable manifest into the JSON envelope as a not-analyzed file", async () => {
+    const { report } = await check({ format: "json", config: null, paths: [] }, d03Context);
+    const envelope = JSON.parse(report);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      {
+        file: "apps/a/pyproject.toml",
+        reason:
+          "its pyproject.toml cannot be fully read: its `pyproject.toml` is not valid TOML, so nothing it declares can be read",
+      },
+    ]);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(EXIT.error);
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.decision.reason).toContain("coverage incomplete");
+  });
+});

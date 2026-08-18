@@ -186,6 +186,12 @@
  *   lines in this way and still could not be read as `from`/`import` is a
  *   failure naming the file rather than a silently dropped record — the same
  *   choice a brace-group `use` gets in the Rust analyzer below.
+ * - **A parenthesised name list** — `import (a, b)` or `from x import (a, b)`,
+ *   Black and isort's normalised multi-import spelling — is read the same way
+ *   as the single-line comma list: the surrounding parens and any interior
+ *   line breaks are stripped, and each name is a record. A paren group whose
+ *   contents cannot be read as names is a failure, never a silently empty
+ *   group (`parsePythonImportSites` pins both).
  * - **A triple-quoted string containing a line that looks like an import** is
  *   read as one. `#` comments are not, since the `#` precedes the keyword.
  * - **`if TYPE_CHECKING:` imports stay `kind: "static"`.** They are erased at
@@ -739,7 +745,7 @@ export function pythonImportRoots(projectRoot, files, directories = []) {
  *
  * @returns {{ byModule: Map<string, { project: string, file: string|null }[]>,
  *   directoriesOf: Map<string, string[]>,
- *   unmodelled: { project: string, reason: string }[] }}
+ *   unmodelled: { project: string, root: string, reason: string }[] }}
  */
 const pythonModulesOf = perWorkspace((workspace) => {
   const byModule = new Map(); // dotted name -> [{ project, file }]
@@ -753,7 +759,9 @@ const pythonModulesOf = perWorkspace((workspace) => {
       files.includes(manifestPath) ? (workspace.readFile(manifestPath) ?? null) : null,
     );
     directoriesOf.set(project.name, layout.directories);
-    for (const reason of layout.unmodelled) unmodelled.push({ project: project.name, reason });
+    for (const reason of layout.unmodelled) {
+      unmodelled.push({ project: project.name, root: project.root, reason });
+    }
     for (const [dotted, entry] of pythonModuleIndex(project.root, files, layout.directories)) {
       const owners = byModule.get(dotted) ?? [];
       owners.push({ project: project.name, file: entry.file });
@@ -762,6 +770,27 @@ const pythonModulesOf = perWorkspace((workspace) => {
   }
   return { byModule, directoriesOf, unmodelled };
 });
+
+/**
+ * Every Python project whose declared package layout this reader could not
+ * follow, as whole-file failures attributed to its `pyproject.toml` —
+ * workspace-scoped on purpose, and surfaced separately from per-import
+ * resolution: a malformed manifest is a hole in every run, not only in the
+ * files that happen to hit a name that reaches no project. The CLI funnels
+ * these alongside the analyzers' own failures, so `check` reports the run
+ * incomplete (exit 3) rather than clean while a project's manifest says
+ * nothing this tool can read.
+ *
+ * @param {object} workspace
+ * @returns {object[]} `fileFailure` shapes (`../analysis/source-util.mjs`).
+ */
+export const pythonUnmodelledFailures = (workspace) =>
+  pythonModulesOf(workspace).unmodelled.map(({ root, reason }) =>
+    fileFailure(
+      normalizePath(root, "pyproject.toml"),
+      `its pyproject.toml cannot be fully read: ${reason}`,
+    ),
+  );
 
 /**
  * The project a dotted module name reaches, by longest matching prefix.
@@ -807,6 +836,58 @@ const IMPORT_STATEMENT = /^[ \t]*import[ \t]+/;
 const FROM_STATEMENT =
   /^([ \t]*from[ \t]+)(\.+[A-Za-z_][\w.]*|\.+|[A-Za-z_][\w.]*)([ \t]+import\b)/;
 const DOTTED_NAME = /^[ \t]*([A-Za-z_][\w.]*)/;
+
+/**
+ * `text` with a parenthesised name group's parentheses blanked to spaces —
+ * `import (a, b)` → `import  a, b `, and `from x import (a, b)` →
+ * `from x import  a, b ` — Black and isort's normalised multi-import
+ * spelling. The parens are blanked rather than removed so the result is the
+ * same length as the source and a position in it is the same position in the
+ * file (the record is read as `file:line:column`). The interior is left where
+ * it is: the existing comma-name loop reads each name exactly as it does in
+ * the single-line form, and a non-name interior (a call, a slice) reads its
+ * first identifier or fails the caller's prefilter — never a silent empty
+ * from a statement that plainly says `import`.
+ *
+ * @param {string} text One statement (a `;`-split piece, possibly the joined
+ *   continuation of several physical lines).
+ * @returns {string}
+ */
+function blankParenGroup(text) {
+  const open = text.indexOf("(");
+  if (open === -1) return text;
+  const close = text.lastIndexOf(")");
+  if (close <= open) return text;
+  // One space in, one space out for each paren, so both lengths and offsets
+  // survive the call.
+  return `${text.slice(0, open)} ${text.slice(open + 1, close)} ${text.slice(close + 1)}`;
+}
+
+/** A `(` in `text` that no `)` closes — the marker of a paren group in
+ * progress. String contents are skipped, so a `(` inside a string never opens
+ * one, and a `#` comment is inert, so a paren written in prose after `#` —
+ * `from x import (a, b)  # (see` — never looks like a group still open. A
+ * trailing `(` in a comment joining the next physical line is how a real
+ * `import` on that line silently vanished. */
+function hasUnclosedParen(text) {
+  let depth = 0;
+  let quote = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote !== null) {
+      if (ch === quote && text[i - 1] !== "\\") quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "#") break; // a comment runs to the end of the line, inert
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+  }
+  return depth > 0;
+}
 /** A line, or a `;`-separated piece of one, worth trying the statement forms on. */
 const FROM_OR_IMPORT_HEAD = /^[ \t]*(?:from|import)\b/;
 /** `importlib.import_module(`, a bare `import_module(`, and `__import__(`. */
@@ -839,10 +920,12 @@ function splitStatements(line) {
 /**
  * Python's explicit line-joining, starting at physical line `index`: a line
  * ending in a bare `\` continues onto the next one with the backslash and the
- * newline both gone, exactly as Python's own tokenizer joins them. Called
- * only for a line that already opens with `from`/`import` — see the caller —
- * so this never reaches into a line that has nothing to do with the
- * statement, a comment ending in `\` while noting a Windows path, say.
+ * newline both gone, exactly as Python's own tokenizer joins them, and a
+ * `from`/`import` line whose paren group stays open continues too — the
+ * `import (a,` + `b,)` spelling Black and isort normalise to. Called only for
+ * a line that already opens with `from`/`import` — see the caller — so this
+ * never reaches into a line that has nothing to do with the statement, a
+ * comment ending in `\` while noting a Windows path, say.
  *
  * Each continuation swaps exactly one character (the trailing `\`) for one (a
  * joining space) and then appends the next physical line whole, so the joined
@@ -862,9 +945,9 @@ function joinContinuedStatement(physicalLines, lineOffsets, index) {
   const segments = [{ start: 0, offset: lineOffsets[index] }];
   let text = physicalLines[index];
   let end = index;
-  while (text.endsWith("\\") && end + 1 < physicalLines.length) {
+  while (end + 1 < physicalLines.length && (text.endsWith("\\") || hasUnclosedParen(text))) {
     end++;
-    text = `${text.slice(0, -1)} `; // drop the trailing `\`, keep the same length
+    text = text.endsWith("\\") ? `${text.slice(0, -1)} ` : text; // swap `\` for a space
     segments.push({ start: text.length, offset: lineOffsets[end] });
     text += physicalLines[end];
   }
@@ -899,15 +982,22 @@ export function parsePythonImportSites(pythonText) {
   let index = 0;
   while (index < physicalLines.length) {
     const line = physicalLines[index];
-    const continues = FROM_OR_IMPORT_HEAD.test(line) && line.endsWith("\\");
+    const continues =
+      FROM_OR_IMPORT_HEAD.test(line) && (line.endsWith("\\") || hasUnclosedParen(line));
     const { text, end, toOffset } = continues
       ? joinContinuedStatement(physicalLines, lineOffsets, index)
       : { text: line, end: index, toOffset: (i) => lineOffsets[index] + i };
 
     let matchedAny = false;
     for (const piece of splitStatements(text)) {
-      if (!FROM_OR_IMPORT_HEAD.test(piece.text)) continue;
-      const from = FROM_STATEMENT.exec(piece.text);
+      // `import (a, b)` / `from x import (a, b)` — blank the parens before
+      // the statement forms are tried, so the group reads exactly like the
+      // single-line comma list. Blanking rather than deleting keeps every
+      // position inside the original text (`piece.start` maps back through
+      // `toOffset`, and a shorter copy would name a byte the file has not).
+      const pieceText = blankParenGroup(piece.text);
+      if (!FROM_OR_IMPORT_HEAD.test(pieceText)) continue;
+      const from = FROM_STATEMENT.exec(pieceText);
       if (from) {
         matchedAny = true;
         sites.push({
@@ -918,13 +1008,13 @@ export function parsePythonImportSites(pythonText) {
         });
         continue;
       }
-      const statement = IMPORT_STATEMENT.exec(piece.text);
+      const statement = IMPORT_STATEMENT.exec(pieceText);
       if (!statement) continue;
       matchedAny = true;
       // `import a.b as c, x.y` is several written imports on one line, and
       // each gets its own record with its own column.
       let cursor = statement[0].length;
-      for (const namePiece of piece.text.slice(cursor).split(",")) {
+      for (const namePiece of pieceText.slice(cursor).split(",")) {
         const name = DOTTED_NAME.exec(namePiece);
         if (name) {
           sites.push({

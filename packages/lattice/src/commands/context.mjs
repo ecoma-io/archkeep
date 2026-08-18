@@ -26,6 +26,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { languageOf } from "../analysis/registry.mjs";
+import { pythonUnmodelledFailures } from "../analysis/python.mjs";
 import { fileFailure } from "../analysis/source-util.mjs";
 import {
   DEFAULT_OPTIONS,
@@ -410,6 +411,11 @@ export function resolveCommandContext(
     failures = [
       ...wholeTreeAnalysis.failures.filter((failure) => selectedFiles.has(failure.sourceFile)),
       ...discovered.failures,
+      // Workspace-scoped on purpose, the same posture the two unclaimed
+      // equivalents above hold: a wildcard run must not be able to hide a
+      // project whose manifest it cannot read by naming a path that excludes
+      // it (`../analysis/python.mjs`'s `pythonUnmodelledFailures`).
+      ...pythonUnmodelledFailures(workspace),
     ];
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
     analyzed = analyzedFiles.length;
@@ -496,6 +502,7 @@ export function resolveCommandContext(
     failures = [
       ...wholeTreeAnalysis.failures.filter((failure) => selectedFiles.has(failure.sourceFile)),
       ...unclaimedFileFailures({ tracked, owned, providerLabel: "the Moon project graph" }),
+      ...pythonUnmodelledFailures(workspace),
     ];
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
     analyzed = analyzedFiles.length;
@@ -546,6 +553,7 @@ export function resolveCommandContext(
     failures = [
       ...failures,
       ...unclaimedFileFailures({ tracked, owned, providerLabel: "the Nx project graph" }),
+      ...pythonUnmodelledFailures(workspace),
     ];
     // Same reason as the Moon branch above: `coverage.exempt` is a native-only
     // concept, so an Nx workspace has nothing to report here.
