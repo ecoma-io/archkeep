@@ -42,16 +42,34 @@ function matchesIncludePattern(relPath, pattern) {
   return false;
 }
 
-/** Collect non-test .mjs files under a src subdirectory. */
-function productionMjsFiles(dir) {
-  const dirPath = join(ROOT, "src", dir);
-  try {
-    return readdirSync(dirPath, { recursive: true })
-      .filter((f) => typeof f === "string" && f.endsWith(".mjs") && !f.endsWith(".test.mjs"))
-      .map((f) => String(f));
-  } catch {
-    return [];
+/**
+ * Collect every production (non-`.test.mjs`, non-`.integ.mjs`) `.mjs` file
+ * under `src/`, recursively — top-level modules included.
+ *
+ * Returns paths relative to `src/` (e.g. `"governance/adr-registry.mjs"`,
+ * `"options.mjs"`). A module that escapes this walk is a silent
+ * determinism-gap, so there is no per-directory opt-out: a missing `src`
+ * throws rather than returning `[]`, because "no files scanned" must never
+ * read as "clean".
+ */
+function productionMjsFiles() {
+  const dirPath = join(ROOT, "src");
+  const names = readdirSync(dirPath, { recursive: true });
+  const files = names
+    .filter(
+      (f) =>
+        typeof f === "string" &&
+        f.endsWith(".mjs") &&
+        !f.endsWith(".test.mjs") &&
+        !f.endsWith(".integ.mjs"),
+    )
+    // `readdirSync`'s recursive type is `(string | Buffer)[]`; only string
+    // entries survive the filter, and `String()` narrows the declared type.
+    .map((f) => String(f));
+  if (files.length === 0) {
+    throw new Error("intent: productionMjsFiles found no .mjs files under src/ — nothing scanned");
   }
+  return files;
 }
 
 /** Strip comments, string literals, and regex literals from source code. */
@@ -149,6 +167,103 @@ function stripStrings(src) {
       }
       i++;
       while (i < src.length && /[gimsuy]/.test(src[i])) i++;
+      continue;
+    }
+    result += src[i];
+    i++;
+  }
+  return result;
+}
+
+/**
+ * Comments/strings/regex-literals replaced by spaces, PRESERVING indices —
+ * `match.index` in the returned string is the byte offset in the original
+ * `src`, so a guard can map a hit back to the `file:line` in the source.
+ * The guard exists to name the site of a violation; a position-preserving
+ * mask is what makes that naming exact.
+ */
+function maskNonCode(src) {
+  let result = "";
+  let i = 0;
+  while (i < src.length) {
+    // Single-line comment
+    if (src[i] === "/" && src[i + 1] === "/") {
+      const end = src.indexOf("\n", i);
+      result += " ".repeat((end === -1 ? src.length : end) - i);
+      i = end === -1 ? src.length : end + 1;
+      continue;
+    }
+    // Block comment
+    if (src[i] === "/" && src[i + 1] === "*") {
+      const end = src.indexOf("*/", i + 2);
+      const to = end === -1 ? src.length : end + 2;
+      result += " ".repeat(to - i);
+      i = to;
+      continue;
+    }
+    // Single-quoted string
+    if (src[i] === "'") {
+      let j = i + 1;
+      while (j < src.length && src[j] !== "'") {
+        if (src[j] === "\\") j++;
+        j++;
+      }
+      result += " ".repeat(Math.min(j + 1, src.length) - i);
+      i = j + 1;
+      continue;
+    }
+    // Double-quoted string
+    if (src[i] === '"') {
+      let j = i + 1;
+      while (j < src.length && src[j] !== '"') {
+        if (src[j] === "\\") j++;
+        j++;
+      }
+      result += " ".repeat(Math.min(j + 1, src.length) - i);
+      i = j + 1;
+      continue;
+    }
+    // Template literal (tracks ${...} nesting so the ` at depth zero ends it)
+    if (src[i] === "`") {
+      let j = i + 1;
+      let depth = 0;
+      while (j < src.length) {
+        if (src[j] === "\\") {
+          j++;
+          j++;
+          continue;
+        }
+        if (src[j] === "$" && src[j + 1] === "{") depth++;
+        else if (src[j] === "}") depth--;
+        else if (src[j] === "`" && depth === 0) break;
+        j++;
+      }
+      result += " ".repeat(Math.min(j + 1, src.length) - i);
+      i = j + 1;
+      continue;
+    }
+    // Regex literal (simplified: /pattern/flags)
+    if (src[i] === "/" && i > 0 && /[=([{}!|&?:;,~^<>+\-*/%\n]/.test(src[i - 1])) {
+      let j = i + 1;
+      while (j < src.length && src[j] !== "/") {
+        if (src[j] === "\\") {
+          j++;
+          j++;
+          continue;
+        }
+        if (src[j] === "[") {
+          j++;
+          while (j < src.length && src[j] !== "]") {
+            if (src[j] === "\\") j++;
+            j++;
+          }
+        }
+        j++;
+      }
+      let end = j + 1;
+      while (end < src.length && /[gimsuy]/.test(src[end])) end++;
+      result += " ".repeat(end - i);
+      i = end;
       continue;
     }
     result += src[i];
@@ -401,19 +516,22 @@ describe("Intent manifest validation", () => {
 // ── Contract A: Provider independence ──────────────────────────────────────
 
 describe("Contract A — Provider independence", () => {
-  const CORE_DIRS = ["rules", "analysis", "report"];
-
   it("core layers (rules, analysis, report) do not import from providers", () => {
     const violations = [];
-    for (const dir of CORE_DIRS) {
-      for (const file of productionMjsFiles(dir)) {
-        const content = readFileSync(join(ROOT, "src", dir, file), "utf-8");
-        if (/from\s+['"]\.\.\/(?:providers|providers\/)/.test(content)) {
-          violations.push(`src/${dir}/${file}: imports from providers`);
-        }
-        if (/from\s+['"]\.\/(?:providers|providers\/)/.test(content)) {
-          violations.push(`src/${dir}/${file}: imports from providers`);
-        }
+    for (const file of productionMjsFiles()) {
+      if (!(
+        file.startsWith("rules/") ||
+        file.startsWith("analysis/") ||
+        file.startsWith("report/")
+      )) {
+        continue;
+      }
+      const content = readFileSync(join(ROOT, "src", file), "utf-8");
+      if (/from\s+['"]\.\.\/(?:providers|providers\/)/.test(content)) {
+        violations.push(`src/${file}: imports from providers`);
+      }
+      if (/from\s+['"]\.\/(?:providers|providers\/)/.test(content)) {
+        violations.push(`src/${file}: imports from providers`);
       }
     }
     expect(violations).toEqual([]);
@@ -512,12 +630,13 @@ describe("Contract C — Workspace resolution ≠ source analysis", () => {
 
   it("analysis code contains no judging vocabulary (allow, ban, forbid, violation as verbs)", () => {
     const violations = [];
-    for (const file of productionMjsFiles("analysis")) {
-      const content = readFileSync(join(ROOT, "src", "analysis", file), "utf-8");
+    for (const file of productionMjsFiles()) {
+      if (!file.startsWith("analysis/")) continue;
+      const content = readFileSync(join(ROOT, "src", file), "utf-8");
       const code = stripComments(content);
       // Look for judging verbs — `bannedExternalImports` in JSDoc is acceptable.
       if (/\b(judge|forbid|permit|allow|ban)\b/.test(code) && !/bannedExternalImports/.test(code)) {
-        violations.push(`src/analysis/${file}: contains judging vocabulary`);
+        violations.push(`src/${file}: contains judging vocabulary`);
       }
     }
     expect(violations).toEqual([]);
@@ -1089,43 +1208,83 @@ describe("Intent gate meta-tests", () => {
 
 // ── Contract K: Determinism ────────────────────────────────────────────────
 
+/**
+ * Wall-clock and random read patterns Contract K forbids in production code.
+ *
+ * A raw call under ANY of these spellings makes output a function of the wall
+ * clock or the RNG: `Date.now()` and `Math.random()` are the obvious ones,
+ * and the argumentless `new Date()` is the same wall-clock read through a
+ * different spelling (`new Date().toISOString()` at `adr-registry.mjs:512`
+ * was how a raw clock escaped the old two-literal guard). `new Date()` with
+ * an argument (`new Date(referenceTime)`, `new Date(Date.UTC(...))`) is a
+ * pure function of its argument, NOT a wall-clock read, so the pattern is
+ * deliberately the empty-paren shape. Whitespace inside the parens is
+ * allowed because prettier may reformat a call that was written to hide.
+ */
+const WALL_CLOCK_PATTERNS = [
+  /Date\s*\.\s*now\s*\(/,
+  /Math\s*\.\s*random\s*\(/,
+  /new\s+Date\s*\(\s*\)/,
+];
+
+/**
+ * The deliberate wall-clock sites Contract K exempts, keyed by
+ * `src/`-relative path → the line the raw read sits on.
+ *
+ * Exactly one production site is an ALLOWED wall-clock read: the injectable
+ * reference-time seam itself (`governance/clock.mjs`). The whole governance
+ * wave resolves determinism-by-injection through that one function, and its
+ * header is the contract that states it; a second site that reached for
+ * `Date` directly instead of the seam is precisely the counterexample this
+ * guard exists to catch (P1-08). The two-line check has no other member —
+ * `config.mjs`'s `new Date(Date.UTC(...))` and `debt-ledger.mjs`'s
+ * `new Date(referenceTime)` do not match the empty-paren pattern at all,
+ * being pure functions of their arguments. A new raw read anywhere — a new
+ * module, a new site, a new spelling — goes RED until it names a
+ * deterministic mechanism or joins this list with the reason it deserves to.
+ */
+const WALL_CLOCK_ALLOWLIST = new Map([["governance/clock.mjs", [27]]]);
+
 describe("Contract K — Determinism", () => {
-  it("no Date.now or Math.random in production source files", () => {
+  it("no raw Date.now / new Date() / Math.random in any production module", () => {
     const violations = [];
-    // `governance` carries the shared reference-time clock
-    // (`governance/clock.mjs`) and every timestamp/age emitter built on it —
-    // debt, waivers, health — so it is exactly where an uninjected, raw
-    // wall-clock or random call would defeat this contract (P1-08: this list
-    // used to omit it, and the guard was structurally blind to that whole
-    // directory as a result).
-    const dirs = ["commands", "rules", "analysis", "report", "providers", "lsp", "governance"];
-    for (const dir of dirs) {
-      for (const file of productionMjsFiles(dir)) {
-        const content = readFileSync(join(ROOT, "src", dir, file), "utf-8");
-        if (/Date\.now\(\)/.test(content) || /Math\.random\(\)/.test(content)) {
-          violations.push(`src/${dir}/${file}: uses Date.now or Math.random`);
+    // The scan is recursive over the whole shipped `src/` tree — every
+    // production `.mjs`, top-level modules (`options.mjs`, `workspace.mjs`,
+    // …) included. A module that escapes this walk is a silent
+    // determinism-gap, so there is no per-directory opt-out and no curated
+    // directory list that a newly added directory or module must remember to
+    // join. `maskNonCode` keeps indices aligned so the violation names the
+    // exact offending line in the original file.
+    for (const file of productionMjsFiles()) {
+      const content = readFileSync(join(ROOT, "src", file), "utf-8");
+      const code = maskNonCode(content);
+      const allowlistedLines = WALL_CLOCK_ALLOWLIST.get(file);
+      for (const pattern of WALL_CLOCK_PATTERNS) {
+        for (const match of code.matchAll(RegExp(pattern.source, "g"))) {
+          const line = content.slice(0, match.index).split("\n").length;
+          if (allowlistedLines?.includes(line)) continue;
+          violations.push(
+            `src/${file}:${line}: uses ${pattern.source} — every wall-clock read goes through ` +
+              `governance/clock.mjs's injectable referenceTime() (see that file's header)`,
+          );
         }
       }
     }
     expect(violations).toEqual([]);
   });
 
-  it("no localeCompare in production graph/impact/sort code", () => {
-    const files = [
-      join(ROOT, "src", "commands", "graph.mjs"),
-      join(ROOT, "src", "commands", "impact.mjs"),
-      join(ROOT, "src", "rules", "index.mjs"),
-    ];
+  it("no localeCompare in any production module", () => {
+    // The whole production tree, not three files: a `localeCompare` landing
+    // in any module with the shell's collation set would drift sort order of
+    // violations with LANG/LC_ALL. Every module header that promises "plain
+    // `<` comparison" is enforced here, by walking the same recursive scan
+    // the wall-clock guard uses.
     const violations = [];
-    for (const file of files) {
-      try {
-        const content = readFileSync(file, "utf-8");
-        const code = stripComments(content);
-        if (/localeCompare/.test(code)) {
-          violations.push(file);
-        }
-      } catch {
-        // File may not exist.
+    for (const file of productionMjsFiles()) {
+      const content = readFileSync(join(ROOT, "src", file), "utf-8");
+      const code = maskNonCode(content);
+      if (/\blocaleCompare\s*\(/.test(code)) {
+        violations.push(`src/${file}: uses localeCompare`);
       }
     }
     expect(violations).toEqual([]);

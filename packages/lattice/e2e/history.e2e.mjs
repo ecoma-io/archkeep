@@ -51,6 +51,72 @@ function readSnapshot(dir, name) {
   return JSON.parse(readFileSync(join(dir, name), "utf8"));
 }
 
+describe("history capture determinism (E-F05)", () => {
+  it("capturing twice into the SAME dir differs only in the duplicate marker", () => {
+    const dir = freshHistoryDir();
+    try {
+      const first = lattice(nativeConsumer.root, ["history", dir, "--capture", "--format", "json"]);
+      expect(first.exitCode).toBe(0);
+      expect(first.json).not.toBeNull();
+      const second = lattice(nativeConsumer.root, [
+        "history",
+        dir,
+        "--capture",
+        "--format",
+        "json",
+      ]);
+      expect(second.exitCode).toBe(0);
+      expect(second.json).not.toBeNull();
+
+      // The envelope's shape must NOT be a function of history-dir state: the
+      // two envelopes differ in exactly the `result.captured.duplicate`
+      // boolean (false for the fresh write, true for the dedup), never in
+      // which keys exist.
+      const one = JSON.parse(JSON.stringify(first.json));
+      const two = JSON.parse(JSON.stringify(second.json));
+      expect(one.result.captured.duplicate).toBe(false);
+      expect(two.result.captured.duplicate).toBe(true);
+      delete one.result.captured.duplicate;
+      delete two.result.captured.duplicate;
+      expect(JSON.stringify(one)).toBe(JSON.stringify(two));
+      expect(listSnapshots(dir)).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("capturing once into two EMPTY dirs is byte-identical", () => {
+    const dirA = freshHistoryDir();
+    const dirB = freshHistoryDir();
+    try {
+      const a = lattice(nativeConsumer.root, ["history", dirA, "--capture", "--format", "json"]);
+      const b = lattice(nativeConsumer.root, ["history", dirB, "--capture", "--format", "json"]);
+      expect(a.exitCode).toBe(0);
+      expect(b.exitCode).toBe(0);
+      // The snapshot files written INTO the two dirs are plain graph
+      // envelopes — they never reference the history dir — so they must be
+      // byte-identical across the two fresh captures: the bytes are a
+      // function of the tree, not of which capture number or which dir.
+      const aName = listSnapshots(dirA)[0];
+      const bName = listSnapshots(dirB)[0];
+      expect(readFileSync(join(dirA, aName), "utf8")).toBe(readFileSync(join(dirB, bName), "utf8"));
+      // The captured filename is the identity-derived `<seq>-<sha8>.json` —
+      // identical for an identical tree.
+      expect(aName).toBe(bName);
+      // The stdout envelopes differ only in `result.dir` (the two temp dirs
+      // are at different absolute paths); every other byte must match.
+      const ja = JSON.parse(a.stdout);
+      const jb = JSON.parse(b.stdout);
+      delete ja.result.dir;
+      delete jb.result.dir;
+      expect(JSON.stringify(ja)).toBe(JSON.stringify(jb));
+    } finally {
+      rmSync(dirA, { recursive: true, force: true });
+      rmSync(dirB, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("history (smoke)", () => {
   it("exits 3 when the directory holds no snapshots — never a record of nothing", () => {
     // The silent-direction case for `history`: an empty directory must be a

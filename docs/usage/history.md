@@ -70,7 +70,11 @@ a new file for an unchanged architecture would make history lie about the space
 between snapshots. A **changed provider** is not deduplicated: a pure provider
 migration (nx → moon with an identical graph and policy) changes how the
 architecture is read, so it must surface as a transition rather than be
-swallowed by the identity match.
+swallowed by the identity match. The JSON envelope's `result.captured` carries
+an always-present `duplicate` boolean (`false` for a fresh write, `true` when
+the capture deduplicated against the last snapshot) — the shape is not a
+function of history-directory state, so the two captures of an unchanged tree
+differ in exactly that one readable field and nothing else.
 
 The write is atomic: the snapshot is first written to `<name>.json.tmp` and then
 renamed over the final name, so an interrupted capture leaves a partial file

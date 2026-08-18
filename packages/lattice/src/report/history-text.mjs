@@ -152,7 +152,7 @@ export function formatHistoryReport({ evolution, coverage }) {
 
   if (evolution.captured) {
     sections.push(
-      evolution.captured.deduplicated
+      evolution.captured.duplicate
         ? `capture  ${evolution.captured.name} — already the last snapshot, no new file written`
         : `capture  ${evolution.captured.name} written`,
     );

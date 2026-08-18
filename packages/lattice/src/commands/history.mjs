@@ -13,7 +13,10 @@
  * architecture identity, so filename byte-sort IS history order) — then
  * produces the record that includes it. Capture deduplicates: when the
  * current architecture identity matches the last snapshot, no new file is
- * written and no empty transition is manufactured.
+ * written and no empty transition is manufactured. The capture answer — was
+ * this a new snapshot (`duplicate: false`) or a dedup against the last one
+ * (`duplicate: true`)? — is an always-present field, so the envelope's shape
+ * is not a function of prior directory state (E-F05).
  *
  * The snapshots are full graph envelopes, not deltas. Each is
  * content-addressable (its identity derives from its own bytes) and
@@ -435,7 +438,14 @@ export function historyCommand(
       // (nx → moon with an identical graph and policy) changes how the
       // architecture is read, so it must surface as a transition rather than be
       // swallowed by the identity match.
-      captured = { name: last.name, id, deduplicated: true };
+      //
+      // `duplicate` is an ALWAYS-PRESENT boolean sibling, never an
+      // only-when-true appended key: the capture envelope's shape must not be
+      // a function of history-directory state (E-F05). Two captures over an
+      // unchanged tree differ in exactly this one readable field, never in
+      // which keys exist — a consumer diffing run#1 vs run#2 can see it is
+      // the "was this a new snapshot" answer, not a structural change.
+      captured = { name: last.name, id, duplicate: true };
     } else {
       const sequence = nextSequence(read);
       const name = `${sequence}-${shortId(id)}.json`;
@@ -470,7 +480,7 @@ export function historyCommand(
         result: { ...head, policy: headPolicy ?? undefined },
       });
       writeSnapshotFile(path, renderJson(envelope));
-      captured = { name, id };
+      captured = { name, id, duplicate: false };
       read.files.push(envelopeToSnapshot(envelope, path, id));
     }
   } else {
