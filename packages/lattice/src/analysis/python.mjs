@@ -175,8 +175,17 @@
  *
  * - **Imports are matched per line**, with any indentation allowed. That is
  *   deliberate, not sloppy: it is what catches a function-local import and an
- *   import under `if TYPE_CHECKING:`, both of which cross a boundary. A line
- *   continued with `\` or a second statement after `;` is not followed.
+ *   import under `if TYPE_CHECKING:`, both of which cross a boundary. Python's
+ *   own statement separators are followed rather than dropped at: a `;` opens
+ *   a fresh statement to check on the same line, and a line ending in a bare
+ *   `\` is joined with the next one first, the same explicit line-joining
+ *   Python itself does — but only starting from a line that already opens
+ *   with `from`/`import`, so an unrelated line elsewhere that happens to end
+ *   in `\` (a comment noting a Windows path, say) never pulls a statement it
+ *   has nothing to do with into this one. A statement that pulled continuation
+ *   lines in this way and still could not be read as `from`/`import` is a
+ *   failure naming the file rather than a silently dropped record — the same
+ *   choice a brace-group `use` gets in the Rust analyzer below.
  * - **A triple-quoted string containing a line that looks like an import** is
  *   read as one. `#` comments are not, since the `#` precedes the keyword.
  * - **`if TYPE_CHECKING:` imports stay `kind: "static"`.** They are erased at
@@ -798,50 +807,150 @@ const IMPORT_STATEMENT = /^[ \t]*import[ \t]+/;
 const FROM_STATEMENT =
   /^([ \t]*from[ \t]+)(\.+[A-Za-z_][\w.]*|\.+|[A-Za-z_][\w.]*)([ \t]+import\b)/;
 const DOTTED_NAME = /^[ \t]*([A-Za-z_][\w.]*)/;
+/** A line, or a `;`-separated piece of one, worth trying the statement forms on. */
+const FROM_OR_IMPORT_HEAD = /^[ \t]*(?:from|import)\b/;
 /** `importlib.import_module(`, a bare `import_module(`, and `__import__(`. */
 const DYNAMIC_CALL = /\b(?:importlib\s*\.\s*)?import_module\s*\(\s*|\b__import__\s*\(\s*/g;
 const STRING_LITERAL = /^(['"])([^'"\\]*)\1/;
+
+/**
+ * Python's own statement separator: `line` split at each `;`, with each
+ * piece's start offset within `line`.
+ *
+ * The split is not string-aware — a `;` inside a string literal splits too —
+ * but the only cost is a spurious piece that fails the `from`/`import`
+ * prefilter right after, the same "worst case is a spurious record, never a
+ * missed one" trade the header already makes for the triple-quoted-string
+ * limit below.
+ *
+ * @param {string} line
+ * @returns {{ text: string, start: number }[]}
+ */
+function splitStatements(line) {
+  const pieces = [];
+  let start = 0;
+  for (const text of line.split(";")) {
+    pieces.push({ text, start });
+    start += text.length + 1;
+  }
+  return pieces;
+}
+
+/**
+ * Python's explicit line-joining, starting at physical line `index`: a line
+ * ending in a bare `\` continues onto the next one with the backslash and the
+ * newline both gone, exactly as Python's own tokenizer joins them. Called
+ * only for a line that already opens with `from`/`import` — see the caller —
+ * so this never reaches into a line that has nothing to do with the
+ * statement, a comment ending in `\` while noting a Windows path, say.
+ *
+ * Each continuation swaps exactly one character (the trailing `\`) for one (a
+ * joining space) and then appends the next physical line whole, so the joined
+ * text's length up to any given physical line's contribution always equals
+ * the sum of the real lines before it. That is what lets `toOffset` translate
+ * a position in the joined text back into the ORIGINAL source by arithmetic
+ * alone, the same length-preserving trick Go's comment mask uses for the same
+ * reason: the record is read as `file:line:column`, and a position computed
+ * from a shortened copy would name a byte the file does not have.
+ *
+ * @param {string[]} physicalLines
+ * @param {number[]} lineOffsets Absolute start offset of each physical line.
+ * @param {number} index
+ * @returns {{ text: string, end: number, toOffset: (i: number) => number }}
+ */
+function joinContinuedStatement(physicalLines, lineOffsets, index) {
+  const segments = [{ start: 0, offset: lineOffsets[index] }];
+  let text = physicalLines[index];
+  let end = index;
+  while (text.endsWith("\\") && end + 1 < physicalLines.length) {
+    end++;
+    text = `${text.slice(0, -1)} `; // drop the trailing `\`, keep the same length
+    segments.push({ start: text.length, offset: lineOffsets[end] });
+    text += physicalLines[end];
+  }
+  const toOffset = (i) => {
+    let segment = segments[0];
+    for (const candidate of segments) {
+      if (candidate.start > i) break;
+      segment = candidate;
+    }
+    return segment.offset + (i - segment.start);
+  };
+  return { text, end, toOffset };
+}
 
 /**
  * Every import site in a `.py` source, in source order and without
  * deduplication — one entry per written import.
  *
  * @param {string} pythonText
- * @returns {{ specifier: string, kind: string, offset: number, literal: boolean }[]}
+ * @returns {{ specifier: string, kind: string, offset: number, literal: boolean,
+ *   continuation?: boolean }[]}
  */
 export function parsePythonImportSites(pythonText) {
   const sites = [];
-  let lineOffset = 0;
-  for (const line of pythonText.split("\n")) {
-    const from = FROM_STATEMENT.exec(line);
-    if (from) {
-      sites.push({
-        specifier: from[2],
-        kind: "static",
-        offset: lineOffset + from[1].length,
-        literal: true,
-      });
-    } else {
-      const statement = IMPORT_STATEMENT.exec(line);
-      if (statement) {
-        // `import a.b as c, x.y` is several written imports on one line, and
-        // each gets its own record with its own column.
-        let cursor = statement[0].length;
-        for (const piece of line.slice(cursor).split(",")) {
-          const name = DOTTED_NAME.exec(piece);
-          if (name) {
-            sites.push({
-              specifier: name[1],
-              kind: "static",
-              offset: lineOffset + cursor + name[0].length - name[1].length,
-              literal: true,
-            });
-          }
-          cursor += piece.length + 1;
+  const physicalLines = pythonText.split("\n");
+  const lineOffsets = [];
+  for (let offset = 0, i = 0; i < physicalLines.length; i++) {
+    lineOffsets.push(offset);
+    offset += physicalLines[i].length + 1;
+  }
+
+  let index = 0;
+  while (index < physicalLines.length) {
+    const line = physicalLines[index];
+    const continues = FROM_OR_IMPORT_HEAD.test(line) && line.endsWith("\\");
+    const { text, end, toOffset } = continues
+      ? joinContinuedStatement(physicalLines, lineOffsets, index)
+      : { text: line, end: index, toOffset: (i) => lineOffsets[index] + i };
+
+    let matchedAny = false;
+    for (const piece of splitStatements(text)) {
+      if (!FROM_OR_IMPORT_HEAD.test(piece.text)) continue;
+      const from = FROM_STATEMENT.exec(piece.text);
+      if (from) {
+        matchedAny = true;
+        sites.push({
+          specifier: from[2],
+          kind: "static",
+          offset: toOffset(piece.start + from[1].length),
+          literal: true,
+        });
+        continue;
+      }
+      const statement = IMPORT_STATEMENT.exec(piece.text);
+      if (!statement) continue;
+      matchedAny = true;
+      // `import a.b as c, x.y` is several written imports on one line, and
+      // each gets its own record with its own column.
+      let cursor = statement[0].length;
+      for (const namePiece of piece.text.slice(cursor).split(",")) {
+        const name = DOTTED_NAME.exec(namePiece);
+        if (name) {
+          sites.push({
+            specifier: name[1],
+            kind: "static",
+            offset: toOffset(piece.start + cursor + name[0].length - name[1].length),
+            literal: true,
+          });
         }
+        cursor += namePiece.length + 1;
       }
     }
-    lineOffset += line.length + 1;
+    if (end > index && !matchedAny) {
+      // Pulled one or more continuation lines to complete what looked like a
+      // `from`/`import` statement, and the joined result still does not parse
+      // as one — reported rather than silently dropped, the same choice a
+      // brace-group `use` gets in the Rust analyzer below.
+      sites.push({
+        specifier: text.trim(),
+        kind: "static",
+        offset: toOffset(0),
+        literal: false,
+        continuation: true,
+      });
+    }
+    index = end + 1;
   }
 
   for (const call of pythonText.matchAll(DYNAMIC_CALL)) {
@@ -887,6 +996,14 @@ export function analyzePython({ sourceFile, text, workspace }) {
       result.imports.push(record);
       const fail = (reason) => result.failures.push({ sourceFile, line, column, reason });
 
+      if (site.continuation) {
+        fail(
+          `'${site.specifier}' looks like a \`from\`/\`import\` statement continued across a ` +
+            `backslash-joined line, but does not parse as one once its continuation lines are ` +
+            `joined — this reader cannot say what it imports`,
+        );
+        continue;
+      }
       if (!site.literal) {
         fail(
           `dynamic import of '${site.specifier}' has a non-literal argument, ` +
