@@ -16,8 +16,11 @@ export default defineConfig({
     include: ["**/*.e2e.mjs"],
     // E2E tests pack an artifact, install it, and run the real CLI — each
     // scenario can take 30+ seconds. 120 s gives headroom for CI runners
-    // that share resources.
+    // that share resources. `hookTimeout` must match: every suite creates
+    // its consumers in `beforeAll`, and Vitest's 10 s default hook timeout
+    // kills the whole suite before a single test runs when the host is busy.
     testTimeout: 120_000,
+    hookTimeout: 120_000,
     // Serial execution: the artifact is packed once per run, and pnpm install
     // mutates the consumer's node_modules. Parallel tests sharing a consumer
     // directory would race; separate consumers are possible but slower and
