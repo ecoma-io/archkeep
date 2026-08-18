@@ -104,15 +104,12 @@ export const moduleBoundaryOptions = {
   banTransitiveDependencies: false,
   checkNestedExternalImports: false,
 };
-// An ES module may export whatever else it likes — this loader reads exactly
-// three names and ignores the rest, unlike the .json dialect's stricter posture.
-export const somethingElseEntirely = 42;
 `;
 
   write("policy.mjs", moduleText);
   write("policy.js", moduleText);
 
-  it("still dispatches .mjs through import(), tolerating an extra export", async () => {
+  it("still dispatches .mjs through import() with only the four recognised exports", async () => {
     const config = await loadBoundaryConfigFile(join(root, "policy.mjs"));
     expect(config.depConstraints).toHaveLength(1);
     expect(config.suppressions).toEqual([]);
@@ -121,6 +118,31 @@ export const somethingElseEntirely = 42;
   it("dispatches .js through import() the same way .mjs does", async () => {
     const config = await loadBoundaryConfigFile(join(root, "policy.js"));
     expect(config.depConstraints).toHaveLength(1);
+  });
+
+  it("refuses an unknown top-level export in the .mjs dialect, by name — the same law the .json dialect has", async () => {
+    write(
+      "typo.mjs",
+      `export const depConstraints = [];
+export const moduleBoundaryOptions = ${JSON.stringify({
+        allow: [],
+        buildTargets: ["build"],
+        enforceBuildableLibDependency: false,
+        allowCircularSelfDependency: false,
+        checkDynamicDependenciesExceptions: [],
+        ignoredCircularDependencies: [],
+        banTransitiveDependencies: false,
+        checkNestedExternalImports: false,
+      })};
+export const moduleBoundaryOption = [];
+`,
+    );
+    // The silent-direction failure this guards: a misspelled top-level export
+    // used to load exit-0 and disappear — a typo'd law is a law that is not
+    // enforced. The identical typo in `.json` was already refused by name.
+    await expect(loadBoundaryConfigFile(join(root, "typo.mjs"))).rejects.toThrow(
+      /moduleBoundaryOption: not a recognised top-level key/,
+    );
   });
 
   it("still reports a malformed .mjs the same way it always has", async () => {
@@ -140,7 +162,7 @@ describe("loadBoundaryConfigFile — the .json dialect", () => {
     expect(config.suppressions).toEqual([]);
   });
 
-  it("ignores $schema, the one carve-out from the unknown-key rejection", async () => {
+  it("accepts a string $schema, the one carve-out from the unknown-key rejection", async () => {
     const readFile = fakeReadFile({
       "/repo/policy.json": JSON.stringify({
         $schema: "https://example.invalid/lattice-boundary-config.schema.json",
@@ -149,6 +171,18 @@ describe("loadBoundaryConfigFile — the .json dialect", () => {
     });
     const config = await loadBoundaryConfigFile("/repo/policy.json", { readFile });
     expect(config.depConstraints).toEqual(wellFormedPolicy().depConstraints);
+  });
+
+  it("rejects a $schema that is not a non-empty string — accepted is not the same as unchecked", () => {
+    // The carve-out must not regress to silently tolerating a value that
+    // states nothing: a `$schema` an editor cannot validate against reads as
+    // a false green. The identical check binds the inline lattice.json form.
+    const readFile = fakeReadFile({
+      "/repo/policy.json": JSON.stringify({ ...wellFormedPolicy(), $schema: 42 }),
+    });
+    return expect(loadBoundaryConfigFile("/repo/policy.json", { readFile })).rejects.toThrow(
+      /\$schema: must be a non-empty string naming the schema the editor should validate against, got number \(42\)/,
+    );
   });
 
   // The silent-direction failure: an unrecognised key in a JSON object has no

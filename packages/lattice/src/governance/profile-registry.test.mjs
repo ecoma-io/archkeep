@@ -58,10 +58,27 @@ describe("profileRegistryViolations", () => {
     ).toEqual([]);
   });
 
+  it("treats an absent version as schema 1 — the version check defaults before it checks", () => {
+    // B-F18a/D-12: a registry that does not state a version is schema 1 by
+    // definition; the default is applied at the one place the version is
+    // read, so a later reader can still distinguish a v1 registry from a
+    // hypothetical v2 one. Same acceptance as `version: 1` above.
+    expect(profileRegistryViolations(wellFormed())).toEqual([]);
+  });
+
   it("rejects a wrong version loudly rather than guessing", () => {
     const violations = profileRegistryViolations({ ...wellFormed(), version: 999 });
     expect(violations).toHaveLength(1);
     expect(violations[0]).toMatch(/expected 1, got/);
+  });
+
+  it("rejects a STATED null version — defaulting must apply only to an absent version", () => {
+    // A `version ?? 1` default would silently accept a stated `version: null`
+    // as schema 1 — the very silence this check exists to refuse. A stated
+    // non-1 value refuses; only an absent one defaults.
+    const violations = profileRegistryViolations({ ...wellFormed(), version: null });
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(/expected 1, got null/);
   });
 
   it("rejects an unknown top-level key", () => {

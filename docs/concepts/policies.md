@@ -76,9 +76,14 @@ export const boundarySuppressions = [];
 export const fitness = [];
 ```
 
-Being a real ES module, it may export other names too — a shared constant, a
-helper the table is built from. The loader reads exactly the four names above
-and ignores the rest.
+Exactly four top-level names are recognized — `depConstraints`,
+`moduleBoundaryOptions`, `boundarySuppressions`, `fitness`. Anything else is
+**rejected by name**, for the same reason the `.json` dialect rejects an
+unknown key: a misspelled export (`moduleBoundaryOption` for
+`moduleBoundaryOptions`) used to load exit-0 and disappear — a typo'd law is a
+law that is not enforced. Build the table from shared constants in the same file
+if you need one: the file is still a real ES module, it just may not state a
+fifth top-level law.
 
 ## The JSON dialect (`.json`)
 
@@ -87,14 +92,12 @@ No comments, no trailing commas.
 
 Exactly four top-level keys are recognized — `depConstraints`,
 `moduleBoundaryOptions`, `boundarySuppressions`, `fitness` — plus `$schema`,
-which is tolerated but does nothing. Any other top-level key is **rejected by
-name.**
+which is accepted for editor validation but must be a non-empty string: a value
+an editor cannot validate against reads as a false green. Any other top-level
+key is **rejected by name.**
 
-That is deliberately asymmetric with the ES module dialect's tolerance for extra
-exports. A JSON object has no namespace to share, so an unrecognized key is
-almost always a typo (`"depConstraint"` for `"depConstraints"`) rather than a
-deliberate export, and the module dialect's leniency would let that typo pass in
-silence.
+The two data dialects share the same top-level key law: a key (or export) the
+loader does not read is refused by name wherever it appears.
 
 ## The ESLint flat-config dialect
 

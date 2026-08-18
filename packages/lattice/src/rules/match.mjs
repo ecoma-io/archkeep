@@ -142,8 +142,14 @@ export function tagPatternError(tag) {
  * The glob metacharacters Nx hands to minimatch and this engine deliberately
  * does not reimplement. A bare `*` is exempt: upstream short-circuits that one
  * before minimatch ever sees it, so "every project" is reproducible exactly.
+ *
+ * Exported so `../config.mjs` can reject the same characters in
+ * `buildTargets` entries — a target NAME containing a glob character can
+ * never match a target under `hasBuildExecutor`'s exact `===` lookup, so it
+ * is refused at load rather than silently selecting nothing
+ * (`../../../../docs/reference/policy-schema.md`, "`moduleBoundaryOptions`").
  */
-const GLOB_METACHARACTERS = /[*?[\]{}()]/;
+export const GLOB_METACHARACTERS = /[*?[\]{}()]/;
 
 /**
  * Why `pattern` cannot be used to select projects here, or `null`.

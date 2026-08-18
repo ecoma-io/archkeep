@@ -49,6 +49,12 @@ import {
  * Loads and validates the `.mjs`/`.js` dialect through a revisioned `import()`
  * — see this module's header for why the revision exists.
  *
+ * The top-level exports carry the same key law `../config.mjs`'s
+ * `loadModulePolicy` applies: an export beyond the four this loader reads is
+ * refused by name, through the same `policyKeyViolations` the `.json` arm and
+ * the CLI both use — a config the CLI refuses must not load clean in the editor
+ * and re-paint every open file against a typo'd, no-op law.
+ *
  * @param {string} path Absolute path of the config file.
  * @param {string|number} revision Busts the ESM module cache across edits.
  * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
@@ -62,7 +68,7 @@ async function readModulePolicy(path, revision) {
   } catch (cause) {
     throw new Error(`lattice: cannot load ${path}: ${cause?.message ?? cause}`, { cause });
   }
-  return policyFrom(module, path);
+  return policyFrom(module, path, policyKeyViolations(module, { allowSchema: false }));
 }
 
 /**
