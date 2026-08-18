@@ -31,13 +31,33 @@
  */
 export function buildReachability(graph) {
   const nodes = Object.keys(graph.nodes ?? {});
+  // Null-prototype for the same reason `../providers/native/graph.mjs` uses
+  // them: every key here is a project NAME, and project names come from the
+  // graph the caller built from attacker-controlled manifests — a plain `{}`
+  // would let a project literally named `__proto__` repoint the map's OWN
+  // prototype instead of adding an entry. The project then vanishes from the
+  // closure: `adjList["__proto__"]` reads the poisoned prototype (a Node
+  // object), `.filter`/`.push` are not functions, and the whole reachability
+  // walk throws `TypeError: adjList[current].filter is not a function` —
+  // exactly the diagnostic an LSP editor published in place of a boundary
+  // verdict. The matrix ROWS need the same protection as the outer maps: a
+  // row that is a plain `{}` reads `matrix[start][adj]` truthy whenever `adj`
+  // is `__proto__` (the inherited accessor answers `Object.prototype`), so the
+  // walk's `continue` skips the hop AND the write `matrix[start][__proto__]`
+  // is a no-op — one poisoned name silently cancels the whole walk through it.
   /** @type {Record<string, string[]>} */
-  const adjList = {};
+  const adjList = Object.create(null);
   /** @type {Record<string, Record<string, boolean>>} */
-  const matrix = {};
+  const matrix = Object.create(null);
   for (const name of nodes) {
     adjList[name] = [];
-    matrix[name] = {};
+    // Null-prototype rows: `matrix[name]` is keyed by project NAME too, and a
+    // project named `__proto__` must be a real, own, enumerable entry in it —
+    // the closure depends on both the read and the write behaving like any
+    // other project name (`Object.create(null)`'s absence of the inherited
+    // `__proto__` accessor is what makes the assignment add an entry instead
+    // of no-op on the prototype setter).
+    matrix[name] = Object.create(null);
   }
   for (const [source, dependencies] of Object.entries(graph.dependencies ?? {})) {
     // Upstream indexes `adjList[dependency.source]` unguarded and throws on a

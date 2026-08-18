@@ -182,6 +182,12 @@ jobs:
       #     re-running exits 1, naming `noRelativeOrAbsoluteImportsAcrossLibraries`
       #     — the same rule engine the step above runs, reached through the other
       #     provider.
+      #
+      # UNIX-ONLY: this step shells out to `ln -s` (below) and `mktemp -d`,
+      # and stock Windows needs developer mode for symlinks. Every job in this
+      # file runs `ubuntu-latest`, so the constraint is real and named rather
+      # than claimed away — there is no Windows leg for the self-check, and
+      # this step would fail loudly there, not silently skip.
       - name: Check this repository's own module boundaries (native provider)
         run: |
           set -euo pipefail
@@ -287,13 +293,16 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The smoke subset covers the fastest E2E scenarios (native clean check,
-      # native violating check, native graph, native self-baseline diff). The
+      # The smoke subset covers the fastest E2E scenarios, one per main command
+      # (native clean/violating check, graph, self-baseline diff, history's
+      # no-verdict, intent's forbidden-edge, plus the language providers). The
       # full suite adds parity, determinism, Moon, and extended command
       # coverage. verify-core already proves lint, unit tests, typecheck,
       # self-check, and the packed artifact — the E2E suite does not duplicate
       # those. It packs its own artifact from source and installs it fresh,
-      # proving the real CLI works as an installed package.
+      # proving the real CLI works as an installed package. `e2e:smoke` also
+      # fails when zero tests ran, so a renamed or misnamed smoke describe can
+      # never turn the fast signal green-while-empty.
       - name: E2E smoke tests
         run: pnpm e2e:smoke
 

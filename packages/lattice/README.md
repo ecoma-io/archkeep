@@ -50,11 +50,18 @@ Create a `lattice.json` at the repository root declaring your projects:
 ```json
 {
   "projects": {
-    "billing-core": { "root": "libs/billing/core" },
-    "billing-api": { "root": "libs/billing/api" }
+    "declared": [
+      { "name": "billing-core", "root": "libs/billing/core" },
+      { "name": "billing-api", "root": "libs/billing/api" }
+    ]
   }
 }
 ```
+
+`projects.declared` is an array of rows, each naming a project's `root` and an
+optional `name` (derived from `package.json`'s `name` or the root's basename
+when omitted). The schema is documented in full at
+[docs/reference/configuration.md](../../docs/reference/configuration.md).
 
 The boundary config defaults to `module-boundaries.config.mjs` at the root, and
 the TypeScript config to `tsconfig.base.json`. Both are read rather than assumed,

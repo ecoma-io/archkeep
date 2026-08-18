@@ -59,10 +59,10 @@ alike.
 
 ## Settings
 
-| setting                | default | what it does                                                            |
-| ---------------------- | ------- | ----------------------------------------------------------------------- |
-| `lattice.server.path`  | `""`    | Path to an `lsp.mjs`; relative paths resolve against the workspace root |
-| `lattice.trace.server` | `off`   | Logs the LSP conversation to the Lattice output channel                 |
+| setting                | default | what it does                                                                                                                                                                                                                                                                           |
+| ---------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lattice.server.path`  | `""`    | Path to an `lsp.mjs`; relative paths resolve against the workspace root                                                                                                                                                                                                                |
+| `lattice.trace.server` | `off`   | Logs the LSP conversation with the server to the Lattice output channel. The channel's own log-level dropdown (the gear icon in the Output panel) is the master switch: tracing only appears when that dropdown is at **Trace**, and the setting then chooses `messages` or `verbose`. |
 
 **There is no `lattice.enable`,** and the omission is deliberate. A workspace with
 the checker switched off produces a report byte-for-byte identical to a workspace

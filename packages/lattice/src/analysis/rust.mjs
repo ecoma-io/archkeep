@@ -30,11 +30,14 @@
  * is a spurious record naming text the file really contains — never a missed
  * project, which is the standard the Go header sets:
  *
- * - **`use` is matched at the start of a line** (after optional indentation
- *   and an optional `pub`/`pub(crate)`), read to the first `;`. A `use` inside
- *   a raw string literal that starts its own line would be read; a `use`
- *   preceded on the same line by an attribute or another statement would not.
- *   `rustfmt` produces neither.
+ * - **`use` is matched at a line start, after a `;`/`{`/`}`, or after a
+ *   same-line attribute block**, read to the first `;`. Every position Rust
+ *   allows a `use` statement starts one of those ways, so the same-line gap
+ *   this header once named is closed. A `use` inside a raw string literal
+ *   that starts its own line would be read, and a `;` inside a comment or
+ *   string can let a `use` written there be read — both are the accepted
+ *   spurious-record trade (text the file really contains), never a missed
+ *   project.
  * - **A `use` whose path opens with a brace group** — `use {a::b, c::d};` —
  *   names no crate before the group. It is recorded with `resolved: null` and
  *   a failure, because guessing which of the group's arms was meant is exactly
@@ -128,6 +131,11 @@ export function resolveRustDependencies(projects, filesOf, readFile) {
             workspace.resolved = true;
             workspace.value = findWorkspaceManifest(project.root, readFile);
           }
+          // `[workspace.dependencies]` is keyed by the member's LOCAL name,
+          // the key Cargo inherits from (measured against cargo 1.96: a member
+          // `foo = { package = "bar", workspace = true }` fails to parse). A
+          // rename on an inherited dep lives in the workspace spec's own
+          // `package`, and `wsSpec.path` still resolves the crate.
           const wsSpec = workspace.value?.manifest.workspace?.dependencies?.[depName];
           if (typeof wsSpec?.path === "string") {
             pathDir = normalizePath(workspace.value.dir, wsSpec.path);
@@ -222,21 +230,33 @@ const renamedDepsOf = perWorkspace((workspace) => {
     for (const table of depTables(manifest)) {
       for (const [depName, spec] of Object.entries(table)) {
         if (typeof spec !== "object" || spec === null) continue;
-        if (typeof spec.package !== "string") continue; // not a rename
+        let renamed = false;
         let pathDir = null;
         if (typeof spec.path === "string") {
           pathDir = normalizePath(project.root, spec.path);
+          renamed = typeof spec.package === "string";
         } else if (spec.workspace === true) {
           if (!ws.resolved) {
             ws.resolved = true;
             ws.value = findWorkspaceManifest(project.root, workspace.readFile);
           }
+          // `[workspace.dependencies]` is keyed by the member's LOCAL name
+          // (`depName`), which is the key Cargo inherits from — measured
+          // against cargo 1.96, a member `foo = { package = "bar",
+          // workspace = true }` fails to parse. A rename on an inherited dep
+          // lives in the WORKSPACE spec (`as_real = { path = …, package =
+          // "real" }`), never on the member entry, which may carry no
+          // `package` at all.
           const wsSpec = ws.value?.manifest.workspace?.dependencies?.[depName];
           if (typeof wsSpec?.path === "string") {
             pathDir = normalizePath(ws.value.dir, wsSpec.path);
+            renamed = typeof spec.package === "string" || typeof wsSpec.package === "string";
           }
         }
-        if (!pathDir) continue;
+        // A plain `use real::…` resolves through `crateNamesOf`; the alias
+        // map is only for names the local spelling does not match, so an
+        // entry that is not a rename contributes nothing here.
+        if (!pathDir || !renamed) continue;
         const target = projectByRoot.get(pathDir);
         if (target && target !== project.name) aliases.set(crateIdentifier(depName), target);
       }
@@ -320,8 +340,13 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
   const sites = [];
   const claimed = [];
 
+  // `use` opens at a line start, after a same-line `;`/`{`/`}` statement
+  // boundary, or after a same-line `#[…]` attribute block — every position
+  // Rust allows one. `[{;}]` inside a string or comment can open a spurious
+  // match (text the file really contains), never a missed one; the `#[…]`
+  // token is read to its closing `]`, which `cfg` never puts inside a string.
   for (const m of rustText.matchAll(
-    /^[ \t]*(pub(?:\s*\([^)]*\))?[ \t]+)?use[ \t\r\n]+([^;]*);/gm,
+    /(?:^|[{;}])[ \t]*(?:(?:#\[[^\]]*\][ \t]*)+)?(pub(?:\s*\([^)]*\))?[ \t]+)?use[ \t\r\n]+([^;]*);/gm,
   )) {
     // The whole match ends with the `;` that closed it, so the path starts
     // exactly its own length plus that one character back from the end.

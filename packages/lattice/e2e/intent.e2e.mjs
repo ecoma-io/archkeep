@@ -46,7 +46,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("architecture intent through the installed CLI", () => {
+describe("architecture intent through the installed CLI (smoke)", () => {
   it("exits 0 on a native tree whose intent agrees with the observed graph", () => {
     const result = lattice(clean.root, ["check", "--format", "json"]);
     expect(result.exitCode).toBe(0);

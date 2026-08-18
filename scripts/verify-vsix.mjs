@@ -19,6 +19,13 @@
 // verify-vsix.test.mjs run with no zip file and no filesystem. Run in CI on
 // every pull request against the freshly packaged vsix, and again in the
 // release lane against the exact bytes about to be uploaded and published.
+//
+// UNIX-ONLY: this script shells out to `unzip` by PATH, and stock Windows does
+// not ship it. That is a deliberate constraint, not an oversight — a Windows
+// vsix-verify leg would need a zip reader this repository does not want to
+// carry. Nothing here claims otherwise: every CI and release job runs
+// `ubuntu-latest` (`.github/workflows/ci.yml`, `release.yml`), and this
+// script is not Windows-runnable by design.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
