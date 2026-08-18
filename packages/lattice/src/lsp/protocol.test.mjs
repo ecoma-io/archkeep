@@ -171,6 +171,7 @@ describe("protocol constants", () => {
       [
         "DIAGNOSTIC_SEVERITY",
         "ERROR_CODES",
+        "MAX_CONTENT_LENGTH",
         "SERVER_INFO",
         "TEXT_DOCUMENT_SYNC_KIND",
         "encodeMessage",
