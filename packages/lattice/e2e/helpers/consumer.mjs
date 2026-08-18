@@ -113,10 +113,26 @@ function run(command, args, cwd, extraEnv = {}) {
  * @returns {ConsumerWorkspace}
  */
 export function createNxConsumer(artifact) {
+  return createNxLanguageConsumer(artifact, nxConsumerFiles);
+}
+
+/**
+ * Creates an Nx consumer workspace from a custom fixture function — the
+ * parameterized form of `createNxConsumer`. The fixture names the projects,
+ * `nx.json` plugin registration, and any extra files (a `profiles` registry,
+ * an intent), and must declare `nx` in its `devDependencies` the way
+ * `nxConsumerFiles` does — the Nx provider resolves and spawns the real `nx`
+ * CLI, so a consumer that registers the plugin has to install it.
+ *
+ * @param {{ tarballPath: string, peers: Record<string, string>, packageName: string, packageManager: string }} artifact
+ * @param {(packageName: string, peers: Record<string, string>, packageManager: string) => Record<string, string>} fixtureFn
+ * @returns {ConsumerWorkspace}
+ */
+export function createNxLanguageConsumer(artifact, fixtureFn) {
   const { tarballPath, peers, packageName, packageManager } = artifact;
   const consumer = realpathSync(mkdtempSync(join(tmpdir(), "lattice-e2e-nx-")));
 
-  const files = nxConsumerFiles(packageName, peers, packageManager);
+  const files = fixtureFn(packageName, peers, packageManager);
   files["package.json"] = files["package.json"].replace(
     '"*"',
     JSON.stringify(`file:${tarballPath}`),
