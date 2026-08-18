@@ -42,6 +42,8 @@
  * places outside the boundary system entirely.
  */
 import { analyzeFile } from "../analysis/analyze.mjs";
+import { projectOwning } from "../analysis/source-util.mjs";
+import { declaredEdgeViolationsForCheck } from "../commands/edge-constraints.mjs";
 import { evaluate } from "../rules/index.mjs";
 
 import {
@@ -125,8 +127,46 @@ export function diagnoseDocument({ sourceFile, text, index, config }) {
     diagnostics.push(violationDiagnostic(violation, lines));
   }
 
+  // The edges `evaluate()` structurally cannot reach. An `implicit` edge — an
+  // Nx/`lattice.json` `implicitDependencies` declaration — has no import site
+  // behind it, so it never becomes an `importSites` record for the rule engine
+  // to iterate. The CLI judges exactly those edges itself
+  // (`../commands/edge-constraints.mjs`'s `declaredEdgeViolationsForCheck`,
+  // `cli.mjs check`), and without the same fold here the editor would paint a
+  // file clean while `check` exits 1 over the same declared edge — the
+  // boundary rule that never runs, dressed as a clean tree. Only the violations
+  // whose SOURCE project owns this document are reported: a declared edge names
+  // a project, not a file, and the whole-file range below is the project-level
+  // finding this file is the stand-in for.
+  const sourceOwner = projectOwning(index.workspace?.projects ?? [], sourceFile)?.name;
+  if (sourceOwner !== undefined) {
+    // `declaredEdgeViolationsForCheck` rebuilds reachability and walks every
+    // dependency list — an O(V+E) cost that would otherwise be paid on every
+    // `didChange` keystroke of every open document. The index is revision-keyed
+    // (a fresh object per rebuilt index), so a WeakMap on index identity is a
+    // cache that is correct by construction — same index, same graph — and the
+    // constraint table rides the same revision (`config` is rebuilt alongside
+    // the index), so the pair `(index, depConstraints)` is stable until the
+    // tree moves, then cold again.
+    let entry = declaredEdgeViolationCache.get(index);
+    if (entry === undefined || entry.depConstraints !== config.depConstraints) {
+      entry = {
+        depConstraints: config.depConstraints,
+        violations: declaredEdgeViolationsForCheck(index.graph, config.depConstraints),
+      };
+      declaredEdgeViolationCache.set(index, entry);
+    }
+    for (const violation of entry.violations) {
+      if (violation.source !== sourceOwner) continue;
+      diagnostics.push(violationDiagnostic({ ...violation, line: null, column: null }, lines));
+    }
+  }
+
   return { analyzed: wholeTree, diagnostics };
 }
+
+/** One `declaredEdgeViolationsForCheck` computation per `(index, depConstraints)` pair. */
+const declaredEdgeViolationCache = new WeakMap();
 
 /** An Error's message, or whatever was thrown, as text a reader can act on. */
 const reasonOf = (cause) => cause?.message ?? String(cause);

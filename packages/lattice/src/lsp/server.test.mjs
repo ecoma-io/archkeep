@@ -313,6 +313,52 @@ describe("publishing, where silence has to mean clean", () => {
     expect(diagnoseDocument).not.toHaveBeenCalled();
   });
 
+  it("shows a window error at initialize when the options could not be read, even with no document open", async () => {
+    // The always-on marker for a refused options state. Every open document gets
+    // the reason on its diagnostics, but a session that has no documents open
+    // yet — the editor pane on first launch — would otherwise show nothing at
+    // all, and a session that quietly stays empty is indistinguishable from one
+    // that is healthy. One `window/showMessage` at the moment the failure is
+    // known marks the session for the whole of its life.
+    const { server, sent } = session({
+      readOptions: () => {
+        throw new Error("lattice: /fixture's nx.json options name a profiles registry");
+      },
+    });
+    await server.handle(initialize());
+
+    const show = sent.find((m) => m.method === "window/showMessage");
+    expect(show).toBeDefined();
+    expect(show.params.type).toBe(1); // MessageType.error
+    expect(show.params.message).toContain("profiles registry");
+  });
+
+  it("keeps refusing every document for the whole session, marking it once", async () => {
+    // Durability, in both directions: the refusal is not a one-shot at
+    // initialize — a document opened later in the same session still gets the
+    // reason on its diagnostics — and the marker is not repeated per document,
+    // because a stream of identical error popups is noise that would get the
+    // first one dismissed.
+    const { server, sent } = session({
+      readOptions: () => {
+        throw new Error("lattice: /fixture's nx.json options name a profiles registry");
+      },
+    });
+    await server.handle(initialize());
+    await server.handle(didOpen());
+    await server.handle(didOpen("package inner\n", "file:///fixture/libs/outer/main.go"));
+
+    expect(sent.filter((m) => m.method === "window/showMessage")).toHaveLength(1);
+    const publishes = published(sent);
+    expect(publishes).toHaveLength(2);
+    for (const publish of publishes) {
+      expect(publish.diagnostics).toHaveLength(1);
+      expect(publish.diagnostics[0].code).toBe("analysisFailure");
+      expect(publish.diagnostics[0].message).toContain("profiles registry");
+    }
+    expect(diagnoseDocument).not.toHaveBeenCalled();
+  });
+
   it("publishes a failure rather than an empty list when the index cannot be built", async () => {
     const { server, sent } = session({
       buildIndex: () => {
@@ -344,6 +390,31 @@ describe("publishing, where silence has to mean clean", () => {
 
     expect(published(sent)[0].diagnostics).toHaveLength(1);
     expect(published(sent)[0].diagnostics[0].message).toContain("names no file on disk");
+  });
+
+  it("keeps an untitled buffer unanalyzable even after a real full change", async () => {
+    // The untitled reason is structural — the URI names no file on disk, so no
+    // project can own it — and no text change fixes it. A didChange carrying
+    // real text must not clear that reason: the document would otherwise reach
+    // diagnosis with `sourceFile === null` and publish a verdict no project
+    // owns. The red direction: before the guard, the change below cleared
+    // `unavailable`, the assertion flipped, and the untitled buffer painted
+    // clean.
+    const { server, sent } = session();
+    await server.handle(initialize());
+    await server.handle(didOpen("package x\n", "untitled:Untitled-1"));
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: {
+        textDocument: { uri: "untitled:Untitled-1", version: 2 },
+        contentChanges: [{ text: "package y\n" }],
+      },
+    });
+
+    expect(published(sent).at(-1).diagnostics).toHaveLength(1);
+    expect(published(sent).at(-1).diagnostics[0].message).toContain("names no file on disk");
+    expect(diagnoseDocument).not.toHaveBeenCalled();
   });
 });
 
@@ -394,6 +465,51 @@ describe("keeping up with the buffer and with the tree", () => {
       "its contents are unknown here",
     );
     expect(logs.join("\n")).toContain("full text synchronisation");
+  });
+
+  it("resumes the verdict when a real full change follows an unanalyzable one", async () => {
+    // The unanalyzable marker must never be a one-way door: a document marked
+    // "contents unknown" after an incremental (or empty) change is the same
+    // buffer the moment a genuine full change lands, and a server that kept
+    // refusing would paint a permanent failure over a file that has been
+    // perfectly analyzable again since the edit. The recovery is the whole
+    // point of storing the marker on the document rather than in a session
+    // flag.
+    const { server, sent } = session();
+    await server.handle(initialize());
+    await server.handle(didOpen());
+    // The open itself was a normal analyzable document and legitimately ran a
+    // diagnosis; the assertions below are about what the changes did.
+    diagnoseDocument.mockClear();
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: {
+        textDocument: { uri: URI, version: 2 },
+        contentChanges: [
+          {
+            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+            text: "P",
+          },
+        ],
+      },
+    });
+
+    expect(published(sent).at(-1).diagnostics[0].code).toBe("analysisFailure");
+    expect(diagnoseDocument).not.toHaveBeenCalled();
+
+    diagnoseDocument.mockReturnValue({ analyzed: true, diagnostics: [] });
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: {
+        textDocument: { uri: URI, version: 3 },
+        contentChanges: [{ text: "package inner\n" }],
+      },
+    });
+
+    expect(published(sent).at(-1).diagnostics).toEqual([]);
+    expect(diagnoseDocument).toHaveBeenCalledTimes(1);
   });
 
   it("clears the markers for a document that closed, which is not the same as calling it clean", async () => {
@@ -511,8 +627,22 @@ describe("asking the client to watch the files a verdict depends on", () => {
 
     const registration = sent.find((m) => m.method === "client/registerCapability");
     expect(registration.params.registrations[0].method).toBe("workspace/didChangeWatchedFiles");
+    // The exact set, spelled out rather than derived from
+    // `watchedFilesFor(DEFAULT_OPTIONS)` — a self-deriving assertion cannot go
+    // red when a dependency is dropped from the watched set (the tsConfig case
+    // this test pins): `registerOptions.watchers` must name every file a
+    // verdict depends on. The tsConfig entry is written literally rather than
+    // read back off `DEFAULT_OPTIONS`, so a `watchedFilesFor` edit that drops
+    // it turns this assertion red. The integration test
+    // (`lsp.integration.test.mjs`) hardcodes the same glob.
     expect(registration.params.registrations[0].registerOptions.watchers).toEqual(
-      DEFAULT_WATCHED.map((file) => ({ globPattern: `**/${file}` })),
+      [
+        DEFAULT_OPTIONS.boundaryConfig,
+        "tsconfig.base.json",
+        "project.json",
+        "nx.json",
+        "lattice.json",
+      ].map((file) => ({ globPattern: `**/${file}` })),
     );
   });
 
@@ -709,9 +839,15 @@ describe("message shapes the protocol allows and the server must survive", () =>
     expect(roots).toEqual([process.cwd()]);
   });
 
-  it("stores an opened document's text and version defensively", async () => {
-    diagnoseDocument.mockReturnValue({ analyzed: true, diagnostics: [] });
-    const { server } = session();
+  it("marks a document that opens without any text as unanalyzable, and resumes on a real change", async () => {
+    // A didOpen whose `text` is not a string — a client that sends the metadata
+    // half of the event and nothing else. The empty string this used to fall
+    // back to is not the file's contents but the ABSENCE of a statement about
+    // them, and analyzing it would publish a verdict about text the buffer does
+    // not have — an empty list on an unanalyzed file, which is the one outcome
+    // this server exists to prevent. The change that finally carries real text
+    // is the one path that must resume the verdict.
+    const { server, sent } = session();
     await server.handle(initialize());
     await server.handle({
       jsonrpc: "2.0",
@@ -719,30 +855,50 @@ describe("message shapes the protocol allows and the server must survive", () =>
       params: { textDocument: { uri: URI, languageId: "go", text: 42 } },
     });
 
-    // The document was stored with an empty text and no version; the next
-    // didChange must not crash and must keep the stored version.
+    const opened = published(sent).at(-1);
+    expect(opened).toBeDefined();
+    expect(opened.diagnostics).not.toHaveLength(0);
+    expect(opened.diagnostics[0].code).toBe("analysisFailure");
+    expect(opened.diagnostics[0].message).toContain("unknown");
+    expect(diagnoseDocument).not.toHaveBeenCalled();
+
+    diagnoseDocument.mockReturnValue({ analyzed: true, diagnostics: [] });
     await server.handle({
       jsonrpc: "2.0",
       method: "textDocument/didChange",
-      params: { textDocument: { uri: URI } },
+      params: {
+        textDocument: { uri: URI, version: 2 },
+        contentChanges: [{ text: "package inner\n" }],
+      },
     });
-    expect(diagnoseDocument).toHaveBeenCalled();
+
+    expect(published(sent).at(-1).diagnostics).toEqual([]);
+    expect(diagnoseDocument).toHaveBeenCalledTimes(1);
   });
 
   it("marks a document unanalyzable when a full change carries no text", async () => {
+    // `contentChanges: [{}]` — a full change with no `text`. Same class as the
+    // didOpen-without-text case: the empty string it would otherwise stand in
+    // for is a fiction, and publishing `[]` over it would read as a clean file
+    // that was never checked. The publish must be a loud failure instead.
     const { server, sent } = session();
     await server.handle(initialize());
     await server.handle(didOpen());
+    // The open itself was a normal analyzable document and legitimately ran a
+    // diagnosis; the assertion below is about the CHANGE.
+    diagnoseDocument.mockClear();
     await server.handle({
       jsonrpc: "2.0",
       method: "textDocument/didChange",
       params: { textDocument: { uri: URI, version: 2 }, contentChanges: [{}] },
     });
 
-    // A full change with no text spares the document the ranged-change death
-    // sentence — it just replaces the buffer with the empty text.
-    expect(published(sent).at(-1)).toBeDefined();
-    expect(diagnoseDocument).toHaveBeenCalled();
+    const changed = published(sent).at(-1);
+    expect(changed).toBeDefined();
+    expect(changed.diagnostics).not.toHaveLength(0);
+    expect(changed.diagnostics[0].code).toBe("analysisFailure");
+    expect(changed.diagnostics[0].message).toContain("unknown");
+    expect(diagnoseDocument).not.toHaveBeenCalled();
   });
 
   it("ignores a change for a document it never opened", async () => {

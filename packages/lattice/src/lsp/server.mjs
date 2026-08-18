@@ -41,7 +41,13 @@ import { LATTICE_MODEL_FILE, loadNativeModel } from "../providers/native/model.m
 import { readBoundaryConfig } from "./boundary-config.mjs";
 import { analysisFailedDiagnostic, documentLines } from "./diagnostics.mjs";
 import { diagnoseDocument } from "./diagnose.mjs";
-import { ERROR_CODES, SERVER_INFO, TEXT_DOCUMENT_SYNC_KIND, uriToPath } from "./protocol.mjs";
+import {
+  ERROR_CODES,
+  MESSAGE_TYPE,
+  SERVER_INFO,
+  TEXT_DOCUMENT_SYNC_KIND,
+  uriToPath,
+} from "./protocol.mjs";
 import { buildWorkspaceIndex, PROJECT_CONFIG_FILE, readWorkspaceFile } from "./workspace-index.mjs";
 
 /**
@@ -65,12 +71,21 @@ import { buildWorkspaceIndex, PROJECT_CONFIG_FILE, readWorkspaceFile } from "./w
  * — a native root has no `nx.json` `plugins` table to nest them under), so an
  * edit to either can rename the config the same way an `nx.json` edit can.
  *
- * @param {{boundaryConfig: string}} options The session's resolved options.
+ * `options.tsConfig` is here for the same argument one step further in: every
+ * TypeScript verdict is resolved against the compiler options that file names,
+ * so a `paths` edit there changes verdicts for files that did not change — and
+ * a server not watching it keeps showing the old verdict until an unrelated
+ * invalidation happens to re-read it. Same derivation seam as `boundaryConfig`:
+ * the name is an option, so the watched set is derived from the resolved
+ * options rather than fixed at module load.
+ *
+ * @param {{boundaryConfig: string, tsConfig: string}} options The session's resolved options.
  * @returns {readonly string[]}
  */
 export function watchedFilesFor(options) {
   return Object.freeze([
     options.boundaryConfig,
+    options.tsConfig,
     PROJECT_CONFIG_FILE,
     NX_CONFIG_FILE,
     LATTICE_MODEL_FILE,
@@ -410,13 +425,17 @@ export function createServer({
   function openDocument({ uri, text, version }) {
     const path = uriToPath(uri);
     const sourceFile = path === null ? null : workspaceRelative(root, path);
+    const textMissing = typeof text !== "string";
     documents.set(uri, {
       uri,
-      text: typeof text === "string" ? text : "",
+      text: textMissing ? "" : text,
       version: version ?? null,
       sourceFile,
-      unavailable:
-        path === null
+      unavailable: textMissing
+        ? `'${uri}' opened without any text, so its contents are unknown here — ` +
+          `analyzing the empty string this buffer would otherwise stand in for would ` +
+          `report a verdict about a file the server never saw`
+        : path === null
           ? `'${uri}' names no file on disk — an untitled buffer or a virtual document — ` +
             `so no project owns it and no boundary rule can be applied to it`
           : sourceFile === null
@@ -443,6 +462,16 @@ export function createServer({
       process.cwd();
     phase = "running";
     refreshOptions();
+    // The always-on marker for an unreadable options state. Every open document
+    // gets the reason on its diagnostics, but a session with no document open
+    // yet — the editor pane on first launch — would otherwise show nothing at
+    // all, and a session that quietly stays empty is indistinguishable from one
+    // that is healthy. One `window/showMessage`, at the moment the failure is
+    // known, marks the session for the whole of its life; the per-document
+    // diagnostics then keep the marker in front of every open file.
+    if (optionsFailure !== null) {
+      notify("window/showMessage", { type: MESSAGE_TYPE.error, message: optionsFailure });
+    }
     clientSupportsFileWatching =
       params?.capabilities?.workspace?.didChangeWatchedFiles?.dynamicRegistration === true;
     log(`lattice: language server initialized for ${root}`);
@@ -610,8 +639,31 @@ export function createServer({
             `lattice: ${uri} arrived as an incremental change, but the server ` +
               `advertised full text synchronisation; its contents are now unknown`,
           );
+        } else if (typeof full.text !== "string") {
+          // `contentChanges: [{}]` — a full change carrying no text. The empty
+          // string it would otherwise fall back to is not the file's contents
+          // but the ABSENCE of a statement about them, and analyzing that as
+          // the file would publish a verdict about text the buffer does not
+          // have. Same class as the incremental branch above: mark it
+          // unanalyzable, loudly, rather than analyze a fiction.
+          document.unavailable =
+            `this buffer's latest full change carried no text, so its contents are unknown ` +
+            `here — a change that was meant to replace the whole document arrived empty, and ` +
+            `every position this server could report about it would be a guess`;
+          log(
+            `lattice: ${uri} arrived with a full change carrying no text; ` +
+              `its contents are now unknown`,
+          );
         } else {
-          document.text = typeof full.text === "string" ? full.text : "";
+          // The one path that RESUMES a verdict: a real full change replaces the
+          // text, which is exactly the situation an earlier `unavailable` reason
+          // stopped applying to. Only a document whose file exists in the
+          // workspace is resumable, though — the untitled-buffer and
+          // outside-workspace reasons are structural, fixed by no text change,
+          // and clearing them would let a `sourceFile === null` document reach
+          // diagnosis and publish a verdict no project owns.
+          document.text = full.text;
+          if (document.sourceFile !== null) document.unavailable = null;
         }
         document.version = params?.textDocument?.version ?? document.version;
         await publishDiagnostics(uri);

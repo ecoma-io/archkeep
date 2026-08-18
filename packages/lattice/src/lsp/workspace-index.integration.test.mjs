@@ -154,8 +154,12 @@ beforeAll(() => {
   }
   // `environmentForTree` because `GIT_DIR` beats `cwd`, and this suite runs
   // from a git hook on every push: inheriting it would re-initialise the
-  // ambient repository and leave this fixture with no `.git` of its own.
+  // ambient repository and leave this fixture with no `.git` of its own. The
+  // files are staged because the file list is TRACKED files only — the same
+  // set `../../cli.mjs`'s `check` reads (`../workspace.mjs`'s
+  // `listTrackedFiles`) — and an untracked fixture file is invisible to both.
   execFileSync("git", ["init", "-q"], { cwd: root, env: environmentForTree() });
+  execFileSync("git", ["add", "-A"], { cwd: root, env: environmentForTree() });
 });
 
 afterAll(() => {
@@ -163,12 +167,21 @@ afterAll(() => {
 });
 
 describe("where the file list comes from", () => {
-  it("lists files that exist but are not committed, because that is what an editor sees", () => {
-    // A file created five seconds ago is exactly the one about to be imported.
-    // `--cached` alone would leave it out of every project's file list, and its
-    // manifest — a brand new `go.mod` — out of resolution entirely.
-    const files = listWorkspaceFiles(root);
+  it("lists only tracked files, because that is what check judges and the editor must match", () => {
+    // An untracked file is a file `../../cli.mjs`'s `check` does not judge —
+    // the CLI's file list is `git ls-files` tracked-only
+    // (`../workspace.mjs`'s `listTrackedFiles`, which this delegates to) — so
+    // an editor verdict that read a different set would disagree with the CLI
+    // about the same tree. The parity is the point: list a fresh untracked
+    // file, see it absent, stage it, see it present.
+    const fresh = "libs/outer/fresh.go";
+    write(fresh, "package outer\n");
+    expect(listWorkspaceFiles(root)).not.toContain(fresh);
 
+    execFileSync("git", ["add", "-A"], { cwd: root, env: environmentForTree() });
+    expect(listWorkspaceFiles(root)).toContain(fresh);
+
+    const files = listWorkspaceFiles(root);
     expect(files).toContain("libs/inner/main.go");
     expect(files).toContain("libs/outer/go.mod");
   });
@@ -421,6 +434,7 @@ describe("a native lattice.json workspace, driven through the real provider", ()
     write2("apps/outer/go.mod", "module native.test/outer\n\ngo 1.23\n");
     write2("apps/outer/outer.go", "package outer\n");
     execFileSync("git", ["init", "-q"], { cwd: nativeRoot, env: environmentForTree() });
+    execFileSync("git", ["add", "-A"], { cwd: nativeRoot, env: environmentForTree() });
   });
 
   afterAll(() => {
@@ -457,6 +471,69 @@ describe("a native lattice.json workspace, driven through the real provider", ()
     expect(diagnostics[0].range.start).toEqual({ line: importLine, character: importCharacter });
   });
 
+  it("flags a declared implicit dependency across a tag boundary, like check does", () => {
+    // A-F07: an `implicitDependencies` edge has no import site behind it, so
+    // `evaluate()` over this document's import sites can never see it — and
+    // `../../cli.mjs`'s `check` still exits 1 on it
+    // (`../commands/edge-constraints.mjs`'s `declaredEdgeViolationsForCheck`).
+    // The LSP used to paint the declaring project clean. A separate root, so
+    // the graph here carries only the declared edge: `inner` declares a
+    // dependency on `outer` and both are declared projects in `lattice.json`,
+    // but `outer` sits outside `inner`'s only-depends-on set.
+    const implicitRoot = mkdtempSync(join(tmpdir(), "lattice-native-implicit-"));
+    const write3 = (relativePath, text) => {
+      const absolute = join(implicitRoot, relativePath);
+      mkdirSync(dirname(absolute), { recursive: true });
+      writeFileSync(absolute, text, "utf8");
+    };
+    try {
+      writeFileSync(
+        join(implicitRoot, "lattice.json"),
+        JSON.stringify({
+          projects: {
+            declared: [
+              {
+                root: "apps/inner",
+                tags: ["zone:inner"],
+                implicitDependencies: ["outer"],
+              },
+              { root: "apps/outer", tags: ["zone:outer"] },
+            ],
+          },
+        }),
+      );
+      write3("apps/inner/go.mod", "module implicit.test/inner\n\ngo 1.23\n");
+      write3("apps/inner/main.go", "package inner\n");
+      write3("apps/outer/go.mod", "module implicit.test/outer\n\ngo 1.23\n");
+      write3("apps/outer/outer.go", "package outer\n");
+      execFileSync("git", ["init", "-q"], { cwd: implicitRoot, env: environmentForTree() });
+      execFileSync("git", ["add", "-A"], { cwd: implicitRoot, env: environmentForTree() });
+
+      const index = buildWorkspaceIndex({ root: implicitRoot });
+
+      expect(index.graph.dependencies.inner).toEqual([
+        { source: "inner", target: "outer", type: "implicit" },
+      ]);
+
+      const { analyzed, diagnostics } = diagnoseDocument({
+        sourceFile: "apps/inner/main.go",
+        text: "package inner\n",
+        index,
+        config,
+      });
+
+      // The red-direction proof: before the fold, `declaredEdgeViolationsForCheck`
+      // was called only from `cli.mjs`, and this list was `[]` — an editor
+      // painting clean the project `check` exits 1 on. The whole-file range is
+      // the project-level finding this file is the stand-in for.
+      expect(analyzed).toBe(true);
+      expect(diagnostics.some((d) => d.code === "onlyTagsConstraintViolation")).toBe(true);
+      expect(diagnostics[0].range.start).toEqual({ line: 0, character: 0 });
+    } finally {
+      rmSync(implicitRoot, { recursive: true, force: true });
+    }
+  });
+
   it("refuses to call a document analyzed when lattice.json itself is broken", () => {
     // A second, independently broken root: `projects.declared[0].root` points
     // at a directory with no tracked file under it at all, which
@@ -473,6 +550,7 @@ describe("a native lattice.json workspace, driven through the real provider", ()
       );
       mkdirSync(join(brokenRoot, "apps"), { recursive: true });
       execFileSync("git", ["init", "-q"], { cwd: brokenRoot, env: environmentForTree() });
+      execFileSync("git", ["add", "-A"], { cwd: brokenRoot, env: environmentForTree() });
 
       const index = buildWorkspaceIndex({ root: brokenRoot });
 

@@ -305,8 +305,16 @@ describe("building the index over a whole tree", () => {
     });
     const index = buildWorkspaceIndex(options);
 
+    // The record is `../analysis/source-util.mjs`'s whole-file `fileFailure`
+    // shape — `line`/`column` null is what makes the failure render as a
+    // whole-file range rather than as a caret on one line.
     expect(index.fileFailures).toEqual([
-      { sourceFile: expect.stringContaining(".go"), reason: expect.stringContaining("elvish") },
+      {
+        sourceFile: expect.stringContaining(".go"),
+        line: null,
+        column: null,
+        reason: expect.stringContaining("elvish"),
+      },
     ]);
     expect(Object.keys(index.graph.nodes).sort()).toEqual(["inner", "nested"]);
   });
@@ -332,8 +340,25 @@ describe("building the index over a whole tree", () => {
     const index = buildWorkspaceIndex(withGone);
 
     expect(index.fileFailures).toEqual([
-      { sourceFile: "libs/inner/gone.go", reason: "could not be read" },
+      { sourceFile: "libs/inner/gone.go", line: null, column: null, reason: "could not be read" },
     ]);
+  });
+
+  it("keeps a positioned failure out of the index gaps, where it would over-warn", () => {
+    // A failure carrying a line/column is one unparseable SITE, not a file the
+    // index lost: the analyzer's other import sites for that file are still in
+    // the graph, so the tree is not INCOMPLETE for every open document the way
+    // a whole-file failure makes it. Same split the CLI draws (`check`'s
+    // `blindSpots` vs `notAnalyzed`); the site fact surfaces at the failing
+    // file's own document level instead.
+    analyzeFile.mockReturnValueOnce({
+      imports: [],
+      failures: [{ sourceFile: "libs/inner/main.go", line: 2, column: 8, reason: "boom" }],
+    });
+    const index = buildWorkspaceIndex(options);
+
+    expect(index.fileFailures).toEqual([]);
+    expect(index.graph.dependencies).toEqual({});
   });
 
   it("fails loudly when the file list cannot be obtained, rather than indexing nothing", () => {
