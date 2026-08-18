@@ -44,12 +44,20 @@
  *   `mod foo`. A first segment matching another project's crate name is read
  *   as that crate. A local module deliberately named after a sibling crate
  *   would produce a spurious record.
- * - **A renamed dependency is not followed.** `dep = { package = "real" }`
- *   makes the source spell `dep` while the crate is `real`; the manifest
- *   resolver above still draws that edge, so the dependency is never lost —
- *   only its source-level location is.
  * - **`mod` is not an import.** A `mod` declaration names a file inside the
  *   same crate, so it crosses no project boundary and is never recorded.
+ *
+ * **A renamed dependency IS followed, scoped to the project that renamed
+ * it.** `dep = { package = "real", path = "../real" }` in a project's own
+ * Cargo.toml makes `real`'s crate reachable from THAT project's `.rs` sources
+ * only under the identifier `dep` — Rust builds a crate's `extern` prelude
+ * from its own manifest alone, so a different project renaming something else
+ * to `dep`, or `dep` happening to be nobody's rename at all, has no bearing on
+ * what THIS project's `use dep::…` means. `renamedDepsOf` below resolves the
+ * rename exactly the way `resolveRustDependencies` resolves the manifest
+ * entry it comes from — same `path`/`workspace = true` handling — so a `use`
+ * naming the rename lands on the same project the graph edge already points
+ * at, never a second, disagreeing answer.
  */
 import { normalizePath, parseManifest } from "./manifest-util.mjs";
 import {
@@ -175,6 +183,67 @@ const crateNamesOf = perWorkspace((workspace) => {
     }
   }
   return byCrate;
+});
+
+/**
+ * Per-project renamed-dependency aliases — see the header's "A renamed
+ * dependency IS followed". Reads each project's OWN Cargo.toml dependency
+ * tables (the same `depTables` the edge resolver walks) for an entry carrying
+ * `package = "…"`, and resolves its `path`/`workspace = true` spec exactly
+ * the way `resolveRustDependencies` does, so the two can never disagree about
+ * which project a rename reaches.
+ *
+ * Scoped per project rather than folded into the single global `crateNamesOf`
+ * map: the alias is a fact about the IMPORTER's manifest, not the imported
+ * crate, and a sibling project could rename the very same dependency to a
+ * different local name, or not rename it at all.
+ *
+ * Only at the project root, matching `resolveRustDependencies` rather than
+ * `crateNamesOf`'s broader `trackedManifests` walk — a nested manifest (the
+ * Tauri `src-tauri/` shape) draws no graph edge to resolve a rename against
+ * in the first place, so there is no target here to be consistent with.
+ *
+ * @returns {Map<string, Map<string, string>>} project name -> (the identifier
+ *   a `.rs` file spells -> the project the rename actually reaches).
+ */
+const renamedDepsOf = perWorkspace((workspace) => {
+  const projectByRoot = new Map();
+  for (const project of workspace.projects) projectByRoot.set(project.root, project.name);
+
+  const byProject = new Map();
+  for (const project of workspace.projects) {
+    const manifestPath = `${project.root}/Cargo.toml`;
+    if (!workspace.filesOf(project.name).includes(manifestPath)) continue;
+    const manifest = parseManifest(workspace.readFile(manifestPath) ?? "");
+    if (!manifest) continue;
+
+    const aliases = new Map();
+    const ws = { resolved: false, value: null }; // lazy per-crate lookup, as the edge resolver
+    for (const table of depTables(manifest)) {
+      for (const [depName, spec] of Object.entries(table)) {
+        if (typeof spec !== "object" || spec === null) continue;
+        if (typeof spec.package !== "string") continue; // not a rename
+        let pathDir = null;
+        if (typeof spec.path === "string") {
+          pathDir = normalizePath(project.root, spec.path);
+        } else if (spec.workspace === true) {
+          if (!ws.resolved) {
+            ws.resolved = true;
+            ws.value = findWorkspaceManifest(project.root, workspace.readFile);
+          }
+          const wsSpec = ws.value?.manifest.workspace?.dependencies?.[depName];
+          if (typeof wsSpec?.path === "string") {
+            pathDir = normalizePath(ws.value.dir, wsSpec.path);
+          }
+        }
+        if (!pathDir) continue;
+        const target = projectByRoot.get(pathDir);
+        if (target && target !== project.name) aliases.set(crateIdentifier(depName), target);
+      }
+    }
+    if (aliases.size > 0) byProject.set(project.name, aliases);
+  }
+  return byProject;
 });
 
 /** Path prefixes that name the crate being compiled rather than another one. */
@@ -321,8 +390,14 @@ export function analyzeRust({ sourceFile, text, workspace }) {
   try {
     const byCrate = crateNamesOf(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
+    // A rename is legible only inside the project whose OWN manifest declares
+    // it — see the header's "A renamed dependency IS followed".
+    const ownAliases = owner ? renamedDepsOf(workspace).get(owner.name) : undefined;
+    const knownCrates = ownAliases
+      ? new Set([...byCrate.keys(), ...ownAliases.keys()])
+      : new Set(byCrate.keys());
 
-    for (const site of parseRustUseSites(text, new Set(byCrate.keys()))) {
+    for (const site of parseRustUseSites(text, knownCrates)) {
       const { line, column } = positionAt(text, site.offset);
       let resolved = null;
       if (site.root === null) {
@@ -340,7 +415,8 @@ export function analyzeRust({ sourceFile, text, workspace }) {
           packageName: null,
         };
       } else {
-        const target = byCrate.get(crateIdentifier(site.root)) ?? null;
+        const identifier = crateIdentifier(site.root);
+        const target = byCrate.get(identifier) ?? ownAliases?.get(identifier) ?? null;
         resolved = {
           target,
           file: null,
