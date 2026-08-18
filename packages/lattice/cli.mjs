@@ -583,84 +583,42 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // tool and the law it enforces are in different trees, and the tree being
   // judged is still the consumer's. Loaded before the two workspace-level
   // checks below, the same order `check` has always used — a malformed
-  // `--config` stops the run before either of them runs at all.
-  //
-  // A workspace that names a `profiles` plugin option enforces BY PROFILE NAME:
-  // `commandContext.options.profiles` names the registry file, and the value of
-  // `--config` / `boundaryConfig` selects which profile in it to apply. The
-  // profile's resolved block runs through the same `profilePolicy` →
-  // `config.mjs` `policyFrom` tail every file dialect uses, so there is exactly
-  // ONE enforcement path — a profile is a way to name a policy, never a second
-  // kind of policy that could disagree with a file about the same row
-  // (`./src/governance/profile-registry.mjs`).
-  //
-  // `policyProfile`/`policySource` are captured in the SAME branch that loads
-  // `config` — never a second conditional over the same options — so the
-  // identity `check`'s report carries can never name a different policy than
-  // the one it actually ran: a violating tree under a weak policy and a clean
-  // tree under a strict one used to produce byte-identical output, with
-  // nothing anywhere in the report saying which law had run (P1-01).
-  // `policyProfile` is `null` on every branch but the profile one — stated,
-  // not omitted, the same "no fact, no claim" bargain `goWork`/`tsconfigPaths`
-  // keep below for a feature a workspace does not use either. `policySource`
-  // is always workspace-relative, the convention every other file reference in
-  // this report already keeps (`sourceFile`, `tsConfig`, intent's `file`) —
-  // `relative` resolves a `--config` pointed outside the tree the same way, as
-  // a `../`-prefixed path, and a native workspace's inline policy — which has
-  // no file of its own — reports `lattice.json` itself, where the inline
-  // object lives.
-  //
-  // Typed explicitly because the four producers below disagree: the two
-  // calls into `./src/config.mjs` (`loadBoundaryConfig`/`loadBoundaryConfigFile`)
-  // are typed with the optional `notes`, the direct `policyFrom` call for a
-  // native workspace's inline `boundaryConfig` is typed without it, and
-  // `profilePolicy` returns the shared policy shape without `notes` — left
-  // inferred, `tsc` narrows the union to whichever arm's return type is
-  // narrowest and refuses the `notes` read below on that narrower type.
-  /** @type {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }} */
-  let config;
-  /** @type {string|null} */
-  let policyProfile = null;
-  /** @type {string} */
-  let policySource;
-  if (hasProfiles(commandContext.options)) {
-    const profileName = String(options.config ?? commandContext.options.boundaryConfig);
-    const registryPath = resolve(root, commandContext.options.profiles);
-    config = profilePolicy(
-      registryPath,
-      profileName,
-      options.config ?? commandContext.options.boundaryConfig,
-    );
-    policyProfile = profileName;
-    policySource = relative(root, registryPath);
-  } else if (options.config) {
-    const configPath = isAbsolute(options.config) ? options.config : resolve(cwd, options.config);
-    config = await loadBoundaryConfigFile(configPath);
-    policySource = relative(root, configPath);
-  } else if (typeof commandContext.options.boundaryConfig === "string") {
-    config = await loadBoundaryConfig(root, commandContext.options.boundaryConfig);
-    policySource = relative(root, resolve(root, commandContext.options.boundaryConfig));
-  } else {
-    config = policyFrom(
-      commandContext.options.boundaryConfig,
-      `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-    );
-    policySource = LATTICE_MODEL_FILE;
-  }
+  // `--config` stops the run before either of them runs at all. `resolvePolicy`
+  // owns the profile/file/inline priority — see its own doc for the order and
+  // why a `profiles` registry, when named, takes `--config`/`boundaryConfig`
+  // over as a profile NAME rather than a filename. `check` is the one caller
+  // of the eleven that also needs to know WHICH profile/file resolved it —
+  // `profile`/`source` — so its report can name the law that governed the run
+  // (P1-01): a violating tree under a weak policy and a clean tree under a
+  // strict one used to produce byte-identical output, with nothing anywhere in
+  // the report saying which law had run. `profile` is `null` on every branch
+  // but the profile one — stated, not omitted, the same "no fact, no claim"
+  // bargain `goWork`/`tsconfigPaths` keep below for a feature a workspace does
+  // not use either. `source` is always workspace-relative, the convention
+  // every other file reference in this report already keeps (`sourceFile`,
+  // `tsConfig`, intent's `file`).
+  const {
+    config,
+    profile: policyProfile,
+    source: policySource,
+  } = await resolvePolicy(options, commandContext, cwd);
   // The policy's own fingerprint, alongside its source — the SHA-256 of the
   // canonicalized policy (`depConstraints`/`options`/`suppressions`) that
   // `graph`/`diff`/`history` already share (`computePolicyFingerprint`,
   // `./src/commands/graph.mjs`), reused here rather than recomputed by hand so
   // two runs under the identical effective policy always agree, whichever of
-  // the four branches above produced it. Unlike `graph`'s own optional
+  // `resolvePolicy`'s branches produced it. Unlike `graph`'s own optional
   // `result.policy` — absent when no config was given — `check` always loads
-  // exactly one policy before it can judge anything, so `policy` below is
-  // never absent.
-  const policy = {
-    profile: policyProfile,
-    source: policySource,
-    fingerprint: computePolicyFingerprint(config),
-  };
+  // exactly one policy before it can judge anything, so `policy` is `null`
+  // only on the one defensive arm `resolvePolicy` itself documents as
+  // unreachable by any current provider.
+  const policy = config
+    ? {
+        profile: policyProfile,
+        source: policySource,
+        fingerprint: computePolicyFingerprint(config),
+      }
+    : null;
 
   // The go.work drift check, keyed off the manifest's presence the way every
   // resolver keys off its language's manifest: no tracked root go.work, no
@@ -1180,6 +1138,102 @@ function hasProfiles(options) {
 }
 
 /**
+ * The boundary-policy "ladder" every command that reads a boundary law
+ * shares, in the one place all of them now call it from. Hand-copied 11
+ * times before this — `check`, `graph`, `diff`, `waivers`, `fitness`,
+ * `impact`, `explain`, `context`, `history`'s `--capture` branch, `debt`,
+ * `health` — the duplication is what let two defects land in it independently:
+ * P1-25 found `graph`'s copy alone missing the inline-object arm, and P1-26
+ * found only `check`'s copy aware of a `profiles` registry at all — the other
+ * ten tried to resolve a profile NAME as a file, and named the wrong problem
+ * when it could not: `loadBoundaryConfigFile` refuses a bare name like
+ * `"strict"` as "names an unsupported boundaryConfig extension '(none)'",
+ * which blames a typo that was never made rather than naming the real gap —
+ * that command never knew profiles existed. One function, called from all
+ * eleven sites, is what makes that defect class structurally impossible to
+ * reintroduce one copy at a time.
+ *
+ * Checked in order, and the first match wins:
+ *
+ * 1. A `profiles` registry, when the workspace names one
+ *    (`commandContext.options.profiles`) — `--config`, or absent that
+ *    `boundaryConfig`, is then a profile NAME resolved from that registry,
+ *    never a filename or an inline object at the same time
+ *    (`docs/concepts/profiles.md`, "Selecting by name": the two never mix at
+ *    one field).
+ * 2. `--config`, a FILE path, resolved against `cwd` rather than the
+ *    workspace root — the tool and the law it enforces may be in different
+ *    trees, and the tree being judged is still the consumer's.
+ * 3. The workspace's own `boundaryConfig`: a filename
+ *    (`loadBoundaryConfig`), or — native workspaces only — the policy
+ *    inline, as an object rather than a filename (`policyFrom`).
+ * 4. `null`, when the workspace declares no law at all. No current provider
+ *    ever reaches this arm — `boundaryConfig` always resolves to a non-empty
+ *    string or a truthy inline object (`./src/options.mjs`'s
+ *    `DEFAULT_OPTIONS`, `./src/providers/native/model.mjs`'s
+ *    `normalizeNativeModel`) — but the guard stays rather than calling
+ *    `policyFrom(undefined, ...)` unconditionally, so a future provider that
+ *    leaves the option unset degrades to "no policy" instead of a crash on a
+ *    value that was never validated.
+ *
+ * `profile`/`source` name WHICH of the four arms fired and where its bytes
+ * came from — `profile` is the resolved profile name (`null` on every arm but
+ * the first), `source` is always workspace-relative, the convention every
+ * other file reference in a report already keeps (`sourceFile`, `tsConfig`,
+ * intent's `file`). Only `check` reads either field today (P1-01, naming the
+ * law that governed a run in its own report), but they are returned
+ * unconditionally rather than as a second, `check`-only code path, so the
+ * eleven callers keep sharing the one ladder this function exists to be.
+ *
+ * @param {{config: string|null}} options The command's own parsed flags —
+ *   only `config` is read here, so a command with no `--config` flag at all
+ *   (`graph` takes none) simply never sets it and this arm is skipped.
+ * @param {object} commandContext From `resolveCommandContext` — `root` and
+ *   `options` (the workspace's resolved `boundaryConfig`/`profiles`) are read.
+ * @param {string} cwd The process's working directory a relative `--config`
+ *   resolves against — kept separate from the workspace root for the reason
+ *   above.
+ * @returns {Promise<{config: {depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[]}|null, profile: string|null, source: string|null}>}
+ * @throws {Error} when a named profile, a `--config` file, or an inline
+ *   policy cannot be resolved or is malformed — every arm's existing failure
+ *   mode, unchanged by the extraction.
+ */
+async function resolvePolicy(options, commandContext, cwd) {
+  const { root } = commandContext;
+  if (hasProfiles(commandContext.options)) {
+    const profileName = String(options.config ?? commandContext.options.boundaryConfig);
+    const registryPath = resolve(root, commandContext.options.profiles);
+    const config = profilePolicy(
+      registryPath,
+      profileName,
+      options.config ?? commandContext.options.boundaryConfig,
+    );
+    return { config, profile: profileName, source: relative(root, registryPath) };
+  }
+  if (options.config) {
+    const configPath = isAbsolute(options.config) ? options.config : resolve(cwd, options.config);
+    const config = await loadBoundaryConfigFile(configPath);
+    return { config, profile: null, source: relative(root, configPath) };
+  }
+  if (typeof commandContext.options.boundaryConfig === "string") {
+    const config = await loadBoundaryConfig(root, commandContext.options.boundaryConfig);
+    return {
+      config,
+      profile: null,
+      source: relative(root, resolve(root, commandContext.options.boundaryConfig)),
+    };
+  }
+  if (commandContext.options.boundaryConfig) {
+    const config = policyFrom(
+      commandContext.options.boundaryConfig,
+      `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
+    );
+    return { config, profile: null, source: LATTICE_MODEL_FILE };
+  }
+  return { config: null, profile: null, source: null };
+}
+
+/**
  * `graph`'s `run`: resolves the command context, drives `graphCommand`, writes
  * the report where it belongs, and returns the process's exit code.
  *
@@ -1203,23 +1257,12 @@ async function runGraph(options, { cwd, env }) {
     // Load the boundary config when --config is given or when the workspace
     // declares one, so the snapshot carries a policy fingerprint that `diff`
     // can use to warn when the policy changed between runs. Without a config,
-    // the snapshot carries no policy identity — the consumer did not provide one.
-    // A native workspace's own `boundaryConfig` may be the policy inline, as an
-    // object rather than a filename — the same third arm every other command's
-    // copy of this ladder carries, so an inline policy's snapshot fingerprint
-    // moves with it the same way a file-based policy's does.
-    const config = options.config
-      ? await loadBoundaryConfigFile(
-          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-        )
-      : typeof commandContext.options.boundaryConfig === "string"
-        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
-        : commandContext.options.boundaryConfig
-          ? policyFrom(
-              commandContext.options.boundaryConfig,
-              `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-            )
-          : null;
+    // the snapshot carries no policy identity — the consumer did not provide
+    // one. A profile-selected workspace's `boundaryConfig` names a profile
+    // rather than a file, resolved the same way `check` resolves it
+    // (`resolvePolicy`), so the fingerprint moves with a profile edit the same
+    // way it already does with a file or inline-object edit.
+    const { config } = await resolvePolicy(options, commandContext, cwd);
 
     result = graphCommand(commandContext, { config });
   } catch (error) {
@@ -1279,20 +1322,11 @@ async function runDiff(options, { cwd, env }) {
 
     // Load the boundary config when --config is given or when the workspace
     // declares one, so rule-impact analysis is computed. Without a config,
-    // the diff reports only structural changes — same as before.
-    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }|null} */
-    const config = options.config
-      ? await loadBoundaryConfigFile(
-          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-        )
-      : typeof commandContext.options.boundaryConfig === "string"
-        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
-        : commandContext.options.boundaryConfig
-          ? policyFrom(
-              commandContext.options.boundaryConfig,
-              `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-            )
-          : null;
+    // the diff reports only structural changes — same as before. A
+    // profile-selected workspace resolves the same way `check` does
+    // (`resolvePolicy`), so a policy edit under an unchanged profile NAME is
+    // still visible as a fingerprint change here.
+    const { config } = await resolvePolicy(options, commandContext, cwd);
 
     result = diffCommand(baselinePath, commandContext, { config });
   } catch (error) {
@@ -1496,20 +1530,12 @@ async function runWaivers(options, { cwd, env }) {
     );
 
     // The waivers surface is part of the run's boundary law, so the law is
-    // loaded the same way `check` loads it and `--config` wins the same way —
-    // resolved against the working directory, never against this tool's own
-    // location. A malformed law throws here, exit 3, exactly as in `check`.
-    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }} */
-    const config = options.config
-      ? await loadBoundaryConfigFile(
-          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-        )
-      : typeof commandContext.options.boundaryConfig === "string"
-        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
-        : policyFrom(
-            commandContext.options.boundaryConfig,
-            `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-          );
+    // loaded the same way `check` loads it (`resolvePolicy`) and `--config`
+    // wins the same way — resolved against the working directory, never
+    // against this tool's own location, and a `profiles` registry resolves
+    // `--config`/`boundaryConfig` as a profile NAME the same way `check`
+    // does. A malformed law throws here, exit 3, exactly as in `check`.
+    const { config } = await resolvePolicy(options, commandContext, cwd);
 
     result = await waiversCommand(commandContext, config);
   } catch (error) {
@@ -1525,8 +1551,20 @@ async function runWaivers(options, { cwd, env }) {
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
     if (!writeOutputReport(options.output, reportText, env)) return EXIT.error;
+    // This clause only, not the JSON envelope: a workspace with no permanent
+    // suppressions sees this stderr line unchanged from before. A reader who
+    // only glances at this confirmation must not see "N waivers on the
+    // table" and conclude that is the whole surface when a
+    // `boundarySuppressions` row with no `expiresAt` is hiding something the
+    // file --output just wrote down.
+    const suppressionNote =
+      result.waivers.suppressions.length > 0
+        ? `, ${result.waivers.suppressions.length} permanent suppression` +
+          `${result.waivers.suppressions.length === 1 ? "" : "s"}`
+        : "";
     env.err(
-      `lattice: ${result.waivers.waivers.length} waivers on the table ` + `→ ${options.output}`,
+      `lattice: ${result.waivers.waivers.length} waivers${suppressionNote} on the table ` +
+        `→ ${options.output}`,
     );
   } else {
     env.out(report);
@@ -1564,20 +1602,16 @@ async function runFitness(options, { cwd, env }) {
     );
 
     // Fitness is part of the run's boundary law, so the law is loaded the same
-    // way `check` loads it and `--config` wins the same way — resolved against
-    // the working directory, never against this tool's own location. A
-    // malformed law throws here, exit 3, exactly as in `check`.
-    /** @type {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }} */
-    const config = options.config
-      ? await loadBoundaryConfigFile(
-          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-        )
-      : typeof commandContext.options.boundaryConfig === "string"
-        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
-        : policyFrom(
-            commandContext.options.boundaryConfig,
-            `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-          );
+    // way `check` loads it (`resolvePolicy`) and `--config` wins the same
+    // way — resolved against the working directory, never against this
+    // tool's own location, profile-aware the same way `check` is. A malformed
+    // law throws here, exit 3, exactly as in `check`. A profile's `block`
+    // never carries a `fitness` key (`docs/concepts/profiles.md`, "A
+    // profile's block carries exactly three keys"), so a profile-selected
+    // workspace reaches `fitnessCommand`'s own "declares no fitness
+    // functions" refusal below rather than a config-loading failure — a
+    // real, named limit, not this ladder's bug.
+    const { config } = await resolvePolicy(options, commandContext, cwd);
 
     result = await fitnessCommand(commandContext, { config });
   } catch (error) {
@@ -1638,20 +1672,9 @@ async function runImpact(options, { cwd, env }) {
     );
 
     // Load the boundary config when --config is given or when the workspace
-    // declares one, so constraint-impact analysis is computed.
-    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }|null} */
-    const config = options.config
-      ? await loadBoundaryConfigFile(
-          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-        )
-      : typeof commandContext.options.boundaryConfig === "string"
-        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
-        : commandContext.options.boundaryConfig
-          ? policyFrom(
-              commandContext.options.boundaryConfig,
-              `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-            )
-          : null;
+    // declares one, so constraint-impact analysis is computed — profile-aware
+    // the same way `check` is (`resolvePolicy`).
+    const { config } = await resolvePolicy(options, commandContext, cwd);
 
     result = impactCommand(projectName, commandContext, config);
   } catch (error) {
@@ -1714,19 +1737,10 @@ async function runExplain(options, { cwd, env }) {
     );
 
     // The config's location is a separate fact from the workspace root.
-    // Same loading logic as `check` — a `--config` overrides the workspace's
-    // own `boundaryConfig`.
-    /** @type {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }} */
-    const config = options.config
-      ? await loadBoundaryConfigFile(
-          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-        )
-      : typeof commandContext.options.boundaryConfig === "string"
-        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
-        : policyFrom(
-            commandContext.options.boundaryConfig,
-            `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-          );
+    // Same loading logic as `check` (`resolvePolicy`) — a `--config`
+    // overrides the workspace's own `boundaryConfig`, profile-aware the same
+    // way `check` is.
+    const { config } = await resolvePolicy(options, commandContext, cwd);
 
     result = explainCommand(site, commandContext, config);
   } catch (error) {
@@ -1797,19 +1811,10 @@ async function runContextCommand(options, { cwd, env }) {
     );
 
     // The config's location is a separate fact from the workspace root.
-    // Same loading logic as `check` and `explain` — a `--config` overrides
-    // the workspace's own `boundaryConfig`.
-    /** @type {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }} */
-    const config = options.config
-      ? await loadBoundaryConfigFile(
-          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-        )
-      : typeof commandContext.options.boundaryConfig === "string"
-        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
-        : policyFrom(
-            commandContext.options.boundaryConfig,
-            `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-          );
+    // Same loading logic as `check` and `explain` (`resolvePolicy`) — a
+    // `--config` overrides the workspace's own `boundaryConfig`,
+    // profile-aware the same way `check` is.
+    const { config } = await resolvePolicy(options, commandContext, cwd);
 
     result = options.plan
       ? await planContextCommand(projectName, scopePaths, commandContext, config)
@@ -1950,22 +1955,12 @@ async function runHistory(options, { cwd, env }) {
 
     // The boundary law's fingerprint when the workspace declares one, so a
     // captured snapshot records the policy it was taken under — the same
-    // config loading `graph` uses, kept in one place so a capture and a
-    // standalone `graph` never disagree about the current policy.
+    // config loading `graph` uses (`resolvePolicy`, profile-aware the same
+    // way `check` is), kept in one place so a capture and a standalone
+    // `graph` never disagree about the current policy.
     let fingerprint = null;
     if (options.capture) {
-      const config = options.config
-        ? await loadBoundaryConfigFile(
-            isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-          )
-        : typeof commandContext.options.boundaryConfig === "string"
-          ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
-          : commandContext.options.boundaryConfig
-            ? policyFrom(
-                commandContext.options.boundaryConfig,
-                `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-              )
-            : null;
+      const { config } = await resolvePolicy(options, commandContext, cwd);
       if (config) {
         fingerprint = computePolicyFingerprint(config);
       }
@@ -2028,20 +2023,10 @@ async function runDebt(options, { cwd, env }) {
     );
 
     // The boundary law the ledger ages waivers against — resolved the same way
-    // `graph` and `diff` resolve it, so a `debt` run and a `check` run never
-    // disagree about the current suppressions.
-    const config = options.config
-      ? await loadBoundaryConfigFile(
-          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-        )
-      : typeof commandContext.options.boundaryConfig === "string"
-        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
-        : commandContext.options.boundaryConfig
-          ? policyFrom(
-              commandContext.options.boundaryConfig,
-              `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-            )
-          : null;
+    // `graph` and `diff` resolve it (`resolvePolicy`), so a `debt` run and a
+    // `check` run never disagree about the current suppressions, and a
+    // profile-selected workspace resolves the same way `check` does.
+    const { config } = await resolvePolicy(options, commandContext, cwd);
 
     result = await debtCommand(dir, commandContext, { config });
   } catch (error) {
@@ -2161,22 +2146,11 @@ async function runHealth(options, { cwd, env }) {
       { readGraph: env.readGraph, listFiles: env.listFiles },
     );
 
-    // The boundary law and the intent, the same loading every command does —
-    // a `--config` overrides the workspace's own `boundaryConfig`, and the
+    // The boundary law and the intent, the same loading every command does
+    // (`resolvePolicy`) — a `--config` overrides the workspace's own
+    // `boundaryConfig`, profile-aware the same way `check` is, and the
     // intent is the tracked root `architecture-intent.json` (or absent).
-    /** @type {{ depConstraints: object[], options: object, suppressions: object[], notes?: string[] }|null} */
-    const config = options.config
-      ? await loadBoundaryConfigFile(
-          isAbsolute(options.config) ? options.config : resolve(cwd, options.config),
-        )
-      : typeof commandContext.options.boundaryConfig === "string"
-        ? await loadBoundaryConfig(commandContext.root, commandContext.options.boundaryConfig)
-        : commandContext.options.boundaryConfig
-          ? policyFrom(
-              commandContext.options.boundaryConfig,
-              `${LATTICE_MODEL_FILE}'s inline boundaryConfig`,
-            )
-          : null;
+    const { config } = await resolvePolicy(options, commandContext, cwd);
 
     const intent = commandContext.tracked.includes(INTENT_FILE)
       ? await loadIntent(commandContext.root, { tracked: commandContext.tracked })
@@ -2796,7 +2770,7 @@ const COMMANDS = Object.freeze({
   waivers: Object.freeze({
     name: "waivers",
     args: "",
-    summary: "List the boundary waivers on the table, with their terms",
+    summary: "List the boundary waivers and permanent suppressions on the table",
     flagHelp: WAIVERS_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(WAIVERS_FLAG_HELP.map((f) => [f.flag, f.key]))),
     defaults: Object.freeze({ format: "text", output: null, config: null }),

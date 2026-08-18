@@ -32,12 +32,10 @@ confirm it.
 
    Understand which dependency directions are allowed and which are forbidden,
    who depends on the project, current violations in scope, any drift, the
-   declared Intent when one exists, and the commands that will verify the change.
-   In a profile-selected workspace `context --plan` exits 3 by design — the
-   profile's effective block lives only in the registry file (resolve its `base`
-   chain by hand), and its `impact`/`graph` verify commands are not runnable
-   there; `check` still is — run `lattice check --config <active-profile>` as
-   the gate instead.
+   declared Intent when one exists, and the commands that will verify the
+   change. In a profile-selected workspace `context --plan` resolves the
+   active profile the same way `check` does, including its bundled
+   `impact`/`graph` facts.
 
 2. **Understand the Intent and policy — and which law is in effect.** First
    confirm whether the workspace enforces by file or by named profile (see

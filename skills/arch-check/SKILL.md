@@ -112,10 +112,10 @@ leave it sound must show the check green.
    into `check`'s exit code (`1` for any `fail`, `3` for any `unknown`). A
    profile cannot carry fitness: a profile's block is exactly
    `depConstraints`/`moduleBoundaryOptions`/`boundarySuppressions`, so a
-   profile-selected run folds no fitness functions. `check` is also the one
-   command that resolves a `profiles` registry; the descriptive commands beside
-   it do not. An _unverifiable_ intent is never a _satisfied_ one, and an
-   unresolved profile is never a satisfied law.
+   profile-selected run folds no fitness functions — the one capability that
+   stays file-only even though every command now resolves the profile itself.
+   An _unverifiable_ intent is never a _satisfied_ one, and an unresolved
+   profile is never a satisfied law.
 
 7. **For CI: generate SARIF.**
 
@@ -133,11 +133,21 @@ leave it sound must show the check green.
 - **An empty violations list is a claim.** When exit 0, Lattice states what it
   inspected: files, projects, imports. "No violations" means those imports were
   checked and all complied — and "no findings" from a scoped run says nothing
-  about the files outside its scope. In a profile workspace, a run that reports
-  unexpectedly green can also mean the law being enforced changed — check the
-  plugin options and the `--config`/`boundaryConfig` selector against what was
-  in effect when the change was made (the option-change check `arch-review` step
-  2 runs), not only the code under review.
+  about the files outside its scope. **A permanent suppression is the one
+  documented exception to "checked and complied."** A `boundarySuppressions`
+  row with no `expiresAt` removes a real violation from the findings entirely,
+  by design: exit 0 can mean the workspace is genuinely clean, or that it is
+  clean except for what is permanently suppressed, and `check`'s own output
+  does not distinguish the two — unlike a waiver (a row WITH `expiresAt`),
+  which stays a finding under "accepted violations" until its term lapses
+  rather than disappearing (`arch-review`, "Waivers / exceptions"). To tell
+  which "empty" a green run is, read the active policy's `boundarySuppressions`
+  table directly for rows with no `expiresAt`; `lattice waivers` names only
+  the term-bound rows, not this one. In a profile workspace, a run that
+  reports unexpectedly green can also mean the law being enforced changed —
+  check the plugin options and the `--config`/`boundaryConfig` selector
+  against what was in effect when the change was made (the option-change
+  check `arch-review` step 2 runs), not only the code under review.
 - **UNKNOWN / INCOMPLETE never silently becomes PASS.** A coverage gap, an
   unreadable file, a no-verdict intent, an unresolved profile — each withholds
   the verdict instead of folding into the green. An unresolved decision is the
@@ -186,10 +196,7 @@ Those two inform a verdict; the rest only inform the reader. A build fails on
   detected, malformed boundary config, missing language manifests, an intent
   that cannot be established, or — in a profile-selected workspace — a profile
   that could not be resolved (unknown name, unknown `base`, a `base` cycle, an
-  unreadable registry). Remember that in a profile workspace `boundaryConfig`
-  holds a name, not a file, so a message about a boundary config with no
-  extension is pointing at profile selection, not a missing file. Do not re-run
-  until the gap is understood.
+  unreadable registry). Do not re-run until the gap is understood.
 - **Unexpected violations** — use `lattice explain` to understand why each import
   was flagged before deciding how to respond.
 - **No violations but expected some** — verify the boundary config applies to the
