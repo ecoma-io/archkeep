@@ -187,8 +187,10 @@ confirm it.
   `--config <NAME>` the gate ran with; a red under the team's active profile is
   a violation to fix in code or escalate, not a law to swap.
 - **A scoped check is not the gate.** `lattice check <paths>` judges only the
-  listed files; cycle and lazy-load rules need the whole graph. Use it for speed,
-  but run a full check before committing.
+  listed files; cycle and lazy-load rules need the whole graph, and a fitness
+  function that needs the whole tree (`coverage-minimum` today) reports
+  `not_applicable` rather than a real verdict. Use it for speed, but run a full
+  check before committing.
 - **Report unresolved violations rather than suppress them.** If you cannot fix
   a violation, say so explicitly. A silent violation is worse than a loud one.
 - **Proposed is not authoritative.** `reconcile --propose` and

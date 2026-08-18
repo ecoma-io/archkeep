@@ -26,11 +26,16 @@
  *
  * A declared function that cannot be determined yields `unknown` — never
  * `pass`. The mirror of `drift`'s refusals: a `layer-dependency` tag no
- * matched project carries, a `coverage-minimum` over zero owned files, a
- * `drift-free` over no architecture-intent.json, and a path-scoped run all
- * answer `unknown` with the missing fact named. A function whose `match`
- * selects no project is `skipped` — loud ("declared but matches nothing"),
- * never folded into `pass`.
+ * matched project carries, a `coverage-minimum` over zero owned files, and a
+ * `drift-free` over no architecture-intent.json all answer `unknown` with the
+ * missing fact named. A function whose `match` selects no project is
+ * `skipped` — loud ("declared but matches nothing"), never folded into
+ * `pass`; a `coverage-minimum` row judged from a path-scoped run joins it
+ * there rather than `unknown` (`../governance/fitness-rules.mjs`), because a
+ * scoped `check <path>` structurally cannot answer a whole-tree coverage
+ * question — that is not evidence of a hole, and folding it into `unknown`
+ * used to make `check <path>` exit 3 unconditionally in any workspace
+ * declaring `coverage-minimum` (P1-19).
  *
  * ## Determinism
  *

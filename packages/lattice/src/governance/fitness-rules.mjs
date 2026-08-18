@@ -279,15 +279,34 @@ export function coverageMinimum(analysis, names, { statement, scoped = false }) 
   }
   // A path-scoped run analyzed a subset of owned files, so coverage over the
   // whole set is not determinable from it. Reading the partial number as a
-  // verdict would be the silent direction — `unknown` with the reason named.
+  // verdict would be the silent direction — but this is not a case of TRYING
+  // to judge and coming up short (`unknown`, I3's "could not look"): a scoped
+  // `check <path>` is a deliberately different, partial invocation, and
+  // coverage-minimum cannot be judged by ANY scoped run over ANY path, clean
+  // or not — the same "did not apply" shape `not_applicable` already has above
+  // for a `match` that selects zero projects, not a fresh meaning grafted onto
+  // it (P1-19: this used to answer `unknown` here, which made `check <path>`
+  // exit 3 unconditionally in any `coverage-minimum`-declaring workspace,
+  // regardless of what the scoped path contained or whether it was clean —
+  // this repository's own root `../../../../module-boundaries.config.mjs`
+  // declares exactly such a row). `not_applicable` still names the reason (I4,
+  // `./verdict.mjs`) and still renders as its own loud, distinct row
+  // (`../report/text.mjs`'s `formatFitnessSection`) — never silent, and never
+  // `pass` either, so a scoped run still cannot claim full coverage over files
+  // it never looked at — but unlike `unknown` it does not fold into `check`'s
+  // exit code (`../../cli.mjs`'s `fitnessUnknown`), so a scoped run over a
+  // genuinely clean subtree no longer exits 3 for a coverage question it was
+  // never in a position to answer.
   if (scoped) {
     return fitnessVerdict({
-      verdict: "unknown",
+      verdict: "not_applicable",
       name: `coverage-minimum:${statement}%`,
       evidence: { projects: names.length, scoped: true },
+      notApplicableReason:
+        "this run was scoped to specific paths — coverage-minimum needs a full, unscoped run",
       message:
-        `cannot judge coverage-minimum over ${names.length} matched projects — this run ` +
-        `was scoped to specific paths, so it inspected only part of the tree`,
+        `coverage-minimum over ${names.length} matched projects does not apply to a ` +
+        `path-scoped run — it needs a full \`check\` with no paths to judge the whole tree`,
       rows: [],
     });
   }
