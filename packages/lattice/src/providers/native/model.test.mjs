@@ -506,24 +506,36 @@ describe("findNativeModelViolations", () => {
           boundaryConfig: { ...wellFormedPolicy(), extra: "decorative" },
         }),
       ).toEqual([
-        "boundaryConfig.extra: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness",
+        "boundaryConfig.extra: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness, plus '$schema' (for editor validation)",
       ]);
     });
 
-    it("rejects $schema inside an inline policy too, unlike the standalone .json dialect's carve-out", () => {
-      // A standalone `.json` file tolerates `$schema` because an editor writes
-      // it in unasked, to validate against a schema on disk. An inline policy
-      // has no file for an editor to point a schema at, so `$schema` here
-      // states no rule either and is rejected like any other unrecognised key
-      // — `../../../../../docs/reference/policy-schema.md`'s "An inline policy, for
-      // `lattice.json`" is where a workspace author reads why.
+    it("accepts $schema inside an inline policy, the same key law a .json policy file has", () => {
+      // The same JSON text that loads as a `.json` file loads inline: `$schema`
+      // is an editor-validation hook an editor may write into any JSON the
+      // workspace holds, and the inline form is a JSON policy — the former
+      // divergence (file accepts what inline rejected) is the false-green trap
+      // `../../config.mjs`'s `policyKeyViolations` exists to close.
       expect(
         findNativeModelViolations({
           ...wellFormed(),
           boundaryConfig: { ...wellFormedPolicy(), $schema: "./schema.json" },
         }),
+      ).toEqual([]);
+    });
+
+    it("rejects an inline $schema that is not a non-empty string — accepted is not the same as unchecked", () => {
+      // Accepting `$schema` must not regress to silently tolerating a value
+      // that states nothing: a `$schema` an editor cannot validate against
+      // reads as a false green, the exact silent direction the acceptance was
+      // meant to fix. The same check applies to the `.json` file dialect.
+      expect(
+        findNativeModelViolations({
+          ...wellFormed(),
+          boundaryConfig: { ...wellFormedPolicy(), $schema: 42 },
+        }),
       ).toEqual([
-        "boundaryConfig.$schema: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness",
+        "boundaryConfig.$schema: must be a non-empty string naming the schema the editor should validate against, got number (42)",
       ]);
     });
 

@@ -35,11 +35,11 @@ a `.json` boundary law. The schema version the current reader enforces is `1`.
 
 ### Top-level keys
 
-| key        | type   | required | meaning                                                                  |
-| ---------- | ------ | -------- | ------------------------------------------------------------------------ |
-| `profiles` | array  | yes      | The named profiles, in declaration order.                                |
-| `version`  | number | no       | Registry schema version. Must be `1` when present; anything else throws. |
-| `$schema`  | string | no       | Tolerated for editor validation; does nothing.                           |
+| key        | type   | required | meaning                                                                                                                                                                                                     |
+| ---------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profiles` | array  | yes      | The named profiles, in declaration order.                                                                                                                                                                   |
+| `version`  | number | no       | Registry schema version. Defaults to `1` when absent; a stated value other than `1` throws. The default is applied at the one place the version is read, so a reader can always tell which schema it holds. |
+| `$schema`  | string | no       | Tolerated for editor validation; does nothing.                                                                                                                                                              |
 
 Any other top-level key is rejected by name.
 

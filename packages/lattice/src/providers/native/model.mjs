@@ -488,11 +488,11 @@ const TOP_LEVEL_KEYS = [
  * reuses `../../config.mjs`'s own `findBoundaryConfigViolations` AND
  * `policyKeyViolations` rather than a second copy of what a policy object may
  * hold: the same pair `../../config.mjs`'s own `.json` dialect calls, with
- * `allowSchema: false` — an inline policy has no separate file for an editor
- * to validate against, so `$schema` states no rule here either and is
- * rejected by name like any other key the three real ones do not cover,
- * rather than carved out (`../../../../../docs/reference/policy-schema.md`, "An
- * inline policy, for `lattice.json`").
+ * `allowSchema: true` — the same key law a `.json` policy file has, so the
+ * same JSON text that loads as a file loads inline (an inline `$schema` is
+ * accepted and checked the same way, never rejected for living in this
+ * object rather than its own file; `../../../../../docs/reference/policy-schema.md`,
+ * "Inline policy (`lattice.json` only)").
  *
  * @param {unknown} raw The parsed `lattice.json`.
  * @returns {string[]}
@@ -516,7 +516,7 @@ export function findNativeModelViolations(raw) {
         ...findBoundaryConfigViolations(raw.boundaryConfig).map(
           (message) => `boundaryConfig.${message}`,
         ),
-        ...policyKeyViolations(raw.boundaryConfig, { allowSchema: false }).map(
+        ...policyKeyViolations(raw.boundaryConfig, { allowSchema: true }).map(
           (message) => `boundaryConfig.${message}`,
         ),
       );

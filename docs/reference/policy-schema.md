@@ -7,8 +7,9 @@ What each field contains; not what to put in it (that is
 
 ## Top-level keys
 
-Four keys, same names in every dialect. A fifth, `$schema`, is tolerated in
-the `.json` dialect but does nothing.
+Four keys, same names in every dialect. A fifth, `$schema`, is accepted in the
+`.json` dialect (file or inline) for editor validation, and must be a non-empty
+string.
 
 | key                     | type   | required | meaning                                                           |
 | ----------------------- | ------ | -------- | ----------------------------------------------------------------- |
@@ -16,6 +17,11 @@ the `.json` dialect but does nothing.
 | `moduleBoundaryOptions` | object | yes      | The eight `@nx/enforce-module-boundaries` options.                |
 | `boundarySuppressions`  | array  | no       | Accepted violations. Absent means nothing suppressed.             |
 | `fitness`               | array  | no       | Named quality gates judged every run. Absent means none declared. |
+
+Any other key is rejected by name in every dialect that reads this table — the
+`.mjs`/`.js` module's extra exports included, so a misspelled key cannot load
+exit-0 and disappear ([policies.md](../concepts/policies.md), "The ES module
+dialect").
 
 ## `depConstraints`
 
@@ -72,16 +78,16 @@ All eight are required. None is defaulted -- a missing option is rejected
 rather than filled in, because a default here would be a second copy of a value
 the file already states.
 
-| option                               | type     | meaning                                                                                                                  |
-| ------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `allow`                              | string[] | Specifiers exempt from every check. The escape hatch of last resort. Nx's `matchImportWithWildcard` dialect.             |
-| `buildTargets`                       | string[] | Which target names make a project "buildable." Read only by `enforceBuildableLibDependency`. Target names, not patterns. |
-| `enforceBuildableLibDependency`      | boolean  | Whether a buildable library importing a non-buildable one is an error.                                                   |
-| `allowCircularSelfDependency`        | boolean  | Whether a file may reach its own project through the project's public entry point.                                       |
-| `checkDynamicDependenciesExceptions` | string[] | Specifiers whose `import()` is exempt. Nx's `matchImportWithWildcard` dialect.                                           |
-| `ignoredCircularDependencies`        | string[] | Project pairs excused from the cycle check. Each entry is a `[projectA, projectB]` pair -- exact names only, no globs.   |
-| `banTransitiveDependencies`          | boolean  | Whether importing a package declared in neither the project's own manifest nor the workspace root's is an error.         |
-| `checkNestedExternalImports`         | boolean  | Whether `bannedExternalImports` is judged against what dependencies drag in, as well as direct imports.                  |
+| option                               | type     | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `allow`                              | string[] | Specifiers exempt from every check. The escape hatch of last resort. Nx's `matchImportWithWildcard` dialect.                                                                                                                                                                                                                                                                                                                                                 |
+| `buildTargets`                       | string[] | Which target names make a project "buildable." Read only by `enforceBuildableLibDependency`. Exact target names — an entry carrying glob syntax is refused at load (a pattern can never match an exact name), and when the option is on, an entry that matches no target declared by any project is refused by every evaluating command (`check`, `explain`, `graph`, the language server — not just the checker), never silently read as selecting nothing. |
+| `enforceBuildableLibDependency`      | boolean  | Whether a buildable library importing a non-buildable one is an error.                                                                                                                                                                                                                                                                                                                                                                                       |
+| `allowCircularSelfDependency`        | boolean  | Whether a file may reach its own project through the project's public entry point.                                                                                                                                                                                                                                                                                                                                                                           |
+| `checkDynamicDependenciesExceptions` | string[] | Specifiers whose `import()` is exempt. Nx's `matchImportWithWildcard` dialect.                                                                                                                                                                                                                                                                                                                                                                               |
+| `ignoredCircularDependencies`        | string[] | Project pairs excused from the cycle check. Each entry is a `[projectA, projectB]` pair -- exact names only, no globs.                                                                                                                                                                                                                                                                                                                                       |
+| `banTransitiveDependencies`          | boolean  | Whether importing a package declared in neither the project's own manifest nor the workspace root's is an error.                                                                                                                                                                                                                                                                                                                                             |
+| `checkNestedExternalImports`         | boolean  | Whether `bannedExternalImports` is judged against what dependencies drag in, as well as direct imports.                                                                                                                                                                                                                                                                                                                                                      |
 
 ### Pattern dialects
 
@@ -174,5 +180,6 @@ to the Nx ecosystem, see [policies.md](../concepts/policies.md).
 
 A native workspace may hold the policy object directly on `lattice.json`'s
 `boundaryConfig` field instead of pointing at a filename. Same three keys as
-the `.json` dialect, validated by the identical function. The language server
-does not yet read this form.
+the `.json` dialect, validated by the identical function — `$schema` included,
+accepted and checked the same way a `.json` policy file accepts it. The
+language server does not yet read this form.

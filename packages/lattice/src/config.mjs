@@ -79,21 +79,22 @@
  * which file held it — the alternative is a second copy of these rules that
  * drifts from this one the first time any of them changes.
  *
- * The three dialects are NOT symmetric on one point: an ES module may export
- * whatever else it likes alongside the three keys this file reads (a helper, a
- * shared constant), because ESM exports are a legitimate namespace and this
- * loader only ever reads three names out of it. A JSON object has no such
- * legitimate reason for a fourth top-level key — there is no namespace to
- * share, so an extra key is a typo (`depConstraint` for `depConstraints`) far
- * more often than it is deliberate, and the `.mjs` dialect's tolerance would
- * make that typo pass in silence. The `.json` dialect therefore rejects any
- * top-level key beyond `depConstraints`, `moduleBoundaryOptions`,
- * `boundarySuppressions` and `fitness` by name, with one carve-out: `$schema`,
- * which editors write into a JSON file unasked for IDE validation and which
- * states no rule of its own. The ESLint dialect has no `boundarySuppressions`
- * counterpart at all — ESLint has its own `eslint-disable` convention for
- * that, with no equivalent this reader can read back — so it always reports
- * an empty suppression list; see `loadBoundaryConfigFile`'s ESLint branch.
+ * The `.mjs`/`.js` and `.json` dialects share the same top-level key law: a
+ * top-level export (or key) beyond `depConstraints`, `moduleBoundaryOptions`,
+ * `boundarySuppressions` and `fitness` is rejected by name. The `.mjs`
+ * dialect's tolerance for a helper export used to let a misspelled key
+ * (`moduleBoundaryOptions` → `moduleBoundaryOption`) disappear into silence —
+ * a typo'd law is a law that is not enforced, the exact silent direction this
+ * file exists to end — so it now carries the same refusal as the `.json`
+ * dialect, through the same `policyKeyViolations`. One carve-out remains, for
+ * the `.json` dialect only: `$schema`, which editors write into a JSON file
+ * unasked for IDE validation and which states no rule of its own (accepted
+ * and checked there and in a native workspace's inline policy; an ES module
+ * has no editor-validation hook to point it at). The ESLint dialect has no
+ * `boundarySuppressions` counterpart at all — ESLint has its own
+ * `eslint-disable` convention for that, with no equivalent this reader can
+ * read back — so it always reports an empty suppression list; see
+ * `loadBoundaryConfigFile`'s ESLint branch.
  */
 import { basename, extname } from "node:path";
 import { readFile as readFileFromDisk } from "node:fs/promises";
@@ -103,6 +104,7 @@ import { loadEslintBoundaryConfig } from "./eslint-config.mjs";
 import { findFitnessViolations } from "./governance/fitness-registry.mjs";
 import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "./governance/row-schema.mjs";
 import {
+  GLOB_METACHARACTERS,
   globComplexityError,
   globPatternError,
   importPatternError,
@@ -157,8 +159,11 @@ export const LEGACY_ESLINTRC_BASENAME = /^\.eslintrc(\.|$)/u;
  * to survive. `../rules/match.mjs` owns those matchers; asking them directly is
  * what makes this check the real one rather than an approximation of it.
  *
- * `buildTargets` carries no matcher because its entries are target names,
- * compared with `===`. It still gets the empty-string check every list gets.
+ * `buildTargets` carries a matcher even though its entries are target names,
+ * compared with `===` (see `OPTION_ENTRY_MATCHERS`): a NAME is exact by
+ * definition, so an entry containing glob syntax can never match a target
+ * declared in any graph — it is refused at load rather than silently
+ * selecting nothing. It still gets the empty-string check every list gets.
  */
 const OPTION_TYPES = {
   allow: "string[]",
@@ -182,6 +187,12 @@ const OPTION_ENTRY_MATCHERS = {
   // the part it can reproduce exactly, and rejects the rest here rather than
   // suppressing cycles it half-understands.
   ignoredCircularDependencies: projectPatternError,
+  // A target NAME is matched with `===` against a project's declared targets
+  // (`../rules/topology.mjs`'s `hasBuildExecutor`), so an entry carrying glob
+  // syntax can never match anything — Nx users conventionally write target
+  // patterns (`"build:*"`), and this engine reproduces no target patterns, so
+  // the entry is refused by name rather than silently selecting no project.
+  buildTargets: targetPatternError,
 };
 
 /**
@@ -190,6 +201,29 @@ const OPTION_ENTRY_MATCHERS = {
  * share one list of lists: a row keys on either one `sourceTag` or an
  * `allSourceTags` array, and both then take the same four optional list fields.
  */
+/**
+ * Why a `buildTargets` entry cannot name a target in this engine, or `null`.
+ *
+ * `hasBuildExecutor` compares entries to a project's declared target names
+ * with `===` — the same exact lookup upstream uses — so an entry containing
+ * glob syntax (`"build:*"`, `"*"`) can never match any target, and a workspace
+ * that wrote one believes `enforceBuildableLibDependency` is live when no
+ * project can possibly be selected.
+ *
+ * @param {string} entry
+ * @returns {string|null}
+ */
+function targetPatternError(entry) {
+  if (GLOB_METACHARACTERS.test(entry)) {
+    return (
+      `is a glob, but buildTargets entries are compared with === against a project's declared ` +
+      `target names — this entry can never match any target. Name targets exactly, or omit this ` +
+      `entry (buildTargets defaults to ['build'])`
+    );
+  }
+  return null;
+}
+
 const ROW_LIST_MATCHERS = {
   onlyDependOnLibsWithTags: tagPatternError,
   notDependOnLibsWithTags: tagPatternError,
@@ -607,11 +641,13 @@ export function findBoundaryConfigViolations(module) {
 /**
  * The `.json` dialect's top-level keys, beyond the three every dialect reads.
  * `$schema` is the one key the `.mjs` dialect has no counterpart for at all —
- * an ES module has no analogous editor-validation hook — so it is carved out
- * by name rather than folded into a general "ignore unknown" rule, which is
- * exactly the leniency this file's header argues a JSON object must not get.
- * `fitness` is the fourth and newest: the boundary dialect's key for the
- * fitness-functions list, validated as an array of fitness rows.
+ * an ES module has no analogous editor-validation hook — so the `.mjs`
+ * dialect refuses it by name like any other unknown export while the `.json`
+ * dialect carves it out by name (accepted and checked, never folded into a
+ * general "ignore unknown" rule, which is exactly the leniency this file's
+ * header argues a JSON object must not get). `fitness` is the fourth and
+ * newest: the boundary dialect's key for the fitness-functions list,
+ * validated as an array of fitness rows.
  */
 const JSON_POLICY_KEYS = [
   "depConstraints",
@@ -628,12 +664,14 @@ const JSON_POLICY_KEYS = [
  * `findBoundaryConfigViolations`' first check, and this function would have
  * nothing to enumerate.
  *
- * Exported so the identical check also binds a native workspace's inline
- * `lattice.json → boundaryConfig` object (`./providers/native/model.mjs`),
- * with `allowSchema: false`: an inline policy has no separate file for an
- * editor to validate against, so `$schema` states no rule there either and is
- * rejected like any other unrecognised key rather than carved out
- * (`../../../docs/reference/policy-schema.md`, "An inline policy, for lattice.json").
+ * When `allowSchema` is set, `$schema` is accepted but CHECKED rather than
+ * ignored: an editor writes it in unasked, but a `$schema` that is not a
+ * non-empty string states nothing an editor can validate against and reads as
+ * a false green — the same silent-direction rule this file applies to every
+ * other key. The check lives here so the `.json` file dialect and a native
+ * workspace's inline `lattice.json → boundaryConfig` object share it
+ * (`./providers/native/model.mjs`) — one validator, one key law.
+ * (`../../../docs/reference/policy-schema.md`, "Inline policy (`lattice.json` only)").
  *
  * @param {unknown} parsed
  * @param {{allowSchema: boolean}} options
@@ -643,11 +681,20 @@ export function policyKeyViolations(parsed, { allowSchema }) {
   if (!isPlainObject(parsed)) return [];
   const violations = [];
   for (const key of Object.keys(parsed)) {
-    if (allowSchema && key === "$schema") continue;
+    if (allowSchema && key === "$schema") {
+      if (typeof parsed[key] !== "string" || parsed[key].trim() === "") {
+        violations.push(
+          `$schema: must be a non-empty string naming the schema the editor should validate ` +
+            `against, got ${describe(parsed[key])}`,
+        );
+      }
+      continue;
+    }
     if (JSON_POLICY_KEYS.includes(key)) continue;
     violations.push(
       `${key}: not a recognised top-level key — expected one of ${JSON_POLICY_KEYS.join(", ")}` +
-        (allowSchema ? `, plus '$schema' (ignored, for editor validation)` : ""),
+        (allowSchema ? `, plus '$schema' (for editor validation)` : "") +
+        (key === "default" ? " — the .mjs dialect reads named exports, not a default export" : ""),
     );
   }
   return violations;
@@ -708,6 +755,14 @@ export function policyFrom(parsed, sourceLabel, extraViolations = []) {
  * Loads and validates the `.mjs`/`.js` dialect: an ES module whose exports
  * `findBoundaryConfigViolations` above reads by name.
  *
+ * The module's own top-level exports get the same unknown-key law the `.json`
+ * dialect applies to its top-level keys: an export that is not one of the four
+ * this loader reads is almost always a misspelling of one of them
+ * (`moduleBoundaryOptions` → `moduleBoundaryOptions` silent-ignored), and
+ * a misspelled law is a law that is not enforced. A genuine helper export is
+ * refused by name; the header's older position that ESM exports are a
+ * legitimate namespace to share a helper in gave a typo the same silence.
+ *
  * @param {string} path Absolute path of the config file.
  * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[] }>}
  * @throws {Error} when the file is missing, unloadable, or malformed.
@@ -721,7 +776,7 @@ async function loadModulePolicy(path) {
       cause,
     });
   }
-  return policyFrom(module, path);
+  return policyFrom(module, path, policyKeyViolations(module, { allowSchema: false }));
 }
 
 /**

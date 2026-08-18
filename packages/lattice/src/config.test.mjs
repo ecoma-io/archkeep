@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   findBoundaryConfigViolations,
   loadBoundaryConfigFile,
+  policyKeyViolations,
   suppressionCovers,
 } from "./config.mjs";
 import { MAX_GLOB_EXPANSIONS } from "./rules/match.mjs";
@@ -239,6 +240,26 @@ describe("findBoundaryConfigViolations", () => {
     ).toMatch(/ignoredCircularDependencies: must be pair\[\]/);
     expect(
       findBoundaryConfigViolations(withOptions({ ignoredCircularDependencies: [["a", "b"]] })),
+    ).toEqual([]);
+  });
+
+  // B-F20/D-15: `hasBuildExecutor` compares `buildTargets` entries to a
+  // project's declared targets with `===`, so a glob entry (`"build:*"`) can
+  // never match any target. It used to load exit-0 and silently select
+  // nothing — the exact silent direction this file exists to end. Now it is
+  // refused at load, naming the entry and explaining exact-match semantics.
+  it("rejects a buildTargets entry carrying glob syntax — a pattern can never match an exact target name", () => {
+    expect(findBoundaryConfigViolations(withOptions({ buildTargets: ["build:*"] }))[0]).toMatch(
+      /moduleBoundaryOptions\.buildTargets\[0\]: 'build:\*' is a glob, but buildTargets/,
+    );
+    expect(findBoundaryConfigViolations(withOptions({ buildTargets: ["*"] }))[0]).toMatch(
+      /moduleBoundaryOptions\.buildTargets\[0\]: '\*' is a glob/,
+    );
+  });
+
+  it("still accepts exact buildTargets names — the documented exact-match semantics", () => {
+    expect(
+      findBoundaryConfigViolations(withOptions({ buildTargets: ["build", "bundle"] })),
     ).toEqual([]);
   });
 
@@ -609,6 +630,35 @@ describe("suppressionCovers", () => {
     // standalone and inside this suite). Bounded generously against
     // shared-machine scheduling noise, not against this call's own cost.
     expect(elapsed).toBeLessThan(500);
+  });
+});
+
+describe("policyKeyViolations — the $schema carve-out is accepted AND checked", () => {
+  it("accepts a non-empty string $schema when allowSchema is set", () => {
+    expect(
+      policyKeyViolations({ ...wellFormed(), $schema: "./schema.json" }, { allowSchema: true }),
+    ).toEqual([]);
+  });
+
+  it("rejects a $schema that is not a non-empty string — accepted is not the same as unchecked", () => {
+    expect(policyKeyViolations({ ...wellFormed(), $schema: 42 }, { allowSchema: true })).toEqual([
+      "$schema: must be a non-empty string naming the schema the editor should validate against, got number (42)",
+    ]);
+    expect(policyKeyViolations({ ...wellFormed(), $schema: "" }, { allowSchema: true })[0]).toMatch(
+      /\$schema: must be a non-empty string/,
+    );
+    // A whitespace-only `$schema` states nothing an editor can validate
+    // against — the same false-green class as an empty string. Accepted must
+    // not mean "any string".
+    expect(
+      policyKeyViolations({ ...wellFormed(), $schema: "   " }, { allowSchema: true })[0],
+    ).toMatch(/\$schema: must be a non-empty string/);
+  });
+
+  it("still refuses $schema when allowSchema is off — the .mjs dialect has no editor hook to point it at", () => {
+    expect(
+      policyKeyViolations({ ...wellFormed(), $schema: "./schema.json" }, { allowSchema: false })[0],
+    ).toMatch(/\$schema: not a recognised top-level key/);
   });
 });
 
