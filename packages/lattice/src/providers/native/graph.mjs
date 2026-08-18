@@ -41,6 +41,30 @@ export function buildDependencies({ importSites, nodes, projectOf }) {
   /** @type {Record<string, {source: string, target: string, type: string}[]>} */
   const dependencies = Object.create(null);
   const seen = new Set();
+  // Nx's own rule for config files, reproduced over the same two dialect
+  // spellings of the workspace-root project's root. `explicit-project-dependencies.js`
+  // (the import-site half of nx's graph construction) drops every edge whose
+  // TARGET is the workspace root, keeping only edges that originate in it —
+  // `if (isRoot(source) || !isRoot(target))` — and names the gap it papers
+  // over in its own TODO: "These edges technically should be allowed but we
+  // need to figure out how to separate config files out from root". The root
+  // project carries the tree's own config files (`eslint.config.*`,
+  // `*.config.ts`, `global-setup.*`), and Nx drops exactly their imported
+  // edges: measured on the code-pushup real tree at the pinned sha, `nx graph`
+  // reports ZERO edges into the root `workspace` node while project-level
+  // config files visibly import the root's — the import site exists, the
+  // target-root edge is what Nx suppresses. So no edge here may point at the
+  // workspace root, or the graph invents dependencies Nx never drew and
+  // `noCircularDependencies` reports cycles that only close through that
+  // node. `scripts/differential-real-trees.mjs`'s ledger carries the
+  // full finding; Nx spells the root `"."` (`isRoot` reads `root === '.'`
+  // verbatim) while this package's native `lattice.json` dialect spells it
+  // `""` (`./discover.mjs`'s `discoverNativeProjects`), so both are
+  // recognised here rather than one silently differing the other.
+  const isRoot = (name) => {
+    const root = nodes[name]?.data?.root;
+    return root === "" || root === ".";
+  };
   const add = (source, target, type) => {
     if (!source || !target || source === target) return;
     if (!nodes[target]) return;
@@ -61,11 +85,19 @@ export function buildDependencies({ importSites, nodes, projectOf }) {
   };
 
   for (const site of importSites) {
-    add(
-      projectOf(site.sourceFile),
-      site.resolved?.target,
-      site.kind === "dynamic" ? "dynamic" : "static",
-    );
+    const source = projectOf(site.sourceFile);
+    const target = site.resolved?.target;
+    // The target-root skip, exactly as Nx applies it — and only to IMPORT
+    // edges. Nx's implicit-dependency expansion (`applyImplicitDependencies`)
+    // has no `isRoot` check, so a project.json naming the root as an implicit
+    // dependency still draws the edge there; import sites are the one place
+    // Nx refuses, and they are the one place this loop reproduces it. Keeping
+    // `source->root` without also dropping `root->source` would misread the
+    // real tree the other way (it would be a loud native-extra rather than a
+    // cycle — config files visibly do import INTO the root, so the only
+    // question is which side Nx withholds, and it withholds the target side).
+    if (isRoot(target) && !isRoot(source)) continue;
+    add(source, target, site.kind === "dynamic" ? "dynamic" : "static");
   }
   for (const [name, node] of Object.entries(nodes)) {
     const declared = node.data.implicitDependencies;
