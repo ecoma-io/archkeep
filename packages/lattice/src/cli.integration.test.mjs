@@ -466,6 +466,158 @@ export const moduleBoundaryOptions = {
   });
 });
 
+describe("check reports violations in a stable total order, not git's index order (E-F10)", () => {
+  // `listTrackedFiles` returns `git ls-files` output verbatim, and nothing
+  // downstream sorted it: `analyzeWorkspace` iterates files in that order,
+  // `evaluate()` preserves the site order, and the report renders the
+  // violations array as-is. Byte-identity held only because git's index
+  // happened to sort paths. This fixture feeds `check` two different
+  // `listFiles` orderings of the SAME tree and requires the rendered bytes to
+  // be identical — which the fix (`sortViolations` at the check boundary)
+  // guarantees and the old order-inheriting behaviour would fail.
+  const orderRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-order-"));
+  afterAll(() => rmSync(orderRoot, { recursive: true, force: true }));
+
+  const writeOrder = (relativePath, text) => {
+    mkdirSync(join(orderRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(orderRoot, relativePath), text);
+  };
+
+  writeOrder(
+    "nx.json",
+    `${JSON.stringify({
+      plugins: [
+        {
+          plugin: "@ecoma-io/lattice/nx",
+          options: { boundaryConfig: "module-boundaries.config.mjs" },
+        },
+      ],
+    })}\n`,
+  );
+  writeOrder(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeOrder("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeOrder(
+    "libs/domain/doc.go",
+    `// Package domain is the layer everything else points at.
+package domain
+
+import (
+	"example.com/adapter"
+)
+
+var _ = adapter.Name
+`,
+  );
+  writeOrder(
+    "libs/domain/other.go",
+    `// Package domain imports the same adapter a second time, from a later line.
+package domain
+
+import "example.com/adapter"
+
+var _ = adapter.Name
+`,
+  );
+  writeOrder("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writeOrder("libs/adapter/adapter.go", "package adapter\n");
+
+  // Two different orders of the same tree. Sorted by (sourceFile, line,
+  // column, messageId) they produce one canonical sequence; fed to `check`
+  // as-is they would produce two different violation orders — A puts
+  // `other.go` (line 4) first, B puts `doc.go` (line 5) first, so without the
+  // sort the byte streams differ.
+  const orderFilesA = [
+    "libs/domain/other.go",
+    "libs/domain/doc.go",
+    "libs/domain/go.mod",
+    "libs/adapter/adapter.go",
+    "libs/adapter/go.mod",
+    "module-boundaries.config.mjs",
+    "nx.json",
+  ];
+  const orderFilesB = [
+    "libs/domain/doc.go",
+    "libs/domain/other.go",
+    "nx.json",
+    "module-boundaries.config.mjs",
+    "libs/adapter/go.mod",
+    "libs/adapter/adapter.go",
+    "libs/domain/go.mod",
+  ];
+  const orderGraph = {
+    nodes: {
+      domain: {
+        name: "domain",
+        type: "lib",
+        data: { root: "libs/domain", tags: ["layer:domain"] },
+      },
+      adapter: {
+        name: "adapter",
+        type: "lib",
+        data: { root: "libs/adapter", tags: ["layer:adapter"] },
+      },
+    },
+    dependencies: { domain: [], adapter: [] },
+  };
+  const orderContextA = {
+    cwd: orderRoot,
+    readGraph: () => orderGraph,
+    listFiles: () => orderFilesA,
+  };
+  const orderContextB = {
+    cwd: orderRoot,
+    readGraph: () => orderGraph,
+    listFiles: () => orderFilesB,
+  };
+
+  it("renders byte-identical reports regardless of the order git hands the file list over", async () => {
+    const runA = await check({ format: "text", config: null, paths: [] }, orderContextA);
+    const runB = await check({ format: "text", config: null, paths: [] }, orderContextB);
+    // Both runs find the same two violations — the point of the second file
+    // is a real ordering difference, not a count difference.
+    expect(runA.violations).toBe(2);
+    expect(runB.violations).toBe(2);
+    expect(runA.report).toBe(runB.report);
+    // And the canonical order is (sourceFile, line, column, messageId) with
+    // sourceFile primary: doc.go's block import at 5:2 sorts before other.go's
+    // single-line import at 4:8 because "libs/domain/doc.go" <
+    // "libs/domain/other.go", even though other.go's line 4 is earlier — the
+    // sort key, not the file-list order, decides the byte sequence.
+    const docGo = runA.report.indexOf("libs/domain/doc.go:5:2");
+    const otherGo = runA.report.indexOf("libs/domain/other.go:4:8");
+    expect(docGo).toBeGreaterThan(-1);
+    expect(otherGo).toBeGreaterThan(-1);
+    expect(docGo).toBeLessThan(otherGo);
+  });
+
+  it("keeps the same canonical order in the JSON envelope's violation list", async () => {
+    const runA = await check({ format: "json", config: null, paths: [] }, orderContextA);
+    const runB = await check({ format: "json", config: null, paths: [] }, orderContextB);
+    expect(runA.report).toBe(runB.report);
+    const orderA = JSON.parse(runA.report).result.violations.map((v) => v.sourceFile);
+    const orderB = JSON.parse(runB.report).result.violations.map((v) => v.sourceFile);
+    expect(orderA).toEqual(orderB);
+    expect(orderA).toEqual(["libs/domain/doc.go", "libs/domain/other.go"]);
+  });
+});
+
 describe("honouring Module Federation remotes in the app-import ban", () => {
   // `nx graph --file=` carries no Module Federation fact (see
   // `annotateMFERemotes` in `./workspace.mjs`), so the CLI computes it from the
@@ -5393,4 +5545,120 @@ describe("adr resolves a workspace root by every marker a root may carry", () =>
       }
     });
   }
+});
+
+describe("checking a tree with a pyproject.toml analysis cannot read (audit D-03)", () => {
+  // Audit finding D-03's exact evidence, reproduced end to end: a Python
+  // project whose `pyproject.toml` is malformed TOML — `[project` with no
+  // closing `]` — while its `.py` imports still resolve. Before the fix, the
+  // layout reader reported the project unmodelled and the run exited 0 with
+  // coverage "complete": a green verdict about a workspace whose manifest
+  // said nothing this tool could read. The silent direction is not an empty
+  // result but an affirmative one — the run's own text said "no boundary
+  // violations" and "coverage complete" while the module index was missing a
+  // whole project. A malformed manifest is a hole in every run, so the whole
+  // file becomes a failure (exit 3), regardless of the boundary config and
+  // regardless of which paths a scoped run names.
+  const d03Root = mkdtempSync(join(tmpdir(), "polyglot-cli-d03-"));
+  afterAll(() => rmSync(d03Root, { recursive: true, force: true }));
+
+  const writeD03 = (relativePath, text) => {
+    mkdirSync(join(d03Root, relativePath, ".."), { recursive: true });
+    writeFileSync(join(d03Root, relativePath), text);
+  };
+
+  writeD03(
+    "lattice.json",
+    JSON.stringify({
+      projects: {
+        declared: [
+          { root: "apps/a", name: "a", type: "lib", tags: [] },
+          { root: "apps/b", name: "b", type: "lib", tags: [] },
+        ],
+      },
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "audit fixture policy file",
+          },
+        ],
+      },
+    }),
+  );
+  writeD03(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [{ sourceTag: "*", onlyDependOnLibsWithTags: ["*"] }];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: [],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  // The audit fixture's malformed manifest: `[project` never closes.
+  writeD03("apps/a/pyproject.toml", '[project\nname = "a"\n');
+  writeD03("apps/a/src/a_main.py", "import bpkg\nprint(bpkg.VALUE)\n");
+  writeD03(
+    "apps/b/pyproject.toml",
+    '[project]\nname = "b"\ndependencies = ["c @ file:///not/root-anchored"]\n',
+  );
+  writeD03("apps/b/src/bpkg/__init__.py", "VALUE = 1\n");
+
+  const d03Files = [
+    "lattice.json",
+    "module-boundaries.config.mjs",
+    "apps/a/pyproject.toml",
+    "apps/a/src/a_main.py",
+    "apps/b/pyproject.toml",
+    "apps/b/src/bpkg/__init__.py",
+  ];
+
+  // The import still resolves — `bpkg` is the OTHER project, the one whose
+  // manifest is fine — so this is a workspace whose imports work while one
+  // manifest cannot be read. The malformed manifest must be the reason the
+  // run fails, not a miss by the resolver.
+  const d03Context = { cwd: d03Root, listFiles: () => d03Files };
+
+  it("exits 3 instead of the 'no boundary violations, coverage complete' the finding reported", async () => {
+    const out = [];
+    const err = [];
+    const streams = {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      ...d03Context,
+    };
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("could not be analyzed at all");
+    expect(report).toContain("apps/a/pyproject.toml");
+    expect(report).toContain("not valid TOML");
+    // The affirmative half of the old silent run — "no boundary violations,
+    // coverage complete" — must not survive: the failure line may sit beside
+    // a counted-imports line, but nothing may claim the run is complete.
+    expect(report).not.toContain("coverage complete");
+  });
+
+  it("carries the unreadable manifest into the JSON envelope as a not-analyzed file", async () => {
+    const { report } = await check({ format: "json", config: null, paths: [] }, d03Context);
+    const envelope = JSON.parse(report);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      {
+        file: "apps/a/pyproject.toml",
+        reason:
+          "its pyproject.toml cannot be fully read: its `pyproject.toml` is not valid TOML, so nothing it declares can be read",
+      },
+    ]);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(EXIT.error);
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.decision.reason).toContain("coverage incomplete");
+  });
 });

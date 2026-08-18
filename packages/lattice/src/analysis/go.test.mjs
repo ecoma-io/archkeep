@@ -8,6 +8,7 @@ import {
   parseGoImportSites,
   parseGoModulePath,
   resolveGoDependencies,
+  resolveGoModule,
 } from "./go.mjs";
 
 const modulePath = fc
@@ -293,6 +294,47 @@ describe("parseGoImports", () => {
   );
 });
 
+describe("resolveGoModule", () => {
+  it("returns null when no module claims the import path", () => {
+    expect(
+      resolveGoModule("example.com/elsewhere/pkg", [
+        { modulePath: "example.com/root", project: "parent" },
+      ]),
+    ).toBeNull();
+  });
+
+  it("wins the longest module path, not the first listed", () => {
+    // WSX-D02: the one function both layers read an import with. A
+    // first-match answer naming the parent attributes every nested-module
+    // import to the project it does not reach.
+    expect(
+      resolveGoModule("example.com/root/sub/pkg", [
+        { modulePath: "example.com/root", project: "parent" },
+        { modulePath: "example.com/root/sub", project: "nested" },
+      ]),
+    ).toEqual({ matched: "example.com/root/sub", project: "nested" });
+  });
+
+  it("requires the module-path boundary — a prefix without a slash is not a match", () => {
+    expect(
+      resolveGoModule("example.com/rootish/x", [
+        { modulePath: "example.com/root", project: "parent" },
+      ]),
+    ).toBeNull();
+  });
+
+  it("keeps a null-project own-module candidate as a longest match", () => {
+    // `analyzeGo` passes the file's own modules with `project: null`, so an
+    // own-module import must resolve there rather than to no module at all.
+    expect(
+      resolveGoModule("example.com/root/store", [
+        { modulePath: "example.com/root", project: null },
+        { modulePath: "example.com/root/store", project: "store" },
+      ]),
+    ).toEqual({ matched: "example.com/root/store", project: "store" });
+  });
+});
+
 describe("resolveGoDependencies", () => {
   const projects = [
     { name: "alpha", root: "acme/libs/alpha" },
@@ -323,6 +365,40 @@ describe("resolveGoDependencies", () => {
         sourceFile: "acme/libs/alpha/main.go",
         type: "static",
       },
+    ]);
+  });
+
+  it("draws one edge to the NESTED module, never a spurious one to its parent (WSX-D02)", () => {
+    // The silent direction is a wrong graph, not an empty one: before the fix,
+    // `resolveGoDependencies` matched the first (parent) module path and pushed
+    // a `third → parent` edge, so `nx affected` rebuilt parent and its whole
+    // subtree for a change that only touched nested — while `analyzeGo`, which
+    // already won the longest module path, resolved the same import to nested.
+    // Both layers now read the same `resolveGoModule`.
+    const nestedProjects = [
+      { name: "parent", root: "acme/libs/parent" },
+      { name: "nested", root: "acme/libs/parent/nested" },
+      { name: "third", root: "acme/libs/third" },
+    ];
+    const nestedContents = {
+      "acme/libs/parent/go.mod": "module example.com/acme/parent\n",
+      "acme/libs/parent/nested/go.mod": "module example.com/acme/parent/nested\n",
+      "acme/libs/third/go.mod": "module example.com/acme/third\n",
+      "acme/libs/third/main.go": 'package main\n\nimport "example.com/acme/parent/nested/store"\n',
+    };
+    const nestedFiles = {
+      parent: ["acme/libs/parent/go.mod"],
+      nested: ["acme/libs/parent/nested/go.mod"],
+      third: ["acme/libs/third/go.mod", "acme/libs/third/main.go"],
+    };
+    expect(
+      resolveGoDependencies(
+        nestedProjects,
+        (name) => nestedFiles[name] ?? [],
+        (path) => nestedContents[path] ?? null,
+      ),
+    ).toEqual([
+      { source: "third", target: "nested", sourceFile: "acme/libs/third/main.go", type: "static" },
     ]);
   });
 

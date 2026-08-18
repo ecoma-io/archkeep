@@ -293,13 +293,16 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The smoke subset covers the fastest E2E scenarios (native clean check,
-      # native violating check, native graph, native self-baseline diff). The
+      # The smoke subset covers the fastest E2E scenarios, one per main command
+      # (native clean/violating check, graph, self-baseline diff, history's
+      # no-verdict, intent's forbidden-edge, plus the language providers). The
       # full suite adds parity, determinism, Moon, and extended command
       # coverage. verify-core already proves lint, unit tests, typecheck,
       # self-check, and the packed artifact — the E2E suite does not duplicate
       # those. It packs its own artifact from source and installs it fresh,
-      # proving the real CLI works as an installed package.
+      # proving the real CLI works as an installed package. `e2e:smoke` also
+      # fails when zero tests ran, so a renamed or misnamed smoke describe can
+      # never turn the fast signal green-while-empty.
       - name: E2E smoke tests
         run: pnpm e2e:smoke
 

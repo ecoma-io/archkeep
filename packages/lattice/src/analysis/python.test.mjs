@@ -693,6 +693,37 @@ describe("parsePythonImportSites", () => {
     ]);
   });
 
+  it("reads a parenthesised name group the way Black and isort write it (D-07)", () => {
+    // The silent-miss of WSX-D07: `import (bpkg,)` — the spelling Black and
+    // isort normalise multi-imports to — produced no record and no failure at
+    // all, so a workspace-crossing import invisibly reported clean.
+    expect(parsePythonImportSites("import (bpkg,)\n").map((site) => site.specifier)).toEqual([
+      "bpkg",
+    ]);
+    expect(parsePythonImportSites("import (os, sys)\n").map((site) => site.specifier)).toEqual([
+      "os",
+      "sys",
+    ]);
+    expect(
+      parsePythonImportSites("from bpkg.sub import (a, b)\n").map((site) => site.specifier),
+    ).toEqual(["bpkg.sub"]);
+    expect(
+      parsePythonImportSites("import (\n    os,\n    sys,\n)").map((site) => site.specifier),
+    ).toEqual(["os", "sys"]);
+    expect(
+      parsePythonImportSites("from bpkg.sub import (\n    a,\n    b,\n)").map(
+        (site) => site.specifier,
+      ),
+    ).toEqual(["bpkg.sub"]);
+  });
+
+  it("does not read a parenthesised group that is not an import name list", () => {
+    // A paren that does not hold a comma-joined name list is text this reader
+    // cannot parse as imports — reported, never silently empty. The call form
+    // is not an import at all.
+    expect(parsePythonImportSites("x = importlib.import_module(name)\n").length).toBe(1);
+  });
+
   it("resolves a `\\`-continued module name that sits ahead of a `;`-shared `import`, together", () => {
     // Realistic combinations of the two forms, not just each in isolation.
     expect(
@@ -799,6 +830,39 @@ describe("analyzePython", () => {
     expect(imports).toHaveLength(2);
     expect(imports[1].specifier).toBe("beta.store");
     expect(imports[1].resolved.target).toBe("beta");
+  });
+
+  it("crosses a boundary named only inside a parenthesised import group (D-07)", () => {
+    // The crossing D-07 was about: `import (\n bpkg,\n)` — the spelling
+    // Black and isort normalise to — produced zero records and zero failures
+    // before the fix. Now read again, and judged.
+    const { imports, failures } = analyze("import (\n    beta.store,\n)\n");
+    expect(failures).toEqual([]);
+    expect(imports).toHaveLength(1);
+    expect(imports[0].specifier).toBe("beta.store");
+    expect(imports[0].resolved.target).toBe("beta");
+  });
+
+  it("crosses a boundary inside a multiline `from x import (...)`, reading every name (D-07)", () => {
+    const { imports, failures } = analyze("from beta.store import (Thing, Other)\n");
+    expect(failures).toEqual([]);
+    expect(imports).toHaveLength(1);
+    expect(imports[0].specifier).toBe("beta.store");
+    expect(imports[0].resolved.target).toBe("beta");
+  });
+
+  it("does not let a `(` written in a trailing comment swallow the next import (D-07)", () => {
+    // A paren in prose after `#` used to leave the paren-depth scanner
+    // thinking the group was still open, so the scanner joined the next
+    // physical line into the statement and the from-form's single record
+    // dropped the `import bpkg` on it — a real crossing read as absent.
+    const { imports, failures } = analyze(
+      "# (awkward but ordinary\nfrom beta.store import (Thing)  # (see\nimport beta.other\n",
+    );
+    expect(failures).toEqual([]);
+    const specifiers = imports.map((r) => r.specifier);
+    expect(specifiers).toEqual(["beta.store", "beta.other"]);
+    expect(specifiers.every((s) => s)).toBe(true);
   });
 
   it("emits an import that never leaves the project", () => {
