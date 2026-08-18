@@ -76,13 +76,6 @@ export const DIAGNOSTIC_SEVERITY = Object.freeze({
   hint: 4,
 });
 
-/** LSP `FileChangeType`, as `workspace/didChangeWatchedFiles` reports it. */
-export const FILE_CHANGE_TYPE = Object.freeze({
-  created: 1,
-  changed: 2,
-  deleted: 3,
-});
-
 /**
  * Splits a byte stream into LSP messages. Returns the messages it could frame
  * plus whatever tail is not yet a whole message, which the caller feeds back

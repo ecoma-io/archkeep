@@ -4,19 +4,16 @@ name: Analysis
 # wider than vulnerabilities, and a workflow called Security makes the next
 # reader either mis-file a correctness finding or leave it out.
 #
-# Three analysers share one workflow because they answer three parts of the same
+# Three analysers share one workflow because they answer parts of the same
 # question — what this code does (CodeQL), what this code does that we have
-# specifically decided it must not (Semgrep), and how this repository is run
-# (Scorecard) — and a reader chasing "what analysis is in place?" should find
-# all of it in one file.
+# specifically decided it must not (Semgrep), and what secrets leaked into the
+# tree (Gitleaks) — and a reader chasing "what analysis is in place?" should
+# find all of it in one file.
 #
-# Merging them is only safe because Scorecard's publish restrictions are scoped
-# the way they are. Publishing results forbids top-level `env`/`defaults` and any
-# WORKFLOW-level write permission, and allows `id-token: write` on the Scorecard
-# job alone; the approved-actions list applies to the steps of that job, not to
-# the workflow. So: nothing is declared above the jobs except read permissions,
-# and CodeQL's `security-events: write` stays at its own job level.
-# https://github.com/ossf/scorecard-action#workflow-restrictions
+# Nothing is declared above the jobs except read permissions, and each job's
+# extra write stays at its own job level — a job-level `permissions` block
+# REPLACES the workflow-level one rather than merging with it, so read access
+# has to be restated there.
 
 on:
   push:
@@ -30,10 +27,10 @@ on:
   # waits for every required check to report against the queued ref, so a
   # required check whose workflow does not trigger there never arrives.
   merge_group:
-  # One weekly cron now covers both analyses, which is a consequence of the
-  # merge rather than a coincidence: a workflow's schedule triggers every job in
-  # it, so two crons would mean each analysis running twice a week under the
-  # other's name.
+  # One weekly cron covers every job in this workflow, which is a consequence
+  # of the merge rather than a coincidence: a workflow's schedule triggers each
+  # job in it, so two crons would mean each analysis running twice a week under
+  # the other's name.
   schedule:
     - cron: "41 4 * * 1"
   workflow_dispatch:
@@ -52,8 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Only this job uploads SARIF, so the write stays here rather than at the
-    # top level — where Scorecard would reject it outright, and where any job
-    # added later would silently inherit it.
+    # top level, where any job added later would silently inherit it.
     # A job-level `permissions` block REPLACES the workflow-level one rather
     # than merging with it, so read access has to be restated: omit it and
     # checkout loses read access to the repository.
@@ -102,10 +98,9 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    # A container is allowed here because Scorecard's "no containers" rule binds
-    # its own job, not the workflow. Written as `tag@digest` so the version stays
-    # readable while the digest is what actually resolves — the analyser cannot
-    # change under a rerun, and Renovate bumps both halves together.
+    # Written as `tag@digest` so the version stays readable while the digest is
+    # what actually resolves — the analyser cannot change under a rerun, and
+    # Renovate bumps both halves together.
     container:
       image: semgrep/semgrep:1.172.0@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
     steps:
@@ -146,47 +141,46 @@ jobs:
           semgrep scan --config .github/semgrep --exclude .github/semgrep
           --error --quiet
 
-  scorecard:
-    name: OpenSSF Scorecard
-    # Scorecard measures repository-wide posture, not a diff, and publishing is
-    # only supported from the default branch — so a pull-request run would have
-    # nothing to say and no right to publish it. `workflow_dispatch` is excluded
-    # for the same reason: the action documents publishing from it as
-    # experimental.
-    if: github.event_name == 'push' || github.event_name == 'schedule'
+  gitleaks:
+    name: Gitleaks
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      # Needed to upload results to the code-scanning dashboard.
-      security-events: write
-      # Needed for the GitHub OIDC token that `publish_results` uses to prove
-      # authorship of the published score. Scorecard's restrictions allow this
-      # on exactly one job per workflow, and this is it.
-      id-token: write
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
-      # This repository is public and Apache-2.0, so publishing to the public
-      # OpenSSF Scorecard API is appropriate: it feeds the public score badge
-      # and the deps.dev / OSV consumers that read it, exposing nothing the
-      # repository does not already show.
-      - name: Run analysis
-        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
-        with:
-          results_file: results.sarif
-          results_format: sarif
-          publish_results: true
+      # Scans the whole history, not just the diff, because a secret removed in
+      # a later commit is still a leak while it sits in the tree. The action
+      # exits 1 when a secret is found, which is what makes this job the
+      # blocking gate: `GITLEAKS_ENABLE_COMMENTS` stays at its default (true)
+      # so a PR finding lands a comment next to the line.
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Secret named for this organization (ECOMA_GITLEAKS_LICENSE) because
+          # it lives under `ecoma-io`; required for scanning a repo that belongs
+          # to an organization account. Without it the action exits 1 at
+          # validation.
+          GITLEAKS_LICENSE: ${{ secrets.ECOMA_GITLEAKS_LICENSE }}
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: SARIF file
-          path: results.sarif
-          retention-days: 5
-
-      - name: Upload to code-scanning
-        uses: github/codeql-action/upload-sarif@d1ba80a13dd99fba24a470575428917156a28b43 # v4.37.5
-        with:
-          sarif_file: results.sarif
+  analysis-gate:
+    name: analysis-gate
+    # The single check name a branch ruleset requires, mirroring `ci-gate`: the
+    # required-check name stays stable while the job list is not — add a job to
+    # `needs` and the gate tightens without editing repository settings, and
+    # forgetting to add it is the only way to widen what green means.
+    # `needs` names the job IDs, so the matrix job `codeql` is one entry even
+    # though it reports two check contexts (one per language).
+    needs: [codeql, semgrep, gitleaks]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # `needs` alone would let a skipped or cancelled job pass as green, since
+      # only `failure` blocks a dependent job by default.
+      - name: Fail unless every job succeeded
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1

@@ -21,15 +21,13 @@ name: Release
 # that resolves the server out of the workspace pairs with the engine it is
 # released with, and one version makes the pairing visible.
 #
-# The cost of the plugin's asset-less releases is exact and worth naming rather
-# than discovering later: OpenSSF Scorecard's Signed-Releases check looks for a
-# signature file among a release's assets, so those releases score nothing
-# there — and the vsix is uploaded unsigned, so the extension scores the same.
-# npm provenance — the `--provenance` flag below — is a real attestation,
-# published to Sigstore's transparency log and shown on the package page, but
-# it lives at the registry rather than on the GitHub release, and that check
-# does not look there. The trade is deliberate: an artifact built or signed
-# only to move a score would be an asset nobody installs.
+# The releases' lack of signatures on the GitHub release object is named rather
+# than discovered later: the plugin releases carry no asset to sign, and the
+# vsix is uploaded unsigned. npm provenance — the `--provenance` flag below — is
+# a real attestation, published to Sigstore's transparency log and shown on the
+# package page, but it lives at the registry rather than on the GitHub release.
+# The trade is deliberate: an artifact built or signed only to hold a signature
+# would be an asset nobody installs.
 
 on:
   push:
@@ -120,11 +118,31 @@ jobs:
       # nothing to reformat, so the gate is the same condition and the checkout,
       # install and reformat all key off it.
       #
-      # The commit identity is deliberately `github-actions[bot]` — the same
-      # actor that pushed the release commit — so the reformat lands as part of
-      # the release, not as a contributor edit. The push reuses the credentials
-      # `actions/checkout` configured from the SAME token the action used, so the
-      # workflow's token budget is unchanged.
+      # The push is NOT a `git commit` from this step: the repository's `main`
+      # ruleset requires a signature on every branch commit
+      # (`required_signatures`, read from `gh api rulesets`), and a commit a
+      # workflow creates with `git config user.name ...` + `git commit` is
+      # unsigned — release PR #75 sat with every check green and
+      # `mergeable_state: BLOCKED` for exactly that reason, nothing naming it.
+      # So the reformat lands through the git-database REST API
+      # (`scripts/push-reformatted-files.mjs`): POST /git/trees (inline
+      # `content`, the encoding release-please itself uses), POST /git/commits,
+      # PATCH /git/refs. Called with NO author or committer — measured,
+      # 2026-08-18, both directions: an explicit identity comes back `unsigned`;
+      # the default comes back author `github-actions[bot]`, committer
+      # `GitHub <noreply@github.com>`, `verification.reason: "valid"` — the
+      # same web-flow signature release-please's own commit carries. A personal
+      # access token produces unsigned commits on the same call shape, so the
+      # step passes `${{ github.token }}` (or the App token when
+      # `RELEASE_APP_ID` is set — App-token API commits carry the app's
+      # signature, also verified). The script refuses success if the new head
+      # does not come back `valid`, so an unmergeable release branch fails red
+      # in-lane instead of after the fact.
+      #
+      # The commit message stays `chore: reformat release-please extra-files`
+      # and the author identity is still effectively `github-actions[bot]`,
+      # so the reformat lands as part of the release, not as a contributor
+      # edit.
       - name: Reformat release-please extra-files
         if: steps.release.outputs.pr != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -143,6 +161,8 @@ jobs:
 
       - name: Reformat release-please extra-files and push
         if: steps.release.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         run: |
           pnpm install --frozen-lockfile
 
@@ -156,16 +176,9 @@ jobs:
           if git diff --quiet; then
             echo "no reformatting needed; nothing to push"
           else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add \
-              .claude-plugin/plugin.json \
-              .claude-plugin/marketplace.json \
-              .codex-plugin/plugin.json \
-              packages/lattice/package.json \
-              packages/lattice-vscode/package.json
-            git commit -m "chore: reformat release-please extra-files"
-            git push
+            node scripts/push-reformatted-files.mjs \
+              --root "$GITHUB_WORKSPACE" \
+              --branch "${{ fromJSON(steps.release.outputs.pr).headBranchName }}"
           fi
 
       # The tripwire for the defect above coming back by another spelling.
@@ -358,7 +371,12 @@ jobs:
       # and drives the three things a consumer buys — the plugin loads inside a
       # real `nx graph`, the checker exits 0 on a clean tree, and it exits 1 on
       # a violating one. The last is the one that matters: a gate only proves it
-      # runs when it can go red.
+      # runs when it can go red. It also asserts the can't-look exit (3) on a
+      # markerless tree and that `npm pack --dry-run` selects the same files
+      # `pnpm pack` verified — the bytes published are the bytes proven.
+      #
+      # Every job in this file runs `ubuntu-latest`; the script shells out to
+      # `pnpm` and `npm` by PATH and is unix-only by design.
       #
       # It runs before publish, not after, because a package that resolves
       # nothing at install time cannot be unpublished away.

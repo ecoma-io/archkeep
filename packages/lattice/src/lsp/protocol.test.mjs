@@ -110,4 +110,27 @@ describe("protocol constants", () => {
     expect(DIAGNOSTIC_SEVERITY.error).toBe(1);
     expect(DIAGNOSTIC_SEVERITY.warning).toBe(2);
   });
+
+  it("exports exactly the surface the server and its tests import", async () => {
+    // Characterization, deliberately: this pins the whole export list of
+    // `protocol.mjs` so adding or removing an export is a deliberate change
+    // reviewed in the diff that makes it. `FILE_CHANGE_TYPE` was removed here
+    // (audit D-14: unreachable — `didChangeWatchedFiles` re-diagnoses on any
+    // event without reading `changeType`, and nothing else imported it), and
+    // this list is what would have caught it being public-but-unused: a dead
+    // export on the boundary of a language server is an accidental contract.
+    const module = await import("./protocol.mjs");
+    expect(Object.keys(module).sort()).toEqual(
+      [
+        "DIAGNOSTIC_SEVERITY",
+        "ERROR_CODES",
+        "SERVER_INFO",
+        "TEXT_DOCUMENT_SYNC_KIND",
+        "encodeMessage",
+        "frameMessages",
+        "pathToUri",
+        "uriToPath",
+      ].sort(),
+    );
+  });
 });
