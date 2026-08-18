@@ -53,8 +53,8 @@ test that only pins the message text is half a test.
 
 ```
 .github/
-  workflows/ci.yml         verify → ci-gate (the one required check name)
-  workflows/analysis.yml   CodeQL · Semgrep · Gitleaks, one workflow
+  workflows/ci.yml         verify → ci-gate (a required check name)
+  workflows/analysis.yml   CodeQL · Semgrep · Gitleaks → analysis-gate
   semgrep/                 this repository's own rules, each with fixtures
   ISSUE_TEMPLATE/          bug · missed violation · feature
   assets/                  logo.svg is the source; the PNGs are rendered
@@ -189,10 +189,10 @@ another.
 - **CI (`ci.yml`)** — Prettier, ESLint, `node --test`, `check-packages`,
   `check-skills`, `check-docs-links`, then `moon run`, the tool itself run on
   this tree, and last the packed artifact driven from outside the workspace.
-  `ci-gate` is the only check name the branch ruleset requires, so a job added
-  later tightens the gate without touching repository settings. It fails on
-  any needed job that is `skipped` or `cancelled`, because `needs` alone only
-  blocks on `failure`.
+  `ci-gate` is a check name the branch ruleset requires (alongside
+  `analysis-gate`), so a job added later tightens the gate without touching
+  repository settings. It fails on any needed job that is `skipped` or
+  `cancelled`, because `needs` alone only blocks on `failure`.
 - **The repository's own module boundaries** — the final CI step runs
   `packages/lattice/cli.mjs check` against `module-boundaries.config.mjs`
   at this root. Every step before it proves the code correct against fixtures it

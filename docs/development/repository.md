@@ -55,14 +55,16 @@ package targets.
 
 ## CI
 
-`.github/workflows/ci.yml` is the single required check (`ci-gate`). It runs
+`.github/workflows/ci.yml` is a required check (`ci-gate`, alongside
+`analysis-gate` from `analysis.yml`). It runs
 Prettier, ESLint, `node --test`, `check-packages`, `check-docs-links`, the
 package targets, the tool on this tree, and the packed-artifact verification.
 It fails on any needed job that is `skipped` or `cancelled`, because `needs`
 alone only blocks on `failure`.
 
 `.github/workflows/analysis.yml` runs CodeQL (both `javascript-typescript` and
-`actions`), Semgrep, and Gitleaks — separately from the correctness gate.
+`actions`), Semgrep, and Gitleaks, aggregated behind an `analysis-gate` job
+that is a required check alongside `ci-gate`.
 
 ## The boundary law
 
