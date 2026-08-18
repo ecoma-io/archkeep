@@ -5,6 +5,7 @@ import {
   formatCoverageGaps,
   formatFailures,
   formatGoWork,
+  formatPolicy,
   formatReport,
   formatTsconfigPaths,
   formatViolation,
@@ -347,6 +348,33 @@ describe("tsconfig paths hygiene", () => {
   });
 });
 
+describe("the policy identity line", () => {
+  // P1-01: a verdict never named the law that produced it, so a violating
+  // tree under a weak policy and a clean tree under a strict one printed the
+  // exact same "no boundary violations" sentence — nothing anywhere said
+  // which law had run.
+  it("names the file and fingerprint when no profile is active", () => {
+    expect(
+      formatPolicy({
+        profile: null,
+        source: "module-boundaries.config.mjs",
+        fingerprint: "abc123",
+      }),
+    ).toBe("policy  module-boundaries.config.mjs — fingerprint abc123");
+  });
+
+  it("names the profile and its registry when a profile is active", () => {
+    expect(
+      formatPolicy({ profile: "strict", source: "law-profiles.json", fingerprint: "abc123" }),
+    ).toBe('policy  profile "strict" from law-profiles.json — fingerprint abc123');
+  });
+
+  it("says nothing at all when no caller supplied a policy — the silent case a unit test exercising some other section is allowed", () => {
+    expect(formatPolicy(null)).toBe("");
+    expect(formatPolicy(undefined)).toBe("");
+  });
+});
+
 describe("the report as a whole", () => {
   const run = (overrides) => ({
     violations: [],
@@ -363,6 +391,29 @@ describe("the report as a whole", () => {
     expect(formatReport(run())).toBe(
       "✔ no boundary violations (1246 imports in 405 files across 19 projects)",
     );
+  });
+
+  it("carries the policy identity line first, ahead of the verdict, when a caller supplies one (P1-01)", () => {
+    // The silent-direction pair: two runs whose only difference is which
+    // policy governed must no longer be able to print the identical verdict
+    // line with nothing distinguishing them — the policy line is the fact
+    // that tells them apart, and it comes first because a reader has to know
+    // which law produced a verdict before the verdict itself means anything.
+    const strict = formatReport(
+      run({ policy: { profile: null, source: "strict.config.mjs", fingerprint: "111" } }),
+    );
+    const weak = formatReport(
+      run({ policy: { profile: null, source: "weak.config.mjs", fingerprint: "222" } }),
+    );
+    expect(strict).not.toBe(weak);
+    expect(strict.split("\n\n")[0]).toBe("policy  strict.config.mjs — fingerprint 111");
+    expect(weak.split("\n\n")[0]).toBe("policy  weak.config.mjs — fingerprint 222");
+    // Everything after the policy line is unaffected — same verdict, same
+    // coverage counts, because the fixture tree and the violation count are
+    // identical; only the law that produced them differs.
+    expect(
+      strict.endsWith("✔ no boundary violations (1246 imports in 405 files across 19 projects)"),
+    ).toBe(true);
   });
 
   it("counts the offending files as well as the violations, so one bad file cannot look like many", () => {
