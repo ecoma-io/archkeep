@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,6 +12,8 @@ import {
   normalizeNativeModel,
 } from "./model.mjs";
 import { MAX_GLOB_EXPANSIONS } from "../../rules/match.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 /** A minimal well-formed document; each test bends exactly one thing. */
 const wellFormed = () => ({ projects: { declared: [] } });
@@ -821,6 +827,23 @@ describe("loadNativeModel", () => {
       /boundaryConfig\.depConstraints\[0\]\.sourceTag: must be a non-empty string/,
     );
     expect(error.message).toMatch(/boundaryConfig\.moduleBoundaryOptions\.allow: missing/);
+  });
+
+  // The package README is the npm landing page (docs/README.md, "it is the
+  // npm landing page and must stand alone"), and its "Any repository"
+  // lattice.json example is the first thing a consumer writes their own
+  // lattice.json against. It used to use an object-map projects form —
+  // `"projects": { "billing-core": { ... } }` — that this validator rejects
+  // with exit 3 "malformed", so a consumer who copied it failed before ever
+  // learning the schema. The example is loaded through the real
+  // `loadNativeModel` so the published copy is the fixture: if the README's
+  // example regresses to any shape this loader refuses, this test goes red.
+  it("parses the lattice.json example the published README leads with", () => {
+    const readme = readFileSync(join(HERE, "../../../README.md"), "utf8");
+    const block = readme.match(/```json\n([\s\S]*?)```/);
+    if (block === null) throw new Error("packages/lattice/README.md has no ```json code block");
+    const model = loadNativeModel("/repo", io({ "lattice.json": block[1] }));
+    expect(model.projects.declared.map((row) => row.name)).toEqual(["billing-core", "billing-api"]);
   });
 });
 
