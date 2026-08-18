@@ -360,8 +360,13 @@ export function formatIntentSection(intent) {
  * functions that were judged. The overall verdict is a fourth line naming the
  * run's posture — `fail` wins, then `unknown`, then `pass`, exactly
  * `fitnessVerdictFor`'s ordering (`../governance/fitness-registry.mjs`) — and
- * a declared function whose `match` selected nothing shows `not_applicable`
- * with its reason: loud, never absent.
+ * a declared function that could not apply to this run — a `match` that
+ * selected nothing, or a `coverage-minimum` row judged from a path-scoped run
+ * (`../governance/fitness-rules.mjs`'s `coverageMinimum`) — shows
+ * `not_applicable` with its own reason: loud, never absent. The overall label
+ * below stays reason-agnostic for exactly that reason: it must read true for
+ * either cause, not just the `match`-selected-nothing one it was first written
+ * for.
  *
  * @param {object[]} decisions Per-function verdict records from
  *   `evaluateFitness`.
@@ -378,7 +383,7 @@ export function formatFitnessSection(decisions, overall) {
     pass: `✔ fitness: ${decisions.length} function${decisions.length === 1 ? "" : "s"} passed`,
     fail: `✖ fitness: ${overall.verdict} — the build fails`,
     unknown: `⚠ fitness: ${decisions.length} function${decisions.length === 1 ? "" : "s"} judged, some could not be determined — the run cannot claim pass`,
-    not_applicable: `◌ fitness: every declared function matched nothing — nothing was judged`,
+    not_applicable: `◌ fitness: every declared function is not applicable to this run — nothing was judged`,
   }[overall.verdict];
   return `${rows}\n\n${overallLabel}`;
 }

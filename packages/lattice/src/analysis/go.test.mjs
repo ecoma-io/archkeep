@@ -216,9 +216,9 @@ describe("parseGoImports", () => {
     ]);
   });
 
-  // The three below pin what this parser still gets WRONG, so the header's
-  // list of limits is checkable rather than a claim. Each errs toward naming
-  // text the file really contains, never toward a missed import — the
+  // The one case below pins what this parser still gets WRONG, so the
+  // header's remaining limit is checkable rather than a claim. It errs toward
+  // naming text the file really contains, never toward a missed import — the
   // direction that matters, because a spurious edge is visible to whoever
   // reads the report and a missing one is visible to nobody.
   it("reads an import-looking line inside a raw string — the limit gofmt does not remove", () => {
@@ -230,16 +230,22 @@ describe("parseGoImports", () => {
     expect(parseGoImports(src)).toEqual(["fmt", "example.com/quoted-only"]);
   });
 
-  it("reads only the first of two imports sharing a line, in either form", () => {
+  it("reads both of two imports sharing a line via an explicit `;`, in either form", () => {
     // Legal Go that gofmt splits onto its own lines, so a formatted tree never
-    // contains it.
-    expect(parseGoImports('package main\n\nimport "fmt"; import "os"\n')).toEqual(["fmt"]);
-    expect(parseGoImports('package main\n\nimport ("fmt"; "os")\n')).toEqual(["fmt"]);
+    // contains it — but an explicit `;` is the same statement separator gofmt
+    // inserts automatically at a newline, and reads the same import either way.
+    expect(parseGoImports('package main\n\nimport "fmt"; import "os"\n').sort()).toEqual([
+      "fmt",
+      "os",
+    ]);
+    expect(parseGoImports('package main\n\nimport ("fmt"; "os")\n').sort()).toEqual(["fmt", "os"]);
   });
 
-  it("does not read an import path spelled as a raw string", () => {
-    // Also legal Go, also rewritten by gofmt — to the interpreted form.
-    expect(parseGoImports("package main\n\nimport `fmt`\n")).toEqual([]);
+  it("reads an import path spelled as a raw string the same as a quoted one", () => {
+    // Also legal Go, also rewritten by gofmt — to the interpreted form. An
+    // import path is a string literal, and Go accepts either literal form.
+    expect(parseGoImports("package main\n\nimport `fmt`\n")).toEqual(["fmt"]);
+    expect(parseGoImports("package main\n\nimport (\n\t`fmt`\n)\n")).toEqual(["fmt"]);
   });
 
   // Two regexes stand in for a Go parser, over sources this plugin never gets
@@ -500,6 +506,29 @@ describe("analyzeGo", () => {
       spelling: { path: false, relative: false },
       resolved: { target: "beta", file: null, external: false, packageName: null },
     });
+  });
+
+  it("crosses a boundary written after a `;` on the same line as another import", () => {
+    // The silent-miss direction: before the fix, the second import on a
+    // semicolon-joined line vanished with no record and no failure, so a real
+    // cross-project dependency reported clean.
+    const text = 'package main\n\nimport "fmt"; import "example.com/acme/beta/store"\n';
+    const { imports, failures } = analyze(text);
+    expect(failures).toEqual([]);
+    expect(imports).toHaveLength(2);
+    expect(imports[1].specifier).toBe("example.com/acme/beta/store");
+    expect(imports[1].resolved.target).toBe("beta");
+  });
+
+  it("crosses a boundary written as a raw-string import path", () => {
+    // The other silent-miss direction: before the fix, an import path spelled
+    // with backticks produced zero records for the whole file.
+    const text = "package main\n\nimport `example.com/acme/beta/store`\n";
+    const { imports, failures } = analyze(text);
+    expect(failures).toEqual([]);
+    expect(imports).toHaveLength(1);
+    expect(imports[0].specifier).toBe("example.com/acme/beta/store");
+    expect(imports[0].resolved.target).toBe("beta");
   });
 
   it("calls no Go import a path, its own module included", () => {
