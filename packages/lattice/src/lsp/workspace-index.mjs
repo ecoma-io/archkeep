@@ -59,9 +59,11 @@
  * git is the one component that already answers that exactly. The alternative
  * is a directory walk with a skip list — `node_modules`, `dist`, `target`,
  * `.venv` — which is a config nobody maintains until the day it swallows a real
- * source directory and the boundary quietly stops being enforced there. `--others --exclude-standard` adds
- * files that exist but are not committed yet, because a file a developer
- * created five seconds ago is exactly the one they are about to import.
+ * source directory and the boundary quietly stops being enforced there. The
+ * list is TRACKED files only, the same set `../../cli.mjs`'s `check` reads
+ * (`../workspace.mjs`'s `listTrackedFiles`, one git spawn shared by both faces)
+ * — an untracked file is a file `lattice check` does not judge, and an editor
+ * verdict must match the CLI's or the two would disagree about the same tree.
  *
  * A workspace git cannot answer for is a LOUD failure, never a silent empty
  * index: `buildWorkspaceIndex` throws, and the server turns that into a
@@ -77,18 +79,24 @@
  * both lists into sentences, and `./diagnose.mjs` refuses to call a document
  * analyzed while either is non-empty.
  */
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { analyzeFile, languageOf } from "../analysis/analyze.mjs";
+import { analyzeFile } from "../analysis/analyze.mjs";
+import { fileFailure, isWholeFileFailure } from "../analysis/source-util.mjs";
 import { parseNxJson } from "../nx-json.mjs";
 import {
   NX_CONFIG_FILE,
   readWorkspaceLayout,
   requireCompleteWorkspaceLayout,
 } from "../options.mjs";
-import { annotateMFERemotes, annotatePackageFacts, environmentForTree } from "../workspace.mjs";
+import {
+  analyzeWorkspace,
+  annotateMFERemotes,
+  annotatePackageFacts,
+  createWorkspace,
+  listTrackedFiles,
+} from "../workspace.mjs";
 import { buildDependencies } from "../providers/native/graph.mjs";
 import { nodeTypeOf, PROJECT_CONFIG_FILE } from "../providers/native/discover.mjs";
 import { LATTICE_MODEL_FILE } from "../providers/native/model.mjs";
@@ -127,17 +135,14 @@ export const parseProjectJson = parseNxJson;
  * @throws {Error} when git cannot answer — not a git tree, git not installed.
  */
 export function listWorkspaceFiles(root) {
-  let stdout;
   try {
-    // `environmentForTree` and not the inherited environment: `GIT_DIR` beats
-    // `cwd`, so a server started from a git hook would list another
-    // repository's files and resolve them against this root.
-    stdout = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], {
-      cwd: root,
-      env: environmentForTree(),
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    // The one git spawn both faces share (`../workspace.mjs`'s
+    // `listTrackedFiles`), not a second git invocation with a different flag
+    // set: a CLI verdict and an editor verdict over the same tree must agree
+    // about which files even exist. `listTrackedFiles` runs through
+    // `../process.mjs`'s `runProcess`, which uses the same `environmentForTree`
+    // guard against an ambient `GIT_DIR` this branch used to apply itself.
+    return listTrackedFiles(root);
   } catch (cause) {
     throw new Error(
       `lattice: cannot list the files of ${root}: ${cause?.message ?? cause}. ` +
@@ -146,7 +151,6 @@ export function listWorkspaceFiles(root) {
       { cause },
     );
   }
-  return stdout.split("\0").filter((file) => file !== "");
 }
 
 /** The directory part of a workspace-relative path; `""` at the tree root. */
@@ -294,28 +298,23 @@ export function buildWorkspaceIndex({
   // violations is the silent direction.
   annotatePackageFacts(nodes, readFile);
 
-  // Longest root wins, for the reason `../analysis/source-util.mjs` gives: a
-  // project nested inside another's directory matches both roots, and a
-  // first-match answer would attribute every one of its files to its parent.
-  const byLongestRoot = [...projects].sort((a, b) => b.root.length - a.root.length);
-  const projectOf = (file) =>
-    byLongestRoot.find(({ root: r }) => r === "" || file === r || file.startsWith(`${r}/`))?.name;
-
-  const filesByProject = new Map(projects.map(({ name }) => [name, []]));
-  for (const file of files) {
-    const owner = projectOf(file);
-    if (owner !== undefined) filesByProject.get(owner).push(file);
-  }
-
-  const workspace = {
+  // The `Workspace` object and the per-project file index, from the SAME
+  // `createWorkspace` the CLI path uses (`../commands/context.mjs`) — longest
+  // root wins by `projectOwning`, and its root normalisation is what keeps a
+  // root-level project (`"."`) owning the root-level files at all (cf. #32).
+  // One implementation is also why `projectOf` here and the CLI's agree about
+  // which file belongs to which project; a second copy is a second answer.
+  const { workspace, owned } = createWorkspace({
     root,
-    projects: projects.map(({ name, root: projectRoot }) => ({ name, root: projectRoot })),
-    filesOf: (name) => filesByProject.get(name) ?? [],
-    readFile,
+    graph: { nodes },
+    files,
     tsConfig,
-  };
+    read: readFile,
+  });
+  const projectOfFile = new Map(owned.map(({ file, project }) => [file, project]));
+  const projectOf = (file) => projectOfFile.get(file);
 
-  const { importSites, fileFailures } = analyzeTrackedFiles({ files, readFile, workspace });
+  const { importSites, fileFailures } = analyzeTrackedFiles({ files, workspace });
 
   // `nx.json`'s `workspaceLayout` reaches the rule engine here the same way
   // `../providers/nx.mjs`'s `readProjectGraph` merges it onto the graph it
@@ -366,30 +365,52 @@ export function buildWorkspaceIndex({
  * import, and what stopped it from answering") does not depend on which
  * provider found the project list.
  *
- * @param {{files: string[], readFile: (path: string) => string|null, workspace: object}} args
+ * The loop is `../workspace.mjs`'s `analyzeWorkspace` — the SAME loop
+ * `../../cli.mjs`'s `check` runs over the same files — with one injected
+ * difference: a throw is caught into a whole-file `fileFailure` record rather
+ * than allowed to cost the whole graph. `analyzeFile` throws for a language
+ * whose analyzer is not written yet, and one such language must not blank
+ * nineteen projects' worth of edges; the document-level diagnosis re-analyzes
+ * the open file itself, where the same throw becomes a diagnostic the reader
+ * sees. That catch is the only behavioural difference from the CLI's loop —
+ * everything else (which files, which reads, which records) is the shared one.
+ *
+ * One filter: the loop records whole-file failures only
+ * (`../analysis/source-util.mjs`'s `isWholeFileFailure`). A positioned
+ * failure — a parse error at a line:column, a specifier TypeScript could not
+ * resolve from a particular file — is a site failure: that import was not
+ * judged, but the rest of the file was, and the document-level diagnosis
+ * re-analyzes the open file and shows that site failure wherever a reader can
+ * see it. A whole-file failure means the graph genuinely missed every import
+ * that file makes, which is the incompleteness `indexGaps` must report.
+ *
+ * @param {{files: string[], workspace: object}} args
  * @returns {{importSites: object[], fileFailures: {sourceFile: string, reason: string}[]}}
  */
-function analyzeTrackedFiles({ files, readFile, workspace }) {
-  const importSites = [];
-  const fileFailures = [];
-  for (const file of files) {
-    if (languageOf(file) === null) continue;
-    const text = readFile(file);
-    if (text === null) {
-      fileFailures.push({ sourceFile: file, reason: "could not be read" });
-      continue;
-    }
-    try {
-      importSites.push(...analyzeFile({ sourceFile: file, text, workspace }).imports);
-    } catch (cause) {
-      // `analyzeFile` throws for a language whose analyzer is not written yet.
-      // Recorded rather than rethrown: one unimplemented language must not cost
-      // the whole graph, and the document-level diagnosis re-analyzes the open
-      // file itself, where the same throw becomes a diagnostic the reader sees.
-      fileFailures.push({ sourceFile: file, reason: cause?.message ?? String(cause) });
-    }
-  }
-  return { importSites, fileFailures };
+function analyzeTrackedFiles({ files, workspace }) {
+  const analysis = analyzeWorkspace(workspace, files, {
+    analyze: (request) => {
+      try {
+        return analyzeFile(request);
+      } catch (cause) {
+        return {
+          imports: [],
+          failures: [fileFailure(request.sourceFile, cause?.message ?? String(cause))],
+        };
+      }
+    },
+  });
+  return {
+    importSites: analysis.imports,
+    // Whole-file failures only — the same split `../../cli.mjs`'s `check`
+    // draws (`notAnalyzed` vs `blindSpots`): a file whose imports are entirely
+    // unknown makes the graph INCOMPLETE for every open document, while a
+    // POSITIONED failure (one unparseable site) is a site fact reported at
+    // that file's own document level — its other import sites are still in the
+    // graph, so the prelude would over-warn. This matches the pre-fork LSP,
+    // which never surfaced positioned failures in `indexGaps` either.
+    fileFailures: analysis.failures.filter(isWholeFileFailure),
+  };
 }
 
 /**
@@ -432,29 +453,25 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
     };
   }
 
-  const projects = discovered.projects.map(({ name, root: projectRoot }) => ({
-    name,
-    root: projectRoot,
-  }));
-  const filesByProject = new Map(projects.map(({ name }) => [name, []]));
-  for (const file of files) {
-    const owner = discovered.projectOf(file);
-    if (owner !== undefined) filesByProject.get(owner).push(file);
-  }
-
-  const workspace = {
-    root,
-    projects,
-    filesOf: (name) => filesByProject.get(name) ?? [],
-    readFile,
-    tsConfig,
+  // The `Workspace` object, from the same `createWorkspace` the CLI's native
+  // branch uses (`../commands/context.mjs`'s native composition, preGraph →
+  // `createWorkspace` → `analyzeWorkspace`): the projects discovered here
+  // become the graph's nodes, and the workspace is built over them exactly the
+  // way `check` builds its own over the same discovery. `discovered.projectOf`
+  // is still what `nativeProvider.buildGraph` resolves import sites through —
+  // it and `createWorkspace`'s `projectOwning` answer the same longest-root
+  // question, and one graph is the answer `evaluate()` actually judges.
+  const preGraph = {
+    nodes: Object.fromEntries(
+      discovered.projects.map((project) => [
+        project.name,
+        { name: project.name, data: { root: project.root } },
+      ]),
+    ),
   };
+  const { workspace } = createWorkspace({ root, graph: preGraph, files, tsConfig, read: readFile });
 
-  const { importSites, fileFailures: analysisFailures } = analyzeTrackedFiles({
-    files,
-    readFile,
-    workspace,
-  });
+  const { importSites, fileFailures: analysisFailures } = analyzeTrackedFiles({ files, workspace });
   // `discovered.failures` — an unparseable `project.json`/`package.json`
   // (`../providers/native/discover.mjs`) and a tracked file none of the
   // discovered projects own (`../providers/native/coverage.mjs`) — are the

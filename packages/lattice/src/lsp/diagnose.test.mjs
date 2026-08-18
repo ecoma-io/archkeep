@@ -8,9 +8,23 @@ import { diagnoseDocument } from "./diagnose.mjs";
 // failure mode is itself a moving target.
 vi.mock("../analysis/analyze.mjs", () => ({ analyzeFile: vi.fn() }));
 vi.mock("../rules/index.mjs", () => ({ evaluate: vi.fn() }));
+vi.mock("../commands/edge-constraints.mjs", async (importOriginal) => {
+  const mod = /** @type {any} */ (await importOriginal());
+  return {
+    declaredEdgeViolationsForCheck: vi.fn((...args) => mod.declaredEdgeViolationsForCheck(...args)),
+    __realDeclaredEdgeViolationsForCheck: mod.declaredEdgeViolationsForCheck,
+  };
+});
 
+// The module is mocked (so its call count can be asserted); the real
+// implementation is `importOriginal`ed and re-exposed for the one test that
+// wants both a spy AND the true verdict. TypeScript cannot see the extra
+// synthetic key on the mocked module, so the cast is explicit.
+const edgeConstraints = /** @type {any} */ (await import("../commands/edge-constraints.mjs"));
 const analyzeFile = vi.mocked((await import("../analysis/analyze.mjs")).analyzeFile);
 const evaluate = vi.mocked((await import("../rules/index.mjs")).evaluate);
+const declaredEdgeViolationsForCheck = vi.mocked(edgeConstraints.declaredEdgeViolationsForCheck);
+const realDeclaredEdgeViolationsForCheck = edgeConstraints.__realDeclaredEdgeViolationsForCheck;
 
 const SOURCE_FILE = "libs/inner/main.go";
 const TEXT = 'package inner\n\nimport "example.test/outer"\n';
@@ -243,6 +257,148 @@ describe("an empty diagnostic list means no violation, and nothing else", () => 
 
     expect(analyzed).toBe(false);
     expect(diagnostics.at(-1).message).toContain("cannot be trusted");
+  });
+});
+
+describe("a declared implicit edge the rule engine structurally cannot reach", () => {
+  const implicitRequest = {
+    sourceFile: SOURCE_FILE,
+    text: TEXT,
+    index: {
+      workspace: {
+        projects: [
+          { name: "inner", root: "libs/inner" },
+          { name: "outer", root: "libs/outer" },
+        ],
+      },
+      graph: {
+        nodes: {
+          inner: { name: "inner", data: { root: "libs/inner", tags: ["zone:inner"] } },
+          outer: { name: "outer", data: { root: "libs/outer", tags: ["zone:outer"] } },
+        },
+        dependencies: { inner: [{ source: "inner", target: "outer", type: "implicit" }] },
+      },
+    },
+    config: {
+      depConstraints: [
+        {
+          sourceTag: "zone:inner",
+          onlyDependOnLibsWithTags: ["zone:inner"],
+        },
+      ],
+      options: {},
+    },
+  };
+
+  it("reports a declared implicit dependency that crosses the tag boundary", () => {
+    // The edge `evaluate()` structurally cannot see: an `implicitDependencies`
+    // entry has no import site behind it, so it never reaches the rule engine
+    // over this document's import sites — and `cli.mjs`'s `check` still exits 1
+    // on it. Before the fold, this request returned `analyzed: true` with no
+    // diagnostics: the editor painted clean exactly the tree `check` flagged.
+    const { analyzed, diagnostics } = diagnoseDocument(implicitRequest);
+
+    expect(analyzed).toBe(true);
+    const violation = diagnostics.find((d) => d.code === "onlyTagsConstraintViolation");
+    expect(violation).toBeDefined();
+    expect(violation.message).toContain("can only depend on");
+    // The whole-file range: a declared edge names a project, not an import, so
+    // the finding is this document standing in for its project.
+    expect(violation.range.start).toEqual({ line: 0, character: 0 });
+  });
+
+  it("reports only the declared edges whose source project owns this document", () => {
+    // Two projects declare implicit edges; only the one owned by the open
+    // document's project may be reported for it. A declared edge names a
+    // project, and a file inside another project is not the stand-in for this
+    // one.
+    const twoWay = {
+      ...implicitRequest,
+      index: {
+        ...implicitRequest.index,
+        graph: {
+          ...implicitRequest.index.graph,
+          dependencies: {
+            inner: [{ source: "inner", target: "outer", type: "implicit" }],
+            outer: [{ source: "outer", target: "inner", type: "implicit" }],
+          },
+        },
+      },
+    };
+
+    const { diagnostics } = diagnoseDocument(twoWay);
+
+    const violations = diagnostics.filter((d) => d.code === "onlyTagsConstraintViolation");
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("can only depend on");
+  });
+
+  it("stays silent for a declared edge that satisfies the constraint table", () => {
+    // The silent direction of the SAME path: an implicit edge within the tag
+    // set is not a violation, and the fold must not invent one for it.
+    const withinTags = {
+      ...implicitRequest,
+      index: {
+        ...implicitRequest.index,
+        workspace: {
+          projects: [
+            { name: "inner", root: "libs/inner" },
+            { name: "aux", root: "libs/aux" },
+          ],
+        },
+        graph: {
+          nodes: {
+            inner: { name: "inner", data: { root: "libs/inner", tags: ["zone:inner"] } },
+            aux: { name: "aux", data: { root: "libs/aux", tags: ["zone:inner"] } },
+          },
+          dependencies: { inner: [{ source: "inner", target: "aux", type: "implicit" }] },
+        },
+      },
+    };
+
+    const { analyzed, diagnostics } = diagnoseDocument(withinTags);
+
+    expect(analyzed).toBe(true);
+    expect(diagnostics).toEqual([]);
+  });
+
+  it("stays silent for a workspace that declares no constraint table at all", () => {
+    // `declaredEdgeViolationsForCheck` has the same early exit the rule engine
+    // does for an empty `depConstraints`: a workspace declaring no constraint
+    // table has opted out of dep-constraint enforcement entirely, and an empty
+    // constraint table must not flag every implicit edge in it.
+    const noConstraints = {
+      ...implicitRequest,
+      config: { depConstraints: [], options: {} },
+    };
+
+    const { analyzed, diagnostics } = diagnoseDocument(noConstraints);
+
+    expect(analyzed).toBe(true);
+    expect(diagnostics).toEqual([]);
+  });
+
+  it("computes the declared-edge verdict once per index, not once per keystroke", () => {
+    // `declaredEdgeViolationsForCheck` is an O(V+E) walk (reachability rebuild
+    // plus every dependency list) that would otherwise run on every `didChange`
+    // of every open document. The index is revision-keyed, so a WeakMap on
+    // index identity makes the walk cost exactly once per rebuilt index. Two
+    // diagnoses over the SAME index must hit the spy once; a fresh index
+    // recomputes.
+    declaredEdgeViolationsForCheck.mockImplementation(realDeclaredEdgeViolationsForCheck);
+    const request = {
+      ...implicitRequest,
+      index: { ...implicitRequest.index, graph: { ...implicitRequest.index.graph } },
+    };
+    const other = { ...request, index: { ...request.index } };
+
+    const first = diagnoseDocument(request);
+    const second = diagnoseDocument(request);
+    const third = diagnoseDocument(other);
+
+    expect(declaredEdgeViolationsForCheck).toHaveBeenCalledTimes(2);
+    expect(second.diagnostics).toEqual(first.diagnostics);
+    expect(third.diagnostics).toEqual(first.diagnostics);
   });
 });
 

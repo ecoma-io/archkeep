@@ -149,14 +149,16 @@ beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "lattice-lsp-")));
   for (const [path, text] of Object.entries(files)) write(path, text);
   // The index reads its file list from git, so the fixture has to be a tree git
-  // can answer for. No commit is needed: `--others --exclude-standard` covers
-  // files that exist but are not committed, which is what an editor sees.
+  // can answer for. The files are staged because the list is TRACKED files only
+  // — the same set `lattice check` judges (`../workspace.mjs`'s
+  // `listTrackedFiles`) — and an untracked fixture file is invisible to both.
   //
   // `environmentForTree` for the same reason the server itself uses it:
   // `GIT_DIR` beats `cwd`, and this suite runs from a git hook on every push.
   // Inheriting it would re-initialise the ambient repository and leave this
   // fixture with no `.git` of its own.
   execFileSync("git", ["init", "-q"], { cwd: root, env: environmentForTree() });
+  execFileSync("git", ["add", "-A"], { cwd: root, env: environmentForTree() });
 });
 
 afterAll(() => {
@@ -508,6 +510,15 @@ describe("a real editor session against a real workspace", () => {
     const dangling = join(root, "libs/inner/generated.go");
     write("libs/outer/project.json", UNREADABLE_PROJECT_JSON);
     symlinkSync("./nowhere.go", dangling);
+    // The file list is tracked-only (`../workspace.mjs`'s `listTrackedFiles`),
+    // and git records a symlink as a mode-120000 index entry even when it
+    // dangles — so the symlink has to be staged to reach the index at all.
+    // Staging just this path keeps the project.json's index entry holding its
+    // good content; `write` above only changed the working-tree copy.
+    execFileSync("git", ["add", "--", "libs/inner/generated.go"], {
+      cwd: root,
+      env: environmentForTree(),
+    });
     try {
       const { client } = await connected();
       const uri = uriOf("libs/inner/main.go");
@@ -528,6 +539,14 @@ describe("a real editor session against a real workspace", () => {
 
       write("libs/outer/project.json", files["libs/outer/project.json"]);
       rmSync(dangling, { force: true });
+      // The index rebuild below reads TRACKED files, and a deleted file that is
+      // still staged would keep being listed — as an unreadable one, which is
+      // exactly the gap this test is clearing. Drop the index entry first, so
+      // the rebuilt index describes the fixed tree.
+      execFileSync("git", ["reset", "-q", "--", "libs/inner/generated.go"], {
+        cwd: root,
+        env: environmentForTree(),
+      });
       client.send({
         jsonrpc: "2.0",
         method: "workspace/didChangeWatchedFiles",
@@ -539,21 +558,31 @@ describe("a real editor session against a real workspace", () => {
       ]);
       client.kill();
     } finally {
+      // Drop the symlink's index entry before it is removed, so the fixture's
+      // tracked set returns to what beforeAll staged.
+      execFileSync("git", ["reset", "-q", "--", "libs/inner/generated.go"], {
+        cwd: root,
+        env: environmentForTree(),
+      });
       write("libs/outer/project.json", files["libs/outer/project.json"]);
       rmSync(dangling, { force: true });
     }
   }, 30_000);
 
   it("registers a file watcher for every file a verdict depends on", async () => {
-    // Four, and the third and fourth are the ones worth naming. The boundary
-    // table and every `project.json` are the inputs to a verdict; `nx.json` is
-    // where the options live for an Nx-shaped root, and `lattice.json` is
-    // both the marker AND the options for a native one — this fixture is
-    // Nx-shaped, so it carries no `lattice.json` of its own, but the glob is
-    // still registered so a workspace that adds one later does not need the
-    // server restarted before the watcher notices it (`./src/lsp/server.mjs`'s
-    // `watchedFilesFor`). A server watching only the files the options
-    // currently name would keep watching a filename the workspace had
+    // Five, and the ones worth naming go beyond the boundary table and every
+    // `project.json`, which are the inputs to a verdict. `nx.json` is where the
+    // options live for an Nx-shaped root, and `lattice.json` is both the marker
+    // AND the options for a native one — this fixture is Nx-shaped, so it
+    // carries no `lattice.json` of its own, but the glob is still registered so
+    // a workspace that adds one later does not need the server restarted before
+    // the watcher notices it. `tsconfig.base.json` is the fifth: every
+    // TypeScript verdict is resolved against the compiler options that file
+    // names (`./src/lsp/server.mjs`'s `watchedFilesFor`), so a `paths` edit
+    // there changes verdicts for files that did not change, and a server not
+    // watching it keeps showing the old verdict until an unrelated
+    // invalidation happens to re-read it. A server watching only the files the
+    // options currently name would keep watching a filename the workspace had
     // renamed — the editor would go on painting verdicts from a config it no
     // longer reads, which looks exactly like a clean tree.
     const { client } = await connected();
@@ -573,6 +602,7 @@ describe("a real editor session against a real workspace", () => {
       "**/module-boundaries.config.mjs",
       "**/nx.json",
       "**/project.json",
+      "**/tsconfig.base.json",
     ]);
 
     client.kill();
@@ -709,6 +739,7 @@ describe("a real editor session against a native lattice.json workspace", () => 
     nativeWrite("apps/outer/go.mod", "module native.test/outer\n\ngo 1.23\n");
     nativeWrite("apps/outer/outer.go", "package outer\n");
     execFileSync("git", ["init", "-q"], { cwd: nativeRoot, env: environmentForTree() });
+    execFileSync("git", ["add", "-A"], { cwd: nativeRoot, env: environmentForTree() });
   });
 
   afterAll(() => {
@@ -791,6 +822,9 @@ describe("a real editor session against a native lattice.json workspace", () => 
       );
       write("src/child/main.ts", 'import { s } from "../shared/s";\n');
       execFileSync("git", ["init", "-q"], { cwd: dir, env: environmentForTree() });
+      // The file list is tracked-only (the same set `lattice check` judges), so
+      // the fixture must be staged or the editor sees no files at all.
+      execFileSync("git", ["add", "-A"], { cwd: dir, env: environmentForTree() });
       return dir;
     };
     const control = makeTree("shared");
