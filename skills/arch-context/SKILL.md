@@ -24,9 +24,7 @@ answer is to surface it, never to ignore it.
 
 1. **Identify the affected projects.** Find the project name for each file or
    directory the change touches. If unsure, list projects with
-   `lattice graph --format json` and match by root directory (in a
-   profile-selected workspace — see step 2 — `graph` itself exits 3, and
-   project names come from the workspace manifests instead).
+   `lattice graph --format json` and match by root directory.
 
 2. **Know which law is in effect.** A workspace enforces either by **file** or
    by **named profile**. Check whether `nx.json`'s plugin options for
@@ -46,22 +44,21 @@ answer is to surface it, never to ignore it.
      documented in [docs/concepts/profiles.md](../../docs/concepts/profiles.md)
      and [docs/reference/profiles.md](../../docs/reference/profiles.md).
 
-   Only `lattice check` resolves a profile by name. The descriptive commands
-   below do not read the `profiles` option, so in a profile-selected
-   workspace a command that takes `--config` still means a file path there,
-   and a command that prints the boundary law may fail loudly (exit 3) rather
-   than silently fall back. Treat that as a fact about which law is in effect,
-   not as "no law". When a descriptive command exits 3 in a profile workspace —
-   `context`, `impact`, `diff`, `explain`, `fitness`, `history`, `waivers`,
-   `debt`, `health`, and `graph` (which takes no `--config` but still loads
-   `boundaryConfig` for the policy fingerprint) — the message "names an
-   unsupported boundaryConfig extension '(none)'" is pointing at profile
-   selection, not at a real file —
-   do not "fix" it by changing `boundaryConfig` or passing a file path. Read
-   the profile's effective block from the registry file and resolve its `base`
-   chain by hand — that is the only source of what the project MAY import; the
-   gate's `check --config <active-profile> --format json` reports only the
-   violations that fired, not the full admissible-direction table.
+   Every command below that reads a boundary law resolves the active profile
+   by name, exactly as `check` does — `context`, `graph`, `diff`, `impact`,
+   `explain`, `fitness`, `history`, `waivers`, `debt`, and `health` all share
+   `check`'s own config-resolution step, so `--config`/`boundaryConfig` is a
+   profile NAME everywhere, never a file path, the moment the workspace names
+   a `profiles` registry. A descriptive command exiting 3 in a profile
+   workspace is therefore a real coverage gap — an unknown profile name, an
+   unknown `base`, a `base` cycle, or an unreadable registry, the same four
+   conditions `check` can hit — not an artifact of that command failing to
+   look at `profiles` at all. The one carve-out is fitness functions: a
+   profile's `block` carries no `fitness` key (only a boundaryConfig **file**
+   can declare one), so `fitness` on a profile-selected workspace reports its
+   own "declares no fitness functions" rather than judging anything —
+   [docs/usage/profiles.md](../../docs/usage/profiles.md), "Every command
+   resolves it, not only `check`".
 
 3. **Determine what exists and what governs it.** Run:
 
@@ -69,10 +66,8 @@ answer is to surface it, never to ignore it.
    lattice context <project> --format json
    ```
 
-   In a profile-selected workspace this exits 3 — `context` does not resolve a
-   profile, and the effective block is readable only from the registry file;
-   fall through to step 6 with the registry's rows as the constraint table.
-   Where it works, this shows:
+   This resolves the active profile the same way `check` does, and shows:
+
    - The project's tags (`layer:`, `scope:`, `license:`)
    - Every constraint that applies — what the project MAY import, and what is
      forbidden
@@ -97,7 +92,7 @@ answer is to surface it, never to ignore it.
    _unverifiable_ intent must never be read as _no drift_.
 
 5. **For a planned change, request the planning context.** When about to change
-   code (not just read it) in a file-based workspace:
+   code (not just read it):
 
    ```
    lattice context <project> --plan
@@ -120,10 +115,9 @@ answer is to surface it, never to ignore it.
 
    `--plan` is facts, not a plan. Lattice never decides an implementation
    strategy — the agent reasons over these facts and produces the plan. In a
-   profile-selected workspace `context --plan` exits 3 with the same
-   profile-selection artifact (step 2); its `verify` commands (`impact`,
-   `graph`, ...) are not runnable there either — plan from the registry file's
-   effective block and verify with `lattice check --config <active-profile>`.
+   profile-selected workspace `--plan` resolves the active profile the same
+   way `check` does, and its bundled `verify` commands (`impact`, `graph`, …)
+   resolve it too when you run them separately.
 
 6. **Read the constraints.** Each constraint names a source tag pattern, a target
    tag pattern, and whether the import is `allowed` or `forbidden`. A project
@@ -202,17 +196,13 @@ code change). Add:
 
 - **Exit 3** — the run could not complete. This is NOT "clean"; it means Lattice
   could not reach a verdict. Check whether a workspace root, boundary config, or
-  project graph is missing or malformed. In a profile-selected workspace,
-  distinguish the two readings of exit 3: a descriptive command (`context`,
-  `graph`, `diff`, `impact`, `explain`, `history`, `fitness`, `waivers`,
-  `debt`, `health`) **never resolves a profile** — when one of those exits 3, a
-  message about a boundary config with no extension is the profile-selection
-  artifact, not a missing file; do not "fix" it by changing `boundaryConfig` or
-  passing a file path, get the law from `lattice check --config <name>` and the
-  registry file instead. Only `check` can exit 3 because a profile could not be
-  resolved — an unknown profile name, an unknown `base`, a `base` cycle, or an
-  unreadable registry; none of those falls back to another law. Do not proceed
-  as if the architecture is safe.
+  project graph is missing or malformed. In a profile-selected workspace, every
+  command that reads a boundary law can exit 3 for the same reason `check`
+  can: an unknown profile name, an unknown `base`, a `base` cycle, or an
+  unreadable registry — none of those falls back to another law, on any
+  command. Do not "fix" it by changing `boundaryConfig` or passing a file
+  path; the value is a profile name, and the fix is the registry or the name,
+  not the command. Do not proceed as if the architecture is safe.
 - **`drift` exit 3** — the intent comparison could not be verified (intent file
   unreadable, a boundary matched no observed project). Surface this in your
   change notes; the declared architecture is not confirmed.
