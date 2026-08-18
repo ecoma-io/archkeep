@@ -2093,6 +2093,741 @@ export const fitness = [
       rmSync(bothRoot, { recursive: true, force: true });
     }
   });
+
+  it("--output refuses a symlinked intermediate directory resolving outside the workspace (G-02a)", async () => {
+    // A committed symlink `sub -> /tmp/out` at the workspace root. Before
+    // `containmentViolation` (`src/containment.mjs`), `lattice check --output
+    // sub/PWN.txt` wrote the report to `/tmp/out/PWN.txt` — OUTSIDE the
+    // workspace — with the tree untouched and exit 0: a runner-write primitive
+    // with the report's (tree-derived) bytes. New behavior: refused loudly
+    // (exit 3), and neither the outside file nor a `.tmp` may appear.
+    const outside = mkdtempSync(join(tmpdir(), "polyglot-cli-g02-outside-"));
+    const escapeRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-g02a-"));
+    try {
+      const writeEscape = (relativePath, text) => {
+        mkdirSync(join(escapeRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(escapeRoot, relativePath), text);
+      };
+      writeEscape(
+        "lattice.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "libs/domain", name: "domain", tags: ["layer:domain"] }] },
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeEscape(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      writeEscape("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeEscape("libs/domain/doc.go", "package domain\n");
+      symlinkSync(outside, join(escapeRoot, "sub"));
+      const files = [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        "sub",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+      const streams = {
+        ...nativeEnv(),
+        cwd: escapeRoot,
+        listFiles: () => files,
+      };
+      const target = join(escapeRoot, "sub", "PWN.txt");
+      expect(await runCli(["check", "--format", "json", "--output", target], streams)).toBe(
+        EXIT.error,
+      );
+      expect(streams.lines.err.join("\n")).toContain("is refused");
+      expect(streams.lines.err.join("\n")).toContain("sub");
+      expect(existsSync(join(outside, "PWN.txt"))).toBe(false);
+      expect(existsSync(join(escapeRoot, "PWN.txt"))).toBe(false);
+      expect(existsSync(target)).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+      rmSync(escapeRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("--output refuses a self-loop symlink that would land the write at the workspace root (G-02b)", async () => {
+    // `sub -> .` resolves INSIDE the workspace, so realpath containment alone
+    // passes — but the write would land at the workspace ROOT as `report.txt`,
+    // not under `sub/`: a different location than the user named, byte-identical
+    // to a clean run. The write policy's no-symlink-below-root rule catches it.
+    const escapeRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-g02b-"));
+    try {
+      const writeEscape = (relativePath, text) => {
+        mkdirSync(join(escapeRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(escapeRoot, relativePath), text);
+      };
+      writeEscape(
+        "lattice.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "libs/domain", name: "domain", tags: ["layer:domain"] }] },
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeEscape(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      writeEscape("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeEscape("libs/domain/doc.go", "package domain\n");
+      symlinkSync(escapeRoot, join(escapeRoot, "sub"));
+      const files = [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        "sub",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+      const streams = {
+        ...nativeEnv(),
+        cwd: escapeRoot,
+        listFiles: () => files,
+      };
+      const target = join(escapeRoot, "sub", "report.txt");
+      expect(await runCli(["check", "--format", "json", "--output", target], streams)).toBe(
+        EXIT.error,
+      );
+      expect(streams.lines.err.join("\n")).toContain("is refused");
+      expect(existsSync(join(escapeRoot, "report.txt"))).toBe(false);
+      expect(existsSync(target)).toBe(false);
+    } finally {
+      rmSync(escapeRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("--output with a `..` across a symlinked intermediate writes the resolved path, not the kernel's (G-02c)", async () => {
+    // The write escape's third shape: `sub -> <outside>` plus a target written
+    // as `sub/../out2/PWN.txt`. Before the resolve-first contract, the check
+    // ran on `resolve(cwd, target)` — which collapses `..` lexically and skips
+    // the symlink — while the write used the raw string, where the kernel
+    // follows `sub` out of the tree, then lets `..` climb to `<outside>/out2`.
+    // The report landed OUTSIDE the workspace with exit 0, the tree untouched.
+    // Now the identical resolved string feeds check AND write: `..` is
+    // collapsed before the symlink is consulted, so the report lands at the
+    // workspace-internal `<escapeRoot>/out2/PWN.txt` and the outside
+    // `<outside>/out2/PWN.txt` never appears.
+    const outsideRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-g02c-outside-"));
+    const outside = join(outsideRoot, "out");
+    const escapeRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-g02c-"));
+    try {
+      mkdirSync(outside, { recursive: true });
+      const writeEscape = (relativePath, text) => {
+        mkdirSync(join(escapeRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(escapeRoot, relativePath), text);
+      };
+      writeEscape(
+        "lattice.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "libs/domain", name: "domain", tags: ["layer:domain"] }] },
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeEscape(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      writeEscape("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeEscape("libs/domain/doc.go", "package domain\n");
+      // The kernel-equivalent landing (`<outside>/../out2/PWN.txt`) exists, so
+      // the OLD code would have written there and reported success — the
+      // silent direction this test pins.
+      mkdirSync(join(outside, "..", "out2"), { recursive: true });
+      // The resolved landing (`<escapeRoot>/out2/PWN.txt`) exists too, so the
+      // NEW code's write succeeds inside the workspace.
+      mkdirSync(join(escapeRoot, "out2"), { recursive: true });
+      symlinkSync(outside, join(escapeRoot, "sub"));
+      const files = [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        "sub",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+      const streams = {
+        ...nativeEnv(),
+        cwd: escapeRoot,
+        listFiles: () => files,
+      };
+      // Absolute, but spelled RAW — `join` would collapse the `..` lexically;
+      // the kernel (and the OLD write) resolves `sub` first, then `..`, so the
+      // raw spelling is exactly what used to escape.
+      const rawTarget = `${escapeRoot}/sub/../out2/PWN.txt`;
+      const resolvedTarget = join(escapeRoot, "out2", "PWN.txt");
+      const kernelLanding = join(outsideRoot, "out2", "PWN.txt");
+      expect(await runCli(["check", "--format", "json", "--output", rawTarget], streams)).toBe(
+        EXIT.ok,
+      );
+      expect(existsSync(kernelLanding)).toBe(false);
+      expect(existsSync(resolvedTarget)).toBe(true);
+    } finally {
+      rmSync(outsideRoot, { recursive: true, force: true });
+      rmSync(escapeRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("treats a tracked symlink leaving the workspace as an unanalyzable file (G-10)", async () => {
+    // Silent direction: before `containmentViolation` on the read side, the
+    // committed symlink was followed by plain `readFileSync(join(root, path))`
+    // and its import sites were judged AS workspace content — the outside file
+    // appeared in `coverage.imports`, and its (here unresolvable) import was a
+    // `blindSpot`, verdict still pass (exit 0). New behavior: the file cannot
+    // be read as workspace content, so it is a whole-file failure — the run
+    // must say so loudly (exit 3) instead of reporting a clean verdict.
+    const readRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-g10-"));
+    const outside = mkdtempSync(join(tmpdir(), "polyglot-cli-g10-outside-"));
+    try {
+      const writeRead = (relativePath, text) => {
+        mkdirSync(join(readRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(readRoot, relativePath), text);
+      };
+      writeRead(
+        "lattice.json",
+        JSON.stringify({
+          projects: {
+            declared: [
+              { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+              { root: "net", name: "net", tags: ["layer:domain"] },
+            ],
+          },
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeRead(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      writeRead("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeRead("libs/domain/doc.go", "package domain\n");
+      // The committed tracked symlink: `net/main.py -> <outside>/outsider.py`.
+      writeFileSync(join(outside, "outsider.py"), "import os\n");
+      mkdirSync(join(readRoot, "net"));
+      symlinkSync(join(outside, "outsider.py"), join(readRoot, "net", "main.py"));
+      const files = [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        "net/main.py",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+      const streams = {
+        ...nativeEnv(),
+        cwd: readRoot,
+        listFiles: () => files,
+      };
+      expect(await runCli(["check", "net", "--format", "json"], streams)).toBe(EXIT.error);
+      const text = streams.lines.out.join("\n") + streams.lines.err.join("\n");
+      expect(text).toContain("net/main.py");
+      expect(text).toContain("could not be read");
+    } finally {
+      rmSync(readRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to read a symlinked lattice.json that leaves the workspace as the model (G-10, model read)", async () => {
+    // The G-10 class one level up: `check`'s native branch reads `lattice.json`
+    // as the workspace's OWN declaration — which projects exist, their tags,
+    // the boundary law. A committed symlink `lattice.json -> <outside>` handed
+    // the outside model in as the workspace's declared facts, and the run had
+    // no way to know it was judging against bytes this tree never committed:
+    // verdict pass, exit 0 — byte-identical to a clean workspace. The CLI's
+    // `readWorkspaceRoot` now applies the same containment rule as the analysis
+    // reader, so a symlinked model is a loud "cannot load" failure (exit 3).
+    const modelRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-g10-model-"));
+    const outside = mkdtempSync(join(tmpdir(), "polyglot-cli-g10-model-outside-"));
+    try {
+      const writeModel = (relativePath, text) => {
+        mkdirSync(join(modelRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(modelRoot, relativePath), text);
+      };
+      // The outside "model": a completely different workspace's declaration.
+      writeFileSync(
+        join(outside, "lattice.json"),
+        JSON.stringify({
+          projects: {
+            declared: [{ root: "attacker-lib", name: "attacker", tags: ["layer:domain"] }],
+          },
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeModel(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      // The committed tracked symlink: `lattice.json -> <outside>/lattice.json`.
+      symlinkSync(join(outside, "lattice.json"), join(modelRoot, "lattice.json"));
+      const files = ["lattice.json", "module-boundaries.config.mjs"];
+      const streams = {
+        ...nativeEnv(),
+        cwd: modelRoot,
+        listFiles: () => files,
+      };
+      expect(await runCli(["check", "--format", "json"], streams)).toBe(EXIT.error);
+      const text = streams.lines.out.join("\n") + streams.lines.err.join("\n");
+      expect(text).toContain("lattice.json");
+      expect(text).toContain("cannot load");
+    } finally {
+      rmSync(modelRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a symlinked architecture-intent.json that leaves the workspace as the intent (G-10, intent read)", async () => {
+    // The same G-10 class on the intent face: `check` reads a TRACKED root
+    // `architecture-intent.json` as the workspace's intended architecture and
+    // judges the observed graph against it. A committed symlink at that path
+    // handed the OUTSIDE file's intent bytes in as the workspace's — before the
+    // containment closure in `loadIntent`, a workspace with a symlinked intent
+    // judged its architecture against bytes this tree never committed, and a
+    // symlink resolving OUTSIDE was read as the tree's own intent. Now a
+    // symlinked intent resolving outside the workspace is a loud no-verdict
+    // (exit 3), never a silent verdict against the outside bytes.
+    const intentRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-g10-intent-"));
+    const outside = mkdtempSync(join(tmpdir(), "polyglot-cli-g10-intent-outside-"));
+    try {
+      const writeIntent = (relativePath, text) => {
+        mkdirSync(join(intentRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(intentRoot, relativePath), text);
+      };
+      writeIntent(
+        "lattice.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "libs/domain", name: "domain", tags: ["layer:domain"] }] },
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeIntent(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      writeIntent("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeIntent("libs/domain/doc.go", "package domain\n");
+      // The committed tracked symlink: `architecture-intent.json -> <outside>`.
+      // The OUTSIDE intent matches the observed graph (`domain`) with no
+      // findings — read silently, it would render a clean intent verdict
+      // (exit 0) from bytes this tree never committed: the silent direction.
+      writeFileSync(
+        join(outside, "intent.json"),
+        JSON.stringify({
+          version: "1",
+          boundaries: [{ name: "domain", match: ["name:domain"] }],
+        }),
+      );
+      symlinkSync(join(outside, "intent.json"), join(intentRoot, "architecture-intent.json"));
+      const files = [
+        "lattice.json",
+        "architecture-intent.json",
+        "module-boundaries.config.mjs",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+      const streams = {
+        ...nativeEnv(),
+        cwd: intentRoot,
+        listFiles: () => files,
+      };
+      // A loud no-verdict — exit 3, naming the intent file — never a silent
+      // clean verdict against the outside bytes (which would otherwise exit 0).
+      expect(await runCli(["check", "--format", "json"], streams)).toBe(EXIT.error);
+      const text = streams.lines.out.join("\n") + streams.lines.err.join("\n");
+      expect(text).toContain("architecture-intent.json");
+      expect(text).toContain("could not be established");
+    } finally {
+      rmSync(intentRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a symlinked nx.json that leaves the workspace as the registration (G-10, nx.json read)", async () => {
+    // The same G-10 class on the Nx branch: `pluginIsRegistered`/`readPluginOptions`
+    // read `nx.json` as the workspace's OWN registration — which plugin options
+    // (boundaryConfig, tsConfig) apply. A committed symlink `nx.json ->
+    // <outside>` handed the outside file in as that registration, so options
+    // (and the boundary law they name) came from bytes this tree never
+    // committed. The `readNxJsonOrNull` choke point now refuses with a loud
+    // "cannot read" (exit 3), never a silent verdict against the outside file.
+    const nxRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-g10-nx-"));
+    const outside = mkdtempSync(join(tmpdir(), "polyglot-cli-g10-nx-outside-"));
+    try {
+      const writeNx = (relativePath, text) => {
+        mkdirSync(join(nxRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(nxRoot, relativePath), text);
+      };
+      // The outside "registration": a different workspace's options.
+      writeFileSync(
+        join(outside, "nx.json"),
+        JSON.stringify({ plugins: [{ plugin: "@ecoma-io/lattice/nx", options: {} }] }),
+      );
+      writeNx(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      // The committed tracked symlink: `nx.json -> <outside>/nx.json`.
+      symlinkSync(join(outside, "nx.json"), join(nxRoot, "nx.json"));
+      const files = ["nx.json", "module-boundaries.config.mjs"];
+      const streams = {
+        ...nativeEnv(),
+        cwd: nxRoot,
+        listFiles: () => files,
+      };
+      // Expect a loud refusal — either the command-context path (`pluginIsRegistered`)
+      // or a later options read throws "cannot read nx.json".
+      const exit = await runCli(["graph", "--format", "json"], streams);
+      expect(exit).toBe(EXIT.error);
+      const text = streams.lines.out.join("\n") + streams.lines.err.join("\n");
+      expect(text).toContain("nx.json");
+      expect(text).toContain("cannot read");
+    } finally {
+      rmSync(nxRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses --output targeting a boundary law renamed via lattice.json (G-07)", async () => {
+    // A native workspace whose `lattice.json` names `law.mjs` as its boundary
+    // config. Before `governanceOutputTargets` consulted `optionsForUsage`, the
+    // guard only covered the DEFAULT name and the `--config` override, so
+    // `lattice graph --output law.mjs` silently replaced the renamed law with a
+    // report, exit 0. New behavior: the ACTUAL law this run reads is guarded.
+    const renameRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-g07-"));
+    try {
+      const writeRename = (relativePath, text) => {
+        mkdirSync(join(renameRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(renameRoot, relativePath), text);
+      };
+      writeRename(
+        "lattice.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "libs/domain", name: "domain", tags: ["layer:domain"] }] },
+          boundaryConfig: "law.mjs",
+          coverage: {
+            exempt: [
+              {
+                path: "law.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeRename(
+        "law.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      writeRename("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeRename("libs/domain/doc.go", "package domain\n");
+      const files = ["lattice.json", "law.mjs", "libs/domain/go.mod", "libs/domain/doc.go"];
+      const streams = {
+        ...nativeEnv(),
+        cwd: renameRoot,
+        listFiles: () => files,
+      };
+      const before = readFileSync(join(renameRoot, "law.mjs"), "utf8");
+      const target = join(renameRoot, "law.mjs");
+      expect(await runCli(["graph", "--format", "json", "--output", target], streams)).toBe(
+        EXIT.error,
+      );
+      expect(streams.lines.err.join("\n")).toContain("resolves to 'law.mjs'");
+      expect(readFileSync(join(renameRoot, "law.mjs"), "utf8")).toBe(before);
+    } finally {
+      rmSync(renameRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("still allows --output to a renamed law's target when the law is NOT the boundary config", async () => {
+    // The G-07 guard must not widen into refusing every `law.mjs` in the tree —
+    // only the ONE file this run reads as the boundary law is guarded. A
+    // workspace with no declaration for `law.mjs` may write a report named that
+    // way (the documented CI-reuse negative-space, extended to a renamed-law
+    // shape).
+    const freeRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-g07-free-"));
+    try {
+      const writeFree = (relativePath, text) => {
+        mkdirSync(join(freeRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(freeRoot, relativePath), text);
+      };
+      writeFree(
+        "lattice.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "libs/domain", name: "domain", tags: ["layer:domain"] }] },
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeFree(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      writeFree("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeFree("libs/domain/doc.go", "package domain\n");
+      const files = [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+      const streams = {
+        ...nativeEnv(),
+        cwd: freeRoot,
+        listFiles: () => files,
+      };
+      const target = join(freeRoot, "law.mjs");
+      expect(await runCli(["graph", "--format", "json", "--output", target], streams)).toBe(
+        EXIT.ok,
+      );
+      expect(existsSync(target)).toBe(true);
+    } finally {
+      rmSync(freeRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to capture a history snapshot through a workspace-internal symlinked dir (G-06)", async () => {
+    // The `history --capture` writer runs the same containment check as
+    // `--output` against the WORKSPACE root. A committed symlink
+    // `.lattice/history -> /tmp/out` makes `lattice history .lattice/history
+    // --capture` the same runner-write escape as G-02 — refused loudly here,
+    // never a snapshot landing outside the tree with a "history complete"
+    // success line. The caller's own choice of an outside-in-string dir
+    // (`--capture /var/lattice/history`) is unchanged-by-design: that is a
+    // user-supplied path, not a tree-committed symlink.
+    const captureRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-g06-"));
+    const outside = mkdtempSync(join(tmpdir(), "polyglot-cli-g06-outside-"));
+    try {
+      const writeCapture = (relativePath, text) => {
+        mkdirSync(join(captureRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(captureRoot, relativePath), text);
+      };
+      writeCapture(
+        "lattice.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "libs/domain", name: "domain", tags: ["layer:domain"] }] },
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeCapture(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      writeCapture("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeCapture("libs/domain/doc.go", "package domain\n");
+      symlinkSync(outside, join(captureRoot, ".lattice"));
+      mkdirSync(join(outside, "history"), { recursive: true });
+      const files = [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        ".lattice",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+      const streams = {
+        ...nativeEnv(),
+        cwd: captureRoot,
+        listFiles: () => files,
+      };
+      expect(
+        await runCli(["history", ".lattice/history", "--capture", "--format", "json"], streams),
+      ).toBe(EXIT.error);
+      // The READ guard fires first now — `historyCommand` reads the dir before
+      // it can write, and the read of a workspace-internal symlinked dir is
+      // refused with the same loud exit 3 the write guard would have produced.
+      // Either message names the same escape class; the read-side one is the
+      // one that actually runs for `--capture`.
+      expect(streams.lines.err.join("\n")).toContain("outside the workspace root");
+      expect(streams.lines.err.join("\n")).toContain("cannot read the history directory");
+      expect(readdirSync(join(outside, "history"))).toEqual([]);
+    } finally {
+      rmSync(captureRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("coverage.exempt is disclosed, not only enforced", () => {
@@ -4017,6 +4752,75 @@ var _ = adapter.Name
     } finally {
       rmSync(diffRoot, { recursive: true, force: true });
       rmSync(histDir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a profiles registry whose symlinked intermediate leaves the workspace (G-10, profiles read)", async () => {
+    // The `profiles` option is tree-derived (`nx.json`/`lattice.json` options)
+    // exactly like `boundaryConfig`, so a committed symlink in an intermediate
+    // component of it hands OUTSIDE profile rows in as the workspace's law —
+    // the boundary config read escape (G-10) held on the profiles arm, which
+    // `resolvePolicy` used to reach straight through `loadProfileRegistry`'s
+    // plain read. Red direction: the outside registry names a profile whose
+    // block is permissive; read silently it would resolve the run against
+    // outside bytes and report its verdict.
+    const profEscape = mkdtempSync(join(tmpdir(), "polyglot-cli-profiles-escape-"));
+    const outside = mkdtempSync(join(tmpdir(), "polyglot-cli-profiles-escape-outside-"));
+    try {
+      const writeEscape = (relativePath, text) => {
+        mkdirSync(join(profEscape, relativePath, ".."), { recursive: true });
+        writeFileSync(join(profEscape, relativePath), text);
+      };
+      writeEscape(
+        "nx.json",
+        JSON.stringify({
+          plugins: [
+            {
+              plugin: "@ecoma-io/lattice/nx",
+              options: { boundaryConfig: "strict", profiles: "sub/law-profiles.json" },
+            },
+          ],
+        }),
+      );
+      writeEscape(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [];
+export const moduleBoundaryOptions = [];
+`,
+      );
+      // The outside registry: a permissive profile the workspace never wrote.
+      writeFileSync(
+        join(outside, "law-profiles.json"),
+        JSON.stringify({
+          version: 1,
+          profiles: [
+            {
+              name: "strict",
+              block: { depConstraints: [], moduleBoundaryOptions: [] },
+            },
+          ],
+        }),
+      );
+      mkdirSync(join(profEscape, "sub"), { recursive: true });
+      rmSync(join(profEscape, "sub"), { recursive: true, force: true });
+      symlinkSync(outside, join(profEscape, "sub"));
+      const out = [];
+      const err = [];
+      const streams = {
+        out: (text) => out.push(text),
+        err: (text) => err.push(text),
+        lines: { out, err },
+        cwd: profEscape,
+        readGraph: () => ({ nodes: {}, dependencies: {} }),
+        listFiles: () => ["nx.json", "module-boundaries.config.mjs", "sub/law-profiles.json"],
+      };
+      expect(await runCli(["graph", "--format", "json"], streams)).toBe(EXIT.error);
+      const text = streams.lines.out.join("\n") + streams.lines.err.join("\n");
+      expect(text).toContain("law-profiles.json");
+      expect(text).toContain("outside the workspace root");
+    } finally {
+      rmSync(profEscape, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 });

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -164,5 +164,53 @@ describe("createDependencies over a real workspace fixture", () => {
       { source: "py-r", target: "py-s", sourceFile: "py/r/pyproject.toml", type: "static" },
       { source: "py-t", target: "py-u", sourceFile: "py/t/pyproject.toml", type: "static" },
     ]);
+  });
+
+  it("draws no edge through a tracked symlink whose realpath leaves the workspace (G-10, plugin read)", () => {
+    // Silent direction: every value `readFile` is handed comes from the tree's
+    // own `fileMap` — attacker-supplied the moment a PR adds a tracked path. A
+    // tracked symlink in that map whose realpath leaves the workspace would
+    // feed OUTSIDE bytes to the Go/Rust/Python resolvers, drawing a dependency
+    // edge from outside content into `nx affected`'s graph. The RED direction
+    // here is a symlinked SOURCE file importing a sibling's module path:
+    // followed, the symlink draws a `one -> two` edge from outside bytes;
+    // refused, the read is null and no edge is drawn. (The hook cannot exit
+    // non-zero by design; dropping the read is the loudest refusal available,
+    // and `resolvePolyglotDependencies`'s contract pins null read → no edge.)
+    const escape = mkdtempSync(join(tmpdir(), "polyglot-graph-escape-"));
+    const outside = mkdtempSync(join(tmpdir(), "polyglot-graph-escape-outside-"));
+    afterAll(() => rmSync(escape, { recursive: true, force: true }));
+    afterAll(() => rmSync(outside, { recursive: true, force: true }));
+    mkdirSync(join(escape, "go/one"), { recursive: true });
+    mkdirSync(join(escape, "go/two"), { recursive: true });
+    // Two real projects: `one` and its sibling `two` (module `example.com/two`).
+    writeFileSync(join(escape, "go/one/go.mod"), "module example.com/one\n\ngo 1.24\n", "utf8");
+    writeFileSync(join(escape, "go/two/go.mod"), "module example.com/two\n\ngo 1.24\n", "utf8");
+    writeFileSync(join(escape, "go/two/lib.go"), "package two\n", "utf8");
+    // The tracked symlink: `go/one/main.go` -> <outside>/main.go, and the
+    // outside file imports the SIBLING's module path.
+    writeFileSync(
+      join(outside, "main.go"),
+      'package one\n\nimport "example.com/two"\n\nvar _ = two.Name\n',
+      "utf8",
+    );
+    symlinkSync(join(outside, "main.go"), join(escape, "go/one/main.go"));
+
+    const deps = createDependencies(undefined, {
+      workspaceRoot: escape,
+      projects: { "go-one": { root: "go/one" }, "go-two": { root: "go/two" } },
+      fileMap: {
+        projectFileMap: {
+          "go-one": [{ file: "go/one/go.mod" }, { file: "go/one/main.go" }],
+          "go-two": [{ file: "go/two/go.mod" }, { file: "go/two/lib.go" }],
+        },
+      },
+    });
+    // Without the containment check, `go/one/main.go` reads the OUTSIDE
+    // bytes, parses `import "example.com/two"`, and draws a `one -> two` edge
+    // the workspace never committed. With it, the read is null, the file
+    // produces no import, and the edge set is empty — the graph cannot lie
+    // about the outside.
+    expect(deps).toEqual([]);
   });
 });

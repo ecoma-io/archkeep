@@ -166,7 +166,9 @@ export function healthCommand(commandContext, io = {}) {
   // re-derived from stored bytes.
   let trends = null;
   if (io.trendDir) {
-    const read = io.readSnapshots ? io.readSnapshots(io.trendDir) : readSnapshots(io.trendDir);
+    const read = io.readSnapshots
+      ? io.readSnapshots(io.trendDir)
+      : readSnapshots(io.trendDir, root);
     trends = {
       snapshots: read.files.map((f) => ({
         name: f.name,

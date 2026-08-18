@@ -77,7 +77,7 @@ const directoryOf = (file) => {
 const basenameOf = (root) => (root === "" ? "" : root.slice(root.lastIndexOf("/") + 1));
 
 /**
- * `project.json` at `root`, parsed the same JSONC-tolerant way
+ * `project.json` at `projectRoot`, parsed the same JSONC-tolerant way
  * `../../nx-json.mjs` reads every other config this package trusts —
  * `../../lsp/workspace-index.mjs` reads its own copy of `project.json` the
  * same way, so a trailing comma or a comment that Nx itself accepts is not a
@@ -95,14 +95,36 @@ const basenameOf = (root) => (root === "" ? "" : root.slice(root.lastIndexOf("/"
  * the project still keeps its row — `discoverNativeProjects` below, same as
  * before — but the caller surfaces the broken manifest as its own finding.
  *
- * @param {string} root
+ * The same refusal applies to a null read of a TRACKED manifest: the reader
+ * (`../../commands/context.mjs`'s `readWorkspaceRoot`, `../../lsp/workspace-index.mjs`'s
+ * `readWorkspaceFile`) already refuses a containment escape — a tracked symlink
+ * whose realpath leaves the workspace — by returning null. Treating that null
+ * as "no manifest" would silently re-read the project as named by its
+ * directory basename, outside bytes purged but the wrong verdict still clean.
+ * So a tracked manifest that reads null is surfaced as a `fileFailure`, the
+ * identical loud shape a parse failure gets (`../../containment.mjs`, the
+ * read-side G-10 closure).
+ *
+ * @param {string} projectRoot Workspace-relative project root (`""` for the
+ *   workspace root itself).
  * @param {(path: string) => string|null} readFile
+ * @param {(path: string) => boolean} isTracked Whether `path` (workspace-relative)
+ *   is in the tracked file list.
  * @returns {{manifest: {name?: string, tags?: string[], projectType?: string, implicitDependencies?: string[]}|undefined, failure: object|undefined}}
  */
-function readProjectManifest(root, readFile) {
-  const path = root === "" ? PROJECT_CONFIG_FILE : `${root}/${PROJECT_CONFIG_FILE}`;
+function readProjectManifest(projectRoot, readFile, isTracked) {
+  const path = projectRoot === "" ? PROJECT_CONFIG_FILE : `${projectRoot}/${PROJECT_CONFIG_FILE}`;
   const text = readFile(path);
-  if (text === null) return { manifest: undefined, failure: undefined };
+  if (text === null) {
+    // A null read is "no such file" only when the tree does not track one; a
+    // tracked manifest that cannot be read was refused (containment) or is
+    // missing from the working tree — either way the project must not silently
+    // fall back to its basename.
+    if (isTracked(path)) {
+      return { manifest: undefined, failure: fileFailure(path, "could not be read") };
+    }
+    return { manifest: undefined, failure: undefined };
+  }
   try {
     return { manifest: parseNxJson(text), failure: undefined };
   } catch (cause) {
@@ -138,14 +160,24 @@ function readProjectManifest(root, readFile) {
  * resolve as external rather than cross-project, unnoticed. The same silent
  * hole `readProjectManifest`'s own header describes for `project.json`.
  *
- * @param {string} root
+ * @param {string} projectRoot Workspace-relative project root (`""` for the
+ *   workspace root itself).
  * @param {(path: string) => string|null} readFile
+ * @param {(path: string) => boolean} isTracked Whether `path` (workspace-relative)
+ *   is in the tracked file list.
  * @returns {{name: string|undefined, failure: object|undefined}}
  */
-function readPackageName(root, readFile) {
-  const path = root === "" ? "package.json" : `${root}/package.json`;
+function readPackageName(projectRoot, readFile, isTracked) {
+  const path = projectRoot === "" ? "package.json" : `${projectRoot}/package.json`;
   const text = readFile(path);
-  if (text === null) return { name: undefined, failure: undefined };
+  if (text === null) {
+    // The same tracked-but-unreadable rule `readProjectManifest` applies: a
+    // null read is "no package.json" only when the tree tracks none.
+    if (isTracked(path)) {
+      return { name: undefined, failure: fileFailure(path, "could not be read") };
+    }
+    return { name: undefined, failure: undefined };
+  }
   try {
     const parsed = parseNxJson(text);
     return {
@@ -235,7 +267,8 @@ export function discoverNativeProjects({ root, files, readFile, model }) {
   const resolved = [];
   for (const projectRoot of allRoots) {
     const declared = declaredByRoot.get(projectRoot);
-    const { manifest, failure } = readProjectManifest(projectRoot, readFile);
+    const isTracked = (path) => files.includes(path);
+    const { manifest, failure } = readProjectManifest(projectRoot, readFile, isTracked);
     if (failure) failures.push(failure);
     // Read unconditionally, not only when `project.json` is absent: a
     // `project.json` that EXISTS but omits `name` is still a truthy
@@ -246,7 +279,11 @@ export function discoverNativeProjects({ root, files, readFile, model }) {
     // `../../lsp/workspace-index.mjs`'s `discoverProjects` — the oracle this
     // module's own header names for this exact precedence — reads
     // `package.json` the same unconditional way for the same reason.
-    const { name: packageName, failure: packageFailure } = readPackageName(projectRoot, readFile);
+    const { name: packageName, failure: packageFailure } = readPackageName(
+      projectRoot,
+      readFile,
+      isTracked,
+    );
     if (packageFailure) failures.push(packageFailure);
     // Nx's own precedence, reproduced exactly (`../../lsp/workspace-index.mjs`,
     // `discoverProjects`): a declared name, then `project.json`'s, then

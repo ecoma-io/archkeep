@@ -70,8 +70,10 @@
  * fetch so a remote answer carries the moment it was taken.
  */
 
-import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
-import { isAbsolute, join, relative } from "node:path";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { join } from "node:path";
+
+import { containmentViolation } from "../containment.mjs";
 
 /** The directory, relative to a workspace root, where ADR files live. */
 export const ADR_DIR = "docs/adr";
@@ -250,42 +252,6 @@ export function validateRecord({ id, frontmatter }) {
 }
 
 /**
- * Whether `path` — a directory entry `loadAdrRegistry` already knows exists —
- * is a symlink whose target resolves outside `root`. Not a symlink: `false`,
- * the common case. A DANGLING symlink is not this function's concern either
- * (`false`): the read that follows fails on it with `ENOENT`, which the
- * existing "cannot read" branch already turns into a loud error, unchanged.
- * What this catches is the symlink that resolves just fine — silently handing
- * back bytes this workspace never committed, the read-side twin of the
- * write-side guard `../../cli.mjs`'s `writeOutputReport` documents.
- *
- * @param {string} root Absolute, already-canonical workspace root — resolving
- *   symlinks out of it is the caller's job (`findWorkspaceRoot` and this
- *   project's own fixtures both hand down a root with no symlink component of
- *   its own), so this function only resolves the candidate file.
- * @param {string} path Absolute path of the candidate file.
- * @param {{lstatSync: (path: string) => {isSymbolicLink: () => boolean}, realpathSync: (path: string) => string}} io
- * @returns {boolean}
- */
-function escapesWorkspace(root, path, io) {
-  let stat;
-  try {
-    stat = io.lstatSync(path);
-  } catch {
-    return false;
-  }
-  if (!stat.isSymbolicLink()) return false;
-  let real;
-  try {
-    real = io.realpathSync(path);
-  } catch {
-    return false;
-  }
-  const rel = relative(root, real);
-  return rel.startsWith("..") || isAbsolute(rel);
-}
-
-/**
  * Read and index every ADR file under `root/docs/adr/`. Deterministic:
  * filenames are byte-sorted, and every list in the returned records is already
  * in the order the source file stated (kept stable — the registry never
@@ -306,7 +272,11 @@ function escapesWorkspace(root, path, io) {
  *   `listTrackedFiles`); when provided, a directory entry whose `docs/adr/<name>`
  *   path is not in it is excluded before it is ever validated — see this
  *   module's header for why, and `../architecture-intent/model.mjs`'s
- *   `loadIntent` for the identical `tracked` contract this one mirrors.
+ *   `loadIntent` for the identical `tracked` contract this one mirrors. The
+ *   `lstatSync`/`realpathSync` seams feed
+ *   `../containment.mjs`'s `containmentViolation`, which resolves the deepest
+ *   existing ancestor through every intermediate component — so a symlinked
+ *   `docs/adr/` directory is excluded the same way an escaping entry file is.
  * @returns {{records: object[], byId: Map<string, object>}}
  * @throws {Error} on an unreadable registry.
  */
@@ -348,11 +318,26 @@ export function loadAdrRegistry(root, io = {}) {
     }
     const filePath = join(dir, name);
     // A tracked NAME says nothing about what currently sits on disk at that
-    // path: a symlink committed at mode 120000, or one swapped in locally
-    // after the `tracked` filter above ran, still passes it by name alone.
-    // Excluded exactly like an untracked file — this module's header explains
-    // why silence here is the honest answer rather than a thrown error.
-    if (escapesWorkspace(root, filePath, { lstatSync: lstat, realpathSync: realpath })) {
+    // path: a symlink committed at mode 120000, one swapped in locally after
+    // the `tracked` filter above ran, or — the intermediate case — a
+    // symlinked `docs/adr/` itself, whose entries all pass the `tracked` filter
+    // as strings while `readdir` hands back the target's bytes. `../containment.mjs`'s
+    // `containmentViolation` walks the realpath of the deepest existing
+    // ancestor through every intermediate component, so it catches all three;
+    // the local `escapesWorkspace` it replaced only lstat'd the final file and
+    // let the intermediate case through, the same escape the write guard in
+    // `../../cli.mjs`'s `writeOutputReport` refuses (G-10). Excluded exactly
+    // like an untracked file — this module's header explains why silence here
+    // is the honest answer rather than a thrown error.
+    if (
+      // The real-fs guard `../architecture-intent/model.mjs`'s `loadIntent`
+      // uses for the identical reason: an injected in-memory reader a test
+      // drives is keyed by a fixture path that does not exist on disk, and
+      // probing a nonexistent root's ancestry would walk up to a real parent
+      // directory and misread it as an escape. Real roots only.
+      existsSync(root) &&
+      containmentViolation(root, filePath, { lstatSync: lstat, realpathSync: realpath }) !== null
+    ) {
       continue;
     }
     let text;

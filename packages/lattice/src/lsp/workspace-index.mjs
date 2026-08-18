@@ -84,6 +84,7 @@ import { join } from "node:path";
 
 import { analyzeFile } from "../analysis/analyze.mjs";
 import { fileFailure, isWholeFileFailure } from "../analysis/source-util.mjs";
+import { containmentViolation } from "../containment.mjs";
 import { parseNxJson } from "../nx-json.mjs";
 import {
   NX_CONFIG_FILE,
@@ -618,8 +619,16 @@ const firstLine = (reason) => String(reason).split("\n")[0].trimEnd();
  * @returns {string|null}
  */
 export function readWorkspaceFile(root, path) {
+  const abs = join(root, path);
+  // Same containment rule as `createWorkspace`'s default reader
+  // (`../workspace.mjs`): a tracked symlink whose realpath leaves the
+  // workspace is outside code read as the workspace's own source, so it is
+  // refused rather than read. `null` is a whole-file failure here — the
+  // analyzer records it, `analyzeTrackedFiles` surfaces it as an `indexGaps`
+  // diagnostic, never a silently empty index (`../../CLAUDE.md`).
+  if (containmentViolation(root, abs) !== null) return null;
   try {
-    return readFileSync(join(root, path), "utf8");
+    return readFileSync(abs, "utf8");
   } catch {
     return null;
   }

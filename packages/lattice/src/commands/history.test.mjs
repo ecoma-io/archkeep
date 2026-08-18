@@ -21,6 +21,20 @@ vi.mock("node:fs", () => ({
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   renameSync: vi.fn(),
+  // The default capture writer runs `containmentViolation`
+  // (`../containment.mjs`) before staging the `.tmp`, which lstat-walks the
+  // history path's ancestors. In a mocked-fs test no path exists, so the walk
+  // must ENOENT up to `/` (no realpath) and containment returns null — the
+  // write proceeds, which is exactly the default-writer behavior this test
+  // pins. The mock must both EXPORT both names (or the import inside
+  // `containment.mjs` throws) and THROW, not return `undefined`, or the
+  // walk reads a nonexistent path as existing.
+  lstatSync: () => {
+    throw new Error("ENOENT");
+  },
+  realpathSync: () => {
+    throw new Error("ENOENT");
+  },
 }));
 
 /** The real overloads would pin these to `Dirent[]`/`PathOrFileDescriptor`;

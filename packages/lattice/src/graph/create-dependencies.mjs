@@ -29,6 +29,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { containmentViolation } from "../containment.mjs";
 import { resolveGoDependencies } from "../analysis/go.mjs";
 import { resolvePythonDependencies } from "../analysis/python.mjs";
 import { resolveRustDependencies } from "../analysis/rust.mjs";
@@ -75,8 +76,18 @@ export const createDependencies = (options, context) => {
   const filesOf = (projectName) =>
     (context.fileMap?.projectFileMap?.[projectName] ?? []).map((f) => f.file);
   const readFile = (workspaceRelativePath) => {
+    const abs = join(context.workspaceRoot, workspaceRelativePath);
+    // Every value this reader is handed comes from the tree's own `fileMap` —
+    // attacker-supplied the moment a PR adds a tracked path. A tracked symlink
+    // whose realpath leaves the workspace would draw a dependency edge from
+    // outside bytes into `nx affected`'s graph; refusing (null) drops the
+    // read so the file produces no edge (the `resolvePolyglotDependencies`
+    // contract is a null read = no edge, not a throw — this hook cannot exit
+    // non-zero by design). A plugin that never resolves outside bytes stays
+    // silent-green only when the bytes are really inside (`../containment.mjs`).
+    if (containmentViolation(context.workspaceRoot, abs) !== null) return null;
     try {
-      return readFileSync(join(context.workspaceRoot, workspaceRelativePath), "utf8");
+      return readFileSync(abs, "utf8");
     } catch {
       return null;
     }

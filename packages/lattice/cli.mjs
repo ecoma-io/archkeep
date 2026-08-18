@@ -77,6 +77,7 @@
 import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
+import { containmentViolation } from "./src/containment.mjs";
 import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs";
 import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/config.mjs";
@@ -133,8 +134,14 @@ import { findWorkspaceRoot, listTrackedFiles } from "./src/workspace.mjs";
  */
 function readWorkspaceRoot(root) {
   return (path) => {
+    const abs = join(root, path);
+    // Same containment rule as the `check` reader (`./src/containment.mjs`):
+    // a tracked symlink whose realpath leaves the workspace hands `--help`
+    // outside bytes as the workspace's own declaration. Refusing keeps a
+    // symlinked `lattice.json` from being read as the model (`../G-10` class).
+    if (containmentViolation(root, abs) !== null) return null;
     try {
-      return readFileSync(join(root, path), "utf8");
+      return readFileSync(abs, "utf8");
     } catch {
       return null;
     }
@@ -1088,20 +1095,12 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
  * `resolve(root, …)` wherever `check`/`drift` load them; the boundary law is
  * `options.config` resolved `isAbsolute(...) ? ... : resolve(cwd, ...)` — the
  * exact expression repeated at every other `options.config` read in this
- * file — falling back to `DEFAULT_OPTIONS.boundaryConfig` at the workspace
- * root when no `--config` override was given, because that un-overridden
- * default is what `check` would load too.
- *
- * Deliberately narrow: a workspace that renamed its boundary law via
- * `nx.json`'s `plugins[].options.boundaryConfig` (or the equivalent
- * `lattice.json` field) and is run with no `--config` override is not
- * covered by the third entry — resolving that name needs the full
- * per-provider options read (`readPluginOptions`, or `lattice.json`'s own
- * inline-vs-filename `boundaryConfig`) that only `resolveCommandContext`
- * does today, and duplicating that here to cover one more name was judged
- * not worth the risk of this guard itself gaining a new, unrelated failure
- * mode. The two fixed names and the un-overridden default close the finding's
- * own examples; a renamed boundary config is the residual gap.
+ * file — falling back to the per-provider name `optionsForUsage(cwd)`
+ * resolves (`nx.json`'s `plugins[].options.boundaryConfig`, a `lattice.json`
+ * `boundaryConfig`, or the default), because that is the name this run's
+ * `check`/`graph` actually load through `resolvePolicy`. A workspace that
+ * renamed its law via `nx.json` or `lattice.json` is covered, not just the
+ * default name and the `--config` override.
  *
  * `root === null` (no workspace reachable from `cwd`) returns an empty map
  * rather than throwing: every caller of `writeOutputReport` below already
@@ -1117,12 +1116,13 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
 function governanceOutputTargets(cwd, configOption) {
   const root = resolveWorkspaceRootForUsage(cwd);
   if (root === null) return new Map();
-  const boundaryConfigName = configOption ?? DEFAULT_OPTIONS.boundaryConfig;
+  const boundaryConfigName =
+    configOption ?? optionsForUsage(cwd).boundaryConfig ?? DEFAULT_OPTIONS.boundaryConfig;
   const boundaryConfigAbs = configOption
     ? isAbsolute(configOption)
       ? configOption
       : resolve(cwd, configOption)
-    : resolve(root, DEFAULT_OPTIONS.boundaryConfig);
+    : resolve(root, boundaryConfigName);
   return new Map([
     [resolve(root, INTENT_FILE), INTENT_FILE],
     [resolve(root, LATTICE_MODEL_FILE), LATTICE_MODEL_FILE],
@@ -1136,9 +1136,16 @@ function governanceOutputTargets(cwd, configOption) {
  * `run*` below calls rather than the 16 near-identical inline copies this
  * replaces.
  *
- * Refuses first, before any write is attempted, when `outputPath` resolves to
- * a name `governanceOutputTargets` above guards: the workspace's declared
- * architecture intent, its native model file, or its boundary law. `{flag:
+ * Refuses first, before any write is attempted, on two grounds. `outputPath`
+ * resolving to a name `governanceOutputTargets` above guards — the workspace's
+ * declared architecture intent, its native model file, or its boundary law,
+ * however that law is named — is one. The other is containment: a
+ * workspace-controlled symlink in an INTERMEDIATE directory component of
+ * `outputPath` (`./src/containment.mjs`'s `containmentViolation` with
+ * `forWrite: true`) would make this write land somewhere other than the path
+ * the user named — outside the workspace entirely, or at the workspace root
+ * for a `sub -> .` self-loop — with the run reporting success. That write is
+ * refused loudly (`exit 3`, never a silent different-location write). `{flag:
  * "wx"}` below stops the temp write from following or truncating through
  * whatever already sits at `<target>.tmp`; it says nothing about the FINAL
  * name, and `renameSync` replaces whatever is there unconditionally — which
@@ -1182,7 +1189,18 @@ function governanceOutputTargets(cwd, configOption) {
  * to write through. It needs the governance guard above instead, because a
  * symlink was never the only thing worth protecting at that destination.
  *
- * @param {string} outputPath Resolved `--output` path.
+ * The containment decision and the actual write share ONE resolved path.
+ * `outputAbs = resolve(cwd, outputPath)` collapses `..` segments lexically, and
+ * the tmp write and `renameSync` act on `outputAbs` — the same string the
+ * governance and containment checks saw — never on the raw `outputPath`. This
+ * is what closes the `..`-across-a-symlink corner of the intermediate-component
+ * escape (`./src/containment.mjs`'s `containsDotDot` owns the mechanism): if
+ * the write used the raw spelling, a `sub -> /tmp/out` plus `sub/../report.json`
+ * would resolve the check to a clean path while the kernel, walking the raw
+ * string, followed `sub` out of the tree. A written path that has no `..` left
+ * in it cannot hide a symlink the kernel would walk later.
+ *
+ * @param {string} outputPath The `--output` flag as the user wrote it.
  * @param {string} text The rendered report, newline-terminated by the caller.
  * @param {{err: Function}} env
  * @param {string} cwd This run's working directory, for resolving both
@@ -1192,7 +1210,11 @@ function governanceOutputTargets(cwd, configOption) {
  *   to `env.err` — the caller's cue to return its own no-verdict exit code.
  */
 function writeOutputReport(outputPath, text, env, cwd, configOption) {
-  const outputAbs = isAbsolute(outputPath) ? outputPath : resolve(cwd, outputPath);
+  // `resolve` normalises BOTH branches — an absolute `--output` keeps its `..`
+  // segments collapsed lexically, and a relative one resolves against this
+  // run's `cwd`, not the process's. The identical `outputAbs` then feeds the
+  // governance guard, the containment decision, AND the write.
+  const outputAbs = isAbsolute(outputPath) ? resolve(outputPath) : resolve(cwd, outputPath);
   const guardedName = governanceOutputTargets(cwd, configOption).get(outputAbs);
   if (guardedName !== undefined) {
     env.err(
@@ -1202,12 +1224,20 @@ function writeOutputReport(outputPath, text, env, cwd, configOption) {
     );
     return false;
   }
-  const tmpOutput = `${outputPath}.tmp`;
+  const root = resolveWorkspaceRootForUsage(cwd);
+  if (root !== null) {
+    const violation = containmentViolation(root, outputAbs, { forWrite: true });
+    if (violation !== null) {
+      env.err(`lattice: --output '${outputPath}' is refused: ${violation}`);
+      return false;
+    }
+  }
+  const tmpOutput = `${outputAbs}.tmp`;
   let tmpCreated = false;
   try {
     writeFileSync(tmpOutput, text, { flag: "wx" });
     tmpCreated = true;
-    renameSync(tmpOutput, outputPath);
+    renameSync(tmpOutput, outputAbs);
     return true;
   } catch (cause) {
     // Only clean up a `.tmp` THIS call created — an `EEXIST` from `wx` means
@@ -1367,6 +1397,15 @@ async function resolvePolicy(options, commandContext, cwd) {
   if (hasProfiles(commandContext.options)) {
     const profileName = String(options.config ?? commandContext.options.boundaryConfig);
     const registryPath = resolve(root, commandContext.options.profiles);
+    // `profiles` is a tree-derived filename (`nx.json`/`lattice.json` options),
+    // so a tracked symlink in an intermediate component of it would hand
+    // outside profile rows in as the workspace's — the same read escape
+    // `loadBoundaryConfig` now refuses at `loadBoundaryConfig`; held here for
+    // the profiles arm (`./src/containment.mjs`, the read-side G-10 closure).
+    const violation = containmentViolation(root, registryPath);
+    if (violation !== null) {
+      throw new Error(`lattice: cannot load ${registryPath}: ${violation}`);
+    }
     const config = profilePolicy(
       registryPath,
       profileName,
@@ -2102,7 +2141,9 @@ async function runHistory(options, { cwd, env }) {
     return EXIT.usage;
   }
 
-  const dir = isAbsolute(options.paths[0]) ? options.paths[0] : resolve(cwd, options.paths[0]);
+  const dir = isAbsolute(options.paths[0])
+    ? resolve(options.paths[0])
+    : resolve(cwd, options.paths[0]);
 
   // A self-footgun guard: writing the history report back into the very
   // directory `history` reads would poison every later run (the report envelope

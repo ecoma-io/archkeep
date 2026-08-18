@@ -95,7 +95,7 @@ export async function debtCommand(dir, commandContext, options = {}) {
 
   // The snapshot directory is the sole source of truth for aging; a directory
   // that cannot be read or parsed throws here (exit 3), never an empty ledger.
-  const read = (io.readSnapshots ?? readSnapshots)(dir);
+  const read = (io.readSnapshots ?? readSnapshots)(dir, root);
 
   const intent = await (io.loadIntentOverride ?? loadIntent)(root, {
     tracked: commandContext.tracked,

@@ -8,7 +8,7 @@
  * down is reachable through `filesOf`. Only a tree on disk shows that.
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -210,6 +210,28 @@ describe("where the file list comes from", () => {
   it("answers null for a file that is not there, rather than throwing mid-run", () => {
     expect(readWorkspaceFile(root, "libs/inner/go.mod")).toContain("module example.test/inner");
     expect(readWorkspaceFile(root, "libs/inner/absent.go")).toBeNull();
+  });
+
+  it("refuses a symlink whose realpath leaves the workspace — the LSP read escape (G-10)", () => {
+    // Before `containmentViolation` (`../containment.mjs`), `readWorkspaceFile`
+    // followed a tracked symlink out of the tree with plain `readFileSync` and
+    // judged the outside bytes as the workspace's own source — the index drew
+    // no diagnostic for the escape, exactly like a clean tree. Now the outside
+    // file is refused: `null` here is the whole-file failure the index
+    // surfaces as an `indexGaps` diagnostic, never a silently-empty index.
+    const outside = mkdtempSync(join(tmpdir(), "lattice-index-escape-"));
+    try {
+      writeFileSync(join(outside, "outsider.py"), "import os\n");
+      const tracked = join(root, "libs", "inner", "escaped.py");
+      symlinkSync(join(outside, "outsider.py"), tracked);
+      try {
+        expect(readWorkspaceFile(root, "libs/inner/escaped.py")).toBeNull();
+      } finally {
+        rmSync(tracked, { force: true });
+      }
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });
 

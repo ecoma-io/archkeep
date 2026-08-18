@@ -25,6 +25,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { containmentViolation } from "../containment.mjs";
 import { languageOf } from "../analysis/registry.mjs";
 import { pythonUnmodelledFailures } from "../analysis/python.mjs";
 import { fileFailure } from "../analysis/source-util.mjs";
@@ -57,13 +58,22 @@ import {
  * read from: `nativeProvider.discover` needs one to load `lattice.json`
  * itself.
  *
+ * Carries the same containment rule as that default reader: a tracked symlink
+ * whose realpath leaves the workspace would hand the reader outside bytes as
+ * the workspace's own declaration — a model file read that way is a whole
+ * verdict built on attacker-controlled input, reported clean. Refusing (null)
+ * makes the read a loud "cannot load" failure rather than a silent
+ * read-and-judge (`../containment.mjs`, the G-10 closure).
+ *
  * @param {string} root
  * @returns {(path: string) => string|null}
  */
 function readWorkspaceRoot(root) {
   return (path) => {
+    const abs = join(root, path);
+    if (containmentViolation(root, abs) !== null) return null;
     try {
-      return readFileSync(join(root, path), "utf8");
+      return readFileSync(abs, "utf8");
     } catch {
       return null;
     }

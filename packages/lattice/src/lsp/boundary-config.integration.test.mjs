@@ -5,7 +5,7 @@
  * pinned IS the ESM module cache, which only exists in a process that outlives
  * the edit. A mocked `import()` would agree with any implementation.
  */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -152,6 +152,34 @@ describe("reading a boundary config that outlives the process reading it", () =>
       );
     } finally {
       rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a boundaryConfig whose symlinked intermediate resolves outside the workspace (G-10, LSP law read)", async () => {
+    // The read escape held on the language-server face of the same law: a
+    // committed symlink in an intermediate component of `boundaryConfig`
+    // hands outside constraint rows in as the workspace's law, and the editor
+    // re-diagnoses every open file against them — an open file judged clean
+    // against bytes this tree never committed. `readBoundaryConfig` holds the
+    // same containment refusal `../config.mjs`'s `loadBoundaryConfig` does.
+    const escape = mkdtempSync(join(tmpdir(), "lattice-config-symlink-"));
+    const outside = mkdtempSync(join(tmpdir(), "lattice-config-symlink-outside-"));
+    try {
+      writeFileSync(
+        join(outside, "law.mjs"),
+        `export const depConstraints = [];\nexport const moduleBoundaryOptions = [];\n`,
+        "utf8",
+      );
+      mkdirSync(join(escape, "sub"), { recursive: true });
+      rmSync(join(escape, "sub"), { recursive: true, force: true });
+      symlinkSync(outside, join(escape, "sub"));
+
+      await expect(readBoundaryConfig(escape, 0, "sub/law.mjs")).rejects.toThrow(
+        /cannot load .*sub[\\/]law\.mjs: .*outside the workspace root/su,
+      );
+    } finally {
+      rmSync(escape, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 

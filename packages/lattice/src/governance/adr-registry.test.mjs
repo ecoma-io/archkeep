@@ -484,3 +484,49 @@ describe("symlink escape (P1-21) — real filesystem", () => {
     }
   });
 });
+
+// G-10 (intermediate component): the escaping-file tests above plant the
+// symlink at the FINAL component. A symlinked `docs/adr/` DIRECTORY — planted
+// one level up, with every entry string still tracked inside the tree — passes
+// a guard that only lstat's the final file (the local `escapesWorkspace` that
+// `../containment.mjs`'s `containmentViolation` replaced did exactly that):
+// `readdirSync` follows the directory symlink and hands back the target's
+// entries, each one validated and indexed as the workspace's own decision.
+// Only realpath of the full path walks the intermediate component.
+describe("symlinked docs/adr directory (G-10) — real filesystem", () => {
+  let root;
+  let outside;
+
+  beforeAll(() => {
+    root = realpathSync(mkdtempSync(join(tmpdir(), "lattice-adr-registry-intermediate-")));
+    outside = realpathSync(
+      mkdtempSync(join(tmpdir(), "lattice-adr-registry-intermediate-outside-")),
+    );
+    mkdirSync(join(root, "docs"), { recursive: true });
+    // The external `docs/adr/`: a well-formed record the bytes of this
+    // workspace never committed. Without the intermediate walk both entries
+    // below would read and index as the workspace's own decisions.
+    mkdirSync(join(outside, "docs", "adr"), { recursive: true });
+    writeFileSync(join(outside, "docs", "adr", "0099-planted.md"), "---\nstatus: accepted\n---\n");
+    writeFileSync(join(outside, "docs", "adr", "0001-real.md"), "---\nstatus: accepted\n---\n");
+    symlinkSync(join(outside, "docs", "adr"), join(root, "docs", "adr"));
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  });
+
+  it("excludes every entry whose docs/adr directory is a symlink resolving outside the workspace", () => {
+    const { records, byId } = loadAdrRegistry(root, {
+      // Each name is TRACKED as a string — the directory's symlink is invisible
+      // to `git ls-files`, which reports paths, never modes.
+      tracked: [`${ADR_DIR}/0099-planted.md`, `${ADR_DIR}/0001-real.md`],
+    });
+    expect(records).toEqual([]);
+    expect(byId.has("0099-planted")).toBe(false);
+    expect(byId.has("0001-real")).toBe(false);
+    expect(resolveDecisionRef(byId, boundFitnessIds(records), "0001-real")).toBe("unknown");
+    expect(resolveDecisionRef(byId, boundFitnessIds(records), "0099-planted")).toBe("unknown");
+  });
+});
