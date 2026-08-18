@@ -98,6 +98,19 @@ export const DIAGNOSTIC_SEVERITY = Object.freeze({
 export const MAX_CONTENT_LENGTH = 64 * 1024 * 1024;
 
 /**
+ * LSP `MessageType`, as `window/showMessage` reports it.
+ *
+ * `error` is the one this server uses — and the one value the
+ * `window/showMessage` notification was built for: a session whose options
+ * could not be read must say so even when no document is open yet, because an
+ * editor pane that stays silent through the whole session is
+ * indistinguishable from a session that never failed.
+ */
+export const MESSAGE_TYPE = Object.freeze({
+  error: 1,
+});
+
+/**
  * Splits a byte stream into LSP messages. Returns the messages it could frame
  * plus whatever tail is not yet a whole message, which the caller feeds back
  * in with the next chunk — or, when a header declared an implausible body size,

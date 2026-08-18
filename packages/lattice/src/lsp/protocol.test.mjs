@@ -166,12 +166,15 @@ describe("protocol constants", () => {
     // event without reading `changeType`, and nothing else imported it), and
     // this list is what would have caught it being public-but-unused: a dead
     // export on the boundary of a language server is an accidental contract.
+    // `MESSAGE_TYPE` joined it for D-11 (the durable refusal marker), and this
+    // list is what keeps that export deliberate too.
     const module = await import("./protocol.mjs");
     expect(Object.keys(module).sort()).toEqual(
       [
         "DIAGNOSTIC_SEVERITY",
         "ERROR_CODES",
         "MAX_CONTENT_LENGTH",
+        "MESSAGE_TYPE",
         "SERVER_INFO",
         "TEXT_DOCUMENT_SYNC_KIND",
         "encodeMessage",
