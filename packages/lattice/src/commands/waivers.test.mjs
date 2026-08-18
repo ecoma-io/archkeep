@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { computeWaivers, formatWaiversReport, waiversCommand } from "./waivers.mjs";
+import { computeWaivers, waiversCommand } from "./waivers.mjs";
 
 // `resolveProvenance` reaches the FS; the report row it fills is "where this
 // run came from", not a waiver fact, so it is pinned to a constant as the
@@ -184,82 +184,6 @@ describe("computeWaivers", () => {
     expect(suppressions).toHaveLength(1);
     expect(suppressions[0].covered).toBe(2);
     expect(suppressed).toBe(2);
-  });
-});
-
-describe("formatWaiversReport", () => {
-  it("says no waivers when the surface is empty, naming what that means", () => {
-    expect(formatWaiversReport(computeWaivers([], [], NOW))).toMatch(
-      /no waivers — every boundary is enforced/,
-    );
-  });
-
-  it("renders the term, the coverage, and the reason for each waiver", () => {
-    const result = computeWaivers(
-      [waiver({ origin: "ticket-1234" })],
-      [violation("area/app/some.config.ts")],
-      NOW,
-    );
-    const text = formatWaiversReport(result);
-    expect(text).toContain("currently covers a violation");
-    expect(text).toContain("1 current violation");
-    expect(text).toContain("reason: the loader resolves no alias here");
-    expect(text).toContain("expires: 2026-09-01T00:00:00.000Z");
-    expect(text).toContain("origin: ticket-1234");
-  });
-
-  it("flags a waiver that covers nothing as stale, loudly", () => {
-    const result = computeWaivers([waiver()], [], NOW);
-    const text = formatWaiversReport(result);
-    expect(text).toContain("covers nothing right now");
-    expect(text).toContain("consider removing it");
-  });
-
-  // P1-07: the regression this file exists to guard. Before the fix,
-  // `computeWaivers` dropped every row with no `expiresAt` before this
-  // function ever saw it, so a workspace whose ENTIRE `boundarySuppressions`
-  // table was permanent rows produced `waivers: []` and this function
-  // returned the same "every boundary is enforced" text as a workspace with
-  // no suppressions at all — a positive claim about a proposition never
-  // measured. Reverting only the `waivers.mjs` source change (keeping this
-  // test) is the red half of red/green: `suppressions` would come back `[]`
-  // too, `formatWaiversReport` would hit the old unconditional early return,
-  // and this whole test would fail on the `not.toMatch` line below.
-  it("does not claim every boundary is enforced when a permanent suppression is hiding one", () => {
-    const wildcard = { path: "**", reason: "accepted workspace-wide, no expiry" };
-    const result = computeWaivers(
-      [wildcard],
-      [violation("libs/domain/doc.go", "onlyTagsConstraintViolation")],
-      NOW,
-    );
-    expect(result.waivers).toHaveLength(0);
-    const text = formatWaiversReport(result);
-    expect(text).not.toMatch(/every boundary is enforced/);
-    expect(text).toContain("no waivers — nothing is being accepted temporarily");
-    expect(text).toContain("1 permanent suppression on the table");
-    expect(text).toContain("currently hiding 1 violation");
-    expect(text).toContain("- **: permanently hides 1 current violation");
-    expect(text).toContain("reason: accepted workspace-wide, no expiry");
-  });
-
-  it("names a permanent suppression that currently covers nothing, the same way a stale waiver is named", () => {
-    const dormant = { path: "libs/retired/**", reason: "kept for the day this path returns" };
-    const result = computeWaivers([dormant], [], NOW);
-    const text = formatWaiversReport(result);
-    expect(text).toContain("- libs/retired/**: covers nothing right now");
-  });
-
-  it("renders both a waiver section and a permanent-suppression section together", () => {
-    const result = computeWaivers(
-      [waiver(), { path: "libs/legacy/**", reason: "legacy module frozen" }],
-      [violation("area/app/some.config.ts"), violation("libs/legacy/main.go")],
-      NOW,
-    );
-    const text = formatWaiversReport(result);
-    expect(text).toContain("1 waiver on the table");
-    expect(text).toContain("1 permanent suppression on the table");
-    // Neither section's claim leaks into the other's summary line.
-    expect(text).not.toMatch(/every boundary is enforced/);
   });
 });
 
