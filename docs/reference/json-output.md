@@ -283,18 +283,30 @@ same gate that reports the boundary violations.
 
 ## `result` (for `command: "waivers"`)
 
-`waivers` lists the waiver surface — every `boundarySuppressions` row carrying
-an `expiresAt` — with each row's term and the violations it currently covers.
-It is descriptive: it never exits `1`, and it exits `0` whenever the surface
-could be read. The envelope's `status` is always `"ok"` on a completed run; a
-surface that only accepts violations is a fact the run reports, not a finding.
+`waivers` lists the whole `boundarySuppressions` surface — both the WAIVER
+rows (carrying `expiresAt`) and the PERMANENT ones (no `expiresAt`) — with each
+row's term (waivers only) and the violations it currently covers. It is
+descriptive: it never exits `1`, and it exits `0` whenever the surface could be
+read. The envelope's `status` is always `"ok"` on a completed run; a surface
+that only accepts violations is a fact the run reports, not a finding.
 
-| field     | type     | meaning                                                                                                                                                                                                                                                                                                                                                |
-| --------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `waivers` | object[] | Every waiver on the table, sorted by `path` then `expiresAt` (byte-identical across runs). Each row is the suppression row plus `status` (`"active"` \| `"expired"`), `remainingMs` (negative when expired, epoch-ms precision), and `covered` (how many violations it currently accepts, judged against the full finding set with the table removed). |
-| `covered` | number   | How many waivers currently cover at least one violation.                                                                                                                                                                                                                                                                                               |
-| `expired` | number   | How many waivers have lapsed — their `expiresAt` is at or before the reference instant, so each covers nothing and its violation re-asserts.                                                                                                                                                                                                           |
-| `stale`   | number   | How many waivers cover no violation right now, active or expired — the count of rows whose reason has lapsed and that are dead weight until edited away.                                                                                                                                                                                               |
+A permanent suppression never appears in `check`'s findings at all — the
+violation is removed outright, which is the mechanism working as designed —
+so `result.suppressions`/`result.suppressed` are the only place in the whole
+JSON surface that names one. Both fields are present on every envelope
+(possibly `[]`/`0`), unlike the additive `waived` field on `check`'s own
+envelope, because a consumer parsing this specific command's result needs to
+tell "measured, found none" apart from a field an older client would read as
+simply absent.
+
+| field          | type     | meaning                                                                                                                                                                                                                                                                                                                                                |
+| -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `waivers`      | object[] | Every waiver on the table, sorted by `path` then `expiresAt` (byte-identical across runs). Each row is the suppression row plus `status` (`"active"` \| `"expired"`), `remainingMs` (negative when expired, epoch-ms precision), and `covered` (how many violations it currently accepts, judged against the full finding set with the table removed). |
+| `covered`      | number   | How many waivers currently cover at least one violation.                                                                                                                                                                                                                                                                                               |
+| `expired`      | number   | How many waivers have lapsed — their `expiresAt` is at or before the reference instant, so each covers nothing and its violation re-asserts.                                                                                                                                                                                                           |
+| `stale`        | number   | How many waivers cover no violation right now, active or expired — the count of rows whose reason has lapsed and that are dead weight until edited away.                                                                                                                                                                                               |
+| `suppressions` | object[] | Every PERMANENT suppression on the table (no `expiresAt`), sorted by `path`. Each row is the suppression row plus `covered` — no `status`/`remainingMs`, since a permanent row carries no term.                                                                                                                                                        |
+| `suppressed`   | number   | How many DISTINCT violations, across the whole raw finding set, at least one permanent suppression currently hides. Two overlapping rows covering the same violation still count it once.                                                                                                                                                              |
 
 Each `waivers` entry:
 
@@ -308,6 +320,13 @@ Each `waivers` entry:
 | `status`      | string  | `"active"` before `expiresAt`, `"expired"` at or after it.                                                                                                                                          |
 | `remainingMs` | number  | Epoch-ms until expiry; negative when expired. The wall clock at the moment of this run, not a fact about the workspace — see "The stability promise" above; `coverage.notes` names it on every run. |
 | `covered`     | number  | Current violations accepted by this row, judged against the full finding set. Zero means the row is stale — covers nothing.                                                                         |
+
+Each `suppressions` entry carries `path`, `reason`, `messageId?` and `origin?`
+with the same meaning as the `waivers` entry above, plus `covered` (current
+violations this row hides, judged against the full finding set — zero means
+the row is dead weight, same as a stale waiver). It carries no `expiresAt`,
+`status` or `remainingMs`: a permanent suppression has no term for those
+fields to describe.
 
 ## `result` (for `command: "reconcile"`)
 
