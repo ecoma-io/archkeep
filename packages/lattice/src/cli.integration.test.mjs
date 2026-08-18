@@ -3206,6 +3206,368 @@ describe("an inline boundaryConfig's policy fingerprint survives graph into hist
   });
 });
 
+describe("a profile is resolved by every command that reads a boundary law, not just check (P1-26, P1-17)", () => {
+  // `check`'s own copy of the file/inline/profile config-resolution ladder
+  // has always recognised a `profiles` plugin option: `hasProfiles` routes
+  // `--config`/`boundaryConfig` through the registry as a profile NAME
+  // instead of a filename. Every other command's copy did not — it fell
+  // straight to `loadBoundaryConfig(root, "<profile-name>")`, which builds a
+  // path like `<root>/strict`, finds no `.mjs`/`.js`/`.json` extension, and
+  // refuses with "names an unsupported boundaryConfig extension '(none)'" —
+  // a message that blames a typo nobody made, because the real problem is
+  // that command never learned profiles exist. `graph` and `diff` failing
+  // this way is the same root cause as a separate finding (P1-17): a
+  // profile workspace could not produce a graph snapshot with a policy
+  // fingerprint, and `diff` could not compare one against a later run.
+  //
+  // Now that all 11 copies call the one `resolvePolicy` in `cli.mjs`, this
+  // block drives ten of the previously-broken ones — every one this repo's
+  // own `docs/concepts/profiles.md` used to name as "cannot see the
+  // profile-resolved law" — over a single shared, read-only fixture, plus a
+  // dedicated one for the fingerprint-change scenario below (mutated
+  // mid-test, so it stays out of the shared fixture the way P1-25's own
+  // `buildRoot` pattern keeps a mutation from bleeding into other cases).
+  const profRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-profiles-"));
+  afterAll(() => rmSync(profRoot, { recursive: true, force: true }));
+
+  const writeProf = (relativePath, text) => {
+    mkdirSync(join(profRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(profRoot, relativePath), text);
+  };
+
+  writeProf(
+    "nx.json",
+    JSON.stringify({
+      plugins: [
+        {
+          plugin: "@ecoma-io/lattice/nx",
+          options: { boundaryConfig: "strict", profiles: "law-profiles.json" },
+        },
+      ],
+    }),
+  );
+  writeProf(
+    "law-profiles.json",
+    JSON.stringify({
+      version: 1,
+      profiles: [
+        {
+          name: "strict",
+          block: {
+            depConstraints: [
+              { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+            ],
+            moduleBoundaryOptions: {
+              allow: [],
+              buildTargets: ["build"],
+              enforceBuildableLibDependency: false,
+              allowCircularSelfDependency: false,
+              checkDynamicDependenciesExceptions: [],
+              ignoredCircularDependencies: [],
+              banTransitiveDependencies: false,
+              checkNestedExternalImports: false,
+            },
+            // Gives `waivers` a real row to list, proving the profile's
+            // `boundarySuppressions` — not only its `depConstraints` — reach
+            // the command through the shared resolver.
+            boundarySuppressions: [
+              {
+                path: "libs/domain/doc.go",
+                reason: "the adapter seam lands next release",
+                expiresAt: "2999-01-01T00:00:00.000Z",
+                origin: "ticket-91",
+              },
+            ],
+          },
+        },
+      ],
+    }),
+  );
+  writeProf("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeProf(
+    "libs/domain/doc.go",
+    `// Package domain is the layer everything else points at.
+package domain
+
+import (
+	"example.com/adapter"
+)
+
+var _ = adapter.Name
+`,
+  );
+  writeProf("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writeProf("libs/adapter/adapter.go", "package adapter\n");
+
+  const profGraph = {
+    nodes: {
+      domain: {
+        name: "domain",
+        type: "lib",
+        data: { root: "libs/domain", tags: ["layer:domain"] },
+      },
+      adapter: {
+        name: "adapter",
+        type: "lib",
+        data: { root: "libs/adapter", tags: ["layer:adapter"] },
+      },
+    },
+    dependencies: {
+      domain: [
+        { source: "domain", target: "adapter", sourceFile: "libs/domain/doc.go", type: "static" },
+      ],
+      adapter: [],
+    },
+  };
+  const profFiles = [
+    "nx.json",
+    "law-profiles.json",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "libs/adapter/go.mod",
+    "libs/adapter/adapter.go",
+  ];
+  const profEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      cwd: profRoot,
+      readGraph: () => profGraph,
+      listFiles: () => profFiles,
+    };
+  };
+
+  // The exact wrong-reason message every one of the ten sites used to fail
+  // with — its absence is the direct assertion that this call site now
+  // recognises `profiles` at all, independent of whatever its own legitimate
+  // verdict turns out to be.
+  const WRONG_REASON = "unsupported boundaryConfig extension";
+
+  it("check already resolved the named profile before this fix, and still does through the shared resolver", async () => {
+    const streams = profEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    expect(streams.lines.out.join("\n")).toContain(
+      "accepted violations: 1 boundary violation waived",
+    );
+  });
+
+  it("graph resolves the profile and carries a policy fingerprint (P1-17)", async () => {
+    const streams = profEnv();
+    expect(await runCli(["graph", "--format", "json"], streams)).toBe(EXIT.ok);
+    expect(streams.lines.err.join("\n")).not.toContain(WRONG_REASON);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.result.policy).toBeDefined();
+    expect(typeof envelope.result.policy.fingerprint).toBe("string");
+    expect(envelope.result.policy.fingerprint.length).toBeGreaterThan(0);
+  });
+
+  it("waivers resolves the profile's boundarySuppressions, not only check's own copy of the ladder", async () => {
+    const streams = profEnv();
+    expect(await runCli(["waivers"], streams)).toBe(EXIT.ok);
+    const text = streams.lines.out.join("\n");
+    expect(text).not.toContain(WRONG_REASON);
+    expect(text).toContain("1 waiver on the table");
+    expect(text).toContain("origin: ticket-91");
+  });
+
+  it("fitness reaches its OWN no-fitness-declared refusal, not the config-loading one — proof the block was actually read", async () => {
+    // A profile's `block` cannot carry a `fitness` key at all
+    // (`docs/concepts/profiles.md`, "A profile's block carries exactly three
+    // keys"), so the CORRECT failure for this fixture is fitness's own
+    // "declares no fitness functions" — a real, named limit. Reaching THAT
+    // message rather than the ladder's is itself proof the profile's block
+    // was resolved and inspected, not just that the command stopped crashing.
+    const streams = profEnv();
+    expect(await runCli(["fitness"], streams)).toBe(EXIT.error);
+    const errText = streams.lines.err.join("\n");
+    expect(errText).not.toContain(WRONG_REASON);
+    expect(errText).toContain("requires a policy that declares fitness functions");
+  });
+
+  it("impact resolves the profile and reports the real dependent", async () => {
+    const streams = profEnv();
+    expect(await runCli(["impact", "adapter"], streams)).toBe(EXIT.ok);
+    const text = streams.lines.out.join("\n");
+    expect(text).not.toContain(WRONG_REASON);
+    expect(text).toContain("1 project depends on adapter");
+  });
+
+  it("explain judges the site against the profile's own depConstraints row", async () => {
+    const streams = profEnv();
+    expect(await runCli(["explain", "libs/domain/doc.go:5:2", "--format", "json"], streams)).toBe(
+      EXIT.ok,
+    );
+    expect(streams.lines.err.join("\n")).not.toContain(WRONG_REASON);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.result.violations).toHaveLength(1);
+    expect(envelope.result.violations[0].messageId).toBe("onlyTagsConstraintViolation");
+  });
+
+  it("context lists the constraint row the profile declared for domain", async () => {
+    const streams = profEnv();
+    expect(await runCli(["context", "domain", "--format", "json"], streams)).toBe(EXIT.ok);
+    expect(streams.lines.err.join("\n")).not.toContain(WRONG_REASON);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.result.constraints).toContainEqual(
+      expect.objectContaining({ sourceTag: "layer:domain" }),
+    );
+  });
+
+  it("history --capture carries a policy fingerprint under a profile-selected workspace", async () => {
+    const histDir = mkdtempSync(join(tmpdir(), "polyglot-cli-profiles-hist-"));
+    try {
+      const streams = profEnv();
+      expect(await runCli(["history", histDir, "--capture"], streams)).toBe(EXIT.ok);
+      expect(streams.lines.err.join("\n")).not.toContain(WRONG_REASON);
+      const [snapshot] = readdirSync(histDir).filter(
+        (name) => name.endsWith(".json") && !name.endsWith(".json.tmp"),
+      );
+      const envelope = JSON.parse(readFileSync(join(histDir, snapshot), "utf8"));
+      expect(envelope.result.policy).toBeDefined();
+      expect(typeof envelope.result.policy.fingerprint).toBe("string");
+    } finally {
+      rmSync(histDir, { recursive: true, force: true });
+    }
+  });
+
+  it("debt resolves the profile and reaches its own missing-intent refusal, not the ladder's", async () => {
+    const debtDir = mkdtempSync(join(tmpdir(), "polyglot-cli-profiles-debt-"));
+    try {
+      const streams = profEnv();
+      expect(await runCli(["debt", debtDir], streams)).toBe(EXIT.error);
+      const errText = streams.lines.err.join("\n");
+      expect(errText).not.toContain(WRONG_REASON);
+      expect(errText).toContain("requires a tracked architecture-intent.json");
+    } finally {
+      rmSync(debtDir, { recursive: true, force: true });
+    }
+  });
+
+  it("health resolves the profile and reports a full verdict", async () => {
+    const streams = profEnv();
+    expect(await runCli(["health"], streams)).toBe(EXIT.ok);
+    const text = streams.lines.out.join("\n");
+    expect(text).not.toContain(WRONG_REASON);
+    expect(text).toContain("health over complete coverage");
+  });
+
+  it("diff detects a real policy change under an unchanged profile NAME (P1-17)", async () => {
+    // Its own tmpdir workspace, mutated mid-test — kept separate from the
+    // read-only fixture above for the same reason P1-25's `buildRoot` factory
+    // is: a mutation here must never be able to affect another case.
+    const policyWith = (banTransitiveDependencies) => ({
+      version: 1,
+      profiles: [
+        {
+          name: "strict",
+          block: {
+            depConstraints: [
+              { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+            ],
+            moduleBoundaryOptions: {
+              allow: [],
+              buildTargets: ["build"],
+              enforceBuildableLibDependency: false,
+              allowCircularSelfDependency: false,
+              checkDynamicDependenciesExceptions: [],
+              ignoredCircularDependencies: [],
+              banTransitiveDependencies,
+              checkNestedExternalImports: false,
+            },
+          },
+        },
+      ],
+    });
+
+    const diffRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-profiles-diff-"));
+    const histDir = mkdtempSync(join(tmpdir(), "polyglot-cli-profiles-diff-hist-"));
+    const registryPath = join(diffRoot, "law-profiles.json");
+    const write = (relativePath, text) => {
+      mkdirSync(join(diffRoot, relativePath, ".."), { recursive: true });
+      writeFileSync(join(diffRoot, relativePath), text);
+    };
+    try {
+      write(
+        "nx.json",
+        JSON.stringify({
+          plugins: [
+            {
+              plugin: "@ecoma-io/lattice/nx",
+              options: { boundaryConfig: "strict", profiles: "law-profiles.json" },
+            },
+          ],
+        }),
+      );
+      writeFileSync(registryPath, JSON.stringify(policyWith(false)));
+      write("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      write("libs/domain/doc.go", "package domain\n");
+      write("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+      write("libs/adapter/adapter.go", "package adapter\n");
+
+      const diffGraph = {
+        nodes: {
+          domain: { name: "domain", type: "lib", data: { root: "libs/domain", tags: [] } },
+          adapter: { name: "adapter", type: "lib", data: { root: "libs/adapter", tags: [] } },
+        },
+        dependencies: { domain: [], adapter: [] },
+      };
+      const diffFiles = [
+        "nx.json",
+        "law-profiles.json",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+        "libs/adapter/go.mod",
+        "libs/adapter/adapter.go",
+      ];
+      const diffEnv = () => {
+        const out = [];
+        const err = [];
+        return {
+          out: (text) => out.push(text),
+          err: (text) => err.push(text),
+          lines: { out, err },
+          cwd: diffRoot,
+          readGraph: () => diffGraph,
+          listFiles: () => diffFiles,
+        };
+      };
+
+      const baselineFile = join(histDir, "0001-baseline.json");
+      const graphStreams = diffEnv();
+      expect(
+        await runCli(["graph", "--format", "json", "--output", baselineFile], graphStreams),
+      ).toBe(EXIT.ok);
+
+      // A real architectural-law edit under the SAME profile NAME — no
+      // project or edge moves, only the policy `banTransitiveDependencies`
+      // flips, the identical technique P1-25's own regression test used for
+      // an inline `boundaryConfig`.
+      writeFileSync(registryPath, JSON.stringify(policyWith(true)));
+
+      const diffStreams = diffEnv();
+      expect(await runCli(["diff", baselineFile, "--format", "json"], diffStreams)).toBe(EXIT.ok);
+      expect(diffStreams.lines.err.join("\n")).not.toContain(WRONG_REASON);
+      const envelope = JSON.parse(diffStreams.lines.out.join("\n"));
+      expect(envelope.result.policyMismatch).toBeDefined();
+      expect(envelope.result.policyMismatch.baseline.fingerprint).not.toBe(
+        envelope.result.policyMismatch.head.fingerprint,
+      );
+
+      const textStreams = diffEnv();
+      expect(await runCli(["diff", baselineFile], textStreams)).toBe(EXIT.ok);
+      expect(textStreams.lines.out.join("\n")).toContain(
+        "policy changed between baseline and head",
+      );
+    } finally {
+      rmSync(diffRoot, { recursive: true, force: true });
+      rmSync(histDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("scoping a native check must not narrow the graph it is judged against", () => {
   // The silent-direction bug this guards: on the native path `graph.dependencies`
   // is DERIVED from analyzed import sites (`./src/providers/native/graph.mjs`),
