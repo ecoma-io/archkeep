@@ -21,9 +21,8 @@
  * written inside a block comment counted as one that is written — costs a
  * spurious edge, and the same mask removes it.
  *
- * Known parse limits, deliberate and pinned by tests. Each errs toward a
- * record naming text the file really contains, never toward a missed import,
- * and all but the first are shapes `gofmt` rewrites:
+ * Known parse limit, deliberate and pinned by tests, and it errs toward a
+ * record naming text the file really contains, never toward a missed import:
  *
  * - A **raw string literal** holding what looks like an import declaration at
  *   the start of one of its lines is read as that declaration. `gofmt` leaves
@@ -31,11 +30,15 @@
  *   The mask keeps raw strings intact on purpose: an import path is itself a
  *   string literal, and a mask that ate string literals would have nothing
  *   left to read.
- * - `import` must open its line, after indentation only. `import "a"; import
- *   "b"` yields the first alone, and so does `import ("a"; "b")`; inside a
- *   block, each import needs its own line for the same reason.
- * - An import path spelled as a raw string rather than a quoted one is not
- *   read. Legal Go, which `gofmt` rewrites to the interpreted form.
+ *
+ * `import` opens its line, after indentation only, OR follows a `;` on the
+ * same line — the same statement separator `gofmt` inserts automatically at
+ * a newline, so an explicit one reopens an import exactly the way a fresh
+ * line does: `import "a"; import "b"` and, inside a block, `import ("a";
+ * "b")` both read as two imports, not one followed by inert text. The path
+ * itself may be a quoted string or, since Go treats a raw string as an
+ * equally legal string literal, backtick-delimited — both spellings are read
+ * the same way, though only the quoted form is what `gofmt` ever writes.
  *
  * Two layers read those regexes. `resolveGoDependencies` reduces them to Nx
  * graph edges; `analyzeGo` returns the fuller import-site record
@@ -160,14 +163,25 @@ export function maskGoComments(goText) {
 export function parseGoImportSites(goText) {
   const source = maskGoComments(goText);
   const sites = [];
-  // import "p" | import alias "p" | import _ "p" | import . "p"
-  for (const m of source.matchAll(/^\s*import\s+(?:[A-Za-z_.][\w.]*\s+)?"([^"]+)"/gm)) {
-    sites.push({ specifier: m[1], offset: m.index + m[0].indexOf('"') });
+  // import "p" | import alias "p" | import _ "p" | import . "p" — the path
+  // quoted or backtick-delimited, and the whole spec opening either a line or
+  // (see the header) a `;`-separated continuation of one.
+  for (const m of source.matchAll(
+    /(?:^|;)\s*import\s+(?:[A-Za-z_.][\w.]*\s+)?(?:"([^"]+)"|`([^`]+)`)/gm,
+  )) {
+    const quote = m[1] !== undefined ? '"' : "`";
+    sites.push({ specifier: m[1] ?? m[2], offset: m.index + m[0].indexOf(quote) });
   }
   for (const block of source.matchAll(/^\s*import\s*\(([\s\S]*?)\)/gm)) {
     const contentOffset = block.index + block[0].indexOf("(") + 1;
-    for (const m of block[1].matchAll(/^\s*(?:[A-Za-z_.][\w.]*\s+)?"([^"]+)"/gm)) {
-      sites.push({ specifier: m[1], offset: contentOffset + m.index + m[0].indexOf('"') });
+    for (const m of block[1].matchAll(
+      /(?:^|;)\s*(?:[A-Za-z_.][\w.]*\s+)?(?:"([^"]+)"|`([^`]+)`)/gm,
+    )) {
+      const quote = m[1] !== undefined ? '"' : "`";
+      sites.push({
+        specifier: m[1] ?? m[2],
+        offset: contentOffset + m.index + m[0].indexOf(quote),
+      });
     }
   }
   return sites.sort((a, b) => a.offset - b.offset);

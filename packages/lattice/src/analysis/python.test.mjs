@@ -671,6 +671,60 @@ describe("parsePythonImportSites", () => {
       ["dynamic", "beta", true],
     ]);
   });
+
+  // The two below pin what used to be a silent miss: a name after the line
+  // break, or after the `;`, produced no record and no failure at all — a
+  // real import reporting exactly like a clean file.
+  it("joins a backslash-continued statement and reads every name in it", () => {
+    const source = "import alpha, \\\n    beta\n";
+    expect(parsePythonImportSites(source).map((site) => site.specifier)).toEqual(["alpha", "beta"]);
+  });
+
+  it("reads a statement that shares a physical line with another via `;`", () => {
+    const source = "import alpha; import beta\n";
+    expect(
+      parsePythonImportSites(source).map((site) => [
+        site.specifier,
+        source.slice(site.offset, site.offset + 4),
+      ]),
+    ).toEqual([
+      ["alpha", "alph"],
+      ["beta", "beta"],
+    ]);
+  });
+
+  it("resolves a `\\`-continued module name that sits ahead of a `;`-shared `import`, together", () => {
+    // Realistic combinations of the two forms, not just each in isolation.
+    expect(
+      parsePythonImportSites("from alpha.core \\\n    import Thing\n").map(
+        (site) => site.specifier,
+      ),
+    ).toEqual(["alpha.core"]);
+    expect(
+      parsePythonImportSites("import os; from alpha.core import Thing\n").map(
+        (site) => site.specifier,
+      ),
+    ).toEqual(["os", "alpha.core"]);
+  });
+
+  it("never joins a line that has nothing to do with the continuation", () => {
+    // The hazard a naive whole-file join would risk: an unrelated line ending
+    // in a bare `\` — a comment noting a Windows path, here — must not pull
+    // the import on the next line into it and hide it.
+    const source = "# see C:\\\nimport alpha\n";
+    expect(parsePythonImportSites(source).map((site) => site.specifier)).toEqual(["alpha"]);
+  });
+
+  it("reports a continuation it could not parse after joining, rather than dropping it", () => {
+    // The residual, honestly-reported gap: a backslash landing inside the
+    // dotted module name itself (not after it, and not in the name list) is
+    // not reassembled into one contiguous name, so this is a loud blind spot
+    // instead of a silently empty result.
+    const source = "from pkg \\\n    .sub import foo\n";
+    const [site] = parsePythonImportSites(source);
+    expect(site.literal).toBe(false);
+    expect(site.continuation).toBe(true);
+  });
 });
 
 describe("analyzePython", () => {
@@ -724,6 +778,27 @@ describe("analyzePython", () => {
         packageName: null,
       },
     });
+  });
+
+  it("crosses a boundary named only after a backslash-continued line break", () => {
+    // The silent-miss direction for case 3: before the fix, a name written
+    // after the line break of a backslash-continued `import` statement
+    // produced no record and no failure at all — a real cross-project import
+    // reporting exactly like a clean file.
+    const { imports, failures } = analyze("import os, \\\n    beta.store\n");
+    expect(failures).toEqual([]);
+    expect(imports).toHaveLength(2);
+    expect(imports[1].specifier).toBe("beta.store");
+    expect(imports[1].resolved.target).toBe("beta");
+  });
+
+  it("crosses a boundary named only after a `;` on the same line as another import", () => {
+    // The silent-miss direction for case 4.
+    const { imports, failures } = analyze("import os; import beta.store\n");
+    expect(failures).toEqual([]);
+    expect(imports).toHaveLength(2);
+    expect(imports[1].specifier).toBe("beta.store");
+    expect(imports[1].resolved.target).toBe("beta");
   });
 
   it("emits an import that never leaves the project", () => {
