@@ -39,8 +39,22 @@ import {
   formatAdrRecord,
   formatAdrReverse,
 } from "../report/adr-text.mjs";
-import { ADR_DIR, ADR_ID_PATTERN } from "../governance/adr-registry.mjs";
+import { ADR_DIR, stripAdrPrefix } from "../governance/adr-registry.mjs";
 import { adrsBinding, boundFitnessIds, loadAdrRegistry } from "../governance/adr-registry.mjs";
+
+/**
+ * The other half of the id name space the positional argument answers
+ * (`docs/usage/adr.md` and `docs/reference/adr.md`, "The id name space"): a
+ * `rule:`/`fitness:`-prefixed ref names a rule or fitness id, and the reverse
+ * lookup for one no ADR binds is a legitimate, ok fact — most fitness ids
+ * are never bound by any ADR, and that is not the same thing as being
+ * unresolved. Every other spelling is read as an attempted ADR reference —
+ * bare `NNN-slug`, the `adr:`-prefixed spelling `../governance/row-schema.mjs`'s
+ * own decisionRef docs recommend, or any other near-miss (wrong case, a
+ * truncation, a path-traversal shape) — so a miss there reports unresolved
+ * instead of silently falling into this pattern's empty-but-clean case.
+ */
+const FITNESS_REF_PATTERN = /^(?:rule|fitness):/u;
 
 /**
  * The result of reading one registry: the records, the index, and the known
@@ -99,13 +113,23 @@ export function adrCommand(root, options, io = {}) {
 
   // An id the caller asked about that the registry does not know is a named
   // unknown, not a clean result — the invariant. Two cases, told apart by the
-  // id's shape: an id matching the ADR pattern (`NNN-slug`) names a record that
-  // is missing — unresolved, exit 3; a rule/fitness id (`rule:x`,
-  // `fitness:x`) is a reverse lookup, and an unenforced one is a fact about
-  // the registry, ok.
+  // id's shape: a `rule:x`/`fitness:x` ref (`FITNESS_REF_PATTERN`, above) is a
+  // reverse lookup, and an unenforced one is a fact about the registry, ok.
+  // Everything else is read as an attempted ADR reference — bare `NNN-slug`,
+  // or `adr:`-prefixed (`stripAdrPrefix` strips it before the lookup below,
+  // the same normalisation `resolveDecisionRef` applies) — and one that does
+  // not resolve is unresolved, exit 3. Classifying by "is this fitness-shaped"
+  // rather than "does this match the ADR pattern" is what catches a near-miss
+  // ADR spelling — that `adr:` prefix, a case mismatch, a truncation, a
+  // path-traversal shape, or anything else that is neither a real record nor
+  // a fitness/rule reference: every one of those used to fall through to the
+  // reverse-lookup branch below and read as a clean, unenforced-but-known
+  // fact instead of a reference the registry could not resolve at all.
   const requestedId = options.id;
+  const isFitnessRef = requestedId !== undefined && FITNESS_REF_PATTERN.test(requestedId);
+  const resolvedAdrId = requestedId === undefined ? undefined : stripAdrPrefix(requestedId);
   let unresolved = [];
-  if (requestedId !== undefined && ADR_ID_PATTERN.test(requestedId) && !byId.has(requestedId)) {
+  if (requestedId !== undefined && !isFitnessRef && !byId.has(resolvedAdrId)) {
     unresolved = [{ ref: requestedId, why: `${requestedId} is not an ADR in ${ADR_DIR}` }];
   }
 
@@ -129,11 +153,11 @@ export function adrCommand(root, options, io = {}) {
   const text =
     requestedId === undefined
       ? formatAdrDump({ records, knownFitness })
-      : byId.has(requestedId)
-        ? formatAdrRecord(byId.get(requestedId))
-        : ADR_ID_PATTERN.test(requestedId)
-          ? formatAdrMissing({ adrId: requestedId })
-          : formatAdrReverse({ fitnessId: requestedId, adrIds: adrsBinding(records, requestedId) });
+      : byId.has(resolvedAdrId)
+        ? formatAdrRecord(byId.get(resolvedAdrId))
+        : isFitnessRef
+          ? formatAdrReverse({ fitnessId: requestedId, adrIds: adrsBinding(records, requestedId) })
+          : formatAdrMissing({ adrId: requestedId });
 
   const coverage = {
     complete: unresolved.length === 0,
