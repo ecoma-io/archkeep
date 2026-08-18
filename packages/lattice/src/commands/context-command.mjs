@@ -38,6 +38,8 @@ import { findConstraintsFor } from "../rules/tags.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatContextReport } from "../report/context-text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { readAdrContext } from "./adr.mjs";
+import { unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 
 /**
  * Collects the architecture context for a project: its tags, which constraint
@@ -103,7 +105,7 @@ export function collectProjectContext(projectName, graph, config) {
  *   is not registered, or when the named project does not exist in the graph.
  */
 export function contextCommand(projectName, commandContext, config) {
-  const { root, provider, marker, graph, pluginGap } = commandContext;
+  const { root, provider, marker, graph, pluginGap, tracked } = commandContext;
 
   // Descriptive commands refuse when the graph is known to be incomplete.
   if (provider === "nx" && !pluginGap.registered && pluginGap.manifests.length > 0) {
@@ -120,6 +122,26 @@ export function contextCommand(projectName, commandContext, config) {
 
   // Validate the project exists before investing in anything else.
   const projectContext = collectProjectContext(projectName, graph, config);
+
+  // A matched constraint row's `decisionRef` names the ADR (or rule/fitness
+  // id) that supposedly authorizes it, unverified until now — the same gap
+  // `cli.mjs`'s `check` closes for the identical `depConstraints` table,
+  // through the same `readAdrContext`/`unresolvedDecisionRefRows`
+  // (`../governance/adr-registry.mjs`). Only the rows this report actually
+  // renders are checked; a workspace that never uses `decisionRef` pays no
+  // extra read.
+  const decisionRefRows = projectContext.constraints
+    .map((row, index) => ({ kind: `constraints[${index}]`, row }))
+    .filter(({ row }) => typeof row?.decisionRef === "string" && row.decisionRef.trim() !== "");
+  let unresolvedDecisionRefs = new Set();
+  if (decisionRefRows.length > 0) {
+    const adrContext = readAdrContext(root, { tracked });
+    unresolvedDecisionRefs = new Set(
+      unresolvedDecisionRefRows(decisionRefRows, adrContext.byId, adrContext.knownFitness).map(
+        (row) => row.decisionRef,
+      ),
+    );
+  }
 
   const notAnalyzed = commandContext.analysis.failures
     .filter(isWholeFileFailure)
@@ -152,6 +174,18 @@ export function contextCommand(projectName, commandContext, config) {
     tags: projectContext.tags,
     constraints: projectContext.constraints,
     dependencies: projectContext.dependencies,
+    // Additive and optional: absent when every matched row's decisionRef
+    // resolves (or none carries one) — a project with no governance-cited
+    // rows reads exactly as it did before this field existed. `constraints`
+    // above keeps every row's raw `decisionRef` untouched; this is the
+    // separate, resolved fact a consumer cross-checks it against.
+    ...(unresolvedDecisionRefs.size > 0
+      ? {
+          unresolvedDecisionRefs: [...unresolvedDecisionRefs].sort((a, b) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          ),
+        }
+      : {}),
   };
 
   const envelope = jsonEnvelope({
@@ -168,7 +202,7 @@ export function contextCommand(projectName, commandContext, config) {
     projectContext: result,
     coverage,
     report: {
-      text: formatContextReport({ projectContext: result, coverage }),
+      text: formatContextReport({ projectContext: result, coverage, unresolvedDecisionRefs }),
       json: renderJson(envelope),
     },
   };

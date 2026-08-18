@@ -45,12 +45,16 @@ decision`: a fact about the registry, reported in a sentence, never as a
   id?_ — not _is that rule enforceable?_ A rule id the registry binds nothing is
   the loud unenforced-fact spelling, and in an agent workflow it is a reason to
   verify the rule row's exact spelling against the config, not a clean result.
-  `context` — and `context --plan`, and `impact` — display a constraint row as
-  it is written, including its `decisionRef` when the row carries one; `check`
-  and `drift` never replay it. The exact string to verify lives in the row: read
-  the `decisionRef` literal in the boundary config or `architecture-intent.json`
-  (or copy it from `context`'s output), and ask `lattice adr` that string, byte
-  for byte.
+  `check`, `context` (and `context --plan`), `drift`, and `provenance` each
+  resolve a row's `decisionRef` against the registry automatically wherever they
+  render or walk that row, and name an unresolved one loudly — no manual lookup
+  is needed just to learn whether a citation resolves. `impact` is the one
+  reader that does not: it displays a constraint row's `decisionRef` as
+  written, unresolved, so the string to verify there must be read from the row
+  itself (the boundary config or `architecture-intent.json`, or copied from
+  `context`'s output) and asked of `lattice adr` byte for byte — the same way a
+  reader inspects the RECORD an already-resolved citation names: its status,
+  supersession chain, and what else it binds.
 - **Anything else is read as an ADR reference** — bare `NNN-slug`, or the
   `adr:`-prefixed spelling `decisionRef` docs recommend as an alternate ADR-id
   form (`packages/lattice/src/governance/row-schema.mjs`); both resolve to the

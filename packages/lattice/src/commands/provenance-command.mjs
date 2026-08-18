@@ -1,9 +1,10 @@
 /**
- * The `provenance` command: where this run's facts came from, and whether the
- * governance rows it judges carry an origin to attest them.
+ * The `provenance` command: where this run's facts came from, whether the
+ * governance rows it judges carry an origin to attest them, and whether a
+ * `decisionRef` any of them cite actually resolves to a recorded decision.
  *
  * Provenance is descriptive, exactly like `graph`/`diff`/`drift`: it never
- * changes a verdict, so it never exits 1. It answers two questions:
+ * changes a verdict, so it never exits 1. It answers three questions:
  *
  * 1. **Repository provenance** — the git commit, remote, and dirty state of the
  *    tree this run judged, through the shared `resolveProvenance`
@@ -19,12 +20,22 @@
  *    decision nobody recorded is indistinguishable from a rule that appeared
  *    by editing the file directly. The report never pretends such a row is
  *    attested.
+ * 3. **Decision resolution** — the same row walk, checked against the
+ *    workspace's ADR registry (`../governance/adr-registry.mjs`) through
+ *    `readAdrContext` (`./adr.mjs`). `origin` says a decision was recorded;
+ *    `decisionRef` says WHICH one, and until this axis existed nothing ever
+ *    verified the citation was real — `resolveDecisionRef` had no production
+ *    caller, and a row bound to a nonexistent ADR id read as legitimately
+ *    documented everywhere it was rendered. A row with no `decisionRef` is
+ *    not a finding here; a row whose `decisionRef` names nothing the registry
+ *    knows is.
  *
  * ## Determinism
  *
  * Every artifact this command reads is a static file — the intent, the config,
- * git state. Two runs over an unchanged tree produce byte-identical output,
- * and no wall-clock time ever enters the report (`../../../../AGENTS.md`).
+ * the ADR registry, git state. Two runs over an unchanged tree produce
+ * byte-identical output, and no wall-clock time ever enters the report
+ * (`../../../../AGENTS.md`).
  *
  * ## Fail-closed
  *
@@ -35,18 +46,22 @@
  *   text report prints `repo provenance unavailable` rather than pretending a
  *   commit; the intent/config row arms still answer, because they read
  *   files, not git;
- * - the intent file or boundary config is malformed → throw → exit 3, exactly
- *   the same loud refusal `drift` makes (`./drift.mjs`): a row list built from
- *   a file it could not read would be a claim about rows that do not exist.
+ * - the intent file, boundary config, or ADR registry is malformed → throw →
+ *   exit 3, exactly the same loud refusal `drift` makes (`./drift.mjs`): a
+ *   row list — or a resolution verdict — built from a file that could not be
+ *   read would be a claim about rows, or citations, that do not exist.
  *
  * An empty `unattested` list must mean exactly "every governance row carries
- * an origin", and nothing else.
+ * an origin", an empty `unresolvedDecisionRefs` list must mean exactly "every
+ * decisionRef citation resolves", and neither means the other.
  */
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatProvenanceReport } from "../report/provenance-text.mjs";
 import { loadIntent } from "../architecture-intent/model.mjs";
 import { loadBoundaryConfig } from "../config.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { readAdrContext } from "./adr.mjs";
+import { unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 
 /**
  * Whether a row declares a governance origin (`origin.by`/`origin.tool`).
@@ -139,26 +154,31 @@ export function configRows(config) {
 }
 
 /**
- * The provenance verdict: two answer surfaces, each fail-closed.
+ * The provenance verdict: three answer surfaces, each fail-closed.
  *
- * `repo` is the git provenance, `established` whether git could answer, and
- * `rows`/`unattested` the per-row decision provenance. Unattested rows are
- * findings about *documentation*, not about the architecture — this command
- * never changes what `check` or `drift` decide, and it exits 0 when it
- * completes.
+ * `repo` is the git provenance, `established` whether git could answer,
+ * `rows`/`unattested` the per-row decision provenance, and
+ * `unresolvedDecisionRefs` every row whose `decisionRef` cites no ADR, rule,
+ * or fitness record this workspace's registry knows. All three are findings
+ * about *documentation*, not about the architecture — this command never
+ * changes what `check` or `drift` decide, and it exits 0 when it completes.
  *
  * @param {{root: string, tracked: string[], provider: string, marker: string,
  *   options: {boundaryConfig: string|object, inline?: boolean}}} commandContext
  *   From `resolveCommandContext`.
  * @param {{loadIntentOverride?: (root: string, io: object) => Promise<object>,
- *   loadConfigOverride?: (root: string, boundaryConfig: string) => Promise<object>}} [io]
+ *   loadConfigOverride?: (root: string, boundaryConfig: string) => Promise<object>,
+ *   loadAdrRegistryOverride?: typeof import("../governance/adr-registry.mjs").loadAdrRegistry}} [io]
+ *   `loadAdrRegistryOverride` is forwarded to `readAdrContext` (`./adr.mjs`)
+ *   unchanged.
  * @returns {Promise<{status: "ok", repo: {commit: string|null, remote: string|null,
  *   dirty: boolean|null, established: boolean},
  *   rows: {kind: string, attested: boolean, origin: object|null}[],
  *   unattested: {kind: string, label: string, note: string}[],
+ *   unresolvedDecisionRefs: {kind: string, label: string, decisionRef: string, note: string}[],
  *   report: {text: string, json: string}}>}
- * @throws {Error} on a malformed intent or boundary config — exit 3, the loud
- *   refusal every command that reads them makes.
+ * @throws {Error} on a malformed intent, boundary config, or ADR registry —
+ *   exit 3, the loud refusal every command that reads them makes.
  */
 export async function provenanceCommand(commandContext, io = {}) {
   const { root, tracked, options } = commandContext;
@@ -168,17 +188,16 @@ export async function provenanceCommand(commandContext, io = {}) {
   const unattested = [];
 
   const intent = await (io.loadIntentOverride ?? loadIntent)(root, { tracked });
-  if (intent !== undefined) {
-    for (const { kind, row } of intentRows(intent)) {
-      const attested = hasOrigin(row);
-      rowList.push({ kind, attested, origin: attested ? row.origin : null });
-      if (!attested) {
-        unattested.push({
-          kind,
-          label: rowLabel(kind, row),
-          note: "no origin recorded — cannot attest",
-        });
-      }
+  const introws = intent === undefined ? [] : intentRows(intent);
+  for (const { kind, row } of introws) {
+    const attested = hasOrigin(row);
+    rowList.push({ kind, attested, origin: attested ? row.origin : null });
+    if (!attested) {
+      unattested.push({
+        kind,
+        label: rowLabel(kind, row),
+        note: "no origin recorded — cannot attest",
+      });
     }
   }
 
@@ -212,11 +231,45 @@ export async function provenanceCommand(commandContext, io = {}) {
     }
   }
 
+  // Resolution — `row-schema.mjs`'s `decisionRef` half, gated on an
+  // `io.resolve` neither `config.mjs` nor `architecture-intent/model.mjs`
+  // ever supplied. Walked over the same two row lists the attestation loops
+  // above already visited, against the workspace's own ADR registry.
+  const governanceRows = [...introws, ...walked];
+  const adrContext = readAdrContext(root, {
+    tracked,
+    loadAdrRegistryOverride: io.loadAdrRegistryOverride,
+  });
+  const unresolvedDecisionRefs = unresolvedDecisionRefRows(
+    governanceRows,
+    adrContext.byId,
+    adrContext.knownFitness,
+  ).map(({ kind, row, decisionRef }) => ({
+    kind,
+    label: rowLabel(kind, row),
+    decisionRef,
+    note: `"${decisionRef}" does not resolve — no matching ADR, rule, or fitness record`,
+  }));
+
   const establishment = repo !== null;
   const repoResult = establishment ? repo : { commit: null, remote: null, dirty: null };
   const rowsTotal = rowList.length;
 
-  const reportText = formatProvenanceReport({ establishment, repo, rowsTotal, unattested });
+  // "No fact, no claim": the resolution section is rendered only when at
+  // least one row actually cites a decisionRef — a workspace that never uses
+  // the field pays nothing and hears nothing, the same bargain every optional
+  // axis in this tool states.
+  const decisionRefRows = governanceRows.filter(
+    ({ row }) => typeof row?.decisionRef === "string" && row.decisionRef.trim() !== "",
+  );
+  const reportText = formatProvenanceReport({
+    establishment,
+    repo,
+    rowsTotal,
+    unattested,
+    decisionRefTotal: decisionRefRows.length,
+    unresolvedDecisionRefs,
+  });
 
   const context = {
     root,
@@ -238,7 +291,11 @@ export async function provenanceCommand(commandContext, io = {}) {
       blindSpots: [],
       notes: [],
     },
-    // The two answer surfaces; `result.rows` preserves the canonical row order.
+    // The three answer surfaces; `result.rows` preserves the canonical row
+    // order. `unresolvedDecisionRefs` is unconditional, like `unattested` —
+    // an empty array is itself the claim "every citation resolves", never an
+    // omitted key that would leave a reader unable to tell "checked, clean"
+    // from "never checked" (`../../../../AGENTS.md`).
     result: {
       repo: repoResult,
       established: establishment,
@@ -248,13 +305,14 @@ export async function provenanceCommand(commandContext, io = {}) {
         origin: origin ?? null,
       })),
       unattested: unattested.map(({ kind, label, note }) => ({ kind, label, note })),
+      unresolvedDecisionRefs,
     },
   });
 
   return {
     status: "ok",
     repo: { ...repoResult, established: establishment },
-    // The two answer surfaces, also available readably (not only inside the
+    // The three answer surfaces, also available readably (not only inside the
     // envelope) so `cli.mjs` can drive the text report from the same facts.
     rows: rowList.map(({ kind, attested, origin }) => ({
       kind,
@@ -262,6 +320,7 @@ export async function provenanceCommand(commandContext, io = {}) {
       origin: origin ?? null,
     })),
     unattested: unattested.map(({ kind, label, note }) => ({ kind, label, note })),
+    unresolvedDecisionRefs,
     report: {
       text: reportText,
       json: renderJson(envelope),

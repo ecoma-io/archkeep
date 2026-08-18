@@ -73,10 +73,26 @@ function formatFinding(finding) {
  * @param {{findings: {rule: string, source: string|null, target: string|null,
  *   message: string}[],
  *   intent: {fingerprint: string, rows: number},
- *   observed: {projects: number, edges: number, implicitEdges: number}}} input
+ *   observed: {projects: number, edges: number, implicitEdges: number},
+ *   unresolvedDecisionRefs?: {kind: string, decisionRef: string}[],
+ *   decisionRefsChecked?: number}} input
+ *   `unresolvedDecisionRefs` — rows whose `decisionRef` cites no ADR, rule, or
+ *   fitness record this workspace's registry knows — is a documentation fact,
+ *   not a drift finding: it is rendered in its own section and never folds
+ *   into the finding count or the "no drift" claim below. `decisionRefsChecked`
+ *   is how many rows carry a `decisionRef` at all (resolved or not) — the
+ *   same "no fact, no claim" distinction `formatGoWork` states: a section
+ *   appears when the axis was exercised, silence only when it was not, so
+ *   "every citation resolves" is never confused with "nothing uses the field".
  * @returns {string}
  */
-export function formatDriftReport({ findings, intent, observed }) {
+export function formatDriftReport({
+  findings,
+  intent,
+  observed,
+  unresolvedDecisionRefs = [],
+  decisionRefsChecked = unresolvedDecisionRefs.length,
+}) {
   const sections = [];
 
   sections.push(
@@ -118,6 +134,28 @@ export function formatDriftReport({ findings, intent, observed }) {
     sections.push(`✔ no drift — the observed architecture matches the intended one (${inspected})`);
   } else {
     sections.push(`${total} drift finding${total === 1 ? "" : "s"} (${inspected})`);
+  }
+
+  // A separate, non-verdict axis — rendered last, after the drift verdict
+  // itself, so a clean "no drift" line never reads as though it also vouches
+  // for an unresolvable decisionRef sitting above it. "No fact, no claim": a
+  // workspace whose rows carry no decisionRef gets no section at all, but one
+  // that DOES use the field and finds every citation clean still gets a
+  // stated line — silence there would be indistinguishable from never
+  // having checked, the same reasoning `formatGoWork` states for its own axis.
+  if (unresolvedDecisionRefs.length > 0) {
+    sections.push(
+      [
+        `⚠ ${unresolvedDecisionRefs.length} intent row${unresolvedDecisionRefs.length === 1 ? "" : "s"} ` +
+          `cite${unresolvedDecisionRefs.length === 1 ? "s" : ""} a decisionRef that does not resolve ` +
+          `to a known ADR, rule, or fitness record:`,
+        ...unresolvedDecisionRefs.map(({ kind, decisionRef }) => `  ${kind} — "${decisionRef}"`),
+      ].join("\n"),
+    );
+  } else if (decisionRefsChecked > 0) {
+    sections.push(
+      `✔ every decisionRef citation (${decisionRefsChecked}) resolves to a known ADR, rule, or fitness record`,
+    );
   }
 
   return sections.join("\n");

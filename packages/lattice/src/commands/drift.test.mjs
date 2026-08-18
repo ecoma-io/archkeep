@@ -311,6 +311,78 @@ describe("driftCommand", () => {
     ).rejects.toThrow(/drift requires a tracked architecture-intent\.json/);
   });
 
+  it("never wires the ADR registry when no row carries a decisionRef", async () => {
+    const readAdrContextOverride = vi.fn();
+    const result = await driftCommand(commandContext(), {
+      ...ioWithIntent(
+        intent({
+          boundaries: [{ name: "packages", match: ["tag:type-package"] }],
+        }),
+      ),
+      readAdrContextOverride,
+    });
+    expect(result.report.text).not.toContain("decisionRef");
+    expect(readAdrContextOverride).not.toHaveBeenCalled();
+  });
+
+  // P1-02: `resolveDecisionRef` (`../governance/adr-registry.mjs`) had zero
+  // production call sites — a row's `decisionRef` passed through every
+  // report unverified. This is the silent-direction repro the finding names:
+  // a nonexistent ADR id must be named, not silently treated as legitimate.
+  describe("decisionRef resolution — a documentation fact, never a drift finding (P1-02)", () => {
+    it("names an intent row whose decisionRef resolves to no known ADR, rule, or fitness record", async () => {
+      const result = await driftCommand(commandContext(), {
+        ...ioWithIntent(
+          intent({
+            boundaries: [{ name: "packages", match: ["tag:type-package"] }],
+            projects: {
+              required: [
+                { name: "core", tags: ["type-package"], decisionRef: "9999-does-not-exist" },
+              ],
+            },
+          }),
+        ),
+        readAdrContextOverride: () => ({ records: [], byId: new Map(), knownFitness: new Set() }),
+      });
+      // Not a finding: the row is satisfied (core exists), so drift itself
+      // stays clean — the unresolved citation is a SEPARATE fact.
+      expect(result.drift.findings).toEqual([]);
+      expect(result.status).toBe("ok");
+      expect(result.drift.unresolvedDecisionRefs).toEqual([
+        { kind: "projects.required[0]", decisionRef: "9999-does-not-exist" },
+      ]);
+      expect(result.report.text).toContain('projects.required[0] — "9999-does-not-exist"');
+      expect(result.report.text).toContain(
+        "does not resolve to a known ADR, rule, or fitness record",
+      );
+    });
+
+    it("states a positive line, never silence, when every citation resolves", async () => {
+      // Silence here would be indistinguishable from a workspace that never
+      // uses decisionRef at all — the same "no fact, no claim" split
+      // `formatGoWork` makes for its own axis.
+      const result = await driftCommand(commandContext(), {
+        ...ioWithIntent(
+          intent({
+            boundaries: [{ name: "packages", match: ["tag:type-package"] }],
+            projects: {
+              required: [{ name: "core", tags: ["type-package"], decisionRef: "0001-real" }],
+            },
+          }),
+        ),
+        readAdrContextOverride: () => ({
+          records: [],
+          byId: new Map([["0001-real", {}]]),
+          knownFitness: new Set(),
+        }),
+      });
+      expect(result.drift.unresolvedDecisionRefs).toBeUndefined();
+      expect(result.report.text).toContain(
+        "✔ every decisionRef citation (1) resolves to a known ADR, rule, or fitness record",
+      );
+    });
+  });
+
   it("refuses when a boundary or row side matched no observed project — 'cannot verify' must not read as 'no drift'", async () => {
     // The empty-result invariant's drift face: a boundary whose selectors
     // match no observed project is a no-verdict in `check` (exit 3). The

@@ -89,7 +89,8 @@ import {
 } from "./src/commands/context.mjs";
 import { contextCommand } from "./src/commands/context-command.mjs";
 import { planContextCommand } from "./src/commands/plan-context-command.mjs";
-import { adrCommand } from "./src/commands/adr.mjs";
+import { adrCommand, readAdrContext } from "./src/commands/adr.mjs";
+import { unresolvedDecisionRefRows } from "./src/governance/adr-registry.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { declaredEdgeViolationsForCheck } from "./src/commands/edge-constraints.mjs";
 import { discoverCommand } from "./src/commands/discover.mjs";
@@ -777,6 +778,34 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   const declaredEdges =
     implicitEdges === 0 ? null : { findings: declaredEdgeViolations, judged: implicitEdges };
 
+  // A `depConstraints` row's `decisionRef` names the ADR (or rule/fitness id)
+  // that supposedly authorizes it — but nothing verified that citation before
+  // it reached a report: `rowSchemaViolations` (`src/governance/row-schema.mjs`)
+  // has always had a resolution half gated on an injected `io.resolve`, and
+  // `config.mjs` has never supplied one, so `resolveDecisionRef`
+  // (`src/governance/adr-registry.mjs`) had zero production callers. A rule
+  // bound to a nonexistent ADR id fired exactly as designed and the report
+  // quoted the citation as if it were confirmed. Checked only when a row
+  // actually carries one — the common case (no `docs/adr/` adopted yet) pays
+  // no extra read. Report-only: an unresolved citation is a fact about the
+  // rule's DOCUMENTATION, not about whether the boundary holds, so it changes
+  // no byte of `verdictFor`'s inputs below — the same posture `provenance`
+  // already takes for a row with no `origin` (`src/commands/provenance-command.mjs`).
+  let unresolvedDecisionRefs = new Set();
+  {
+    const decisionRefRows = config.depConstraints
+      .map((row, index) => ({ kind: `depConstraints[${index}]`, row }))
+      .filter(({ row }) => typeof row?.decisionRef === "string" && row.decisionRef.trim() !== "");
+    if (decisionRefRows.length > 0) {
+      const adrContext = readAdrContext(root, { tracked });
+      unresolvedDecisionRefs = new Set(
+        unresolvedDecisionRefRows(decisionRefRows, adrContext.byId, adrContext.knownFitness).map(
+          (row) => row.decisionRef,
+        ),
+      );
+    }
+  }
+
   const goWorkDrift = goWork === null ? 0 : goWork.findings.length;
   const tsconfigPathsDead = tsconfigPaths === null ? 0 : tsconfigPaths.findings.length;
   const intentFindings = intent === null ? 0 : intent.findings.length;
@@ -918,6 +947,20 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               // waivers, so an unchanged tree's JSON is unchanged. Never `!` —
               // the accepted count is a tracked decision, not a new error kind.
               ...(waived > 0 ? { waived } : {}),
+              // Additive and optional, the same bargain: absent when every
+              // depConstraints row's decisionRef resolves (or none carries
+              // one) — an unchanged tree's JSON is unchanged. A row that fired
+              // stays in `violations` with its raw `constraint.decisionRef`
+              // untouched (byte-identical to today); this list is the
+              // separate, resolved fact a consumer cross-checks it against,
+              // never a mutation of the row itself.
+              ...(unresolvedDecisionRefs.size > 0
+                ? {
+                    unresolvedDecisionRefs: [...unresolvedDecisionRefs].sort((a, b) =>
+                      a < b ? -1 : a > b ? 1 : 0,
+                    ),
+                  }
+                : {}),
               goWork: goWork === null ? null : { checked: true, findings: goWork.findings },
               tsconfigPaths:
                 tsconfigPaths === null ? null : { checked: true, findings: tsconfigPaths.findings },
@@ -988,6 +1031,10 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
           // inspected" fact does (`src/report/text.mjs`'s `formatReport`).
           notes,
           coverageGaps,
+          // `formatReport` (text) reads this to annotate an unresolved
+          // decisionRef inline; `formatSarif` does not destructure it, so a
+          // SARIF upload stays exactly as it renders today.
+          unresolvedDecisionRefs,
         });
 
   return {

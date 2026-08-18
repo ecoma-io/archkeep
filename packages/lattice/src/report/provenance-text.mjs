@@ -17,10 +17,22 @@
  * @param {{establishment: boolean,
  *   repo: {commit: string|null, remote: string|null, dirty: boolean|null}|null,
  *   rowsTotal: number,
- *   unattested: {kind: string, label: string, note: string}[]}} input
+ *   unattested: {kind: string, label: string, note: string}[],
+ *   decisionRefTotal: number,
+ *   unresolvedDecisionRefs: {kind: string, label: string, decisionRef: string, note: string}[]}} input
+ *   `decisionRefTotal` is how many governance rows cite a `decisionRef` at
+ *   all — the resolution section renders only when it is non-zero, the same
+ *   "no fact, no claim" bargain every optional axis in this tool states.
  * @returns {string}
  */
-export function formatProvenanceReport({ establishment, repo, rowsTotal, unattested }) {
+export function formatProvenanceReport({
+  establishment,
+  repo,
+  rowsTotal,
+  unattested,
+  decisionRefTotal,
+  unresolvedDecisionRefs,
+}) {
   const attestedCount = rowsTotal - unattested.length;
   const text = [];
   text.push(
@@ -44,6 +56,23 @@ export function formatProvenanceReport({ establishment, repo, rowsTotal, unattes
       `✔ every governance row carries an origin — each names who decided ` +
         `on it and with what tool`,
     );
+  }
+  if (decisionRefTotal > 0) {
+    if (unresolvedDecisionRefs.length > 0) {
+      text.push("unresolved decisionRefs (cite no known ADR, rule, or fitness record):");
+      for (const row of unresolvedDecisionRefs) {
+        text.push(`  ${row.kind} — "${row.decisionRef}"`);
+      }
+      text.push(
+        `${unresolvedDecisionRefs.length} of ${decisionRefTotal} decisionRef citation` +
+          `${decisionRefTotal === 1 ? "" : "s"} do not resolve`,
+      );
+    } else {
+      text.push(
+        `✔ every decisionRef citation (${decisionRefTotal}) resolves to a known ADR, ` +
+          `rule, or fitness record`,
+      );
+    }
   }
   return text.join("\n");
 }

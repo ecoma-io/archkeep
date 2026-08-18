@@ -72,13 +72,20 @@ violation", and nothing else) binds the registry two ways:
   rule/fitness id the workspace's ADRs bind. Anything else is unknown, and the
   `adr` command reports it the loud way: a requested ADR id it does not know is
   exit 3, never clean — a rule that reads as bound while nothing binds it is the
-  silent direction. That resolution happens only when an id is _explicitly
-  requested_ of `lattice adr`: today the config and intent loaders validate a
-  `decisionRef`'s shape only and resolve nothing, and no check gate — `check`,
-  `drift`, or a descriptive command — ever turns a row's `decisionRef` into a
-  verdict. A `decisionRef` that no gate has resolved is not system "unknown";
-  it is simply unexamined, and the only action that makes it a named fact is
-  asking `lattice adr` the id.
+  silent direction. The config and intent loaders still validate a
+  `decisionRef`'s shape only and resolve nothing at load time — that half stays
+  a load-time shape check, not a resolution. Reporting is the other half:
+  `check`, `context`, `drift`, and `provenance` each resolve every row's
+  `decisionRef` against the registry wherever they render or walk that row, and
+  name an unresolved one loudly — `UNRESOLVED` inline in `check`'s and
+  `context`'s constraint line, a named section in `drift`'s and `provenance`'s
+  reports. None of them turns the citation into a _verdict_: an unresolved
+  `decisionRef` is a fact about the row's documentation, not about whether the
+  boundary holds, so it changes no exit code and no finding count — the same
+  posture `provenance`'s `unattested` (a row with no `origin`) already takes.
+  `lattice adr <id>` remains how a reader inspects the record itself — its
+  status, supersession chain, and what else it binds — once a citation is known
+  to resolve.
 
 ## Remote lookup does not change local resolution
 

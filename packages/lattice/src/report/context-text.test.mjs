@@ -173,6 +173,49 @@ describe("formatContextReport", () => {
     expect(text).toContain("1 file could not be analyzed");
   });
 
+  // P1-02: a matched constraint row's decisionRef used to render verbatim,
+  // unverified, in this exact section — the finding's own reproduction.
+  it("flags a matched constraint row's decisionRef when it is unresolved", () => {
+    const text = formatContextReport({
+      projectContext: {
+        project: "alpha",
+        tags: ["scope:app"],
+        constraints: [
+          {
+            sourceTag: "scope:app",
+            onlyDependOnLibsWithTags: ["scope:allowed"],
+            decisionRef: "9999-does-not-exist",
+          },
+        ],
+        dependencies: [],
+      },
+      coverage: coverage(),
+      unresolvedDecisionRefs: new Set(["9999-does-not-exist"]),
+    });
+    expect(text).toContain("decisionRef [9999-does-not-exist]");
+    expect(text).toContain("UNRESOLVED");
+  });
+
+  it("renders a decisionRef verbatim when no unresolved set is passed — unchanged from before this existed", () => {
+    const text = formatContextReport({
+      projectContext: {
+        project: "alpha",
+        tags: ["scope:app"],
+        constraints: [
+          {
+            sourceTag: "scope:app",
+            onlyDependOnLibsWithTags: ["scope:allowed"],
+            decisionRef: "9999-does-not-exist",
+          },
+        ],
+        dependencies: [],
+      },
+      coverage: coverage(),
+    });
+    expect(text).toContain("decisionRef [9999-does-not-exist]");
+    expect(text).not.toContain("UNRESOLVED");
+  });
+
   it("renders an allSourceTags constraint row", () => {
     const text = formatContextReport({
       projectContext: {

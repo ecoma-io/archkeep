@@ -14,6 +14,7 @@ import {
   resolveDecisionRef,
   resolveWithRemote,
   stripAdrPrefix,
+  unresolvedDecisionRefRows,
   validateRecord,
 } from "./adr-registry.mjs";
 
@@ -278,6 +279,60 @@ describe("stripAdrPrefix", () => {
 
   it("leaves a differently-cased prefix unchanged — no fuzzy matching", () => {
     expect(stripAdrPrefix("ADR:0001-bind-collaboration")).toBe("ADR:0001-bind-collaboration");
+  });
+});
+
+// P1-02: `resolveDecisionRef` had zero production call sites — every row
+// owner (`config.mjs`, `architecture-intent/model.mjs`) called
+// `rowSchemaViolations` with no `io.resolve`, and every report that renders a
+// `decisionRef` (`check`, `context`, `drift`, `provenance`) quoted it
+// verbatim, unverified. `unresolvedDecisionRefRows` is the bulk primitive
+// those reporting paths now call.
+describe("unresolvedDecisionRefRows — the bulk form the reporting paths call", () => {
+  const { records, byId } = loadAdrRegistry("/tmp/x", treeWith({}));
+  const known = boundFitnessIds(records);
+
+  it("is empty when every citation resolves — 'no fact, no claim'", () => {
+    const rows = [
+      { kind: "depConstraints[0]", row: { decisionRef: "0001-bind-collaboration" } },
+      { kind: "forbidden[0]", row: { decisionRef: "rule:no-direct-dep" } },
+    ];
+    expect(unresolvedDecisionRefRows(rows, byId, known)).toEqual([]);
+  });
+
+  it("names the row and the unresolvable reference — the silent direction this fixes", () => {
+    // The audit's own reproduction: a decisionRef naming a completely
+    // nonexistent ADR id must not pass through unverified.
+    const rows = [{ kind: "depConstraints[0]", row: { decisionRef: "9999-does-not-exist" } }];
+    expect(unresolvedDecisionRefRows(rows, byId, known)).toEqual([
+      { kind: "depConstraints[0]", row: rows[0].row, decisionRef: "9999-does-not-exist" },
+    ]);
+  });
+
+  it("skips a row with no decisionRef at all", () => {
+    const rows = [{ kind: "allowed[0]", row: { from: "a", to: "b" } }];
+    expect(unresolvedDecisionRefRows(rows, byId, known)).toEqual([]);
+  });
+
+  it("skips a row whose decisionRef is empty or non-string — a shape error, not a resolution question", () => {
+    const rows = [
+      { kind: "allowed[0]", row: { decisionRef: "" } },
+      { kind: "allowed[1]", row: { decisionRef: "   " } },
+      { kind: "allowed[2]", row: { decisionRef: 42 } },
+    ];
+    expect(unresolvedDecisionRefRows(rows, byId, known)).toEqual([]);
+  });
+
+  it("reports one entry per unresolved row, preserving row order", () => {
+    const rows = [
+      { kind: "allowed[0]", row: { decisionRef: "0001-bind-collaboration" } },
+      { kind: "forbidden[0]", row: { decisionRef: "0000-missing" } },
+      { kind: "forbidden[1]", row: { decisionRef: "rule:also-missing" } },
+    ];
+    expect(unresolvedDecisionRefRows(rows, byId, known).map((r) => r.kind)).toEqual([
+      "forbidden[0]",
+      "forbidden[1]",
+    ]);
   });
 });
 

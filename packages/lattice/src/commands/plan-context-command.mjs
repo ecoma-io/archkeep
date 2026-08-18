@@ -65,6 +65,8 @@ import { computeImpact } from "./impact.mjs";
 import { collectProjectContext } from "./context-command.mjs";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { readAdrContext } from "./adr.mjs";
+import { unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 import { formatPlanContextReport } from "../report/plan-context-text.mjs";
 
 /** How many dependents are listed before an explicit overflow note. */
@@ -257,6 +259,26 @@ export async function planContextCommand(projectName, paths, commandContext, con
   // which is the caller-error path `cli.mjs` maps to usage.
   const projectContext = collectProjectContext(projectName, graph, config);
 
+  // A matched constraint row's `decisionRef` names the ADR (or rule/fitness
+  // id) that supposedly authorizes it — the same gap the plain `context`
+  // command closes for the identical rows, through the identical
+  // `readAdrContext`/`unresolvedDecisionRefRows`
+  // (`../governance/adr-registry.mjs`). The plan and the plain command must
+  // not disagree about which citations resolve any more than they disagree
+  // about the constraint rows themselves.
+  const planDecisionRefRows = projectContext.constraints
+    .map((row, index) => ({ kind: `constraints[${index}]`, row }))
+    .filter(({ row }) => typeof row?.decisionRef === "string" && row.decisionRef.trim() !== "");
+  let unresolvedDecisionRefs = new Set();
+  if (planDecisionRefRows.length > 0) {
+    const adrContext = readAdrContext(root, { tracked });
+    unresolvedDecisionRefs = new Set(
+      unresolvedDecisionRefRows(planDecisionRefRows, adrContext.byId, adrContext.knownFitness).map(
+        (row) => row.decisionRef,
+      ),
+    );
+  }
+
   // Whole-tree analysis: the same import set `check` would judge, so the rule
   // verdict below is the full-workspace verdict regardless of provider.
   const wholeTree = analyzeWorkspace(
@@ -374,6 +396,16 @@ export async function planContextCommand(projectName, paths, commandContext, con
     tags: projectContext.tags,
     constraints: projectContext.constraints,
     dependencies: projectContext.dependencies,
+    // Additive and optional, the same bargain the plain `context` command's
+    // field of the same name states: absent when every matched row's
+    // decisionRef resolves (or none carries one).
+    ...(unresolvedDecisionRefs.size > 0
+      ? {
+          unresolvedDecisionRefs: [...unresolvedDecisionRefs].sort((a, b) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          ),
+        }
+      : {}),
     // The planning context's own sections, nested so the plain `context` fields
     // above stay intact — a consumer that already parses `context` reads exactly
     // what it read before, plus the plan.
@@ -443,7 +475,7 @@ export async function planContextCommand(projectName, paths, commandContext, con
     coverage,
     result,
     report: {
-      text: formatPlanContextReport({ project: result, coverage }),
+      text: formatPlanContextReport({ project: result, coverage, unresolvedDecisionRefs }),
       json: renderJson(envelope),
     },
   };
