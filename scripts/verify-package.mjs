@@ -31,6 +31,15 @@
 //   6. `diff` against a self-baseline exits 0 and reports no changes.
 //   7. The checker exits 1 on a violating tree — a gate only proves it runs when
 //      it can go red, so the clean direction alone would prove nothing.
+//   8. The checker exits 3 on a run that cannot look — the can't-look state must
+//      never read as clean (see `cli.mjs`'s exit contract), and it is proven
+//      here against the installed tarball, not only in source-tree tests.
+//
+// The `pnpm pack` tarball above is also compared, by file selection, against
+// `npm pack --dry-run` of the same tree: the lane verifies the pnpm tarball and
+// publishes with `npm publish`, which re-packs — so a divergence between the two
+// selections would ship bytes the lane never verified. The check pins them
+// agreeing today (audit H-F11) rather than trusting a measurement.
 //
 // Checks 4-6 run before check 7 so that graph/diff prove the clean installed
 // artifact. A boundary violation is not a graph or diff finding, so the
@@ -408,6 +417,11 @@ const VIOLATING_FILES = {
 const failures = [];
 const note = (text) => console.log(text);
 
+/** Two sorted name lists are the same file selection. */
+function packsEqual(a, b) {
+  return a.length === b.length && a.every((name, index) => name === b[index]);
+}
+
 /** Records a failure with the evidence, rather than throwing on the first one. */
 function check(label, ok, evidence) {
   if (ok) {
@@ -546,6 +560,31 @@ function verifyCleanAndLspChecks(consumer, label, packageName) {
     `exit ${lsp.status}\nstdout: ${lsp.stdout || "(empty)"}\nstderr: ${lsp.stderr || "(empty)"}` +
       `\n\nAn empty stdout here is the defect this check exists for: the process started, ` +
       `read nothing, and exited 0. See src/entry-point.mjs.`,
+  );
+
+  // 8. Exit 3 — a run that cannot look must never read as a clean tree. The
+  //    packed artifact is driven through clean→0 and violating→1, but between
+  //    them sits the can't-look state, and before this check it was proven
+  //    only in source-tree integration tests, never against the tarball the
+  //    lane actually ships. A regression that made "cannot look" return 0
+  //    would ship green on the exact silent direction this repository exists
+  //    to refuse. The cwd is a sibling of the consumer — no workspace marker
+  //    anywhere above it, which a path inside the consumer could never be —
+  //    and the CLI is the installed artifact's own `cli.mjs` run by absolute
+  //    path, so this proves the packed bytes answer 3 on no-verdict, never 0.
+  const nowhere = join(dirname(consumer), "lattice-no-workspace");
+  mkdirSync(nowhere, { recursive: true });
+  const cannotLook = run(
+    process.execPath,
+    [join(consumer, "node_modules", packageName, "cli.mjs"), "check"],
+    nowhere,
+  );
+  check(
+    `the checker exits 3 on a run that cannot look (${label})`,
+    cannotLook.status === 3,
+    `exit ${cannotLook.status}\n${cannotLook.stdout ?? ""}${cannotLook.stderr ?? ""}\n\n` +
+      `The can't-look exit is the state that must never be mistaken for an inspected ` +
+      `clean tree: value 3 on no-verdict, never 0.`,
   );
 }
 
@@ -713,6 +752,59 @@ try {
     console.error(`\`pnpm pack\` reported success but wrote no .tgz into ${packDir}.`);
     process.exit(1);
   }
+
+  // The lane verifies the `pnpm pack` tarball below, then `npm publish`
+  // rebuilds its own tarball on the way out (the release lane's own comment
+  // names the measured difference: npm does not copy the repository-root
+  // LICENSE the way `pnpm pack` does, which is why the package holds its own
+  // copy). Nothing pins those two file selections agreeing, and the audit
+  // measured them set-identical today (111 files). "Measured today" is a
+  // claim, not a gate: this check pins the agreement here, so a manifest edit
+  // that makes npm select different files than pnpm breaks the change that
+  // caused it instead of shipping bytes the lane never verified. Content
+  // differences are the point — the bytes verified must be the bytes
+  // published, "identical contents" asserted rather than assumed.
+  //
+  // `tar -tzf` reads the pnpm tarball's entry names; `npm pack --dry-run
+  // --json` is npm's own selection of the same tree. The two order their
+  // entries differently (locale-correct sorting is not a byte-stable
+  // contract), so both sides are compared as sorted SETS after stripping the
+  // `package/` prefix pnpm's tarball carries.
+  const packParity = (() => {
+    const listing = run("tar", ["-tzf", join(packDir, tarball)], packageDir, {
+      LC_ALL: "C",
+    });
+    const pnpmNames = (listing.stdout ?? "")
+      .split("\n")
+      .map((entry) => entry.replace(/\/$/, "").replace(/^package\//, ""))
+      .filter(Boolean)
+      .sort();
+
+    const dryRun = run("npm", ["pack", "--dry-run", "--json"], packageDir, {
+      LC_ALL: "C",
+    });
+    let npmNames = [];
+    try {
+      const json = JSON.parse(dryRun.stdout ?? "");
+      npmNames = (json[0]?.files ?? []).map((file) => file.path).sort();
+    } catch {
+      // Will fail the check below.
+    }
+
+    const identical =
+      listing.status === 0 && dryRun.status === 0 && packsEqual(pnpmNames, npmNames);
+    return { identical, pnpmNames, npmNames, listing, dryRun };
+  })();
+
+  check(
+    "npm and pnpm select the same files from the same tree — the verified bytes are the published bytes",
+    packParity.identical,
+    `pnpm pack lists ${packParity.pnpmNames.length}; npm pack lists ${packParity.npmNames.length}\n` +
+      (packParity.listing.status === 0 ? "" : `tar exited ${packParity.listing.status}\n`) +
+      (packParity.dryRun.status === 0 ? "" : `npm dry-run exited ${packParity.dryRun.status}\n`) +
+      `pnpm-only: ${packParity.pnpmNames.filter((n) => !packParity.npmNames.includes(n)).join(", ") || "(none)"}\n` +
+      `npm-only: ${packParity.npmNames.filter((n) => !packParity.pnpmNames.includes(n)).join(", ") || "(none)"}`,
+  );
 
   const peers = manifest.peerDependencies ?? {};
   const packageManager = JSON.parse(
