@@ -15,8 +15,10 @@
 // They are excised from the parsed JSON before comparison, and each case
 // asserts the disclosure note exists — the note is the contract's proof that
 // the drift is documented rather than silent. `history --capture` is not
-// swept: its output is a function of history-directory state (the second
-// capture dedups, E-F05), so it lives in `history.e2e.mjs`, not here.
+// swept here: its two captures of an unchanged tree differ in exactly one
+// readable field, the always-present `result.captured.duplicate` boolean
+// (E-F05), so it lives in `history.e2e.mjs`, which pins that one-field
+// contract instead.
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

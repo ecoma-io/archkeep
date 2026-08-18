@@ -12,7 +12,6 @@ import {
   loadAdrRegistry,
   parseFrontmatterFields,
   resolveDecisionRef,
-  resolveWithRemote,
   stripAdrPrefix,
   unresolvedDecisionRefRows,
   validateRecord,
@@ -333,58 +332,6 @@ describe("unresolvedDecisionRefRows — the bulk form the reporting paths call",
       "forbidden[0]",
       "forbidden[1]",
     ]);
-  });
-});
-
-describe("resolveWithRemote — remote is opt-in and never changes local resolution", () => {
-  const { byId } = loadAdrRegistry("/tmp/x", treeWith({}));
-  const known = boundFitnessIds(loadAdrRegistry("/tmp/x", treeWith({})).records);
-
-  it("keeps a locally-resolved reference local, with no reference time", () => {
-    const result = resolveWithRemote(byId, known, "0001-bind-collaboration", {
-      remoteResolve: () => true,
-      refTime: () => "2026-08-16T00:00:00Z",
-    });
-    expect(result).toEqual({ kind: "adr", referenceTime: null });
-  });
-
-  it("asks the remote only for an unknown reference and stamps the fetch", () => {
-    const seen = [];
-    const result = resolveWithRemote(byId, known, "0999-remote", {
-      remoteResolve: (ref, stamp) => {
-        seen.push([ref, stamp]);
-        return true;
-      },
-      refTime: () => "2026-08-16T00:00:00Z",
-    });
-    expect(result.kind).toBe("fitness");
-    expect(result.referenceTime).toBe("2026-08-16T00:00:00Z");
-    expect(seen).toEqual([["0999-remote", "2026-08-16T00:00:00Z"]]);
-  });
-
-  it("fails closed when the remote cannot answer — still unknown, never pass", () => {
-    const result = resolveWithRemote(byId, known, "0999-remote", {
-      remoteResolve: () => false,
-      refTime: () => "2026-08-16T00:00:00Z",
-    });
-    expect(result).toEqual({ kind: "unknown", referenceTime: null });
-  });
-
-  it("fails closed when the remote throws", () => {
-    const result = resolveWithRemote(byId, known, "0999-remote", {
-      remoteResolve: () => {
-        throw new Error("network down");
-      },
-      refTime: () => "2026-08-16T00:00:00Z",
-    });
-    expect(result).toEqual({ kind: "unknown", referenceTime: null });
-  });
-
-  it("returns unknown with no remote configured", () => {
-    expect(resolveWithRemote(byId, known, "0999-remote")).toEqual({
-      kind: "unknown",
-      referenceTime: null,
-    });
   });
 });
 

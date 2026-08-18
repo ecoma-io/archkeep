@@ -547,7 +547,7 @@ describe("historyCommand", () => {
       },
     });
     expect(writes).toHaveLength(0);
-    expect(result.evolution.captured.deduplicated).toBe(true);
+    expect(result.evolution.captured.duplicate).toBe(true);
     expect(result.evolution.snapshots).toHaveLength(1);
   });
 
@@ -565,7 +565,7 @@ describe("historyCommand", () => {
       },
     });
     expect(writes).toHaveLength(1);
-    expect(result.evolution.captured.deduplicated).toBeFalsy();
+    expect(result.evolution.captured.duplicate).toBeFalsy();
     expect(result.evolution.captured.name).toMatch(/^0002-/);
     expect(result.evolution.transitions[0].providerChanged).toBe(true);
   });
@@ -601,7 +601,7 @@ describe("historyCommand", () => {
     expect(tmpPath.endsWith(".json.tmp")).toBe(true);
     expect(finalPath.endsWith(".json")).toBe(true);
     expect(tmpPath.replace(/\.tmp$/, "")).toBe(finalPath);
-    expect(result.evolution.captured.deduplicated).toBeFalsy();
+    expect(result.evolution.captured.duplicate).toBeFalsy();
   });
 
   it("throws on an empty directory", () => {

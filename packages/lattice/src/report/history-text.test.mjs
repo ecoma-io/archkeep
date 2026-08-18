@@ -64,7 +64,7 @@ describe("formatHistoryReport", () => {
     const text = formatHistoryReport({
       evolution: {
         dir: "/ws/hist",
-        captured: { name: "0001-a.json", deduplicated: true },
+        captured: { name: "0001-a.json", duplicate: true },
         snapshots,
         transitions: [transition()],
       },
