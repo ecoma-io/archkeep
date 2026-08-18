@@ -275,3 +275,57 @@ describe("waiversCommand", () => {
     expect(result.report.text).toContain("expired");
   });
 });
+
+describe("waiversCommand — determinism", () => {
+  // One hour after NOW; the default waiver's 2026-09-01 term keeps `status`
+  // "active" at both instants, isolating the wall-clock variance to
+  // `remainingMs` alone — the exact field P1-05 found leaking into every
+  // run's bytes.
+  const LATER = "2026-08-16T11:00:00.000Z";
+
+  /** Every field of a waivers envelope except the one documented as time-relative. */
+  function stripTimeRelativeFields(envelope) {
+    return {
+      ...envelope,
+      result: {
+        ...envelope.result,
+        waivers: envelope.result.waivers.map(({ remainingMs: _remainingMs, ...rest }) => rest),
+      },
+    };
+  }
+
+  it("silent-direction guard: two runs of an unchanged tree at different reference times must not diverge anywhere but the documented field", async () => {
+    const a = await waiversCommand(commandContext(), policy([waiver()]), { now: NOW });
+    const b = await waiversCommand(commandContext(), policy([waiver()]), { now: LATER });
+    const envelopeA = JSON.parse(a.report.json);
+    const envelopeB = JSON.parse(b.report.json);
+
+    // The isolated field genuinely moves with the clock — a frozen value here
+    // would silently defeat the "time remaining right now" it exists to
+    // report, the opposite failure from the one this test's title guards.
+    expect(envelopeA.result.waivers[0].remainingMs).not.toBe(
+      envelopeB.result.waivers[0].remainingMs,
+    );
+    expect(envelopeA.result.waivers[0].status).toBe("active");
+    expect(envelopeB.result.waivers[0].status).toBe("active");
+
+    // Before this fix, nothing marked `remainingMs` as the sanctioned
+    // exception, so a naive full-envelope diff/hash across two real runs
+    // reported drift on every single run — "five runs, five distinct
+    // hashes" — indistinguishable from an actual change to the workspace.
+    // Stripping only the one documented field must leave the two envelopes
+    // byte-identical; any other field moving here would be the silent
+    // regression this test exists to catch.
+    expect(JSON.stringify(stripTimeRelativeFields(envelopeA))).toBe(
+      JSON.stringify(stripTimeRelativeFields(envelopeB)),
+    );
+  });
+
+  it("discloses the excluded field in-band, in coverage.notes, on every run — not only in prose docs", async () => {
+    const result = await waiversCommand(commandContext(), policy([waiver()]), { now: NOW });
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.coverage.notes).toEqual(
+      expect.arrayContaining([expect.stringContaining("remainingMs is the wall clock")]),
+    );
+  });
+});
