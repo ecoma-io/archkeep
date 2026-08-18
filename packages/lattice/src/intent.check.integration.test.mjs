@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { check, EXIT } from "../cli.mjs";
+import { computePolicyFingerprint } from "./commands/graph.mjs";
+import { loadBoundaryConfigFile } from "./config.mjs";
 
 /**
  * Architecture-intent through the real `check` command — real loader, real
@@ -103,7 +105,15 @@ describe("architecture intent through check — the absent-declaration pact", ()
   it("leaves the text report untouched — no section, no mention — when there is no intent file", async () => {
     const w = workspace();
     const { report } = await check({ format: "text", config: null, paths: [] }, w.context);
-    expect(report).toBe("✔ no boundary violations (0 imports in 2 files across 2 projects)");
+    // Computed from the real fixture and the real fingerprint function, not
+    // written as a literal (P1-01's policy line, first in every report).
+    const fingerprint = computePolicyFingerprint(
+      await loadBoundaryConfigFile(join(w.root, "module-boundaries.config.mjs")),
+    );
+    expect(report).toBe(
+      `policy  module-boundaries.config.mjs — fingerprint ${fingerprint}\n\n` +
+        "✔ no boundary violations (0 imports in 2 files across 2 projects)",
+    );
   });
 
   it("treats an untracked intent file as absent — an intentional file is not reviewed state", async () => {
