@@ -62,7 +62,7 @@ It fails on any needed job that is `skipped` or `cancelled`, because `needs`
 alone only blocks on `failure`.
 
 `.github/workflows/analysis.yml` runs CodeQL (both `javascript-typescript` and
-`actions`), Scorecard, and Semgrep — separately from the correctness gate.
+`actions`), Semgrep, and Gitleaks — separately from the correctness gate.
 
 ## The boundary law
 

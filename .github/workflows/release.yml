@@ -21,15 +21,13 @@ name: Release
 # that resolves the server out of the workspace pairs with the engine it is
 # released with, and one version makes the pairing visible.
 #
-# The cost of the plugin's asset-less releases is exact and worth naming rather
-# than discovering later: OpenSSF Scorecard's Signed-Releases check looks for a
-# signature file among a release's assets, so those releases score nothing
-# there — and the vsix is uploaded unsigned, so the extension scores the same.
-# npm provenance — the `--provenance` flag below — is a real attestation,
-# published to Sigstore's transparency log and shown on the package page, but
-# it lives at the registry rather than on the GitHub release, and that check
-# does not look there. The trade is deliberate: an artifact built or signed
-# only to move a score would be an asset nobody installs.
+# The releases' lack of signatures on the GitHub release object is named rather
+# than discovered later: the plugin releases carry no asset to sign, and the
+# vsix is uploaded unsigned. npm provenance — the `--provenance` flag below — is
+# a real attestation, published to Sigstore's transparency log and shown on the
+# package page, but it lives at the registry rather than on the GitHub release.
+# The trade is deliberate: an artifact built or signed only to hold a signature
+# would be an asset nobody installs.
 
 on:
   push:

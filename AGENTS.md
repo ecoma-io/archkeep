@@ -54,7 +54,7 @@ test that only pins the message text is half a test.
 ```
 .github/
   workflows/ci.yml         verify → ci-gate (the one required check name)
-  workflows/analysis.yml   CodeQL · Scorecard · Semgrep, one workflow
+  workflows/analysis.yml   CodeQL · Semgrep · Gitleaks, one workflow
   semgrep/                 this repository's own rules, each with fixtures
   ISSUE_TEMPLATE/          bug · missed violation · feature
   assets/                  logo.svg is the source; the PNGs are rendered
@@ -249,12 +249,13 @@ another.
   that never passes through the `commit-msg` hook. The title reaches the step via
   `env:`, never interpolated into the `run:` body.
 - **`analysis.yml`** — CodeQL (`javascript-typescript` **and** `actions`; without
-  the `actions` leg every workflow-security query runs zero times), Scorecard,
-  and Semgrep. `permissions: read-all` sits at the top level and writes appear
-  only at job level, because Scorecard refuses to publish results from a workflow
-  holding any workflow-level write permission. Job-level `permissions` _replaces_
-  the workflow-level block rather than extending it, so `contents: read` is
-  restated in each job that narrows it.
+  the `actions` leg every workflow-security query runs zero times), Semgrep,
+  and Gitleaks (a blocking scan of the whole history — a secret removed in a
+  later commit is still a leak while it sits in the tree).
+  `permissions: read-all` sits at the top level and writes appear only at job
+  level. Job-level `permissions` _replaces_ the workflow-level block rather
+  than extending it, so `contents: read` is restated in each job that narrows
+  it.
 - **cubic — configured, and currently not running.** It is meant to review the
   defect class no gate can decide: a path that reports nothing. Its scope and
   reasoning live in `cubic.yaml`, in that file rather than here, because a config
