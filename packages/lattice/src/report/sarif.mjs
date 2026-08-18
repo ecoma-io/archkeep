@@ -347,11 +347,23 @@ export function sarifNotification(failure) {
 /**
  * The whole SARIF log.
  *
+ * `policy` — which law this run enforced — rides `runs[0].properties`, SARIF's
+ * own generic property-bag extension point (the 2.1.0 schema's `propertyBag`,
+ * the same mechanism `sarifResult`'s own `properties` already use for
+ * per-finding metadata upstream SARIF has no field for). Before this, neither
+ * a clean run nor a violating one carried anything at all naming the config,
+ * profile, or fingerprint that produced it — a code-scanning consumer had no
+ * way to tell a strict run from one under a weaker policy (P1-01). Absent
+ * (never a `null`-valued key) when no caller supplied one, so a SARIF log
+ * built by anything other than `check` — nothing does today — stays
+ * byte-identical to before this field existed.
+ *
  * @param {{violations: object[], failures: object[],
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
  *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
  *   declaredEdges?: {findings: object[], judged?: number}|null,
- *   intent?: {findings: object[]}|null}} run
+ *   intent?: {findings: object[]}|null,
+ *   policy?: {profile: string|null, source: string, fingerprint: string}|null}} run
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
 export function buildSarifLog({
@@ -361,6 +373,7 @@ export function buildSarifLog({
   tsconfigPaths,
   declaredEdges,
   intent,
+  policy = null,
 }) {
   const waived = violations.filter((violation) => violation.waivedBy);
   // A waived count rides as a notification so a consumer scanning for "did
@@ -390,6 +403,7 @@ export function buildSarifLog({
       {
         tool: { driver: { name: "lattice", rules: sarifRules() } },
         columnKind: "utf16CodeUnits",
+        ...(policy == null ? {} : { properties: { policy } }),
         results: [
           ...violations.map(sarifResult),
           ...(goWork?.findings ?? []).map(sarifGoWorkResult),
@@ -418,7 +432,8 @@ export function buildSarifLog({
  * @param {{violations: object[], failures: object[],
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
  *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
- *   intent?: {findings: object[]}|null}} run
+ *   intent?: {findings: object[]}|null,
+ *   policy?: {profile: string|null, source: string, fingerprint: string}|null}} run
  * @returns {string}
  */
 export function formatSarif(run) {
