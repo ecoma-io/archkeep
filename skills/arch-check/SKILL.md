@@ -141,9 +141,10 @@ leave it sound must show the check green.
   does not distinguish the two — unlike a waiver (a row WITH `expiresAt`),
   which stays a finding under "accepted violations" until its term lapses
   rather than disappearing (`arch-review`, "Waivers / exceptions"). To tell
-  which "empty" a green run is, read the active policy's `boundarySuppressions`
-  table directly for rows with no `expiresAt`; `lattice waivers` names only
-  the term-bound rows, not this one. In a profile workspace, a run that
+  which "empty" a green run is, run `lattice waivers`: it names every
+  `boundarySuppressions` row — a waiver with its term, a permanent suppression
+  with what it is hiding — the one surface that distinguishes the two. In a
+  profile workspace, a run that
   reports unexpectedly green can also mean the law being enforced changed —
   check the plugin options and the `--config`/`boundaryConfig` selector
   against what was in effect when the change was made (the option-change
@@ -151,12 +152,13 @@ leave it sound must show the check green.
 - **UNKNOWN / INCOMPLETE never silently becomes PASS.** A coverage gap, an
   unreadable file, a no-verdict intent, an unresolved profile — each withholds
   the verdict instead of folding into the green. An unresolved decision is the
-  same rule in the agent's hands: `check` validates a `decisionRef`'s shape but
-  does not resolve it, so an ADR id that `lattice adr` cannot look up stays
-  `unknown` evidence, never a pass — say so rather than citing it. That
-  `unknown` is the agent's own inference, not a verdict from `check`: no gate
-  turns a row's `decisionRef` into a verdict, and the only action that names it
-  is asking `lattice adr` the id.
+  same rule in the agent's hands: `check` resolves each row's `decisionRef`
+  against the ADR registry (report-only — the resolution changes no byte of
+  the verdict) and names an unresolved one inline and under
+  `result.unresolvedDecisionRefs`, so an ADR id that `lattice adr` cannot look
+  up stays `unknown` evidence, never a pass — say so rather than citing it.
+  That `unknown` is `check`'s report of the citation, not a verdict from it:
+  no gate turns a row's `decisionRef` into a verdict.
 - **Empty output from a scoped check does NOT mean the workspace is safe.**
   Cycle rules and lazy-load rules judge the whole file graph. A scoped check is
   a fast filter; a full check is the gate. A fitness function that needs the

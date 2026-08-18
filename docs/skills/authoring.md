@@ -1,7 +1,10 @@
 # Authoring arch-* skills
 
-Conventions for writing new skills in the `arch-*` namespace. These are enforced
-by `scripts/check-skills.mjs` in CI.
+Conventions for writing new skills in the `arch-*` namespace. The gate —
+`scripts/check-skills.mjs` in CI — validates `name`, `description`, and the
+host-independence contract below, and holds the five-file version chain
+([versioning.md](versioning.md)); these conventions are the part of that gate
+the authoring side must meet.
 
 ## Frontmatter rules
 
@@ -11,8 +14,6 @@ Every `SKILL.md` must begin with YAML frontmatter containing at minimum:
 ---
 name: arch-skill-name
 description: One-line description of what the skill teaches
-metadata:
-  version: "0.4.0"
 compatibility: Requires @ecoma-io/lattice CLI
 ---
 ```
@@ -30,6 +31,13 @@ compatibility: Requires @ecoma-io/lattice CLI
   `lattice` or `@ecoma-io/lattice` so consumers know the dependency.
 
 ### Forbidden fields
+
+The canonical skills carry **no `metadata` block — and no `metadata.version` —
+by decision** ([versioning.md](versioning.md)): a per-skill version would have
+to be bumped by hand on every release, and a version that drifts is worse than
+none because it reads as current. The version that matters is the plugin
+manifest's, and the chain (not any per-skill field) is what keeps it in
+lockstep. Do not add a version field.
 
 The following fields are **host-specific** and must not appear in canonical
 skills:
