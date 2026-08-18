@@ -1416,6 +1416,72 @@ var _ = adapter.Name
     }
   });
 
+  it("--output refuses rather than silently overwriting the tracked architecture-intent.json", async () => {
+    // `{flag: "wx"}` above protects the `.tmp` intermediate; it says nothing
+    // about the FINAL name, and `renameSync` replaces whatever already sits
+    // there unconditionally. Before `governanceOutputTargets`, `lattice check
+    // --output architecture-intent.json` — a copy-pasted flag, a typo'd
+    // path, or a CI script a pull request edited — silently replaced the
+    // tracked intent this fixture declares above with a check report, exit 0
+    // (P1-24's own example command). The write must never even attempt a
+    // `.tmp` file at this target: refused before either name is touched.
+    const target = join(nativeRoot, "architecture-intent.json");
+    const before = readFileSync(target, "utf8");
+    const streams = nativeEnv();
+    expect(await runCli(["check", "--format", "json", "--output", target], streams)).toBe(
+      EXIT.error,
+    );
+    expect(streams.lines.err.join("\n")).toContain("resolves to 'architecture-intent.json'");
+    expect(readFileSync(target, "utf8")).toBe(before);
+    expect(existsSync(`${target}.tmp`)).toBe(false);
+  });
+
+  it("--output refuses rather than silently overwriting the tracked lattice.json", async () => {
+    const target = join(nativeRoot, "lattice.json");
+    const before = readFileSync(target, "utf8");
+    const streams = nativeEnv();
+    expect(await runCli(["graph", "--format", "json", "--output", target], streams)).toBe(
+      EXIT.error,
+    );
+    expect(streams.lines.err.join("\n")).toContain("resolves to 'lattice.json'");
+    expect(readFileSync(target, "utf8")).toBe(before);
+    expect(existsSync(`${target}.tmp`)).toBe(false);
+  });
+
+  it("--output refuses rather than silently overwriting the workspace's boundary-law file", async () => {
+    // The un-overridden default name (`DEFAULT_OPTIONS.boundaryConfig`) —
+    // this fixture never renames it via `--config`. Silently overwriting it
+    // would also corrupt the very `module-boundaries.config.mjs` every other
+    // `--config` test in this file `import()`s, which is exactly why THOSE
+    // tests are careful to write a separate filename instead (see the next
+    // test's own comment).
+    const target = join(nativeRoot, "module-boundaries.config.mjs");
+    const before = readFileSync(target, "utf8");
+    const streams = nativeEnv();
+    expect(await runCli(["graph", "--format", "json", "--output", target], streams)).toBe(
+      EXIT.error,
+    );
+    expect(streams.lines.err.join("\n")).toContain("resolves to 'module-boundaries.config.mjs'");
+    expect(readFileSync(target, "utf8")).toBe(before);
+    expect(existsSync(`${target}.tmp`)).toBe(false);
+  });
+
+  it("--output still overwrites an ordinary, previously-written report — the documented CI reuse", async () => {
+    // The governance guard above is deliberately narrow. `docs/usage/ci.md`'s
+    // own recipe reruns `--output boundaries.json` on every push, relying on
+    // the previous run's file being silently replaced — this is the
+    // negative-space proof the new guard did not widen into refusing every
+    // pre-existing target, only the fixed governance names.
+    const target = join(nativeRoot, "reused-report.json");
+    const first = nativeEnv();
+    expect(await runCli(["graph", "--format", "json", "--output", target], first)).toBe(EXIT.ok);
+    expect(existsSync(target)).toBe(true);
+    const second = nativeEnv();
+    expect(await runCli(["graph", "--format", "json", "--output", target], second)).toBe(EXIT.ok);
+    expect(existsSync(target)).toBe(true);
+    expect(existsSync(`${target}.tmp`)).toBe(false);
+  });
+
   it("folds a declared fitness function into the check verdict — a coverage-minimum over owned files", async () => {
     // A SEPARATE config filename, never `module-boundaries.config.mjs`: that
     // file was already `import()`ed during the describe-block setup, and ES
