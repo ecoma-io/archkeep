@@ -62,14 +62,24 @@ import { readFileSync } from "node:fs";
 import { policyFrom } from "../config.mjs";
 
 /**
- * The top-level keys a profiles file may carry. `version` is checked when
- * present; `profiles` is the list. `$schema` is tolerated for editor
- * validation, the same carve-out the `.json` boundary dialect makes.
+ * The top-level keys a profiles file may carry. `version` is checked AFTER
+ * defaulting: a file that does not state one is schema 1 by definition, so a
+ * later reader can still tell a v1 registry from a hypothetical v2 — the
+ * default is applied here, at the one place the version is read. `profiles`
+ * is the list. `$schema` is tolerated for editor validation, the same
+ * carve-out the `.json` boundary dialect makes.
  */
 const REGISTRY_KEYS = ["profiles", "version", "$schema"];
 
 /** A version a reader that predates it must refuse, per `docs/reference/profiles.md`. */
 export const PROFILE_REGISTRY_SCHEMA_VERSION = 1;
+
+/** The registry's schema version: stated, or schema 1 when absent. */
+function registrySchemaVersion(raw) {
+  return raw.version === undefined
+    ? PROFILE_REGISTRY_SCHEMA_VERSION
+    : /** @type {unknown} */ (raw.version);
+}
 
 /** The three keys a profile's `block` may carry, exactly those `policyFrom` reads. */
 const BLOCK_KEYS = ["depConstraints", "moduleBoundaryOptions", "boundarySuppressions"];
@@ -129,7 +139,7 @@ export function profileRegistryViolations(raw) {
       );
     }
   }
-  if (raw.version !== undefined && raw.version !== PROFILE_REGISTRY_SCHEMA_VERSION) {
+  if (registrySchemaVersion(raw) !== PROFILE_REGISTRY_SCHEMA_VERSION) {
     violations.push(
       `version: expected ${PROFILE_REGISTRY_SCHEMA_VERSION}, got ${describe(raw.version)} — ` +
         `a registry this reader does not understand must refuse rather than guess`,

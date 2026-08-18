@@ -79,9 +79,10 @@ effective block it inherits), and a `block` of the three policy keys:
 ```
 
 Two top-level keys are recognized — `profiles` (required) and `version`
-(optional, must be `1` when present) — plus `$schema`, which is tolerated for
-editor validation. Any other key is rejected by name. Each profile may carry
-only `name`, `base`, and `block`; the block only the three policy keys.
+(defaults to `1` when absent, must be `1` when present) — plus `$schema`,
+which is tolerated for editor validation. Any other key is rejected by name.
+Each profile may carry only `name`, `base`, and `block`; the block only the
+three policy keys.
 
 A profile with no `base` stands alone. With a `base`, the child inherits its
 effective block and merges on top of it:
