@@ -68,7 +68,7 @@ import { resolveProvenance } from "./provenance.mjs";
 import { judgeIntent } from "../architecture-intent/judge.mjs";
 import { computeIntentFingerprint } from "../architecture-intent/intent-fingerprint.mjs";
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
-import { formatDriftReport } from "../drift/drift-text.mjs";
+import { formatDriftReport } from "../report/drift-text.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { intentRows as governanceIntentRows } from "./provenance-command.mjs";
 import { unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";

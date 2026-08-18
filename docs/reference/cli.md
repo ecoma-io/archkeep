@@ -13,7 +13,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `discover`   | (none)               | Report observed facts, and optionally propose candidates                                           | no               |
 | `reconcile`  | (none)               | Score the declared intent against the observed architecture, with proposed edits under `--propose` | no               |
 | `fitness`    | (none)               | Judge every declared fitness function against the workspace                                        | no               |
-| `waivers`    | (none)               | List the boundary waivers on the table, with their terms                                           | no               |
+| `waivers`    | (none)               | List the boundary waivers and permanent suppressions on the table                                  | no               |
 | `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                                             | no               |
 | `health`     | `[<snapshot-dir>]`   | Describe architecture health metrics and trends                                                    | no               |
 | `debt`       | `<dir>`              | Print the architecture-debt ledger across snapshots                                                | no               |
@@ -28,6 +28,12 @@ usage error (exit 2). If the first positional argument names a path that exists
 on disk, it is treated as `check` scoped to that path, the same as `lattice check <path>`.
 
 ## Flags
+
+Every `--config`/`boundaryConfig` below reads the same way: a file path,
+unless the workspace names a `profiles` registry, in which case it is a
+profile NAME instead — `check`'s own row states the mechanism once;
+[profiles.md](../concepts/profiles.md) is the full model. This applies to
+every command below that takes a `--config` flag, not only `check`.
 
 ### `check`
 
@@ -190,10 +196,14 @@ table produces a different set of matching rows.
 | `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. The surface listed is the one this law carries. |
 
 No positional arguments. Lists every `boundarySuppressions` row carrying an
-`expiresAt` — a waiver — with its term and the current violations it covers.
-Coverage is judged against the full finding set with the suppression table
-removed, so a row that covers nothing reads as stale. Descriptive: it exits 0
-whenever the surface could be read, never 1.
+`expiresAt` — a waiver — with its term and the current violations it covers, and
+every row with no `expiresAt` — a permanent suppression — with the violations it
+is currently hiding. Coverage is judged against the full finding set with the
+suppression table removed, so a row that covers nothing reads as stale. A tree
+whose only violations are permanently suppressed does not read as "no
+waivers — every boundary is enforced": this command names the suppression and
+what it hides instead. Descriptive: it exits 0 whenever the surface could be
+read, never 1.
 
 ### `history`
 
@@ -249,12 +259,12 @@ or verified must never read as "no debt".
 
 ## Exit codes
 
-| code | meaning                                                                                                                | when                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ---- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0    | clean -- and every selected file was analyzed                                                                          | No findings and no coverage gaps.                                                                                                                                                                                                                                                                                                                                                                                                    |
-| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, intent findings, or a failing fitness gate | `check` only. No other command exits 1.                                                                                                                                                                                                                                                                                                                                                                                              |
-| 2    | usage error                                                                                                            | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                                                                                                                                                                                                                                                                                                      |
-| 3    | no verdict -- the run could not start, a selected file could not be read, or the law itself could not be established   | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load, a tracked `architecture-intent.json` that will not parse or whose boundaries match no project, or -- on `check` in a profile-selected workspace -- a profile that could not be resolved: an unknown profile name, an unknown `base`, a `base` cycle, or an unreadable registry. |
+| code | meaning                                                                                                                | when                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | clean -- and every selected file was analyzed                                                                          | No findings and no coverage gaps.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, intent findings, or a failing fitness gate | `check` only. No other command exits 1.                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 2    | usage error                                                                                                            | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                                                                                                                                                                                                                                                                                                                                     |
+| 3    | no verdict -- the run could not start, a selected file could not be read, or the law itself could not be established   | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load, a tracked `architecture-intent.json` that will not parse or whose boundaries match no project, or -- in a profile-selected workspace, on any command that reads a boundary law -- a profile that could not be resolved: an unknown profile name, an unknown `base`, a `base` cycle, or an unreadable registry. |
 
 **Do not collapse 3 into 0.** A checker that could not look must never be
 mistaken for one that looked and found nothing. Both 1 and 3 must fail a CI
@@ -311,9 +321,17 @@ with its term and the current violations it covers. Coverage is judged against
 the full finding set (the table removed), so a row that covers nothing is
 flagged as stale rather than silently doing nothing. A waiver that has lapsed
 is listed as expired with its remaining time; it covers nothing and the
-violation it accepted re-asserts. A `waivers` run is descriptive and never
-modifies the table — waivers are removed by an explicit edit, never by the
-tool. Descriptive.
+violation it accepted re-asserts.
+
+It also lists every row with no `expiresAt` — a permanent suppression — and how
+many violations each is currently hiding: that removal never appears in
+`check`'s findings at all, so this is the only command that names it.
+`result.suppressions` carries the rows, `result.suppressed` the count of
+distinct violations they hide, and the text report never collapses "no
+waivers" into "every boundary is enforced" while a permanent suppression is
+covering something this run measured. A `waivers` run is descriptive and never
+modifies the table — waivers and suppressions are both removed only by an
+explicit edit, never by the tool. Descriptive.
 
 ### `history <dir>`
 
@@ -464,16 +482,19 @@ error.
 
 With no argument, dumps the whole ADR registry — every recorded architecture
 decision, its status, its supersession chain, and which rule/fitness ids it
-binds. With one argument, answers that id: an ADR id (`NNN-slug`) shows the
-record, a `rule:…`/`fitness:…` id is the reverse lookup naming which ADRs bind
-it. `adr` takes no `--config` — a description of what is recorded needs no
-boundary law.
+binds. With one argument, answers that id: a `rule:…`/`fitness:…` id is the
+reverse lookup naming which ADRs bind it, and everything else is read as an
+ADR reference — bare `NNN-slug`, or `adr:`-prefixed, the alternate spelling
+`decisionRef` docs recommend — showing the record when it resolves. `adr`
+takes no `--config` — a description of what is recorded needs no boundary law.
 
 Descriptive, never a gate: `adr` never exits 1. Exit 0 (a) when every requested
-ADR-pattern id resolves to a record, or (b) when the request was a reverse
+ADR reference resolves to a record, or (b) when the request was a reverse
 lookup — `rule:`/`fitness:` ids answer with a sentence naming which ADRs bind
 that id, or `no ADR binds it`; that sentence is exit 0, never a gate verdict.
-Exit 3 when an ADR-pattern id resolves to nothing or the registry could not be
-read (a `decisionRef` that does not resolve is `unknown`, never clean), and 2
-on usage error. See [adr.md](adr.md) for the report shapes and the concept in
+Exit 3 when an ADR reference resolves to nothing — an unknown id, a wrong
+case, a truncation, a path-traversal shape, or any other spelling that is not
+a `rule:…`/`fitness:…` reference — or the registry could not be read (a
+`decisionRef` that does not resolve is `unknown`, never clean), and 2 on usage
+error. See [adr.md](adr.md) for the report shapes and the concept in
 [concepts/adr.md](../concepts/adr.md).

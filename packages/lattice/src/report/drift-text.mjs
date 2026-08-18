@@ -19,7 +19,7 @@
  * and it never re-sorts: the judge already orders findings by total key.
  *
  * This module decides nothing. A formatter that filtered would be a rule
- * wearing a formatter's name (`../README.md`).
+ * wearing a formatter's name (`./README.md`).
  */
 
 /** The taxonomy in report order. Every rule `judgeIntent` can emit appears here. */

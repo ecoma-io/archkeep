@@ -13,6 +13,7 @@ import {
   parseFrontmatterFields,
   resolveDecisionRef,
   resolveWithRemote,
+  stripAdrPrefix,
   unresolvedDecisionRefRows,
   validateRecord,
 } from "./adr-registry.mjs";
@@ -249,6 +250,35 @@ describe("binding and reverse lookup", () => {
     expect(resolveDecisionRef(byId, known, "rule:no-direct-dep")).toBe("fitness");
     expect(resolveDecisionRef(byId, known, "0000-missing")).toBe("unknown");
     expect(resolveDecisionRef(byId, known, "rule:missing")).toBe("unknown");
+  });
+
+  // P1-23: `../governance/row-schema.mjs`'s decisionRef docs recommend
+  // `adr:0012` as a valid ADR-id spelling beside the bare `0012-slug` form,
+  // but `byId` is keyed on the bare form alone — a lookup that checked `ref`
+  // verbatim could never match the one spelling this tool itself suggests.
+  it("resolves the `adr:`-prefixed spelling to the same record as the bare id", () => {
+    const known = boundFitnessIds(records);
+    expect(resolveDecisionRef(byId, known, "adr:0001-bind-collaboration")).toBe("adr");
+    // A prefix on an id that genuinely does not exist still resolves unknown
+    // — stripping the prefix must not turn a real miss into a false match.
+    expect(resolveDecisionRef(byId, known, "adr:0000-missing")).toBe("unknown");
+    // Only the exact, documented lowercase prefix is an alias; a differently
+    // cased one is a near-miss like any other, not a fuzzy match.
+    expect(resolveDecisionRef(byId, known, "ADR:0001-bind-collaboration")).toBe("unknown");
+  });
+});
+
+describe("stripAdrPrefix", () => {
+  it("strips exactly the documented lowercase adr: prefix", () => {
+    expect(stripAdrPrefix("adr:0001-bind-collaboration")).toBe("0001-bind-collaboration");
+  });
+
+  it("leaves a ref with no adr: prefix unchanged", () => {
+    expect(stripAdrPrefix("0001-bind-collaboration")).toBe("0001-bind-collaboration");
+  });
+
+  it("leaves a differently-cased prefix unchanged — no fuzzy matching", () => {
+    expect(stripAdrPrefix("ADR:0001-bind-collaboration")).toBe("ADR:0001-bind-collaboration");
   });
 });
 

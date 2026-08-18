@@ -421,7 +421,15 @@ describe("judgeFitnessRow — coverage-minimum", () => {
     expect(d.message).toMatch(/owns no tracked files/);
   });
 
-  it("yields unknown on a path-scoped run — never a partial-number verdict", () => {
+  it("yields not_applicable on a path-scoped run — never a partial-number verdict, and never unknown either (P1-19)", () => {
+    // P1-19: this used to yield `unknown`, which folds into `check`'s exit
+    // code the same as a real coverage hole — so `check <path>` exited 3 in
+    // ANY `coverage-minimum`-declaring workspace, regardless of what the
+    // scoped path held or whether it was clean. `not_applicable` keeps the
+    // P0-1 guarantee below (never a partial number read as `pass`) while no
+    // longer forcing that exit — `fitnessVerdictFor`/`check`'s fold treat
+    // `not_applicable` the same as a zero-matched `match`, never `pass` and
+    // never folded into `fitnessFail`/`fitnessUnknown`.
     const analysis = {
       coverage: { app: { owned: 10, analyzed: 10 } },
       owned: 10,
@@ -435,8 +443,9 @@ describe("judgeFitnessRow — coverage-minimum", () => {
       reason: "r",
     };
     const d = judgeFitnessRow(row, graph([["app", "apps/app"]]), analysis, null, []);
-    expect(d.verdict).toBe("unknown");
-    expect(d.message).toMatch(/scoped to specific paths/);
+    expect(d.verdict).toBe("not_applicable");
+    expect(d.notApplicableReason).toMatch(/scoped to specific paths/);
+    expect(d.message).toMatch(/does not apply to a path-scoped run/);
   });
 });
 
@@ -543,11 +552,16 @@ describe("fitnessSnapshot and evaluateFitness", () => {
     expect(snapshot.analysis.analyzed).toBe(1);
   });
 
-  it("rides the scoped flag inside analysis, where judgeFitnessRow reads it — a path-scoped run must answer unknown, never pass", () => {
+  it("rides the scoped flag inside analysis, where judgeFitnessRow reads it — a path-scoped run must never answer pass", () => {
     // P0-1 regression: the flag used to sit on the snapshot's top level, which
     // `validateAndConfigure` never read, so a scoped run claimed full-coverage
     // `pass` over the files it happened to analyze. The snapshot must place it
-    // where the rule reads it — `analysis.scoped`.
+    // where the rule reads it — `analysis.scoped`. P1-19 later moved the
+    // verdict this reaches from `unknown` to `not_applicable` (an `unknown`
+    // folded into `check`'s exit code the same as a real coverage hole, so a
+    // scoped run exited 3 in any `coverage-minimum`-declaring workspace no
+    // matter what the scoped path held) — this test's own guarantee is
+    // unchanged by that: `not_applicable` is still never `pass`.
     const snapshot = fitnessSnapshot(
       {
         graph: graph([["app", "apps/app"]]),
@@ -570,8 +584,9 @@ describe("fitnessSnapshot and evaluateFitness", () => {
       snapshot.intent,
       snapshot.suppressions,
     );
-    expect(d.verdict).toBe("unknown");
-    expect(d.message).toMatch(/scoped to specific paths/);
+    expect(d.verdict).not.toBe("pass");
+    expect(d.verdict).toBe("not_applicable");
+    expect(d.message).toMatch(/does not apply to a path-scoped run/);
   });
 
   it("evaluates every declared row, in declaration order", () => {

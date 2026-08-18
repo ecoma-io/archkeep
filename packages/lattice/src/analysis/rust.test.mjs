@@ -467,3 +467,87 @@ describe("analyzeRust", () => {
     expect(result.failures[0].reason).toBe("Rust analysis failed: graph unavailable");
   });
 });
+
+describe('analyzeRust — a dependency renamed via `package = "…"`', () => {
+  const workspace = {
+    root: "/w",
+    projects: [
+      { name: "engine", root: "acme/libs/engine" },
+      { name: "other", root: "acme/libs/other" },
+      { name: "app", root: "acme/apps/app" },
+    ],
+    filesOf: (name) =>
+      ({
+        engine: ["acme/libs/engine/Cargo.toml"],
+        other: ["acme/libs/other/Cargo.toml"],
+        app: ["acme/apps/app/Cargo.toml", "acme/apps/app/src/main.rs"],
+      })[name] ?? [],
+    readFile: (path) =>
+      ({
+        "acme/libs/engine/Cargo.toml": '[package]\nname = "engine"\nversion = "0.1.0"\n',
+        "acme/libs/other/Cargo.toml": '[package]\nname = "other"\nversion = "0.1.0"\n',
+        "acme/apps/app/Cargo.toml":
+          '[package]\nname = "app"\nversion = "0.1.0"\n\n[dependencies]\n' +
+          'dep = { package = "engine", path = "../../libs/engine" }\n',
+      })[path] ?? null,
+  };
+  const analyze = (text) =>
+    analyzeRust({ sourceFile: "acme/apps/app/src/main.rs", text, workspace });
+
+  it("crosses a boundary written under the renamed local identifier, via `use`", () => {
+    // The silent-miss direction: before the fix, `dep` matched no known crate
+    // and the record came back `external: true` naming `dep` — a real
+    // cross-project dependency reporting as if it were a registry package,
+    // with no failure marking the blind spot either.
+    expect(
+      resolveRustDependencies(workspace.projects, workspace.filesOf, workspace.readFile),
+    ).toEqual([
+      { source: "app", target: "engine", sourceFile: "acme/apps/app/Cargo.toml", type: "static" },
+    ]);
+    const { imports, failures } = analyze("use dep::widget;\n");
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toEqual({
+      target: "engine",
+      file: null,
+      external: false,
+      packageName: null,
+    });
+  });
+
+  it("crosses the same boundary written bare, with no `use` at all", () => {
+    // Since Rust 2018 a crate needs no `use` line anywhere; the rename has to
+    // be legible to the bare-path form too, the same as any other known crate.
+    const { imports, failures } = analyze("fn main() {\n    dep::widget();\n}\n");
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved.target).toBe("engine");
+  });
+
+  it("scopes the rename to the project that declared it — a sibling's own `dep` reaches a different crate", () => {
+    const withSibling = {
+      ...workspace,
+      projects: [...workspace.projects, { name: "app2", root: "acme/apps/app2" }],
+      filesOf: (name) =>
+        name === "app2"
+          ? ["acme/apps/app2/Cargo.toml", "acme/apps/app2/src/main.rs"]
+          : workspace.filesOf(name),
+      readFile: (path) =>
+        path === "acme/apps/app2/Cargo.toml"
+          ? '[package]\nname = "app2"\nversion = "0.1.0"\n\n[dependencies]\n' +
+            'dep = { package = "other", path = "../../libs/other" }\n'
+          : workspace.readFile(path),
+    };
+    const app2 = analyzeRust({
+      sourceFile: "acme/apps/app2/src/main.rs",
+      text: "use dep::widget;\n",
+      workspace: withSibling,
+    });
+    expect(app2.imports[0].resolved.target).toBe("other");
+    // `app`'s own resolution is unaffected by `app2` sharing the same alias.
+    const app = analyzeRust({
+      sourceFile: "acme/apps/app/src/main.rs",
+      text: "use dep::widget;\n",
+      workspace: withSibling,
+    });
+    expect(app.imports[0].resolved.target).toBe("engine");
+  });
+});

@@ -56,6 +56,7 @@
  * decisionRef citation resolves", and neither means the other.
  */
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
+import { formatProvenanceReport } from "../report/provenance-text.mjs";
 import { loadIntent } from "../architecture-intent/model.mjs";
 import { loadBoundaryConfig } from "../config.mjs";
 import { resolveProvenance } from "./provenance.mjs";
@@ -253,57 +254,22 @@ export async function provenanceCommand(commandContext, io = {}) {
   const establishment = repo !== null;
   const repoResult = establishment ? repo : { commit: null, remote: null, dirty: null };
   const rowsTotal = rowList.length;
-  const attestedCount = rowsTotal - unattested.length;
 
-  // Determinism: every report line derives from static facts in the canonical
-  // row order (intent, then config); no wall-clock time, no localeCompare.
-  const text = [];
-  text.push(
-    establishment
-      ? `repo      ${repo.commit}${repo.dirty ? " (dirty)" : ""}` +
-          (repo.remote ? ` — ${repo.remote}` : "")
-      : "repo      provenance unavailable — not a git repository or git not installed",
-  );
-  text.push(
-    `rows      ${rowsTotal} governance row${rowsTotal === 1 ? "" : "s"}, ` +
-      `${attestedCount} with an origin, ${unattested.length} without`,
-  );
-  if (unattested.length > 0) {
-    text.push("unattested (no origin recorded — cannot attest):");
-    for (const row of unattested) {
-      text.push(`  ${row.kind}`);
-    }
-    text.push(`${unattested.length} of them carry no decision behind the rule`);
-  } else {
-    text.push(
-      `✔ every governance row carries an origin — each names who decided ` +
-        `on it and with what tool`,
-    );
-  }
-  // "No fact, no claim": stated only when at least one row actually cites a
-  // decisionRef — a workspace that never uses the field pays nothing and
-  // hears nothing, the same bargain every optional axis in this tool states.
+  // "No fact, no claim": the resolution section is rendered only when at
+  // least one row actually cites a decisionRef — a workspace that never uses
+  // the field pays nothing and hears nothing, the same bargain every optional
+  // axis in this tool states.
   const decisionRefRows = governanceRows.filter(
     ({ row }) => typeof row?.decisionRef === "string" && row.decisionRef.trim() !== "",
   );
-  if (decisionRefRows.length > 0) {
-    if (unresolvedDecisionRefs.length > 0) {
-      text.push("unresolved decisionRefs (cite no known ADR, rule, or fitness record):");
-      for (const row of unresolvedDecisionRefs) {
-        text.push(`  ${row.kind} — "${row.decisionRef}"`);
-      }
-      text.push(
-        `${unresolvedDecisionRefs.length} of ${decisionRefRows.length} decisionRef citation` +
-          `${decisionRefRows.length === 1 ? "" : "s"} do not resolve`,
-      );
-    } else {
-      text.push(
-        `✔ every decisionRef citation (${decisionRefRows.length}) resolves to a known ADR, ` +
-          `rule, or fitness record`,
-      );
-    }
-  }
-  const reportText = text.join("\n");
+  const reportText = formatProvenanceReport({
+    establishment,
+    repo,
+    rowsTotal,
+    unattested,
+    decisionRefTotal: decisionRefRows.length,
+    unresolvedDecisionRefs,
+  });
 
   const context = {
     root,

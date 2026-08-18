@@ -1092,7 +1092,13 @@ describe("Intent gate meta-tests", () => {
 describe("Contract K — Determinism", () => {
   it("no Date.now or Math.random in production source files", () => {
     const violations = [];
-    const dirs = ["commands", "rules", "analysis", "report", "providers", "lsp"];
+    // `governance` carries the shared reference-time clock
+    // (`governance/clock.mjs`) and every timestamp/age emitter built on it —
+    // debt, waivers, health — so it is exactly where an uninjected, raw
+    // wall-clock or random call would defeat this contract (P1-08: this list
+    // used to omit it, and the guard was structurally blind to that whole
+    // directory as a result).
+    const dirs = ["commands", "rules", "analysis", "report", "providers", "lsp", "governance"];
     for (const dir of dirs) {
       for (const file of productionMjsFiles(dir)) {
         const content = readFileSync(join(ROOT, "src", dir, file), "utf-8");

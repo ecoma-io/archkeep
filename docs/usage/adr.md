@@ -48,11 +48,19 @@ decision`: a fact about the registry, reported in a sentence, never as a
   `check`, `context` (and `context --plan`), `drift`, and `provenance` each
   resolve a row's `decisionRef` against the registry automatically wherever they
   render or walk that row, and name an unresolved one loudly — no manual lookup
-  is needed just to learn whether a citation resolves. `lattice adr` that same
-  string, byte for byte, remains how a reader inspects the RECORD an
-  already-resolved citation names — its status, supersession chain, and what
-  else it binds.
-- **An ADR-pattern id the registry does not know** — `no ADR 0999-ghost in
+  is needed just to learn whether a citation resolves. `impact` is the one
+  reader that does not: it displays a constraint row's `decisionRef` as
+  written, unresolved, so the string to verify there must be read from the row
+  itself (the boundary config or `architecture-intent.json`, or copied from
+  `context`'s output) and asked of `lattice adr` byte for byte — the same way a
+  reader inspects the RECORD an already-resolved citation names: its status,
+  supersession chain, and what else it binds.
+- **Anything else is read as an ADR reference** — bare `NNN-slug`, or the
+  `adr:`-prefixed spelling `decisionRef` docs recommend as an alternate ADR-id
+  form (`packages/lattice/src/governance/row-schema.mjs`); both resolve to the
+  same record. One the registry does not know — an unknown id, a wrong case,
+  a truncation, a path-traversal shape, or any other spelling that is not a
+  `rule:…`/`fitness:…` reference above — reads `no ADR 0999-ghost in
 docs/adr/ …`: the record is missing, and the run reports **no-verdict**,
   never clean.
 

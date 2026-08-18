@@ -353,6 +353,40 @@ function expectReportsEqual(members, expectedCount) {
   }
 }
 
+/**
+ * Splits off the policy-identity line `formatPolicy` now prints first
+ * (`../report/text.mjs`, P1-01) — the one line every axis below is now
+ * EXPECTED to diverge on, because a different spelling is, by construction, a
+ * different file, dialect, or route, and that is exactly the fact the line
+ * exists to name. Every other axis in this file proves the LAW is
+ * spelling-invariant, not the file path that carried it, so the policy line
+ * is split off and asserted on its own terms here rather than folded into
+ * `expectReportsEqual`, which stays a strict byte comparison by design (its
+ * own doc comment above: "if a dialect legitimately differs, the fix is to
+ * assert that exact difference by name at the call site, never to weaken this
+ * back into a substring check") — the same pattern A3's own `exemptionNote`
+ * stripping below already uses for its one expected, provider-specific
+ * divergence.
+ *
+ * @param {string} report A `check({format: "text"})` report.
+ * @returns {{source: string, fingerprint: string, rest: string}} `source` and
+ *   `fingerprint` are the policy line's own two facts, parsed rather than
+ *   regex-matched loosely, so a report that did NOT open with a well-formed
+ *   policy line throws here instead of silently comparing past it. `rest` is
+ *   everything after the line and its separating blank line — what the axis
+ *   itself still claims is spelling-invariant.
+ */
+function splitPolicyLine(report) {
+  const [firstLine, ...rest] = report.split("\n\n");
+  const match = firstLine.match(/^policy {2}(.+) — fingerprint ([0-9a-f]{64})$/);
+  if (!match) {
+    throw new Error(
+      `splitPolicyLine: report did not open with a well-formed policy line: ${JSON.stringify(firstLine)}`,
+    );
+  }
+  return { source: match[1], fingerprint: match[2], rest: rest.join("\n\n") };
+}
+
 describe("expectAllEquivalent — the comparator, proved before it is trusted", () => {
   it("throws when expectedCount itself is below two: an equivalence claim needs at least two spellings", () => {
     expect(() => expectAllEquivalent([], 0)).toThrow(/at least two/);
@@ -517,10 +551,18 @@ describe("A1 — path source: the default location and --config pointing at a re
     );
     expect(viaDefault.violations).toBe(1);
     expect(viaConfigFlag.violations).toBe(1);
+    // The one axis-specific divergence the policy line is SUPPOSED to carry:
+    // the two routes read the identical bytes from two different paths, so
+    // the fingerprint must agree while the named source must not.
+    const defaultPolicy = splitPolicyLine(viaDefault.report);
+    const configFlagPolicy = splitPolicyLine(viaConfigFlag.report);
+    expect(defaultPolicy.fingerprint).toBe(configFlagPolicy.fingerprint);
+    expect(defaultPolicy.source).toBe("module-boundaries.config.mjs");
+    expect(configFlagPolicy.source).toBe("elsewhere/law.mjs");
     expectReportsEqual(
       [
-        { spelling: "default location", report: viaDefault.report },
-        { spelling: "--config, relocated copy", report: viaConfigFlag.report },
+        { spelling: "default location", report: defaultPolicy.rest },
+        { spelling: "--config, relocated copy", report: configFlagPolicy.rest },
       ],
       2,
     );
@@ -599,10 +641,17 @@ describe("A2 — filename: a non-default boundaryConfig name changes nothing abo
     );
     expect(viaDefault.violations).toBe(1);
     expect(viaCustom.violations).toBe(1);
+    // Same bargain as A1: identical bytes, two different declared filenames —
+    // the fingerprint must agree while the named source must not.
+    const defaultPolicy = splitPolicyLine(viaDefault.report);
+    const customPolicy = splitPolicyLine(viaCustom.report);
+    expect(defaultPolicy.fingerprint).toBe(customPolicy.fingerprint);
+    expect(defaultPolicy.source).toBe("module-boundaries.config.mjs");
+    expect(customPolicy.source).toBe("law/custom.mjs");
     expectReportsEqual(
       [
-        { spelling: "default filename", report: viaDefault.report },
-        { spelling: "declared custom filename", report: viaCustom.report },
+        { spelling: "default filename", report: defaultPolicy.rest },
+        { spelling: "declared custom filename", report: customPolicy.rest },
       ],
       2,
     );
@@ -862,12 +911,33 @@ describe("A4 — dialect: the same law as .mjs, .json, an ESLint flat config, an
       expect(result.violations).toBe(1);
     }
     const [moduleResult, jsonResult, eslintResult, inlineResult] = results;
+    // Four dialects, four different sources by construction — a `.mjs`
+    // filename, a `.json` filename, an ESLint flat config's filename, and
+    // (the inline object has no file of its own) `lattice.json` itself — so
+    // the fingerprint is the one fact across all four that must still agree,
+    // proving the SAME effective policy even more precisely than Tier 1's
+    // parsed-object comparison: the exact bytes this run actually hashed.
+    const modulePolicy = splitPolicyLine(moduleResult.report);
+    const jsonPolicy = splitPolicyLine(jsonResult.report);
+    const eslintPolicy = splitPolicyLine(eslintResult.report);
+    const inlinePolicy = splitPolicyLine(inlineResult.report);
+    expect(modulePolicy.source).toBe("module-boundaries.config.mjs");
+    expect(jsonPolicy.source).toBe("policy.json");
+    expect(eslintPolicy.source).toBe("eslint.config.mjs");
+    expect(inlinePolicy.source).toBe("lattice.json");
+    const fingerprints = new Set([
+      modulePolicy.fingerprint,
+      jsonPolicy.fingerprint,
+      eslintPolicy.fingerprint,
+      inlinePolicy.fingerprint,
+    ]);
+    expect(fingerprints.size).toBe(1);
     expectReportsEqual(
       [
-        { spelling: "module (.mjs)", report: moduleResult.report },
-        { spelling: "json (.json)", report: jsonResult.report },
-        { spelling: "eslint (flat config)", report: eslintResult.report },
-        { spelling: "inline (lattice.json)", report: inlineResult.report },
+        { spelling: "module (.mjs)", report: modulePolicy.rest },
+        { spelling: "json (.json)", report: jsonPolicy.rest },
+        { spelling: "eslint (flat config)", report: eslintPolicy.rest },
+        { spelling: "inline (lattice.json)", report: inlinePolicy.rest },
       ],
       4,
     );

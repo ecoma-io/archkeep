@@ -55,7 +55,10 @@ rides in the JSON envelope so a reader can see when the ledger was taken.
 
 The same history directory, the same current facts and the same clock produce
 the same ledger: entries sort by plain string comparison of kind-then-source,
-and two runs over an unchanged tree produce byte-identical JSON.
+and two runs over an unchanged tree produce byte-identical JSON. Without an
+injected clock, `sampleTime` is the one field that differs run to run — see
+[the JSON reference](../reference/json-output.md#result-for-command-debt) for
+how it is excluded from that promise.
 
 ## Refusals
 

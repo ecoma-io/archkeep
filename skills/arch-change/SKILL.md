@@ -32,12 +32,10 @@ confirm it.
 
    Understand which dependency directions are allowed and which are forbidden,
    who depends on the project, current violations in scope, any drift, the
-   declared Intent when one exists, and the commands that will verify the change.
-   In a profile-selected workspace `context --plan` exits 3 by design — the
-   profile's effective block lives only in the registry file (resolve its `base`
-   chain by hand), and its `impact`/`graph` verify commands are not runnable
-   there; `check` still is — run `lattice check --config <active-profile>` as
-   the gate instead.
+   declared Intent when one exists, and the commands that will verify the
+   change. In a profile-selected workspace `context --plan` resolves the
+   active profile the same way `check` does, including its bundled
+   `impact`/`graph` facts.
 
 2. **Understand the Intent and policy — and which law is in effect.** First
    confirm whether the workspace enforces by file or by named profile (see
@@ -189,8 +187,10 @@ confirm it.
   `--config <NAME>` the gate ran with; a red under the team's active profile is
   a violation to fix in code or escalate, not a law to swap.
 - **A scoped check is not the gate.** `lattice check <paths>` judges only the
-  listed files; cycle and lazy-load rules need the whole graph. Use it for speed,
-  but run a full check before committing.
+  listed files; cycle and lazy-load rules need the whole graph, and a fitness
+  function that needs the whole tree (`coverage-minimum` today) reports
+  `not_applicable` rather than a real verdict. Use it for speed, but run a full
+  check before committing.
 - **Report unresolved violations rather than suppress them.** If you cannot fix
   a violation, say so explicitly. A silent violation is worse than a loud one.
 - **Proposed is not authoritative.** `reconcile --propose` and
