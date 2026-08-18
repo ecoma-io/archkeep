@@ -28,9 +28,18 @@ permissions:
 
 jobs:
   verify-core:
-    name: Verify (core)
+    name: Verify (core) Node ${{ matrix.node }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      # 24 is the current default (`.node-version`, which every other job in
+      # this repository still reads); 22 is the `engines.node` floor this
+      # package promises. Both legs run the IDENTICAL suite — there is no
+      # separate smoke subset that could go green while the full path does
+      # not — so a Node-24-only API entering shipped code or a test fails the
+      # 22 leg here rather than in a consumer's CI later.
+      matrix:
+        node: [24, 22]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,7 +56,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: .node-version
+          node-version: ${{ matrix.node }}
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile

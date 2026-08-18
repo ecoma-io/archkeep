@@ -24,6 +24,32 @@ const CONFIG_FILE = "boundaries.fixture.mjs";
 /** The `.json` dialect's sibling of {@link CONFIG_FILE}, for the parity test below. */
 const CONFIG_FILE_JSON = "boundaries.fixture.json";
 
+/**
+ * Escapes every regular-expression meta-character in `text` so it can be
+ * interpolated into a `RegExp` literal as a literal string.
+ *
+ * Stands in for `RegExp.escape` (a Node >= 24 built-in): the suite must also
+ * run on Node 22, this package's declared floor (`package.json` engines), so
+ * the same no-Node-24-only-API rule applies to tests as to shipped code.
+ * Escaping every meta-character — rather than a hand-picked one of them —
+ * is the half that keeps the assertion honest: a meta-character left live
+ * in the filename would quietly widen what the pattern accepts, which
+ * CodeQL flags as `js/incomplete-sanitization` and is right to.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+// The red-direction for the helper: `.` matches a literal `.` even unescaped,
+// so the assertions below that interpolate real filenames cannot tell an
+// escaping helper from a no-op one. A `+` has no such fallback — `a+b`
+// unescaped would match `aab` — so this is the case that goes red if the
+// char class breaks.
+expect(escapeRegExp("a+b")).toBe("a\\+b");
+expect(new RegExp(escapeRegExp("a+b"), "u").test("aab")).toBe(false);
+expect(new RegExp(escapeRegExp("a+b"), "u").test("a+b")).toBe(true);
+
 const MODULE_BOUNDARY_OPTIONS = {
   allow: [],
   buildTargets: ["build"],
@@ -118,13 +144,11 @@ describe("reading a boundary config that outlives the process reading it", () =>
     const empty = mkdtempSync(join(tmpdir(), "lattice-config-empty-"));
     try {
       await expect(readBoundaryConfig(empty, 0, CONFIG_FILE)).rejects.toThrow(
-        // `RegExp.escape` rather than a hand-rolled `.` replacement: escaping
-        // one meta-character leaves every other one live, which CodeQL flags as
-        // `js/incomplete-sanitization` and is right to. Node 24 is the floor
-        // here (`.node-version`), and it has the built-in.
-        // @ts-expect-error -- `RegExp.escape` is real on Node >= 24
-        // (`.node-version`); TypeScript 5.9 ships no lib that declares it yet.
-        new RegExp(`cannot load .*${RegExp.escape(CONFIG_FILE)}`, "u"),
+        // `escapeRegExp` rather than `RegExp.escape` (Node >= 24, tests must
+        // also run on Node 22): escaping every meta-character leaves none live,
+        // which is the half that keeps a meta-character in the filename from
+        // quietly widening what this pattern accepts.
+        new RegExp(`cannot load .*${escapeRegExp(CONFIG_FILE)}`, "u"),
       );
     } finally {
       rmSync(empty, { recursive: true, force: true });
