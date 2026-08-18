@@ -118,6 +118,55 @@ describe("adrCommand", () => {
     expect(result.report.text).toContain("no ADR 0999-ghost in docs/adr/");
   });
 
+  // P1-23: this tool's own decisionRef docs (`../governance/row-schema.mjs`)
+  // recommend `adr:0012` as a valid ADR-id spelling right beside the bare
+  // `0012-slug` form — but the lookup used to check `byId` verbatim, so the
+  // one spelling the tool itself suggests never matched a real record. Worse,
+  // because the id no longer matched `ADR_ID_PATTERN` once prefixed, it fell
+  // through to the reverse-lookup branch and reported the generic "no ADR
+  // binds it" sentence at exit 0 — indistinguishable from a legitimate,
+  // unbound rule/fitness id.
+  it("resolves the tool's own recommended `adr:`-prefixed spelling to the real record", () => {
+    const result = adrCommand(
+      "/ws",
+      { id: "adr:0001-bind-collaboration" },
+      ioWith(() => registry()),
+    );
+    expect(result.status).toBe("ok");
+    expect(result.result.unresolved).toEqual([]);
+    expect(result.report.text).toContain("0001-bind-collaboration  (accepted)");
+    expect(result.report.text).toContain("bindings:   rule:no-direct-dep, fitness:hotspot");
+    // The silent-direction failure mode this guards: reading as an unbound
+    // reverse lookup instead of the real record.
+    expect(result.report.text).not.toContain("no ADR in docs/adr/ binds");
+  });
+
+  // Same finding, the broader half: ANY near-miss spelling of a real id —
+  // wrong case, a path-traversal shape, or the `adr:` prefix on an id that
+  // does not exist either — must read as unresolved, never fall into the
+  // "empty reverse lookup" bucket that a genuine `rule:`/`fitness:` reference
+  // is allowed to land in empty.
+  it.each([
+    ["0001-BIND-COLLABORATION", "an uppercase near-miss of a real id"],
+    ["../0001-bind-collaboration", "a path-traversal-shaped near-miss"],
+    ["adr:0999-ghost", "the adr: prefix on an id that does not exist"],
+  ])("reports %s (%s) as no-verdict, never a silent clean reverse lookup", (nearMiss) => {
+    const result = adrCommand(
+      "/ws",
+      { id: nearMiss },
+      ioWith(() => registry()),
+    );
+    expect(result.status).toBe("no-verdict");
+    expect(result.coverage.complete).toBe(false);
+    expect(result.result.unresolved).toEqual([
+      { ref: nearMiss, why: `${nearMiss} is not an ADR in docs/adr` },
+    ]);
+    expect(result.report.text).toContain(`no ADR ${nearMiss} in docs/adr/`);
+    // The silent-direction failure mode this guards: reading as a clean,
+    // merely-unbound reverse lookup instead of an unresolved reference.
+    expect(result.report.text).not.toContain("no ADR in docs/adr/ binds");
+  });
+
   it("builds a versioned JSON envelope naming the command and provider", () => {
     const result = adrCommand(
       "/ws",
