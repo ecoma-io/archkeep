@@ -85,15 +85,17 @@ fixtures/
 
 ### Smoke tests
 
-Describe blocks named `(smoke)` contain the five fastest scenarios:
+Describe blocks named `(smoke)` contain the fastest scenarios, one per main
+command so each command's silent direction is in the PR path's quick subset:
+`check`, `context`, `diff`, `drift`, `graph`, `history` (empty-dir no-verdict),
+`intent` (forbidden-edge), `moon`, and each language.
 
-- Native clean check
-- Native violating check
-- Nx clean check
-- Native graph
-- Native self-baseline diff
-
-The `e2e:smoke` script filters by name pattern (`-t 'smoke'`), running only these.
+The `e2e:smoke` script filters by name pattern (`-t 'smoke'`) and additionally
+**fails when zero tests ran**: a `-t` pattern that matches nothing makes vitest
+exit 0 with every test skipped, which would let a misnamed smoke describe block
+turn the gate green-while-empty. The gate (`scripts/smoke-e2e.mjs`) reads the
+JSON report vitest writes and requires at least one test to have actually
+executed.
 
 ## CI integration
 

@@ -49,7 +49,7 @@
     "test": "node --test \"scripts/**/*.test.mjs\"",
     "typecheck": "tsc -p scripts/tsconfig.json",
     "e2e": "vitest run --config packages/lattice/e2e/vitest.config.mjs",
-    "e2e:smoke": "vitest run --config packages/lattice/e2e/vitest.config.mjs -t 'smoke'"
+    "e2e:smoke": "node scripts/smoke-e2e.mjs"
   },
   "dependencies": {
     "smol-toml": "1.7.1",
