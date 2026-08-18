@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { encodeMessage, frameMessages } from "./lsp/protocol.mjs";
+import { encodeMessage, frameMessages, MAX_CONTENT_LENGTH } from "./lsp/protocol.mjs";
 import { environmentForTree } from "./workspace.mjs";
 
 const SERVER = fileURLToPath(new URL("../lsp.mjs", import.meta.url));
@@ -200,6 +200,10 @@ function connect(server = SERVER) {
   return {
     send(message) {
       child.stdin.write(encodeMessage(message));
+    },
+    /** Write a raw byte buffer to stdin, for frames `send` cannot build. */
+    sendRaw(bytes) {
+      child.stdin.write(bytes);
     },
     /** The first message — already received or yet to arrive — that matches. */
     waitFor(predicate, description) {
@@ -733,6 +737,139 @@ describe("a real editor session against a native lattice.json workspace", () => 
     expect(violation, `no tag violation among ${JSON.stringify(diagnostics)}`).toBeDefined();
 
     client.kill();
+  }, 30_000);
+
+  // G-01: a project named `__proto__` must be a first-class node in the graph
+  // and produce the SAME verdict the control-named project produces. Two trees
+  // identical except for the shared project's declared name — same directory,
+  // same files, same import — a real editor session diagnoses the crossing in
+  // both. The fixture mirrors the finding's: a root `project.json` declaring
+  // `{name, root: "src/shared"}`, source at `src/shared/s.ts`, sibling at
+  // `src/child`, import `../shared/s`.
+  //
+  // The red-direction proof: with the old plain-`{}` nodes map, the `__proto__`
+  // name vanished from `graph.nodes`, `filesOf` still attributed the shared
+  // project its files, and the reachability walk over the poisoned prototype
+  // published `analysisFailed: adjList[current].filter is not a function`
+  // instead of the boundary violation the control tree published — a verdict
+  // that was wrong from both directions at once.
+  it("judges an import into a __proto__-named project exactly as into any other", async () => {
+    const makeTree = (sharedName) => {
+      const dir = realpathSync(mkdtempSync(join(tmpdir(), "lattice-lsp-proto-")));
+      const boundary = [
+        "export const depConstraints = [",
+        '  { sourceTag: "scope:child", onlyDependOnLibsWithTags: ["scope:child"] },',
+        "];",
+        'export const moduleBoundaryOptions = { allow: [], buildTargets: ["build"],',
+        "  enforceBuildableLibDependency: false, allowCircularSelfDependency: false,",
+        "  checkDynamicDependenciesExceptions: [], ignoredCircularDependencies: [],",
+        "  banTransitiveDependencies: false, checkNestedExternalImports: false };",
+      ].join("\n");
+      const write = (relativePath, text) => {
+        const absolute = join(dir, relativePath);
+        mkdirSync(dirname(absolute), { recursive: true });
+        writeFileSync(absolute, text, "utf8");
+      };
+      write("module-boundaries.config.mjs", boundary);
+      write("nx.json", '{"plugins":[{"plugin":"@ecoma-io/lattice/nx"}]}\n');
+      // The shared project's config lives at the tree ROOT and names its own
+      // root, exactly as the finding's fixture does — the `__proto__` project
+      // is declared by name in a manifest, and that name is the whole point.
+      write(
+        "project.json",
+        JSON.stringify({
+          name: sharedName,
+          root: "src/shared",
+          projectType: "library",
+          tags: ["scope:shared"],
+        }),
+      );
+      write("src/shared/s.ts", "export const s = 1;\n");
+      write(
+        "src/child/project.json",
+        JSON.stringify({ name: "child", projectType: "library", tags: ["scope:child"] }),
+      );
+      write("src/child/main.ts", 'import { s } from "../shared/s";\n');
+      execFileSync("git", ["init", "-q"], { cwd: dir, env: environmentForTree() });
+      return dir;
+    };
+    const control = makeTree("shared");
+    const proto = makeTree("__proto__");
+    try {
+      const diagnose = async (dir) => {
+        const { client } = await connected(SERVER, dir);
+        const uri = pathToFileURL(join(dir, "src/child/main.ts")).href;
+        client.send({
+          jsonrpc: "2.0",
+          method: "textDocument/didOpen",
+          params: {
+            textDocument: {
+              uri,
+              languageId: "typescript",
+              version: 1,
+              text: "import { s } from '../shared/s';\n",
+            },
+          },
+        });
+        const diagnostics = await client.diagnosticsFor(uri);
+        client.kill();
+        return diagnostics;
+      };
+      const controlDiagnostics = await diagnose(control);
+      const protoDiagnostics = await diagnose(proto);
+
+      const controlViolation = controlDiagnostics.find(
+        (d) => d.code === "noRelativeOrAbsoluteImportsAcrossLibraries",
+      );
+      expect(
+        controlViolation,
+        `control tree did not publish the crossing violation: ${JSON.stringify(controlDiagnostics)}`,
+      ).toBeDefined();
+      // The `__proto__` tree must publish the SAME boundary verdict with the
+      // SAME message — never the `analysisFailed` "could not be checked" error
+      // the poisoned prototype produced, and never an empty list that would
+      // read as a clean bill of health.
+      const protoViolation = protoDiagnostics.find(
+        (d) => d.code === "noRelativeOrAbsoluteImportsAcrossLibraries",
+      );
+      expect(
+        protoViolation,
+        `__proto__ tree produced ${JSON.stringify(protoDiagnostics)}`,
+      ).toBeDefined();
+      expect(protoViolation.message).toBe(controlViolation.message);
+      expect(
+        protoDiagnostics.some((d) => String(d.message ?? "").includes("could not be checked")),
+      ).toBe(false);
+    } finally {
+      rmSync(control, { recursive: true, force: true });
+      rmSync(proto, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  // G-08: the real process must close a session whose first frame declares an
+  // implausible `Content-Length` — loudly, and fast — instead of holding the
+  // pipe open forever waiting for bytes that will never arrive. The old
+  // `frameMessages` returned `{messages: [], rest: <everything>}` for this
+  // input and the server fed the rest back in forever: the editor saw a
+  // permanently hanging language server, which reads identically to a clean
+  // session that never starts. `connect` returns an `exitCode` (null until the
+  // process actually closes) and the `closed` promise, so both halves are
+  // observable.
+  it("closes a session whose frame declares a Content-Length beyond the cap, loudly and fast", async () => {
+    const client = connect(SERVER);
+    // A legal Content-Length with a body that never completes is exactly the
+    // finding's attack: `MAX_CONTENT_LENGTH + 1` declared, a short body
+    // written. The session must refuse it outright, not wait forever.
+    client.sendRaw(
+      Buffer.concat([
+        Buffer.from(`Content-Length: ${MAX_CONTENT_LENGTH + 1}\r\n\r\n`),
+        Buffer.from('{"jsonrpc":"2.0"'),
+      ]),
+    );
+    const exitCode = await client.closed;
+    expect(exitCode).toBe(2);
+    expect(client.stderr).toContain("Content-Length");
+    expect(client.stderr).toContain("maximum");
   }, 30_000);
 
   it("refuses a root that declares both nx.json and lattice.json", async () => {

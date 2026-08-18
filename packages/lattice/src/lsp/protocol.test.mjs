@@ -5,6 +5,7 @@ import {
   encodeMessage,
   ERROR_CODES,
   frameMessages,
+  MAX_CONTENT_LENGTH,
   pathToUri,
   SERVER_INFO,
   TEXT_DOCUMENT_SYNC_KIND,
@@ -69,6 +70,52 @@ describe("base-protocol framing", () => {
     const { messages } = frameMessages(Buffer.concat([frame(a), frame(b)]));
 
     expect(messages.map((m) => m.method)).toEqual(["initialize", "initialized"]);
+  });
+
+  it("refuses a Content-Length beyond the cap with a loud terminal error, not a silent hold-open", () => {
+    // G-08: an implausible declared length never completes, and a framer that
+    // returned `{messages: [], rest: <everything>}` would keep the caller
+    // buffering it forever — every later frame, `initialize` included, is
+    // swallowed behind it and the session hangs with no diagnostic at all.
+    // A declared length beyond the server's budget is indistinguishable in the
+    // stream from a client that died mid-frame, so the framer must say so
+    // LOUDLY instead of waiting for bytes that will never arrive.
+    const huge = Buffer.concat([
+      Buffer.from(`Content-Length: ${MAX_CONTENT_LENGTH + 1}\r\n\r\n`),
+      Buffer.from('{"jsonrpc":"2.0"'),
+    ]);
+    const result = frameMessages(huge);
+
+    expect(result.messages).toEqual([]);
+    expect(result.rest).toHaveLength(0);
+    expect(result.protocolError).toBeDefined();
+    expect(result.protocolError).toContain(String(MAX_CONTENT_LENGTH));
+    expect(result.protocolError).toContain("Content-Length");
+  });
+
+  // The 64 MiB body is a real allocation; the global 5s timeout is a
+  // contention casualty under a parallel suite run, not a slow assertion.
+  it("accepts a frame whose declared length is exactly the cap", { timeout: 60_000 }, () => {
+    // The cap is a budget, not a cliff: a frame AT it is a frame a working
+    // client could legitimately send and must frame normally. The padding is
+    // written INSIDE the JSON (a string field) so the body still parses — an
+    // unparsable-but-well-framed body is a different, non-terminal branch.
+    const prefix = '{"jsonrpc":"2.0","method":"exit","params":{"pad":"';
+    const suffix = '"}}';
+    const pad = "a".repeat(
+      MAX_CONTENT_LENGTH - Buffer.byteLength(prefix) - Buffer.byteLength(suffix),
+    );
+    const body = prefix + pad + suffix;
+    expect(Buffer.byteLength(body)).toBe(MAX_CONTENT_LENGTH);
+    const framed = frameMessages(frame(body));
+
+    expect(framed.protocolError).toBeUndefined();
+    expect(framed.messages).toHaveLength(1);
+    // `toEqual` on the full decoded body would deep-compare 64 MiB of string;
+    // the sentinel identity is what the cap is about — the frame was kept whole
+    // and parsed, which is the at-cap contract.
+    expect(framed.messages[0]?.params?.pad).toBe(pad);
+    expect(framed.rest).toHaveLength(0);
   });
 });
 
