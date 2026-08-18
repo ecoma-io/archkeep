@@ -482,16 +482,19 @@ error.
 
 With no argument, dumps the whole ADR registry — every recorded architecture
 decision, its status, its supersession chain, and which rule/fitness ids it
-binds. With one argument, answers that id: an ADR id (`NNN-slug`) shows the
-record, a `rule:…`/`fitness:…` id is the reverse lookup naming which ADRs bind
-it. `adr` takes no `--config` — a description of what is recorded needs no
-boundary law.
+binds. With one argument, answers that id: a `rule:…`/`fitness:…` id is the
+reverse lookup naming which ADRs bind it, and everything else is read as an
+ADR reference — bare `NNN-slug`, or `adr:`-prefixed, the alternate spelling
+`decisionRef` docs recommend — showing the record when it resolves. `adr`
+takes no `--config` — a description of what is recorded needs no boundary law.
 
 Descriptive, never a gate: `adr` never exits 1. Exit 0 (a) when every requested
-ADR-pattern id resolves to a record, or (b) when the request was a reverse
+ADR reference resolves to a record, or (b) when the request was a reverse
 lookup — `rule:`/`fitness:` ids answer with a sentence naming which ADRs bind
 that id, or `no ADR binds it`; that sentence is exit 0, never a gate verdict.
-Exit 3 when an ADR-pattern id resolves to nothing or the registry could not be
-read (a `decisionRef` that does not resolve is `unknown`, never clean), and 2
-on usage error. See [adr.md](adr.md) for the report shapes and the concept in
+Exit 3 when an ADR reference resolves to nothing — an unknown id, a wrong
+case, a truncation, a path-traversal shape, or any other spelling that is not
+a `rule:…`/`fitness:…` reference — or the registry could not be read (a
+`decisionRef` that does not resolve is `unknown`, never clean), and 2 on usage
+error. See [adr.md](adr.md) for the report shapes and the concept in
 [concepts/adr.md](../concepts/adr.md).
