@@ -122,15 +122,17 @@ describe("Determinism source guard — recursive scan (R7 / E-F01 regression)", 
     "export function sample(t) { return new Date(t).toISOString(); }\n",
   );
   // A template literal whose `${...}` contains a `}` (inside a nested string,
-  // inside `${JSON.stringify({...})}`) must NOT swallow the raw `new Date()`
-  // that follows it — the R7 masker's original depth counter mis-skipped the
-  // rest of the file here, the silent direction. `new Date()` lands on line 4.
+  // inside `${JSON.stringify({...})}`, or inside a NESTED template literal)
+  // must NOT swallow the raw `new Date()` that follows it — the R7 masker's
+  // original depth counter mis-skipped the rest of the file here, the silent
+  // direction. `new Date()` lands on line 5.
   writeFileSync(
     join(root, "src", "governance", "template-user.mjs"),
     [
       "export function render(o) {",
       "  const hint = `use ${JSON.stringify({ id: o.id })}`;",
       '  const probe = `x ${map["}"]}`;',
+      "  const tag = `${`inner${o.id}`}`;",
       "  return new Date().toISOString();",
       "}",
       "",
@@ -149,14 +151,15 @@ describe("Determinism source guard — recursive scan (R7 / E-F01 regression)", 
     expect(scanForRawClock(root)).not.toContain("governance/clock.mjs:27");
   });
 
-  it("the recursive scan does NOT swallow a wall-clock read after a template whose interpolation contains a brace — the original depth counter's silent false-negative", () => {
+  it("the recursive scan does NOT swallow a wall-clock read after a template whose interpolation contains a brace or a nested template — the original depth counter's silent false-negative", () => {
     // The R7 masker originally counted every `}` as a depth decrement, so a
-    // balanced `}` inside `${JSON.stringify({...})}` or inside a nested string
-    // (e.g. `${map["}"]}`) left the counter nonzero and consumed the rest of
-    // the file as masked — a raw `new Date()` after it read as clean. This
-    // fixture places the read on line 4 of `template-user.mjs` behind exactly
-    // those shapes; the guard must still name it.
-    expect(scanForRawClock(root)).toContain("governance/template-user.mjs:4");
+    // balanced `}` inside `${JSON.stringify({...})}`, inside a nested string
+    // (e.g. `${map["}"]}`), or inside a NESTED template literal left the
+    // counter nonzero and consumed the rest of the file as masked — a raw
+    // `new Date()` after it read as clean. This fixture places the read on
+    // line 5 of `template-user.mjs` behind exactly those shapes; the guard
+    // must still name it.
+    expect(scanForRawClock(root)).toContain("governance/template-user.mjs:5");
   });
 
   it("the exemption is load-bearing: with an EMPTY allow-list the seam is reported", () => {

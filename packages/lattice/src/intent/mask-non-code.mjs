@@ -39,6 +39,104 @@
  * the swallow is still a mask that cannot name a real read a reader cannot
  * see). Convert to a full tokenizer when a production module needs it.
  */
+/**
+ * Scans a template literal starting just after its opening backtick and
+ * returns the index of that opening backtick's matching close.
+ *
+ * `${` opens an interpolation expression; inside one, `}` closes it only
+ * while that expression is open (a `}` inside a nested string or nested
+ * template is consumed by that sub-scan and never decrements the open
+ * interpolation). Nested template literals inside an interpolation are
+ * scanned by this same function recursively. The backtick that closes the
+ * literal is found only at interpolation depth zero.
+ *
+ * Mirrors the structure of `maskNonCode` for the regions it can contain, so
+ * a `}` inside `${ map["}"] }` or `${ `inner${v}` }` does not end the
+ * expression early. `ponytail:` — a comment inside an interpolation is not
+ * handled here (no comment skip there); a comment-containing `${}` inside a
+ * template literal would noise the mask, never silently pass a raw read
+ * after it. A full tokenizer is the upgrade when a production module needs
+ * that shape.
+ *
+ * @param {string} src Source text.
+ * @param {number} i Index just past the opening backtick.
+ * @returns {number} Index of the closing backtick.
+ */
+function scanTemplate(src, i) {
+  let j = i;
+  let depth = 0;
+  while (j < src.length) {
+    if (src[j] === "\\") {
+      j += 2;
+      continue;
+    }
+    if (src[j] === "$" && src[j + 1] === "{") {
+      depth++;
+      j += 2;
+      continue;
+    }
+    if (depth === 0) {
+      // Template text: only the backtick (and interpolation) matters.
+      if (src[j] === "`") return j;
+      j++;
+      continue;
+    }
+    // Inside an interpolation expression.
+    if (src[j] === "`") {
+      // Nested template: it closes at its own depth-zero backtick.
+      j = scanTemplate(src, j + 1) + 1;
+      continue;
+    }
+    if (src[j] === "'") {
+      j++;
+      while (j < src.length && src[j] !== "'") {
+        if (src[j] === "\\") j += 2;
+        else j++;
+      }
+      if (j < src.length) j++;
+      continue;
+    }
+    if (src[j] === '"') {
+      j++;
+      while (j < src.length && src[j] !== '"') {
+        if (src[j] === "\\") j += 2;
+        else j++;
+      }
+      if (j < src.length) j++;
+      continue;
+    }
+    if (src[j] === "/") {
+      // Regex inside an interpolation expression, else division: `/re/`
+      // starts after an operator/opening char; division after an operand is
+      // just an expression char.
+      const prev = src[j - 1];
+      if (prev === undefined || /[=([{,:;!&|?+\-*%^~<>]/.test(prev)) {
+        let k = j + 1;
+        let inClass = false;
+        while (k < src.length && (inClass || src[k] !== "/")) {
+          if (src[k] === "\\") {
+            k += 2;
+            continue;
+          }
+          if (src[k] === "[") inClass = true;
+          else if (src[k] === "]") inClass = false;
+          k++;
+        }
+        if (k < src.length) j = k + 1;
+        else j = k;
+        continue;
+      }
+    }
+    if (src[j] === "}" && depth > 0) {
+      depth--;
+      j++;
+      continue;
+    }
+    j++;
+  }
+  return j;
+}
+
 export function maskNonCode(src) {
   let result = "";
   let i = 0;
@@ -82,102 +180,12 @@ export function maskNonCode(src) {
     }
     // Template literal. `${` opens an interpolation; `}` closes one only when
     // an interpolation is open (a literal `}` in template text, or a `}`
-    // inside a nested string/`${}` that the inner scan consumed, never
+    // inside a nested string/template that the inner scan consumed, never
     // decrements into the negative). The closing backtick ends the literal.
     if (src[i] === "`") {
-      let j = i + 1;
-      let depth = 0;
-      while (j < src.length) {
-        if (src[j] === "\\") {
-          j++;
-          j++;
-          continue;
-        }
-        if (src[j] === "$" && src[j + 1] === "{") {
-          depth++;
-          j += 2;
-          continue;
-        }
-        if (depth === 0) {
-          // Template text: only the backtick (and interpolation) matters.
-          if (src[j] === "`") break;
-          j++;
-          continue;
-        }
-        // Inside an interpolation expression.
-        if (src[j] === "`") {
-          // Nested template: scan it to its closing backtick, recursively.
-          j++;
-          let nestedDepth = 0;
-          while (j < src.length) {
-            if (src[j] === "\\") {
-              j += 2;
-              continue;
-            }
-            if (src[j] === "$" && src[j + 1] === "{") {
-              nestedDepth++;
-              j += 2;
-              continue;
-            }
-            if (src[j] === "`") {
-              if (nestedDepth === 0) {
-                j++;
-                break;
-              }
-              nestedDepth--;
-            }
-            j++;
-          }
-          continue;
-        }
-        if (src[j] === "'") {
-          j++;
-          while (j < src.length && src[j] !== "'") {
-            if (src[j] === "\\") j += 2;
-            else j++;
-          }
-          if (j < src.length) j++;
-          continue;
-        }
-        if (src[j] === '"') {
-          j++;
-          while (j < src.length && src[j] !== '"') {
-            if (src[j] === "\\") j += 2;
-            else j++;
-          }
-          if (j < src.length) j++;
-          continue;
-        }
-        if (src[j] === "/") {
-          // Regex inside an interpolation expression, else division.
-          const prev = src[j - 1];
-          if (prev === undefined || /[=([{,:;!&|?+\-*%^~<>]/.test(prev)) {
-            let k = j + 1;
-            let inClass = false;
-            while (k < src.length && (inClass || src[k] !== "/")) {
-              if (src[k] === "\\") {
-                k += 2;
-                continue;
-              }
-              if (src[k] === "[") inClass = true;
-              else if (src[k] === "]") inClass = false;
-              k++;
-            }
-            if (k < src.length) j = k + 1;
-            else j = k;
-            continue;
-          }
-        }
-        if (src[j] === "}" && depth > 0) {
-          depth--;
-          j++;
-          continue;
-        }
-        j++;
-      }
-      const to = Math.min(j + 1, src.length);
-      result += " ".repeat(to - i);
-      i = to;
+      const j = scanTemplate(src, i + 1);
+      result += " ".repeat(Math.min(j + 1, src.length) - i);
+      i = j + 1;
       continue;
     }
     // Regex literal (simplified: /pattern/flags) — keyed off a leading
