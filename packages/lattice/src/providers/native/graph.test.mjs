@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { evaluate } from "../../rules/index.mjs";
 import { buildDependencies, buildNativeGraph } from "./graph.mjs";
 
 const project = (overrides) => ({
@@ -14,7 +15,13 @@ const project = (overrides) => ({
 const importSite = (sourceFile, target, kind = "static") => ({
   sourceFile,
   kind,
+  specifier: target,
   resolved: { target },
+  // `evaluate` validates every record's `spelling` against the analysis
+  // contract before judging (`src/analysis/contract.md`): whether a specifier
+  // is a path and whether it stays inside its own project are questions only
+  // an analyzer can answer, so the fixture states the JS-family answer.
+  spelling: { path: false, relative: false },
 });
 
 describe("buildNativeGraph", () => {
@@ -190,6 +197,153 @@ describe("buildDependencies", () => {
       projectOf: () => "a",
     });
     expect(dependencies.a ?? []).toEqual([]);
+  });
+
+  // R14 — the code-pushup shape. Its root project (root `""`, no projectType,
+  // named `workspace`) owns every root-level config file, and each project's
+  // own `eslint.config.js` imports `../../eslint.config.js`, which resolves
+  // INTO the root project. Nx drops exactly those target-root edges
+  // (`explicit-project-dependencies.js`, now reproduced in `graph.mjs`), and
+  // this is the regression that pins it: a config file must not become an
+  // edge that closes a cycle through the root node. Fixture mirrors the real
+  // tree's shape — a root project, a `.config`-style file importing the
+  // root's config relatively, and a source file whose import the cycle would
+  // otherwise poison — see `scripts/differential-real-trees.mjs`'s TREES
+  // table (code-pushup @ ba41f92) for the measured 33 false `*->workspace`
+  // edges and 330 false `noCircularDependencies` verdicts.
+  it("does not draw an import edge INTO the workspace-root project from a project-level config file", () => {
+    const withRoot = {
+      workspace: { name: "workspace", data: { root: "", tags: [], implicitDependencies: [] } },
+      utils: {
+        name: "utils",
+        data: { root: "packages/utils", tags: [], implicitDependencies: [] },
+      },
+    };
+    const dependencies = buildDependencies({
+      // `packages/utils/eslint.config.js` says `import ... from
+      // '../../eslint.config.js'` — resolves to the root project.
+      importSites: [importSite("packages/utils/eslint.config.js", "workspace")],
+      nodes: withRoot,
+      projectOf: () => "utils",
+    });
+    expect(dependencies.workspace ?? []).toEqual([]);
+    expect(dependencies.utils ?? []).toEqual([]);
+    // The mirror case, so the exemption's edge is pinned from both sides: an
+    // edge FROM the workspace root to a real project (the root-level
+    // `code-pushup.preset.ts` importing `./packages/...`) must STILL be drawn
+    // — Nx keeps root-source edges, and dropping them would lose 9 real edges
+    // on the same tree.
+    const rootToProject = buildDependencies({
+      importSites: [importSite("code-pushup.preset.ts", "utils")],
+      nodes: withRoot,
+      projectOf: () => "workspace",
+    });
+    expect(rootToProject.workspace).toEqual([
+      { source: "workspace", target: "utils", type: "static" },
+    ]);
+  });
+
+  // The SILENT-DIRECTION half of the same R14 finding, at the verdict layer:
+  // the exported graph from the two fixture cases above, judged over a source
+  // import like the tree's real ones (`packages/plugin-axe/src/lib/axe-plugin.ts`
+  // importing the utils project). Before the target-root rule existed, the
+  // `utils->workspace` config edge above plus the root project's `workspace->
+  // utils` preset edge closed a cycle through the root node, and every such
+  // resolution was reported `noCircularDependencies` — 330 false verdicts on
+  // the code-pushup tree. With the edge gone, the same import must be judged
+  // clean: a missing verdict here is the silent direction the whole exemption
+  // exists to avoid, and this test proves the rule present in the graph rather
+  // than only asserted in prose.
+  it("judges clean the source import a config-edge-driven cycle used to poison", () => {
+    const withRoot = {
+      workspace: {
+        name: "workspace",
+        type: "lib",
+        data: { root: "", tags: [], implicitDependencies: [] },
+      },
+      utils: {
+        name: "utils",
+        type: "lib",
+        data: { root: "packages/utils", tags: [], implicitDependencies: [] },
+      },
+      axe: {
+        name: "axe",
+        type: "lib",
+        data: { root: "packages/plugin-axe", tags: [], implicitDependencies: [] },
+      },
+    };
+    // The raw analysis records the tree yields: each project's eslint config
+    // importing the root config (target = workspace), the root preset importing
+    // every project it composes (source = workspace, the real tree's nine
+    // `workspace->X` edges), and the one real source-site being judged. Before
+    // the target-root rule existed this graph carried BOTH halves — `utils ->
+    // workspace` from the config and `workspace -> axe` from the preset — so
+    // judging `axe -> utils` found the `utils -> workspace -> axe` road back
+    // and reported `noCircularDependencies` (330 times on the code-pushup
+    // tree). The target-root skip swallows the config edge half, the
+    // root-source preset edge survives, the road back is gone, and the verdict
+    // must stay silent — which is the exact direction the exemption could
+    // otherwise fake green in.
+    const importSites = [
+      importSite("packages/utils/eslint.config.js", "workspace"),
+      importSite("code-pushup.preset.ts", "utils"),
+      importSite("code-pushup.preset.ts", "axe"),
+      importSite("packages/plugin-axe/src/lib/axe-plugin.ts", "utils"),
+    ];
+    const { dependencies } = buildNativeGraph({
+      projects: [
+        {
+          name: "workspace",
+          root: "",
+          type: "lib",
+          tags: [],
+          implicitDependencies: [],
+          targets: [],
+        },
+        {
+          name: "utils",
+          root: "packages/utils",
+          type: "lib",
+          tags: [],
+          implicitDependencies: [],
+          targets: [],
+        },
+        {
+          name: "axe",
+          root: "packages/plugin-axe",
+          type: "lib",
+          tags: [],
+          implicitDependencies: [],
+          targets: [],
+        },
+      ],
+      importSites,
+      projectOf: (file) => {
+        if (file.startsWith("packages/utils/")) return "utils";
+        if (file.startsWith("packages/plugin-axe/")) return "axe";
+        return "workspace";
+      },
+    });
+    const graph = { nodes: withRoot, dependencies };
+    const verdicts = evaluate(
+      [importSite("packages/plugin-axe/src/lib/axe-plugin.ts", "utils")],
+      graph,
+      {
+        depConstraints: [],
+        options: {
+          allow: [],
+          buildTargets: ["build"],
+          enforceBuildableLibDependency: false,
+          allowCircularSelfDependency: false,
+          checkDynamicDependenciesExceptions: [],
+          ignoredCircularDependencies: [],
+          banTransitiveDependencies: false,
+          checkNestedExternalImports: false,
+        },
+        suppressions: [],
+      },
+    );
+    expect(verdicts.map((v) => v.messageId)).toEqual([]);
   });
 
   it("deduplicates an identical edge reported by more than one import site", () => {
