@@ -160,18 +160,20 @@ loudly rather than watching a name as though it were a file, for the same
 reason it refuses an inline law — see the reference page's "The `profiles`
 plugin option".
 
-Only `check` resolves a profile by name. The descriptive commands (`context`,
-`graph`, `explain`, `impact`, `diff`, `fitness`, `waivers`, `debt`, `health`,
-`history`) read `boundaryConfig`/`--config` as a file path, so in a
-profile-selected workspace they cannot see the profile-resolved law — a
-`--config`-carrying one fails loudly (exit 3) with a message pointing at a
-file that was never meant to be one; `graph` fails the same way, since it too
-loads `boundaryConfig` for the policy fingerprint. Profile semantics exist
-only inside `check`; plan against the active law with
-`lattice check --config <active> --format json`, and read the registry file
-for the selected profile's effective block. Because the tool's own report
-never names which profile it enforced, anything a change report cites as "the
-check" must name the `--config <NAME>` it ran with — the reader of a
+Every command that reads a boundary law resolves a profile by name, not only
+`check`: `context`, `graph`, `explain`, `impact`, `diff`, `fitness`, `waivers`,
+`debt`, `health`, and `history --capture` share `check`'s own config-resolution
+step, so a profile-selected workspace reads `--config`/`boundaryConfig` as a
+profile NAME everywhere a boundary law is read, never as a file path. The four
+loud conditions above apply identically on every one of them — an unknown
+name, a bad `base`, a cycle, or an unreadable registry all exit 3 wherever they
+are hit, not only under `check`. `graph`'s snapshot carries the resolved
+profile's policy fingerprint the same way it already does for a file or an
+inline policy, so `history` and `diff` classify a profile edit as a policy
+change across two captures the same way they classify one in the other two
+dialects. Because the tool's own report never names which profile it enforced,
+anything a change report cites — "the check", "the graph", "the context" —
+must still name the `--config <NAME>` it ran with; the reader of a
 profile-selected run cannot otherwise tell which law produced the verdict.
 
 A profile's `block` carries exactly three keys — `depConstraints`,
