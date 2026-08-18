@@ -171,10 +171,16 @@ are hit, not only under `check`. `graph`'s snapshot carries the resolved
 profile's policy fingerprint the same way it already does for a file or an
 inline policy, so `history` and `diff` classify a profile edit as a policy
 change across two captures the same way they classify one in the other two
-dialects. Because the tool's own report never names which profile it enforced,
-anything a change report cites — "the check", "the graph", "the context" —
-must still name the `--config <NAME>` it ran with; the reader of a
-profile-selected run cannot otherwise tell which law produced the verdict.
+dialects.
+
+Only `check`'s own report names which profile it enforced — `result.policy.profile`
+in `--format json`, and a `policy` line first in the text and SARIF reports
+([json-output.md](../reference/json-output.md)) — so a `check` run can be read
+back against itself: the reader no longer has to take a change report's word
+for which law produced the verdict. The other ten commands report no such
+identity, so anything a change report cites about one of them — "the graph",
+"the context" — must still name the `--config <NAME>` it ran with; only
+`check`'s reader gets that fact from the report itself.
 
 A profile's `block` carries exactly three keys — `depConstraints`,
 `moduleBoundaryOptions`, `boundarySuppressions` — so a profile-selected run
