@@ -98,8 +98,9 @@ governance change gets the full one.
 ## Host independence
 
 Canonical skills live in `skills/` at the repository root. They use only the
-Agent Skills open standard frontmatter (`name`, `description`, `metadata`,
-`compatibility`) — no host-specific fields. The `scripts/check-skills.mjs` gate
+Agent Skills open standard frontmatter (`name`, `description`,
+`compatibility`) — no host-specific fields, and no `metadata` block: the
+skills carry no version by decision ([versioning.md](versioning.md)). The `scripts/check-skills.mjs` gate
 enforces this in CI.
 
 Host-specific configuration belongs in the plugin or agent settings, not in the

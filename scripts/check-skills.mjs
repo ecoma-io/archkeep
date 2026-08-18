@@ -129,8 +129,10 @@ function unquote(value) {
  * @param {string} input.marketplaceVersion version from the marketplace.json entry
  * @param {string} input.codexPluginVersion version from the Codex plugin manifest
  * @param {string} input.vscodeVersion version from packages/lattice-vscode/package.json
- * @param {{dir: string, name: string|null, description: string|null, compatibility: string|null, hostFields: string[]}[]} input.skills
- *   parsed frontmatter for each skill
+ * @param {{dir: string, name: string|null, description: string|null, compatibility: string|null, hostFields: string[], text?: string}[]} input.skills
+ *   parsed frontmatter plus the full SKILL.md text for each skill
+ * @param {string} [input.authoring] text of docs/skills/authoring.md
+ * @param {string} [input.overview] text of docs/skills/overview.md
  * @returns {{lines: string[], failures: string[]}}
  */
 export function evaluate({
@@ -141,6 +143,8 @@ export function evaluate({
   codexPluginVersion,
   vscodeVersion,
   skills,
+  authoring = "",
+  overview = "",
 }) {
   const lines = [];
   const failures = [];
@@ -212,6 +216,145 @@ export function evaluate({
     }
   }
 
+  // 7b. The skills' mechanism claims must describe the current commands, and
+  // the authoring docs must not require a per-skill version. These are the
+  // doc-truth corrections the audit closed (WS1-F01/F02/F03/F10): a skill
+  // that teaches a stale behavior misdirects an agent the same way a silent
+  // gate does — the agent trusts a mechanism the code no longer performs.
+  const skillText = new Map(skills.map((s) => [s.dir, s.text]));
+  // Stale-mechanism claims, each a regex so a REWORDED reversion is still
+  // caught — a stale sentence sits identical to an absent one, so the gate
+  // matches the claim's shape, not one exact string. Each pattern must be
+  // checked against the CURRENT corrected text AND the natural phrasings a
+  // maintainer would write to document the corrected behavior (a "does not
+  // resolve", "must not declare" or "must not contain" clause describes the
+  // correct state and must stay green) before extending.
+  const stalePhrases = [
+    {
+      // WS1-F01: an `adr:`-prefixed id falling into the reverse lookup and
+      // reading as a clean, unenforced exit-0 sentence.
+      re: /reverse-lookup (?:arm|branch)/u,
+      skills: ["arch-change"],
+      why: "an `adr:`-prefixed id never falls to the reverse lookup — it resolves like the bare slug, and an unknown one is exit 3",
+    },
+    {
+      re: /not[- ]enforced[^\n]{0,60}exit 0/u,
+      skills: ["arch-change"],
+      why: "an ADR id the registry does not know is exit 3, never a clean 'not enforced' sentence",
+    },
+    {
+      // WS1-F01 additive: an `adr:`-prefixed id "treated as" the reverse
+      // lookup and reported with a clean sentence — the arm/branch wording
+      // above is not the only shape a reversion can choose.
+      re: /adr:[^\n]{0,50}(?:falls? (?:to|into)|treated as)[^\n]{0,50}(?:clean|exit 0)/iu,
+      skills: ["arch-change"],
+      why: "an `adr:`-prefixed id never falls to the reverse lookup — an unknown one is exit 3, never a clean sentence",
+    },
+    {
+      // WS1-F02: `check` does not resolve a decisionRef. The subject is bound
+      // to an explicit name (check/the command) rather than a pronoun — "it
+      // does not resolve" is ambiguous between the stale claim and the
+      // corrected "an unresolved decisionRef does not resolve to a verdict",
+      // so a pronoun arm would false-positive on the natural phrasing. The
+      // window excludes sentence AND clause boundaries (`.` and `;`) so an
+      // intervening clause ("check names an unresolved citation; it does not
+      // resolve to a verdict") stays green, while a comma-adjacent "the check
+      // does NOT resolve them" still matches.
+      re: /(?:check|the command)\b[^.;\n]{0,40}(?:does\s+not|doesn't|never|won't|is\s+not\s+able\s+to)\s+resolve\w*\b/iu,
+      skills: ["arch-check"],
+      why: "`check` resolves each row's decisionRef against the ADR registry (report-only)",
+    },
+    {
+      // WS1-F03: `waivers` names/lists only the term-bound rows.
+      re: /(?:names|lists)\s+only\s+the\s+(?:term-bound|temporary)\b/u,
+      skills: ["arch-check", "arch-review"],
+      why: "`lattice waivers` names every boundarySuppressions row, permanent suppressions included",
+    },
+    {
+      // WS1-F03 additive: "shows/reports/displays only the waivers".
+      re: /(?:shows|reports|displays)\s+only\s+(?:the\s+)?waivers\b[^\n]{0,60}(?:not\s+the|never|absent)/iu,
+      skills: ["arch-check", "arch-review"],
+      why: "`lattice waivers` names every boundarySuppressions row, permanent suppressions included",
+    },
+    {
+      // WS1-F10: authoring requires a per-skill version. The negative
+      // lookahead keeps the corrected "must not declare metadata.version"
+      // green; the `requires` arm catches the reworded claim.
+      re: /must\b(?:(?!not\b|never\b|n't\b)[^\n]){0,80}(?:metadata\.version|declare a version)|requires?\b[^\n]{0,40}metadata\.version/iu,
+      skills: [],
+      why: "the arch-* skills carry no version by decision",
+      text: authoring,
+      name: "docs/skills/authoring.md",
+    },
+    {
+      // WS1-F10: overview lists `metadata` in the standard frontmatter. The
+      // `metadata` must sit INSIDE the same parenthesised list as
+      // name/description/compatibility — a sentence that merely names the
+      // field to forbid it ("must not contain `metadata`, `context`") stays
+      // green.
+      re: /\([\s\S]{0,200}?name[\s\S]{0,200}?description[\s\S]{0,200}?metadata[\s\S]{0,200}?compatibility[\s\S]{0,200}?\)/iu,
+      skills: [],
+      why: "the arch-* skills carry no version by decision",
+      text: overview,
+      name: "docs/skills/overview.md",
+    },
+  ];
+  for (const { re, skills: owners, why, text, name } of stalePhrases) {
+    const haystack = text ?? owners.map((dir) => skillText.get(dir) ?? "").join("\n");
+    const owner = name ?? owners.join("/");
+    if (re.test(haystack)) {
+      failures.push(
+        `A skill still teaches a stale mechanism (${owner}): ${why}. ` +
+          `Post-#139 the \`adr:\`-prefixed spelling resolves like the bare slug, ` +
+          `\`check\` resolves decisionRefs report-only, \`lattice waivers\` names ` +
+          `permanent suppressions, and skills carry no version by decision. ` +
+          `Correct the skill, not this gate.`,
+      );
+      lines.push(`FAIL stale-mechanism claim: ${owner}`);
+    }
+  }
+
+  const change = skillText.get("arch-change") ?? "";
+  const checkText = skillText.get("arch-check") ?? "";
+  const review = skillText.get("arch-review") ?? "";
+  if (skillText.has("arch-change") && !/both resolve to\s+the same record/u.test(change)) {
+    failures.push(
+      `skills/arch-change/SKILL.md must teach that the \`adr:\`-prefixed spelling ` +
+        `resolves to the same record as the bare slug (audit WS1-F01).`,
+    );
+    lines.push(`FAIL arch-change — adr: spelling behavior not stated`);
+  }
+  if (skillText.has("arch-check") && !/resolves each row's `decisionRef`/u.test(checkText)) {
+    failures.push(
+      `skills/arch-check/SKILL.md must teach that \`check\` resolves each row's ` +
+        `decisionRef against the ADR registry (report-only) (audit WS1-F02).`,
+    );
+    lines.push(`FAIL arch-check — check decisionRef resolution not stated`);
+  }
+  if (
+    (skillText.has("arch-check") &&
+      !/names every\s+`boundarySuppressions`\s+row/u.test(checkText)) ||
+    (skillText.has("arch-review") && !/names every row/u.test(review))
+  ) {
+    failures.push(
+      `the skills must teach that \`lattice waivers\` names every ` +
+        `boundarySuppressions row, permanent suppressions included (audit WS1-F03).`,
+    );
+    lines.push(`FAIL waivers — permanent suppressions claim not stated`);
+  }
+  if (authoring.includes("metadata:\n  version")) {
+    failures.push(
+      `docs/skills/authoring.md must not require a \`metadata.version\`: the ` +
+        `arch-* skills carry no version by decision, and the gate enforces only ` +
+        `the five-file chain (audit WS1-F10).`,
+    );
+    lines.push(`FAIL authoring.md — per-skill version required`);
+  }
+  // The overview `metadata` prohibition lives in the stalePhrases entry above
+  // (paren-anchored to the standard-frontmatter list), so a corrected "must
+  // not contain `metadata`" phrasing stays green while a listing that includes
+  // it still fails.
+
   // 8. Plugin version must match package version
   if (pluginVersion !== packageVersion) {
     failures.push(
@@ -256,7 +399,7 @@ export function evaluate({
  * Reads the filesystem and returns the facts `evaluate` needs.
  * This is the only function that touches the outside world.
  *
- * @returns {{skillDirs: string[], packageVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, skills: object[]}}
+ * @returns {{skillDirs: string[], packageVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, skills: object[], authoring: string, overview: string}}
  */
 export function readSkillFacts() {
   const pkgPath = join(root, PACKAGE_JSON);
@@ -317,8 +460,12 @@ export function readSkillFacts() {
       description: fm?.description ?? null,
       compatibility: fm?.compatibility ?? null,
       hostFields,
+      text,
     };
   });
+
+  const readDoc = (relPath) =>
+    existsSync(join(root, relPath)) ? readFileSync(join(root, relPath), "utf8") : "";
 
   return {
     skillDirs,
@@ -328,6 +475,8 @@ export function readSkillFacts() {
     codexPluginVersion,
     vscodeVersion,
     skills,
+    authoring: readDoc("docs/skills/authoring.md"),
+    overview: readDoc("docs/skills/overview.md"),
   };
 }
 

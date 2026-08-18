@@ -51,8 +51,13 @@ function readSnapshot(dir, name) {
   return JSON.parse(readFileSync(join(dir, name), "utf8"));
 }
 
-describe("history (empty and capture)", () => {
-  it("exits 3 when the directory holds no snapshots", () => {
+describe("history (smoke)", () => {
+  it("exits 3 when the directory holds no snapshots — never a record of nothing", () => {
+    // The silent-direction case for `history`: an empty directory must be a
+    // loud no-verdict (exit 3), never an empty record that reads as "no
+    // history" — the same empty-result invariant the rest of the suite holds.
+    // This is the command's fastest and loudest behavior, so it carries the
+    // smoke tag that keeps it in the PR path's quick subset.
     const dir = freshHistoryDir();
     try {
       const result = lattice(nativeConsumer.root, ["history", dir]);
@@ -63,6 +68,21 @@ describe("history (empty and capture)", () => {
     }
   });
 
+  it("captures a snapshot into an empty directory", () => {
+    const dir = freshHistoryDir();
+    try {
+      const result = lattice(nativeConsumer.root, ["history", dir, "--capture"]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("capture");
+      expect(result.stdout).toContain("written");
+      expect(listSnapshots(dir)).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("history (empty and capture)", () => {
   it("captures a snapshot, then deduplicates when nothing changed", () => {
     const dir = freshHistoryDir();
     try {

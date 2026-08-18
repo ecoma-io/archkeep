@@ -167,11 +167,12 @@ cites when it says "the declared architecture no longer matches the code".
   this change.
 - **Waivers / exceptions** — a suppression (no `expiresAt`) is permanent, and
   a waiver (with `expiresAt`) accepts a violation for a fixed term. Both live
-  in `boundarySuppressions`; `lattice waivers` lists only the term-bound rows
-  (a permanent suppression is absent from the listing), and `check` keeps
-  reporting a waived violation as a finding (exit 1) so CI still catches the
-  day the term lapses. `coverage.exempt` in `lattice.json` is the one
-  coverage-count suppression surface, and it requires a mandatory reason.
+  in `boundarySuppressions`; `lattice waivers` names every row — a waiver with
+  its term, a permanent suppression with what it is hiding (the one surface
+  `check`'s green cannot distinguish), and `check` keeps reporting a waived
+  violation as a finding (exit 1) so CI still catches the day the term lapses.
+  `coverage.exempt` in `lattice.json` is the one coverage-count suppression
+  surface, and it requires a mandatory reason.
   A waiver never promotes `unknown` → `pass`.
 - **Provenance** — each `graph` snapshot carries its git origin;
   `history` classifies transitions (architecture / policy / provider / code

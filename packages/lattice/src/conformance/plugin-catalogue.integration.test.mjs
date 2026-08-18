@@ -60,6 +60,43 @@ describe("the plugin catalogue this repository publishes", () => {
     }
   });
 
+  it("declares the keys a session depends on, so a typo is loud rather than silently ignored", () => {
+    // Claude Code ignores manifest keys it does not know (`claude plugin
+    // validate` says so in as many words, and the plugin manifest's own
+    // `$comment` quotes it) — which is the silent direction this test exists
+    // to refuse: a misspelled `lspServers` installs fine and the language
+    // server never starts. The entry the session runs must therefore carry
+    // exactly the keys the launch depends on, so a rename is a red test, not
+    // a quietly absent server. `skills` is pinned for the same reason — a
+    // typo there drops the arch-* skills with no error.
+    for (const entry of marketplace.plugins) {
+      const manifest = readJson(join(ROOT, entry.source, ".claude-plugin/plugin.json"));
+
+      expect(manifest.lspServers, `${entry.name}: lspServers must exist`).toBeTypeOf("object");
+      expect(Object.keys(manifest.lspServers), `${entry.name}: exactly one server`).toEqual([
+        "lattice",
+      ]);
+
+      const server = manifest.lspServers.lattice;
+      expect(server, `${entry.name}: the lattice server entry`).toBeTypeOf("object");
+      expect(Object.keys(server), `${entry.name}: server entry keys`).toEqual([
+        "command",
+        "args",
+        "extensionToLanguage",
+        "transport",
+        "workspaceFolder",
+      ]);
+      expect(server.command, `${entry.name}: server command`).toBeTypeOf("string");
+      expect(Array.isArray(server.args), `${entry.name}: server args`).toBe(true);
+      expect(server.args.length, `${entry.name}: server args present`).toBeGreaterThan(0);
+      expect(server.extensionToLanguage, `${entry.name}: extension map`).toBeTypeOf("object");
+      expect(server.transport, `${entry.name}: stdio transport`).toBe("stdio");
+
+      expect(Array.isArray(manifest.skills), `${entry.name}: skills array`).toBe(true);
+      expect(manifest.skills.length, `${entry.name}: skills present`).toBeGreaterThan(0);
+    }
+  });
+
   it("gives every entry the version its own manifest declares", () => {
     for (const entry of marketplace.plugins) {
       const manifest = readJson(join(ROOT, entry.source, ".claude-plugin/plugin.json"));

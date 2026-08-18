@@ -148,6 +148,34 @@ export const EXIT = Object.freeze({
   error: 3,
 });
 
+/**
+ * A total order over violations, so a report's byte sequence is an invariant
+ * rather than an accident of git's index order.
+ *
+ * `listTrackedFiles` returns `git ls-files` output verbatim, and the analysis
+ * and rule layers preserve exactly that order through `evaluate()` — which
+ * makes byte-identity hold today only because git's index happens to sort
+ * paths. A filesystem or git version that stopped guaranteeing that order
+ * would silently reorder every report while the determinism contract
+ * (`docs/reference/json-output.md`) still claimed byte-identity. Sorting here —
+ * at the boundary between the engine and its reports — makes `(sourceFile,
+ * line, column, messageId)` the one place a reorder could come from, and
+ * plain `<` comparison means the ordering never varies with the invoking
+ * environment's collation (`../../AGENTS.md`, the localeCompare invariant).
+ *
+ * @param {object[]} violations `Violation` records from `../src/rules/`.
+ * @returns {object[]} A new array, sorted; the input is not mutated.
+ */
+export function sortViolations(violations) {
+  return [...violations].sort((a, b) => {
+    if (a.sourceFile !== b.sourceFile) return a.sourceFile < b.sourceFile ? -1 : 1;
+    if (a.line !== b.line) return a.line < b.line ? -1 : 1;
+    if (a.column !== b.column) return a.column < b.column ? -1 : 1;
+    if (a.messageId !== b.messageId) return a.messageId < b.messageId ? -1 : 1;
+    return 0;
+  });
+}
+
 /** Renderers for the two formats whose output is a report, not an envelope. */
 const FORMATS = Object.freeze({ text: formatReport, sarif: formatSarif });
 
@@ -744,7 +772,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     }
   }
 
-  const violations = evaluate(imports, graph, config);
+  const violations = sortViolations(evaluate(imports, graph, config));
   // An ACTIVE waiver keeps the violation it accepts in the findings list,
   // marked `waivedBy` — the run is still non-zero (waiving does not flip
   // exit 1 → 0), and this count is the additive "accepted violations" number
