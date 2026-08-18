@@ -43,9 +43,12 @@ what `pass` may mean and what it may not:
   over no intent), and the function's `match` could not be judged against the
   observed graph.
 - **`not_applicable`** — a declared function whose `match` selects zero
-  projects. Reported loudly — "declared but matches nothing" — never folded
-  into `pass`, and it names a `notApplicableReason` so the reader can tell
-  "did not apply" from "did not run".
+  projects, or a `coverage-minimum` row judged from a path-scoped run (it needs
+  the whole tree, and no scoped `check <path>` can supply that, however clean
+  the scoped path is). Reported loudly — "declared but matches nothing" or
+  "needs a full run" — never folded into `pass`, and it names a
+  `notApplicableReason` so the reader can tell "did not apply" from "did not
+  run".
 
 The silent direction this tool exists to end is the one where an empty result
 reads as "checked, clean". A function that cannot be determined is therefore
@@ -108,8 +111,12 @@ analyzable owned files — the same files `analysis` actually reads. A Markdown
 file can neither raise nor lower the claim; a file that was owned but not
 analyzed counts as uncovered. A path-scoped run (`lattice check <path>`)
 analyzes a subset of owned files, so coverage over the whole set is not
-determinable from it: `coverage-minimum` answers `unknown` there, never a
-low-looking number that is really "we only looked at part of the tree".
+determinable from it: `coverage-minimum` answers `not_applicable` there, never
+a low-looking number that is really "we only looked at part of the tree" — and,
+unlike `unknown`, a `not_applicable` verdict does not by itself fail a `check`
+run (see "Two faces, one registry" below). A workspace that declares
+`coverage-minimum` still needs an unscoped run to actually judge it; a scoped
+run just reports that it could not.
 
 ## Two faces, one registry
 
@@ -117,9 +124,13 @@ low-looking number that is really "we only looked at part of the tree".
 a table and never exits 1. `check` is the gate face: it folds fitness in by
 presence — a workspace whose policy declares fitness gets its per-function
 verdicts counted into `check`'s exit-code machinery (1 for any `fail`, 3 for
-any `unknown`, never a new exit code). There is no `--fitness` flag. An opt-in
-flag would make a forgotten flag byte-identical to "no fitness checked" — the
-silent direction this whole tool exists to end.
+any `unknown`, never a new exit code). `not_applicable` counts toward neither:
+a function that did not apply to this run — nothing matched, or (a
+path-scoped `check`) the condition needed the whole tree — is reported, not
+hidden, but it cannot fail a run it was never in a position to judge. There is
+no `--fitness` flag. An opt-in flag would make a forgotten flag
+byte-identical to "no fitness checked" — the silent direction this whole tool
+exists to end.
 
 ## Where this sits in the roadmap
 

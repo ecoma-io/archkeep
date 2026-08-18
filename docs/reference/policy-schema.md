@@ -138,14 +138,14 @@ deciding nothing. Unknown keys in a row, a duplicate name, or an ill-formed
 
 ### Conditions
 
-| `type`                                        | fields                       | verdict contract                                                                                                                                              |
-| --------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cycle-free`                                  | —                            | `pass` when the matched subgraph has no dependency cycle.                                                                                                     |
-| `layer-dependency`                            | `from`, `to`, `direction`    | `direction` is `forbidden` (no edge from `from` to `to`) or `required` (at least one). A tag no matched project carries is `unknown`, never `pass` or `fail`. |
-| `tag-conformance`                             | `from`, `to`, `toDependents` | `toDependents` is `only` (edges from `from` may target only `to`) or `never` (may not target `to`).                                                           |
-| `coverage-minimum`                            | `statement`                  | At least `statement` percent of the matched projects' analyzable owned files were analyzed. Zero owned files or a path-scoped run is `unknown`.               |
-| `boundary-suppression-count-within-threshold` | `max`                        | The number of accepted `boundarySuppressions` is at most `max`.                                                                                               |
-| `drift-free`                                  | —                            | `pass` when the declared architecture intent judges clean; no intent file or a no-verdict intent is `unknown`.                                                |
+| `type`                                        | fields                       | verdict contract                                                                                                                                                                                  |
+| --------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cycle-free`                                  | —                            | `pass` when the matched subgraph has no dependency cycle.                                                                                                                                         |
+| `layer-dependency`                            | `from`, `to`, `direction`    | `direction` is `forbidden` (no edge from `from` to `to`) or `required` (at least one). A tag no matched project carries is `unknown`, never `pass` or `fail`.                                     |
+| `tag-conformance`                             | `from`, `to`, `toDependents` | `toDependents` is `only` (edges from `from` may target only `to`) or `never` (may not target `to`).                                                                                               |
+| `coverage-minimum`                            | `statement`                  | At least `statement` percent of the matched projects' analyzable owned files were analyzed. Zero owned files is `unknown`; a path-scoped run is `not_applicable` — it needs a full, unscoped run. |
+| `boundary-suppression-count-within-threshold` | `max`                        | The number of accepted `boundarySuppressions` is at most `max`.                                                                                                                                   |
+| `drift-free`                                  | —                            | `pass` when the declared architecture intent judges clean; no intent file or a no-verdict intent is `unknown`.                                                                                    |
 
 `from`/`to` are non-empty tag values; `direction` is one of
 `forbidden`/`required`; `toDependents` is one of `only`/`never`; `statement` is
