@@ -761,9 +761,11 @@ try {
   // measured them set-identical today (111 files). "Measured today" is a
   // claim, not a gate: this check pins the agreement here, so a manifest edit
   // that makes npm select different files than pnpm breaks the change that
-  // caused it instead of shipping bytes the lane never verified. Content
-  // differences are the point — the bytes verified must be the bytes
-  // published, "identical contents" asserted rather than assumed.
+  // caused it instead of shipping bytes the lane never verified. The parity
+  // asserted is selection parity: npm and pnpm must agree on which files
+  // ship. Contents are not hashed here — `npm publish` re-packs from the same
+  // tracked tree the pnpm tarball came from, so a selection divergence is the
+  // drift this check pins.
   //
   // `tar -tzf` reads the pnpm tarball's entry names; `npm pack --dry-run
   // --json` is npm's own selection of the same tree. The two order their
