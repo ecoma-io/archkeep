@@ -51,7 +51,12 @@ decision`: a fact about the registry, reported in a sentence, never as a
   the `decisionRef` literal in the boundary config or `architecture-intent.json`
   (or copy it from `context`'s output), and ask `lattice adr` that string, byte
   for byte.
-- **An ADR-pattern id the registry does not know** — `no ADR 0999-ghost in
+- **Anything else is read as an ADR reference** — bare `NNN-slug`, or the
+  `adr:`-prefixed spelling `decisionRef` docs recommend as an alternate ADR-id
+  form (`packages/lattice/src/governance/row-schema.mjs`); both resolve to the
+  same record. One the registry does not know — an unknown id, a wrong case,
+  a truncation, a path-traversal shape, or any other spelling that is not a
+  `rule:…`/`fitness:…` reference above — reads `no ADR 0999-ghost in
 docs/adr/ …`: the record is missing, and the run reports **no-verdict**,
   never clean.
 
