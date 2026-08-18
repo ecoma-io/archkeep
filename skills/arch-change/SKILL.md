@@ -51,11 +51,16 @@ confirm it.
    `lattice adr rule:no-direct-dep` (the reverse lookup: which ADR binds this
    rule?) and `lattice adr 0001-bind-collaboration` (that record's status and
    rationale) before changing code the rule binds. The `decisionRef` literal
-   names a record by its bare `NNN-slug` id — a `rule:`/`fitness:` id is the
-   reverse lookup, and anything else (an `adr:`-prefixed literal, a bare slug
-   in no registry) falls to the reverse-lookup arm and reads as a false
-   "not enforced" exit 0, never a bound answer: verify the literal against
-   the registry with `lattice adr <id>`, or open `docs/adr/NNN-slug.md`.
+   names a record by its bare `NNN-slug` id — and `adr:NNN-slug` is that same
+   record written with the `adr:` prefix the decisionRef docs recommend, the
+   alternate spelling the registry normalises before lookup: both resolve to
+   the same record. A `rule:`/`fitness:` id is the reverse lookup — which ADR
+   binds this rule — and one no ADR binds is a fact about the registry,
+   reported in a sentence with exit 0, not a resolved reference. Anything
+   else, an ADR id the registry does not know, bare or `adr:`-prefixed, is
+   no-verdict exit 3, never a clean "not enforced" sentence: verify the
+   literal against the registry with `lattice adr <id>`, or open
+   `docs/adr/NNN-slug.md`.
    `lattice adr <id>` confirms the binding and the record's status, but the
    decision itself — the rationale, the context, the consequences — lives in
    the record file: open `docs/adr/NNN-slug.md` and read the prose before
