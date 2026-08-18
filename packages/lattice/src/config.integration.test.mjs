@@ -25,6 +25,30 @@ import { loadBoundaryConfig } from "./config.mjs";
  */
 const workspaceRoot = fileURLToPath(new URL("../../../", import.meta.url));
 
+/**
+ * Escapes every regular-expression meta-character in `text` so it can be
+ * interpolated into a `RegExp` literal as a literal string.
+ *
+ * Stands in for `RegExp.escape` (a Node >= 24 built-in): the suite must also
+ * run on Node 22, this package's declared floor (`package.json` engines), so
+ * the no-Node-24-only-API rule applies to tests as to shipped code. Escaping
+ * every meta-character — rather than a hand-picked one of them — is the half
+ * that keeps the assertion honest: a meta-character left live in the path or
+ * filename would quietly widen what the pattern accepts.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+// The red-direction for the helper: `.` matches a literal `.` even unescaped,
+// so the assertions below that interpolate real paths cannot tell an escaping
+// helper from a no-op one. A `+` has no such fallback — `a+b` unescaped would
+// match `aab` — so this is the case that goes red if the char class breaks.
+expect(escapeRegExp("a+b")).toBe("a\\+b");
+expect(new RegExp(escapeRegExp("a+b"), "u").test("aab")).toBe(false);
+expect(new RegExp(escapeRegExp("a+b"), "u").test("a+b")).toBe(true);
+
 describe("loadBoundaryConfig over this workspace", () => {
   it("loads the boundary table every reader of the law reads, and finds it well-formed", async () => {
     const { depConstraints, options } = await loadBoundaryConfig(
@@ -83,15 +107,15 @@ describe("loadBoundaryConfig over this workspace", () => {
     const elsewhere = mkdtempSync(join(tmpdir(), "polyglot-boundaries-"));
     afterAll(() => rmSync(elsewhere, { recursive: true, force: true }));
 
-    // Both halves go through `RegExp.escape`: the path comes from `mkdtemp`
+    // Both halves go through `escapeRegExp`: the path comes from `mkdtemp`
     // and the filename from an option, so neither is a literal this test
-    // controls, and an unescaped `.` or `+` in either would quietly widen what
-    // this assertion accepts rather than fail loudly.
+    // controls. Escaping every meta-character — rather than the metachars a
+    // hand-written list happened to name — keeps the assertion from accepting
+    // a pattern wider than the bytes that really landed. Hand-rolled rather
+    // than `RegExp.escape` (Node >= 24, tests must also run on Node 22).
     await expect(loadBoundaryConfig(elsewhere, DEFAULT_OPTIONS.boundaryConfig)).rejects.toThrow(
       new RegExp(
-        // @ts-expect-error -- `RegExp.escape` is real on Node >= 24
-        // (`.node-version`); TypeScript 5.9 ships no lib that declares it yet.
-        `cannot load ${RegExp.escape(elsewhere)}/${RegExp.escape(DEFAULT_OPTIONS.boundaryConfig)}`,
+        `cannot load ${escapeRegExp(elsewhere)}/${escapeRegExp(DEFAULT_OPTIONS.boundaryConfig)}`,
         "u",
       ),
     );
