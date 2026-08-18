@@ -228,6 +228,31 @@ export const LEDGER = Object.freeze([
       "lib carries no blanket import ban. A pre-existing, argued design limit, not a defect this " +
       "leg discovered; no issue filed.",
   },
+  // Every `noRelativeOrAbsoluteImportsAcrossLibraries` this engine reports on
+  // `code-pushup.preset.ts` is a `stricter` row because the file's first line
+  // carries `/* eslint-disable @nx/enforce-module-boundaries */`. Upstream
+  // honours that directive and says nothing; this engine does not read ESLint
+  // comment syntax and reports the crossing imports. That is the fixture
+  // suite's pinned, declared decision
+  // (packages/lattice/src/conformance/README.md, "the exemptions do not live
+  // in comments" — reading directive comments would tie a five-language tool
+  // to a JavaScript convention and give exemptions a second home besides
+  // `module-boundaries.config.mjs`), showing up as a real-tree divergence
+  // rather than a new defect. No issue to file: a workspace that pairs each
+  // directive with a `boundarySuppressions` entry sees no gap, exactly as the
+  // fixture suite documents.
+  {
+    tree: "code-pushup",
+    direction: "stricter",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+    sitePattern: "^code-pushup\\.preset\\.ts:",
+    reason:
+      "code-pushup.preset.ts opens with '/* eslint-disable @nx/enforce-module-boundaries */', a " +
+      "directive upstream honours and this engine deliberately does not read " +
+      "(packages/lattice/src/conformance/README.md: 'the exemptions do not live in comments'). The " +
+      "8 crossing imports are reported only here, making each a declared stricter divergence " +
+      "rather than an unexplained one.",
+  },
 ]);
 
 /**

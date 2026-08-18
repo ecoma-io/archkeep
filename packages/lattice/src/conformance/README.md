@@ -447,9 +447,16 @@ holding them rather than a plan.
    branch closes it, a could-not-look run never touches it), and `release.yml`'s
    `verify-conformance` gate re-runs the differential against the tagged bytes
    before publish, blocking on findings and failing open — loudly, as
-   UNVERIFIED — only on could-not-look. Measured 2026-08-11 at the pinned
-   commits: 33 verdicts per engine across both trees, all agreeing, ledger
-   empty. The scope: both trees are TypeScript and JavaScript workspaces,
+   UNVERIFIED — only on could-not-look. Measured 2026-08-18 at the pinned
+   commits: upstream reports 26 verdicts on code-pushup and 8 on ng-doc; this
+   engine reports the same 26 plus 8 more on code-pushup's
+   `code-pushup.preset.ts`, each one a declared `eslint-disable`-directive
+   divergence the ledger explains, so the run is clean rather than
+   findings-red. On the native leg, both trees agree with the Nx graph node
+   for node, edge for edge — code-pushup's 175 edges and 34 verdicts, ng-doc's
+   13 edges and 8 verdicts — with only code-pushup's already-ledgered
+   `workspace#type` field difference remaining. The scope: both trees are
+   TypeScript and JavaScript workspaces,
    which is also the entire surface upstream can read — no public Nx tree with
    Go, Rust, Python or Vue sources and a non-trivial constraint table under a
    permissive license existed to pin (the search and its rejects are recorded
