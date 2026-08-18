@@ -96,9 +96,13 @@ violation is failing again. The ledger names it loudly, and the waiver is still
 listed.
 
 The `--format json` output is the same ledger in the versioned envelope, with
-`result.total`, `result.byKind`, `result.bySeverity`, `result.agings`, and
-`result.sampleTime` — additive, deterministic, and byte-identical across runs
-over an unchanged tree.
+`result.total`, `result.byKind`, `result.bySeverity`, and `result.agings` —
+additive, deterministic, and byte-identical across runs over an unchanged
+tree. `result.sampleTime` is the one exception: it is the wall clock at the
+moment of the run, not a fact about the workspace, so it differs between two
+runs even when nothing else does — `result.coverage.notes` names it on every
+run, and [the reference](../reference/json-output.md#result-for-command-debt)
+is the exact contract.
 
 For the four entry kinds, the age model, and the refusals, see
 [the reference](../reference/debt.md).

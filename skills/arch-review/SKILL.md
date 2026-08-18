@@ -95,8 +95,17 @@ by a change to this one.
 
 ### 5. Run the authoritative check
 
+Full workspace — the form a review's verdict may rest on:
+
 ```
 lattice check --format json
+```
+
+Scoped to just the files the change touched, when speed matters more than
+completeness:
+
+```
+lattice check --format json path/to/file.go path/to/other.rs
 ```
 
 This is the gate — boundary violations **and** the declared Intent, in one run,
@@ -104,8 +113,21 @@ against the law in effect (the profile `boundaryConfig`/`--config` selects in a
 profile-selected workspace). Exit 1 names findings the change introduced or
 resolved; exit 3 means the gate could not reach a verdict on part of the
 workspace — including a profile that could not be resolved — and the review
-must say so instead of reporting "no findings". When the change is itself a
-profile under review, judge it without touching the live law:
+must say so instead of reporting "no findings". **Exit 1 or exit 3 blocks: the
+review must not approve the change, or call it mergeable, while either
+stands.** This is a hard rule, not a caveat satisfied by disclosure — naming a
+finding or a coverage gap in the review is not the same as clearing it.
+
+**A scoped run must be disclosed as scoped, and disclosure alone does not earn
+approval.** Cycle and lazy-load rules judge the whole file graph, so a scoped
+run's silence about them is not evidence they pass (`arch-check`, "Empty
+output from a scoped check does NOT mean the workspace is safe."). Approve on
+a scoped run only when the review states the specific, concrete reason the
+scoping does not matter for this change; absent one, re-run unscoped before
+writing the verdict.
+
+When the change is itself a profile under review, judge it without touching
+the live law:
 
 ```
 lattice check --config <candidate-profile>
@@ -215,7 +237,8 @@ Report, each half with evidence:
 - **Gate verdict**: the `check` exit code, the `--config <NAME>` (or
   `boundaryConfig` value) the gate resolved, every finding with its
   `file:line:column`, the coverage gaps that withheld a verdict, and whether
-  the change introduced, resolved, or is silent about each.
+  the change introduced, resolved, or is silent about each. Exit 1 or exit 3
+  blocks (step 5) — do not report the change as mergeable while either stands.
 - **Coverage honesty**: any run that exited 3, any missing baseline, any
   no-verdict intent. A review that cannot see part of the architecture says so.
 
@@ -247,7 +270,8 @@ Report, each half with evidence:
 - **`lattice impact` returns empty dependents** — that is a claim, not a shrug.
   Nothing in the workspace depends on this project. Verify this is expected.
 - **`lattice check` exit 3** — coverage is incomplete. The review cannot reach a
-  verdict on the unchecked files. State this in the review summary — and in a
+  verdict on the unchecked files, and this blocks: state it in the review
+  summary and do not approve while it stands (step 5) — and in a
   profile-selected workspace check whether the selected profile could be
   resolved before blaming the files: an unknown profile name, an unknown
   `base`, a `base` cycle, or an unreadable registry are all exit 3 with no

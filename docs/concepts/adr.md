@@ -56,9 +56,11 @@ violation", and nothing else) binds the registry two ways:
 
 - **An unreadable registry is a loud failure, never an empty one.** A
   `docs/adr/` that exists but holds a file that will not parse, a duplicate id,
-  a status outside the three, an unknown frontmatter key, or a `supersedes` /
-  `bindings` entry that is not what the field requires — any of those throws, so
-  a caller can never mistake "could not read the registry" for "no ADRs".
+  a status outside the three, an unknown frontmatter key, a frontmatter key
+  repeated within one record (the second occurrence would otherwise silently
+  overwrite the first), or a `supersedes` / `bindings` entry that is not what
+  the field requires — any of those throws, so a caller can never mistake
+  "could not read the registry" for "no ADRs".
   An absent `docs/adr/` is the one quiet path, on purpose: a workspace that has
   not adopted ADRs yet has nothing to resolve, and the report says so in a
   sentence rather than a table. That exit-0 sentence is not a verdict that any
