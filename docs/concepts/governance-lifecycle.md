@@ -84,13 +84,12 @@ in it, and none of them exits 1 on its own — describing or proposing is not a
 finding. Two of these are the law's own selectors, not observations of it:
 
 - **Named law profiles** — a `profiles` registry in the plugin options turns
-  the gate into a selection: `check` resolves `boundaryConfig`/`--config` as a
-  profile _name_ rather than a file path, and a profile that cannot be resolved
-  exits 3. The other commands never resolve a profile — they read their
-  configured file and fail loudly in a profile-selected workspace — so the
-  profile's effective block is a planning fact read from the registry, and the
-  report of any `check` names the `--config <NAME>` it ran with
-  ([profiles.md](../concepts/profiles.md) is the full model).
+  the gate into a selection: every command that reads a boundary law resolves
+  `boundaryConfig`/`--config` as a profile _name_ rather than a file path, and
+  a profile that cannot be resolved exits 3, wherever it is hit. Because no
+  report names which profile it enforced, a change report still must name the
+  `--config <NAME>` it ran with ([profiles.md](../concepts/profiles.md) is the
+  full model).
 - **ADR / decision records** — a rule's `decisionRef` points at a recorded
   decision in `docs/adr/`, read by `lattice adr` (the evidence bullet above).
   The record is committed governance like the rule itself; authoring one is a

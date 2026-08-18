@@ -38,6 +38,21 @@ resolves a different profile than in effect is a review of that profile, not a
 verification of the change — when you report it, name the profile and say it is
 not the law in effect.
 
+## Every command resolves it, not only `check`
+
+`context`, `graph`, `explain`, `impact`, `diff`, `fitness`, `waivers`, `debt`,
+`health`, and `history --capture` all read `boundaryConfig`/`--config` the same
+way `check` does: a profile NAME when the workspace names a `profiles`
+registry, never a file path. `lattice context <project>` and
+`lattice graph --output` work against a profile-selected workspace exactly as
+they do against a file-selected one — `graph`'s snapshot carries the resolved
+profile's policy fingerprint, so `history` and `diff` see a profile edit as a
+policy change the same way they already see a file edit as one. The one
+exception is fitness functions: a profile's block carries no `fitness` key
+(only a boundaryConfig **file** can declare one), so `fitness` on a
+profile-selected workspace reports its own "declares no fitness functions"
+rather than judging anything.
+
 ## What a profile-selected run reports
 
 Nothing distinct. The verdict, the exit codes, the report formats, and the
