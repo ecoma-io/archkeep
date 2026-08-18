@@ -8,8 +8,6 @@ describe("parseSkillFrontmatter", () => {
     const text = `---
 name: arch-context
 description: Understand architecture boundaries
-metadata:
-  version: "0.4.0"
 compatibility: Requires lattice CLI
 ---
 Body text here`;
@@ -18,7 +16,6 @@ Body text here`;
     assert.ok(fm);
     assert.equal(fm.name, "arch-context");
     assert.equal(fm.description, "Understand architecture boundaries");
-    assert.equal(fm.metadata.version, "0.4.0");
     assert.equal(fm.compatibility, "Requires lattice CLI");
   });
 
@@ -26,15 +23,13 @@ Body text here`;
     const text = `---
 name: 'arch-check'
 description: 'Validate after changes'
-metadata:
-  version: '0.4.0'
 ---
 Body`;
 
     const fm = parseSkillFrontmatter(text);
     assert.ok(fm);
     assert.equal(fm.name, "arch-check");
-    assert.equal(fm.metadata.version, "0.4.0");
+    assert.equal(fm.description, "Validate after changes");
   });
 
   it("returns null when no frontmatter delimiters found", () => {
@@ -67,9 +62,35 @@ describe("evaluate", () => {
     description: `Skill ${name}`,
     compatibility: "Requires @ecoma-io/lattice CLI",
     hostFields: [],
+    text: "",
   });
 
-  const allGood = () => EXPECTED_SKILLS.map((s) => goodSkill(s, s));
+  // The corrected mechanism sentences the doc-truth gate requires (audit
+  // WS1-F01/F02/F03). `allGood` carries them so the baseline fixtures
+  // exercise the require-half of the gate, and each regression test below
+  // reverts one to prove the fail-half is loud.
+  const correctedText = (dir) => {
+    const byDir = {
+      "arch-change":
+        "The `decisionRef` literal names a record by its bare `NNN-slug` id — and " +
+        "`adr:NNN-slug` is that same record written with the `adr:` prefix, the " +
+        "alternate spelling the registry normalises before lookup: both resolve to " +
+        "the same record.",
+      "arch-check":
+        "`check` resolves each row's `decisionRef` against the ADR registry " +
+        "(report-only — the resolution changes no byte of the verdict) and names an " +
+        "unresolved one inline and under `result.unresolvedDecisionRefs`. " +
+        "`lattice waivers` names every `boundarySuppressions` row — a waiver with " +
+        "its term, a permanent suppression with what it is hiding.",
+      "arch-review":
+        "`lattice waivers` names every row — a waiver with its term, a permanent " +
+        "suppression with what it is hiding.",
+    };
+    return byDir[dir] ?? "";
+  };
+
+  const allGood = () =>
+    EXPECTED_SKILLS.map((s) => ({ ...goodSkill(s, s), text: correctedText(s) }));
 
   const baseFacts = {
     skillDirs: [...EXPECTED_SKILLS],
@@ -119,6 +140,7 @@ describe("evaluate", () => {
       description: "x",
       compatibility: "lattice",
       hostFields: [],
+      text: correctedText("arch-context"),
     };
     const result = evaluate({
       ...baseFacts,
@@ -135,6 +157,7 @@ describe("evaluate", () => {
       description: null,
       compatibility: "lattice",
       hostFields: [],
+      text: correctedText("arch-context"),
     };
     const result = evaluate({
       ...baseFacts,
@@ -187,5 +210,218 @@ describe("evaluate", () => {
       skills: allGood(),
     });
     assert.ok(result.failures.some((f) => f.includes("lattice-vscode") && f.includes("1.0.1")));
+  });
+
+  // The doc-truth corrections (audit WS1-F01/F02/F03/F10). These pin the
+  // SILENT direction: a stale mechanism claim in a skill sits identical to an
+  // absent one, so the gate fails when the corrected text is ever reverted.
+  it("passes when the skills teach the post-#139 mechanisms", () => {
+    const result = evaluate({
+      ...baseFacts,
+      skills: allGood(),
+      authoring: "Every SKILL.md must begin with name, description, compatibility.",
+      overview: "The standard frontmatter (name, description, compatibility)",
+    });
+    assert.equal(result.failures.length, 0);
+  });
+
+  it("fails when a skill still teaches the stale adr:-prefix behavior", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-change"
+          ? "anything else falls to the reverse-lookup arm and reads as a false not enforced exit 0"
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(result.failures.some((f) => f.includes("stale mechanism")));
+  });
+
+  it("fails when arch-check still says check does not resolve a decisionRef", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-check"
+          ? "check validates a decisionRef's shape but does not resolve it, so an ADR id"
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(result.failures.some((f) => f.includes("stale mechanism")));
+  });
+
+  // Reworded stale claims — each keeps the corrected positive sentence AND
+  // contradicts it. The gate must fail: a stale sentence that reads clean
+  // sits identical to an absent one.
+  it("fails on a reworded stale adr:-prefix claim that keeps the positive sentence", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-change"
+          ? correctedText(s.dir) +
+            " Although an adr:0001-unknown id reads as a clean not-enforced exit 0 through the reverse-lookup branch."
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(result.failures.some((f) => f.includes("stale mechanism")));
+  });
+
+  it("fails on a reworded check-does-not-resolve claim that keeps the positive sentence", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-check"
+          ? correctedText(s.dir) +
+            " although really the check does NOT resolve them, it only checks the shape."
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(result.failures.some((f) => f.includes("stale mechanism")));
+  });
+
+  it("fails on a reworded waivers-lists-only claim that keeps the positive sentence", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-check"
+          ? correctedText(s.dir) + " but it lists only the temporary ones with a term."
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(result.failures.some((f) => f.includes("stale mechanism")));
+  });
+
+  // Reworded slips the first stale-phrase pass let through (B1-B5). Each keeps
+  // the corrected positive sentence and adds a stale claim in a new shape; the
+  // gate must fail — a stale sentence that reads clean sits identical to an
+  // absent one.
+  it("fails when arch-change says an adr: id is treated as a reverse lookup with a clean sentence", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-change"
+          ? correctedText(s.dir) +
+            " An adr:0001-unknown id is treated as a reverse lookup with a clean sentence."
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(result.failures.some((f) => f.includes("stale mechanism")));
+  });
+
+  it("fails when arch-check says check never resolves a decisionRef", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-check"
+          ? correctedText(s.dir) + " check never resolves a decisionRef at all."
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(result.failures.some((f) => f.includes("stale mechanism")));
+  });
+
+  it("fails when arch-check says waivers shows only the waivers, not the permanent suppressions", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-check"
+          ? correctedText(s.dir) +
+            " waivers shows only the waivers, not the permanent suppressions."
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(result.failures.some((f) => f.includes("stale mechanism")));
+  });
+
+  it("fails when authoring.md says every SKILL.md requires a metadata.version", () => {
+    const result = evaluate({
+      ...baseFacts,
+      skills: allGood(),
+      authoring: "Every SKILL.md requires a metadata.version",
+    });
+    assert.ok(result.failures.some((f) => f.includes("stale mechanism")));
+  });
+
+  it("fails when overview.md lists metadata and compatibility in the standard frontmatter", () => {
+    const result = evaluate({
+      ...baseFacts,
+      skills: allGood(),
+      overview: "standard frontmatter (name, description, metadata and compatibility)",
+    });
+    assert.ok(result.failures.some((f) => f.includes("stale mechanism")));
+  });
+
+  // The no-false-positive half: the natural phrasings a maintainer writes to
+  // document the CORRECTED behavior must stay green.
+  it("allows the natural corrected phrasings (a decisionRef that does not resolve; must not declare metadata.version)", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-check"
+          ? correctedText(s.dir) +
+            " A decisionRef that does not resolve is named inline as UNRESOLVED."
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({
+      ...baseFacts,
+      skills,
+      authoring: "A skill must not declare metadata.version.",
+      overview: "A skill must not contain `metadata`, `context` fields.",
+    });
+    assert.equal(result.failures.length, 0);
+  });
+
+  it("allows the pronoun-based corrected phrasing (check names an unresolved citation; it does not resolve to a verdict)", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-check"
+          ? correctedText(s.dir) +
+            " check names an unresolved citation; it does not resolve to a verdict."
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({ ...baseFacts, skills });
+    assert.equal(result.failures.length, 0);
+  });
+
+  it("fails when a skill still says waivers lists only the term-bound rows", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-review"
+          ? "lattice waivers lists only the term-bound rows (a permanent suppression is absent)"
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(result.failures.some((f) => f.includes("stale mechanism")));
+  });
+
+  it("fails when a skill omits the corrected mechanism sentence", () => {
+    const skills = allGood().map((s) =>
+      s.dir === "arch-change" ? { ...s, text: "no decisionRef behavior mentioned at all" } : s,
+    );
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(result.failures.some((f) => f.includes("WS1-F01")));
+  });
+
+  it("fails when authoring.md requires a metadata.version", () => {
+    const result = evaluate({
+      ...baseFacts,
+      skills: allGood(),
+      authoring: 'metadata:\n  version: "0.4.0"',
+    });
+    assert.ok(
+      result.failures.some((f) => f.includes("authoring.md") && f.includes("metadata.version")),
+    );
+  });
+
+  it("fails when overview.md lists metadata in the standard frontmatter", () => {
+    const result = evaluate({
+      ...baseFacts,
+      skills: allGood(),
+      overview: "standard frontmatter (`name`, `description`, `metadata`, `compatibility`)",
+    });
+    assert.ok(
+      result.failures.some((f) => f.includes("overview.md") && f.includes("stale mechanism")),
+    );
   });
 });
