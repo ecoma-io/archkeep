@@ -74,11 +74,17 @@ Decisions have layers.
  * every sweep target that reads the policy sees the same law except for the
  * `remainingMs` wall-clock field `waivers` discloses. Built by extending the
  * shared law rather than restating it, so the two cannot drift apart.
+ *
+ * The waiver expires a year from the moment the fixture is built, never at a
+ * fixed calendar date: a fixed expiry would turn the waiver into an `expired`
+ * entry once that instant passed, and the sweep would keep passing while
+ * silently no longer exercising the live-waiver disclosure it exists to pin.
  */
 const WITH_WAIVER = MONOREPO_BOUNDARY_CONFIG.replace(
   "export const boundarySuppressions = [];",
   "export const boundarySuppressions = [\n" +
-    '  { path: "libs/app/**", reason: "app-to-core is being fixed", expiresAt: "2027-01-01T00:00:00.000Z" },\n' +
+    '  { path: "libs/app/**", reason: "app-to-core is being fixed", ' +
+    `expiresAt: "${new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()}" },\n` +
     "];",
 );
 

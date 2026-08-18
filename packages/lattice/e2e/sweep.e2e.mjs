@@ -99,15 +99,20 @@ function writeBaseline(dir) {
  * the two envelopes must still match. The caller asserts the note exists,
  * which is the loud disclosure that turns a documented drift into a contract.
  *
+ * `expectExit`, when given, pins the absolute exit code from the first run —
+ * the cross-run equality by itself would certify a command that regressed to
+ * the same wrong exit on both runs.
+ *
  * @param {string} root The consumer workspace root.
  * @param {string[]} args CLI arguments after `lattice`.
- * @param {{excise?: string[]}} [options]
+ * @param {{excise?: string[], expectExit?: number}} [options]
  */
 function assertDeterministic(root, args, options = {}) {
   const first = lattice(root, args);
   const second = lattice(root, args);
   expect(first.exitCode).toBe(second.exitCode);
   expect(first.stderr).toBe(second.stderr);
+  if (options.expectExit !== undefined) expect(first.exitCode).toBe(options.expectExit);
 
   if (options.excise && options.excise.length > 0) {
     expect(first.json).not.toBeNull();
@@ -143,35 +148,56 @@ function assertDeterministic(root, args, options = {}) {
 
 describe("determinism sweep (full)", () => {
   it("drift --format json is byte-identical, matching intent, exit 0", () => {
-    assertDeterministic(clean.root, ["drift", "--format", "json"]);
+    assertDeterministic(clean.root, ["drift", "--format", "json"], { expectExit: 0 });
   });
 
   it("reconcile --format json is byte-identical, exit 0", () => {
-    assertDeterministic(clean.root, ["reconcile", "--format", "json"]);
+    assertDeterministic(clean.root, ["reconcile", "--format", "json"], { expectExit: 0 });
   });
 
   it("reconcile --propose --format json is byte-identical, exit 0", () => {
-    assertDeterministic(clean.root, ["reconcile", "--propose", "--format", "json"]);
+    assertDeterministic(clean.root, ["reconcile", "--propose", "--format", "json"], {
+      expectExit: 0,
+    });
   });
 
   it("context <project> --format json is byte-identical, exit 0", () => {
-    assertDeterministic(clean.root, ["context", "core", "--format", "json"]);
+    assertDeterministic(clean.root, ["context", "core", "--format", "json"], { expectExit: 0 });
   });
 
   it("provenance --format json is byte-identical, exit 0", () => {
-    assertDeterministic(clean.root, ["provenance", "--format", "json"]);
+    assertDeterministic(clean.root, ["provenance", "--format", "json"], { expectExit: 0 });
   });
 
   it("adr --format json is byte-identical, exit 0", () => {
-    assertDeterministic(clean.root, ["adr", "--format", "json"]);
+    assertDeterministic(clean.root, ["adr", "--format", "json"], { expectExit: 0 });
+  });
+
+  it("discover --format json is byte-identical, exit 0 (descriptive)", () => {
+    assertDeterministic(clean.root, ["discover", "--format", "json"], { expectExit: 0 });
+  });
+
+  it("discover --propose --format json is byte-identical, exit 0 (candidate ranking)", () => {
+    assertDeterministic(clean.root, ["discover", "--propose", "--format", "json"], {
+      expectExit: 0,
+    });
+  });
+
+  it("fitness --format json is byte-identical, exit 3, on a policy declaring none", () => {
+    // The sweep fixture's boundary config declares no `fitness` export, so
+    // this is the no-verdict refusal lane — "nothing to judge" must be as
+    // deterministic as a clean verdict.
+    assertDeterministic(clean.root, ["fitness", "--format", "json"], { expectExit: 3 });
   });
 
   it("explain <site> --format json is byte-identical, exit 0", () => {
-    assertDeterministic(clean.root, ["explain", "libs/app/app.go:3:8", "--format", "json"]);
+    assertDeterministic(clean.root, ["explain", "libs/app/app.go:3:8", "--format", "json"], {
+      expectExit: 0,
+    });
   });
 
   it("health --format json is byte-identical, exit 0", () => {
-    assertDeterministic(clean.root, ["health", "--format", "json"]);
+    assertDeterministic(clean.root, ["health", "--format", "json"], { expectExit: 0 });
   });
 
   it("health <history-dir> --format json is byte-identical over a fixed history dir", () => {
@@ -222,30 +248,29 @@ describe("determinism sweep (full)", () => {
   });
 
   it("check --format json is byte-identical and stays exit 0 on the sweep tree", () => {
-    assertDeterministic(clean.root, ["check", "--format", "json"]);
+    assertDeterministic(clean.root, ["check", "--format", "json"], { expectExit: 0 });
   });
 
   it("check --format sarif is byte-identical on a clean tree, exit 0", () => {
-    assertDeterministic(clean.root, ["check", "--format", "sarif"]);
+    assertDeterministic(clean.root, ["check", "--format", "sarif"], { expectExit: 0 });
   });
 
   it("check --format json is byte-identical and stays exit 1 on a violating tree", () => {
-    assertDeterministic(violating.root, ["check", "--format", "json"]);
-    expect(lattice(violating.root, ["check", "--format", "json"]).exitCode).toBe(1);
+    assertDeterministic(violating.root, ["check", "--format", "json"], { expectExit: 1 });
   });
 
   it("check --format sarif is byte-identical on a violating tree, exit 1", () => {
-    assertDeterministic(violating.root, ["check", "--format", "sarif"]);
-    expect(lattice(violating.root, ["check", "--format", "sarif"]).exitCode).toBe(1);
+    assertDeterministic(violating.root, ["check", "--format", "sarif"], { expectExit: 1 });
   });
 
   it("drift --format json is byte-identical on a violating tree, exit 0 (descriptive)", () => {
-    assertDeterministic(violating.root, ["drift", "--format", "json"]);
+    assertDeterministic(violating.root, ["drift", "--format", "json"], { expectExit: 0 });
   });
 
   it("waivers --format json is byte-identical except the disclosed remainingMs", () => {
     assertDeterministic(cleanWaiver.root, ["waivers", "--format", "json"], {
       excise: ["result.waivers[].remainingMs"],
+      expectExit: 0,
     });
     const result = lattice(cleanWaiver.root, ["waivers", "--format", "json"]);
     expect(result.json.coverage.notes.join(" ")).toContain("remainingMs");
@@ -253,17 +278,15 @@ describe("determinism sweep (full)", () => {
   });
 
   it("waivers --format json is byte-identical on a tree with no waiver", () => {
-    assertDeterministic(clean.root, ["waivers", "--format", "json"]);
+    assertDeterministic(clean.root, ["waivers", "--format", "json"], { expectExit: 0 });
   });
 
   it("check --format json is byte-identical, exit 3, on a malformed intent", () => {
-    assertDeterministic(malformed.root, ["check", "--format", "json"]);
-    expect(lattice(malformed.root, ["check", "--format", "json"]).exitCode).toBe(3);
+    assertDeterministic(malformed.root, ["check", "--format", "json"], { expectExit: 3 });
   });
 
   it("drift --format json is byte-identical, exit 3, on a malformed intent", () => {
-    assertDeterministic(malformed.root, ["drift", "--format", "json"]);
-    expect(lattice(malformed.root, ["drift", "--format", "json"]).exitCode).toBe(3);
+    assertDeterministic(malformed.root, ["drift", "--format", "json"], { expectExit: 3 });
   });
 
   it("check --format json is byte-identical on a tree with no workspace", () => {
@@ -305,8 +328,7 @@ describe("determinism sweep (full)", () => {
         ),
         "utf8",
       );
-      assertDeterministic(empty.root, ["check", "--format", "json"]);
-      expect(lattice(empty.root, ["check", "--format", "json"]).exitCode).toBe(3);
+      assertDeterministic(empty.root, ["check", "--format", "json"], { expectExit: 3 });
     } finally {
       empty.cleanup();
     }
@@ -314,9 +336,10 @@ describe("determinism sweep (full)", () => {
 });
 
 // The Nx profile consumer installs the real `nx` package (a larger install
-// than the native consumers above), so it gets its own `beforeAll` — keeping
-// each `beforeAll`'s installs within Vitest's hook timeout, the same split
-// `check.e2e.mjs` already makes between its native and Nx consumers.
+// than the native consumers above) and is created in the shared `beforeAll`
+// alongside them. Its assertions live in a separate `describe` only so a
+// failure there reads distinctly from a native-tree failure — the consumer
+// itself lives and dies with the same `beforeAll`/`afterAll` as the rest.
 describe("determinism sweep: profile-selected (full)", () => {
   it("check --format json is byte-identical on a profile-selected Nx tree, exit 0", () => {
     assertDeterministic(profile.root, ["check", "--format", "json"]);
