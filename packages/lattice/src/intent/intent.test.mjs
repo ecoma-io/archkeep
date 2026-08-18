@@ -176,101 +176,13 @@ function stripStrings(src) {
 }
 
 /**
- * Comments/strings/regex-literals replaced by spaces, PRESERVING indices —
- * `match.index` in the returned string is the byte offset in the original
- * `src`, so a guard can map a hit back to the `file:line` in the source.
- * The guard exists to name the site of a violation; a position-preserving
- * mask is what makes that naming exact.
+ * The position-preserving masker, shared with the behavioral reproduction in
+ * `determinism-source-guard.test.mjs` and shipped inside the published
+ * artifact (`src/` ships), so the two test files can never diverge from the
+ * engine. The single copy lives here; that file re-exports it.
  */
-function maskNonCode(src) {
-  let result = "";
-  let i = 0;
-  while (i < src.length) {
-    // Single-line comment
-    if (src[i] === "/" && src[i + 1] === "/") {
-      const end = src.indexOf("\n", i);
-      result += " ".repeat((end === -1 ? src.length : end) - i);
-      i = end === -1 ? src.length : end + 1;
-      continue;
-    }
-    // Block comment
-    if (src[i] === "/" && src[i + 1] === "*") {
-      const end = src.indexOf("*/", i + 2);
-      const to = end === -1 ? src.length : end + 2;
-      result += " ".repeat(to - i);
-      i = to;
-      continue;
-    }
-    // Single-quoted string
-    if (src[i] === "'") {
-      let j = i + 1;
-      while (j < src.length && src[j] !== "'") {
-        if (src[j] === "\\") j++;
-        j++;
-      }
-      result += " ".repeat(Math.min(j + 1, src.length) - i);
-      i = j + 1;
-      continue;
-    }
-    // Double-quoted string
-    if (src[i] === '"') {
-      let j = i + 1;
-      while (j < src.length && src[j] !== '"') {
-        if (src[j] === "\\") j++;
-        j++;
-      }
-      result += " ".repeat(Math.min(j + 1, src.length) - i);
-      i = j + 1;
-      continue;
-    }
-    // Template literal (tracks ${...} nesting so the ` at depth zero ends it)
-    if (src[i] === "`") {
-      let j = i + 1;
-      let depth = 0;
-      while (j < src.length) {
-        if (src[j] === "\\") {
-          j++;
-          j++;
-          continue;
-        }
-        if (src[j] === "$" && src[j + 1] === "{") depth++;
-        else if (src[j] === "}") depth--;
-        else if (src[j] === "`" && depth === 0) break;
-        j++;
-      }
-      result += " ".repeat(Math.min(j + 1, src.length) - i);
-      i = j + 1;
-      continue;
-    }
-    // Regex literal (simplified: /pattern/flags)
-    if (src[i] === "/" && i > 0 && /[=([{}!|&?:;,~^<>+\-*/%\n]/.test(src[i - 1])) {
-      let j = i + 1;
-      while (j < src.length && src[j] !== "/") {
-        if (src[j] === "\\") {
-          j++;
-          j++;
-          continue;
-        }
-        if (src[j] === "[") {
-          j++;
-          while (j < src.length && src[j] !== "]") {
-            if (src[j] === "\\") j++;
-            j++;
-          }
-        }
-        j++;
-      }
-      let end = j + 1;
-      while (end < src.length && /[gimsuy]/.test(src[end])) end++;
-      result += " ".repeat(end - i);
-      i = end;
-      continue;
-    }
-    result += src[i];
-    i++;
-  }
-  return result;
-}
+import { maskNonCode } from "./mask-non-code.mjs";
+export { maskNonCode };
 
 /**
  * Detects patterns that would prevent a test from actually executing:

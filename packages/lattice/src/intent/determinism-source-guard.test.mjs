@@ -37,6 +37,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { maskNonCode } from "./mask-non-code.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -48,9 +49,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * pattern matched with a line-number allow-list.
  *
  * @param {string} root Fixture root (a directory containing `src/`).
+ * @param {Map<string, number[]>} [allowlist] Line allow-list, defaulting to
+ *   the real `WALL_CLOCK_ALLOWLIST` — the negative control passes an empty
+ *   map to prove the seam is only exempt because the list names it.
  * @returns {string[]} One entry per offending site, as `"<path-from-src>:<line>"`.
  */
-function scanForRawClock(root) {
+function scanForRawClock(root, allowlist = WALL_CLOCK_ALLOWLIST) {
   const violations = [];
   const srcRoot = join(root, "src");
   const files = readdirSync(srcRoot, { recursive: true }).filter(
@@ -66,7 +70,7 @@ function scanForRawClock(root) {
     for (const pattern of WALL_CLOCK_PATTERNS) {
       for (const match of code.matchAll(RegExp(pattern.source, "g"))) {
         const line = content.slice(0, match.index).split("\n").length;
-        const allow = WALL_CLOCK_ALLOWLIST.get(String(file)) ?? [];
+        const allow = allowlist.get(String(file)) ?? [];
         if (allow.includes(line)) continue;
         violations.push(`${String(file)}:${line}`);
       }
@@ -84,95 +88,6 @@ const WALL_CLOCK_PATTERNS = [
 
 /** The one deliberate site, identical to `intent.test.mjs`. */
 const WALL_CLOCK_ALLOWLIST = new Map([["governance/clock.mjs", [27]]]);
-
-/**
- * Minimal index-preserving masker matching `maskNonCode` in
- * `intent.test.mjs`: comments/strings/regex-literals become spaces so a
- * `matchAll` index names the byte offset in the original file.
- */
-function maskNonCode(src) {
-  let result = "";
-  let i = 0;
-  while (i < src.length) {
-    if (src[i] === "/" && src[i + 1] === "/") {
-      const end = src.indexOf("\n", i);
-      result += " ".repeat((end === -1 ? src.length : end) - i);
-      i = end === -1 ? src.length : end + 1;
-      continue;
-    }
-    if (src[i] === "/" && src[i + 1] === "*") {
-      const end = src.indexOf("*/", i + 2);
-      const to = end === -1 ? src.length : end + 2;
-      result += " ".repeat(to - i);
-      i = to;
-      continue;
-    }
-    if (src[i] === "'") {
-      let j = i + 1;
-      while (j < src.length && src[j] !== "'") {
-        if (src[j] === "\\") j++;
-        j++;
-      }
-      result += " ".repeat(Math.min(j + 1, src.length) - i);
-      i = j + 1;
-      continue;
-    }
-    if (src[i] === '"') {
-      let j = i + 1;
-      while (j < src.length && src[j] !== '"') {
-        if (src[j] === "\\") j++;
-        j++;
-      }
-      result += " ".repeat(Math.min(j + 1, src.length) - i);
-      i = j + 1;
-      continue;
-    }
-    if (src[i] === "`") {
-      let j = i + 1;
-      let depth = 0;
-      while (j < src.length) {
-        if (src[j] === "\\") {
-          j++;
-          j++;
-          continue;
-        }
-        if (src[j] === "$" && src[j + 1] === "{") depth++;
-        else if (src[j] === "}") depth--;
-        else if (src[j] === "`" && depth === 0) break;
-        j++;
-      }
-      result += " ".repeat(Math.min(j + 1, src.length) - i);
-      i = j + 1;
-      continue;
-    }
-    if (src[i] === "/" && i > 0 && /[=([{}!|&?:;,~^<>+\-*/%\n]/.test(src[i - 1])) {
-      let j = i + 1;
-      while (j < src.length && src[j] !== "/") {
-        if (src[j] === "\\") {
-          j++;
-          j++;
-          continue;
-        }
-        if (src[j] === "[") {
-          j++;
-          while (j < src.length && src[j] !== "]") {
-            if (src[j] === "\\") j++;
-            j++;
-          }
-        }
-        j++;
-      }
-      let end = j + 1;
-      while (end < src.length && /[gimsuy]/.test(src[end])) end++;
-      result += " ".repeat(end - i);
-      i = end;
-      continue;
-    }
-    result += src[i];
-    i++;
-  }
-  return result;
-}
 
 describe("Determinism source guard — recursive scan (R7 / E-F01 regression)", () => {
   const root = mkdtempSync(join(tmpdir(), "lattice-determinism-guard-r7-"));
@@ -192,10 +107,12 @@ describe("Determinism source guard — recursive scan (R7 / E-F01 regression)", 
     "export function stamp() { return new Date().toISOString(); }\n",
   );
   // The deliberate seam the guard must exempt, at the same line the real
-  // clock.mjs uses.
+  // clock.mjs uses: 25 comment lines put `export function referenceTime() {`
+  // on 26 and the raw `return new Date()` on 27, matching the real
+  // `governance/clock.mjs` (and `WALL_CLOCK_ALLOWLIST`'s `[27]`).
   writeFileSync(
     join(root, "src", "governance", "clock.mjs"),
-    "/** clock */\n".repeat(26) +
+    "/** clock */\n".repeat(25) +
       "export function referenceTime() {\n  return new Date().toISOString();\n}\n",
   );
   // A pure-argument `new Date(x)` must NOT trip — the pattern is the
@@ -203,6 +120,21 @@ describe("Determinism source guard — recursive scan (R7 / E-F01 regression)", 
   writeFileSync(
     join(root, "src", "governance", "sample.mjs"),
     "export function sample(t) { return new Date(t).toISOString(); }\n",
+  );
+  // A template literal whose `${...}` contains a `}` (inside a nested string,
+  // inside `${JSON.stringify({...})}`) must NOT swallow the raw `new Date()`
+  // that follows it — the R7 masker's original depth counter mis-skipped the
+  // rest of the file here, the silent direction. `new Date()` lands on line 4.
+  writeFileSync(
+    join(root, "src", "governance", "template-user.mjs"),
+    [
+      "export function render(o) {",
+      "  const hint = `use ${JSON.stringify({ id: o.id })}`;",
+      '  const probe = `x ${map["}"]}`;',
+      "  return new Date().toISOString();",
+      "}",
+      "",
+    ].join("\n"),
   );
 
   it("the recursive scan catches the top-level Date.now() — the site the pre-R7 dir-walk could not reach", () => {
@@ -215,6 +147,28 @@ describe("Determinism source guard — recursive scan (R7 / E-F01 regression)", 
 
   it("the recursive scan exempts the exact allow-listed clock seam", () => {
     expect(scanForRawClock(root)).not.toContain("governance/clock.mjs:27");
+  });
+
+  it("the recursive scan does NOT swallow a wall-clock read after a template whose interpolation contains a brace — the original depth counter's silent false-negative", () => {
+    // The R7 masker originally counted every `}` as a depth decrement, so a
+    // balanced `}` inside `${JSON.stringify({...})}` or inside a nested string
+    // (e.g. `${map["}"]}`) left the counter nonzero and consumed the rest of
+    // the file as masked — a raw `new Date()` after it read as clean. This
+    // fixture places the read on line 4 of `template-user.mjs` behind exactly
+    // those shapes; the guard must still name it.
+    expect(scanForRawClock(root)).toContain("governance/template-user.mjs:4");
+  });
+
+  it("the exemption is load-bearing: with an EMPTY allow-list the seam is reported", () => {
+    // The fixture's allow-listed clock.mjs deliberately places the raw read on
+    // line 27, and the exemption test above asserts `:27` is NOT reported.
+    // If the exemption silently re-anchored or the fixture drifted, this
+    // negative control turns the suite red — an empty allow-list must report
+    // the seam at exactly the line it sits on. (Scanning with an EMPTY map is
+    // what makes this a control: the exemption passing above and this failing
+    // here together prove the only reason `:27` is clean is the allow-list.)
+    const violations = scanForRawClock(root, new Map());
+    expect(violations).toContain("governance/clock.mjs:27");
   });
 
   it("the recursive scan does not flag a pure-argument new Date(x)", () => {
