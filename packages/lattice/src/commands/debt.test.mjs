@@ -190,3 +190,66 @@ describe("debtCommand", () => {
     expect(result.ledger.entries[0].age).toBe(0);
   });
 });
+
+describe("debtCommand — determinism", () => {
+  const T1 = "2026-08-16T00:00:00.000Z";
+  const T2 = "2026-08-16T01:00:00.000Z";
+
+  const debtConfig = {
+    depConstraints: [],
+    options: {},
+    suppressions: [{ path: "libs/core/v.go", reason: "r" }],
+  };
+
+  /** Every field of a debt envelope except the one documented as time-relative. */
+  function stripTimeRelativeFields(envelope) {
+    const { sampleTime: _sampleTime, ...rest } = envelope.result;
+    return { ...envelope, result: rest };
+  }
+
+  it("silent-direction guard: two runs of an unchanged tree at different reference times must not diverge anywhere but the documented field", async () => {
+    const a = await debtCommand("/ws/hist", commandContext(), {
+      config: debtConfig,
+      io: ioWith({ readSnapshots: () => agedRead }),
+      referenceTime: T1,
+    });
+    const b = await debtCommand("/ws/hist", commandContext(), {
+      config: debtConfig,
+      io: ioWith({ readSnapshots: () => agedRead }),
+      referenceTime: T2,
+    });
+    const envelopeA = JSON.parse(a.report.json);
+    const envelopeB = JSON.parse(b.report.json);
+
+    // The isolated field genuinely moves with the injected clock — a frozen
+    // value here would silently defeat the "when was this ledger taken" fact
+    // it exists to report, the opposite failure from the one this test's
+    // title guards.
+    expect(envelopeA.result.sampleTime).toBe(T1);
+    expect(envelopeB.result.sampleTime).toBe(T2);
+    expect(envelopeA.result.sampleTime).not.toBe(envelopeB.result.sampleTime);
+
+    // Before this fix, nothing marked `sampleTime` as the sanctioned
+    // exception, so a naive full-envelope diff/hash across two real runs
+    // reported drift on every single run — "five runs, five distinct
+    // hashes" — indistinguishable from an actual change to the workspace's
+    // debt. Stripping only the one documented field must leave the two
+    // envelopes byte-identical; any other field moving here would be the
+    // silent regression this test exists to catch.
+    expect(JSON.stringify(stripTimeRelativeFields(envelopeA))).toBe(
+      JSON.stringify(stripTimeRelativeFields(envelopeB)),
+    );
+  });
+
+  it("discloses the excluded field in-band, in coverage.notes, on every run — not only in prose docs", async () => {
+    const result = await debtCommand("/ws/hist", commandContext(), {
+      config: debtConfig,
+      io: ioWith({ readSnapshots: () => agedRead }),
+      referenceTime: T1,
+    });
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.coverage.notes).toEqual(
+      expect.arrayContaining([expect.stringContaining("sampleTime is the wall clock")]),
+    );
+  });
+});

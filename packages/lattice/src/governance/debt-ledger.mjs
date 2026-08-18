@@ -50,8 +50,8 @@
  * `source` project. An aspirational gap and an unresolved intent name no
  * project, so they carry age 0.
  *
- * `referenceTime` is the ledger's clock; the invocation timestamp when the
- * caller is the CLI (see `computeDebtLedger`).
+ * `referenceTime` is the ledger's clock; the shared governance clock's current
+ * instant when the caller is the CLI (see `computeDebtLedger`).
  *
  * ## Severity
  *
@@ -76,6 +76,8 @@
  * `readSnapshots` (the caller's job) and surfaces as exit 3 from the command,
  * never as an empty ledger.
  */
+
+import { referenceTime as clockReferenceTime } from "./clock.mjs";
 
 /**
  * The head snapshot's projects as name → root, used to place a suppression path
@@ -124,8 +126,9 @@ function owningProjectForPath(path, byName) {
  * ledger. All lists sort by plain `<` comparison, never `localeCompare`.
  *
  * The caller is the CLI; tests may leave `referenceTime` out and receive one
- * of their own, because `Date.now()` is not a promise two test runs could
- * share. (The ledger's own determinism is about a fixed clock.)
+ * of their own, from the shared clock (`./clock.mjs`) — not a promise two
+ * test runs could share. (The ledger's own determinism is about a fixed
+ * clock.)
  *
  * @param {{suppressions?: object[], intentNotes?: string[], findings?: object[],
  *   unresolved?: object[]}} current The current run's candid facts: the loaded
@@ -140,7 +143,7 @@ function owningProjectForPath(path, byName) {
  *   sampleTime: string}}
  */
 export function computeDebtLedger(current, snapshots, opts = {}) {
-  const referenceTime = opts.referenceTime ?? Date.now();
+  const referenceTime = opts.referenceTime ?? clockReferenceTime();
   const sampleTime = new Date(referenceTime).toISOString();
 
   const files = snapshots.files ?? [];

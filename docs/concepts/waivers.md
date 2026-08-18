@@ -86,6 +86,13 @@ byte-identical bytes — the determinism rule every governance capability
 shares. Expiry is judged at epoch-millisecond precision, so a waiver expiring
 mid-day is respected at mid-day, not at midnight.
 
+Without an injected clock — every real `lattice waivers` run — `remainingMs`
+is the one field that differs run to run, because it names time remaining as
+of right now; `coverage.notes` discloses that in-band, and
+[the JSON reference](../reference/json-output.md#result-for-command-waivers)
+is the exact contract, including how it is excluded from the envelope's
+determinism promise.
+
 ## When to use a waiver, and when not to
 
 Use a waiver for a **known, dated breach**: a migration in flight, a vendored
