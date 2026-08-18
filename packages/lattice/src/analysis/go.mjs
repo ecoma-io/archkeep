@@ -218,11 +218,20 @@ export function resolveGoDependencies(projects, filesOf, readFile) {
       const text = readFile(file);
       if (text === null) continue;
       for (const importPath of parseGoImports(text)) {
-        for (const [modulePath, target] of moduleOf) {
-          if (target === project.name) continue;
-          if (importPath === modulePath || importPath.startsWith(`${modulePath}/`)) {
-            dependencies.push({ source: project.name, target, sourceFile: file, type: "static" });
-          }
+        // The same longest-module-path resolution `analyzeGo` applies, so the
+        // graph edge names the same project the import-site record resolves to
+        // (WSX-D02): a nested module is its own project, not its parent.
+        const resolved = resolveGoModule(
+          importPath,
+          [...moduleOf].map(([modulePath, target]) => ({ modulePath, project: target })),
+        );
+        if (resolved !== null && resolved.project !== project.name && resolved.project !== null) {
+          dependencies.push({
+            source: project.name,
+            target: resolved.project,
+            sourceFile: file,
+            type: "static",
+          });
         }
       }
     }
@@ -253,6 +262,30 @@ const goModulesOf = perWorkspace((workspace) => {
 /** True when `importPath` is inside the module rooted at `modulePath`. */
 const isUnderModule = (importPath, modulePath) =>
   importPath === modulePath || importPath.startsWith(`${modulePath}/`);
+
+/**
+ * The single longest-module-path resolution both layers read an import with,
+ * so the graph and the verdict can never disagree about which project an
+ * import belongs to (WSX-D02): a module nested under another module's path is
+ * a different project, and a first-match answer names its parent.
+ *
+ * @param {string} importPath
+ * @param {({ modulePath: string, project: string | null })[]} modules
+ *   Longest-match candidates; `project` null marks an own-module candidate.
+ * @returns {{ matched: string, project: string | null } | null} `null` when
+ *   no module claims `importPath`.
+ */
+export function resolveGoModule(importPath, modules) {
+  let matched = "";
+  let project = null;
+  for (const { modulePath, project: target } of modules) {
+    if (!isUnderModule(importPath, modulePath)) continue;
+    if (modulePath.length <= matched.length) continue;
+    matched = modulePath;
+    project = target;
+  }
+  return matched === "" ? null : { matched, project };
+}
 
 /**
  * Did this import land inside the file's own project — the `spelling.relative`
@@ -299,23 +332,15 @@ export function analyzeGo({ sourceFile, text, workspace }) {
 
     for (const site of parseGoImportSites(text)) {
       const { line, column } = positionAt(text, site.offset);
-      // Longest module path wins, for the reason `projectOwning` matches the
-      // longest project root: a module nested under another module's path is
-      // a different project, and a first-match answer would name its parent.
-      let target = null;
-      let matched = "";
-      for (const ownModule of ownModules) {
-        if (!isUnderModule(site.specifier, ownModule)) continue;
-        if (ownModule.length <= matched.length) continue;
-        target = owner.name;
-        matched = ownModule;
-      }
-      for (const [modulePath, project] of byModulePath) {
-        if (!isUnderModule(site.specifier, modulePath)) continue;
-        if (modulePath.length <= matched.length) continue;
-        target = project;
-        matched = modulePath;
-      }
+      // The one resolution both layers share (WSX-D02): longest module path
+      // wins, for the reason `projectOwning` matches the longest project root —
+      // a module nested under another module's path is a different project,
+      // and a first-match answer would name its parent.
+      const resolved = resolveGoModule(site.specifier, [
+        ...ownModules.map((modulePath) => ({ modulePath, project: owner?.name ?? null })),
+        ...[...byModulePath].map(([modulePath, project]) => ({ modulePath, project })),
+      ]);
+      const target = resolved?.project ?? null;
       result.imports.push({
         sourceFile,
         line,
