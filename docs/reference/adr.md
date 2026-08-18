@@ -24,13 +24,21 @@ on a tree with no Nx at all.
 The one positional argument answers one of two questions, told apart by the
 id's shape:
 
-- **`NNN-slug`** — an ADR id. The registry is consulted directly: a known id
-  shows that record, an unknown id is **unresolved** (below).
 - **`rule:…` / `fitness:…`** — a rule or fitness id. Registers as a _reverse
   lookup_: which ADRs bind it, in registry order. An id no ADR binds is a fact
   about the registry — that rule is not enforced by any recorded decision —
   and is reported as a sentence naming the unenforced id, never as a silent
   empty list.
+- **Anything else is read as an ADR reference.** Bare `NNN-slug`, or
+  `adr:`-prefixed (`adr:NNN-slug`) — the alternate spelling `decisionRef`'s own
+  docs recommend beside the bare form
+  (`packages/lattice/src/governance/row-schema.mjs`) — resolve identically:
+  the prefix is stripped before the registry is consulted. A known id, either
+  spelling, shows that record; everything that does not resolve — an unknown
+  id, a case mismatch, a truncation, a path-traversal shape, or any other
+  spelling that is not a `rule:…`/`fitness:…` reference above — is
+  **unresolved** (below), never folded into the reverse-lookup's empty-but-ok
+  case.
 
 ## The report
 
@@ -58,8 +66,8 @@ enforceable through it`, never an empty-looking table. Everything here is
 deterministic: two runs over an unchanged tree produce byte-identical output.
 
 A single-record report shows that record alone. The reverse lookup prints the
-binding ADRs or the unenforced sentence; an ADR-pattern id the registry does not
-know prints:
+binding ADRs or the unenforced sentence; an id read as an ADR reference that
+the registry does not know prints:
 
 ```text
 no ADR 0999-ghost in docs/adr/ — nothing is recorded under that id, and a
@@ -86,9 +94,10 @@ be resolved and why.
 
 `adr` never exits 1: a description of what is recorded is never a finding; only
 `check` exits 1. The two exit-3 paths are the command's obligations to the
-invariant. An id matching the ADR pattern that the registry does not know is
-unresolved — an empty reverse lookup would read exactly like a clean workspace,
-which is the silent direction. An unreadable registry throws the same loud
+invariant. An id read as an ADR reference — everything except a
+`rule:…`/`fitness:…` id — that the registry does not know is unresolved — an
+empty reverse lookup would read exactly like a clean workspace, which is the
+silent direction. An unreadable registry throws the same loud
 refusal `provenance` makes for a malformed intent file: a list built from a
 registry it could not read would be a claim about records that do not exist.
 
