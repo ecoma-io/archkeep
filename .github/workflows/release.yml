@@ -371,7 +371,12 @@ jobs:
       # and drives the three things a consumer buys — the plugin loads inside a
       # real `nx graph`, the checker exits 0 on a clean tree, and it exits 1 on
       # a violating one. The last is the one that matters: a gate only proves it
-      # runs when it can go red.
+      # runs when it can go red. It also asserts the can't-look exit (3) on a
+      # markerless tree and that `npm pack --dry-run` selects the same files
+      # `pnpm pack` verified — the bytes published are the bytes proven.
+      #
+      # Every job in this file runs `ubuntu-latest`; the script shells out to
+      # `pnpm` and `npm` by PATH and is unix-only by design.
       #
       # It runs before publish, not after, because a package that resolves
       # nothing at install time cannot be unpublished away.
