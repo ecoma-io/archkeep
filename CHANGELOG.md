@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/ecoma-io/lattice/compare/v0.6.1...v0.6.2) (2026-08-19)
+
+
+### Bug Fixes
+
+* **lattice:** stabilize the public API surface for v0.7.0 ([#161](https://github.com/ecoma-io/lattice/issues/161)) ([01f39ff](https://github.com/ecoma-io/lattice/commit/01f39ff4dd0e2115c08aff81fb8795a193f5b3fd))
+
 ## [0.6.1](https://github.com/ecoma-io/lattice/compare/v0.6.0...v0.6.1) (2026-08-19)
 
 
