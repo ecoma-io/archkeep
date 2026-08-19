@@ -62,6 +62,32 @@ every release; its marketplace `vsce publish` step skips — loudly, in the job
 log — until a marketplace publisher account and its `VSCE_PAT` secret exist,
 and runs automatically from the release that follows their arrival.
 
+## The one manual step, and why it is still here
+
+**A release pull request's checks do not start on their own.** Both required
+gates (`ci-gate`, `analysis-gate`) land on the release branch as runs with
+conclusion `action_required` and zero jobs — created, never started — so the
+pull request sits at `mergeable_state: blocked` with nothing red to point at.
+Someone has to approve or re-run each of them before the release can merge.
+
+Measured rather than suspected: across every release branch this repository
+has cut, **every first attempt is `action_required` and every success carries
+`run_attempt: 2`.** It has been a hand on every release since 0.1.0, which is
+also why it is written here — an undocumented manual step reads as a broken
+lane to whoever meets it first.
+
+The cause is the identity that pushes the reformat commit. That commit lands
+through the git-database REST API under `${{ github.token }}` whenever
+`RELEASE_APP_ID` is unset (`release.yml`'s reformat step argues why the API
+route rather than `git commit`), and GitHub holds workflow runs attributed to
+that identity for approval.
+
+The fix is the branch the workflow already has: set `RELEASE_APP_ID` and its
+private-key secret so the reformat pushes under the App token that step
+already prefers. Until that exists, expect to approve two runs per release —
+and note that [roadmap.md](../roadmap.md)'s fourth 1.0 condition, releases
+landing without a hand on them, is measured against exactly this.
+
 ## Breaking changes
 
 A change to what is reported on an unchanged workspace is a **breaking change**
