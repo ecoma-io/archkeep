@@ -149,18 +149,25 @@ function requireGh(args) {
 
 /** Creates the label when it does not exist yet — `gh issue create --label`
  * refuses an unknown label, and the first run of this mechanism is its own
- * bootstrap. */
+ * bootstrap. Returns once the label exists, whether created here or already
+ * present.
+ *
+ * The retry-with-`--force` is load-bearing, measured on 2026-08-19: the
+ * earlier `gh label list --search` probe returned a false negative in CI —
+ * the workflow's `GITHUB_TOKEN` carries `contents: read` + `issues: write`
+ * but no `issues: read`, and `gh label list`'s GraphQL `repository.labels`
+ * connection is gated on that read permission (the two failing runs' own
+ * "Set up job" logs show `Metadata: read` present, so the blocker is the
+ * label read, not metadata) — so every run fell through to `create`, which
+ * then failed with "already exists; use `--force`", on `ok` runs whose only
+ * job was to close the `conformance-differential` issue as well. Create
+ * first, and on the one `already exists` error retry with `--force`: that
+ * keeps create-if-absent while never overwriting a label that was already
+ * there — a caller whose token CAN list labels (local runs, a fuller scope)
+ * leaves a human-edited label untouched, and a caller that cannot reaches
+ * the same create-or-update the old code intended. */
 function ensureLabel(repo) {
-  // `gh label list` (not `view` — which no gh CLI version ships — and not
-  // `--search` matching something else) is the probe: it returns 0 whether
-  // the label exists or not, and lists rows one per line. A label whose line
-  // is present therefore means the label already exists and nothing needs
-  // creating; only a genuinely absent label reaches the `create` below.
-  const list = gh(["label", "list", "--repo", repo, "--search", LABEL]);
-  if (list.status === 0 && list.stdout.split("\n").some((line) => line.startsWith(`${LABEL}\t`))) {
-    return;
-  }
-  const create = gh([
+  const base = [
     "label",
     "create",
     LABEL,
@@ -170,9 +177,12 @@ function ensureLabel(repo) {
     "d73a4a",
     "--description",
     "The conformance differential found a divergence from @nx/enforce-module-boundaries",
-  ]);
-  if (create.status !== 0) {
-    throw new Error(`label ${LABEL} is absent and could not be created: ${create.stderr.trim()}`);
+  ];
+  const created = gh(base);
+  if (created.status === 0) return;
+  const force = gh([...base, "--force"]);
+  if (force.status !== 0) {
+    throw new Error(`label ${LABEL} could not be created or updated: ${force.stderr.trim()}`);
   }
 }
 
