@@ -96,6 +96,10 @@ the load-bearing half, so "no violations" is a claim about coverage as much as
 about correctness. The exempt suffix names the boundary law itself, which is
 not owned by any project.
 
+The import resolver uses the workspace's own `typescript` (a peer dependency,
+resolved from your tree, never bundled). A TypeScript-free Go/Rust/Python
+workspace pays nothing: resolution keys off the manifests that exist.
+
 ## Who it is for
 
 **Human teams** run `lattice check` in CI and gate on its exit code. The verdict
