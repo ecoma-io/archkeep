@@ -12,7 +12,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `drift`      | (none)               | Compare the observed architecture to the declared intent                                           | no               |
 | `discover`   | (none)               | Report observed facts, and optionally propose candidates                                           | no               |
 | `reconcile`  | (none)               | Score the declared intent against the observed architecture, with proposed edits under `--propose` | no               |
-| `fitness`    | (none)               | Judge every declared fitness function against the workspace                                        | no               |
+| `fitness`    | (none)               | Judge every declared fitness function against the workspace; exits 1 on a failing function         | no*              |
 | `waivers`    | (none)               | List the boundary waivers and permanent suppressions on the table                                  | no               |
 | `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                                             | no               |
 | `health`     | `[<snapshot-dir>]`   | Describe architecture health metrics and trends                                                    | no               |
@@ -22,6 +22,10 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `context`    | `<project>`          | Show the architecture constraints that apply to a project                                          | no               |
 | `provenance` | (none)               | Describe where this run's facts came from and which rows carry an origin                           | no               |
 | `adr`        | `[<id>]`             | List recorded architecture decisions and what each binds                                           | no               |
+
+\* `fitness` reports no boundary violation, but it is a verdict command, not a
+descriptive one: a declared function that `fail`s makes it exit 1 (and an
+undetermined one, 3) — see the prose below.
 
 `lattice --help` prints the help text and exits 0. An omitted command name is a
 usage error (exit 2). If the first positional argument names a path that exists

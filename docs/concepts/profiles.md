@@ -8,10 +8,10 @@ once: a registry of named policy blocks, each inheriting from a `base`, with the
 `check` command selecting one by name for a run.
 
 A profile is data, not a new dialect. Each profile's `block` is a policy block
-of the exact three keys every boundaryConfig dialect already shares —
-`depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`
-([policies.md](policies.md) owns those dialects) — validated by the same
-validator. The resolution result runs through the same enforcement path as a
+of the four keys every boundaryConfig dialect already shares —
+`depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, and
+`fitness` ([policies.md](policies.md) owns those dialects) — validated by the
+same validator. The resolution result runs through the same enforcement path as a
 file, so there is exactly ONE way a policy becomes a verdict: a profile is a way
 to name and reuse a policy, never a second kind of policy that could disagree
 with a file about the same row.
@@ -40,7 +40,7 @@ run mutates.
 The registry is a JSON file named by the `profiles` plugin option
 ([configuration](../reference/configuration.md#nxjson-plugin-options)). A
 profile has a `name`, an optional `base` (the name of another profile whose
-effective block it inherits), and a `block` of the three policy keys:
+effective block it inherits), and a `block` of the policy keys:
 
 ```json
 {
@@ -82,7 +82,7 @@ Two top-level keys are recognized — `profiles` (required) and `version`
 (defaults to `1` when absent, must be `1` when present) — plus `$schema`,
 which is tolerated for editor validation. Any other key is rejected by name.
 Each profile may carry only `name`, `base`, and `block`; the block only the
-three policy keys.
+four policy keys.
 
 A profile with no `base` stands alone. With a `base`, the child inherits its
 effective block and merges on top of it:
@@ -183,9 +183,9 @@ identity, so anything a change report cites about one of them — "the graph",
 "the context" — must still name the `--config <NAME>` it ran with; only
 `check`'s reader gets that fact from the report itself.
 
-A profile's `block` carries exactly three keys — `depConstraints`,
-`moduleBoundaryOptions`, `boundarySuppressions` — so a profile-selected run
-folds no fitness functions and no governance-origin rows it cannot carry: a
-`fitness` export exists only on a boundary-config **file** (`policyFrom`
-requires the export there). What a profile cannot express is a file-only
-capability, stated as such rather than silently shortened.
+A profile's `block` carries the four keys `depConstraints`,
+`moduleBoundaryOptions`, `boundarySuppressions`, and `fitness` — the same
+four keys a boundaryConfig dialect already shares ([policies.md](policies.md)
+owns those dialects) — so a profile-selected run folds fitness functions in by
+presence, and every key the resolution result carries is one the policy
+validator already knows.

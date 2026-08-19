@@ -89,6 +89,56 @@ describe("resolveProvenance", () => {
     }
   });
 
+  it("throws loudly on a git repository with NO commits — an unborn HEAD is not 'no origin claim'", () => {
+    // The silent direction this case exists to end: `git init` with nothing
+    // committed. `git ls-files` answers an empty list, so a run over this tree
+    // would otherwise report a clean workspace over zero files; resolving
+    // provenance as `null` would read as "no origin claim", which is a
+    // different fact from "the tree's own git cannot name its state". The
+    // throw makes a commitless tree a loud could-not-look (exit 3) at every
+    // call site instead.
+    const repo = mkdtempSync(join(tmpdir(), "lattice-provenance-commitless-"));
+    try {
+      execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
+      expect(() => resolveProvenance(repo)).toThrow(/no commits/);
+      // The near miss in the loud direction: the very same directory, one
+      // commit later, is no longer a throw — the error is about the unborn
+      // HEAD specifically, not about the directory being a repo.
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-m", "base"],
+        { cwd: repo },
+      );
+      expect(resolveProvenance(repo)).not.toBeNull();
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("does NOT call a broken-HEAD committed repository 'commitless'", () => {
+    // The too-broad reading of the throw above: any `--verify HEAD` failure is
+    // not an unborn HEAD. A repo that HAS commits but whose HEAD points at a
+    // nonexistent ref (a broken `git symbolic-ref HEAD refs/heads/nonexistent`)
+    // must not be told to "commit at least once" — the tree has identity, only
+    // the ref is corrupt. The message must name the broken HEAD instead.
+    const repo = mkdtempSync(join(tmpdir(), "lattice-provenance-broken-head-"));
+    try {
+      const ident = ["-c", "user.name=t", "-c", "user.email=t@t"];
+      execFileSync("git", ["init", "-q", "-b", "main"], {
+        cwd: repo,
+      });
+      execFileSync("git", ident.concat(["commit", "--allow-empty", "-m", "base"]), { cwd: repo });
+      execFileSync("git", ["symbolic-ref", "HEAD", "refs/heads/nonexistent"], { cwd: repo });
+      expect(() => resolveProvenance(repo)).toThrow(/HEAD cannot be resolved/);
+      // The positive twin, so the error is about the broken ref specifically:
+      // restoring HEAD to a real ref resolves normally.
+      execFileSync("git", ["symbolic-ref", "HEAD", "refs/heads/main"], { cwd: repo });
+      expect(resolveProvenance(repo)).not.toBeNull();
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   it("reports dirty=true when working tree has changes", () => {
     // This test is probabilistic (the working tree may or may not be dirty), so
     // verify the field exists and matches what git status actually reports.

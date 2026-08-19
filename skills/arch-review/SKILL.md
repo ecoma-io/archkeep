@@ -157,8 +157,9 @@ cites when it says "the declared architecture no longer matches the code".
   (a metric whose evidence is unavailable is `unknown`/`not_applicable`, never
   zero); `lattice fitness`(when the policy declares a `fitness` export) judges
   the workspace's named quality gates with `pass` / `fail` / `unknown` /
-  `not_applicable` verdicts. Both are descriptive — they never exit 1. `check`
-  stays the gate.
+  `not_applicable` verdicts. `fitness` is descriptive too, but a declared
+  function that `fail`s makes it exit 1 — a failing fitness function is a
+  finding, not a print job. `check` stays the gate.
 - **Pre-existing violations ("debt")** — `lattice debt <dir>` ages waivers, gaps
   and drift across a snapshots directory: how long a violation has been
   accepted or unknown. It is a ledger, not a live gate — it never changes a
@@ -179,9 +180,10 @@ cites when it says "the declared architecture no longer matches the code".
   drift) by the evidence snapshots carry; `lattice provenance` reports the
   governance row schema. Provenance is a property of snapshots — a command
   reports it, it does not pluralize it.
-- **ADR / decision references** — when a reviewed constraint or intent row
-  carries a `decisionRef` (a fitness gate cannot: a fitness row accepts exactly
-  `name`/`match`/`condition`/`reason`), verify the decision it leans on
+- **ADR / decision references** — when a reviewed constraint, intent, or
+  fitness row carries a `decisionRef` (`decisionRef` is a governance block key
+  a fitness row accepts, alongside `name`/`match`/`condition`/`reason`), verify
+  the decision it leans on
   (`lattice adr rule:no-direct-dep` finds the binding ADR; `lattice adr
 0001-bind-collaboration` confirms the record's status and its bindings — the
   decision's rationale and context live in the record file, `docs/adr/NNN-slug.md`,

@@ -29,10 +29,10 @@ An ADR with no `bindings` is recorded but **not yet enforceable** — the report
 names it exactly that. The moment a rule row (a `depConstraints` row or an
 intent row) carries a `decisionRef` naming the ADR, the two sides of the
 binding exist: the row declares it leans on the decision, and the ADR declares
-the decision covers the row. (A fitness row cannot carry a `decisionRef` — it
-accepts exactly `name`/`match`/`condition`/`reason` — but an ADR's `bindings`
-may still name a fitness id, binding the gate to the decision from the ADR's
-side only.)
+the decision covers the row. A fitness row may carry a `decisionRef` the same
+way a rule row does — `decisionRef` is one of the governance block keys a
+fitness row accepts — and an ADR's `bindings` may name a fitness id too,
+binding the gate to the decision from either side.
 
 ## The dialect is strict on purpose
 

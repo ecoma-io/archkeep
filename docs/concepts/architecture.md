@@ -125,7 +125,9 @@ that looked and found nothing.
 | `provenance` | Reports the governance row schema and the run's origin                                | no               |
 | `adr`        | Lists recorded architecture decisions and what each binds (`docs/adr/`)               | no               |
 
-`check` is the only command that exits 1. The other fifteen are descriptive or
+`check` is the only command that exits 1 on boundary findings — with one
+companion: `fitness` exits 1 when a declared function fails (a failing fitness
+function is a finding, not a print job). The other fourteen are descriptive or
 proposal-only: they answer questions about the architecture without claiming a
 violation. `context` answers the question an agent asks _before_ editing (what
 is this project allowed to reach?); `impact` answers the question during
@@ -139,7 +141,9 @@ the architecture that was declared?); `reconcile --propose` and
 `discover --propose` answer it in the future tense (what would the declared
 model need to look like for the two sides to agree?) — as proposals, never
 written. `fitness` and `waivers` sit between: their verdicts fold into
-`check`'s exit code by presence, but neither exits 1 on its own.
+`check`'s exit code by presence, and `fitness` exits 1 on its own when a
+declared function fails — `waivers` stays descriptive, listing the term-bound
+suppressions on the table without claiming a violation.
 
 Two of the descriptive commands fold into `check` by presence: a policy
 declaring a `fitness` export counts its per-function verdicts into `check`'s

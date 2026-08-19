@@ -32,7 +32,7 @@ structured:
 
 - No workspace tool -- the native provider walks the tree itself: [first-project.md](first-project.md)
 - Nx workspace -- register the integration in `nx.json`: [../integrations/nx.md](../integrations/nx.md)
-- Moonrepo workspace -- configure `lattice.json` at the root: [../integrations/moon.md](../integrations/moon.md)
+- Moonrepo workspace -- add the `.moon/` directory and follow the integration guide (no `lattice.json` — the pair is a hard error): [../integrations/moon.md](../integrations/moon.md)
 
 ## What the package provides
 

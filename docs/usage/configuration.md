@@ -58,17 +58,12 @@ would give you a full green run against a rule nobody wrote.
 
 A Moon workspace carries a `.moon/` directory at the root. Because Moon's
 configuration does not provide a plugin-options table the way `nx.json`'s
-`plugins[].options` does, the options sit on `lattice.json` at the root — the
-same file the native provider reads. See [moon.md](../integrations/moon.md) for
-the integration guide.
-
-```jsonc
-// lattice.json
-{
-  "boundaryConfig": "module-boundaries.config.mjs",
-  "tsConfig": "tsconfig.base.json",
-}
-```
+`plugins[].options` does, the two options fall back to their defaults by
+convention — `module-boundaries.config.mjs` and `tsconfig.base.json` at the
+root. A Moon workspace must **not** create a `lattice.json` to name them: a
+tree carrying both the `.moon/` marker and a root `lattice.json` is refused
+loudly as a hard error (exit 3), never read as a config surface. See
+[moon.md](../integrations/moon.md) for the integration guide.
 
 | option           | default                        | meaning                                                                                 |
 | ---------------- | ------------------------------ | --------------------------------------------------------------------------------------- |

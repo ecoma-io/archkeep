@@ -7,9 +7,11 @@ to look elsewhere for a field's definition.
 ## `lattice.json`
 
 For a workspace with no Nx at all. `nx.json` and `lattice.json` are
-alternatives -- a root carrying both is a usage error. A Moon workspace (`.moon/`
-directory present) also reads from `lattice.json` when no `nx.json` is present.
-Every field below is optional; an empty `{}` validates but declares zero projects.
+alternatives -- a root carrying both is a usage error. A Moon workspace
+(`.moon/` directory present) must NOT create a `lattice.json` alongside it: a
+tree carrying both markers is refused loudly (exit 3), because this tool
+judges a workspace against exactly one project model. Every field below is
+optional; an empty `{}` validates but declares zero projects.
 Six top-level keys are recognized; any other key is rejected by name.
 
 ### `projects`
@@ -75,8 +77,9 @@ enforced.
 Never inferred from directory names. A declaration naming only one of the two
 keys is refused. An Nx-registered workspace states the same fact in `nx.json`'s
 own top-level `workspaceLayout` field; the Nx integration reads it from there
-directly. A Moon workspace does not use `workspaceLayout` — project roots are
-declared explicitly in `.moon/workspace.yml`.
+directly. A Moon workspace carries `workspaceLayout` on its graph output too,
+inferred from the common directory prefix shared by each layer's project
+roots.
 
 ### `boundaryConfig`
 
@@ -98,8 +101,9 @@ from an editor.
 | string | `"tsconfig.base.json"` | Filename of the shared TypeScript config. |
 
 No second shape -- stays a filename. An Nx-registered workspace states this
-under `nx.json -> plugins[].options` instead. A Moon workspace states it in
-`lattice.json` alongside the native provider.
+under `nx.json -> plugins[].options` instead. A Moon workspace carries no
+`lattice.json` (the `.moon`/`lattice.json` pair is refused loudly, exit 3), so
+the Moon provider reads the two options from defaults by convention.
 
 ## `nx.json` plugin options
 
@@ -135,12 +139,12 @@ server at startup, loudly, because it only ever reads a policy file.
 
 All commands share the same flag-parsing rules. Both `--flag value` and
 `--flag=value` work. An unknown flag is a usage error rather than a path.
+`--help` is the one exception to the shared rules — see below.
 
-### Global flags (every command)
-
-| flag     | argument | default | meaning                        |
-| -------- | -------- | ------- | ------------------------------ |
-| `--help` | --       | --      | Show the help text and exit 0. |
+Help is shown by `lattice --help` (or by running `lattice` with no arguments),
+and only as the first argument — `lattice <command> --help` is a usage error
+(exit 2), because `--help` is not parsed per command. A bare `lattice help`
+(no `--`) is likewise a usage error: `help` is not a command name.
 
 ### `--format`
 

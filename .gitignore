@@ -29,3 +29,12 @@ pnpm-debug.log*
 # Claude Code worktrees — full clones of this repository, one per worktree.
 # Prettier and the boundary checker would otherwise scan every clone.
 .claude/worktrees/
+
+# Test fixtures created inside the package root by `mkdtempSync(join(packageRoot,
+# ".cli-eslint-config-fixture-"))` in cli.integration.test.mjs and
+# eslint-config.integration.test.mjs. The tests clean them up in `afterAll`, but
+# an interrupted run leaves them behind, and an untracked fixture dir is exactly
+# the shape of accidental `git add -A`. Kept out of git rather than moved to
+# tmpdir(): the fixtures must sit inside the package to be resolvable by the
+# resolver under test.
+packages/lattice/.cli-eslint-config-fixture-*/

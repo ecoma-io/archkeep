@@ -852,10 +852,18 @@ describe("loadNativeModel", () => {
   // example regresses to any shape this loader refuses, this test goes red.
   it("parses the lattice.json example the published README leads with", () => {
     const readme = readFileSync(join(HERE, "../../../README.md"), "utf8");
-    const block = readme.match(/```json\n([\s\S]*?)```/);
-    if (block === null) throw new Error("packages/lattice/README.md has no ```json code block");
+    // The FIRST ```json block used to be the fixture by convention — but a
+    // future README inserting any earlier ```json snippet (an install hint, an
+    // `nx.json` fragment) would silently pin a different block. Match the
+    // lattice.json example by its own marker instead, so the test stays pinned
+    // to the config it means even as the page above it grows.
+    const block = readme.match(/```json\n([\s\S]*?"projects"\s*:\s*\{[\s\S]*?)```/);
+    if (block === null)
+      throw new Error(
+        "packages/lattice/README.md has no ```json block carrying a projects declaration",
+      );
     const model = loadNativeModel("/repo", io({ "lattice.json": block[1] }));
-    expect(model.projects.declared.map((row) => row.name)).toEqual(["billing-core", "billing-api"]);
+    expect(model.projects.declared.map((row) => row.name)).toEqual(["billing-core", "shared-ui"]);
   });
 });
 

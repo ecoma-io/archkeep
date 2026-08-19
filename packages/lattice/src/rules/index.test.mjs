@@ -1360,6 +1360,73 @@ describe("evaluate", () => {
     });
   });
 
+  describe("determinism — the same inputs always produce the same verdict", () => {
+    // The differential contract (`docs/reference/json-output.md`): two runs
+    // over an unchanged tree produce byte-identical JSON. This layer is the
+    // first judge — if `evaluate` were not a pure function of
+    // (importSites, graph, config), no amount of report-layer sorting could
+    // restore the guarantee. Two calls with the SAME records, graph and config
+    // object must yield deep-identical arrays AND byte-identical serialisation.
+    // Red direction: any mutation of an input, any hidden iteration order or
+    // any time/randomness entering the rules would change the bytes.
+    const determinismSite = () =>
+      site({
+        specifier: "../../beta/src/thing",
+        resolved: {
+          target: "beta",
+          file: "area/beta/src/thing.ts",
+          external: false,
+          packageName: null,
+        },
+      });
+
+    it("is deterministic for a run with violations — two calls, byte-identical verdicts", () => {
+      const graph = graphOf([
+        project("alpha", { tags: ["zone:x"] }),
+        project("beta", { tags: ["zone:y"] }),
+      ]);
+      const cfg = config(permissive);
+      const sites = [determinismSite(), determinismSite()];
+      const first = evaluate(sites, graph, cfg);
+      const second = evaluate(sites, graph, cfg);
+      expect(first.length).toBe(2);
+      expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+      // A third call over a NEW array of the same records agrees too — the
+      // verdict depends on the records, not on array identity or a mutation
+      // the first call may or may not have made.
+      expect(JSON.stringify(evaluate([determinismSite(), determinismSite()], graph, cfg))).toBe(
+        JSON.stringify(first),
+      );
+      // The INPUTS are unchanged by the calls — determinism must not depend on
+      // a side effect licensing the second call to reuse the first's.
+      expect(sites).toEqual([determinismSite(), determinismSite()]);
+    });
+
+    it("is deterministic for a clean run — two calls, byte-identical empty verdicts", () => {
+      const graph = graphOf([
+        project("alpha", { tags: ["zone:x"] }),
+        project("beta", { tags: ["zone:y"] }),
+      ]);
+      const cfg = config(permissive);
+      const cleanSites = [
+        site({
+          specifier: "./thing",
+          resolved: {
+            target: "alpha",
+            file: "area/alpha/src/thing.ts",
+            external: false,
+            packageName: null,
+          },
+        }),
+      ];
+      const first = evaluate(cleanSites, graph, cfg);
+      const second = evaluate(cleanSites, graph, cfg);
+      expect(first.length).toBe(0);
+      expect(JSON.stringify(first)).toBe("[]");
+      expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+    });
+  });
+
   describe("the violation record", () => {
     it("carries the position, the specifier and the rendered message", () => {
       const graph = graphOf([

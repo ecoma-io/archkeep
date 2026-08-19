@@ -53,10 +53,9 @@ answer is to surface it, never to ignore it.
    workspace is therefore a real coverage gap — an unknown profile name, an
    unknown `base`, a `base` cycle, or an unreadable registry, the same four
    conditions `check` can hit — not an artifact of that command failing to
-   look at `profiles` at all. The one carve-out is fitness functions: a
-   profile's `block` carries no `fitness` key (only a boundaryConfig **file**
-   can declare one), so `fitness` on a profile-selected workspace reports its
-   own "declares no fitness functions" rather than judging anything —
+   look at `profiles` at all. A profile's `block` may carry a `fitness` key
+   like any other policy key, so `fitness` on a profile-selected workspace
+   folds the declared functions the same way a file-selected one does —
    [docs/usage/profiles.md](../../docs/usage/profiles.md), "Every command
    resolves it, not only `check`".
 
@@ -124,10 +123,10 @@ answer is to surface it, never to ignore it.
    with `layer:domain` may be allowed to import `layer:domain` and `layer:shared`
    but forbidden from importing `layer:adapter`. When a constraint row — or an
    intent row — carries a `decisionRef`, that is the "why" of the rule: the
-   record of the decision that made it enforceable. (A fitness gate cannot carry
-   one: a fitness row accepts exactly `name`/`match`/`condition`/`reason`.)
-   Resolve it with the reverse lookup before treating the rule as standing on
-   its own:
+   record of the decision that made it enforceable. A fitness gate may carry
+   one too — `decisionRef` is a governance block key a fitness row accepts,
+   alongside `name`/`match`/`condition`/`reason`. Resolve it with the reverse
+   lookup before treating the rule as standing on its own:
 
    ```
    lattice adr rule:no-direct-dep          # which ADR binds this rule?
@@ -159,17 +158,20 @@ answer is to surface it, never to ignore it.
    say no history was inspected.
 
 8. **Understand the surrounding governance surfaces when the facts need
-   context.** These are descriptive, never gates — they never exit 1:
+   context.** These are descriptive, never gates — they do not report boundary
+   findings:
    `lattice waivers` lists the term-bound suppressions a violation under review
    may be covered by; `lattice health` reports per-metric verdicts (unmeasured
    is `unknown`/`not_applicable`, never zero); `lattice debt <dir>` ages waivers,
    gaps and drift across snapshots; `lattice fitness` (when the policy declares
-   a `fitness` export) judges the workspace's named quality gates;
+   a `fitness` export) judges the workspace's named quality gates and exits 1
+   when one `fail`s;
    `lattice adr` lists the recorded architecture decisions and what each binds;
    and `lattice reconcile --propose` / `lattice discover --propose` shape a stale
    model or a blank one — all proposals, never written. Consult them for
    context, and let their zero-verdict exits stay out of the change's clean/not
-   verdict: `check` is the only command that exits 1.
+   verdict: `check` is the only command that exits 1 on boundary findings —
+   `fitness` also exits 1 when a declared function `fail`s.
 
 9. **Proceed within constraints.** Only then modify code, staying within the
    import directions the context described.

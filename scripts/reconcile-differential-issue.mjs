@@ -151,8 +151,15 @@ function requireGh(args) {
  * refuses an unknown label, and the first run of this mechanism is its own
  * bootstrap. */
 function ensureLabel(repo) {
-  const view = gh(["label", "view", LABEL, "--repo", repo]);
-  if (view.status === 0) return;
+  // `gh label list` (not `view` — which no gh CLI version ships — and not
+  // `--search` matching something else) is the probe: it returns 0 whether
+  // the label exists or not, and lists rows one per line. A label whose line
+  // is present therefore means the label already exists and nothing needs
+  // creating; only a genuinely absent label reaches the `create` below.
+  const list = gh(["label", "list", "--repo", repo, "--search", LABEL]);
+  if (list.status === 0 && list.stdout.split("\n").some((line) => line.startsWith(`${LABEL}\t`))) {
+    return;
+  }
   const create = gh([
     "label",
     "create",
@@ -187,7 +194,10 @@ function existingIssue(repo) {
   ]);
   const found = JSON.parse(list.stdout);
   if (found.length === 0) return undefined;
-  return { number: found[0].number, state: found[0].state };
+  // `gh issue list --json state` answers in UPPERCASE ("OPEN"/"CLOSED"), while
+  // `decideIssue` compares against lowercase. Normalized here, at the boundary
+  // that reads from the CLI, so the decision function keeps its pure contract.
+  return { number: found[0].number, state: found[0].state.toLowerCase() };
 }
 
 function main() {
