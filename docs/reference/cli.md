@@ -109,8 +109,10 @@ look" must never read as "clean".
 | `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                               |
 | `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. |
 
-No positional arguments. Fitness is descriptive — it never exits 1, only 0 on a
-completed judgment and 3 when coverage is incomplete or the policy declares no
+No positional arguments. Fitness is a verdict, not a print job (D-09): it
+exits 1 on a failing function and 3 on an undetermined one — the same two
+lanes `check` uses — and 0 only on a completed judgment with nothing failed or
+undetermined. It exits 3 when coverage is incomplete or the policy declares no
 `fitness` at all. Each declared function is judged against the observed
 workspace and printed as a verdict row; `check` folds the same verdicts in by
 presence.
@@ -262,7 +264,7 @@ or verified must never read as "no debt".
 | code | meaning                                                                                                                | when                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ---- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0    | clean -- and every selected file was analyzed                                                                          | No findings and no coverage gaps.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, intent findings, or a failing fitness gate | `check` only. No other command exits 1.                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, intent findings, or a failing fitness gate | `check` and `fitness`. A failing fitness function is a finding (D-09); every other command that finds something reports it but exits 0.                                                                                                                                                                                                                                                                                                                             |
 | 2    | usage error                                                                                                            | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                                                                                                                                                                                                                                                                                                                                     |
 | 3    | no verdict -- the run could not start, a selected file could not be read, or the law itself could not be established   | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load, a tracked `architecture-intent.json` that will not parse or whose boundaries match no project, or -- in a profile-selected workspace, on any command that reads a boundary law -- a profile that could not be resolved: an unknown profile name, an unknown `base`, a `base` cycle, or an unreadable registry. |
 
@@ -275,10 +277,12 @@ analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
 A descriptive command (`graph`, `diff`, `drift`, `discover`, `reconcile`,
-`fitness`, `waivers`, `history`, `health`, `debt`, `impact`, `explain`,
+`waivers`, `history`, `health`, `debt`, `impact`, `explain`,
 `context`, `provenance`, `adr`) exits 0 when it completes, 3 when coverage is
 incomplete or a metric is `unknown`, and 2 on usage error. None exits 1,
-because a descriptive result is never a finding.
+because a descriptive result is never a finding. `fitness` is the exception —
+it is a verdict, so a failing function exits 1 (the `check` lane) and an
+undetermined one exits 3.
 
 ## What each command does
 
@@ -407,10 +411,9 @@ Descriptive.
 
 Judges every declared fitness function against the observed workspace: one line
 per function `✔ / ✖ / ⚠ / ◌`, then an overall posture, all deterministic and
-clock-free. Descriptive — it never exits 1. `check` folds fitness in by
-presence: a workspace whose policy declares a `fitness` export gets the same
-per-function verdicts counted into its exit code — 1 for any `fail`, 3 for any
-`unknown`, never a new code.
+clock-free. A verdict, not a print job — it exits 1 for any `fail`, 3 for any
+`unknown` (D-09). `check` folds the same per-function verdicts into its exit
+code — 1 for any `fail`, 3 for any `unknown`, never a new code.
 
 ### `context <project> --plan [<path>...]`
 

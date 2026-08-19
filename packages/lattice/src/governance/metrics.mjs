@@ -58,6 +58,8 @@
  * states the same limit).
  */
 import { suppressionCovers } from "../config.mjs";
+import { referenceTime } from "./clock.mjs";
+import { suppressionFate } from "./waiver.mjs";
 import { evaluateWithSuppressions } from "../rules/index.mjs";
 import { buildReachability } from "../rules/reachability.mjs";
 
@@ -203,8 +205,10 @@ export function structuralMetrics(model, coverage, edgeComplete = coverage.compl
  *
  * @param {object[]} importSites The run's analysis `imports`.
  * @param {object} graph The project graph `{nodes, dependencies}`.
- * @param {{depConstraints: object[], options: object, suppressions?: object[]}|null} config
- *   The loaded boundary law, or `null` when the workspace provides none.
+ * @param {{depConstraints: object[], options: object, suppressions?: object[], now?: string}|null} config
+ *   The loaded boundary law, or `null` when the workspace provides none. `now`
+ *   is the waiver-expiry reference the rule engine honours, threaded so the
+ *   metrics agree with `check` about which waivers are still in force.
  * @param {{complete: boolean}} coverage
  * @returns {{violations: Metric, waiverSurface: Metric, underWavedCount: number}}
  */
@@ -235,13 +239,30 @@ export function boundaryMetrics(importSites, graph, config, coverage) {
     };
   }
   const suppressions = config.suppressions ?? [];
-  const waived = raws.filter((v) => suppressions.some((entry) => suppressionCovers(entry, v)));
+  // F02: a suppression entry is a waiver (expires) or a legacy suppression
+  // (permanent). `suppressionCovers` only answers "path+id match" — an
+  // EXPIRED waiver still matched, so the metrics wrote the boundary clean
+  // while `check`/`health` were re-asserting it. The fate decides: a waiver
+  // in force (waive) or a permanent suppression (suppress) covers; an
+  // expired one (reassert) covers nothing and the violation is live — the
+  // same verdict `applySuppressions` (`../rules/index.mjs`) renders for the
+  // gate. `config.now` is the same reference the rule engine honours.
+  const now = config.now ?? referenceTime();
+  const waived = raws.filter((v) =>
+    suppressions.some((entry) => {
+      if (!suppressionCovers(entry, v)) return false;
+      return suppressionFate(entry, now) !== "reassert";
+    }),
+  );
   const violations = metric(raws.length - waived.length);
   // The waiver surface is a METRIC, not a verdict: a waiver is a decision the
   // workspace made about its own law, so a non-zero surface is a fact on the
   // books, never a finding. It carries `ok` + the count (informational, like
   // edge density) — the violations verdict beside it already reports what that
-  // surface is waiving.
+  // surface is waiving. `waived` holds everything currently suppressing (a
+  // legacy suppression and an active waiver alike); an EXPIRED waiver (fate
+  // `reassert`) is in neither count, so the metric and the gate can never
+  // disagree about the same tree (F02).
   /** @type {Metric} */
   const waiverSurface = { verdict: "ok", value: waived.length };
   return { violations, waiverSurface, underWavedCount: waived.length };

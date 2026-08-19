@@ -39,7 +39,7 @@ import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatContextReport } from "../report/context-text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { readAdrContext } from "./adr.mjs";
-import { unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
+import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 
 /**
  * Collects the architecture context for a project: its tags, which constraint
@@ -137,7 +137,9 @@ export function contextCommand(projectName, commandContext, config) {
   if (decisionRefRows.length > 0) {
     const adrContext = readAdrContext(root, { tracked });
     unresolvedDecisionRefs = new Set(
-      unresolvedDecisionRefRows(decisionRefRows, adrContext.byId, adrContext.knownFitness).map(
+      // F04: the fitness half resolves against the ids THIS policy declares
+      // (`declaredFitnessNames(config)`), never the ADRs' own `bindings`.
+      unresolvedDecisionRefRows(decisionRefRows, adrContext.byId, declaredFitnessNames(config)).map(
         (row) => row.decisionRef,
       ),
     );

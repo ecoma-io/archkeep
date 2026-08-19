@@ -328,16 +328,33 @@ export function formatTsconfigPaths(tsconfigPaths) {
  * boundary that passed.
  *
  * @param {{verdict: "ok"|"findings"|"no-verdict", findings: object[],
- *   unresolved: object[], boundaries: object[]}|null|undefined} intent
+ *   unresolved: object[], boundaries: object[],
+ *   unresolvedDecisionRefs?: {kind: string, decisionRef: string}[]}|null|undefined} intent
  * @returns {string} Empty exactly when there is no intent verdict to render.
  */
 export function formatIntentSection(intent) {
   if (intent == null) return "";
-  const { verdict, findings, unresolved, boundaries } = intent;
+  const { verdict, findings, unresolved, boundaries, unresolvedDecisionRefs = [] } = intent;
   const count = boundaries.length;
   const label = `${count} boundar${count === 1 ? "y" : "ies"}`;
+  // An intent row whose `decisionRef` names no ADR, rule, or fitness record the
+  // registry knows — a citation the workspace claims as its authority but that
+  // does not exist (`check` folds these into its no-verdict lane; `drift` and
+  // `provenance` flag the identical row loudly). Rendered as an UNRESOLVED
+  // block so the gate's text face is not the one that stays silent.
+  const decisionRefSection =
+    unresolvedDecisionRefs.length > 0
+      ? unresolvedDecisionRefs
+          .map(
+            (entry) =>
+              `⚠ ${entry.kind} decisionRef [${entry.decisionRef}] (UNRESOLVED — no matching ADR, rule, or fitness record)`,
+          )
+          .join("\n")
+      : "";
   if (verdict === "ok") {
-    return `✔ architecture-intent agrees with the observed graph (${label})`;
+    return [decisionRefSection, `✔ architecture-intent agrees with the observed graph (${label})`]
+      .filter(Boolean)
+      .join("\n\n");
   }
   if (verdict === "no-verdict") {
     const entries = unresolved.map((entry) => {
@@ -348,12 +365,15 @@ export function formatIntentSection(intent) {
       return `${entry.boundary}  ${message}`;
     });
     return [
+      decisionRefSection,
       entries.join("\n\n"),
       `⚠ architecture-intent.json reached no verdict on ${unresolved.length} ` +
         `boundar${unresolved.length === 1 ? "y" : "ies"} — the intent ` +
         `${unresolved.length === 1 ? "this boundary names" : "these boundaries name"} ` +
         `could not be verified, and the run fails`,
-    ].join("\n\n");
+    ]
+      .filter(Boolean)
+      .join("\n\n");
   }
   const entries = findings.map((finding) => {
     const message = finding.message
@@ -363,11 +383,14 @@ export function formatIntentSection(intent) {
     return `${finding.rule}  ${message}`;
   });
   return [
+    decisionRefSection,
     entries.join("\n\n"),
     `✖ architecture-intent findings: ${findings.length} ` +
       `finding${findings.length === 1 ? "" : "s"} (${label}) — the intended ` +
       `architecture and the observed one disagree, and the run fails`,
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /**

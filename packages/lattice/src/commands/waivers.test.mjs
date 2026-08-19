@@ -290,6 +290,31 @@ describe("waiversCommand", () => {
     expect(envelope.result.suppressed).toBe(1);
   });
 
+  it("refuses on a plugin-gap tree rather than claiming complete coverage (F07)", async () => {
+    // The exact tree `graph`/`drift`/`fitness` refuse: an Nx workspace whose
+    // nx.json does not register this plugin but whose tracked files carry
+    // polyglot manifests. `waivers` used to report `complete: true` over a
+    // graph that cannot see Go/Rust/Python edges — a waiver naming a file the
+    // invisible graph never judged read as "covers nothing". The command must
+    // refuse loudly, the same shared guard `drift` uses.
+    const streams = await waiversCommand(
+      commandContext({
+        provider: "nx",
+        pluginGap: { registered: false, manifests: ["libs/domain/go.mod"] },
+        analysis: {
+          analyzed: 2,
+          imports: [],
+          failures: [],
+        },
+      }),
+      policy([waiver()]),
+      { now: NOW },
+    ).catch((error) => error);
+    expect(streams).toBeInstanceOf(Error);
+    expect(streams.message).toMatch(/measure waivers/);
+    expect(streams.message).toMatch(/would carry no polyglot edges/);
+  });
+
   it("refuses a tree it could not fully read — incomplete coverage must not read as a stale surface", async () => {
     // A whole-file failure (line: null) means the analyzer never judged the
     // file, so a waiver naming it would read as "covers nothing" about a

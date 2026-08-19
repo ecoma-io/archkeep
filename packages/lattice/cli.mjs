@@ -91,7 +91,7 @@ import {
 import { contextCommand } from "./src/commands/context-command.mjs";
 import { planContextCommand } from "./src/commands/plan-context-command.mjs";
 import { adrCommand, readAdrContext } from "./src/commands/adr.mjs";
-import { unresolvedDecisionRefRows } from "./src/governance/adr-registry.mjs";
+import { declaredFitnessNames, unresolvedDecisionRefRows } from "./src/governance/adr-registry.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { declaredEdgeViolationsForCheck } from "./src/commands/edge-constraints.mjs";
 import { discoverCommand } from "./src/commands/discover.mjs";
@@ -104,6 +104,7 @@ import { healthCommand } from "./src/commands/health.mjs";
 import { debtCommand } from "./src/commands/debt.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
+import { resolveProvenance } from "./src/commands/provenance.mjs";
 import { provenanceCommand } from "./src/commands/provenance-command.mjs";
 import { waiversCommand } from "./src/commands/waivers.mjs";
 import { INTENT_FILE, loadIntent } from "./src/architecture-intent/model.mjs";
@@ -471,7 +472,7 @@ export function parseCheckArgs(argv) {
  * with no findings), which makes a regression in this mapping a loud error
  * rather than a silent one.
  *
- * @param {{violations: number, declaredEdgeFindings: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, unchecked: number, fitnessFail?: number, fitnessUnknown?: number}} counts
+ * @param {{violations: number, declaredEdgeFindings: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, intentUnresolvedDecisionRefs?: number, unchecked: number, fitnessFail?: number, fitnessUnknown?: number}} counts
  * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3, decision: object}}
  */
 function verdictFor({
@@ -481,6 +482,7 @@ function verdictFor({
   tsconfigPathsDead,
   intentFindings,
   intentUnresolved,
+  intentUnresolvedDecisionRefs = 0,
   unchecked,
   fitnessFail = 0,
   fitnessUnknown = 0,
@@ -509,7 +511,12 @@ function verdictFor({
       }),
     };
   }
-  if (unchecked > 0 || intentUnresolved > 0 || fitnessUnknown > 0) {
+  if (
+    unchecked > 0 ||
+    intentUnresolved > 0 ||
+    intentUnresolvedDecisionRefs > 0 ||
+    fitnessUnknown > 0
+  ) {
     return {
       status: "no-verdict",
       exitCode: EXIT.error,
@@ -530,7 +537,10 @@ function verdictFor({
           unchecked === 0 && intentUnresolved > 0
             ? `${intentUnresolved} architecture-intent boundary or row${intentUnresolved === 1 ? "" : "s"} could not be established`
             : null,
-          intentUnresolved === 0 && fitnessUnknown > 0
+          intentUnresolved === 0 && intentUnresolvedDecisionRefs > 0
+            ? `${intentUnresolvedDecisionRefs} intent row${intentUnresolvedDecisionRefs === 1 ? "" : "s"} ${intentUnresolvedDecisionRefs === 1 ? "cites" : "cite"} a decisionRef that does not resolve`
+            : null,
+          intentUnresolved === 0 && intentUnresolvedDecisionRefs === 0 && fitnessUnknown > 0
             ? `${fitnessUnknown} fitness function${fitnessUnknown === 1 ? "" : "s"} could not be determined`
             : null,
         ]
@@ -601,8 +611,8 @@ function declaredEdgeManifest({ provider, graph }, sourceProject) {
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} context
  * @returns {Promise<{report: string, violations: number, declaredEdgeFindings: number,
  *   goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number,
- *   intentUnresolved: number, fitnessFail: number, fitnessUnknown: number,
- *   analyzed: number, unchecked: number, waived?: number}>}
+ *   intentUnresolved: number, intentUnresolvedDecisionRefs: number, fitnessFail: number,
+ *   fitnessUnknown: number, analyzed: number, unchecked: number, waived?: number}>}
  */
 export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
   const commandContext = resolveCommandContext(
@@ -743,7 +753,13 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // intent renders as a distinct line, never as "N files could not be
   // analyzed"). It rides `intentUnresolved` instead, the same no-verdict lane
   // a zero-member boundary takes.
+  /** @type {{verdict: "ok"|"findings"|"no-verdict", findings: object[], unresolved: object[], boundaries: object[], notes: object[], unresolvedDecisionRefs?: {kind: string, decisionRef: string}[]}|null} */
   let intent = null;
+  // The intent rows that carry a `decisionRef`, for `check`'s own citation
+  // pass — empty when no intent is tracked, and populated by the fold below
+  // (F01: an intent row citing nothing the registry knows must be surfaced
+  // the way `drift`/`provenance` surface it, not left silent).
+  let intentDecisionRefRows = [];
   if (tracked.includes(INTENT_FILE)) {
     try {
       // The drift fold runs the same refuse-incomplete-graph guard the `drift`
@@ -765,6 +781,12 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
         unresolved: drift.unresolved,
         notes: drift.notes,
       };
+      // The fold's intent rows carrying a `decisionRef` — the rows `drift`/
+      // `provenance` judge loudly, and which `check` must not leave silent
+      // (F01). Captured here, outside the `intent` object, so the citation
+      // pass below can judge them through the same registry as the boundary
+      // rows.
+      intentDecisionRefRows = drift.decisionRefRows;
     } catch (cause) {
       const reason =
         `${cause?.message ?? cause} — architecture-intent.json could not be ` +
@@ -826,18 +848,48 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // rule's DOCUMENTATION, not about whether the boundary holds, so it changes
   // no byte of `verdictFor`'s inputs below — the same posture `provenance`
   // already takes for a row with no `origin` (`src/commands/provenance-command.mjs`).
-  let unresolvedDecisionRefs = new Set();
+  //
+  // The intent's rows are judged through the SAME registry, in the SAME pass,
+  // so `check` cannot disagree with `drift`/`provenance` about which intent
+  // citations resolve. Unlike the boundary rows, an intent row with an
+  // unresolved `decisionRef` folds into the no-verdict lane (exit 3) WHEN THE
+  // INTENT IS APPLIED — a workspace that declared an intended architecture
+  // whose governing decision does not exist cannot claim `ok` on that axis
+  // (`drift`/`provenance` already flag the identical row loudly). That is the
+  // F01 parity the audit names: `drift` and `provenance` both surface it, and
+  // the gate CI runs must not be the one face that stays silent.
+  const unresolvedDecisionRefs = new Set();
+  const intentUnresolvedDecisionRefRows = [];
   {
-    const decisionRefRows = config.depConstraints
-      .map((row, index) => ({ kind: `depConstraints[${index}]`, row }))
-      .filter(({ row }) => typeof row?.decisionRef === "string" && row.decisionRef.trim() !== "");
+    // Intent rows while the intent is actually tracked — the same gate the
+    // fold above uses, so a workspace with no intent pays nothing and hears
+    // nothing.
+    const decisionRefRows = [
+      ...config.depConstraints
+        .map((row, index) => ({ kind: `depConstraints[${index}]`, row }))
+        .filter(({ row }) => typeof row?.decisionRef === "string" && row.decisionRef.trim() !== ""),
+      ...intentDecisionRefRows,
+    ];
     if (decisionRefRows.length > 0) {
       const adrContext = readAdrContext(root, { tracked });
-      unresolvedDecisionRefs = new Set(
-        unresolvedDecisionRefRows(decisionRefRows, adrContext.byId, adrContext.knownFitness).map(
-          (row) => row.decisionRef,
-        ),
-      );
+      // F04: the fitness half resolves against the ids the loaded policy
+      // DECLARES (`declaredFitnessNames(config)`), never the ADRs' own
+      // `bindings` — a citation cannot resolve itself.
+      for (const row of unresolvedDecisionRefRows(
+        decisionRefRows,
+        adrContext.byId,
+        declaredFitnessNames(config),
+      )) {
+        unresolvedDecisionRefs.add(row.decisionRef);
+        if (row.kind.startsWith("depConstraints")) continue;
+        intentUnresolvedDecisionRefRows.push({ kind: row.kind, decisionRef: row.decisionRef });
+      }
+    }
+    // The unresolved intent citations ride the intent object so the text
+    // report can render them inline (the same UNRESOLVED note the constraint
+    // rows get), and so the JSON intent block names WHICH rows cited what.
+    if (intent !== null && intentUnresolvedDecisionRefRows.length > 0) {
+      intent.unresolvedDecisionRefs = intentUnresolvedDecisionRefRows;
     }
   }
 
@@ -935,6 +987,12 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               root,
               provider: commandContext.provider,
               marker: commandContext.marker,
+              // D-10: provenance rides the SAME-envelope shape every other
+              // command resolves through the one `resolveProvenance` — a check
+              // report is byte-identifiable to the git HEAD it was run on, so
+              // a dirty or un-stamped CI run cannot present a claim about a
+              // different tree state.
+              provenance: resolveProvenance(root),
             },
             // `verdictFor` returns `status`, `exitCode`, and the canonical
             // `decision` — the four-state verb of the same counts — so the
@@ -947,6 +1005,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               tsconfigPathsDead,
               intentFindings,
               intentUnresolved,
+              intentUnresolvedDecisionRefs: intentUnresolvedDecisionRefRows.length,
               unchecked,
               fitnessFail,
               fitnessUnknown,
@@ -1027,6 +1086,13 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
                       findings: intent.findings,
                       unresolved: intent.unresolved,
                       boundaries: intent.boundaries,
+                      // The intent rows whose `decisionRef` does not resolve —
+                      // the same citations `result.unresolvedDecisionRefs` lists
+                      // values for, named here with their row so the JSON
+                      // intent block is self-contained.
+                      ...(intent.unresolvedDecisionRefs !== undefined
+                        ? { unresolvedDecisionRefs: intent.unresolvedDecisionRefs }
+                        : {}),
                     },
                   }),
               // Fitness is a policy DECLARATION too, absent when the workspace
@@ -1081,6 +1147,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     tsconfigPathsDead,
     intentFindings,
     intentUnresolved,
+    intentUnresolvedDecisionRefs: intentUnresolvedDecisionRefRows.length,
     fitnessFail,
     fitnessUnknown,
     analyzed,
@@ -1579,7 +1646,17 @@ async function runDrift(options, { cwd, env }) {
       { cwd },
       { readGraph: env.readGraph, listFiles: env.listFiles },
     );
-    result = await driftCommand(commandContext);
+    // The loaded policy — profile-aware the same way `check` is
+    // (`resolvePolicy`), `null` when the workspace declares none. Drift reads
+    // the intent's rows, and the fitness half of a row's `decisionRef`
+    // resolves against the ids THIS policy declares (F04), so the same policy
+    // that made the boundary law answerable to the model must answer here.
+    // `drift` has no `--config` (`DRIFT_FLAG_HELP`), so `config` is always the
+    // workspace's own default — resolvePolicy reads `options.config` as the
+    // override, hence `null` here, which selects the workspace's configured
+    // boundary law (or a profile, when one is registered).
+    const { config } = await resolvePolicy({ ...options, config: null }, commandContext, cwd);
+    result = await driftCommand(commandContext, { config });
   } catch (error) {
     const usageError = /is outside the workspace/.test(error?.message ?? "");
     env.err(String(error?.message ?? error));
@@ -1847,11 +1924,14 @@ async function runFitness(options, { cwd, env }) {
     env.out(report);
   }
 
-  // Fitness is descriptive: the verdict table prints and the command exits 0
-  // when it completes; only `check` folds a `fail` into exit 1. 3 when the
-  // run could not reach a verdict (`../src/commands/fitness.mjs` states the
-  // posture).
-  return result.status === "ok" ? EXIT.ok : EXIT.error;
+  // `fitness` is a verdict, not a print job (D-09): `fail` exits 1, `unknown`
+  // exits 3, and a run that completed with everything `pass` (or not
+  // applicable) exits 0. The command's own status carries the pair, and the
+  // JSON envelope asserts it; this mapping is the one process-level exit.
+  return (
+    { ok: EXIT.ok, findings: EXIT.violations, "no-verdict": EXIT.error }[result.status] ??
+    EXIT.error
+  );
 }
 
 /**

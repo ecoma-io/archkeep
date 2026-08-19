@@ -311,7 +311,7 @@ export function explainCommand(site, commandContext, config) {
     reason: null,
   };
 
-  const context = { root, provider, marker };
+  const context = { root, provider, marker, provenance: resolveProvenance(root) };
   const coverage = {
     complete,
     projects: Object.keys(graph.nodes).length,

@@ -61,7 +61,7 @@ import { loadIntent } from "../architecture-intent/model.mjs";
 import { loadBoundaryConfig } from "../config.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { readAdrContext } from "./adr.mjs";
-import { unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
+import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 
 /**
  * Whether a row declares a governance origin (`origin.by`/`origin.tool`).
@@ -209,14 +209,17 @@ export async function provenanceCommand(commandContext, io = {}) {
   // which is the silent direction this command exists to end.
   const boundaryConfig = options.boundaryConfig;
   const walked = [];
+  let loadedConfig = null;
   if (typeof boundaryConfig === "string") {
     const config = await (io.loadConfigOverride ?? loadBoundaryConfig)(root, boundaryConfig);
+    loadedConfig = config;
     walked.push(...configRows(config));
   } else if (
     boundaryConfig !== null &&
     typeof boundaryConfig === "object" &&
     !Array.isArray(boundaryConfig)
   ) {
+    loadedConfig = boundaryConfig;
     walked.push(...configRows(boundaryConfig));
   }
   for (const { kind, row } of walked) {
@@ -240,10 +243,15 @@ export async function provenanceCommand(commandContext, io = {}) {
     tracked,
     loadAdrRegistryOverride: io.loadAdrRegistryOverride,
   });
+  // F04: the fitness half of a decisionRef resolves against the ids the
+  // loaded policy DECLARES (`declaredFitnessNames`), never against the ADRs'
+  // own `bindings` — a citation cannot resolve itself. `loadedConfig` is the
+  // policy object walked above; `null` only when no boundary law was declared,
+  // and then no fitness-shaped ref can resolve, which is correct.
   const unresolvedDecisionRefs = unresolvedDecisionRefRows(
     governanceRows,
     adrContext.byId,
-    adrContext.knownFitness,
+    declaredFitnessNames(loadedConfig),
   ).map(({ kind, row, decisionRef }) => ({
     kind,
     label: rowLabel(kind, row),

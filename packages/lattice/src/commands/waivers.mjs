@@ -43,6 +43,7 @@ import { referenceTime } from "../governance/clock.mjs";
 import { isWaiver, remainingMs, waiverStatus } from "../governance/waiver.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatWaiversReport } from "../report/waivers-text.mjs";
+import { refuseIncompleteGraph } from "./drift.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { evaluate } from "../rules/index.mjs";
 
@@ -168,6 +169,14 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
         `would read as covering nothing it never saw. Fix the unanalyzed files and re-run.`,
     );
   }
+
+  // F07: a waiver surface measured against a graph that cannot see the
+  // workspace's polyglot edges is a lottery ticket too — a waiver naming a
+  // file the invisible graph never judged reads as "covers nothing" on a tree
+  // whose Go/Rust/Python edges were never drawn. `graph`/`drift`/`fitness`
+  // refuse this exact tree; `complete: true` may not be claimed where they
+  // refuse (`drift.mjs`'s `refuseIncompleteGraph` is the ONE shared guard).
+  refuseIncompleteGraph(commandContext, "measure waivers");
 
   // Evaluate with the suppression table REMOVED, so every row's coverage is
   // measured against the full finding set rather than the post-waiver run.

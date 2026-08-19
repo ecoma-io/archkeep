@@ -50,6 +50,7 @@
 import { isValidSelector, resolveMembers } from "../architecture-intent/selectors.mjs";
 import { languageOf } from "../analysis/registry.mjs";
 import { canonicalizeJson } from "../canonical.mjs";
+import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "./row-schema.mjs";
 import { fitnessVerdict, isVerdict } from "./verdict.mjs";
 import {
   coverageMinimum,
@@ -73,7 +74,7 @@ export const CONDITION_TYPES = Object.freeze([
   "drift-free",
 ]);
 
-/** The keys a fitness row may carry. */
+/** The keys a fitness row may carry — the governance block rides additively. */
 const ROW_KEYS = Object.freeze(["name", "match", "condition", "reason"]);
 
 /** A fitness `name`, matched exactly — names can never contain `:`, so a name can never collide with a selector label. */
@@ -106,7 +107,7 @@ function unknownKeys(obj, allowed) {
  * @param {unknown} list The parsed `fitness` value.
  * @returns {string[]}
  */
-export function findFitnessViolations(list) {
+export function findFitnessViolations(list, io = {}) {
   if (list === undefined) return [];
   if (!Array.isArray(list)) {
     return [`fitness: must be an array of fitness rows, got ${describe(list)}`];
@@ -125,11 +126,19 @@ export function findFitnessViolations(list) {
       violations.push(`${at}: must be an object, got ${describe(row)}`);
       return;
     }
-    for (const key of unknownKeys(row, ROW_KEYS)) {
+    for (const key of unknownKeys(row, [...ROW_KEYS, ...GOVERNANCE_ROW_KEYS])) {
       violations.push(
-        `${at}.${key}: unknown key — a fitness row may carry only ${ROW_KEYS.join(", ")}`,
+        `${at}.${key}: unknown key — a fitness row may carry only ` +
+          `${ROW_KEYS.join(", ")}, plus the governance block keys ` +
+          `${GOVERNANCE_ROW_KEYS.join(", ")}`,
       );
     }
+    // The shared governance block (Contract 2): a fitness row is a policy
+    // decision like any other row, so the same `origin`/`rationale`/
+    // `decisionRef`/`fitnessBindings` shape — and, when a caller has a
+    // registry, the same resolution half — applies. Additive: a legacy row
+    // without the block stays valid byte-identical.
+    violations.push(...rowSchemaViolations(row, at, io));
     if (typeof row.name !== "string" || !NAME_PATTERN.test(row.name)) {
       violations.push(
         `${at}.name: must be a non-empty string of letters, digits, "-" or "_" (no ":"), got ${describe(row.name)}`,

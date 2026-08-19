@@ -102,6 +102,42 @@ describe("fitness row validation (findFitnessViolations)", () => {
     expect(violations.some((v) => /reason/.test(v))).toBe(true);
   });
 
+  it("round-trips a fitness row carrying the shared governance block (B-F19)", () => {
+    // A fitness row is a policy decision like any other row, so it may carry
+    // `origin`/`rationale`/`decisionRef`/`fitnessBindings` — the SAME shared
+    // block `row-schema.mjs` validates for depConstraints and intent rows. A
+    // row that claimed the block refused on an unknown key until this change.
+    const row = {
+      name: "no-cycles",
+      match: ["*"],
+      condition: { type: "cycle-free" },
+      reason: "keep it acyclic",
+      origin: { by: "jane@example.com", tool: "lattice:v1" },
+      rationale: "cycles make the graph unreadable",
+      decisionRef: "adr:0001",
+    };
+    expect(findFitnessViolations([row])).toEqual([]);
+  });
+
+  it("rejects a fitnessBindings entry naming no declared fitness rule (F05)", () => {
+    const violations = findFitnessViolations(
+      [
+        {
+          name: "no-cycles",
+          match: ["*"],
+          condition: { type: "cycle-free" },
+          reason: "keep it acyclic",
+          fitnessBindings: ["fitness:undeclared"],
+        },
+      ],
+      {
+        resolve: (key, id) => key !== "fitnessBindings" || id === "fitness:declared",
+        kindLabel: "declared fitness",
+      },
+    );
+    expect(violations.some((v) => /fitness:undeclared.*does not resolve/.test(v))).toBe(true);
+  });
+
   it("rejects an empty match and a bad name", () => {
     const violations = findFitnessViolations([
       { name: "bad:name", match: [], condition: { type: "cycle-free" }, reason: "r" },

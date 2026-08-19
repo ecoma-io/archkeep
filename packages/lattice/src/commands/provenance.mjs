@@ -26,6 +26,8 @@
 
 import { execFileSync } from "node:child_process";
 
+import { environmentForTree } from "../process.mjs";
+
 /**
  * Resolves repository provenance from the workspace root.
  *
@@ -36,9 +38,15 @@ import { execFileSync } from "node:child_process";
  * @returns {{ commit: string, remote: string | null, dirty: boolean } | null}
  */
 export function resolveProvenance(root) {
+  // G-09: every git spawn routes through the shared environment guard, so an
+  // ambient GIT_DIR/GIT_WORK_TREE from a wrapping tool (the editor hooks, an
+  // outer `git` call) can never make these spawns read a repository other
+  // than the tree at `root`.
+  const env = environmentForTree();
   try {
     const commit = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: root,
+      env,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
@@ -50,6 +58,7 @@ export function resolveProvenance(root) {
     try {
       const remotes = execFileSync("git", ["remote"], {
         cwd: root,
+        env,
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "pipe"],
       }).trim();
@@ -58,6 +67,7 @@ export function resolveProvenance(root) {
         const firstRemote = remotes.split("\n")[0].trim();
         remote = execFileSync("git", ["remote", "get-url", firstRemote], {
           cwd: root,
+          env,
           encoding: "utf-8",
           stdio: ["pipe", "pipe", "pipe"],
         }).trim();
@@ -71,6 +81,7 @@ export function resolveProvenance(root) {
     // reproducible claim about that commit.
     const status = execFileSync("git", ["status", "--porcelain"], {
       cwd: root,
+      env,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();

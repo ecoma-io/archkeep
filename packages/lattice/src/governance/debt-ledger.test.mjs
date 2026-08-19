@@ -60,6 +60,49 @@ describe("computeDebtLedger", () => {
     expect(ledger.sampleTime).toBe("2026-08-16T00:00:00.000Z");
   });
 
+  it("books an expired waiver as a medium expired-waiver, never a low still-suppressed row (F06)", () => {
+    const ledger = computeDebtLedger(
+      {
+        suppressions: [
+          {
+            path: "libs/app/policy-violation.go",
+            reason: "was true",
+            expiresAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      aged,
+      { referenceTime: "2026-08-16T00:00:00Z" },
+    );
+    const entry = ledger.entries[0];
+    expect(entry.kind).toBe("expired-waiver");
+    expect(entry.severity).toBe("medium");
+    expect(entry.remediationHint).toContain("expired");
+    expect(entry.remediationHint).toContain("live again");
+    // The same fate the gate applies — an expired waiver covers nothing.
+    expect(ledger.bySeverity.medium).toBe(1);
+    expect(ledger.bySeverity.low).toBe(0);
+  });
+
+  it("keeps a still-active waiver low — the F06 complement", () => {
+    const ledger = computeDebtLedger(
+      {
+        suppressions: [
+          {
+            path: "libs/app/policy-violation.go",
+            reason: "still true",
+            expiresAt: "2099-01-01T00:00:00Z",
+          },
+        ],
+      },
+      aged,
+      { referenceTime: "2026-08-16T00:00:00Z" },
+    );
+    const entry = ledger.entries[0];
+    expect(entry.kind).toBe("waiver");
+    expect(entry.severity).toBe("low");
+  });
+
   it("ages a waiver that only ever sat in the head snapshot at youth", () => {
     const ledger = computeDebtLedger(
       { suppressions: [{ path: "libs/ring/nested.go", reason: "legacy" }] },

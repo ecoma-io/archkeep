@@ -66,7 +66,7 @@ import { collectProjectContext } from "./context-command.mjs";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { readAdrContext } from "./adr.mjs";
-import { unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
+import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 import { formatPlanContextReport } from "../report/plan-context-text.mjs";
 
 /** How many dependents are listed before an explicit overflow note. */
@@ -273,9 +273,13 @@ export async function planContextCommand(projectName, paths, commandContext, con
   if (planDecisionRefRows.length > 0) {
     const adrContext = readAdrContext(root, { tracked });
     unresolvedDecisionRefs = new Set(
-      unresolvedDecisionRefRows(planDecisionRefRows, adrContext.byId, adrContext.knownFitness).map(
-        (row) => row.decisionRef,
-      ),
+      // F04: the fitness half resolves against the ids THIS policy declares
+      // (`declaredFitnessNames(config)`), never the ADRs' own `bindings`.
+      unresolvedDecisionRefRows(
+        planDecisionRefRows,
+        adrContext.byId,
+        declaredFitnessNames(config),
+      ).map((row) => row.decisionRef),
     );
   }
 

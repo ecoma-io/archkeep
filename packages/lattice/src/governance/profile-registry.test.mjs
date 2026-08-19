@@ -58,14 +58,36 @@ describe("profileRegistryViolations", () => {
     ).toEqual([]);
   });
 
-  it("treats an absent version as schema 1 — the version check defaults before it checks", () => {
-    // B-F18a/D-12: a registry that does not state a version is schema 1 by
-    // definition; the default is applied at the one place the version is
-    // read, so a later reader can still distinguish a v1 registry from a
-    // hypothetical v2 one. Same acceptance as `version: 1` above.
+  it("defaults an absent version to schema 1 — the version check defaults before it checks (B-F18a)", () => {
+    // `version` is a stated fact when present; an absent one means "as of
+    // schema 1", the version this reader implements. Before the default was
+    // applied and then checked, an absent version was silently unverified and
+    // a FUTURE schema-2 file with no version would have loaded as if this
+    // reader understood it.
     expect(profileRegistryViolations(wellFormed())).toEqual([]);
   });
 
+  it("accepts a `fitness` block alongside the three original block keys (B-F18b)", () => {
+    const violations = profileRegistryViolations({
+      profiles: [
+        {
+          name: "measured",
+          block: {
+            ...wellFormed().profiles[0].block,
+            fitness: [
+              {
+                name: "coverage",
+                match: ["*"],
+                condition: { type: "coverage-minimum", statement: 100 },
+                reason: "every owned file must be analyzed",
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(violations).toEqual([]);
+  });
   it("rejects a wrong version loudly rather than guessing", () => {
     const violations = profileRegistryViolations({ ...wellFormed(), version: 999 });
     expect(violations).toHaveLength(1);
@@ -243,6 +265,32 @@ describe("resolveProfile", () => {
   it("appends child boundarySuppressions rows after base rows", () => {
     const effective = resolveProfile(profiles(), "child-law");
     expect(effective.boundarySuppressions.map((s) => s.path)).toEqual(["legacy/**", "special/**"]);
+  });
+
+  it("appends child fitness rows after base rows — one enforcement path for profiles (B-F18b)", () => {
+    const effective = resolveProfile(
+      profiles({
+        extra: [
+          {
+            name: "with-fitness",
+            block: {
+              depConstraints: [],
+              moduleBoundaryOptions: fullOptions(),
+              fitness: [
+                {
+                  name: "child-fitness",
+                  match: ["*"],
+                  condition: { type: "coverage-minimum", statement: 100 },
+                  reason: "the child adds its own measure",
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      "with-fitness",
+    );
+    expect(effective.fitness.map((r) => r.name)).toEqual(["child-fitness"]);
   });
 
   it("resolves a chain of any depth, depth-first, in written order", () => {

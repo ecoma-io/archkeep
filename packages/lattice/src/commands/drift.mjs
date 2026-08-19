@@ -71,7 +71,7 @@ import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
 import { formatDriftReport } from "../report/drift-text.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { intentRows as governanceIntentRows } from "./provenance-command.mjs";
-import { unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
+import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 
 /**
  * The observed side of the comparison: the same project model `graph` builds.
@@ -125,15 +125,20 @@ export function buildObserved(commandContext) {
  * would be ambiguous between "the architecture changed" and "never seen".
  *
  * @param {object} commandContext From `resolveCommandContext`.
+ * @param {string} [what] What the caller was doing, named in the refusal — the
+ *   default "judge drift" reads true for every caller that reaches the shared
+ *   guard (`graph`, `diff`, `impact`, `explain`, `fitness`, and now `waivers`),
+ *   so each command's refusal names its own question rather than every one of
+ *   them claiming to be a drift verdict.
  * @throws {Error} on the unregistered-plugin over polyglot manifests.
  */
-export function refuseIncompleteGraph(commandContext) {
+export function refuseIncompleteGraph(commandContext, what = "judge drift") {
   const { provider, pluginGap } = commandContext;
   if (provider === "nx" && !pluginGap.registered && pluginGap.manifests.length > 0) {
     throw new Error(
-      `lattice: refusing to judge drift for an Nx workspace where this plugin is not ` +
+      `lattice: refusing to ${what} for an Nx workspace where this plugin is not ` +
         `registered but polyglot manifests exist under project roots ` +
-        `(${pluginGap.manifests.join(", ")}). The graph would carry no polyglot edges, so a drift ` +
+        `(${pluginGap.manifests.join(", ")}). The graph would carry no polyglot edges, so a ${what} ` +
         `verdict would silently under-represent the real architecture. Register the plugin in ` +
         `nx.json: "plugins": [{ "plugin": "@ecoma-io/lattice/nx" }], or remove the polyglot ` +
         `manifests if they are not in use.`,
@@ -165,10 +170,11 @@ export function refuseIncompleteGraph(commandContext) {
  * @returns {Promise<{intent: {file: string, fingerprint: string, rows: number}|undefined,
  *   observed: {projects: number, edges: number, implicitEdges: number},
  *   findings: object[], unresolved: object[], boundaries: object[],
- *   notes: string[]}>} `intent` is `undefined` exactly when no
- *   architecture-intent.json is tracked — a caller building its own
- *   verdict-shaped intent reads that as "no intent declared", never as
- *   "declared and clean".
+ *   notes: string[], decisionRefRows: {kind: string, row: object}[]}>} `intent`
+ *   is `undefined` exactly when no architecture-intent.json is tracked — a
+ *   caller building its own verdict-shaped intent reads that as "no intent
+ *   declared", never as "declared and clean". `decisionRefRows` lists every
+ *   intent row carrying a `decisionRef`, for `check`'s own citation pass.
  */
 export async function driftForCheck(commandContext, io = {}) {
   refuseIncompleteGraph(commandContext);
@@ -189,6 +195,7 @@ export async function driftForCheck(commandContext, io = {}) {
       unresolved: [],
       boundaries: [],
       notes: [],
+      decisionRefRows: [],
     };
   }
   const verdict = judgeIntent(intent, {
@@ -206,7 +213,31 @@ export async function driftForCheck(commandContext, io = {}) {
     unresolved: verdict.unresolved,
     boundaries: verdict.boundaries,
     notes: verdict.notes,
+    // The intent rows that carry a `decisionRef` — surfaced for `check`'s own
+    // citation pass (F01) so the gate judges intent citations through the SAME
+    // registry as `depConstraints` citations, instead of a second ADR read
+    // with a second opinion about the same rows.
+    decisionRefRows: intentDecisionRefRows(intent),
   };
+}
+
+/**
+ * Every intent row that carries a `decisionRef` — the subset `check` folds
+ * into its own citation check. The intent model itself stays inside
+ * `driftForCheck` (the fold needs only the judge's verdict), so the rows that
+ * would have been visible to a resolution pass are surfaced here, additively:
+ * absent when the workspace declared no intent, empty when no row carries a
+ * `decisionRef`. This is what lets `check` judge intent citations through the
+ * SAME registry pass as `depConstraints` citations instead of a second ADR
+ * read with a second opinion about the same rows.
+ *
+ * @param {object} intent The normalized intent model.
+ * @returns {{kind: string, row: object}[]}
+ */
+export function intentDecisionRefRows(intent) {
+  return governanceIntentRows(intent).filter(
+    ({ row }) => typeof row?.decisionRef === "string" && row.decisionRef.trim() !== "",
+  );
 }
 
 /**
@@ -314,10 +345,13 @@ export async function driftCommand(commandContext, io = {}) {
       tracked: commandContext.tracked,
       loadAdrRegistryOverride: io.loadAdrRegistryOverride,
     });
+    // F04: the fitness half resolves against the ids the workspace's policy
+    // DECLARES (`declaredFitnessNames`, the `io.config` the caller holds),
+    // never the ADRs' own `bindings` — a citation cannot resolve itself.
     unresolvedDecisionRefs = unresolvedDecisionRefRows(
       decisionRefRows,
       adrContext.byId,
-      adrContext.knownFitness,
+      declaredFitnessNames(io.config),
     ).map(({ kind, decisionRef }) => ({ kind, decisionRef }));
   }
 

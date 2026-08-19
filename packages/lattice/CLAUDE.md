@@ -379,10 +379,12 @@ at the repository root. Concretely:
   silence the paths check exactly where the table is most broken.
   `check` also states what it inspected — imports, files, projects — beside
   every verdict, because "no violations" is a claim about coverage too. `check`
-  is the only command `cli.mjs`'s `COMMANDS` table holds that exits 1 — that
-  exit code is `check`'s alone, and every other verb in the table only ever
-  reads, so a command that finds something reports it without claiming the
-  boundary-violation exit code that means specifically this.
+  is the only command that holds FOUR exit codes (0/1/2/3); `fitness` is the
+  only other verb whose verdict carries exit 1 — a failing fitness function is
+  a finding, not a print job (D-09), and an undetermined one exits 3. Every
+  other verb in `cli.mjs`'s `COMMANDS` table only ever reads, so a command
+  that finds something reports it without claiming the boundary-violation exit
+  code.
   `--format json` wraps the same verdict in the versioned envelope
   `src/report/json.mjs` builds and `docs/reference/json-output.md`
   documents — a third rendering, changing no exit code and no byte of the text

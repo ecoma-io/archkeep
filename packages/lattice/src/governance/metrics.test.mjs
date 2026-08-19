@@ -101,7 +101,11 @@ describe("boundaryMetrics", () => {
    * it (`config.mjs`: a default would be a second copy of a value the file
    * states). The values are upstream's own defaults, so only the
    * `depConstraints` below decides what the engine reports. */
-  const cfg = (suppressions = []) => ({
+  /** @param {object[]} [suppressions] @param {string} [now] A reference instant
+   * for waiver expiration — carried on `config.now`, the same field the rule
+   * engine's `applySuppressions` reads. */
+  const cfg = (suppressions = [], now) => ({
+    ...(now === undefined ? {} : { now }),
     depConstraints: [],
     options: {
       allow: [],
@@ -182,6 +186,37 @@ describe("boundaryMetrics", () => {
       { path: "area/alpha/src/index.ts", reason: "legacy adapter, queued for extraction" },
     ];
     const result = boundaryMetrics([site()], graph, cfg(suppressions), coarse());
+    expect(result.violations).toEqual({ verdict: "ok", value: 0 });
+    expect(result.waiverSurface).toEqual({ verdict: "ok", value: 1 });
+    expect(result.underWavedCount).toBe(1);
+  });
+
+  it("re-asserts an expired waiver — the metrics never write the boundary clean while the gate is live (F02)", () => {
+    // A waiver that lapsed covers nothing: `suppressionCovers` alone matches
+    // path+id and would have LEFT this violation in the waived bucket, so
+    // `health`/`debt` reported the boundary "still suppressed" while `check`
+    // was re-asserting the same row (evidence "expired waiver"). The metrics
+    // must apply `suppressionFate` — an expired waiver is a live violation.
+    const expired = {
+      path: "area/alpha/src/index.ts",
+      reason: "was true last quarter",
+      expiresAt: "2026-01-01T00:00:00.000Z",
+    };
+    const now = "2026-08-19T00:00:00.000Z";
+    const result = boundaryMetrics([site()], graph, cfg([expired], now), coarse());
+    expect(result.violations).toEqual({ verdict: "findings", value: 1 });
+    expect(result.waiverSurface).toEqual({ verdict: "ok", value: 0 });
+    expect(result.underWavedCount).toBe(0);
+  });
+
+  it("counts an active waiver as waived — not re-asserted (the F02 complement)", () => {
+    const active = {
+      path: "area/alpha/src/index.ts",
+      reason: "still under migration",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    };
+    const now = "2026-08-19T00:00:00.000Z";
+    const result = boundaryMetrics([site()], graph, cfg([active], now), coarse());
     expect(result.violations).toEqual({ verdict: "ok", value: 0 });
     expect(result.waiverSurface).toEqual({ verdict: "ok", value: 1 });
     expect(result.underWavedCount).toBe(1);

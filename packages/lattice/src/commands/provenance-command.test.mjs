@@ -328,7 +328,13 @@ describe("provenanceCommand", () => {
       );
     });
 
-    it("resolves a decisionRef naming a rule/fitness id an ADR record binds", async () => {
+    it("reports unresolved when a rule/fitness id is only ADR-bound and no policy declares it (F04)", async () => {
+      // The audit's reproduction: an ADR binds `rule:no-direct-dep`, but no
+      // policy has a `fitness` rule named `no-direct-dep`. The citation naming
+      // it must be unresolved — an ADR binding itself is not a declaration,
+      // and a citation that resolves itself is the silent direction this
+      // finding closes. (A policy that DOES declare the name resolves — pinned
+      // by the cli-level fitness citation tests.)
       const result = await provenanceCommand(
         commandContext(),
         ioWith({
@@ -336,7 +342,9 @@ describe("provenanceCommand", () => {
           adrRecords: [{ id: "0001-bind-collaboration", bindings: ["rule:no-direct-dep"] }],
         }),
       );
-      expect(result.unresolvedDecisionRefs).toEqual([]);
+      expect(result.unresolvedDecisionRefs).toEqual([
+        expect.objectContaining({ kind: "depConstraints[0]", decisionRef: "rule:no-direct-dep" }),
+      ]);
     });
 
     it("says nothing about decisionRefs when no row carries one — 'no fact, no claim'", async () => {
