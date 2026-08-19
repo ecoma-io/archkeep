@@ -47,11 +47,13 @@ than made things worse.
 1. `allow` — a matching specifier is exempt from **all fifteen** and nothing below runs
 2. A file belonging to no project is skipped entirely
 3. Path spelling → **1, 2**
-4. Unresolvable target → **2, 12**
-5. Reaching your own project through its public alias → **4**
-6. An external/npm target → **10, 12** _(the only place two can be reported for one site)_
-7. Project-to-project structure → **3, 5, 6, 7, 8**
-8. The constraint table → **9, 11, 13, 14, 15**
+4. Unresolvable target → **2, 10**
+5. Reaching your own project through its public alias → **3**
+6. An external/npm target → **4, 10** _(the only place two can be reported for one site)_
+7. Project-to-project structure → **6, 7, 8, 9, 11**
+8. The constraint table → **5, 12, 13, 14, 15**
+
+The bold numbers are the section numbers of the catalogue below.
 
 Two exceptions to "at most one": an external import can be reported as both
 transitive **and** banned, and the nested-banned check reports once per offending

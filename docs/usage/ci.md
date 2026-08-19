@@ -95,6 +95,8 @@ whether you go and look.
 ## What a clean run prints
 
 ```text
+policy  module-boundaries.config.mjs — fingerprint 3f9c…
+
 ✔ no boundary violations (264 imports in 78 files across 12 projects)
 ```
 
@@ -254,10 +256,10 @@ rather than two that drift — see
 `@nx/enforce-module-boundaries`_.
 
 The conditions under which you could eventually drop the ESLint rule are
-enumerated in
-`src/conformance/`.
-One of the three is not met — agreement measured on real trees — and it is not
-about correctness on the fixtures.
+enumerated in `src/conformance/README.md` § _What this licenses_, and that
+document is the one that binds. All three now have a mechanism holding them;
+what still blocks removal is the breadth of the real-tree evidence, which that
+section states beside each condition.
 
 ## Pre-commit
 
@@ -273,5 +275,3 @@ hook that passes is not a promise CI will — and neither does a fitness functio
 that needs the whole tree (`coverage-minimum` today): the hook reports it
 `not_applicable`, not evaluated, so a workspace that declares one still needs
 an unscoped `check` in CI to actually enforce it.
-
-[bad](../README.md)

@@ -79,12 +79,21 @@ import { buildWorkspaceIndex, PROJECT_CONFIG_FILE, readWorkspaceFile } from "./w
  * the name is an option, so the watched set is derived from the resolved
  * options rather than fixed at module load.
  *
- * @param {{boundaryConfig: string, tsConfig: string}} options The session's resolved options.
+ * An INLINE policy contributes no entry of its own, and needs none: the law is
+ * then a field on `lattice.json`, which the list already carries
+ * unconditionally, so an edit to it invalidates through that entry. Spreading
+ * the object in instead would produce the glob `**\/[object Object]` — one
+ * that matches no file ever, while reading in the registration like a watched
+ * law. The file carrying the law would look covered and no notification would
+ * arrive: the silent direction, in the one list whose whole job is noticing
+ * that the law moved.
+ *
+ * @param {{boundaryConfig: string|object, tsConfig: string}} options The session's resolved options.
  * @returns {readonly string[]}
  */
 export function watchedFilesFor(options) {
   return Object.freeze([
-    options.boundaryConfig,
+    ...(typeof options.boundaryConfig === "string" ? [options.boundaryConfig] : []),
     options.tsConfig,
     PROJECT_CONFIG_FILE,
     NX_CONFIG_FILE,
@@ -131,22 +140,20 @@ function markersAt(root) {
  * `boundaryConfig` can also be an inline policy OBJECT rather than a filename
  * (`../providers/native/model.mjs`'s doc comment on `findNativeModelViolations`,
  * "boundaryConfig"; `../../../../docs/reference/policy-schema.md`, "An inline policy, for
- * lattice.json") — a form this server does not yet read. Without the check
- * below, that object would flow into `watchedFilesFor` (`**\/[object Object]`,
- * a glob that matches nothing) and then into `./boundary-config.mjs`, which
- * treats it as a filename and fails with "cannot load
- * .../[object Object]" — a message that reads like a missing file rather
- * than an unsupported form. Refusing here, by name, is louder and closer to
- * the truth: an inline policy is real and valid (`cli.mjs` reads it), the
- * language server just cannot follow it yet.
+ * lattice.json"), and that object is returned as-is for the two places
+ * downstream that know what to do with it: `watchedFilesFor` omits it and
+ * leans on the `lattice.json` entry it already has, and
+ * `./boundary-config.mjs` validates it instead of reading a file. Both are
+ * argued where they are implemented. What makes the pair sound is that this
+ * function is called again on every invalidation: the object it returns is
+ * whatever `lattice.json` says NOW, so an edit to an inline law re-diagnoses
+ * exactly like an edit to a law in its own file.
  *
  * @param {string} root
- * @returns {{boundaryConfig: string, tsConfig: string}}
+ * @returns {{boundaryConfig: string|object, tsConfig: string}}
  * @throws {Error} when both markers are present, the marker present is
- *   unreadable or malformed, a native root's `boundaryConfig` is the
- *   inline-object form this server cannot yet read, or an Nx root's options
- *   name a `profiles` registry — a profile NAME is not a file this server
- *   could watch or parse.
+ *   unreadable or malformed, or an Nx root's options name a `profiles`
+ *   registry — a profile NAME is not a file this server could watch or parse.
  */
 export function readWorkspaceOptions(root) {
   const { hasNx, hasNative } = markersAt(root);
@@ -161,16 +168,6 @@ export function readWorkspaceOptions(root) {
   }
   if (hasNative) {
     const model = loadNativeModel(root, { readFile: (path) => readWorkspaceFile(root, path) });
-    if (typeof model.boundaryConfig !== "string") {
-      throw new Error(
-        `lattice: ${LATTICE_MODEL_FILE} at ${root} holds its boundaryConfig inline, as a policy ` +
-          `object rather than a filename — a valid form (../../cli.mjs's check reads it fine), ` +
-          `but not one this language server can load yet: it only ever reads a policy FILE, and ` +
-          `has no filename here to watch or parse. Move the policy into its own .mjs or .json ` +
-          `file and point boundaryConfig at that instead — see ` +
-          `../../../../docs/reference/policy-schema.md, "An inline policy, for lattice.json".`,
-      );
-    }
     return { boundaryConfig: model.boundaryConfig, tsConfig: model.tsConfig };
   }
   const options = readPluginOptions(root);

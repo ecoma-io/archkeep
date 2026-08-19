@@ -103,8 +103,9 @@ upstream rules rather than an approximation, they can be **differentially tested
 against real ESLint** on the same workspace, and the places the two disagree can
 be enumerated rather than hoped about.
 `src/conformance/`
-is that comparison — 46 fixture workspaces, 116 probes, and a ledger of every
-known difference with the reason for each.
+is that comparison — dozens of fixture workspaces and over a hundred probes
+(its README carries the exact counts, held to the catalogue by a test), and a
+ledger of every known difference with the reason for each.
 
 ## Why silence is the thing this project is organised around
 
@@ -140,8 +141,8 @@ one sentence and not more, because a claim about provenance proves nothing on it
 own.
 
 What does prove something: CI here runs the checker against **this repository's
-own source**, under a boundary table whose tag vocabulary (`type:package`,
-`scope:nx`) shares nothing with the workspace the tool came from. If any project
+own source**, under a boundary table whose tag vocabulary (`type-package`,
+`scope-nx`) shares nothing with the workspace the tool came from. If any project
 name, area or tag value from that workspace had survived in the source, this is
 the run that fails — because none of those names are here to be found.
 

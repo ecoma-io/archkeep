@@ -180,12 +180,12 @@ a distinct outcome from both 0 and 1, and it should fail your build.
 
 **Total failures** — the run never started:
 
-| symptom                       | cause                                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------- |
-| no workspace found            | not run from inside a repository with a workspace marker (`lattice.json` or `nx.json`)                  |
-| config errors, naming the row | the boundary config is malformed — every problem is listed rather than the first                        |
-| `nx graph` failed             | a plugin threw during graph computation; run `nx graph --file=graph.json` directly for the real message |
-| `git` failed                  | not a git repository, or `git ls-files` is unavailable                                                  |
+| symptom                       | cause                                                                                                             |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| no workspace found            | not run from inside a repository with a workspace marker (`nx.json`, `lattice.json`, `.moon/` or `.config/moon/`) |
+| config errors, naming the row | the boundary config is malformed — every problem is listed rather than the first                                  |
+| `nx graph` failed             | a plugin threw during graph computation; run `nx graph --file=graph.json` directly for the real message           |
+| `git` failed                  | not a git repository, or `git ls-files` is unavailable                                                            |
 
 **Partial failures** — the run completed but some file has no verdict. These
 appear under their own heading in the report, and they are the reason exit 3
@@ -270,7 +270,8 @@ Pass it explicitly through `initializationOptions` if in doubt. See
 [editors.md](../integrations/vscode.md).
 
 **Stale after editing the boundary config.** The server asks the client to watch
-the boundary config, `**/nx.json` and `**/project.json`. A client that cannot
+five patterns: the boundary config, the resolved `tsConfig`, `**/project.json`,
+`**/nx.json` and `**/lattice.json`. A client that cannot
 register watchers dynamically is told so **on stderr** — check the server's log
 output. Reopening the file re-runs the check regardless.
 

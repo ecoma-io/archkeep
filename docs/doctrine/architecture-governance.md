@@ -37,8 +37,8 @@ they disagree.
 
 CI enforces this on itself. The final CI step runs
 `packages/lattice/cli.mjs check` against this repository's own
-`module-boundaries.config.mjs`, under a tag vocabulary (`type:package`,
-`scope:nx`) that nothing in `src/` knows about. A repository shipping an enforcer
+`module-boundaries.config.mjs`, under a tag vocabulary (`type-package`,
+`scope-nx`) that nothing in `src/` knows about. A repository shipping an enforcer
 it did not run on itself would be answering a consumer's first question with a
 promise.
 

@@ -100,6 +100,8 @@ lattice check
 ```
 
 ```text
+policy  module-boundaries.config.mjs — fingerprint 3f9c…
+
 ✔ no boundary violations (1 import in 2 files across 2 projects; 1 file exempted from coverage by lattice.json's coverage.exempt)
 ```
 

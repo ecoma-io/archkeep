@@ -33,7 +33,7 @@ nothing else. Those scripts are what make a green build mean something, and a
 broken gate reports nothing rather than reporting a failure. They run first in CI
 for exactly that reason.
 
-**`nx run-many -t test`** is each package's own target — Vitest in both packages.
+**`moon run ...:test`** is each package's own target — Vitest in both packages.
 For `lattice` that includes the differential against a real
 `@nx/enforce-module-boundaries`; for `lattice-vscode` it is every decision the
 extension makes, driven as pure functions with no editor running.
@@ -54,8 +54,9 @@ gets records, an analyzer gets `{ sourceFile, text, workspace }`. A function tha
 reads a file _and_ decides something has to be split before it can be tested, and
 the split is the improvement.
 
-The one deliberate exception is `readNxProjects`, which touches the outside world
-and is untested on purpose — a test that stubbed the answer would pin the stub.
+The one deliberate exception is `readMoonProjects`, which touches the outside
+world and is untested on purpose — a test that stubbed the answer would pin the
+stub.
 
 Two rules specific to this codebase:
 
@@ -100,8 +101,10 @@ real pair.
 
 `src/conformance/`
 is the only thing in the repository that puts this engine's verdict beside real
-ESLint's on the same code. **46 fixture workspaces, 116 probes, 94 projects**, and
-80 of the 116 probes are near-misses where ESLint must report nothing.
+ESLint's on the same code. Its catalogue sizes — fixture workspaces, probes,
+projects, near-misses — live in that directory's README, held to the catalogue
+by `stated-counts.integration.test.mjs`; a copy of the numbers here would drift
+with nothing holding it.
 
 Nothing is stubbed on either side. The eight option values and the fifteen
 message ids come off the installed rule's own `defaultOptions` and
@@ -157,10 +160,10 @@ Three things in CI prove something no unit test can, and they are worth knowing
 about because a change can break them without breaking a single test:
 
 - **`check-packages`** — asserts every directory under `packages/` is a project
-  the graph can see, declaring at least one CI target. Without it, `nx run-many`
+  the graph can see, declaring at least one CI target. Without it, `moon run`
   exits 0 on three different states and only one of them is good: nothing there,
   something there with no matching target (**skipped in silence**), or a
-  directory with sources and no manifest (**invisible** to `nx show projects`).
+  directory with sources and no `moon.yml` (**invisible** to `moon projects`).
 - **`check-docs-links`** — fails on any doc reference that cannot resolve:
   a markdown link whose target file is gone, a `#anchor` that names no heading,
   a `docs/…` citation pointing at nothing. Prettier formats a broken link and

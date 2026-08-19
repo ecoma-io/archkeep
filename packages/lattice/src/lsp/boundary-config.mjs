@@ -19,7 +19,9 @@
  * dialect needs no such trick — `readFile` reads whatever is on disk at the
  * moment it is called, with no module cache in the way — so `revision` is
  * accepted for both dialects (one entry point, one signature) but only spent
- * on the one that needs it.
+ * on the one that needs it. The inline form spends it least of all: it arrives
+ * as an object `./server.mjs` already re-read from `lattice.json`, so there is
+ * no read here to make stale.
  *
  * A THIRD dialect exists — `../config.mjs`'s ESLint flat-config reader
  * (`../eslint-config.mjs`), which the CLI and Nx-plugin faces both read
@@ -46,6 +48,7 @@ import {
   policyFrom,
   policyKeyViolations,
 } from "../config.mjs";
+import { LATTICE_MODEL_FILE } from "../providers/native/model.mjs";
 
 /**
  * Loads and validates the `.mjs`/`.js` dialect through a revisioned `import()`
@@ -133,8 +136,11 @@ async function readJsonPolicy(path, readFile) {
  *   workspace's root are in different trees.
  * @param {string|number} revision Anything that changes when the file should be
  *   re-read. Spent only by the `.mjs`/`.js` arm — see this module's header.
- * @param {string} boundaryConfig The config's filename in this workspace,
- *   resolved from the plugin's options by the server that owns the session.
+ * @param {string|object} boundaryConfig The config's filename in this
+ *   workspace, resolved from the plugin's options by the server that owns the
+ *   session — or, on a native root that carries its law on `lattice.json`
+ *   itself, that inline policy object, validated and returned with no file
+ *   read at all (the first branch of the body says why none is needed).
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Injectable read, used only by the `.json` dialect, defaulting to
  *   `node:fs/promises`'s `readFile`.
@@ -143,9 +149,10 @@ async function readJsonPolicy(path, readFile) {
  * @throws {Error} when `boundaryConfig` names the ESLint flat-config dialect
  *   or a legacy `.eslintrc*` file (this reader does not read either yet — see
  *   above), or — for a dialect it does read — when the file is missing,
- *   unloadable, or malformed, or names an extension neither dialect reads —
- *   the same contract `loadBoundaryConfigFile` has, for the same reason: an
- *   enforcer that starts with no rules enforces nothing and says nothing.
+ *   unloadable, or malformed, or names an extension neither dialect reads, or
+ *   — for the inline form — when the policy object is malformed. The same
+ *   contract `loadBoundaryConfigFile` has, for the same reason: an enforcer
+ *   that starts with no rules enforces nothing and says nothing.
  */
 export async function readBoundaryConfig(
   workspaceRoot,
@@ -153,6 +160,28 @@ export async function readBoundaryConfig(
   boundaryConfig,
   { readFile = readFileFromDisk } = {},
 ) {
+  // An inline policy is DATA, not a path, so every mechanic below it is moot:
+  // there is no name to resolve, nothing to contain, no dialect to dispatch on,
+  // and no module cache for `revision` to defeat. `./server.mjs`'s
+  // `readWorkspaceOptions` has already re-read this object out of
+  // `lattice.json` for the current revision, and that file is watched
+  // unconditionally by `watchedFilesFor`, so an edit to the law arrives here as
+  // a different object rather than as a file this function would have to
+  // re-read.
+  //
+  // It is still validated rather than trusted. `../providers/native/model.mjs`
+  // checked it at load, which makes this the second pass over a table small
+  // enough to review by eye — cheap, and the alternative is a face that
+  // enforces whatever its caller hands it. `allowSchema` matches the `.json`
+  // arm below because the inline form accepts `$schema` for the same
+  // editor-validation reason a policy file does.
+  if (typeof boundaryConfig !== "string") {
+    return policyFrom(
+      boundaryConfig,
+      `the inline policy on ${LATTICE_MODEL_FILE}'s boundaryConfig at ${workspaceRoot}`,
+      policyKeyViolations(boundaryConfig, { allowSchema: true }),
+    );
+  }
   const path = `${workspaceRoot.replace(/\/$/, "")}/${boundaryConfig}`;
   // Resolved ONCE, and the IDENTICAL string feeds the containment check and
   // the read below. The law name is tree-derived (`nx.json`/`lattice.json`

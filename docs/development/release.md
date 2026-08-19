@@ -41,7 +41,9 @@ publishing. That step proves four things a consumer's first hour asks:
 3. The language server answers `initialize` through the symlinked path an
    installed plugin is launched by.
 4. All three of those work against a second workspace with `lattice.json` at
-   its root instead of `nx.json`, and no `nx` package installed.
+   its root instead of `nx.json` and no `nx` package installed — and again
+   against a third, Moon-shaped workspace (`.moon/workspace.yml` at its root,
+   `@moonrepo/cli` resolving from its own `node_modules`).
 
 A gate only proves it runs when it can go red. A version that fails to resolve
 at install time cannot be unpublished away, which is why this check runs before
@@ -49,14 +51,16 @@ at install time cannot be unpublished away, which is why this check runs before
 
 ## The two packages, two registries
 
-| package                   | registry            | what publishes it     |
-| ------------------------- | ------------------- | --------------------- |
-| `packages/lattice`        | npm                 | release-please tag    |
-| `packages/lattice-vscode` | VS Code Marketplace | manual `vsce publish` |
+| package                   | registry            | what publishes it                     |
+| ------------------------- | ------------------- | ------------------------------------- |
+| `packages/lattice`        | npm                 | release-please tag                    |
+| `packages/lattice-vscode` | VS Code Marketplace | the release lane's `publish-vsix` job |
 
-The npm package publishes automatically when the release tag lands. The VS Code
-extension publishes manually, because it requires a marketplace publisher
-account and the CLI tool `vsce`.
+Both publish from the same release lane when the tag lands. The `publish-vsix`
+job packs and verifies the `.vsix` and attaches it to the GitHub release on
+every release; its marketplace `vsce publish` step skips — loudly, in the job
+log — until a marketplace publisher account and its `VSCE_PAT` secret exist,
+and runs automatically from the release that follows their arrival.
 
 ## Breaking changes
 

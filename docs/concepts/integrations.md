@@ -38,7 +38,7 @@ editor knows the two that carry a config file to watch.
 | integration | supplies                                               | runs when                        |
 | ----------- | ------------------------------------------------------ | -------------------------------- |
 | Nx          | project graph edges from the `createDependencies` hook | every graph computation          |
-| Moon        | project graph from `moon project-graph --json`         | on demand (CLI, language server) |
+| Moon        | project graph from `moon project-graph --json`         | on demand (CLI)                  |
 | VS Code     | the language server hosted in an editor                | on an edit, in the editor window |
 
 The Nx integration is the only integration that contributes to the project graph

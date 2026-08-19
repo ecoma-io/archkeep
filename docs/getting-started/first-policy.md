@@ -79,7 +79,9 @@ pnpm exec lattice check
 A clean tree prints what it inspected, not just that it found nothing:
 
 ```text
-no boundary violations (264 imports in 78 files across 12 projects)
+policy  module-boundaries.config.mjs — fingerprint 3f9c…
+
+✔ no boundary violations (264 imports in 78 files across 12 projects)
 ```
 
 Those counts are the point. "No violations" is a claim about coverage as much as
@@ -125,15 +127,15 @@ export default [
 
 Keep running it. It stays authoritative for JavaScript, TypeScript and Vue; this
 tool is for the languages it cannot parse. The conditions under which you could
-eventually drop it are enumerated in
-`src/conformance/`,
-and one of the three is not met yet.
+eventually drop it are enumerated in `src/conformance/README.md` § _What this
+licenses_: all three now have a mechanism holding them, and what still blocks
+removal is the breadth of the real-tree evidence.
 
 ## Other dialects
 
 `.mjs` is the default. Two others exist, selected by filename:
 
-- `.json` -- plain JSON, no comments, no trailing commas. Same three keys.
+- `.json` -- plain JSON, no comments, no trailing commas. Same four keys.
 - `eslint.config.*` -- reads the constraint table out of an ESLint flat config's
   `@nx/enforce-module-boundaries` entry directly, so the file you already have
   is the file Lattice reads.

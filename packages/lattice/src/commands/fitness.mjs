@@ -14,9 +14,11 @@
  *
  * ## Posture
  *
- * `fitness` is descriptive exactly like `diff`/`drift`: it prints a verdict
- * table and never exits 1. Only `check` exits 1, and `check` folds fitness in
- * by presence — a workspace whose policy declares fitness gets its per-function
+ * `fitness` prints a verdict table, and the verdict carries the exit code: a
+ * failing function is a finding (exit 1) and an undetermined one is a
+ * could-not-determine (exit 3) — the same two lanes `check` uses, argued at
+ * the status↔exitCode mapping below (D-09). `check` also folds fitness in by
+ * presence — a workspace whose policy declares fitness gets its per-function
  * verdicts counted into the same verdict machinery (exit 1 for any `fail`,
  * exit 3 for any `unknown`, never a new exit code). There is no `--fitness`
  * flag: an opt-in flag would make a forgotten flag byte-identical to "no

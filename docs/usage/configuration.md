@@ -16,8 +16,8 @@ A marker file at the workspace root decides:
 | `.moon/`       | Moon     | Moon's project graph (`moon project-graph`) |
 | `lattice.json` | native   | `lattice.json` + tracked tree               |
 
-More than one marker present is a usage error — the engine refuses to guess.
-Neither present exits 3, naming what it looked for.
+More than one marker present is a hard error (exit 3) — the engine refuses to
+guess. Neither present exits 3 too, naming what it looked for.
 
 The rest of this page covers the options each provider accepts. The boundary
 law itself — `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`
@@ -74,7 +74,7 @@ Both default to the Moon convention. An unknown key **throws** — the same
 guarantee the Nx provider makes.
 
 `boundaryConfig` can also be an **inline object** — see the native provider
-section below for the caveat about the inline form.
+section below.
 
 ## Native provider options
 
@@ -91,19 +91,19 @@ file — there is no `plugins[].options` table to nest them under. The full
 ```
 
 `boundaryConfig` can also be an **inline object** — the boundary law directly,
-rather than a filename pointing at it. Its keys are `depConstraints`,
-`moduleBoundaryOptions`, and `boundarySuppressions`, validated by the same
-check a separate file goes through. The language server does not support the
-inline form: it watches and re-reads a _file_, and an object embedded in
-`lattice.json` does not change independently of the model.
+rather than a filename pointing at it. Its keys are the `.json` dialect's four —
+`depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, `fitness` —
+validated by the same check a separate file goes through. Every face reads it,
+the language server included: it watches `lattice.json` itself, so editing an
+inline law re-diagnoses open files just as editing a policy file does.
 
 ## CLI flags
 
-| flag       | commands that accept it                                                                                                                                     | meaning                                                                          |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `--format` | `check`, `graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`, `explain`, `context`, `provenance` | `text` (default), `sarif` (check only), or `json` (versioned envelope)           |
-| `--output` | all commands                                                                                                                                                | Write the report to a file instead of stdout                                     |
-| `--config` | `check`, `diff`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`, `explain`, `context`                                                          | Read the boundary law from this file instead of the workspace's `boundaryConfig` |
+| flag       | commands that accept it                                                                                                                                            | meaning                                                                          |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `--format` | `check`, `graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`, `explain`, `context`, `provenance`, `adr` | `text` (default), `sarif` (check only), or `json` (versioned envelope)           |
+| `--output` | all commands                                                                                                                                                       | Write the report to a file instead of stdout                                     |
+| `--config` | `check`, `diff`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`, `explain`, `context`                                                                 | Read the boundary law from this file instead of the workspace's `boundaryConfig` |
 
 `--format sarif` is only available for `check`; every other command produces
 `text` or `json` only. `diff` accepts `--config` because rule-impact analysis
@@ -113,9 +113,8 @@ captured snapshot records the fingerprint of the law in effect. `waivers`,
 the one the law in effect carries. `impact` accepts it for constraint context.
 `explain` and `context` accept it because the judgment and the matching rows
 both depend on which constraint table governs. `graph`, `discover`, `drift`,
-`reconcile`, and `provenance` take no `--config` because they describe
-structure or compare against the declared intent, not against any boundary
-law.
+`reconcile`, `provenance`, and `adr` take no `--config` because they describe
+structure, provenance, or the decision registry — not any boundary law.
 
 ## What is not configurable
 

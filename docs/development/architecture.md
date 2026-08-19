@@ -255,17 +255,14 @@ suffix rule) and its implicit-dependency expansion. `evaluate` is pure and
 takes a graph it does not build either way. Which layers may build one is
 `packages/lattice/CLAUDE.md`'s rule, not this page's.
 
-That reuse has a gap the language server does not paper over: it still
-discovers projects from `project.json` files, never from `lattice.json`'s own
-declared∪inferred model, so a native workspace's project with no
-`project.json` (the case `lattice.json` exists to allow) is invisible to
-`discoverProjects`. Rather than reimplement or half-wire the native model into
-an index shape not built for it, a root carrying `lattice.json` gets the loud
-alternative: `buildWorkspaceIndex` reports a permanent index gap for it, the
-same `indexGaps` mechanism a skipped `project.json` uses, so no editor ever
-draws "clean" over a native tree this server cannot actually see the project
-model of — the invariant above, applied to a case the server chose not to
-solve.
+That reuse now reaches the native root directly: on a tree whose tracked files
+include `lattice.json`, the index is built through `nativeProvider.discover`
+and `buildGraph` rather than from `project.json` files, so a native project
+with no `project.json` (the case `lattice.json` exists to allow) is indexed
+like any other. What stays loud rather than papered over is the model that
+will not load: that becomes a named, self-clearing index gap — the same
+`indexGaps` mechanism a skipped `project.json` uses — so no editor ever draws
+"clean" over a native tree whose project model this server could not read.
 
 The server's invariant is the CLI's, sharpened: **an empty diagnostic list must
 mean "no violation", and nothing else.** Two guards enforce it —

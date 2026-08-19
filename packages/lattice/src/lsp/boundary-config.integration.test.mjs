@@ -269,3 +269,81 @@ describe("the .json dialect, which this server used to be unable to load at all"
     );
   });
 });
+
+describe("the inline dialect, where the law is data on lattice.json rather than a file", () => {
+  // The third spelling `./server.mjs`'s `readWorkspaceOptions` can hand this
+  // reader: a native root that carries its policy on `lattice.json`'s own
+  // `boundaryConfig` field. It reaches the same `policyFrom` the two file
+  // dialects do, and these cases are what hold it there.
+  const inline = (tag) => ({
+    depConstraints: [{ sourceTag: tag, onlyDependOnLibsWithTags: ["zone:inner"] }],
+    moduleBoundaryOptions: MODULE_BOUNDARY_OPTIONS,
+  });
+
+  it("reaches the same verdict as the identical law written to a file", async () => {
+    // The assertion that makes this dialect support rather than a second
+    // implementation: same data, two spellings, one answer. A reader that
+    // shaped the inline object differently — dropping `suppressions`'s `[]`
+    // default, say — would pass every test that only checked it "loaded".
+    write(config("zone:inline-parity"));
+
+    const [fromModule, fromInline] = await Promise.all([
+      readBoundaryConfig(root, 20, CONFIG_FILE),
+      readBoundaryConfig(root, 20, inline("zone:inline-parity")),
+    ]);
+
+    expect(fromInline).toEqual(fromModule);
+  });
+
+  it("refuses a malformed inline policy rather than enforcing the half of it that is well-formed", async () => {
+    // The silent direction for this dialect, and the row chosen is the one
+    // `../config.mjs` describes as approving everything: no `sourceTag` and no
+    // `allSourceTags` matches no project, so a reader that let it through
+    // would enforce a table with a hole in it and report clean.
+    // `../providers/native/model.mjs` validates the object at load, which
+    // makes this the second pass — the one that matters if a future caller
+    // ever reaches this function without going through that loader.
+    const malformed = {
+      depConstraints: [{ onlyDependOnLibsWithTags: ["zone:inner"] }],
+      moduleBoundaryOptions: MODULE_BOUNDARY_OPTIONS,
+    };
+
+    await expect(readBoundaryConfig(root, 21, malformed)).rejects.toThrow(Error);
+    await expect(readBoundaryConfig(root, 21, malformed)).rejects.toThrow(
+      /inline policy on lattice\.json's boundaryConfig/u,
+    );
+  });
+
+  it("refuses an unknown top-level key, the same law both file dialects apply", async () => {
+    // A typo'd key is the defect this law exists for: `moduleBoundaryOption`
+    // silently ignored is a full green run against options nobody set. The
+    // inline form gets the identical treatment, through the identical
+    // validator, rather than a laxer one because it is "already validated".
+    await expect(
+      readBoundaryConfig(root, 22, { ...inline("zone:typo"), moduleBoundaryOption: {} }),
+    ).rejects.toThrow(/moduleBoundaryOption/u);
+  });
+
+  it("accepts $schema, which an inline policy carries for the same reason a .json file does", async () => {
+    const policy = { $schema: "https://example.invalid/lattice.schema.json", ...inline("zone:s") };
+
+    await expect(readBoundaryConfig(root, 23, policy)).resolves.toMatchObject({
+      depConstraints: [{ sourceTag: "zone:s", onlyDependOnLibsWithTags: ["zone:inner"] }],
+    });
+  });
+
+  it("reads whatever object it is handed, so an edited inline law is never served from a cache", async () => {
+    // The inline analogue of the revision test at the top of this file, and
+    // the reason `readBoundaryConfig` spends no revision on this dialect: the
+    // freshness guarantee lives one layer up, in `readWorkspaceOptions`
+    // re-reading `lattice.json` per invalidation. What this pins is that the
+    // reader adds no cache of its own on top of it — two calls at the SAME
+    // revision with different objects must not agree, which is exactly what a
+    // memoised-by-revision implementation would get wrong.
+    const before = await readBoundaryConfig(root, 24, inline("zone:before"));
+    const after = await readBoundaryConfig(root, 24, inline("zone:after"));
+
+    expect(before.depConstraints[0].sourceTag).toBe("zone:before");
+    expect(after.depConstraints[0].sourceTag).toBe("zone:after");
+  });
+});

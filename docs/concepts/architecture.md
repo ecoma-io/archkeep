@@ -163,7 +163,7 @@ require import-site details. Run `check` for the complete verdict.
 | CLI              | on demand                          | a provider (Nx, Moon, or native)               |
 | LSP              | on an edit, in any LSP client      | the native provider's discovery                |
 | Nx integration   | on every project-graph computation | the Nx integration's `createDependencies` hook |
-| Moon integration | on demand (CLI, language server)   | `moon project-graph --json`                    |
+| Moon integration | on demand (CLI)                    | `moon project-graph --json`                    |
 
 The Nx integration is a lossy view of the analysis — an edge is `{ source, target,
 sourceFile, type }`, and everything else is discarded. That is why the graph
@@ -171,7 +171,8 @@ layer and the enforcement layer stay separate rather than one growing fields the
 other throws away.
 
 The language server shares the same `evaluate` function and the same constraint
-table, but builds its own workspace index from tracked `project.json` files.
+table, but builds its own workspace index — through the native provider's model
+on a `lattice.json` root, and from tracked `project.json` files on an Nx one.
 Its invariant is the CLI's, sharpened: an empty diagnostic list must mean "no
 violation", and nothing else.
 

@@ -7,7 +7,7 @@ to look elsewhere for a field's definition.
 ## `lattice.json`
 
 For a workspace with no Nx at all. `nx.json` and `lattice.json` are
-alternatives -- a root carrying both is a usage error. A Moon workspace
+alternatives -- a root carrying both is refused loudly (exit 3). A Moon workspace
 (`.moon/` directory present) must NOT create a `lattice.json` alongside it: a
 tree carrying both markers is refused loudly (exit 3), because this tool
 judges a workspace against exactly one project model. Every field below is
@@ -83,16 +83,16 @@ roots.
 
 ### `boundaryConfig`
 
-| type   | default                          | meaning                                                                                     |
-| ------ | -------------------------------- | ------------------------------------------------------------------------------------------- |
-| string | `"module-boundaries.config.mjs"` | Filename of the boundary law, workspace-relative.                                           |
-| object | --                               | The boundary law inline: `{ depConstraints, moduleBoundaryOptions, boundarySuppressions }`. |
+| type   | default                          | meaning                                                                                              |
+| ------ | -------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| string | `"module-boundaries.config.mjs"` | Filename of the boundary law, workspace-relative.                                                    |
+| object | --                               | The boundary law inline: `{ depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness }`. |
 
 When the value is a string, `--config` on the CLI overrides it for one run.
-When the value is an object, the same three keys as the `.json` dialect are
-validated by the identical function. The language server does not yet read the
-inline form -- move the policy into its own `.mjs` or `.json` file to use it
-from an editor.
+When the value is an object, the same four keys as the `.json` dialect are
+validated by the identical function. The language server reads the inline form
+too: it watches `lattice.json` itself, so an edit to the policy re-diagnoses
+every open file the same way an edit to a policy file does.
 
 ### `tsConfig`
 
@@ -141,8 +141,9 @@ All commands share the same flag-parsing rules. Both `--flag value` and
 `--flag=value` work. An unknown flag is a usage error rather than a path.
 `--help` is the one exception to the shared rules — see below.
 
-Help is shown by `lattice --help` (or by running `lattice` with no arguments),
-and only as the first argument — `lattice <command> --help` is a usage error
+Help is shown by `lattice --help` (running `lattice` with no arguments prints
+the same text, but as a usage error: exit 2, on stderr), and only as the first
+argument — `lattice <command> --help` is a usage error
 (exit 2), because `--help` is not parsed per command. A bare `lattice help`
 (no `--`) is likewise a usage error: `help` is not a command name.
 

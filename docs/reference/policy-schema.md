@@ -179,7 +179,9 @@ to the Nx ecosystem, see [policies.md](../concepts/policies.md).
 ### Inline policy (`lattice.json` only)
 
 A native workspace may hold the policy object directly on `lattice.json`'s
-`boundaryConfig` field instead of pointing at a filename. Same three keys as
+`boundaryConfig` field instead of pointing at a filename. Same four keys as
 the `.json` dialect, validated by the identical function — `$schema` included,
-accepted and checked the same way a `.json` policy file accepts it. The
-language server does not yet read this form.
+accepted and checked the same way a `.json` policy file accepts it. Every face
+reads it: the CLI, the Nx hook, and the language server, which re-reads
+`lattice.json` on every invalidation and so sees an edited inline law exactly
+as it sees an edited policy file.

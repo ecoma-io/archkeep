@@ -207,11 +207,14 @@ another.
   **1** on a violating one, and the language server answers `initialize` through
   the symlinked path an installed plugin is launched by. It then repeats the
   clean/violating/language-server three of those four against a SECOND
-  throwaway workspace — `lattice.json` at its root instead of `.moon/`, and no
+  throwaway workspace — `lattice.json` at its root instead of `nx.json`, and no
   `nx` package requested at all — because those three questions are exactly the
   ones the package's fixture-only tests (`packages/lattice/src/providers/native/`)
   cannot answer: a real `pnpm pack` tarball, installed into a tree this
-  repository never built, with no Nx present to fall back on. It also asserts
+  repository never built, with no Nx present to fall back on — and again
+  against a THIRD, Moon-shaped workspace (`.moon/workspace.yml` at its root,
+  `@moonrepo/cli` resolving from its own `node_modules`), the third provider
+  face the package ships. It also asserts
   `nx` does not resolve in that second install, which is the optional-peer claim
   checked against an actual install rather than only against
   `peerDependenciesMeta`. Every other gate runs where the tool's dependencies
