@@ -79,9 +79,20 @@ export const moduleBoundaryOptions = {
 };
 ```
 
-A `billing-core` file importing `@shared/button` (mapped through the workspace's
-`tsconfig.base.json` paths) is legal; one importing into a `scope:checkout`
-project is an `onlyTagsConstraintViolation`, exit 1. Now check the tree:
+The import resolver reads the workspace's `tsconfig.base.json` for path
+mappings, so `@shared/button` maps to the UI source:
+
+```json
+{
+  "compilerOptions": {
+    "paths": { "@shared/button": ["libs/shared/ui/src/button.ts"] }
+  }
+}
+```
+
+A `billing-core` file importing `@shared/button` is legal; one importing into
+a `scope:checkout` project is an `onlyTagsConstraintViolation`, exit 1. Now
+check the tree:
 
 ```shell
 lattice check
