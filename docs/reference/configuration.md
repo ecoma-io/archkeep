@@ -143,7 +143,8 @@ All commands share the same flag-parsing rules. Both `--flag value` and
 
 Help is shown by `lattice --help` (or by running `lattice` with no arguments),
 and only as the first argument — `lattice <command> --help` is a usage error
-(exit 2), because `--help` is not parsed per command.
+(exit 2), because `--help` is not parsed per command. A bare `lattice help`
+(no `--`) is likewise a usage error: `help` is not a command name.
 
 ### `--format`
 
