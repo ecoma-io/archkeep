@@ -216,5 +216,5 @@ Three refusals, by design (full list:
 
 [Apache License 2.0](../../LICENSE) — © Mai Ngọc Hóa (John Martin) and the
 Lattice contributors. This README ships inside the tarball; the
-repository-level landing page, with the full capability index, is
+repository-level landing page with the full capability index is
 [`../../README.md`](../../README.md).
