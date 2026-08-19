@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.3](https://github.com/ecoma-io/lattice/compare/v0.6.2...v0.6.3) (2026-08-19)
+
+
+### Bug Fixes
+
+* **lattice:** count unresolvable declared-project imports as no-verdict ([#165](https://github.com/ecoma-io/lattice/issues/165)) ([98b7070](https://github.com/ecoma-io/lattice/commit/98b7070915db5a3cc10aeaeb6cb367cd23f5aa96))
+* **workspace:** make the differential label reconcile idempotent ([#163](https://github.com/ecoma-io/lattice/issues/163)) ([297f97e](https://github.com/ecoma-io/lattice/commit/297f97e842040235f672bee8a168a10b946ff5af))
+
+
+### Documentation
+
+* **workspace:** make the Quick start a working, verifiable walk-through ([#164](https://github.com/ecoma-io/lattice/issues/164)) ([8444509](https://github.com/ecoma-io/lattice/commit/84445090a02130d9c6093465753cba9abfdae895))
+
 ## [0.6.2](https://github.com/ecoma-io/lattice/compare/v0.6.1...v0.6.2) (2026-08-19)
 
 
