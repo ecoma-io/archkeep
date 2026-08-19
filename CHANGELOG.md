@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.6.0](https://github.com/ecoma-io/lattice/compare/v0.5.0...v0.6.0) (2026-08-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* **lattice:** a workspace dependency inherited under a local alias now resolves its import records to the renamed project, where it previously resolved to an external crate. A consumer whose boundary config forbade that crossing will start seeing it.
+
+### Bug Fixes
+
+* **ci:** fail e2e:smoke on zero tests and sort check violations ([#147](https://github.com/ecoma-io/lattice/issues/147)) ([c9ca5db](https://github.com/ecoma-io/lattice/commit/c9ca5dbb3beed6ccae7afef3cf227794f7c867a0))
+* **lattice:** exempt workspace-root edges from the native graph ([#156](https://github.com/ecoma-io/lattice/issues/156)) ([5e751dd](https://github.com/ecoma-io/lattice/commit/5e751dda2bc046e19fd0224ad3a86f2ca3a0a0df))
+* **lattice:** lsp verdict parity + durable refusal ([#151](https://github.com/ecoma-io/lattice/issues/151)) ([c4277b6](https://github.com/ecoma-io/lattice/commit/c4277b6466319825b4cf3e447ef27fa196cc01aa))
+* **lattice:** make config dialect, buildTargets and $schema refusals loud ([#155](https://github.com/ecoma-io/lattice/issues/155)) ([452eea0](https://github.com/ecoma-io/lattice/commit/452eea07c6b364f9248a5269c94893e78be37242))
+* **lattice:** make LSP project-name maps prototype-safe and cap Content-Length ([#146](https://github.com/ecoma-io/lattice/issues/146)) ([8a0a39f](https://github.com/ecoma-io/lattice/commit/8a0a39f156f7c2d998b0229016b0d5dba8584f05))
+* **lattice:** read every paren-joined and boundary-adjacent import aloud ([#150](https://github.com/ecoma-io/lattice/issues/150)) ([a0369f3](https://github.com/ecoma-io/lattice/commit/a0369f39e4435b4dd4ff1ac5e75c2b8706502685))
+* **lattice:** recursive determinism source guard + deterministic capture envelope ([#154](https://github.com/ecoma-io/lattice/issues/154)) ([c7119fc](https://github.com/ecoma-io/lattice/commit/c7119fc0665922ba313edb2376db3657a3fa78d2))
+* **lattice:** resolve and contain every tree-derived read and write path (G-02, G-06, G-07, G-10) ([#157](https://github.com/ecoma-io/lattice/issues/157)) ([1c6669d](https://github.com/ecoma-io/lattice/commit/1c6669d96e739d81b60da5a6024c55155e6ef316))
+* **lattice:** surface unresolved decisionRefs and gate verdicts (R6 F01-F07, D-09, D-10, D-12) ([#158](https://github.com/ecoma-io/lattice/issues/158)) ([fcf47de](https://github.com/ecoma-io/lattice/commit/fcf47dec107b3c1d212b6e0ef650d97d3e126d3f))
+
+
+### Documentation
+
+* correct skill truth to post-[#139](https://github.com/ecoma-io/lattice/issues/139) behavior ([#144](https://github.com/ecoma-io/lattice/issues/144)) ([38e2b3b](https://github.com/ecoma-io/lattice/commit/38e2b3be167584a1e8be257a98010252a2c13eef))
+
 ## [0.5.0](https://github.com/ecoma-io/lattice/compare/v0.4.0...v0.5.0) (2026-08-18)
 
 
