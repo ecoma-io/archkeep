@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/ecoma-io/lattice/compare/v0.7.0...v0.7.1) (2026-08-19)
+
+
+### Documentation
+
+* **docs:** name the manual approval every release lane run needs ([#169](https://github.com/ecoma-io/lattice/issues/169)) ([8cfec9f](https://github.com/ecoma-io/lattice/commit/8cfec9f59a6da28468e8379430df431ea0aa0cf8))
+
 ## [0.7.0](https://github.com/ecoma-io/lattice/compare/v0.6.3...v0.7.0) (2026-08-19)
 
 
