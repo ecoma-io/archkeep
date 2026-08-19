@@ -219,4 +219,4 @@ Three refusals, by design (full list:
 [Apache License 2.0](https://github.com/ecoma-io/lattice/blob/main/LICENSE) — © Mai Ngọc Hóa (John Martin) and the
 Lattice contributors. This README ships inside the tarball; the
 repository-level landing page with the full capability index is
-[`../../README.md`](https://github.com/ecoma-io/lattice).
+[`README.md`](https://github.com/ecoma-io/lattice).
