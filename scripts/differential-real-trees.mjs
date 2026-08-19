@@ -442,7 +442,26 @@ export function emptyVerdictBreaches(tree, verdictCounts) {
  * spelling difference between two config dialects that both mean "the
  * workspace root".
  *
- * @param {{nodes: Record<string, {name: string, data: {root: string, projectType?: string, tags?: string[], implicitDependencies?: string[]}}>}} graph
+ * `targets` is derived as the target-NAME list, not passed through as the
+ * graph's `data.targets` object: `lattice.json`'s `projects.declared[].targets`
+ * is a plain list of names (`../docs/reference/configuration.md`, and
+ * `../packages/lattice/src/providers/native/model.mjs`'s
+ * `declaredProjectViolations` validates exactly that), and
+ * `../packages/lattice/src/providers/native/graph.mjs`'s `buildNativeGraph`
+ * synthesises `{executor: "lattice:declared"}` for each name. Before this field
+ * existed the derived model carried no targets anywhere, and a real tree that
+ * runs `enforceBuildableLibDependency` with the default `buildTargets: ['build']`
+ * (code-pushup and ng-doc both do, at their pinned shas) turned the native leg
+ * into an infrastructure failure: `evaluate`'s buildTargets gate
+ * (`../packages/lattice/src/rules/index.mjs`'s `createContext`) loudly refuses a
+ * `buildTargets` entry no project declares, and with an empty derived `targets`
+ * list every project declared none — a self-inflicted "could not look" on a
+ * tree the real Nx graph resolves fine. The names come from the graph Nx
+ * already computed, so both sides see the same target-name set and
+ * `hasBuildExecutor` (which only cares that the executor string is non-empty)
+ * answers the same on the real graph's executors and the synthesised ones.
+ *
+ * @param {{nodes: Record<string, {name: string, data: {root: string, projectType?: string, tags?: string[], implicitDependencies?: string[], targets?: Record<string, object>}}>}} graph
  * @returns {{projects: {declared: object[]}}}
  */
 export function deriveNativeModel(graph) {
@@ -452,6 +471,7 @@ export function deriveNativeModel(graph) {
     type: nodeTypeOf(node.name, node.data.projectType),
     tags: node.data.tags ?? [],
     implicitDependencies: node.data.implicitDependencies ?? [],
+    targets: Object.keys(node.data.targets ?? {}),
   }));
   return { projects: { declared } };
 }
