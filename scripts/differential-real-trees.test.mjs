@@ -376,6 +376,39 @@ test("deriveNativeModel renormalises Nx's root-project root '.' to lattice.json'
   assert.equal(byName.get("utils").root, "packages/utils");
 });
 
+test("deriveNativeModel derives the target-NAME list — the field whose absence red the native leg on real trees", () => {
+  const graph = {
+    nodes: {
+      core: nxNode("core", { targets: { build: { executor: "nx:run-commands" }, lint: {} } }),
+      cli: nxNode("cli", { projectType: "application" }),
+    },
+  };
+  const model = deriveNativeModel(graph);
+  const byName = new Map(model.projects.declared.map((p) => [p.name, p]));
+  // `lattice.json`'s declared row carries target NAMES only, never an executor
+  // or options — the shape `model.mjs`'s `declaredProjectViolations` validates
+  // and `graph.mjs`'s `buildNativeGraph` synthesises `{executor:
+  // "lattice:declared"}` for (`../packages/lattice/src/providers/native/graph.mjs`'s
+  // `data.targets` doc). Deriving the object's keys, not the object, is what
+  // keeps the derived model a valid `lattice.json` for the tree.
+  assert.deepEqual(byName.get("core").targets, ["build", "lint"]);
+  // A node whose data carries no targets derives an empty list — the field is
+  // present on every row (spec §5's declared row), never dropped.
+  assert.deepEqual(byName.get("cli").targets, []);
+  // The shape that actually red the real-tree differential on origin/main
+  // before this field existed: code-pushup runs `enforceBuildableLibDependency:
+  // true` with the upstream default `buildTargets: ['build']`, and a derived
+  // model carrying no targets made the native graph declare no `build`
+  // anywhere — `evaluate`'s buildTargets gate (rules/index.mjs's createContext)
+  // then refused the run loudly as a silent no-op, turning a fidelity
+  // measurement into a "could not look" infrastructure failure. A faithful
+  // derivation of the real graph restores parity: the graph's `build` entry
+  // reaches `lattice.json` as the name `build`, and `buildNativeGraph`'s
+  // synthesised `{executor: "lattice:declared"}` reads buildable exactly where
+  // the real graph's non-empty executor does — which is what the first
+  // assertion above pins.
+});
+
 test("scopeLedgerToDirections keeps a ledger entry's staleness scoped to its own leg — silent-direction proof of a real bug this file shipped and fixed", () => {
   // One ledger holding a row for each leg, the exact shape `LEDGER` carries
   // for real: an upstream-vs-tool row and a native-leg row for the same tree.
