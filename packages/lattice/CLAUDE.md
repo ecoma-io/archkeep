@@ -344,17 +344,20 @@ module cache would otherwise ignore across edits, which `loadBoundaryConfigFile`
 has no reason to do for a process that loads a config once and exits — but it
 shares the same `policyKeyViolations`/`policyFrom` validators, so a `.json`
 `boundaryConfig` reaches the identical verdict from the language server as it
-does from `cli.mjs` and the Nx hook. Two spellings stay out of its reach: the
-ESLint flat-config dialect is refused by the same basename check, by name,
-before any `import()` runs — this server was not built against either of that
-dialect's two mechanisms (`@nx/eslint-plugin` resolution, revision-suffixed
-import), and reusing it without working through both would be a guess dressed
-as support; and `src/lsp/server.mjs`'s `readWorkspaceOptions` refuses to start
-over a native root whose `boundaryConfig` is the inline-object form, loudly,
-because this server only ever watches and re-reads a policy _file_ —
-`../../docs/reference/policy-schema.md`'s "An inline policy, for `lattice.json`"
-names that limitation on the consumer-facing side, and its ESLint-dialect
-section names the language-server gap on the other.
+does from `cli.mjs` and the Nx hook. The inline form reaches it too, by a
+different route: `src/lsp/server.mjs`'s `readWorkspaceOptions` passes the
+policy OBJECT through, `watchedFilesFor` contributes no entry for it (the law
+lives on `lattice.json`, already watched — an object spread in would become
+the glob `**/[object Object]`, matching nothing while looking watched), and
+`readBoundaryConfig` validates it through the same `policyFrom` instead of
+reading a file. Freshness comes from `readWorkspaceOptions` being called again
+on every invalidation, so no revision is spent on that arm. ONE spelling stays
+out of its reach: the ESLint flat-config dialect is refused by the basename
+check, by name, before any `import()` runs — this server was not built against
+either of that dialect's two mechanisms (`@nx/eslint-plugin` resolution,
+revision-suffixed import), and reusing it without working through both would be
+a guess dressed as support. `../../docs/reference/policy-schema.md`'s
+ESLint-dialect section names that gap on the consumer-facing side.
 
 ## What is a stub, and how each one says so
 

@@ -90,9 +90,9 @@ roots.
 
 When the value is a string, `--config` on the CLI overrides it for one run.
 When the value is an object, the same four keys as the `.json` dialect are
-validated by the identical function. The language server does not yet read the
-inline form -- move the policy into its own `.mjs` or `.json` file to use it
-from an editor.
+validated by the identical function. The language server reads the inline form
+too: it watches `lattice.json` itself, so an edit to the policy re-diagnoses
+every open file the same way an edit to a policy file does.
 
 ### `tsConfig`
 

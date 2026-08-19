@@ -259,33 +259,60 @@ describe("publishing, where silence has to mean clean", () => {
     expect(diagnoseDocument).not.toHaveBeenCalled();
   });
 
-  it("publishes a failure rather than an empty list when a native root's boundaryConfig is inline", async () => {
-    // `readWorkspaceOptions` (`./server.mjs`) refuses this shape by throwing,
-    // rather than reading `model.boundaryConfig` as though it were a filename —
-    // the loud alternative to the two silent ones it replaced: a
-    // `**/[object Object]` watch glob nothing ever matches, and a
-    // "cannot load .../[object Object]" message from `./boundary-config.mjs`
-    // that reads like a missing file rather than an unsupported form. This
-    // pins the loud failure actually reaching the editor, not just the message
-    // text: if `refreshOptions` ever went back to swallowing the throw and
-    // falling back to `DEFAULT_OPTIONS`, `currentResources` would stop seeing
-    // `optionsFailure` and `diagnoseDocument` would run against a config the
-    // workspace never declared — the silent direction this test goes red for.
+  it("diagnoses a native root whose boundaryConfig is an inline policy object", async () => {
+    // This server used to REFUSE this shape, and the refusal was the honest
+    // answer while `./boundary-config.mjs` could only read a file: an inline
+    // law would have produced a `**/[object Object]` watch glob matching
+    // nothing and a "cannot load .../[object Object]" message reading like a
+    // missing file. Both halves are handled now, so the refusal would be the
+    // wrong kind of loud — a valid workspace the CLI judges fine, told by its
+    // editor that it cannot be looked at.
+    //
+    // What this pins is that the object reaches the reader intact rather than
+    // being coerced to a filename somewhere in between. `readConfig` asserting
+    // on what it was handed is the load-bearing half: a server that stringified
+    // the policy would still "work" against a reader that then failed, and the
+    // failure would surface as a load error nobody could trace back to here.
+    const policy = {
+      depConstraints: [{ sourceTag: "zone:a", onlyDependOnLibsWithTags: ["zone:b"] }],
+      moduleBoundaryOptions: {},
+    };
+    const readConfig = vi.fn(async () => ({ depConstraints: policy.depConstraints, options: {} }));
     const { server, sent } = session({
-      readOptions: () => {
-        throw new Error(
-          "lattice: lattice.json at /fixture holds its boundaryConfig inline, as a policy object " +
-            "rather than a filename",
-        );
-      },
+      readConfig,
+      readOptions: () => ({ boundaryConfig: policy, tsConfig: "tsconfig.base.json" }),
     });
     await server.handle(initialize());
     await server.handle(didOpen());
 
+    expect(readConfig).toHaveBeenCalledWith(ROOT, expect.any(Number), policy);
     const [publish] = published(sent);
-    expect(publish.diagnostics).toHaveLength(1);
-    expect(publish.diagnostics[0].message).toContain("holds its boundaryConfig inline");
-    expect(diagnoseDocument).not.toHaveBeenCalled();
+    expect(publish.diagnostics).toEqual([]);
+    expect(diagnoseDocument).toHaveBeenCalled();
+  });
+
+  it("watches lattice.json and no [object Object] glob when the policy is inline", async () => {
+    // The silent direction for the watched set. An inline `boundaryConfig`
+    // spread into the list becomes the glob `**/[object Object]`, which
+    // matches no file that can exist — the registration would look like it
+    // covered the law while no change notification ever arrived, and every
+    // open file would keep showing a verdict from the policy as it was when
+    // the editor opened. `lattice.json` staying in the list is the other half:
+    // it is where an inline law actually lives, so dropping it would lose the
+    // only notification that can reach one.
+    const watched = watchedFilesFor({
+      boundaryConfig: { depConstraints: [], moduleBoundaryOptions: {} },
+      tsConfig: "tsconfig.base.json",
+    });
+
+    // Asserted as "every entry is a string" rather than "no entry is the
+    // object": `registerFileWatchers` interpolates each entry into a glob, so
+    // a non-string entry is the defect itself, one template literal before it
+    // becomes the unmatchable glob.
+    expect(watched.every((file) => typeof file === "string")).toBe(true);
+    expect(watched.some((file) => String(file).includes("object Object"))).toBe(false);
+    expect(watched).toContain("lattice.json");
+    expect(watched).toContain("tsconfig.base.json");
   });
 
   it("publishes a failure, not an empty list, when an Nx workspace's options name a profiles registry", async () => {

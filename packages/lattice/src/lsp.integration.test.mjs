@@ -920,17 +920,42 @@ describe("a real editor session against a native lattice.json workspace", () => 
     }
   }, 30_000);
 
-  it("refuses a native root whose boundaryConfig is the inline-object form", async () => {
-    // `lattice.json`'s inline policy is valid for `cli.mjs`, but this server
-    // only ever reads a policy FILE — there is no filename to watch or parse.
+  it("diagnoses a native root whose boundaryConfig is the inline-object form", async () => {
+    // This server used to REFUSE this shape, and the refusal was honest while
+    // `./lsp/boundary-config.mjs` could only read a policy file. Both halves
+    // are handled now — `watchedFilesFor` leans on the `lattice.json` entry it
+    // already carries, and the reader validates the object instead of
+    // resolving a path — so a workspace the CLI judges fine is one the editor
+    // judges too.
+    //
+    // Driven end to end rather than through `readWorkspaceOptions` alone: a
+    // unit assertion that the object rides through would pass against a
+    // server that then failed to produce a single diagnostic from it, which is
+    // the failure that would actually reach a developer. The tree is the same
+    // fixture shape as the sibling test above, with the law moved off its file
+    // and onto `lattice.json` — so what differs between the two is the dialect
+    // and nothing else, and both must reach the identical violation.
     const inline = realpathSync(mkdtempSync(join(tmpdir(), "lattice-lsp-inline-")));
+    const inlineWrite = (relativePath, text) => {
+      const absolute = join(inline, relativePath);
+      mkdirSync(dirname(absolute), { recursive: true });
+      writeFileSync(absolute, text, "utf8");
+    };
     try {
-      writeFileSync(
-        join(inline, "lattice.json"),
+      inlineWrite(
+        "lattice.json",
         JSON.stringify({
-          projects: { declared: [{ root: "apps/inner", tags: ["zone:inner"] }] },
+          projects: {
+            declared: [
+              { root: "apps/inner", tags: ["zone:inner"] },
+              { root: "apps/outer", tags: ["zone:outer"] },
+            ],
+          },
           boundaryConfig: {
-            depConstraints: [],
+            depConstraints: [
+              { sourceTag: "zone:inner", onlyDependOnLibsWithTags: ["zone:inner"] },
+              { sourceTag: "zone:outer", onlyDependOnLibsWithTags: ["zone:outer"] },
+            ],
             moduleBoundaryOptions: {
               allow: [],
               buildTargets: ["build"],
@@ -943,10 +968,34 @@ describe("a real editor session against a native lattice.json workspace", () => 
             },
           },
         }),
-        "utf8",
       );
-      const { readWorkspaceOptions } = await import("./lsp/server.mjs");
-      expect(() => readWorkspaceOptions(inline)).toThrow(/holds its boundaryConfig inline/);
+      inlineWrite("apps/inner/go.mod", "module native.test/inner\n\ngo 1.23\n");
+      inlineWrite("apps/inner/main.go", INNER_GO);
+      inlineWrite("apps/outer/go.mod", "module native.test/outer\n\ngo 1.23\n");
+      inlineWrite("apps/outer/outer.go", "package outer\n");
+      execFileSync("git", ["init", "-q"], { cwd: inline, env: environmentForTree() });
+      execFileSync("git", ["add", "-A"], { cwd: inline, env: environmentForTree() });
+
+      const { client } = await connected(SERVER, inline);
+      const uri = pathToFileURL(join(inline, "apps/inner/main.go")).href;
+
+      client.send({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: { textDocument: { uri, languageId: "go", version: 1, text: INNER_GO } },
+      });
+
+      const diagnostics = await client.diagnosticsFor(uri);
+      const violation = diagnostics.find((d) => d.code === "onlyTagsConstraintViolation");
+
+      // Named rather than asserted by length: the silent direction here is an
+      // EMPTY list (the law never loaded, and the editor paints the file
+      // clean), and the loud-but-wrong one is a lone `analysisFailed` from a
+      // reader that still treated the object as a path. Printing what actually
+      // arrived tells those two apart on the first failing run.
+      expect(violation, `no tag violation among ${JSON.stringify(diagnostics)}`).toBeDefined();
+
+      client.kill();
     } finally {
       rmSync(inline, { recursive: true, force: true });
     }

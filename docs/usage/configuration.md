@@ -74,7 +74,7 @@ Both default to the Moon convention. An unknown key **throws** — the same
 guarantee the Nx provider makes.
 
 `boundaryConfig` can also be an **inline object** — see the native provider
-section below for the caveat about the inline form.
+section below.
 
 ## Native provider options
 
@@ -93,9 +93,9 @@ file — there is no `plugins[].options` table to nest them under. The full
 `boundaryConfig` can also be an **inline object** — the boundary law directly,
 rather than a filename pointing at it. Its keys are the `.json` dialect's four —
 `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, `fitness` —
-validated by the same check a separate file goes through. The language server does not support the
-inline form: it watches and re-reads a _file_, and an object embedded in
-`lattice.json` does not change independently of the model.
+validated by the same check a separate file goes through. Every face reads it,
+the language server included: it watches `lattice.json` itself, so editing an
+inline law re-diagnoses open files just as editing a policy file does.
 
 ## CLI flags
 
