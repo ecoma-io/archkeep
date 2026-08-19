@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/ecoma-io/lattice/compare/v0.6.3...v0.7.0) (2026-08-19)
+
+
+### Features
+
+* **lattice:** read an inline lattice.json policy from the language server ([#167](https://github.com/ecoma-io/lattice/issues/167)) ([f2b699e](https://github.com/ecoma-io/lattice/commit/f2b699e07254e5aebc1385999ef7dce3c4b847fe))
+
 ## [0.6.3](https://github.com/ecoma-io/lattice/compare/v0.6.2...v0.6.3) (2026-08-19)
 
 
