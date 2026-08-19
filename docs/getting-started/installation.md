@@ -44,9 +44,9 @@ Three entry points, one engine behind them:
 | `lattice-lsp`          | Language server over stdio   | Diagnostics at the edit, in any LSP client                    |
 | `@ecoma-io/lattice/nx` | Nx integration, in `nx.json` | Polyglot edges in the project graph, on every `nx` invocation |
 
-The CLI commands -- `check`, `graph`, `diff`, `drift`, `history`, `health`,
-`impact`, `explain`, `context` --
-are documented individually under [../usage/](../usage/). This page covers
+The CLI commands are documented individually under [../usage/](../usage/), and
+[../reference/cli.md](../reference/cli.md) is the full command reference. This
+page covers
 getting the package onto your machine; the next two pages cover using it.
 
 ## Next

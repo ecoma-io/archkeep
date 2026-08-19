@@ -28,7 +28,7 @@ SARIF run.
 
 ## What `check` judges
 
-One run combines four verdicts:
+One run combines six verdicts:
 
 1. **Import boundaries** — every import site in every tracked, supported source
    file is matched against the boundary law.
@@ -41,6 +41,12 @@ One run combines four verdicts:
    forbidden relationships are held against the observed graph. The schema and
    the four verdict states live in
    [architecture-intent.md](../reference/architecture-intent.md).
+5. **Declared edges** — when a `project.json` or `lattice.json` row declares
+   `implicitDependencies`, each declared edge is judged against the same
+   `depConstraints` table, even though it has no import site to report.
+6. **Fitness functions** — when the policy declares them, each function's
+   verdict folds in by presence: `fail` → exit 1, `unknown` → exit 3
+   ([fitness-functions.md](../concepts/fitness-functions.md)).
 
 The second and third checks are workspace facts, so paths named on the command
 line do not scope them.

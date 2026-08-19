@@ -86,6 +86,6 @@ The seven principles are not independent. The first demands that architecture be
 checked; the second and third demand that the check be honest; the fourth and
 fifth demand that it be reproducible; the sixth and seventh demand that it stay
 honest as it grows and as its consumers change. A violation of any one weakens
-the others, and the order below is the order in which a drift would most likely
+the others, and the order above is the order in which a drift would most likely
 appear — the same order [north-star.md](north-star.md) gives for the signals
 that the invariant is eroding.

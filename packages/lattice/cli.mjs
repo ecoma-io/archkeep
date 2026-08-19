@@ -66,11 +66,10 @@
  * `COMMANDS` below is a table rather than a `switch`, and `parseArgs` is
  * shared rather than hand-rolled per command, so a new command is a new
  * row rather than a second copy of the dispatch and flag-parsing this file
- * used to own alone. The table is built for nine commands — `check`, `graph`,
- * `diff`, `drift`, `history`, `health`, `debt`, `impact`, `explain`, `context`,
- * `provenance` — with three flags shared across all of them (`--format`,
- * `--output`, `--config`) and `history`'s boolean `--capture`, the first flag
- * that takes no value. No subcommand nesting, and no shell completion to
+ * used to own alone. The table carries the whole command surface (`COMMANDS`
+ * is the one copy of it; `docs/reference/cli.md` documents each row), with
+ * three flags shared across most of them (`--format`, `--output`, `--config`)
+ * and `history`'s boolean `--capture`, the first flag that takes no value. No subcommand nesting, and no shell completion to
  * generate, mean a plain table gets there without a framework; reach for one
  * only once a later command needs something this table cannot express.
  */

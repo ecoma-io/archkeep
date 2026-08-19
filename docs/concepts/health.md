@@ -19,9 +19,10 @@ mistaken for a clean zero. `not_applicable` (nothing to measure) and `unknown`
 visible in the text report and the JSON envelope.
 
 That is why `health` exists as a descriptive command and never exits 1: a
-description of how healthy the architecture is is never itself a finding. Only
-`check` exits 1, and `health` never changes the verdict or exit code of any
-other command — it is purely additive.
+description of how healthy the architecture is is never itself a finding. The
+finding exit stays with `check` and `fitness`
+([fitness-functions.md](fitness-functions.md)), and `health` never changes the
+verdict or exit code of any other command — it is purely additive.
 
 ## What is healthy, and what is not
 

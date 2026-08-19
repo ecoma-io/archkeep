@@ -65,10 +65,11 @@ lattice debt .lattice/history
 | code | meaning                                                                                                                                                        |
 | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0    | The ledger was produced — including a long or alarming one.                                                                                                    |
-| 2    | Usage error: wrong argument count, unknown flag, or `--output` pointing inside the history directory.                                                          |
+| 2    | Usage error: wrong argument count or an unknown flag.                                                                                                          |
 | 3    | No verdict: missing `architecture-intent.json`, an intent that cannot be verified, incomplete graph coverage, or an unreadable or malformed history directory. |
 
-`debt` never exits 1. Debt is not a finding — only `check` exits 1.
+`debt` never exits 1. Debt is not a finding — the finding exit stays with
+`check` and `fitness`.
 
 ## Example
 

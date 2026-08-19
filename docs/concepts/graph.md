@@ -31,11 +31,13 @@ The type comes from the import's form in the source file:
 - **`dynamic`** — a run-time-only dependency (`import()`, `require` of a
   lazy-loaded library).
 
-Edges come from language manifests, not from source files. A manifest says a
-dependency _may_ be used; it never says a boundary _was_ crossed. The source
-file is where the boundary question lives, and the two disagreeing is itself
-information — a declared-but-unused dependency and an undeclared-but-imported one
-are both findings.
+Go, Rust and Python edges come from language manifests, not from source files.
+A manifest says a dependency _may_ be used; it never says a boundary _was_
+crossed. The source file is where the boundary question lives — analysis
+records carry the import's form where one exists, which is where the
+`static`/`dynamic` split above is read — and the two disagreeing is itself
+information: a declared-but-unused dependency and an undeclared-but-imported
+one are both findings.
 
 ## Deterministic snapshots
 

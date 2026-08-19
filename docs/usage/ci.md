@@ -95,6 +95,8 @@ whether you go and look.
 ## What a clean run prints
 
 ```text
+policy  module-boundaries.config.mjs — fingerprint 3f9c…
+
 ✔ no boundary violations (264 imports in 78 files across 12 projects)
 ```
 

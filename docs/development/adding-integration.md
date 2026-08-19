@@ -31,12 +31,14 @@ Three rules that follow:
    computes on machines without the language toolchains. An integration that
    added a `go list` or `cargo metadata` call would break that property.
 
-3. **An integration's version is its own, not the engine's.** The VS Code
-   extension updates independently of the npm package, because it ships to a
-   marketplace on its own cadence. The extension resolves the server from the
-   workspace rather than bundling it, so a marketplace-pinned analyzer could
-   disagree with the workspace's own — and both would report confidently. The
-   resolution is in the extension's hands; the engine's is not.
+3. **An integration shares the engine's version, by decision.** The VS Code
+   extension is versioned with the repository — one version for engine and
+   client, the chain [docs/skills/versioning.md](../skills/versioning.md) owns
+   and `scripts/check-skills.mjs` holds on every pull request. What stays the
+   integration's own is the server it runs: the extension resolves it from the
+   workspace rather than bundling it, because a bundled, marketplace-pinned
+   analyzer could disagree with the workspace's own — and both would report
+   confidently.
 
 ## The two integrations today
 

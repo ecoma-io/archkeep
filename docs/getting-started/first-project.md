@@ -216,7 +216,9 @@ pnpm exec lattice check
 A clean tree prints what it inspected, not just that it found nothing:
 
 ```text
-no boundary violations (18 imports in 6 files across 2 projects)
+policy  module-boundaries.config.mjs — fingerprint 3f9c…
+
+✔ no boundary violations (18 imports in 6 files across 2 projects)
 ```
 
 Those counts are the point. "No violations" is a claim about coverage as much as

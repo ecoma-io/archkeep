@@ -85,9 +85,10 @@ claim is true only when this command measured both halves of the table and
 found each one empty.
 
 A `waivers` run is descriptive, like `graph` or `drift`: it exits 0 whenever
-the surface could be read, never 1. The failing verdict is `check`'s alone —
-but a run of only waivers shows its own not-clean summary, because a surface
-with everything accepted must not read like a linting pass.
+the surface could be read, never 1. The failing verdict belongs to `check` and
+`fitness` ([fitness-functions.md](fitness-functions.md)) — but a run of only
+waivers shows its own not-clean summary, because a surface with everything
+accepted must not read like a linting pass.
 
 ## The clock
 

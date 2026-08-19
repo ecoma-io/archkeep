@@ -35,11 +35,12 @@ Governance
 Human + coding agent
 ```
 
-`check` is the only command that exits with a finding, and it earns that role by
-reporting a verdict on every reachable path or refusing to look silently
+`check` is the gate, and `fitness` is its one companion: they are the only
+commands that exit with a finding, and each earns that role by reporting a
+verdict on every reachable path or refusing to look silently
 ([exit-codes.md](../reference/exit-codes.md)). Every other command produces
 evidence a human or an agent can act on — context before an edit, impact during
-planning, diff across time, explain after a finding. None of them judges.
+planning, diff across time, explain after a finding. None of the others judges.
 
 ## What is not Lattice
 

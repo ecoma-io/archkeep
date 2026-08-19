@@ -47,11 +47,15 @@ program and writes nothing.
   second workspace with no Moon at all, proving the native provider works from a
   real install, and a third with a Moon workspace, proving the Moon provider
   works from a real install.
+- `check-skills.mjs` — the skills gate: shape, citations, and the manifest
+  version chain [../skills/versioning.md](../skills/versioning.md) owns.
 - `differential-real-trees.mjs` — drives both this engine and real ESLint over
   public Nx workspaces, comparing verdicts.
 
-These run under `pnpm test` (`node --test`) and are a separate suite from the
-package targets.
+Their `*.test.mjs` companions run under `pnpm test` (`node --test`), a separate
+suite from the package targets. The scripts themselves run as their own CI
+steps — `verify-package.mjs` in `ci.yml` and again in the release lane,
+`differential-real-trees.mjs` from `differential.yml`.
 
 ## CI
 

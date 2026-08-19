@@ -143,9 +143,11 @@ and a new config file would have needed its own filename option to find itself.
 A workspace with no `nx.json` — `lattice.json` at its root instead — states the
 same two keys directly on that file's own `boundaryConfig`/`tsConfig` fields
 (`src/providers/native/model.mjs`), because there is no `plugins[].options`
-table to nest them under; a Moon workspace (`.moon/` directory present, no
-`nx.json`) reads those same keys from `lattice.json` too, because Moon's own
-configuration does not carry a plugin-options table. `cli.mjs`'s
+table to nest them under; a Moon workspace (`.moon/` directory present — a
+`lattice.json` beside it is refused loudly, one project model per tree) takes
+the two names from the defaults by convention, `--config` overriding for one
+run, because Moon's own configuration does not carry a plugin-options table
+(`../../docs/integrations/moon.md` owns that story). `cli.mjs`'s
 `optionsForUsage` and `check` are the two places that read either shape, chosen
 by which marker file the workspace root carries.
 
