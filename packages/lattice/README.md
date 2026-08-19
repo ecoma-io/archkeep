@@ -6,7 +6,7 @@ your team keeps changing. Dependency graphs and module boundaries for Go, Rust,
 Python, TypeScript, JavaScript and Vue, with Nx and Moon as first-class
 integrations. Coding agents read the same verdicts, machine-readably, through
 the `arch-*` skills. The system boundary — what Lattice is and what it is not —
-is owned by [../../docs/doctrine/architecture-authority.md](../../docs/doctrine/architecture-authority.md).
+is owned by [architecture-authority.md](https://github.com/ecoma-io/lattice/blob/main/docs/doctrine/architecture-authority.md).
 
 ## Why it exists
 
@@ -19,7 +19,7 @@ knows a dependency exists when it is an edge in the project graph, and Nx infers
 no edge for a Go import, a Cargo path dependency, or a `pyproject.toml` path
 dependency. An under-selecting `affected` and an absent boundary rule look
 exactly like a clean workspace, which is why the silence goes unnoticed (the
-measurement: [../../docs/why.md](../../docs/why.md)).
+measurement: [why.md](https://github.com/ecoma-io/lattice/blob/main/docs/why.md)).
 
 Lattice closes both gaps with one analysis, served three ways — a CLI
 (`lattice check`), a language server (`lattice-lsp`), and an Nx plugin
@@ -31,15 +31,15 @@ Lattice closes both gaps with one analysis, served three ways — a CLI
 npm install -D @ecoma-io/lattice
 ```
 
-`lattice.json` at the repository root declares the projects — the
-`coverage.exempt` row names the boundary law itself, which no project owns:
+`lattice.json` at the repository root declares the projects and their tags —
+the `coverage.exempt` row names the boundary law itself, which no project owns:
 
 ```json
 {
   "projects": {
     "declared": [
-      { "name": "billing-core", "root": "libs/billing/core" },
-      { "name": "shared-ui", "root": "libs/shared/ui" }
+      { "name": "billing-core", "root": "libs/billing/core", "tags": ["scope:billing"] },
+      { "name": "shared-ui", "root": "libs/shared/ui", "tags": ["scope:shared"] }
     ]
   },
   "coverage": {
@@ -79,9 +79,9 @@ export const moduleBoundaryOptions = {
 };
 ```
 
-A `billing-core` file importing from `shared-ui` is legal; one importing into
-a `scope:checkout` project is an `onlyTagsConstraintViolation`, exit 1. Now
-check the tree:
+A `billing-core` file importing `@shared/button` (mapped through the workspace's
+`tsconfig.base.json` paths) is legal; one importing into a `scope:checkout`
+project is an `onlyTagsConstraintViolation`, exit 1. Now check the tree:
 
 ```shell
 lattice check
@@ -102,56 +102,56 @@ not owned by any project.
 is deterministic and evidence-based: same tree, same config, same answer — no
 machine-specific toolchain result, no model in the loop, and every verdict names
 what it inspected beside what it found
-([exit-codes.md](../../docs/reference/exit-codes.md)).
+([exit-codes.md](https://github.com/ecoma-io/lattice/blob/main/docs/reference/exit-codes.md)).
 
 **Coding agents** read the same authority through the four `arch-*` skills —
 `arch-context` before an edit, `arch-change` during, `arch-check` after, and
 `arch-review` on a change or PR. The agent is a consumer of the verdict, never
 its authority: the commands it runs are read-only, and the constraint table is
-a file it cannot edit ([../../docs/skills/overview.md](../../docs/skills/overview.md)).
+a file it cannot edit ([overview.md](https://github.com/ecoma-io/lattice/blob/main/docs/skills/overview.md)).
 
 ## What it does
 
 - **Deterministic graph** — a project graph from any provider: Nx, Moon, or the
   native discovery that needs neither
-  ([../../docs/concepts/graph.md](../../docs/concepts/graph.md)).
+  ([graph.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/graph.md)).
 - **Boundary check** — every import judged against the constraint table, with
   `file:line:column` evidence for each violation
-  ([../../docs/reference/violations.md](../../docs/reference/violations.md)).
+  ([violations.md](https://github.com/ecoma-io/lattice/blob/main/docs/reference/violations.md)).
 - **Drift and intent** — a tracked `architecture-intent.json` declares what the
   architecture must be; `drift` and `check` compare the observed graph against
   it, and an unverifiable intent is a no-verdict, never a pass
-  ([../../docs/concepts/drift.md](../../docs/concepts/drift.md)).
+  ([drift.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/drift.md)).
 - **Evolution** — `graph` snapshots the architecture, `diff` compares two
   snapshots, `history` describes the evolution across a directory of them
-  ([../../docs/usage/diff.md](../../docs/usage/diff.md)).
+  ([diff.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/diff.md)).
 - **Waivers, profiles, fitness, ADR** — term-bound waivers, named law profiles
   selected at check time, declared quality gates judged per run, and recorded
   architecture decisions a constraint row can lean on
-  ([../../docs/concepts/waivers.md](../../docs/concepts/waivers.md) ·
-  [../../docs/concepts/profiles.md](../../docs/concepts/profiles.md) ·
-  [../../docs/concepts/fitness-functions.md](../../docs/concepts/fitness-functions.md) ·
-  [../../docs/concepts/adr.md](../../docs/concepts/adr.md)).
+  ([waivers.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/waivers.md) ·
+  [profiles.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/profiles.md) ·
+  [fitness-functions.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/fitness-functions.md) ·
+  [adr.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/adr.md)).
 - **Machine-readable JSON** — `--format json` wraps any verdict in a versioned
   envelope (`schemaVersion`, `status`, `exitCode`, `coverage`); every field
   name is a public contract
-  ([../../docs/reference/json-output.md](../../docs/reference/json-output.md)).
+  ([json-output.md](https://github.com/ecoma-io/lattice/blob/main/docs/reference/json-output.md)).
 - **Language server** — `lattice-lsp` publishes one diagnostic per violation in
   any LSP client; an empty diagnostic list means "no violation", nothing else
-  ([../../docs/integrations/vscode.md](../../docs/integrations/vscode.md)).
+  ([vscode.md](https://github.com/ecoma-io/lattice/blob/main/docs/integrations/vscode.md)).
 
 ## Support
 
 - **Languages** — Go, Rust, Python, TypeScript and JavaScript, and Vue. Analysis
   from source, never a build: nothing shells out to `go`, `cargo`, `uv` or `tsc`
-  ([../../docs/reference/languages.md](../../docs/reference/languages.md)).
+  ([languages.md](https://github.com/ecoma-io/lattice/blob/main/docs/reference/languages.md)).
 - **Workspaces** — any repository: Nx registers the plugin in `nx.json` and
   reuses Nx's project graph; Moon workspaces are recognised automatically; any
   other tree uses `lattice.json` and the native provider
-  ([../../docs/integrations/nx.md](../../docs/integrations/nx.md) ·
-  [../../docs/integrations/moon.md](../../docs/integrations/moon.md)).
+  ([nx.md](https://github.com/ecoma-io/lattice/blob/main/docs/integrations/nx.md) ·
+  [moon.md](https://github.com/ecoma-io/lattice/blob/main/docs/integrations/moon.md)).
 - **Agents** — Claude Code, Codex and opencode run the `arch-*` skills, which
-  are host-independent ([../../docs/skills/supported-hosts.md](../../docs/skills/supported-hosts.md)).
+  are host-independent ([supported-hosts.md](https://github.com/ecoma-io/lattice/blob/main/docs/skills/supported-hosts.md)).
 
 ## Install and quick start
 
@@ -174,24 +174,24 @@ esac
 
 Exit codes: 0 clean — and every selected file was analyzed; 1 findings;
 2 usage error; 3 no verdict
-([../../docs/reference/exit-codes.md](../../docs/reference/exit-codes.md) ·
-[../../docs/usage/ci.md](../../docs/usage/ci.md)).
+([exit-codes.md](https://github.com/ecoma-io/lattice/blob/main/docs/reference/exit-codes.md) ·
+[ci.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/ci.md)).
 
 Ten minutes end to end, most of it spent deciding what your tags mean:
-[**Getting started →**](../../docs/getting-started/installation.md). `graph`,
+[**Getting started →**](https://github.com/ecoma-io/lattice/blob/main/docs/getting-started/installation.md). `graph`,
 `diff`, `history`, `drift`, `impact`, `explain` and `context` complete the
-command surface ([CLI and flags](../../docs/reference/cli.md)).
+command surface ([CLI and flags](https://github.com/ecoma-io/lattice/blob/main/docs/reference/cli.md)).
 
 ## Documentation map
 
-| Topic           | Read                                                                                                                                                                                                          |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Getting started | [Installation](../../docs/getting-started/installation.md) → [first project](../../docs/getting-started/first-project.md) → [first policy](../../docs/getting-started/first-policy.md)                        |
-| Concepts        | [The engine](../../docs/concepts/architecture.md) · [boundaries](../../docs/concepts/boundaries.md) · [drift](../../docs/concepts/drift.md) · [intent](../../docs/reference/architecture-intent.md)           |
-| Reference       | [CLI and flags](../../docs/reference/cli.md) · [configuration](../../docs/reference/configuration.md) · [exit codes](../../docs/reference/exit-codes.md) · [JSON output](../../docs/reference/json-output.md) |
-| Using it        | [Checking](../../docs/usage/checking.md) · [CI](../../docs/usage/ci.md) · [troubleshooting](../../docs/usage/troubleshooting.md)                                                                              |
-| Agents          | [The `arch-*` protocol](../../docs/skills/overview.md)                                                                                                                                                        |
-| Building on it  | [Architecture](../../docs/development/architecture.md) · [contributing](../../CONTRIBUTING.md)                                                                                                                |
+| Topic           | Read                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Getting started | [Installation](https://github.com/ecoma-io/lattice/blob/main/docs/getting-started/installation.md) → [first project](https://github.com/ecoma-io/lattice/blob/main/docs/getting-started/first-project.md) → [first policy](https://github.com/ecoma-io/lattice/blob/main/docs/getting-started/first-policy.md)                                                                |
+| Concepts        | [The engine](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/architecture.md) · [boundaries](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/boundaries.md) · [drift](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/drift.md) · [intent](https://github.com/ecoma-io/lattice/blob/main/docs/reference/architecture-intent.md)           |
+| Reference       | [CLI and flags](https://github.com/ecoma-io/lattice/blob/main/docs/reference/cli.md) · [configuration](https://github.com/ecoma-io/lattice/blob/main/docs/reference/configuration.md) · [exit codes](https://github.com/ecoma-io/lattice/blob/main/docs/reference/exit-codes.md) · [JSON output](https://github.com/ecoma-io/lattice/blob/main/docs/reference/json-output.md) |
+| Using it        | [Checking](https://github.com/ecoma-io/lattice/blob/main/docs/usage/checking.md) · [CI](https://github.com/ecoma-io/lattice/blob/main/docs/usage/ci.md) · [troubleshooting](https://github.com/ecoma-io/lattice/blob/main/docs/usage/troubleshooting.md)                                                                                                                      |
+| Agents          | [The `arch-*` protocol](https://github.com/ecoma-io/lattice/blob/main/docs/skills/overview.md)                                                                                                                                                                                                                                                                                |
+| Building on it  | [Architecture](https://github.com/ecoma-io/lattice/blob/main/docs/development/architecture.md) · [contributing](https://github.com/ecoma-io/lattice/blob/main/CONTRIBUTING.md)                                                                                                                                                                                                |
 
 ## Status and deliberate limits
 
@@ -200,7 +200,7 @@ command runs against this tree's tag vocabulary, which shares nothing with the
 workspace the tool was written against.
 
 Three refusals, by design (full list:
-[../../docs/doctrine/architecture-authority.md](../../docs/doctrine/architecture-authority.md)):
+[architecture-authority.md](https://github.com/ecoma-io/lattice/blob/main/docs/doctrine/architecture-authority.md)):
 
 - **It never infers targets.** Projects and targets stay hand-written in each
   `project.json`; this tool adds the missing dependency edges only, so what a
@@ -214,7 +214,7 @@ Three refusals, by design (full list:
 
 ## License
 
-[Apache License 2.0](../../LICENSE) — © Mai Ngọc Hóa (John Martin) and the
+[Apache License 2.0](https://github.com/ecoma-io/lattice/blob/main/LICENSE) — © Mai Ngọc Hóa (John Martin) and the
 Lattice contributors. This README ships inside the tarball; the
 repository-level landing page with the full capability index is
-[`../../README.md`](../../README.md).
+[`../../README.md`](https://github.com/ecoma-io/lattice).
