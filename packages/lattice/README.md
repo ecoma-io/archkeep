@@ -178,9 +178,9 @@ Exit codes: 0 clean — and every selected file was analyzed; 1 findings;
 [ci.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/ci.md)).
 
 Ten minutes end to end, most of it spent deciding what your tags mean:
-[**Getting started →**](https://github.com/ecoma-io/lattice/blob/main/docs/getting-started/installation.md). `graph`,
-`diff`, `history`, `drift`, `impact`, `explain` and `context` complete the
-command surface ([CLI and flags](https://github.com/ecoma-io/lattice/blob/main/docs/reference/cli.md)).
+[**Getting started →**](https://github.com/ecoma-io/lattice/blob/main/docs/getting-started/installation.md). `graph`, `diff`,
+`history`, `drift`, `impact`, `explain`, `context` and the rest of the
+sixteen-command surface are in the [CLI reference](https://github.com/ecoma-io/lattice/blob/main/docs/reference/cli.md).
 
 ## Documentation map
 
@@ -204,7 +204,9 @@ Three refusals, by design (full list:
 
 - **It never infers targets.** Projects and targets stay hand-written in each
   `project.json`; this tool adds the missing dependency edges only, so what a
-  target does has one source of truth.
+  target does has one source of truth. (The one derivation the Moon provider
+  performs — inferring the workspace layout's `libsDir`/`appsDir` prefixes from
+  project root paths — is about where source lives, never what a target runs.)
 - **It never shells out.** Resolvers read only tracked manifest and source
   files, so the graph computes on a lint-only CI runner with no Go, Cargo or uv
   installed.
