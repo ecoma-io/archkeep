@@ -28,7 +28,7 @@ holds" is a verdict a pipeline computes rather than a belief a reviewer holds.
 
 ## Current / implemented
 
-Everything in this section ships today (package 0.4.0) and is not future work.
+Everything in this section ships today and is not future work.
 A new reader should find these capabilities described as present, not promised.
 
 - **A core independent of Nx, of Moon, and of monorepos.** The engine discovers
