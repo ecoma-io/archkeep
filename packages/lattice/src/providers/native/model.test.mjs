@@ -855,7 +855,7 @@ describe("loadNativeModel", () => {
     const block = readme.match(/```json\n([\s\S]*?)```/);
     if (block === null) throw new Error("packages/lattice/README.md has no ```json code block");
     const model = loadNativeModel("/repo", io({ "lattice.json": block[1] }));
-    expect(model.projects.declared.map((row) => row.name)).toEqual(["billing-core", "billing-api"]);
+    expect(model.projects.declared.map((row) => row.name)).toEqual(["billing-core", "shared-ui"]);
   });
 });
 

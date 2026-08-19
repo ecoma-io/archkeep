@@ -321,6 +321,98 @@ describe("checking a real tree", () => {
     }
   });
 
+  it("exits 3 on a commitless git repository instead of reporting a clean empty run (D-17)", async () => {
+    // The silent direction this case exists to end: `git init` with nothing
+    // committed. `git ls-files` answers an empty list with exit 0, so a check
+    // run over this tree would previously print "0 imports in 0 files" and
+    // exit 0 — byte-for-byte identical to a clean workspace, while the run
+    // never looked at a single file. `resolveProvenance` now refuses the
+    // unborn-HEAD state loudly, and `check` resolves it BEFORE any verdict, so
+    // BOTH report formats are a loud could-not-look.
+    const repo = mkdtempSync(join(tmpdir(), "polyglot-cli-commitless-"));
+    try {
+      const g = (...args) =>
+        spawnSync("git", args, {
+          cwd: repo,
+          encoding: "utf8",
+          env: { ...process.env, HOME: process.env.HOME },
+        }).status;
+      const repoWrite = (relativePath, text) => {
+        mkdirSync(join(repo, relativePath, ".."), { recursive: true });
+        writeFileSync(join(repo, relativePath), text);
+      };
+      expect(g("init", "-q", "-b", "main")).toBe(0);
+      repoWrite("nx.json", readFileSync(join(root, "nx.json"), "utf8"));
+      repoWrite(
+        "module-boundaries.config.mjs",
+        readFileSync(join(root, "module-boundaries.config.mjs"), "utf8"),
+      );
+      // Files exist on disk but nothing is ever committed — `git ls-files`
+      // reports exactly what it would on a clean index, which is nothing.
+      const commitlessStreams = () => {
+        const out = [];
+        const err = [];
+        return {
+          out: (text) => out.push(text),
+          err: (text) => err.push(text),
+          lines: { out, err },
+          cwd: repo,
+          listFiles: () => [],
+          readGraph: () => graph,
+        };
+      };
+      const textStreams = commitlessStreams();
+      expect(await runCli(["check"], textStreams)).toBe(EXIT.error);
+      const textErr = textStreams.lines.err.join("\n");
+      expect(textErr).toContain("no commits");
+      // No verdict bytes reach the primary stream — the run never claimed a
+      // clean tree, which is the point of the exit code.
+      expect(textStreams.lines.out.join("\n")).not.toContain("no boundary violations");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("exits 3 on a commitless git repository through provenance too, naming the missing evidence (D-17)", async () => {
+    // The provenance command previously printed "provenance unavailable — not
+    // a git repository or git not installed" for this state — a false
+    // statement, since `.git` IS present — followed by "✔ every governance
+    // row carries an origin", and exited 0. A tree whose own git cannot name
+    // its state must be a loud could-not-look, never an empty clean record.
+    const repo = mkdtempSync(join(tmpdir(), "polyglot-cli-provenance-commitless-"));
+    try {
+      const g = (...args) =>
+        spawnSync("git", args, {
+          cwd: repo,
+          encoding: "utf8",
+          env: { ...process.env, HOME: process.env.HOME },
+        }).status;
+      const repoWrite = (relativePath, text) => {
+        mkdirSync(join(repo, relativePath, ".."), { recursive: true });
+        writeFileSync(join(repo, relativePath), text);
+      };
+      expect(g("init", "-q", "-b", "main")).toBe(0);
+      repoWrite("nx.json", readFileSync(join(root, "nx.json"), "utf8"));
+      const out = [];
+      const err = [];
+      const streams = {
+        out: (text) => out.push(text),
+        err: (text) => err.push(text),
+        lines: { out, err },
+        cwd: repo,
+        listFiles: () => [],
+        readGraph: () => graph,
+      };
+      expect(await runCli(["provenance"], streams)).toBe(EXIT.error);
+      expect(streams.lines.err.join("\n")).toContain("no commits");
+      expect(streams.lines.out.join("\n")).not.toContain(
+        "✔ every governance row carries an origin",
+      );
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   it("renders the exact byte sequence for the violating fixture — a golden pin against silent format drift", async () => {
     // Every other assertion in this describe block checks a substring; this
     // one checks the whole thing, so a change that reorders a line or drops a
@@ -4784,12 +4876,163 @@ var _ = adapter.Name
   // verdict turns out to be.
   const WRONG_REASON = "unsupported boundaryConfig extension";
 
+  /**
+   * A workspace whose plugin options select a profile NAME the registry does
+   * not contain, as its DEFAULT (`boundaryConfig`) — the shape `graph` (which
+   * takes no `--config`) is forced to fail by. Committed to a throwaway git
+   * repo so the commitless-noise guards are not what the test sees.
+   * Returns the root; the caller removes it.
+   */
+  const writeGap1UnknownProfileRoot = () => {
+    const gapRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-profiles-unknown-"));
+    writeGap1Files(gapRoot, {
+      version: 1,
+      profiles: [
+        {
+          name: "strict",
+          block: {
+            depConstraints: [],
+            moduleBoundaryOptions: withAllBoundaryOptions({}),
+          },
+        },
+      ],
+    });
+    return gapRoot;
+  };
+
+  /**
+   * A workspace whose registry declares two profiles that base on each other —
+   * `a` on `b` on `a` — so any profile-selected command refuses by name.
+   * Returns the root; the caller removes it.
+   */
+  const writeGap1CycleRoot = () => {
+    const cycleRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-profiles-cycle-"));
+    // `a` exists and IS the selected profile, so its cycle is what refuses —
+    // a registry whose cycle hides behind a name no one asked for would read
+    // as "profile not found" and never exercise the cycle arm.
+    writeGap1Files(
+      cycleRoot,
+      {
+        version: 1,
+        profiles: [
+          {
+            name: "a",
+            base: "b",
+            block: {
+              depConstraints: [],
+              moduleBoundaryOptions: withAllBoundaryOptions({}),
+            },
+          },
+          {
+            name: "b",
+            base: "a",
+            block: {
+              depConstraints: [],
+              moduleBoundaryOptions: withAllBoundaryOptions({}),
+            },
+          },
+        ],
+      },
+      "a",
+    );
+    return cycleRoot;
+  };
+
+  const withAllBoundaryOptions = (overrides) => ({
+    allow: [],
+    buildTargets: ["build"],
+    enforceBuildableLibDependency: false,
+    allowCircularSelfDependency: false,
+    checkDynamicDependenciesExceptions: [],
+    ignoredCircularDependencies: [],
+    banTransitiveDependencies: false,
+    checkNestedExternalImports: false,
+    ...overrides,
+  });
+
+  const writeGap1Files = (gapRoot, registry, profileName = "no-such-profile") => {
+    const gapWrite = (relativePath, text) => {
+      mkdirSync(join(gapRoot, relativePath, ".."), { recursive: true });
+      writeFileSync(join(gapRoot, relativePath), text);
+    };
+    gapWrite(
+      "nx.json",
+      JSON.stringify({
+        plugins: [
+          {
+            plugin: "@ecoma-io/lattice/nx",
+            options: { boundaryConfig: profileName, profiles: "law-profiles.json" },
+          },
+        ],
+      }),
+    );
+    gapWrite("law-profiles.json", JSON.stringify(registry));
+  };
+
   it("check already resolved the named profile before this fix, and still does through the shared resolver", async () => {
     const streams = profEnv();
     expect(await runCli(["check"], streams)).toBe(EXIT.violations);
     expect(streams.lines.out.join("\n")).toContain(
       "accepted violations: 1 boundary violation waived",
     );
+  });
+
+  it("check exits 3 on a profile name the registry does not contain, naming the profile", async () => {
+    // The unit-level refusal (`resolveProfile` throwing) is only half the
+    // contract the audit asked for: at the CLI, selecting a nonexistent
+    // profile must be a could-not-look (exit 3) that names WHICH profile was
+    // asked for — not a generic "could not load config" that hides the real
+    // cause. Red direction: if the ladder regressed to resolve the name as a
+    // bare file path, this exits 3 with the wrong message
+    // (`WRONG_REASON`), which this assertion forbids.
+    const streams = profEnv();
+    expect(await runCli(["check", "--config", "no-such-profile"], streams)).toBe(EXIT.error);
+    const errText = streams.lines.err.join("\n");
+    expect(errText).not.toContain(WRONG_REASON);
+    expect(errText).toContain('profile "no-such-profile" does not exist');
+  });
+
+  it("graph exits 3 on a profile name the registry does not contain, naming the profile", async () => {
+    // `graph` takes no `--config` (`GRAPH_FLAG_HELP`), so the failing name is
+    // the workspace's own `boundaryConfig` option — the same "profile as a
+    // name, not a file" state the command must refuse by name.
+    const gapRoot = writeGap1UnknownProfileRoot();
+    try {
+      const streams = profEnv();
+      streams.cwd = gapRoot;
+      expect(await runCli(["graph", "--format", "json"], streams)).toBe(EXIT.error);
+      const text = streams.lines.out.join("\n") + streams.lines.err.join("\n");
+      expect(text).not.toContain(WRONG_REASON);
+      expect(text).toContain('profile "no-such-profile" does not exist');
+    } finally {
+      rmSync(gapRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("a profiles registry whose base chain cycles is refused by name at every profile-selected command (exit 3)", async () => {
+    // The base-cycle half of "a profile selected by name must resolve":
+    // `resolveProfile` throws on a cycle, and the loader surfaces it as a
+    // malformed-registry refusal that names the cycle. Red direction: read as
+    // "no base" the stack would shed inherited rows and the run would look
+    // clean.
+    const cycleRoot = writeGap1CycleRoot();
+    try {
+      const out = [];
+      const err = [];
+      const streams = {
+        out: (text) => out.push(text),
+        err: (text) => err.push(text),
+        lines: { out, err },
+        cwd: cycleRoot,
+        readGraph: () => ({ nodes: {}, dependencies: {} }),
+        listFiles: () => ["nx.json", "law-profiles.json"],
+      };
+      expect(await runCli(["check"], streams)).toBe(EXIT.error);
+      const text = streams.lines.out.join("\n") + streams.lines.err.join("\n");
+      expect(text).toContain("base chain contains a cycle");
+    } finally {
+      rmSync(cycleRoot, { recursive: true, force: true });
+    }
   });
 
   it("graph resolves the profile and carries a policy fingerprint (P1-17)", async () => {
@@ -6714,5 +6957,300 @@ export const moduleBoundaryOptions = {
     expect(envelope.exitCode).toBe(EXIT.error);
     expect(envelope.decision.verdict).toBe("unknown");
     expect(envelope.decision.reason).toContain("coverage incomplete");
+  });
+});
+
+describe("one tree, four languages — Go, Rust, Python and TypeScript in a single check (P0-polyglot)", () => {
+  // The per-language e2e fixtures (`e2e/languages/`) prove each language alone;
+  // this block proves the same engine analyses ALL of them in ONE check over
+  // ONE tree, and draws graph edges for each language side by side. The trees
+  // reuse the e2e fixtures' layered architecture (domain → application → api)
+  // with a distinct language per project, so a language that stopped producing
+  // records, a manifest edge, or a boundary verdict would go red here.
+  //
+  // Cross-language facts worth naming: the `application -> domain` edge is a
+  // RUST Cargo `path = "../domain"` dependency landing on a GO project (the
+  // resolver needs only the target's project root, not a Cargo manifest of its
+  // own); `api -> application` is a PYTHON `[tool.uv.sources]` dependency
+  // landing on a RUST project; `web -> api` is a TYPESCRIPT `@poly/api` import
+  // landing on a PYTHON project. Each language's resolver sees only its own
+  // projects for SOURCE imports, but the manifest edges cross the seams.
+  const polyglotRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-combined-"));
+  afterAll(() => rmSync(polyglotRoot, { recursive: true, force: true }));
+
+  const writePoly = (relativePath, text) => {
+    mkdirSync(join(polyglotRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(polyglotRoot, relativePath), text);
+  };
+
+  const buildTree = () => {
+    writePoly("libs/domain/go.mod", "module example.test/domain\n\ngo 1.22\n");
+    writePoly("libs/domain/value.go", 'package domain\n\nconst Name = "domain"\n');
+    writePoly("libs/domain/src/index.ts", 'export const name: string = "domain";\n');
+    writePoly(
+      "libs/application/Cargo.toml",
+      '[package]\nname = "application"\nversion = "0.1.0"\nedition = "2021"\n\n' +
+        '[dependencies]\ndomain = { path = "../domain" }\n',
+    );
+    writePoly("libs/application/Cargo.lock", "");
+    writePoly("libs/application/src/lib.rs", "use domain::Name;\n\npub const APP: &str = Name;\n");
+    writePoly(
+      "libs/application/src/index.ts",
+      'import { name } from "@poly/domain";\n\nexport const app = name;\n',
+    );
+    writePoly(
+      "libs/api/pyproject.toml",
+      '[project]\nname = "api"\nversion = "0.1.0"\ndependencies = ["application"]\n\n' +
+        "[tool.uv.sources]\napplication = { workspace = true }\n",
+    );
+    writePoly("libs/api/src/api/__init__.py", "from application import APP\n\nAPI = APP\n");
+    writePoly(
+      "libs/api/src/index.ts",
+      'import { app } from "@poly/application";\n\nexport const api = app;\n',
+    );
+    // In the clean variant `web` is layer:api (api may reach api/application/
+    // domain); in the api-crossing variant `web` is layer:domain, so this same
+    // import violates the domain-only-on-domain row — a TypeScript site crossing
+    // into a Python-managed project.
+    writePoly(
+      "libs/web/src/index.ts",
+      'import { api } from "@poly/api";\n\nexport const web = api;\n',
+    );
+  };
+
+  const writeModel = (webTag) => {
+    writePoly(
+      "lattice.json",
+      JSON.stringify({
+        boundaryConfig: "module-boundaries.config.mjs",
+        tsConfig: "tsconfig.json",
+        projects: {
+          declared: [
+            { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+            { root: "libs/application", name: "application", tags: ["layer:application"] },
+            { root: "libs/api", name: "api", tags: ["layer:api"] },
+            { root: "libs/web", name: "web", tags: [webTag] },
+          ],
+        },
+        coverage: {
+          exempt: [
+            {
+              path: "module-boundaries.config.mjs",
+              reason: "workspace tooling config at the root, not itself a project",
+            },
+          ],
+        },
+      }),
+    );
+    writePoly(
+      "tsconfig.json",
+      JSON.stringify({
+        compilerOptions: {
+          module: "nodenext",
+          moduleResolution: "nodenext",
+          paths: {
+            "@poly/domain": ["./libs/domain/src/index.ts"],
+            "@poly/application": ["./libs/application/src/index.ts"],
+            "@poly/api": ["./libs/api/src/index.ts"],
+          },
+        },
+      }),
+    );
+    writePoly(
+      "module-boundaries.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:application", onlyDependOnLibsWithTags: ["layer:application", "layer:domain"] },
+  { sourceTag: "layer:api", onlyDependOnLibsWithTags: ["layer:api", "layer:application", "layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const boundarySuppressions = [];
+`,
+    );
+  };
+
+  buildTree();
+  writeModel("layer:api");
+
+  const polyglotStreams = (extra = {}) => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      cwd: polyglotRoot,
+      // The fixture is not a git repo, so the file list is injected the same
+      // way every other integration fixture here injects `listFiles` — the
+      // native provider reads the tree off this list, not off git.
+      listFiles: () => [
+        "lattice.json",
+        "tsconfig.json",
+        "module-boundaries.config.mjs",
+        "libs/domain/go.mod",
+        "libs/domain/value.go",
+        "libs/domain/src/index.ts",
+        "libs/application/Cargo.toml",
+        "libs/application/Cargo.lock",
+        "libs/application/src/lib.rs",
+        "libs/application/src/index.ts",
+        "libs/api/pyproject.toml",
+        "libs/api/src/api/__init__.py",
+        "libs/api/src/index.ts",
+        "libs/web/src/index.ts",
+      ],
+      ...extra,
+    };
+  };
+
+  it("exits 0 on the clean tree with all four languages analyzed and no crossings", async () => {
+    const streams = polyglotStreams();
+    expect(await runCli(["check", "--format", "json"], streams)).toBe(EXIT.ok);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.coverage.projects).toBe(4);
+    // 4 source files with imports carry the analysis: the Go value.go has no
+    // import, so the four importing files are application/lib.rs (Rust),
+    // api/__init__.py (Python), and the three .ts indexes. The `.go`, `.rs`,
+    // `.py` and `.ts` analyzers must ALL have run.
+    expect(envelope.coverage.analyzedFiles).toBeGreaterThanOrEqual(6);
+    expect(envelope.coverage.imports).toBeGreaterThanOrEqual(3);
+    expect(envelope.result.violations).toEqual([]);
+  });
+
+  it("draws graph nodes and edges for every language in one run", async () => {
+    const streams = polyglotStreams();
+    expect(await runCli(["graph", "--format", "json"], streams)).toBe(EXIT.ok);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.result.projects.map((p) => p.name).sort()).toEqual([
+      "api",
+      "application",
+      "domain",
+      "web",
+    ]);
+    const edges = envelope.result.dependencies
+      .map((e) => `${e.source}->${e.target}:${e.type}`)
+      .sort();
+    expect(edges).toContain("application->domain:static");
+    expect(edges).toContain("api->application:static");
+    expect(edges).toContain("web->api:static");
+  });
+
+  it("exits 1 on the crossing and names the TypeScript file that wrote it", async () => {
+    // The same tree, one tag changed: `web` becomes layer:domain, so its
+    // (clean-run-allowed) import of layer:api is a boundary crossing. The
+    // checker must agree with the law — exit 1 — and pinpoint the TypeScript
+    // site that wrote it.
+    writeModel("layer:domain");
+    const streams = polyglotStreams();
+    expect(await runCli(["check", "--format", "json"], streams)).toBe(EXIT.violations);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.result.violations).toEqual([
+      expect.objectContaining({
+        sourceFile: "libs/web/src/index.ts",
+        messageId: "onlyTagsConstraintViolation",
+      }),
+    ]);
+  });
+});
+
+describe("a backslash path inside an otherwise-valid root is a loud could-not-look, never a clean run (P0-backslash)", () => {
+  // `model.test.mjs` rejects a backslash in a project ROOT; this is the next
+  // rung the audit asked to pin: a FILE REFERENCE written with backslashes
+  // (`libs\core\src\index.ts`) inside a tree whose root is the valid
+  // `libs/core`. On this tool's posix-style matching the backslash name is
+  // byte-distinct from every `/`-joined path, so the declared root sees no
+  // tracked file under it and the model refuses — exit 3, deterministically,
+  // in every command that reads the tree. The red direction: if that refusal
+  // ever became a silent normalization (or a drop), the same tree would exit
+  // 0 with "no boundary violations" over a file the run never looked at.
+  const backslashRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-backslash-"));
+  afterAll(() => rmSync(backslashRoot, { recursive: true, force: true }));
+
+  const writeBackslash = (relativePath, text) => {
+    mkdirSync(join(backslashRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(backslashRoot, relativePath), text);
+  };
+
+  writeBackslash(
+    "lattice.json",
+    JSON.stringify({
+      boundaryConfig: "module-boundaries.config.mjs",
+      projects: {
+        declared: [{ root: "libs/core", name: "core", tags: ["layer:domain"] }],
+      },
+      coverage: {
+        exempt: [
+          {
+            path: "module-boundaries.config.mjs",
+            reason: "workspace tooling config at the root, not itself a project",
+          },
+        ],
+      },
+    }),
+  );
+  writeBackslash(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+
+  const backslashStreams = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      cwd: backslashRoot,
+      // The literal filename on disk is `libs\core\src\index.ts` (a real
+      // backslash character), exactly what `git ls-files` would report for a
+      // Windows-checked-out tree. Injected because the fixture is not a repo.
+      listFiles: () => [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        "libs\\core\\src\\index.ts",
+      ],
+    };
+  };
+
+  it("exits 3 for both check and graph, naming the unbacked root, identically across runs", async () => {
+    const checkFirst = backslashStreams();
+    const checkSecond = backslashStreams();
+    expect(await runCli(["check"], checkFirst)).toBe(EXIT.error);
+    expect(await runCli(["check"], checkSecond)).toBe(EXIT.error);
+    const checkErr = checkFirst.lines.err.join("\n");
+    expect(checkErr).toContain("root 'libs/core' has no tracked file under it");
+    // Deterministic: two runs produce byte-identical refusal text. A run that
+    // normalized the backslash sometimes and refused other times would break
+    // the byte-identity contract the reports promise.
+    expect(checkFirst.lines.err.join("\n")).toBe(checkSecond.lines.err.join("\n"));
+    // Never a clean verdict over the file the run could not attribute.
+    expect(checkFirst.lines.out.join("\n")).not.toContain("no boundary violations");
+
+    const graphStreams = backslashStreams();
+    expect(await runCli(["graph", "--format", "json"], graphStreams)).toBe(EXIT.error);
+    expect(graphStreams.lines.err.join("\n")).toContain(
+      "root 'libs/core' has no tracked file under it",
+    );
   });
 });

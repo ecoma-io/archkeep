@@ -648,6 +648,13 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     profile: policyProfile,
     source: policySource,
   } = await resolvePolicy(options, commandContext, cwd);
+  // D-10: provenance is resolved once, up front — BEFORE any verdict — and
+  // reused in the JSON envelope, so a commitless repository (an unborn HEAD,
+  // which makes `git ls-files` report zero files) is a loud exit-3 could-not-
+  // look in BOTH report formats instead of a quiet "0 imports in 0 files"
+  // claim. `resolveProvenance` throws for that state; `null` here means "git
+  // not available or not a repository at all", a legitimate no-origin-claim.
+  const provenance = resolveProvenance(root);
   // The policy's own fingerprint, alongside its source — the SHA-256 of the
   // canonicalized policy (`depConstraints`/`options`/`suppressions`) that
   // `graph`/`diff`/`history` already share (`computePolicyFingerprint`,
@@ -991,8 +998,9 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               // command resolves through the one `resolveProvenance` — a check
               // report is byte-identifiable to the git HEAD it was run on, so
               // a dirty or un-stamped CI run cannot present a claim about a
-              // different tree state.
-              provenance: resolveProvenance(root),
+              // different tree state. Resolved once at the top of `check` for
+              // the reason that comment states.
+              provenance,
             },
             // `verdictFor` returns `status`, `exitCode`, and the canonical
             // `decision` — the four-state verb of the same counts — so the
