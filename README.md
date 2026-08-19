@@ -263,45 +263,101 @@ gates; the skills themselves are host-independent. See
 npm install -D @ecoma-io/lattice   # or pnpm / yarn / bun
 ```
 
-Create a `lattice.json` at the repository root:
+Five small files, and then one command. Create `lattice.json` (which projects
+exist, and which root files are exempt from coverage),
+`module-boundaries.config.mjs` (which tags may reach which — the law
+`check` enforces), two source files (one of them crossing the boundary), and
+a `tsconfig.base.json` path alias so the crossing import resolves:
 
 ```json
+// lattice.json
 {
   "projects": {
     "declared": [
-      { "name": "billing-core", "root": "libs/billing/core" },
-      { "name": "billing-api", "root": "libs/billing/api" }
+      { "name": "billing-core", "root": "libs/billing/core", "tags": ["scope:billing"] },
+      { "name": "billing-api", "root": "libs/billing/api", "tags": ["scope:checkout"] }
+    ]
+  },
+  "coverage": {
+    "exempt": [
+      {
+        "path": "module-boundaries.config.mjs",
+        "reason": "the boundary law is not part of any project"
+      }
     ]
   }
 }
 ```
 
-Inspect what a project may reach, then check the boundaries:
-
-```bash
-lattice context billing-core --plan
-lattice check
+```js
+// module-boundaries.config.mjs
+export const depConstraints = [
+  { sourceTag: "scope:billing", onlyDependOnLibsWithTags: ["scope:billing"] },
+  { sourceTag: "scope:checkout", onlyDependOnLibsWithTags: ["scope:checkout", "scope:billing"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const boundarySuppressions = [];
 ```
 
-Declare the intended architecture (optional, but it is what makes drift and
-`architecture-intent` governance real):
+```ts
+// libs/billing/core/index.ts — imports across the boundary
+import { helper } from "@billing/api";
+export const value = helper;
+```
+
+```ts
+// libs/billing/api/index.ts — the project being reached into
+export const helper = 42;
+```
+
+And the path alias that lets the graph resolve `@billing/api` to that source
+(`moduleBoundaryOptions` and its eight fields are the full rule options — see
+[**docs/getting-started/first-policy.md**](docs/getting-started/first-policy.md)):
 
 ```json
+// tsconfig.base.json
 {
-  "version": "1",
-  "boundaries": [{ "name": "billing", "match": ["tag:scope:billing"] }],
-  "forbidden": [
-    {
-      "from": "billing",
-      "to": "tag:scope:checkout",
-      "reason": "billing must never reach into checkout"
-    }
-  ]
+  "compilerOptions": {
+    "paths": { "@billing/api": ["libs/billing/api/index.ts"] }
+  }
 }
 ```
 
+Run the check:
+
+```bash
+lattice check
+```
+
+```
+policy  module-boundaries.config.mjs — fingerprint a9ce10e4e282e243659d52daf89136
+
+libs/billing/core/index.ts:1:24  onlyTagsConstraintViolation
+    A project tagged with "scope:billing" can only depend on libs tagged with "scope:billing"
+  import      "@billing/api" (static)  billing-core → billing-api
+  constraint  sourceTag scope:billing → onlyDependOnLibsWithTags [scope:billing]
+
+✖ 1 boundary violation in 1 file (1 import in 2 files across 2 projects; 1 file exempted from coverage by lattice.json's coverage.exempt)
+
+✔ no dead tsconfig path aliases (1 alias judged in tsconfig.base.json)
+```
+
+`check` exits **1** — billing-core (`scope:billing`) may only depend on other
+`scope:billing` projects, and `@billing/api` is `scope:checkout`. Because the
+verdict is evidence, not a belief, the same tree and config always produce the
+same answer; remove the import and `check` exits 0.
+
 Wire `lattice check` into CI (fail on both 1 and 3 — the distinction is the
-point), and hand the workflow to an agent through the `arch-*` skills.
+point), or hand the workflow to an agent through the `arch-*` skills.
 
 Ten minutes end to end, most of it spent deciding what your tags mean:
 [**Getting started →**](docs/getting-started/installation.md)
