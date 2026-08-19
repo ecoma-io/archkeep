@@ -11,7 +11,7 @@
     {
       "name": "lattice",
       "source": "./",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "description": "Module-boundary diagnostics at edit time, and architecture agent skills, for Go, Rust, Python and Vue",
       "category": "productivity",
       "tags": [

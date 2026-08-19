@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/ecoma-io/lattice/compare/v0.6.0...v0.6.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **lattice:** derive declared targets in the real-tree native model ([#159](https://github.com/ecoma-io/lattice/issues/159)) ([b8f7ec3](https://github.com/ecoma-io/lattice/commit/b8f7ec366863be7cc1baaec842bf59dd42e646c7))
+
 ## [0.6.0](https://github.com/ecoma-io/lattice/compare/v0.5.0...v0.6.0) (2026-08-19)
 
 
