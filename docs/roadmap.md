@@ -114,12 +114,6 @@ Most of 1.x is already implemented and listed above. What remains before a
 **stable 1.0** is completion of the surfaces and hardening of the proof, not a
 new feature list:
 
-- **The language server on the VS Code marketplace.** The client exists and
-  runs from a development host or a `.vsix` CI build; what is missing is the
-  marketplace publisher account, so a developer who does not already run an LSP
-  client still has a manual install to perform.
-  ([integrations/vscode.md](integrations/vscode.md),
-  [doctrine/north-star.md](doctrine/north-star.md))
 - **Breadth of conformance evidence.** The differential against
   `@nx/enforce-module-boundaries` runs over real public workspaces, weekly and
   on demand, as a non-required check that is still treated as a regression when
@@ -128,6 +122,13 @@ new feature list:
 - **A stable `schemaVersion` promise.** The JSON envelope is versioned and
   documented; 1.0 makes that contract a promise consumers can build on.
   ([reference/json-output.md](reference/json-output.md))
+
+The VS Code marketplace listing is deliberately **not** on that list. The
+client exists, the `.vsix` attaches to every release, and the release lane
+publishes to the marketplace the moment a publisher account exists
+([integrations/vscode.md](integrations/vscode.md)) — so the listing lands
+whenever that account does, independent of what version the package carries,
+and 1.0 does not wait for it.
 
 ### Capabilities pulled forward from 2.x
 
