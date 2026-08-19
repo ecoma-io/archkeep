@@ -72,21 +72,50 @@ export function resolveProvenance(root) {
   }
   let commit;
   try {
-    commit = execFileSync("git", ["rev-parse", "HEAD"], {
+    commit = execFileSync("git", ["rev-parse", "--verify", "HEAD"], {
       cwd: root,
       env,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
   } catch {
-    // `--is-inside-work-tree` passed above, so a repo EXISTS here — a HEAD
-    // that still cannot be resolved is an unborn one. No commit can identify
-    // the tree, and `git ls-files` in this state silently reports nothing, so
-    // a run proceeding here would judge zero files and print a clean verdict.
+    // `--is-inside-work-tree` passed above, so a repo EXISTS here, and
+    // `--verify` (the two-argument form) failed to resolve HEAD. Two states
+    // share that failure, and they need different messages:
+    //   - an UNBORN HEAD (a commitless repo: `git init` with nothing ever
+    //     committed). Git keeps no identity for it — `git ls-files` answers an
+    //     empty list, so a run otherwise reports a clean workspace over zero
+    //     files, the exact silent direction this repository refuses.
+    //   - a BROKEN HEAD (a repo with commits whose HEAD points at a ref that
+    //     no longer exists — `git symbolic-ref HEAD refs/heads/nonexistent`).
+    //     The tree HAS identity; only the ref is corrupt, and telling the
+    //     user to "commit at least once" would be factually false.
+    // The count of commits reachable from any ref (`--all`, includes HEAD via
+    // its reflog) distinguishes them: zero means genuinely unborn, nonzero
+    // means the HEAD ref is broken.
+    let reachable;
+    try {
+      reachable = execFileSync("git", ["rev-list", "--count", "--all"], {
+        cwd: root,
+        env,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+    } catch {
+      // `rev-list --all` failing too is a degenerate repo; treat it as unborn
+      // rather than inventing a third class.
+    }
+    if (reachable === undefined || reachable === "0") {
+      throw new Error(
+        `lattice: ${root} is a git repository with no commits — no commit or tracked ` +
+          `file exists to establish evidence, so there is nothing this run could look at. ` +
+          `Commit at least once before running a Lattice command.`,
+      );
+    }
     throw new Error(
-      `lattice: ${root} is a git repository with no commits — no commit or tracked ` +
-        `file exists to establish evidence, so there is nothing this run could look at. ` +
-        `Commit at least once before running a Lattice command.`,
+      `lattice: ${root} is a git repository whose HEAD cannot be resolved (the ` +
+        `HEAD ref appears to point at a nonexistent branch), even though the repository ` +
+        `has commits. Fix the broken HEAD before running a Lattice command.`,
     );
   }
 
