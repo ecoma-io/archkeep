@@ -73,7 +73,9 @@ leave it sound must show the check green.
    - **Exit 1** — findings: boundary violations, intent findings (a forbidden
      relationship appeared, an allowed one went missing), or waiver-entangled
      ones (a violation an active waiver accepts is still exit `1`, only moved
-     to an "accepted violations" section). This is the only command that exits 1.
+     to an "accepted violations" section). This is the only command that
+     exits 1 on boundary findings — with one companion: `fitness` also exits
+     1 when a declared function `fail`s.
    - **Exit 3** — no verdict. The run could not complete, or a selected file
      could not be analyzed, or the intent could not be established, or — in a
      profile-selected workspace — the selected profile could not be resolved:
@@ -110,10 +112,10 @@ leave it sound must show the check green.
    "accepted violations"); and it folds fitness in by presence too — a policy
    **file** declaring a `fitness` export gets those per-function verdicts counted
    into `check`'s exit code (`1` for any `fail`, `3` for any `unknown`). A
-   profile cannot carry fitness: a profile's block is exactly
-   `depConstraints`/`moduleBoundaryOptions`/`boundarySuppressions`, so a
-   profile-selected run folds no fitness functions — the one capability that
-   stays file-only even though every command now resolves the profile itself.
+   profile carries fitness like any other policy key: a profile's block is
+   `depConstraints`/`moduleBoundaryOptions`/`boundarySuppressions`/`fitness`,
+   so a profile-selected run folds a declared `fitness` block the same way a
+   file-selected one does.
    An _unverifiable_ intent is never a _satisfied_ one, and an unresolved
    profile is never a satisfied law.
 
@@ -182,19 +184,19 @@ never merely louder.
 
 Fifteen descriptive commands sit **beside** the gate. `graph`, `diff`,
 `drift`, `discover`, `reconcile`, `impact`, `explain`, `context`, `history`,
-`waivers`, `fitness`, `health`, `debt`, `provenance`, and `adr` each describe
-or propose against the same observed facts, and none of them exits 1 on its
-own (describing architecture is not a finding; `debt` ages the ledger rather
-than re-judging it, `health` reports per-metric verdicts where an unmeasured
+`waivers`, `health`, `debt`, `provenance`, and `adr` each describe or propose
+against the same observed facts, and none of them exits 1 on its own
+(describing architecture is not a finding; `debt` ages the ledger rather than
+re-judging it, `health` reports per-metric verdicts where an unmeasured
 metric is `unknown`/`not_applicable`, never zero, and `adr` describes the
 recorded decisions — exit 3 only on an ADR-pattern id the registry does not
 know or an unreadable registry, never clean, but never a finding; a reverse
-lookup naming a rule id no ADR binds is a sentence with exit 0). But two of
-them still reach `check`'s exit code: `fitness` verdicts fold into the gate by
-presence (`fail` → 1, `unknown` → 3), and a waived violation stays exit `1` in
-`check`, moved to the "accepted violations" section until its term lapses.
-Those two inform a verdict; the rest only inform the reader. A build fails on
-`check`, and on nothing else.
+lookup naming a rule id no ADR binds is a sentence with exit 0). Two of them
+still reach an exit code: `fitness` is the one descriptive command that exits
+1 on its own when a declared function `fail`s (`fail` → 1, `unknown` → 3), and
+a waived violation stays exit `1` in `check`, moved to the "accepted
+violations" section until its term lapses. Those two inform a verdict; the
+rest only inform the reader. A build fails on `check`, and on nothing else.
 
 ## What to do if it fails
 

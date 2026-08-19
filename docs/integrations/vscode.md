@@ -146,7 +146,7 @@ without going through this extension.
 | command                 | `node <workspace>/node_modules/@ecoma-io/lattice/lsp.mjs`                                    |
 | transport               | stdio                                                                                        |
 | `initializationOptions` | `{ "workspaceRoot": "<workspace>" }` — only when the editor's root is not the workspace root |
-| watched files           | the boundary config, `**/nx.json`, and `**/project.json`                                     |
+| watched files           | the boundary config, the tsConfig, `**/project.json`, `**/nx.json`, and `**/lattice.json`    |
 
 The workspace root is taken from `initializationOptions`, then
 `workspaceFolders`, then `rootUri`, then `rootPath`, then the working directory
@@ -161,7 +161,7 @@ proven correct — one mis-applied ranged edit puts every later diagnostic on th
 wrong line, confidently.
 
 **File watching.** A client that supports dynamic registration is asked to watch
-the three files above. A client that cannot register dynamically is told so on
+the five files above. A client that cannot register dynamically is told so on
 stderr — if your diagnostics go stale after a config edit, that message is why,
 and reopening the file re-runs the check.
 

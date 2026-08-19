@@ -26,9 +26,12 @@ provider is active depends on the marker file at the workspace root:
 - A `.moon/` directory activates the Moon provider, which reads the project
   graph from `moon project-graph --json`.
 
-The provider is chosen once, at the start of a run, and neither the CLI nor the
-language server needs to know which one it is holding. That seam is what makes
-the engine work in both contexts — with or without the Nx integration.
+The provider is chosen once, at the start of a run, and the CLI works over
+every one of the three. The language server is the exception: it recognizes
+only the Nx and native markers (`nx.json` and `lattice.json`) — there is no
+Moon provider on the server side, so a Moon workspace's graph and options are
+not read there. That split is the seam; the CLI knows all three providers, the
+editor knows the two that carry a config file to watch.
 
 ## What each integration supplies
 

@@ -92,11 +92,11 @@ Three values, and each one carries exactly one `exitCode` — `jsonEnvelope`
 (`src/report/json.mjs`) throws rather than build an envelope where the two
 disagree, so this table is not just documentation, it is enforced:
 
-| `status`       | `exitCode` | meaning                                                                                                                                                                                                                                                                                            |
-| -------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"ok"`         | `0`        | No findings, and every selected file was analyzed.                                                                                                                                                                                                                                                 |
-| `"findings"`   | `1`        | Boundary violations, declared-edge violations, go.work drift, dead tsconfig path aliases, or architecture-intent findings — one or more of `result.violations`, `result.declaredEdges.findings`, `result.goWork.findings`, `result.tsconfigPaths.findings`, `result.intent.findings` is non-empty. |
-| `"no-verdict"` | `3`        | The run found no findings but could not fully read the tree — `coverage.complete` is `false` — or architecture intent could not be established. Never mistake this for `"ok"`: a checker that could not look must never read as one that looked and found nothing.                                 |
+| `status`       | `exitCode` | meaning                                                                                                                                                                                                                                                                                                                                                            |
+| -------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `"ok"`         | `0`        | No findings, and every selected file was analyzed.                                                                                                                                                                                                                                                                                                                 |
+| `"findings"`   | `1`        | Boundary violations, declared-edge violations, go.work drift, dead tsconfig path aliases, architecture-intent findings, or a failing fitness function — one or more of `result.violations`, `result.declaredEdges.findings`, `result.goWork.findings`, `result.tsconfigPaths.findings`, `result.intent.findings` is non-empty, or the function verdict was `fail`. |
+| `"no-verdict"` | `3`        | The run found no findings but could not fully read the tree — `coverage.complete` is `false` — or architecture intent could not be established. Never mistake this for `"ok"`: a checker that could not look must never read as one that looked and found nothing.                                                                                                 |
 
 **This table describes an envelope that got built.** A run can also exit `3`
 having never reached the point of building one at all — no workspace root,
@@ -508,7 +508,7 @@ field presence.
 | `plan.drift`             | `object`           | `goWork` and `tsconfigPaths` drift — an absent manifest is `null` (not judged), never "no drift".                                                                                                                                                                                                                                                                      |
 | `plan.intent`            | absent \| `object` | The canonical Architecture Intent verdict — the same model `check` and `drift` judge. The key is **absent** (never `null`) when the workspace has no tracked `architecture-intent.json`, matching `check`. When present: `{verified: true, file: "architecture-intent.json", verdict: "ok"\|"findings"\|"no-verdict", rows, findings, unresolved, boundaries, notes}`. |
 | `plan.verify`            | `string[]`         | The deterministic commands an agent runs after the change. These are suggestions, not executed by Lattice.                                                                                                                                                                                                                                                             |
-| `plan.provenance`        | object             | null                                                                                                                                                                                                                                                                                                                                                                   | The same repository-provenance record the envelope's `workspace.provenance` carries. |
+| `plan.provenance`        | object             | The same repository-provenance record the envelope's `workspace.provenance` carries — `{commit: string, remote: string\|null, dirty: boolean}`, and `null` when git is unavailable.                                                                                                                                                                                    |
 
 The `coverage.notes` array carries planning-specific limitations: that the
 verdict is whole-tree scoped for reporting, that drift is keyed off manifest
@@ -545,7 +545,6 @@ three declared blind spots and nothing else to say:
   },
   "status": "ok",
   "exitCode": 0,
-  "decision": { "verdict": "pass" },
   "coverage": {
     "complete": true,
     "projects": 2,
@@ -584,7 +583,8 @@ three declared blind spots and nothing else to say:
     "violations": [],
     "goWork": null,
     "tsconfigPaths": null
-  }
+  },
+  "decision": { "verdict": "pass" }
 }
 ```
 

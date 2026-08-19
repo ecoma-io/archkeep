@@ -47,11 +47,10 @@ registry, never a file path. `lattice context <project>` and
 `lattice graph --output` work against a profile-selected workspace exactly as
 they do against a file-selected one — `graph`'s snapshot carries the resolved
 profile's policy fingerprint, so `history` and `diff` see a profile edit as a
-policy change the same way they already see a file edit as one. The one
-exception is fitness functions: a profile's block carries no `fitness` key
-(only a boundaryConfig **file** can declare one), so `fitness` on a
-profile-selected workspace reports its own "declares no fitness functions"
-rather than judging anything.
+policy change the same way they already see a file edit as one. Fitness
+functions are not an exception: a profile's block may carry a `fitness` key
+like any other policy key, so a profile-selected workspace folds its declared
+functions the same way a file-selected one does.
 
 ## What a profile-selected run reports
 

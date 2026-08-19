@@ -121,16 +121,17 @@ run just reports that it could not.
 ## Two faces, one registry
 
 `lattice fitness` is the descriptive face: it prints each function's verdict as
-a table and never exits 1. `check` is the gate face: it folds fitness in by
-presence — a workspace whose policy declares fitness gets its per-function
-verdicts counted into `check`'s exit-code machinery (1 for any `fail`, 3 for
-any `unknown`, never a new exit code). `not_applicable` counts toward neither:
-a function that did not apply to this run — nothing matched, or (a
-path-scoped `check`) the condition needed the whole tree — is reported, not
-hidden, but it cannot fail a run it was never in a position to judge. There is
-no `--fitness` flag. An opt-in flag would make a forgotten flag
-byte-identical to "no fitness checked" — the silent direction this whole tool
-exists to end.
+a table. A function that `fail`s makes it exit 1 — a failing fitness function
+is a finding, not a print job — and any function that is `unknown` makes it
+exit 3. `check` is the gate face: it folds fitness in by presence — a
+workspace whose policy declares fitness gets its per-function verdicts counted
+into `check`'s exit-code machinery (1 for any `fail`, 3 for any `unknown`,
+never a new exit code). `not_applicable` counts toward neither: a function
+that did not apply to this run — nothing matched, or (a path-scoped `check`)
+the condition needed the whole tree — is reported, not hidden, but it cannot
+fail a run it was never in a position to judge. There is no `--fitness` flag.
+An opt-in flag would make a forgotten flag byte-identical to "no fitness
+checked" — the silent direction this whole tool exists to end.
 
 ## Where this sits in the roadmap
 

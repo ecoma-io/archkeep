@@ -20,25 +20,22 @@ architecture's central seam —
 ## Workspace detection
 
 Lattice detects a Moon workspace by the presence of a `.moon/` directory at the
-workspace root. A `lattice.json` or `nx.json` alongside it is an ambiguity the
-checker refuses — exactly one marker may be present.
+workspace root. A `lattice.json` or `nx.json` alongside it is a **hard error**,
+not a config surface: a tree carrying `.moon` and `lattice.json` (or `.moon`
+and `nx.json`) together is refused loudly (exit 3), because this tool judges a
+workspace against exactly one project model. Exactly one marker may be present.
 
 ## Configuration
 
-A Moon workspace states its options in `lattice.json` at the root (the same file
-the native provider reads), not in `.moon/workspace.yml`. This is because Moon's
-own configuration does not carry a plugin-options table the way `nx.json`'s
-`plugins[].options` does, and a second config file would need its own filename
-option to find itself.
-
-```json
-{
-  "boundaryConfig": "module-boundaries.config.mjs",
-  "tsConfig": "tsconfig.base.json"
-}
-```
+A Moon workspace cannot create a `lattice.json` — the `.moon`/`lattice.json`
+pair is refused. The provider therefore reads the two options from defaults by
+convention: `boundaryConfig` names `module-boundaries.config.mjs` and
+`tsConfig` names `tsconfig.base.json`. Moon's own configuration does not carry
+a plugin-options table the way `nx.json`'s `plugins[].options` does, and a
+second config file would need its own filename option to find itself.
 
 Those two values are the defaults. There are no other options. An unknown key
+in a workspace that does carry a `lattice.json` under another provider
 **throws** rather than falling back — a `tsconfigBase` typed for `tsConfig`
 that quietly used the default would give you a full green run against a rule
 nobody wrote.
@@ -132,10 +129,14 @@ integration.
   enforcement, not for contribution. A workspace that needs polyglot edges in
   `moon affected` should declare them through Moon's own `dependsOn` in
   `moon.yml`.
-- **It does not carry `workspaceLayout`.** Moon does not emit the
-  `appsDir`/`libsDir` convention Nx uses. A Moon workspace's project roots are
-  declared explicitly in `.moon/workspace.yml`, so the path-based layout
-  inference the Nx provider carries does not apply.
+- **It infers `workspaceLayout` from project source paths.** Moon does not
+  declare an `appsDir`/`libsDir` convention the way `nx.json` does, so the
+  provider infers one from the common directory prefix shared by each layer's
+  project roots (`application`-layer sources → `appsDir`, `library`-layer
+  sources → `libsDir`), falling back to the default
+  `{libsDir: "libs", appsDir: "apps"}` when no consistent prefix exists.
+  `workspaceLayout` is carried on the graph output exactly as the Nx and
+  native providers carry theirs.
 
 ---
 

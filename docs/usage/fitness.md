@@ -31,17 +31,19 @@ instead of printing a table built on a hole.
 
 ## Exit codes
 
-| code | meaning                                                   |
-| ---- | --------------------------------------------------------- |
-| 0    | The judgment completed (whatever the verdicts were).      |
-| 2    | Usage error: positional arguments given, unknown flag.    |
-| 3    | Coverage incomplete, or the policy declares no `fitness`. |
+| code | meaning                                                                           |
+| ---- | --------------------------------------------------------------------------------- |
+| 0    | The judgment completed and every function passed.                                 |
+| 1    | A declared function `fail`ed — a failing fitness function is a finding.           |
+| 2    | Usage error: positional arguments given, unknown flag.                            |
+| 3    | Coverage incomplete, any function `unknown`, or the policy declares no `fitness`. |
 
-`fitness` never exits 1 — describing fitness is not a finding. `check` exits 1
-when a declared function `fail`s, and 3 when any function is `unknown`, and it
-folds fitness in by presence: a workspace whose policy declares fitness counts
-the same verdicts. Exit codes stay `check`'s own machinery — 1 is the findings
-exit code and 3 is the no-verdict exit code, and no new code is introduced.
+`fitness` exits 1 when a declared function `fail`s — a failing fitness function
+is a finding, not a print job — and 3 when any function is `unknown`, or when
+coverage is incomplete or the policy declares no `fitness`. `check` folds
+fitness in by presence the same way: a workspace whose policy declares fitness
+counts the same verdicts into the same exit codes. 1 is the findings exit code
+and 3 is the no-verdict exit code.
 
 ## Example
 
