@@ -90,9 +90,10 @@ mappings, so `@shared/button` maps to the UI source:
 }
 ```
 
-A `billing-core` file importing `@shared/button` is legal; one importing into
-a `scope:checkout` project is an `onlyTagsConstraintViolation`, exit 1. Now
-check the tree:
+A `billing-core` file importing `@shared/button` is legal (the constraint
+row allows it) — and had a `billing-core` file imported into a project tagged
+outside `scope:billing` or `scope:shared`, the same constraint would be an
+`onlyTagsConstraintViolation`, exit 1. Now check the tree:
 
 ```shell
 lattice check

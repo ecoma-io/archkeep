@@ -1901,12 +1901,12 @@ async function runFitness(options, { cwd, env }) {
     // way `check` loads it (`resolvePolicy`) and `--config` wins the same
     // way — resolved against the working directory, never against this
     // tool's own location, profile-aware the same way `check` is. A malformed
-    // law throws here, exit 3, exactly as in `check`. A profile's `block`
-    // never carries a `fitness` key (`docs/concepts/profiles.md`, "A
-    // profile's block carries exactly three keys"), so a profile-selected
-    // workspace reaches `fitnessCommand`'s own "declares no fitness
-    // functions" refusal below rather than a config-loading failure — a
-    // real, named limit, not this ladder's bug.
+    // law throws here, exit 3, exactly as in `check`. A profile's `block` may
+    // carry a `fitness` key (`docs/concepts/profiles.md` now names four
+    // block keys, fitness among them), so a profile-selected workspace folds
+    // the declared functions the same way a file-selected one does — a
+    // profile that declares none reaches `fitnessCommand`'s own "declares no
+    // fitness functions" refusal below rather than a config-loading failure.
     const { config } = await resolvePolicy(options, commandContext, cwd);
 
     result = await fitnessCommand(commandContext, { config });

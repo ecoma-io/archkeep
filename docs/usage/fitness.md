@@ -33,7 +33,7 @@ instead of printing a table built on a hole.
 
 | code | meaning                                                                           |
 | ---- | --------------------------------------------------------------------------------- |
-| 0    | The judgment completed and every function passed.                                 |
+| 0    | The judgment completed and every function `pass`ed or was `not_applicable`.       |
 | 1    | A declared function `fail`ed — a failing fitness function is a finding.           |
 | 2    | Usage error: positional arguments given, unknown flag.                            |
 | 3    | Coverage incomplete, any function `unknown`, or the policy declares no `fitness`. |
