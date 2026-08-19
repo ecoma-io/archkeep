@@ -42,6 +42,27 @@
  *   wraps the same `ImportTypeNode` inside a `TypeQueryNode`; the walk visits
  *   the `ImportTypeNode` once and produces exactly one site, not a duplicate.
  *
+ * - **A LITERAL specifier that names a DECLARED project and fails to resolve
+ *   is a whole-file failure.** `import { x } from "@acme/ui"` where the native
+ *   workspace declares a project named `@acme/ui` asks the resolver a concrete
+ *   question about a workspace-internal dependency and the resolver answers
+ *   "no such module" — the edge that import would have carried (or the
+ *   violation it would have avoided) is simply missing, so the file could not
+ *   be fully judged. That is the same "could not look" shape an unreadable
+ *   file produces (`fileFailure`, `line: null`), and it rides `check`'s
+ *   `unchecked` count to exit 3 (`cli.mjs`) rather than a silent pass.
+ * - **A literal package import that names NO declared project** (`vitest`,
+ *   `@nx/eslint-plugin`, an uninstalled third-party package) is NOT a hole: a
+ *   workspace with packages is a normal state, and failing the whole run on
+ *   every unresolved package import would block merges over dependencies
+ *   nobody crossed. Those stay positioned site failures — the "blind spot"
+ *   the contract documents as legitimately permanent.
+ * - **A NON-LITERAL argument** — `import(url)` with a computed argument, a
+ *   brace-group `use` the Rust analyzer records the same way — is genuinely
+ *   not statically knowable and stays a positioned site failure, because the
+ *   rest of the file's imports WERE judged. The two classes are deliberately
+ *   different directions of the same "did not resolve" fact (`contract.md`).
+ *
  * ## One `kind` per import site, and how a mixed statement is judged
  *
  * The record carries one `kind` (`contract.md`), so a statement that is two
@@ -218,6 +239,32 @@ export function packageNameOf(specifier) {
   if (specifier.startsWith("@"))
     return segments.length >= 2 ? `${segments[0]}/${segments[1]}` : null;
   return segments[0];
+}
+
+/**
+ * Whether an unresolvable literal specifier names a project this workspace
+ * DECLARES — the discriminator between a missing workspace edge and a
+ * legitimate (perhaps uninstalled) package dependency.
+ *
+ * Both the full specifier and its package name (`packageNameOf`) are matched
+ * against the declared project names. A project is imported by its own name in
+ * a native `lattice.json` workspace; a scoped specifier `@billing/api` names a
+ * project whose declared name IS `@billing/api` (names are non-empty strings,
+ * and the model performs no normalisation — `providers/native/model.mjs`
+ * accepts the scope verbatim), and a deep path into such a project
+ * (`@billing/api/models`) still matches its package name. A specifier that
+ * reduces to no package name — a relative path, an empty string — is a path
+ * spelling judged by the path rules, never a workspace-internal package
+ * dependency, so it stays a blind spot.
+ *
+ * @param {string} specifier The raw specifier as written.
+ * @param {{projects: {name: string}[]}} workspace
+ * @returns {boolean}
+ */
+function namesDeclaredProject(specifier, workspace) {
+  const name = packageNameOf(specifier);
+  if (name === null) return false;
+  return workspace.projects.some((project) => project.name === name || project.name === specifier);
 }
 
 /** The dialect to parse `sourceFile` as; `lang` wins when the caller knows it. */
@@ -699,8 +746,28 @@ export function analyzeTypeScript({ sourceFile, text, workspace, lang }) {
         spelling: specifierSpelling(site.specifier),
         resolved,
       });
+      // A LITERAL specifier that failed to resolve is a hole — but only when it
+      // names a project this workspace DECLARES. The resolver was asked a
+      // concrete question about a workspace-internal dependency and could not
+      // answer, so the edge that import would have carried (or the violation it
+      // would have avoided) is missing and the file's boundary verdict is
+      // incomplete — the same "could not look" shape an unreadable file takes
+      // (`unchecked`, exit 3). A literal package import that names NO declared
+      // project (`vitest`, `@nx/eslint-plugin`, an uninstalled third-party
+      // package) is legitimate: a workspace with packages is a normal state,
+      // and failing the whole run on every unresolved package import would
+      // block merges over dependencies nobody crossed. Those stay positioned
+      // site failures — the "blind spot" the contract documents as legitimately
+      // permanent (`report/text.mjs`'s `formatFailures` is where the report
+      // explains the two, and `cli.mjs` counts `unchecked` by
+      // `failure.line === null`). A NON-LITERAL argument keeps its line/column
+      // for the same reason: it is genuinely not statically knowable.
       if (reason) {
-        result.failures.push({ sourceFile, line: line + 1, column: character + 1, reason });
+        result.failures.push(
+          site.literal && namesDeclaredProject(site.specifier, workspace)
+            ? fileFailure(sourceFile, reason)
+            : { sourceFile, line: line + 1, column: character + 1, reason },
+        );
       }
     }
   } catch (cause) {

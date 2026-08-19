@@ -144,12 +144,15 @@ export const fileFailure = (sourceFile, reason) => ({
  *
  * The distinction is the difference between a blind spot and a hole. A site
  * failure says "this file was analyzed and one specifier in it is not
- * statically knowable" — the other imports in it were still judged. A whole-
- * file failure says the file was never read, never parsed, or had no analyzer
- * that could run, so "no violations here" is not a finding about it; it is the
- * absence of one. Only the shape carries this: a null position is what the
- * analysis contract already means by "about the file as a whole", so callers
- * ask here instead of re-testing `line === null` and drifting apart.
+ * statically knowable" — a computed `import()` argument, or a literal package
+ * import naming no declared project — and the other imports in it were still
+ * judged. A whole-file failure says the file was never read, never parsed, had
+ * no analyzer that could run, or imported a declared project it could not
+ * resolve (a missing workspace edge), so "no violations here" is not a finding
+ * about it; it is the absence of one. Only the shape carries this: a null
+ * position is what the analysis contract already means by "about the file as a
+ * whole", so callers ask here instead of re-testing `line === null` and
+ * drifting apart.
  *
  * @param {{ line: number|null }} failure
  * @returns {boolean}

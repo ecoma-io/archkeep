@@ -153,16 +153,21 @@ not only about correctness — the same principle the terminal report's
 | `projects`      | number                           | Project count in the graph this run judged against.                                                                                                                                                                                                                                                                                                                                            |
 | `analyzedFiles` | number                           | Files the analyzer produced a verdict for.                                                                                                                                                                                                                                                                                                                                                     |
 | `imports`       | number                           | Import sites judged against the boundary law.                                                                                                                                                                                                                                                                                                                                                  |
-| `notAnalyzed`   | `{file, reason}[]`               | Whole-file failures: a file the analyzer never reached a verdict about at all (unreadable, no analyzer, a config it depends on that would not load). Non-empty here is exactly what makes `complete` false and forces `status` away from `"ok"`.                                                                                                                                               |
-| `blindSpots`    | `{file, line, column, reason}[]` | Site-level failures: the file WAS analyzed, but one import site's target is not statically knowable (e.g. a dynamic `import()` with a non-literal argument). These do not affect `complete` — the file was judged.                                                                                                                                                                             |
+| `notAnalyzed`   | `{file, reason}[]`               | Whole-file failures: a file the analyzer never reached a verdict about at all (unreadable, no analyzer, a config it depends on that would not load, or an import that names a declared project but could not be resolved — a missing workspace edge). Non-empty here is exactly what makes `complete` false and forces `status` away from `"ok"`.                                              |
+| `blindSpots`    | `{file, line, column, reason}[]` | Site-level failures: the file WAS analyzed, but one import site's target is not statically knowable (a dynamic `import()` with a non-literal argument, or a literal package import that names no declared project and cannot resolve). These do not affect `complete` — the file was judged.                                                                                                   |
 | `notes`         | string[]                         | Caveats about how the result should be interpreted: ESLint dialect parsing (`check`), provider mismatches between baseline and head (`diff`), provenance gaps (`diff`), policy fingerprint disagreements (`diff`), depConstraints narrowing (`context`, `impact`), or which result field is the wall clock made visible and excluded from the determinism claim above (`waivers`, `debt`).     |
 | `coverageGaps`  | `{kind, manifests}[]`            | Gaps in Nx-graph coverage that the checker's own analysis covers but `nx affected` and `@nx/enforce-module-boundaries` do not. Currently only one kind: `"unregistered-plugin"` — an Nx workspace whose `nx.json` does not register this plugin but whose tracked files include polyglot manifests (`go.mod`, `Cargo.toml`, `pyproject.toml`) under project roots. Empty when there is no gap. |
 
 The distinction between `notAnalyzed` and `blindSpots` is the same one the
 terminal report draws under two separate headings, and it is load-bearing:
 losing a whole file is a coverage hole (`status: "no-verdict"` when nothing
-else fired); one unresolvable site inside an otherwise-analyzed file is a
-declared limit the run states and moves past.
+else fired); one site whose target is not statically knowable inside an
+otherwise-analyzed file is a declared limit the run states and moves past.
+The line between the two for an unresolvable import is whether the specifier
+names a declared project: a workspace-internal dependency that should resolve
+to a project node but cannot is a whole-file failure (the missing edge is a
+coverage hole), while a package import that names no declared project (an
+uninstalled third-party dependency) is a normal permanent blind spot.
 
 ## `workspace.provenance`
 

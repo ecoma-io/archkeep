@@ -230,6 +230,10 @@ describe("analyzeTypeScript — resolution through TypeScript's own resolver", (
   });
 
   it("does not invent a file for a relative import that names nothing", () => {
+    // A relative path names a FILE, not a package, so it can never name a
+    // declared project by the `project.name` rule — it stays a positioned
+    // blind spot (`contract.md`): the rest of the file's imports were judged,
+    // and a path spelling is what the path rules report on.
     const { imports, failures } = analyze('import x from "./missing.vue";');
     expect(imports[0].resolved).toBeNull();
     expect(failures).toEqual([
@@ -238,6 +242,65 @@ describe("analyzeTypeScript — resolution through TypeScript's own resolver", (
         line: 1,
         column: 15,
         reason: "TypeScript cannot resolve './missing.vue' from 'apps/web/src/main.ts'",
+      },
+    ]);
+  });
+
+  it("keeps a non-literal dynamic import a positioned blind spot, not a whole-file failure", () => {
+    // The permanent case: a computed argument is not statically knowable, but
+    // the rest of the file's imports WERE judged. It stays a site failure so
+    // the report can show the position and `check` does not fail the run.
+    const { imports, failures } = analyze(
+      'const load = (name) => import(name);\nimport x from "./ok";',
+    );
+    const dynamic = imports.find((record) => record.kind === "dynamic");
+    expect(dynamic.resolved).toBeNull();
+    const failure = failures.find((failure) => /non-literal/.test(failure.reason));
+    expect(failure).toMatchObject({ line: 1, column: 31 });
+    expect(failure.line).toBe(1);
+    expect(failure.column).toBe(31);
+  });
+
+  it("counts a literal import naming a declared project as a whole-file failure", () => {
+    // The hole the invariant forbids: `web` is a declared project, the import
+    // names it as a package, and the resolver cannot answer because there is no
+    // `tsconfig` `paths` mapping and no `node_modules` entry. The edge that
+    // workspace-internal dependency would have carried is missing — the file
+    // could not be fully judged. It is a whole-file failure (`line: null`),
+    // which is what makes `check` count the file toward `unchecked` (exit 3).
+    // The tsconfig is dropped so the alias never resolves in the first place.
+    const { failures } = analyze('import { local } from "web";', {
+      files: { "tsconfig.base.json": undefined },
+    });
+    expect(failures).toEqual([
+      {
+        sourceFile: "apps/web/src/main.ts",
+        line: null,
+        column: null,
+        reason: "TypeScript cannot resolve 'web' from 'apps/web/src/main.ts'",
+      },
+    ]);
+  });
+
+  it("keeps a literal import naming no declared project a positioned blind spot", () => {
+    // `left-pad` is an installed third-party package in the fixture's
+    // `node_modules`, but a workspace without it installed is a normal state —
+    // failing the whole run on every unresolved package import would block
+    // merges over dependencies nobody crossed. It stays a positioned blind
+    // spot — reported loudly in the text report, but not a coverage hole that
+    // changes the exit code.
+    const { failures } = analyze('import { pad } from "left-pad";', {
+      files: {
+        "node_modules/left-pad/package.json": undefined,
+        "node_modules/left-pad/index.js": undefined,
+      },
+    });
+    expect(failures).toEqual([
+      {
+        sourceFile: "apps/web/src/main.ts",
+        line: 1,
+        column: 21,
+        reason: "TypeScript cannot resolve 'left-pad' from 'apps/web/src/main.ts'",
       },
     ]);
   });

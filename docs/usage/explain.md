@@ -68,7 +68,9 @@ claim about a judgment that never happened. Two cases are distinguished:
 A site-level failure (the file was analyzed but this one import could not be
 resolved) is not an error — it is an `UNRESOLVABLE` verdict, because the
 judgment was reached and the answer is that the site has no statically knowable
-target.
+target. The one exception is a literal import that names a DECLARED project and
+cannot be resolved: that is a missing workspace edge, a whole-file failure the
+run refuses a verdict over, not a site blind spot.
 
 ## Why `explain` runs the full evaluation
 

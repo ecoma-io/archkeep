@@ -317,14 +317,19 @@ exit-3 refusal instead of a pass.
 ## Three things that are not violations
 
 **Unresolvable import sites.** A specifier that is not statically knowable — a
-computed `import()` argument, a Rust brace group with no leading crate name — is
+computed `import()` argument, a Rust brace group with no leading crate name, a
+literal package import that names no declared project and cannot resolve — is
 printed under its own heading as a declared blind spot. The file _was_ judged;
-one position in it has no answer. The run does not fail on these.
+one position in it has no answer. The run does not fail on these: a workspace
+with packages is a normal state, and failing on every uninstalled package
+would block merges over dependencies nobody crossed.
 
-**Whole-file failures.** A file that could not be analyzed at all is a different
-section, and it **does** fail the run with exit 3. That distinction is the whole
-design: a checker that could not look must never be mistaken for one that looked
-and found nothing.
+**Whole-file failures.** A file that could not be analyzed at all — unreadable,
+no analyzer, a `tsconfig` that will not load, or a literal import that names a
+DECLARED project but cannot be resolved (a missing workspace edge) — is a
+different section, and it **does** fail the run with exit 3. That distinction
+is the whole design: a checker that could not look must never be mistaken for
+one that looked and found nothing.
 
 **Workspace-level findings.** go.work drift (the `goWork*` ids) and a dead
 tsconfig paths alias (`tsconfigDeadPathAlias`) are judged against the

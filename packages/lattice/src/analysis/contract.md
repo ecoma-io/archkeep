@@ -128,12 +128,33 @@ say where a specifier points, `resolved` is `null` and the reason lands in
 `failures` (below). It never guesses a target from a name that looks similar,
 and it never drops the record.
 
-A **dynamic import with a non-literal argument** is the recurring case —
-`import(somePath)`, or an `import()` whose argument is a template literal
-interpolating a variable. The site is real, the target is not knowable
-statically, and the honest answer is one record with `kind: "dynamic"`, the
-source text of the argument as `specifier`, and `resolved: null`. Silently
-dropping it is how a boundary gets bypassed by a template literal.
+There are two ways to reach `resolved: null`, and the failure's shape says
+which one it was:
+
+- A **LITERAL specifier that names a DECLARED project the resolver could not
+  answer** — `import { x } from "@acme/ui"` in a native workspace whose
+  `lattice.json` declares a project literally named `@acme/ui` — is a hole:
+  the edge that workspace-internal dependency would have carried is missing,
+  so the file could not be fully judged. It is a whole-file failure
+  (`fileFailure`, `line`/`column` `null`), which makes `check` count the file
+  toward `unchecked` and refuse a verdict (exit 3) — the same "could not look"
+  shape an unreadable file produces (`cli.mjs` counts `unchecked` by
+  `failure.line === null`).
+- A **literal package import that names no declared project** — an uninstalled
+  third-party package, a dependency of some other workspace — is a normal,
+  permanent state: a workspace with packages is not a missing workspace edge.
+  It stays a POSITIONED failure (`line`/`column` set), the "blind spot" that
+  does not fail the run.
+- A **dynamic import with a non-literal argument** — `import(somePath)`, or an
+  `import()` whose argument is a template literal interpolating a variable — is
+  the recurring permanent case. The site is real, the target is not knowable
+  statically, and the honest answer is one record with `kind: "dynamic"`, the
+  source text of the argument as `specifier`, and a POSITIONED failure
+  (`line`/`column` set). The rest of the file's imports were still judged; a
+  reader can see this one site in the report's blind-spot section and the run
+  does not fail on it.
+
+Silently dropping any of them is how a boundary gets bypassed.
 
 `external: true` marks a specifier that resolves outside every project — an npm
 package, a crate, a Go module from the proxy, a stdlib module. `target` is then

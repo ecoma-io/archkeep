@@ -22,14 +22,20 @@ Exit 0 was the bug: it meant an unreadable file, a missing analyzer, or a
 
 Exit 3 covers both total failures (no workspace root, malformed boundary
 config, `nx graph` or `git` itself failing) and **partial** ones. A single
-unreadable file, a file with no analyzer, or a `tsconfig` that will not load
-each leaves a file the summary counted but no rule ever judged, and that is
-enough to withhold the verdict.
+unreadable file, a file with no analyzer, a `tsconfig` that will not load, or
+a literal import that names a declared project but cannot be resolved (a
+missing workspace edge) each leaves a file the summary counted but no rule
+ever judged, and that is enough to withhold the verdict.
 
-An import site whose specifier is not statically knowable (dynamic `import()`
-with a non-literal argument) is **not** this case: the file was judged, one
-position in it has no answer, and those are printed under a separate heading
-as declared blind spots. They do not affect the exit code.
+An import site whose target is not statically knowable is **not** this case:
+the file was judged, one position in it has no answer, and those are printed
+under a separate heading as declared blind spots. They do not affect the exit
+code. This covers a dynamic `import()` with a non-literal argument — the
+computed target is genuinely unknowable — and a literal package import that
+names NO declared project (an uninstalled third-party dependency): a workspace
+with packages is a normal state, and failing the whole run on it would block
+merges over dependencies nobody crossed. The line is whether the specifier
+names a project this workspace declares.
 
 ## What a clean run prints
 
@@ -104,14 +110,18 @@ inspected. Its `complete` field is the switch that decides between `status:
 | `projects`      | number                           | Project count in the graph this run judged against.                                                                                                                                                                                                                                                      |
 | `analyzedFiles` | number                           | Files the analyzer produced a verdict for.                                                                                                                                                                                                                                                               |
 | `imports`       | number                           | Import sites judged against the boundary law.                                                                                                                                                                                                                                                            |
-| `notAnalyzed`   | `{file, reason}[]`               | Whole-file failures: a file the analyzer never reached a verdict about at all (unreadable, no analyzer, a config it depends on that would not load). Non-empty here is what forces exit 3.                                                                                                               |
-| `blindSpots`    | `{file, line, column, reason}[]` | Site-level failures: the file was analyzed, but one import site's target is not statically knowable. These do not affect `complete` or the exit code.                                                                                                                                                    |
+| `notAnalyzed`   | `{file, reason}[]`               | Whole-file failures: a file the analyzer never reached a verdict about at all (unreadable, no analyzer, a config it depends on that would not load, or a literal import that names a declared project but could not be resolved). Non-empty here is what forces exit 3.                                  |
+| `blindSpots`    | `{file, line, column, reason}[]` | Site-level failures: the file was analyzed, but one import site's target is not statically knowable (a dynamic `import()` with a non-literal argument, or a literal package import that names no declared project and cannot resolve). These do not affect `complete` or the exit code.                  |
 | `notes`         | string[]                         | Caveats about how the result should be interpreted: ESLint dialect parsing, provider mismatches between baseline and head (`diff`), provenance gaps, policy fingerprint disagreements, depConstraints narrowing (`context`, `impact`), or an optional architecture-intent relationship not yet observed. |
 
 The distinction between `notAnalyzed` and `blindSpots` is load-bearing: losing a
-whole file is a coverage hole (exit 3 when nothing else fired); one
-unresolvable site inside an otherwise-analyzed file is a declared limit the run
-states and moves past.
+whole file is a coverage hole (exit 3 when nothing else fired); one site whose
+target is not statically knowable inside an otherwise-analyzed file is a
+declared limit the run states and moves past. For an unresolvable import the
+line is whether the specifier names a declared project: a workspace-internal
+dependency that should resolve to a project node but cannot is a whole-file
+failure (a missing edge, a coverage hole), while a package import that names
+no declared project is a permanent blind spot.
 
 ## Descriptive commands
 
