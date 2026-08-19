@@ -243,12 +243,33 @@ describe("binding and reverse lookup", () => {
     expect(adrsBinding(records, "rule:missing")).toEqual([]);
   });
 
-  it("resolves an ADR id and a known fitness id, and nothing else", () => {
-    const known = boundFitnessIds(records);
+  it("resolves an ADR id and a declared fitness id, and nothing else", () => {
+    // F04: resolution is judged against the ids the policy DECLARES
+    // (`declaredFitnessNames`), never against the ADRs' own `bindings` — the
+    // fixture's bindings (`rule:no-direct-dep`, `fitness:hotspot`) are registry
+    // facts, not declarations, so they must appear in `known` to resolve.
+    const known = new Set(["no-direct-dep", "hotspot", "declared-only"]);
     expect(resolveDecisionRef(byId, known, "0001-bind-collaboration")).toBe("adr");
     expect(resolveDecisionRef(byId, known, "rule:no-direct-dep")).toBe("fitness");
     expect(resolveDecisionRef(byId, known, "0000-missing")).toBe("unknown");
     expect(resolveDecisionRef(byId, known, "rule:missing")).toBe("unknown");
+  });
+
+  it("is unknown when a binding names no declared fitness — a citation cannot resolve itself (F04)", () => {
+    // The audit's exact reproduction: ADR frontmatter binds `hotspot`, but no
+    // policy declares a fitness function named `hotspot`. The citation must
+    // read unknown, never `fitness` — bound-by-itself is the silent direction.
+    const known = new Set(); // no declared fitness anywhere
+    expect(resolveDecisionRef(byId, known, "hotspot")).toBe("unknown");
+    expect(resolveDecisionRef(byId, known, "fitness:hotspot")).toBe("unknown");
+    expect(resolveDecisionRef(byId, known, "rule:no-direct-dep")).toBe("unknown");
+  });
+
+  it("resolves a bare declared fitness id and its `fitness:`/`rule:`-prefixed spelling alike", () => {
+    const known = new Set(["hotspot"]);
+    expect(resolveDecisionRef(byId, known, "hotspot")).toBe("fitness");
+    expect(resolveDecisionRef(byId, known, "fitness:hotspot")).toBe("fitness");
+    expect(resolveDecisionRef(byId, known, "rule:hotspot")).toBe("fitness");
   });
 
   // P1-23: `../governance/row-schema.mjs`'s decisionRef docs recommend
@@ -256,7 +277,7 @@ describe("binding and reverse lookup", () => {
   // but `byId` is keyed on the bare form alone — a lookup that checked `ref`
   // verbatim could never match the one spelling this tool itself suggests.
   it("resolves the `adr:`-prefixed spelling to the same record as the bare id", () => {
-    const known = boundFitnessIds(records);
+    const known = new Set(["hotspot", "no-direct-dep"]);
     expect(resolveDecisionRef(byId, known, "adr:0001-bind-collaboration")).toBe("adr");
     // A prefix on an id that genuinely does not exist still resolves unknown
     // — stripping the prefix must not turn a real miss into a false match.
@@ -288,8 +309,11 @@ describe("stripAdrPrefix", () => {
 // verbatim, unverified. `unresolvedDecisionRefRows` is the bulk primitive
 // those reporting paths now call.
 describe("unresolvedDecisionRefRows — the bulk form the reporting paths call", () => {
-  const { records, byId } = loadAdrRegistry("/tmp/x", treeWith({}));
-  const known = boundFitnessIds(records);
+  const { byId } = loadAdrRegistry("/tmp/x", treeWith({}));
+  // F04: the resolution set is the DECLARED fitness ids, not the fixture's
+  // ADR bindings — `rule:no-direct-dep` only resolves because `no-direct-dep`
+  // is declared below.
+  const known = new Set(["no-direct-dep"]);
 
   it("is empty when every citation resolves — 'no fact, no claim'", () => {
     const rows = [

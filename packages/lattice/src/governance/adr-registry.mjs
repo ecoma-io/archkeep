@@ -413,6 +413,16 @@ export function stripAdrPrefix(ref) {
  * with the `adr:` prefix `stripAdrPrefix` strips) or a rule/fitness id the
  * workspace declares in `knownFitness`. Anything else is unknown.
  *
+ * The fitness half strips the documented `rule:`/`fitness:` prefixes
+ * (`../governance/row-schema.mjs`'s own decisionRef docs show both spellings)
+ * before the membership test: `knownFitness` holds the DECLARED names —
+ * a policy's `fitness` export names (`"hotspot"`), never prefixed strings —
+ * and a citation is the two spellings a row author can write. A ref that is
+ * neither an ADR id nor a declared name — including one that merely prefixes
+ * an undeclared name — is unknown, never a fuzzy match that would hide a
+ * typo behind a "resolved" answer (the same near-miss rule `stripAdrPrefix`
+ * documents for the ADR half).
+ *
  * @param {Map<string, object>} byId The local registry index.
  * @param {Set<string>} knownFitness Rule/fitness ids the workspace declares.
  * @param {string} ref The decisionRef value.
@@ -420,8 +430,41 @@ export function stripAdrPrefix(ref) {
  */
 export function resolveDecisionRef(byId, knownFitness, ref) {
   if (byId.has(stripAdrPrefix(ref))) return "adr";
-  if (knownFitness.has(ref)) return "fitness";
+  if (knownFitness.has(stripRuleFitnessPrefix(ref))) return "fitness";
   return "unknown";
+}
+
+/**
+ * Strips the `rule:`/`fitness:` prefix a governance-row `decisionRef` may
+ * carry (`../governance/row-schema.mjs` documents both spellings beside the
+ * bare name). Only the exact documented lowercase spellings are aliases —
+ * a differently-cased `RULE:x` is a near-miss like any other, never a fuzzy
+ * match — and a name already bare passes through unchanged.
+ *
+ * @param {string} ref
+ * @returns {string}
+ */
+export function stripRuleFitnessPrefix(ref) {
+  return ref.startsWith("rule:") || ref.startsWith("fitness:")
+    ? ref.slice(ref.indexOf(":") + 1)
+    : ref;
+}
+
+/**
+ * The rule/fitness ids a policy DECLARES — the `fitness` export's `name`
+ * fields on the loaded boundary config (F04: a `decisionRef` claiming a
+ * fitness rule must be judged against the ids the executed policy actually
+ * declares, never against the ADRs' own `bindings` lists, which let a
+ * citation resolve itself). Absent when the policy declares none — and then
+ * no `fitness:`-shaped ref can ever resolve, which is the correct answer: a
+ * rule that cannot be measured is no more bound than one that does not exist.
+ *
+ * @param {{fitness?: {name: string}[]}|null|undefined} config The loaded
+ *   boundary config, or `null`/`undefined` when a caller has none.
+ * @returns {Set<string>}
+ */
+export function declaredFitnessNames(config) {
+  return new Set((config?.fitness ?? []).map((row) => row.name));
 }
 
 /**

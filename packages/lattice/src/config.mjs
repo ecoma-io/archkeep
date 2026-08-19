@@ -105,6 +105,7 @@ import { containmentViolation } from "./containment.mjs";
 
 import { loadEslintBoundaryConfig } from "./eslint-config.mjs";
 import { findFitnessViolations } from "./governance/fitness-registry.mjs";
+import { declaredFitnessNames, stripRuleFitnessPrefix } from "./governance/adr-registry.mjs";
 import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "./governance/row-schema.mjs";
 import {
   GLOB_METACHARACTERS,
@@ -282,7 +283,7 @@ function listEntryViolations(values, at, patternError) {
 }
 
 /** One row's problems, prefixed with its index so a report names the offender. */
-function constraintRowViolations(row, index) {
+function constraintRowViolations(row, index, io) {
   const at = `depConstraints[${index}]`;
   if (!isPlainObject(row)) return [`${at}: must be an object, got ${describe(row)}`];
 
@@ -352,7 +353,7 @@ function constraintRowViolations(row, index) {
   // Resolution of a decisionRef/fitnessBinding id is the registry capability's
   // (`./governance/row-schema.mjs`); shape is validated here, loudly.
   if ("origin" in row || "rationale" in row || "decisionRef" in row || "fitnessBindings" in row) {
-    violations.push(...rowSchemaViolations(row, at));
+    violations.push(...rowSchemaViolations(row, at, io));
   }
   // Rejected rather than ignored: an unknown key is almost always a
   // misspelling of one above (`bannedExternalImport`), and the rule would
@@ -550,11 +551,36 @@ function describe(value) {
  * @param {unknown} module The config module's exports.
  * @returns {string[]}
  */
-export function findBoundaryConfigViolations(module) {
+export function findBoundaryConfigViolations(module, io = {}) {
   if (!isPlainObject(module)) return [`config: expected a module object, got ${describe(module)}`];
 
   const violations = [];
   const { depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness } = module;
+  // F05: the resolution half of the governance block (`row-schema.mjs`'s
+  // `io.resolve`) was validator-only until now — no production caller passed
+  // one, so a row bound to a fitness rule that does not exist loaded and ran
+  // as if verified. When no caller supplies one, fill it from this module's
+  // OWN `fitness` export: a row may only claim a fitness rule this very
+  // policy declares (F04's authority, `declaredFitnessNames`). An ADR id needs
+  // the registry, which no config loader holds — `unresolvedDecisionRefRows`
+  // (`./governance/adr-registry.mjs`) is the check/adr/provenance callers'
+  // game, run where the registry lives. What is resolved HERE is the half that
+  // can answer from the policy alone.
+  if (!io.resolve) {
+    const declared = declaredFitnessNames(module);
+    io = {
+      ...io,
+      resolve: (key, id) =>
+        key === "fitnessBindings"
+          ? declared.has(stripRuleFitnessPrefix(id))
+          : // A row's `decisionRef` has two name spaces — a `rule:`/`fitness:`-shaped
+            // citation must name a declared fitness here (the half this loader can
+            // answer), while a bare `NNN-slug` or `adr:`-prefixed one is an ADR
+            // citation the registry owns, judged where the registry lives
+            // (`unresolvedDecisionRefRows`, run by check/adr/provenance).
+            stripRuleFitnessPrefix(id) === id || declared.has(stripRuleFitnessPrefix(id)),
+    };
+  }
 
   // The fitness list — declared where every other executable policy is
   // (`../governance/fitness-registry.mjs` owns the shape). Absent means "no
@@ -562,7 +588,7 @@ export function findBoundaryConfigViolations(module) {
   // present but malformed is refused here, loudly, the same way a malformed
   // suppression is.
   if (fitness !== undefined) {
-    violations.push(...findFitnessViolations(fitness));
+    violations.push(...findFitnessViolations(fitness, io));
   }
 
   // Absent means "nothing is suppressed", which is the only default that fails
@@ -589,7 +615,9 @@ export function findBoundaryConfigViolations(module) {
         `this is the constraint table both enforcers read`,
     );
   } else {
-    depConstraints.forEach((row, index) => violations.push(...constraintRowViolations(row, index)));
+    depConstraints.forEach((row, index) =>
+      violations.push(...constraintRowViolations(row, index, io)),
+    );
   }
 
   if (!isPlainObject(moduleBoundaryOptions)) {

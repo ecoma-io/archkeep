@@ -282,10 +282,18 @@ describe("findBoundaryConfigViolations", () => {
 });
 
 describe("findBoundaryConfigViolations — the governance block (Contract 2)", () => {
-  it("accepts a constraint row carrying the full governance block", () => {
+  it("accepts a constraint row carrying the full governance block when the binding is declared", () => {
     expect(
       findBoundaryConfigViolations({
         ...wellFormed(),
+        fitness: [
+          {
+            name: "hotspot",
+            match: ["*"],
+            condition: { type: "coverage-minimum", statement: 100 },
+            reason: "measured",
+          },
+        ],
         depConstraints: [
           {
             sourceTag: "layer:domain",
@@ -298,6 +306,27 @@ describe("findBoundaryConfigViolations — the governance block (Contract 2)", (
         ],
       }),
     ).toEqual([]);
+  });
+
+  it("rejects a fitnessBindings entry that names no declared fitness rule (F05)", () => {
+    // The F04/F05 reproduction: a row bound to `fitness:hotspot` with no
+    // fitness function named `hotspot` declared anywhere in this policy. The
+    // resolution half of the governance block (`row-schema.mjs`'s `io.resolve`)
+    // was dead until now; a binding that names nothing is a load error, not a
+    // silently-verified claim.
+    const violations = findBoundaryConfigViolations({
+      ...wellFormed(),
+      depConstraints: [
+        {
+          sourceTag: "layer:domain",
+          onlyDependOnLibsWithTags: ["layer:util"],
+          fitnessBindings: ["fitness:hotspot"],
+        },
+      ],
+    });
+    expect(
+      violations.some((v) => v.includes("fitnessBindings[0]") && v.includes("does not resolve")),
+    ).toBe(true);
   });
 
   it("accepts a legacy row with no governance block at all — byte-identical parse", () => {

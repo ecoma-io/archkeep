@@ -3,9 +3,9 @@
  * stack on a base, and then select by name instead of by file.
  *
  * A profile is data, not a new dialect. Each profile body is a policy block of
- * the exact three keys every boundaryConfig dialect already shares —
- * `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`
- * (`../../config.mjs`'s `findBoundaryConfigViolations`, documented in
+ * the exact four keys every boundaryConfig dialect already shares —
+ * `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, and
+ * `fitness` (`../../config.mjs`'s `findBoundaryConfigViolations`, documented in
  * `../../../../docs/concepts/policies.md`) — validated by that same validator,
  * so a profile cannot state a constraint the file dialects cannot. The
  * resolution result is fed through `../../config.mjs`'s `policyFrom` tail, so
@@ -16,13 +16,14 @@
  * The profile list itself is JSON, named by the `profiles` plugin option
  * (`../../options.mjs`). A profile has a `name`, an optional `base` (the name
  * of another profile whose effective block it inherits), and a `block` of the
- * three keys. Precedence is deterministic and documented in
+ * four keys. Precedence is deterministic and documented in
  * `../../../../docs/concepts/profiles.md`: a child profile's `depConstraints`
  * rows are appended AFTER its base's rows (the composition semantics of
  * `@nx/enforce-module-boundaries`, where a dependency must satisfy EVERY row
  * whose `sourceTag` its source project carries, so axes compose rather than
  * replace); its `moduleBoundaryOptions` keys overwrite the base's key by key;
- * its `boundarySuppressions` rows are appended after the base's. `base` may
+ * its `boundarySuppressions` rows — and its `fitness` rows — are appended
+ * after the base's. `base` may
  * chain by name — `b` on `a`, `c` on `b` — resolved depth-first, earlier
  * profiles first, so a chain reads in the order it was written.
  *
@@ -81,8 +82,8 @@ function registrySchemaVersion(raw) {
     : /** @type {unknown} */ (raw.version);
 }
 
-/** The three keys a profile's `block` may carry, exactly those `policyFrom` reads. */
-const BLOCK_KEYS = ["depConstraints", "moduleBoundaryOptions", "boundarySuppressions"];
+/** The four keys a profile's `block` may carry, exactly those `policyFrom` reads. */
+const BLOCK_KEYS = ["depConstraints", "moduleBoundaryOptions", "boundarySuppressions", "fitness"];
 
 /**
  * A profile `name`, matched exactly by `resolveProfile` and typed by an
@@ -141,7 +142,7 @@ export function profileRegistryViolations(raw) {
   }
   if (registrySchemaVersion(raw) !== PROFILE_REGISTRY_SCHEMA_VERSION) {
     violations.push(
-      `version: expected ${PROFILE_REGISTRY_SCHEMA_VERSION}, got ${describe(raw.version)} — ` +
+      `version: expected ${PROFILE_REGISTRY_SCHEMA_VERSION}, got ${describe(registrySchemaVersion(raw))} — ` +
         `a registry this reader does not understand must refuse rather than guess`,
     );
   }
@@ -242,7 +243,12 @@ export function profileReferenceViolations(profiles) {
  * @param {object[]} profiles The registry's full profile list.
  * @param {string} name The profile to resolve.
  * @param {Set<string>} [seen] Inheritance stack (used internally by recursion).
- * @returns {{depConstraints: object[], moduleBoundaryOptions: object, boundarySuppressions: object[]}}
+ * @returns {{depConstraints: object[], moduleBoundaryOptions: object, boundarySuppressions: object[],
+ *   fitness?: object[]}} `fitness` is present only when the profile (or a base
+ *   it inherits) declares one — the same absent-is-a-decision posture
+ *   `policyFrom` keeps, so a profile-selected workspace reaches the fitness
+ *   command's "declares no fitness functions" refusal rather than a
+ *   config-loading failure.
  * @throws {Error} when `name` does not exist or its base chain cycles — never
  *   silently resolved as "no profile".
  */
@@ -277,6 +283,11 @@ export function resolveProfile(profiles, name, seen = new Set()) {
       ...(base?.boundarySuppressions ?? []),
       ...(block.boundarySuppressions ?? []),
     ],
+    // Child `fitness` rows append after base rows, the same composition
+    // semantics every other list-keyed block field uses.
+    ...(base?.fitness !== undefined || block.fitness !== undefined
+      ? { fitness: [...(base?.fitness ?? []), ...(block.fitness ?? [])] }
+      : {}),
   };
 }
 

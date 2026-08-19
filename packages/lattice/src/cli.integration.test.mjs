@@ -231,6 +231,96 @@ describe("checking a real tree", () => {
     expect(envelope.result.tsconfigPaths).toBeNull();
   });
 
+  it("stamps the check envelope with git provenance — commit and dirty flag, the same resolveProvenance every command uses (D-10)", async () => {
+    // D-10: `check`'s JSON envelope used to carry NO provenance, so a CI run
+    // over a dirty tree presented an abstract claim about a tree state it did
+    // not name. Every envelope command now resolves provenance through the one
+    // `resolveProvenance`. This fixture is a real git repo, so the bytes are
+    // real: HEAD short-sha + the dirty flag from `git status --porcelain`.
+    const repo = mkdtempSync(join(tmpdir(), "polyglot-cli-provenance-"));
+    try {
+      const g = (...args) =>
+        spawnSync("git", args, {
+          cwd: repo,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: "t",
+            GIT_AUTHOR_EMAIL: "t@t",
+            GIT_COMMITTER_NAME: "t",
+            GIT_COMMITTER_EMAIL: "t@t",
+            HOME: process.env.HOME,
+          },
+        }).status;
+      const git = (...args) => {
+        const r = spawnSync("git", args, {
+          cwd: repo,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: "t",
+            GIT_AUTHOR_EMAIL: "t@t",
+            GIT_COMMITTER_NAME: "t",
+            GIT_COMMITTER_EMAIL: "t@t",
+            HOME: process.env.HOME,
+          },
+        });
+        return r.stdout.trim();
+      };
+      const repoWrite = (relativePath, text) => {
+        mkdirSync(join(repo, relativePath, ".."), { recursive: true });
+        writeFileSync(join(repo, relativePath), text);
+      };
+      expect(g("init", "-q", "-b", "main")).toBe(0);
+      repoWrite("nx.json", readFileSync(join(root, "nx.json"), "utf8"));
+      repoWrite(
+        "module-boundaries.config.mjs",
+        readFileSync(join(root, "module-boundaries.config.mjs"), "utf8"),
+      );
+      repoWrite("libs/domain/go.mod", readFileSync(join(root, "libs/domain/go.mod"), "utf8"));
+      repoWrite("libs/domain/doc.go", readFileSync(join(root, "libs/domain/doc.go"), "utf8"));
+      repoWrite("libs/adapter/go.mod", readFileSync(join(root, "libs/adapter/go.mod"), "utf8"));
+      repoWrite(
+        "libs/adapter/adapter.go",
+        readFileSync(join(root, "libs/adapter/adapter.go"), "utf8"),
+      );
+      expect(g("add", "-A")).toBe(0);
+      expect(g("commit", "-m", "fixture")).toBe(0);
+      const head = git("rev-parse", "HEAD");
+
+      const streams = {
+        out: (t) => streams.lines.out.push(t),
+        err: (t) => streams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: repo,
+        listFiles: () => files,
+        readGraph: () => graph,
+      };
+      expect(await runCli(["check", "--format", "json"], streams)).toBe(EXIT.violations);
+      const envelope = JSON.parse(streams.lines.out.join("\n"));
+      expect(envelope.workspace).toBeDefined();
+      expect(envelope.workspace.provenance).toEqual({ commit: head, remote: null, dirty: false });
+
+      // Dirty: touching a tracked file flips the flag, so a stamped-but-stale
+      // run can never claim a clean tree.
+      repoWrite("libs/domain/go.mod", "module example.com/domain\n\ngo 1.25\n");
+      const dirtyStreams = {
+        out: (t) => dirtyStreams.lines.out.push(t),
+        err: (t) => dirtyStreams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: repo,
+        listFiles: () => files,
+        readGraph: () => graph,
+      };
+      await runCli(["check", "--format", "json"], dirtyStreams);
+      const dirtyEnvelope = JSON.parse(dirtyStreams.lines.out.join("\n"));
+      expect(dirtyEnvelope.workspace.provenance.commit).toBe(head);
+      expect(dirtyEnvelope.workspace.provenance.dirty).toBe(true);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   it("renders the exact byte sequence for the violating fixture — a golden pin against silent format drift", async () => {
     // Every other assertion in this describe block checks a substring; this
     // one checks the whole thing, so a change that reorders a line or drops a
@@ -1679,6 +1769,163 @@ export const fitness = [
     expect(report).toContain("2/2 files analyzed (100%)");
   });
 
+  it("exits 1 when a declared fitness function fails — a fitness fail is a finding (D-09)", async () => {
+    // The `fitness` COMMAND's exit code was hardcoded 0 before D-09/F03 — the
+    // verdict table printed `✖` but the process exited 0, so a CI gating on
+    // `lattice fitness` was green over a failing function. A `fail` verdict
+    // must exit 1 (findings), the same lane `check` uses for a boundary
+    // violation.
+    writeNative(
+      "fitness-fail.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "domain-may-not-reach-adapter",
+    match: ["*"],
+    condition: { type: "layer-dependency", from: "layer:domain", to: "layer:adapter", direction: "forbidden" },
+    reason: "the domain layer must never reach the adapter",
+  },
+];
+`,
+    );
+    const streams = nativeEnv();
+    expect(await runCli(["fitness", "--config", "fitness-fail.config.mjs"], streams)).toBe(
+      EXIT.violations,
+    );
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("✖ domain-may-not-reach-adapter");
+    expect(out).toContain("the build fails");
+  });
+
+  it("exits 3 when an intent row cites an unresolved decisionRef — the gate's face is never silent (F01)", async () => {
+    // F01: `check` used to NEVER surface intent-row unresolved decisionRefs —
+    // `drift`/`provenance` flag the identical row loudly, but the gate CI runs
+    // was the one face that stayed silent. A clean boundary (this law ALLOWS
+    // the domain→adapter crossing) plus an intent row citing a nonexistent
+    // decisionRef must fold into the no-verdict lane: exit 3, with the
+    // citation named in both the text and the JSON. A workspace that declared
+    // an intended architecture whose governing decision does not exist cannot
+    // claim `ok` on that axis.
+    const root = mkdtempSync(join(tmpdir(), "polyglot-cli-f01-"));
+    try {
+      const w = (p, t) => {
+        mkdirSync(join(root, p, ".."), { recursive: true });
+        writeFileSync(join(root, p), t);
+      };
+      w(
+        "lattice.json",
+        JSON.stringify({
+          projects: {
+            declared: [
+              { root: "libs/domain", name: "domain", tags: ["layer:domain"] },
+              { root: "libs/adapter", name: "adapter", tags: ["layer:adapter"] },
+            ],
+          },
+          coverage: {
+            exempt: [{ path: "module-boundaries.config.mjs", reason: "workspace tooling config" }],
+          },
+        }),
+      );
+      w(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:adapter", "layer:domain"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      w("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      w(
+        "libs/domain/doc.go",
+        'package domain\n\nimport "example.com/adapter"\n\nvar _ = adapter.Name\n',
+      );
+      w("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+      w("libs/adapter/adapter.go", "package adapter\n\nvar Name string\n");
+      w(
+        "architecture-intent.json",
+        JSON.stringify({
+          version: "1",
+          boundaries: [
+            { name: "domain", match: ["name:domain"] },
+            { name: "adapter", match: ["name:adapter"] },
+          ],
+          forbidden: [
+            {
+              from: "adapter",
+              to: "domain",
+              reason: "adapter must not reach the domain",
+              decisionRef: "9999-never-written",
+            },
+          ],
+        }),
+      );
+      const files = [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        "architecture-intent.json",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+        "libs/adapter/go.mod",
+        "libs/adapter/adapter.go",
+      ];
+      const streams = {
+        out: (t) => streams.lines.out.push(t),
+        err: (t) => streams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: root,
+        listFiles: () => files,
+      };
+      // The boundary is clean — no violations. The run must still exit 3.
+      expect(await runCli(["check", "--format", "json"], streams)).toBe(EXIT.error);
+      const envelope = JSON.parse(streams.lines.out.join("\n"));
+      expect(envelope.status).toBe("no-verdict");
+      expect(envelope.result.unresolvedDecisionRefs).toEqual(["9999-never-written"]);
+      expect(envelope.result.intent.unresolvedDecisionRefs).toEqual([
+        { kind: "forbidden[0]", decisionRef: "9999-never-written" },
+      ]);
+      expect(envelope.decision.reason).toContain(
+        "1 intent row cites a decisionRef that does not resolve",
+      );
+
+      const textStreams = {
+        out: (t) => textStreams.lines.out.push(t),
+        err: (t) => textStreams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: root,
+        listFiles: () => files,
+      };
+      await runCli(["check"], textStreams);
+      const text = textStreams.lines.out.join("\n");
+      expect(text).toContain("UNRESOLVED");
+      expect(text).toContain("forbidden[0] decisionRef [9999-never-written]");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("exits 3 when a declared fitness function cannot be determined — never a pass", async () => {
     writeNative(
       "fitness-unknown.config.mjs",
@@ -2034,13 +2281,16 @@ export const fitness = [
         cwd: root,
         listFiles: () => files,
       };
-      expect(await runCli(["fitness"], streams)).toBe(EXIT.ok);
+      expect(await runCli(["fitness"], streams)).toBe(EXIT.error);
       const report = streams.lines.out.join("\n") + streams.lines.err.join("\n");
       expect(report).not.toContain("Cannot read properties of undefined");
       expect(report).not.toContain("TypeError");
       expect(report).toContain("✔ full-coverage");
       expect(report).toContain("⚠ intent-clean");
       expect(report).toContain("cannot judge drift-free — no architecture-intent.json is declared");
+      // D-09: the run could not determine `intent-clean` (no intent file), so
+      // it is `unknown`, and an unknown is exit 3 — "the supported
+      // configuration" must not claim `pass` over an axis it did not judge.
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

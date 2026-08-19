@@ -10,7 +10,7 @@
  * test is whether it correctly reads what git reports. A mocked git would prove
  * the mock, not the code.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { resolveProvenance } from "./provenance.mjs";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -30,6 +30,52 @@ describe("resolveProvenance", () => {
       expect(provenance.remote.length).toBeGreaterThan(0);
     }
     expect(typeof provenance.dirty).toBe("boolean");
+  });
+
+  it("ignores an ambient GIT_DIR — the spawns route through environmentForTree (G-09)", () => {
+    // A wrapping tool (an editor hook, an outer `git` call) can leak a
+    // GIT_DIR/GIT_WORK_TREE into this process. Without the guard, the spawn
+    // would read THAT repository instead of the tree at `root` — provenance
+    // attributed to the wrong bytes. `environmentForTree` strips the redirects,
+    // so the porcelain reflects the tree under test, never the ambient one.
+    const repo = mkdtempSync(join(tmpdir(), "lattice-git-env-guard-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: repo });
+      execFileSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-m", "base"],
+        {
+          cwd: repo,
+          env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined },
+        },
+      );
+      const provenance = resolveProvenance(repo);
+      expect(provenance).not.toBeNull();
+      expect(provenance.commit).toMatch(/^[0-9a-f]{40}$/u);
+      // Poison the environment and re-resolve: the guard must strip it, so the
+      // answer is byte-identical instead of pointing at GIT_DIR.
+      const gitEnvBackup = {
+        GIT_DIR: process.env.GIT_DIR,
+        GIT_WORK_TREE: process.env.GIT_WORK_TREE,
+        GIT_INDEX_FILE: process.env.GIT_INDEX_FILE,
+      };
+      try {
+        vi.stubEnv("GIT_DIR", "/somewhere/else");
+        vi.stubEnv("GIT_WORK_TREE", "/somewhere/else");
+        vi.stubEnv("GIT_INDEX_FILE", "/somewhere/else");
+        const poisoned = resolveProvenance(repo);
+        expect(poisoned.commit).toBe(provenance.commit);
+        expect(poisoned.dirty).toBe(provenance.dirty);
+      } finally {
+        vi.unstubAllEnvs();
+        for (const [key, value] of Object.entries(gitEnvBackup)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   it("returns null when the directory is not a git repository", () => {

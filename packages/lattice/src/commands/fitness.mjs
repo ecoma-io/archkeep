@@ -95,7 +95,7 @@ export function fitnessForCheck(commandContext, { rows, intent, suppressions, sc
  *
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config?: object|null}} [io] The loaded policy, injectable for tests.
- * @returns {Promise<{status: "ok", fitness: object, coverage: object,
+ * @returns {Promise<{status: "ok"|"findings"|"no-verdict", fitness: object, coverage: object,
  *   report: {text: string, json: string}}>}
  * @throws {Error} on every condition the header lists, all exit-3 class.
  */
@@ -180,8 +180,20 @@ export async function fitnessCommand(commandContext, io = {}) {
   };
 
   const context = { root, provider, marker, provenance: resolveProvenance(root) };
-  const status = "ok";
-  const exitCode = 0;
+  // D-09: a `fitness` run is a verdict, not a print job. `fail` is a finding
+  // (exit 1) and `unknown` is a could-not-determine (exit 3) — the same two
+  // lanes `check` uses, so a CI that gates on `lattice fitness` cannot be
+  // green over a function the run could not determine. `pass` and a run whose
+  // every function is `not_applicable` are both `ok`: nothing failed and
+  // nothing stayed undetermined. The status↔exitCode pair is asserted by
+  // `jsonEnvelope` (3-on-no-verdict), so a wrong mapping here cannot ship.
+  /** @type {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3}} */
+  const { status, exitCode } =
+    overall.verdict === "fail"
+      ? { status: "findings", exitCode: 1 }
+      : overall.verdict === "unknown"
+        ? { status: "no-verdict", exitCode: 3 }
+        : { status: "ok", exitCode: 0 };
   const result = { verdict: overall.verdict, functions: decisions };
 
   const report = {

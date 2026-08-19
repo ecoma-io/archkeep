@@ -78,6 +78,7 @@
  */
 
 import { referenceTime as clockReferenceTime } from "./clock.mjs";
+import { EXPIRED_WAIVER_EVIDENCE, suppressionFate } from "./waiver.mjs";
 
 /**
  * The head snapshot's projects as name → root, used to place a suppression path
@@ -171,15 +172,23 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
 
   for (const suppression of current.suppressions ?? []) {
     const project = owningProjectForPath(suppression.path, byName);
+    // F06: a waiver that lapsed re-asserts — the ledger must name it, never
+    // book it as a low "still suppressed" row while the gate re-asserts the
+    // same row. The shared fate function (`./waiver.mjs`) is the ONE
+    // authority, so `debt` and `check` cannot disagree about expiry. A legacy
+    // suppression (no `expiresAt`) is `suppress`: still low and permanent.
+    const fate = suppressionFate(suppression, sampleTime);
+    const expired = fate === "reassert";
     entries.push({
       source: suppression.path,
-      kind: "waiver",
-      severity: "low",
+      kind: expired ? "expired-waiver" : "waiver",
+      severity: expired ? "medium" : "low",
       age: project ? ageOf(project) : 0,
       count: 1,
-      remediationHint:
-        `the accepted violation at '${suppression.path}' is still suppressed — ` +
-        (project ? `owning project '${project}'` : "retire it or confirm the reason"),
+      remediationHint: expired
+        ? `the waiver at '${suppression.path}' expired — the boundary it accepted is live again (${EXPIRED_WAIVER_EVIDENCE}); renew it or retire it`
+        : `the accepted violation at '${suppression.path}' is still suppressed — ` +
+          (project ? `owning project '${project}'` : "retire it or confirm the reason"),
     });
   }
   for (const note of current.intentNotes ?? []) {

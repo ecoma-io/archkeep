@@ -9,7 +9,7 @@ map to them.
 | code | meaning                                                                                                                                       | when                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ---- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0    | clean -- and every selected file was analyzed                                                                                                 | No findings and no coverage gaps.                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, or architecture-intent findings                                   | `check` only. No other command can exit 1.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 1    | findings -- boundary violations, go.work drift, dead tsconfig path aliases, architecture-intent findings, or a failing fitness function       | `check` and `fitness`. A failing fitness function is a finding (D-09); every other command that finds something reports it but exits 0, so it never claims the findings exit code without a failed enforcement.                                                                                                                                                                                                                                                                  |
 | 2    | usage error                                                                                                                                   | Unknown command, unknown flag, missing argument, path outside the tree, or a scoped path matching no tracked file (a typo, the wrong working directory, or a file not yet `git add`ed). Never reaches the JSON envelope.                                                                                                                                                                                                                                                         |
 | 3    | no verdict -- the run could not start, a selected file could not be read, or architecture intent (or the law itself) could not be established | No workspace, both root markers present, malformed config, `nx graph`/`git` failed, unreadable file, no analyzer for a file, `tsconfig` that will not load, a tracked `architecture-intent.json` that will not parse or whose boundaries match no project, (native provider) a tracked file no project owns, or — in a profile-selected workspace — a profile that could not be resolved: an unknown profile name, an unknown `base`, a `base` cycle, or an unreadable registry. |
 
@@ -115,11 +115,16 @@ states and moves past.
 
 ## Descriptive commands
 
-`graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`,
+`graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`,
 `history`, `health`, `debt`, `impact`, `explain`, `context`, `provenance`, and
 `adr` are descriptive -- they never exit 1.
 They exit 0 when the run completes and 3 when coverage is incomplete. The
 envelope's `status` follows the same mapping: `"ok"` for 0, `"no-verdict"` for 3. `"findings"` never appears for a descriptive command.
+
+`fitness` is the exception: it is a verdict, not a print job (D-09). It exits 1
+on a failing function and 3 on an undetermined one -- the same two lanes
+`check` uses -- because a CI gating on `lattice fitness` must not be green over
+a function that failed or that the run could not determine.
 
 `diff` also refuses an incomplete baseline or current workspace (exit 3, no
 diff), because every "removed" entry would be ambiguous between a real change
@@ -128,7 +133,6 @@ and a coverage gap.
 `fitness` also exits 3 when the policy declares no `fitness` at all -- judging
 nothing is not the same as judging an empty table, and a `--config` pointing at
 a policy that declares none names that loudly instead of printing an empty
-verdict table. Its per-function verdicts, when present, fold into `check`
-instead: `check` exits 1 when a declared fitness function `fail`s and 3 when any
-function is `unknown`, same machinery as boundary findings and no-verdicts,
-never a new code.
+verdict table. Its per-function verdicts fold into `check` the same way: a
+declared fitness function that `fail`s exits 1 and one that is `unknown` exits
+3, same machinery as boundary findings and no-verdicts, never a new code.
