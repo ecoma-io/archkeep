@@ -129,11 +129,15 @@ const formatFailure = (failure) =>
  *
  * A SITE failure is a blind spot: the file was analyzed, and one specifier in
  * it is not statically knowable — `import(url)` with a computed argument is
- * the honest example. The rest of the file still got a verdict. Failing the
- * run on these would let one unresolvable third-party specifier block a merge
- * over a boundary nobody crossed, and they are legitimately permanent.
+ * the honest example, and so is a literal package import that names no
+ * declared project and cannot resolve (an uninstalled third-party dependency:
+ * a workspace with packages is a normal state, and failing the run on it would
+ * block merges over dependencies nobody crossed). Both are legitimately
+ * permanent, and the rest of the file still got a verdict.
  *
- * A WHOLE-FILE failure is a hole: nothing was read, parsed, or analyzed, so
+ * A WHOLE-FILE failure is a hole: nothing was read, parsed, or analyzed — or a
+ * literal import that names a DECLARED project could not be resolved, so the
+ * edge that workspace-internal dependency would have carried is missing — and
  * this file contributed no verdict at all. The summary line above still counts
  * imports and files, so a reader who sees "no boundary violations" is being
  * told about coverage; a file in this section is coverage that is missing.

@@ -1683,6 +1683,191 @@ var _ = adapter.Name
     expect(report).toContain("libs/domain/doc.go:5:2  onlyTagsConstraintViolation");
   });
 
+  it("counts a tracked file whose literal import names a declared project but cannot resolve — exit 3, never a silent pass", async () => {
+    // The fail-closed direction, end to end. A native (non-Nx) workspace with
+    // no `tsconfig` `paths` mapping puts an import that names a DECLARED
+    // project into a tracked file: the TypeScript resolver can answer "no such
+    // module", so the edge that workspace-internal dependency would have
+    // carried is missing and the file's boundary verdict is incomplete. That is
+    // the same "could not look" the invariant singles out (`AGENTS.md`): an
+    // empty violation list over a file the run could not fully judge reads
+    // byte-identically to a clean workspace. The analyzer emits the literal
+    // resolution failure as a WHOLE-FILE failure only when the specifier names
+    // a declared project (`analysis/typescript.mjs`'s `namesDeclaredProject`),
+    // so `check` counts the file toward `unchecked` and refuses a verdict
+    // (exit 3). `runCli` closes the loop through the real CLI, the same seam
+    // CI runs.
+    const unresolvableRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-unresolvable-"));
+    const writeU = (relativePath, text) => {
+      mkdirSync(join(unresolvableRoot, relativePath, ".."), { recursive: true });
+      writeFileSync(join(unresolvableRoot, relativePath), text);
+    };
+    try {
+      // The `@billing/api` project is DECLARED with that exact name — an
+      // import of it from a sibling project is a workspace-internal dependency
+      // that must resolve to a project node. With no tsconfig `paths` mapping
+      // it cannot, so the importing file's boundary verdict is incomplete.
+      writeU(
+        "lattice.json",
+        JSON.stringify({
+          projects: {
+            declared: [
+              { name: "billing-core", root: "libs/billing/core", tags: ["scope:billing"] },
+              { name: "@billing/api", root: "libs/billing/api", tags: ["scope:checkout"] },
+            ],
+          },
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "the boundary law is not part of any project",
+              },
+            ],
+          },
+        }),
+      );
+      writeU(
+        "module-boundaries.config.mjs",
+        `export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const depConstraints = [
+  { sourceTag: "*", onlyDependOnLibsWithTags: ["*"] },
+];
+export const boundarySuppressions = [];
+`,
+      );
+      writeU(
+        "libs/billing/core/index.ts",
+        'import { helper } from "@billing/api";\nexport const used = helper;\n',
+      );
+      writeU("libs/billing/api/index.ts", "export const helper = 42;\n");
+      const uFiles = [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        "libs/billing/core/index.ts",
+        "libs/billing/api/index.ts",
+      ];
+      const streams = {
+        ...nativeEnv(),
+        cwd: unresolvableRoot,
+        listFiles: () => uFiles,
+      };
+
+      // The `check()` seam, in-process: the file lands in `notAnalyzed`, so the
+      // run produced no verdict for it.
+      const { report, violations, unchecked } = await check(
+        { format: "text", config: null, paths: [] },
+        streams,
+      );
+      expect(violations).toBe(0);
+      expect(unchecked).toBe(1);
+      expect(report).toContain("1 file could not be analyzed at all");
+      expect(report).toContain(
+        "TypeScript cannot resolve '@billing/api' from 'libs/billing/core/index.ts'",
+      );
+
+      // The CLI seam, the same verdict through the real exit code: RED on a
+      // file the run could not fully look at, never a silent pass.
+      const cliStreams = {
+        ...nativeEnv(),
+        cwd: unresolvableRoot,
+        listFiles: () => uFiles,
+      };
+      expect(await runCli(["check"], cliStreams)).toBe(EXIT.error);
+      expect(cliStreams.lines.out.join("\n")).toContain("could not be analyzed at all");
+    } finally {
+      rmSync(unresolvableRoot, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("keeps an unresolved bare-package import a blind spot — a workspace with packages is normal", async () => {
+    // The OTHER side of the discriminator, and what keeps the native selfcheck
+    // green: a native copy of this repository sees hundreds of bare-package
+    // imports (`vitest`, `@nx/eslint-plugin`, an uninstalled `left-pad`) that
+    // cannot resolve because the tree ships no `node_modules`. Those are
+    // legitimate package dependencies, NOT missing workspace edges — no
+    // declared project is named `left-pad`. Failing the whole run on them would
+    // make every package-owning workspace uncheckable. They stay positioned
+    // blind spots (reported loudly, exit 0).
+    const pkgRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-unresolvable-pkg-"));
+    const writeP = (relativePath, text) => {
+      mkdirSync(join(pkgRoot, relativePath, ".."), { recursive: true });
+      writeFileSync(join(pkgRoot, relativePath), text);
+    };
+    try {
+      writeP(
+        "lattice.json",
+        JSON.stringify({
+          projects: {
+            declared: [{ name: "core", root: "libs/core", tags: ["scope:core"] }],
+          },
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "the boundary law is not part of any project",
+              },
+            ],
+          },
+        }),
+      );
+      writeP(
+        "module-boundaries.config.mjs",
+        `export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const depConstraints = [
+  { sourceTag: "*", onlyDependOnLibsWithTags: ["*"] },
+];
+export const boundarySuppressions = [];
+`,
+      );
+      writeP("libs/core/index.ts", 'import { pad } from "left-pad";\nexport const used = pad;\n');
+      const pFiles = ["lattice.json", "module-boundaries.config.mjs", "libs/core/index.ts"];
+      const streams = {
+        ...nativeEnv(),
+        cwd: pkgRoot,
+        listFiles: () => pFiles,
+      };
+
+      const { report, violations, unchecked } = await check(
+        { format: "text", config: null, paths: [] },
+        streams,
+      );
+      expect(violations).toBe(0);
+      expect(unchecked).toBe(0);
+      // The blind spot is still reported — loud, never silent — but the verdict
+      // stays `ok` because the import names no declared project.
+      expect(report).toContain("left-pad");
+      expect(report).toContain("TypeScript cannot resolve 'left-pad'");
+      expect(report).not.toContain("could not be analyzed at all");
+
+      const cliStreams = {
+        ...nativeEnv(),
+        cwd: pkgRoot,
+        listFiles: () => pFiles,
+      };
+      expect(await runCli(["check"], cliStreams)).toBe(EXIT.ok);
+    } finally {
+      rmSync(pkgRoot, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("writes a drift report to --output atomically, and names the fact on stderr", async () => {
     // The `--output` branch of `runDrift`: write to `<target>.tmp`, rename over
     // the target, print the comparison fact on stderr. Neither a `<target>.tmp`
