@@ -35,7 +35,7 @@
  * Everything this file reports is loud: an ESLint config this reader cannot
  * map to a constraint table throws, naming why, so a workspace mid-migration
  * to this dialect gets one clear error rather than a boundary check that
- * quietly ran with no constraints (`AGENTS.md`'s invariant). Three classes of
+ * quietly ran with no constraints (`AGENTS.md`'s invariant). Four classes of
  * "cannot map" beyond the ones already documented on `extractBoundaryRule`
  * and `parseRuleValue`:
  *
@@ -58,6 +58,12 @@
  *   never which part of the tree the law covers, so lattice applies the
  *   table tree-wide and records the fact as a note rather than refusing a
  *   config this dialect is meant to read with no rewriting at all.
+ * - An entry carrying a non-empty `ignores` is refused outright, with no
+ *   bare-extension exception: unlike `files`, an `ignores` list is a set of
+ *   paths by construction — there is no shape of it that states languages
+ *   rather than territory — so it is folded into the same refusal a
+ *   directory-component `files` glob gets, never applied tree-wide with the
+ *   exclusion silently dropped.
  */
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -88,6 +94,25 @@ const BARE_EXTENSION_GLOB = /^\*\*\/\*\.[A-Za-z0-9]+$/u;
 /** @type {(value: unknown) => value is Record<string, unknown>} */
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** A rule entry's severity — the bare value itself, or the `[severity, …]` pair's first element. */
+function severityOf(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/**
+ * Whether a rule entry states an options element at all (`[severity, options]`,
+ * as opposed to a bare severity or a one-element `[severity]` array). Measured
+ * against eslint 10.8.0's own `FlatConfigArray`: a later flat-config entry
+ * that states only a severity does not clear the options an earlier entry
+ * stated for the same rule — ESLint keeps that options object and merges only
+ * the severity forward. `extractBoundaryRule` mirrors that merge instead of
+ * reading a severity-only winning entry as "no depConstraints key stated" for
+ * a config ESLint is actively enforcing under an earlier table.
+ */
+function statesOptions(value) {
+  return Array.isArray(value) && value.length > 1;
 }
 
 /** A flat-config array element's shape, for a message naming what was found instead of a plain object. */
@@ -170,19 +195,25 @@ function parseRuleValue(value, index) {
  * @returns {{depConstraints: object[], options: Record<string, unknown>,
  *   note?: string}} The constraint table, the entry's own stated options
  *   (`depConstraints` stripped out), and — only when there is something worth
- *   telling a reader about which entry bound — a note recording it. Two
+ *   telling a reader about which entry bound — a note recording it. Three
  *   independent facts can each contribute a sentence: several unscoped (or
- *   accepted files-scoped) entries configuring the rule differently, and the
- *   winning entry itself being files-scoped under the accepted shape. Neither
- *   is a refusal: several overrides layered across a monorepo's
- *   `eslint.config.mjs` composing other configs is a normal, common shape,
- *   and ESLint's own binding rule already says unambiguously which one wins;
- *   a bare source-extension `files` entry states languages, not territory.
+ *   accepted files-scoped) entries configuring the rule differently, the
+ *   winning entry itself being files-scoped under the accepted shape, and the
+ *   winning entry stating only a severity so its options were read off an
+ *   earlier entry instead (see `statesOptions`). None of the three is a
+ *   refusal: several overrides layered across a monorepo's `eslint.config.mjs`
+ *   composing other configs is a normal, common shape, and ESLint's own
+ *   binding rule already says unambiguously which one wins; a bare
+ *   source-extension `files` entry states languages, not territory; and a
+ *   severity-only override is exactly how ESLint expects a later config to
+ *   dial a rule up or down without restating its table.
  * @throws {Error} when `flatConfig` is not an array, an element is not a
  *   plain object or carries an `extends` key, no entry configures the rule,
  *   an entry scopes the rule under a `files` glob with a directory component
- *   (a per-glob law this reader cannot express — see below), or the winning
- *   entry's severity/options are malformed (`parseRuleValue`).
+ *   or carries a non-empty `ignores` (a per-glob law this reader cannot
+ *   express — see below), or the winning entry's severity/options are
+ *   malformed (`parseRuleValue`) once any severity-only fallback has been
+ *   applied.
  */
 export function extractBoundaryRule(flatConfig) {
   if (!Array.isArray(flatConfig)) {
@@ -192,7 +223,7 @@ export function extractBoundaryRule(flatConfig) {
     );
   }
 
-  /** @type {{index: number, files: unknown, value: unknown, scope: "unscoped"|"extension"|"path"}[]} */
+  /** @type {{index: number, files: unknown, ignores: unknown, value: unknown, scope: "unscoped"|"extension"|"path"}[]} */
   const matches = [];
   flatConfig.forEach((item, index) => {
     if (!isPlainObject(item)) {
@@ -216,14 +247,27 @@ export function extractBoundaryRule(flatConfig) {
     const value = /** @type {any} */ (item.rules)?.["@nx/enforce-module-boundaries"];
     if (value === undefined) return;
     const files = item.files;
-    const scope =
-      files === undefined
+    const ignores = item.ignores;
+    // An `ignores` array on the same entry as `files`/`rules` excludes part of
+    // the tree from what that entry configures — a scoping decision no less
+    // territorial than a directory-component `files` glob (the `pathScoped`
+    // check below), and unlike `files` there is no bare-extension shape that
+    // reads as "which languages", never "which files": an ignore list is a
+    // set of paths by construction. Reading past it — the bug this branch
+    // closes — bound the table tree-wide with no note at all, silently
+    // dropping the very exclusion the workspace wrote. Folding it into the
+    // same `"path"` scope reuses the existing named refusal rather than
+    // inventing a second one for the same class of problem.
+    const hasIgnores = Array.isArray(ignores) && ignores.length > 0;
+    const scope = hasIgnores
+      ? "path"
+      : files === undefined
         ? "unscoped"
         : Array.isArray(files) &&
             files.every((glob) => typeof glob === "string" && BARE_EXTENSION_GLOB.test(glob))
           ? "extension"
           : "path";
-    matches.push({ index, files, value, scope });
+    matches.push({ index, files, ignores, value, scope });
   });
 
   if (matches.length === 0) {
@@ -246,13 +290,20 @@ export function extractBoundaryRule(flatConfig) {
   // in the pool below.
   const pathScoped = matches.find((match) => match.scope === "path");
   if (pathScoped !== undefined) {
+    const hasIgnores = Array.isArray(pathScoped.ignores) && pathScoped.ignores.length > 0;
     throw new Error(
-      `lattice: flatConfig[${pathScoped.index}] configures @nx/enforce-module-boundaries under ` +
-        `files: ${JSON.stringify(pathScoped.files)} — lattice reads one global constraint table ` +
-        "and has no way to express a law that differs per file glob. A files entry whose every " +
-        "glob is a bare source-extension pattern over the whole tree (no directory component) is " +
-        "accepted instead and applied tree-wide, because that shape states which languages ESLint " +
-        "parses rather than which part of the tree the law covers.",
+      hasIgnores
+        ? `lattice: flatConfig[${pathScoped.index}] configures @nx/enforce-module-boundaries under ` +
+            `ignores: ${JSON.stringify(pathScoped.ignores)} — lattice reads one global constraint ` +
+            "table and has no way to express a law that excludes part of the tree. State the rule " +
+            "in an entry with no ignores instead, or move ignores to a separate entry that carries " +
+            "no @nx/enforce-module-boundaries key."
+        : `lattice: flatConfig[${pathScoped.index}] configures @nx/enforce-module-boundaries under ` +
+            `files: ${JSON.stringify(pathScoped.files)} — lattice reads one global constraint table ` +
+            "and has no way to express a law that differs per file glob. A files entry whose every " +
+            "glob is a bare source-extension pattern over the whole tree (no directory component) is " +
+            "accepted instead and applied tree-wide, because that shape states which languages ESLint " +
+            "parses rather than which part of the tree the law covers.",
     );
   }
 
@@ -261,10 +312,45 @@ export function extractBoundaryRule(flatConfig) {
   // must not be able to refuse a run over the entry ESLint itself would run
   // with.
   const last = matches[matches.length - 1];
-  const { depConstraints: rawDepConstraints, ...options } = parseRuleValue(last.value, last.index);
+
+  // A winning entry that states only a severity (`"warn"`, not
+  // `["warn", {...}]`) does not, under ESLint's own merge, clear whatever
+  // options an earlier entry stated for this rule — see `statesOptions`.
+  // Reading it as "on, with no depConstraints key" would refuse a config
+  // ESLint is actively enforcing under the most recent earlier table; fall
+  // back to that table instead, keeping the winning entry's own severity.
+  let priorWithOptions;
+  let effectiveValue = last.value;
+  if (!statesOptions(effectiveValue)) {
+    // `Array.prototype.findLast` needs an ES2023 lib target this package
+    // does not carry (`tsconfig.json` targets es2022) — a plain backward
+    // loop instead of widening the lib for one call site.
+    for (let i = matches.length - 2; i >= 0; i--) {
+      if (statesOptions(matches[i].value)) {
+        priorWithOptions = matches[i];
+        break;
+      }
+    }
+    if (priorWithOptions !== undefined) {
+      effectiveValue = [severityOf(last.value), priorWithOptions.value[1]];
+    }
+  }
+
+  const { depConstraints: rawDepConstraints, ...options } = parseRuleValue(
+    effectiveValue,
+    last.index,
+  );
   const depConstraints = /** @type {object[]} */ (rawDepConstraints);
 
   const noteParts = [];
+  if (priorWithOptions !== undefined) {
+    noteParts.push(
+      `flatConfig[${last.index}] states only a severity (${JSON.stringify(last.value)}) for ` +
+        "@nx/enforce-module-boundaries — ESLint's own merge keeps the options an earlier entry " +
+        `stated for the rule rather than clearing them, so lattice read the constraint table off ` +
+        `flatConfig[${priorWithOptions.index}], the most recent entry that stated one.`,
+    );
+  }
   if (matches.length > 1) {
     const differs = matches.some(
       (entry) => JSON.stringify(entry.value) !== JSON.stringify(last.value),

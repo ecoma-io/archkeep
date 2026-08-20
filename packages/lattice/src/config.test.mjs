@@ -333,6 +333,29 @@ describe("findBoundaryConfigViolations — the governance block (Contract 2)", (
     expect(findBoundaryConfigViolations(wellFormed())).toEqual([]);
   });
 
+  it("names a non-array fitness export instead of throwing a raw TypeError (F05 default io.resolve)", () => {
+    // findBoundaryConfigViolations builds its default io.resolve from
+    // declaredFitnessNames(module) BEFORE findFitnessViolations validates the
+    // `fitness` shape. Before the fix, `({}).map` (an object, not an array)
+    // threw "fitness.map is not a function" — a raw, unprefixed TypeError
+    // naming no path/key, not the contracted "lattice: … is malformed:
+    // fitness: …" message. The named violation must fire instead, exactly as
+    // it does for the correctly-shaped `fitness: ["row"]` case.
+    const violations = findBoundaryConfigViolations({ ...wellFormed(), fitness: {} });
+    expect(violations.some((v) => v.startsWith("fitness: must be an array of fitness rows"))).toBe(
+      true,
+    );
+  });
+
+  it("names a fitness list holding a non-object row instead of throwing on `.name`", () => {
+    // Same default-io.resolve path: `[null].map((row) => row.name)` threw
+    // "Cannot read properties of null (reading 'name')" before the fix — a
+    // raw TypeError, not the named `fitness[0]: must be an object` violation
+    // `findFitnessViolations` is supposed to report.
+    const violations = findBoundaryConfigViolations({ ...wellFormed(), fitness: [null] });
+    expect(violations.some((v) => v.startsWith("fitness[0]: must be an object"))).toBe(true);
+  });
+
   it("rejects an invalid origin loudly, naming the row", () => {
     const violations = findBoundaryConfigViolations({
       ...wellFormed(),
