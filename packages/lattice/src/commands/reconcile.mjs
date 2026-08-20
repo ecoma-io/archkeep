@@ -16,7 +16,7 @@
  *
  * Like `drift`, `reconcile` is descriptive: it completes with status `"ok"` /
  * exit 0 whether the model matches reality or diverges from it, and it never
- * exits 1 (only `check` does). The divergence lives in the result's scored
+ * exits 1: divergence is described, never gated. The divergence lives in the result's scored
  * elements and, with `--propose`, in the ranked candidate list — both of which
  * a reader acts on deliberately rather than a CI gate failing over.
  *
@@ -185,7 +185,7 @@ export async function reconcileCommand(commandContext, io = {}, options = {}) {
 
   // Reconcile is descriptive — always status "ok" when it completes, never
   // "findings". Divergence is described and (with --propose) proposed, not
-  // judged; only `check` exits 1.
+  // judged: a descriptive command never claims a violation's exit code.
   const status = "ok";
   const exitCode = 0;
 

@@ -41,6 +41,14 @@ class:
 - a boundary or row side matched no observed project — the intent for that row
   cannot be verified against the graph.
 
+One further refusal is conditional, and fires only for a workspace whose intent
+actually cites something: when an intent row carries a `decisionRef` and the
+workspace's boundary law cannot be loaded, `drift` exits 3. The fitness half of
+a citation resolves against the ids that law declares, so resolving citations
+without it would report rows unresolved on the strength of a law nobody read. A
+workspace whose intent carries no `decisionRef` never opens the boundary law at
+all, and a missing or unloadable one changes nothing about its drift verdict.
+
 An empty finding list must mean exactly "the observed architecture matches the
 intended one". When a comparison cannot be completed, `drift` exits 3 with a
 loud message rather than print "✔ no drift".

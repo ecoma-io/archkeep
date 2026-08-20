@@ -43,7 +43,7 @@ given instead of a project or constraint answer.
 | 2    | Usage error: wrong argument count, unknown flag, malformed site string. |
 | 3    | The explanation was produced, but coverage is incomplete.               |
 
-`explain` never exits 1. An explanation is descriptive — only `check` exits 1.
+`explain` never exits 1. An explanation is descriptive.
 
 ## The unregistered-plugin refusal
 

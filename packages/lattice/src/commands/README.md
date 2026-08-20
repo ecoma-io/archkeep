@@ -13,8 +13,12 @@ commands share rather than a command. It composes `../workspace.mjs`,
 ## Commands
 
 - **`check`** (`../../cli.mjs`'s `runCheck`) — judges every import site against
-  the boundary rules and returns violations, go.work drift, and dead tsconfig
-  path aliases. The only command that exits 1.
+  the boundary rules and folds in every other finding class a verdict counts:
+  declared-edge violations, go.work drift, dead tsconfig path aliases, intent
+  drift, and a failing fitness gate. Exits 1 on any of them, and it is the only
+  command holding all four exit codes
+  ([which verbs carry exit 1 is settled in `docs/concepts/architecture.md`](../../../../docs/concepts/architecture.md)
+  — `fitness` is the other one).
 
 - **`graph`** (`./graph.mjs`'s `graphCommand`) — the project graph as a
   deterministic, serialisable snapshot: projects (with `targets` and `tags`) and
@@ -114,8 +118,6 @@ commands share rather than a command. It composes `../workspace.mjs`,
 - **`snapshot-meta.mjs`** — `compareSnapshotMetadata`, shared by `diff` and
   `history`: the provider, provenance (with cross-repo and one-sided
   detection) and policy-fingerprint comparison between a baseline and a head.
-
-- **`edge-constraints.mjs`** — edge-constraint analysis shared by `diff` and
 
 - **`edge-constraints.mjs`** — edge-constraint analysis shared by `diff` and
   `impact`. Judges a single graph edge against the `depConstraints` table,

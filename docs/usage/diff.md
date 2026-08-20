@@ -49,7 +49,7 @@ this diff would silently misread.
 | 2    | Usage error: wrong argument count, unknown flag.                                            |
 | 3    | The baseline is incomplete or unreadable, or the current workspace has incomplete coverage. |
 
-`diff` never exits 1. Changes are not findings — only `check` exits 1.
+`diff` never exits 1. Changes are not findings.
 
 ## The unregistered-plugin refusal
 

@@ -8,7 +8,8 @@
  * governance wave shares (`../governance/metrics.mjs`'s header owns the four
  * states). It is **descriptive**, exactly like `graph`/`diff`/`impact`:
  * it never exits 1, because a description of how healthy the architecture is
- * is never itself a finding — only `check` ever exits 1 (`./README.md`).
+ * is never itself a finding. Which verbs DO carry exit 1 is settled in
+ * `./README.md`, and it is not this one.
  *
  * ## What it reports
  *

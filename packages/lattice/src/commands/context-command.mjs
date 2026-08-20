@@ -5,7 +5,7 @@
  * that match those tags, and what each constraint allows or bans — the
  * architecture context a developer (or an AI agent) needs before editing a
  * project. It is descriptive: it never exits 1, because a description of what
- * the rules say is never a finding (only `check` ever exits 1).
+ * the rules say is never a finding.
  *
  * What it needs from its caller is a project name and a `CommandContext` — the
  * preamble every command shares (`./context.mjs`) — plus the loaded boundary
