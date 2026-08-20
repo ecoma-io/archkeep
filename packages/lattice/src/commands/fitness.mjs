@@ -87,6 +87,23 @@ export function fitnessForCheck(commandContext, { rows, intent, suppressions, sc
 }
 
 /**
+ * Whether a policy declares fitness functions at all — the one condition that
+ * separates "this workspace has no quality gates to judge" from "the gates
+ * could not be judged". `fitnessCommand` refuses (exit 3) when it is false,
+ * because a `fitness` run asked for a table that does not exist; a composing
+ * report reads the same predicate to render `not_applicable` instead, which is
+ * the correct verdict for a workspace that declared none
+ * (`../governance/metrics.mjs`'s header owns that distinction). Exported so the
+ * two callers cannot come to disagree about what "declares fitness" means.
+ *
+ * @param {{fitness?: unknown}|null|undefined} config The loaded boundary policy.
+ * @returns {boolean}
+ */
+export function declaresFitness(config) {
+  return config !== null && config !== undefined && config.fitness !== undefined;
+}
+
+/**
  * Runs the `fitness` command: loads the boundary policy, evaluates every
  * declared function against the workspace's facts, and renders the verdict
  * table.
@@ -105,7 +122,7 @@ export async function fitnessCommand(commandContext, io = {}) {
   const { root, provider, marker, analysis } = commandContext;
 
   const config = io.config ?? null;
-  if (config === null || config.fitness === undefined) {
+  if (!declaresFitness(config)) {
     throw new Error(
       `lattice: fitness requires a policy that declares fitness functions — ` +
         `module-boundary config has no \`fitness\` export, so there is nothing to judge`,

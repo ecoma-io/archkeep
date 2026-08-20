@@ -100,6 +100,7 @@ import { reconcileCommand } from "./src/commands/reconcile.mjs";
 import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
 import { historyCommand } from "./src/commands/history.mjs";
 import { healthCommand } from "./src/commands/health.mjs";
+import { reportCommand } from "./src/commands/report.mjs";
 import { debtCommand } from "./src/commands/debt.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
@@ -2503,6 +2504,91 @@ async function runHealth(options, { cwd, env }) {
 }
 
 /**
+ * `report`'s `run`: resolves the command context and the one boundary law the
+ * whole document is written against, drives `reportCommand`, writes the report
+ * where it belongs, and returns the process's exit code.
+ *
+ * The positional argument, the flags and the exit-code lane are `health`'s —
+ * `report` is the same posture over a wider document: descriptive, 0 when
+ * every surface reached a verdict, 3 when any did not, 2 on a usage error. It
+ * never exits 1, because the commands that own a finding own its exit code
+ * (`./src/commands/report.mjs` argues both halves).
+ *
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runReport(options, { cwd, env }) {
+  if (options.paths.length > 1) {
+    env.err(
+      `lattice: report takes at most one positional argument (the snapshot directory for trends); ` +
+        `got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  const trendDir =
+    options.paths.length === 1
+      ? isAbsolute(options.paths[0])
+        ? options.paths[0]
+        : resolve(cwd, options.paths[0])
+      : null;
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    // ONE law for the whole document — resolved exactly the way `check` and
+    // `health` resolve theirs, and handed to every surface the report
+    // composes, so no two sections can cite different laws.
+    const { config, source } = await resolvePolicy(options, commandContext, cwd);
+
+    const intent = commandContext.tracked.includes(INTENT_FILE)
+      ? await loadIntent(commandContext.root, { tracked: commandContext.tracked })
+      : null;
+
+    result = await reportCommand(commandContext, {
+      config,
+      intent,
+      trendDir,
+      policySource: source,
+    });
+  } catch (error) {
+    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
+    // The confirmation names the no-verdict case, so a reader who only
+    // glances at stderr cannot mistake a written document for an established
+    // one (the same reason `waivers` states its permanent-suppression count
+    // on this line).
+    const gaps = result.result.uninspectable.length;
+    const verdict =
+      gaps === 0
+        ? "every surface reached a verdict"
+        : `NO VERDICT — ${gaps} surface${gaps === 1 ? "" : "s"} could not be inspected`;
+    env.err(`lattice: report complete (${verdict}) → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // Descriptive: 0 when every surface reached a verdict, 3 when any evidence
+  // could not be inspected. Never 1.
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
+}
+
+/**
  * `check`'s own flags, described once — `usage()` renders this straight into
  * the Options block, and `flags` below (what `parseArgs` needs) is derived
  * from it rather than kept as a second list that could name a flag `--help`
@@ -2840,6 +2926,43 @@ const HEALTH_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `report`'s flags: the same three `health` takes, for the same reasons — the
+ * governance document is written against one boundary law, and `--config`
+ * (or a profile name, in a workspace that names a `profiles` registry) is how
+ * a caller says which. The optional positional argument is the snapshot
+ * directory for trends, the same directory `history` reads.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const REPORT_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: ({ boundaryConfig, inline }) =>
+      Object.freeze([
+        "Read the boundary law from here instead of",
+        inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
+      ]),
+  }),
+]);
+
+/**
  * `debt`'s flags: text or JSON envelope, optional file output, and the same
  * `--config` the other descriptive commands take, so a ledger ages the
  * suppressions of the exact law it was run under.
@@ -3129,6 +3252,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runHealth,
+  }),
+  report: Object.freeze({
+    name: "report",
+    args: "[<snapshot-dir>]",
+    summary: "One governance document: how healthy the architecture is, and why",
+    flagHelp: REPORT_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(REPORT_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runReport,
   }),
   debt: Object.freeze({
     name: "debt",
