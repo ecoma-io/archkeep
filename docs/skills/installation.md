@@ -17,8 +17,8 @@ configuration.
 ### Options
 
 ```bash
-# Install specific skills only
-npx skills add ecoma-io/lattice -s arch-context,arch-check
+# Install specific skills only (`-s` takes space-separated names)
+npx skills add ecoma-io/lattice -s arch-context arch-check
 
 # Install for a specific agent platform
 npx skills add ecoma-io/lattice -a claude-code
@@ -26,8 +26,8 @@ npx skills add ecoma-io/lattice -a claude-code
 # List available skills without installing
 npx skills add ecoma-io/lattice -l
 
-# Update to the latest version
-npx skills add ecoma-io/lattice --force
+# Update previously installed skills to the latest version
+npx skills update
 ```
 
 ## Claude Code plugin
@@ -56,11 +56,17 @@ See [claude-code.md](claude-code.md) for full details.
 Copy the `skills/` directory from the repository into your agent's native
 discovery path:
 
-| Agent       | Directory         |
-| ----------- | ----------------- |
-| Claude Code | `.claude/skills/` |
-| Codex       | `.agents/skills/` |
-| Cursor      | `.cursor/skills/` |
+| Agent                  | Directory           |
+| ---------------------- | ------------------- |
+| Claude Code            | `.claude/skills/`   |
+| Codex, Cursor, Copilot | `.agents/skills/`   |
+| Cursor (also)          | `.cursor/skills/`   |
+| Windsurf               | `.windsurf/skills/` |
+
+`.agents/skills/` is the shared project-level directory of the Agent Skills
+standard; agents that read it discover the same installed copy. The
+per-platform matrix — including global (per-user) directories — is in
+[supported-hosts.md](supported-hosts.md).
 
 Each `SKILL.md` file must be inside a subdirectory named after the skill:
 `.claude/skills/arch-context/SKILL.md`, not `.claude/skills/arch-context.md`.

@@ -4,17 +4,23 @@ The `arch-*` skills use the Agent Skills open standard, so they work with any
 agent that reads `SKILL.md` files. The table below describes what each platform
 supports today.
 
-| Platform       | Discovery method                      | Slash command | `--format json` consumption | Skill install              |
-| -------------- | ------------------------------------- | ------------- | --------------------------- | -------------------------- |
-| Claude Code    | Plugin `skills` field or `npx skills` | `/arch-*`     | Full                        | Plugin or `npx skills add` |
-| Codex          | `.agents/skills/` or `npx skills`     | `$arch-*`     | Full                        | `npx skills add`           |
-| opencode       | `npx skills`                          | Via agent     | Full                        | `npx skills add`           |
-| Cursor         | `.cursor/skills/` or `npx skills`     | Via agent     | Full                        | `npx skills add`           |
-| GitHub Copilot | `.github/skills/` or `npx skills`     | Via agent     | Full                        | `npx skills add`           |
-| Windsurf       | `.codeium/skills/` or `npx skills`    | Via agent     | Full                        | `npx skills add`           |
+| Platform       | Project discovery                        | Global discovery              | Invocation          | `--format json` consumption | Skill install              |
+| -------------- | ---------------------------------------- | ----------------------------- | ------------------- | --------------------------- | -------------------------- |
+| Claude Code    | Plugin `skills` field, `.claude/skills/` | `~/.claude/skills/`           | `/arch-*`           | Full                        | Plugin or `npx skills add` |
+| Codex          | `.agents/skills/`                        | `~/.codex/skills/`            | `$arch-*` (mention) | Full                        | `npx skills add`           |
+| opencode       | `.agents/skills/`                        | `~/.config/opencode/skills/`  | Via agent           | Full                        | `npx skills add`           |
+| Cursor         | `.agents/skills/` or `.cursor/skills/`   | `~/.cursor/skills/`           | `/` in Agent chat   | Full                        | `npx skills add`           |
+| GitHub Copilot | `.agents/skills/` or `.github/skills/`   | `~/.copilot/skills/`          | Via agent           | Full                        | `npx skills add`           |
+| Windsurf       | `.windsurf/skills/`                      | `~/.codeium/windsurf/skills/` | Via agent           | Full                        | `npx skills add`           |
 
 All platforms consume the same canonical `SKILL.md` files. The skill content is
-identical regardless of how the agent discovers it.
+identical regardless of how the agent discovers it. `.agents/skills/` is the
+Agent Skills standard's shared project-level directory: one installed copy
+serves every agent that reads it. The project and global columns are the
+directories `npx skills add` targets per platform (its `-g` flag selects the
+global column); a platform that additionally documents its own native
+directory (Cursor's `.cursor/skills/`, Copilot's `.github/skills/`) is listed
+with both.
 
 ## What "full consumption" means
 

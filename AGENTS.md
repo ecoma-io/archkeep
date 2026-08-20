@@ -231,8 +231,8 @@ another.
   holding the next version of the root component `"."`, which is every package
   and skill this repository ships at once. That single version is written into
   five places by `extra-files` (the chain `docs/skills/versioning.md` owns), and
-  `check-skills` on every PR holds the same five to each other, so a bump cannot
-  land half-applied. A reformat step then re-applies Prettier to those files,
+  `check-skills` on every PR holds that chain — root manifest included — to
+  itself, so a bump cannot land half-applied. A reformat step then re-applies Prettier to those files,
   because release-please re-serializes JSON in a layout that fails
   `format:check`. The publish jobs — npm and the VS Code extension, which
   share the engine's version by decision — steer on the un-prefixed
