@@ -20,6 +20,10 @@ concept and the schema are
 }
 ```
 
+If you have not written a registry yet, four are shipped with the package —
+Clean Architecture, hexagonal, layered modular monolith and DDD bounded
+contexts — and [presets.md](presets.md) is how to adopt one.
+
 `boundaryConfig` still names the law in effect — only now it names it by
 looking the name up in the registry instead of opening a file. The default
 `check` run resolves the `strict` profile and enforces exactly as if its block

@@ -151,6 +151,12 @@ a file it cannot edit ([overview.md](https://github.com/ecoma-io/lattice/blob/ma
   [profiles.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/profiles.md) ·
   [fitness-functions.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/fitness-functions.md) ·
   [adr.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/adr.md)).
+- **Shipped policy packs** — Clean Architecture, hexagonal, layered modular
+  monolith and DDD bounded contexts, as ready-made profile registries under
+  this package's `presets/` directory. Copy one into your workspace, or point
+  the `profiles` option straight at it; either way it is enforced by the same
+  path a registry you wrote yourself is
+  ([presets.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/presets.md)).
 - **Machine-readable JSON** — `--format json` wraps any verdict in a versioned
   envelope (`schemaVersion`, `status`, `exitCode`, `coverage`); every field
   name is a public contract

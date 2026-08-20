@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "name": "modular-monolith",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "layer:shared-kernel",
+            "onlyDependOnLibsWithTags": ["layer:shared-kernel"],
+            "description": "The kernel is what every module is allowed to share, so it may depend on nothing that is not itself shared.",
+            "remediation": "A kernel project reaching into a module has made that module part of the kernel; move the code, or move the dependency into the module."
+          },
+          {
+            "sourceTag": "layer:module",
+            "onlyDependOnLibsWithTags": [
+              "layer:module",
+              "layer:module-internal",
+              "layer:shared-kernel"
+            ],
+            "description": "A module's published surface may integrate with another module's published surface, its own internals, and the kernel.",
+            "remediation": "Reach the other module through its layer:module surface rather than through anything it keeps internal."
+          },
+          {
+            "sourceTag": "layer:module-internal",
+            "onlyDependOnLibsWithTags": ["layer:module-internal", "layer:shared-kernel"],
+            "description": "Internals are private implementation. Cross-module integration is the published surface's job, not theirs.",
+            "remediation": "Move the integration up into the module's layer:module surface, which is the only part allowed to name another module."
+          },
+          {
+            "sourceTag": "layer:app",
+            "onlyDependOnLibsWithTags": ["layer:app", "layer:module", "layer:shared-kernel"],
+            "description": "The deployable composes modules through their published surfaces; a module's internals are invisible to it.",
+            "remediation": "Export what the app needs from the module's layer:module surface instead of importing the internal project."
+          }
+        ],
+        "moduleBoundaryOptions": {
+          "allow": [],
+          "buildTargets": ["build"],
+          "enforceBuildableLibDependency": false,
+          "allowCircularSelfDependency": false,
+          "checkDynamicDependenciesExceptions": [],
+          "ignoredCircularDependencies": [],
+          "banTransitiveDependencies": false,
+          "checkNestedExternalImports": false
+        }
+      }
+    },
+    {
+      "name": "modular-monolith-sealed-kernel",
+      "base": "modular-monolith",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "layer:shared-kernel",
+            "bannedExternalImports": ["*"],
+            "description": "Every module inherits the kernel's third-party dependencies, so the kernel takes none — Node built-ins included.",
+            "remediation": "Keep the package in the module that needs it, or expose the capability from the kernel as an interface the module implements."
+          }
+        ],
+        "moduleBoundaryOptions": {
+          "checkNestedExternalImports": true
+        }
+      }
+    }
+  ]
+}
