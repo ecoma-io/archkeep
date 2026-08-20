@@ -27,7 +27,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("determinism (full)", () => {
+describe("determinism", () => {
   it("graph --format json produces identical output on two runs", () => {
     const first = lattice(nativeConsumer.root, ["graph", "--format", "json"]);
     const second = lattice(nativeConsumer.root, ["graph", "--format", "json"]);

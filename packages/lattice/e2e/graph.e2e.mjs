@@ -27,16 +27,14 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("graph (smoke)", () => {
+describe("graph", () => {
   it("exits 0 on a clean native tree and states project and edge counts", () => {
     const result = lattice(nativeConsumer.root, ["graph"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toMatch(/[1-9]\d* project/);
     expect(result.stdout).toMatch(/[1-9]\d* edge/);
   });
-});
 
-describe("graph (full)", () => {
   it("produces a valid JSON envelope on a clean native tree", () => {
     const result = lattice(nativeConsumer.root, ["graph", "--format", "json"]);
     expect(result.exitCode).toBe(0);

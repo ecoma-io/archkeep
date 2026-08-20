@@ -34,7 +34,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("Cross-language parity (full)", () => {
+describe("Cross-language parity", () => {
   it("all six languages agree on project names", () => {
     const results = {};
     for (const lang of LANGUAGES) {

@@ -24,7 +24,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("Python language E2E (smoke)", () => {
+describe("Python language E2E", () => {
   it("Python imports are discovered in the graph", () => {
     const result = lattice(consumer.root, ["graph", "--format", "json"]);
     expect(result.exitCode).toBe(0);
@@ -50,9 +50,7 @@ describe("Python language E2E (smoke)", () => {
     expect(result.stdout).toMatch(/[1-9]\d* file/);
     expect(result.stdout).toMatch(/[1-9]\d* project/);
   });
-});
 
-describe("Python language E2E (full)", () => {
   it("Python architecture violation is enforced", () => {
     const violator = createNativeLanguageConsumer(artifact, "python");
     try {

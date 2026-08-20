@@ -22,7 +22,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("Go language E2E (smoke)", () => {
+describe("Go language E2E", () => {
   it("Go dependency imports are discovered in the graph", () => {
     const result = lattice(consumer.root, ["graph", "--format", "json"]);
     expect(result.exitCode).toBe(0);
@@ -48,9 +48,7 @@ describe("Go language E2E (smoke)", () => {
     expect(result.stdout).toMatch(/[1-9]\d* file/);
     expect(result.stdout).toMatch(/[1-9]\d* project/);
   });
-});
 
-describe("Go language E2E (full)", () => {
   it("Go architecture violation is enforced", () => {
     const violator = createNativeLanguageConsumer(artifact, "go");
     try {

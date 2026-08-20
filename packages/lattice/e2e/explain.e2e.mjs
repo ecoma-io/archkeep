@@ -24,7 +24,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("explain (full)", () => {
+describe("explain", () => {
   it("explains a clean import site with no violation", () => {
     // libs/app/app.go line 3: `import "example.test/core"`
     // The `"` of the import path is at column 8 (1-based: i=1, m=2, p=3,

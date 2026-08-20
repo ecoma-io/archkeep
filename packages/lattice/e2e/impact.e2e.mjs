@@ -25,7 +25,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("impact (full)", () => {
+describe("impact", () => {
   it("reports direct and transitive dependents for a leaf project", () => {
     // In the monorepo: app → api → core. So `impact core` should list
     // api (direct) and app (transitive).
@@ -67,7 +67,7 @@ describe("impact (full)", () => {
   });
 });
 
-describe("impact --config (full)", () => {
+describe("impact --config", () => {
   it("impact core on monorepo shows constraint context", () => {
     // The monorepo declares boundaryConfig in lattice.json, so the
     // workspace's own config is loaded and constraint context appears.

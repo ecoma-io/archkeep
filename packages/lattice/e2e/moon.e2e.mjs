@@ -43,7 +43,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("Moon (smoke)", () => {
+describe("Moon", () => {
   it("exits 0 on a clean Moon tree and states what it inspected", () => {
     const result = lattice(moonConsumer.root, ["check"]);
     expect(result.exitCode).toBe(0);
@@ -60,9 +60,7 @@ describe("Moon (smoke)", () => {
     expect(result.stdout).toMatch(/[1-9]\d* project/);
     expect(result.stdout).toMatch(/[1-9]\d* edge/);
   });
-});
 
-describe("Moon (full)", () => {
   it("exits 1 on a violating Moon tree, naming the rule and position", () => {
     // Each violating test needs its own consumer to avoid mutating the shared
     // clean consumer. Create a fresh one.

@@ -27,14 +27,15 @@ What E2E does **not** cover (and why):
 ## Running
 
 ```bash
-# Full suite (all commands, parity, determinism)
+# The whole suite (all commands, parity, determinism)
 pnpm e2e
 
-# Smoke subset (~5 fastest scenarios)
-pnpm e2e:smoke
+# One half of it — the two shards CI runs on separate runners
+pnpm e2e --shard=1/2
+pnpm e2e --shard=2/2
 ```
 
-Both commands run Vitest with the dedicated config at `packages/lattice/e2e/vitest.config.mjs`. Tests execute **serially** (`maxForks: 1`) because `pnpm install` mutates `node_modules` and parallel consumers would race on shared state.
+`pnpm e2e` is the one entry point, and anything after it is passed through to Vitest, which runs with the dedicated config at `packages/lattice/e2e/vitest.config.mjs`. Tests execute **serially** (`fileParallelism: false`) because `pnpm install` mutates `node_modules` and parallel consumers would race on shared state — the parallelism CI buys is across runners, never inside one.
 
 ## Architecture
 
@@ -68,40 +69,50 @@ fixtures/
 
 ### Test files
 
-| File                  | Commands covered                                                        |
-| --------------------- | ----------------------------------------------------------------------- |
-| `check.e2e.mjs`       | `check` (clean, violating, no-marker, JSON envelope)                    |
-| `graph.e2e.mjs`       | `graph` (clean, JSON envelope, project names, edges, `--output`)        |
-| `diff.e2e.mjs`        | `diff` (self-baseline, added/removed edge, invalid/incomplete baseline) |
-| `drift.e2e.mjs`       | `drift` (smoke, with an intent file)                                    |
-| `history.e2e.mjs`     | `history` (empty/capture, evolution)                                    |
-| `context.e2e.mjs`     | `context` (smoke, full)                                                 |
-| `intent.e2e.mjs`      | `architecture-intent` through the installed CLI                         |
-| `moon.e2e.mjs`        | Moon provider (smoke, full)                                             |
-| `impact.e2e.mjs`      | `impact` (leaf, mid-chain, root project, unknown project)               |
-| `explain.e2e.mjs`     | `explain` (clean site, violating site, malformed/missing site)          |
-| `parity.e2e.mjs`      | Native/Nx semantic parity (projects, edges, violations, envelope)       |
-| `determinism.e2e.mjs` | Repeated-execution byte-identical output                                |
+| File                  | Commands covered                                                                                                |
+| --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `check.e2e.mjs`       | `check` (clean, violating, no-marker, JSON envelope)                                                            |
+| `graph.e2e.mjs`       | `graph` (clean, JSON envelope, project names, edges, `--output`)                                                |
+| `diff.e2e.mjs`        | `diff` (self-baseline, added/removed edge, invalid/incomplete baseline)                                         |
+| `drift.e2e.mjs`       | `drift` (matching tree, forbidden edge, missing project, malformed intent)                                      |
+| `history.e2e.mjs`     | `history` (empty/capture, evolution)                                                                            |
+| `context.e2e.mjs`     | `context` (tags, constraints, text and JSON, unknown project)                                                   |
+| `intent.e2e.mjs`      | `architecture-intent` through the installed CLI                                                                 |
+| `moon.e2e.mjs`        | Moon provider (`check`, `graph`, `diff`, `impact`, `explain`, `context`)                                        |
+| `impact.e2e.mjs`      | `impact` (leaf, mid-chain, root project, unknown project)                                                       |
+| `explain.e2e.mjs`     | `explain` (clean site, violating site, malformed/missing site)                                                  |
+| `parity.e2e.mjs`      | Native/Nx semantic parity (projects, edges, violations, envelope)                                               |
+| `determinism.e2e.mjs` | Repeated-execution byte-identical output                                                                        |
+| `sweep.e2e.mjs`       | Every machine-readable command, run twice, byte-identical                                                       |
+| `languages/*.e2e.mjs` | Go, Rust, Python, TypeScript, JavaScript and Vue, one file each, plus `cross-language.e2e.mjs` for their parity |
 
-### Smoke tests
+### Sharding
 
-Describe blocks named `(smoke)` contain the fastest scenarios, one per main
-command so each command's silent direction is in the PR path's quick subset:
-`check`, `context`, `diff`, `drift`, `graph`, `history` (empty-dir no-verdict),
-`intent` (forbidden-edge), `moon`, and each language.
+The suite is split across runners by **test file**, and the assignment is
+Vitest's rather than this directory's: measured against Vitest 4.1.10, it hashes
+each resolved file's workspace-relative path with SHA-1, sorts by that hash, and
+hands each shard a contiguous slice. Two consequences worth knowing before
+trying to tune it:
 
-The `e2e:smoke` script filters by name pattern (`-t 'smoke'`) and additionally
-**fails when zero tests ran**: a `-t` pattern that matches nothing makes vitest
-exit 0 with every test skipped, which would let a misnamed smoke describe block
-turn the gate green-while-empty. The gate (`scripts/smoke-e2e.mjs`) reads the
-JSON report vitest writes and requires at least one test to have actually
-executed.
+- The split is deterministic run to run, and every file lands in exactly one
+  shard — the shards together are the whole suite, never more and never less.
+- The sort key is a path, not a cost, so the shards are **not** balanced by
+  duration, and no ordering option can rebalance them: `shard()` re-sorts by
+  hash whatever order it is handed. What does move a file between shards is
+  renaming it (the hash is of its path) or adding or removing an e2e file (the
+  slice boundaries move with the file count).
+
+A shard that ran nothing must never read as a shard that passed. Both ways that
+can happen exit 1 rather than 0, and the
+[`verify-e2e` job](../../../.github/workflows/ci.yml) names each with the
+message Vitest prints.
 
 ## CI integration
 
-- **Every PR and merge**: `pnpm e2e:smoke` runs after `verify-package.mjs` in the `verify` job
-- **Every PR and merge**: `pnpm e2e` runs the full suite in the same job
-- **Release lane**: `pnpm e2e` runs before `npm publish`, against the exact tag checkout
+- **Every PR and merge**: two `verify-e2e` matrix legs run `pnpm e2e --shard=1/2`
+  and `pnpm e2e --shard=2/2`, in parallel with `verify-core`
+- **Release lane**: `pnpm e2e` runs the whole suite in one job before
+  `npm publish`, against the exact tag checkout
 
 The existing `verify-package.mjs` step remains unchanged — it proves LSP initialization and Nx Go-edge drawing, responsibilities the E2E suite does not duplicate.
 

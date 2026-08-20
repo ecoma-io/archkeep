@@ -29,7 +29,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("parity (full)", () => {
+describe("parity", () => {
   it("graph JSON agrees on project names", () => {
     const nativeResult = lattice(nativeConsumer.root, ["graph", "--format", "json"]);
     const nxResult = lattice(nxConsumer.root, ["graph", "--format", "json"]);
