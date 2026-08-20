@@ -17,6 +17,11 @@ const entryOf = (value, files) =>
     ? { rules: { "@nx/enforce-module-boundaries": value } }
     : { rules: { "@nx/enforce-module-boundaries": value }, files };
 
+const entryWithIgnores = (value, ignores) => ({
+  rules: { "@nx/enforce-module-boundaries": value },
+  ignores,
+});
+
 describe("extractBoundaryRule", () => {
   it("takes the LAST unscoped configuring entry, as ESLint binds it", () => {
     const first = { rules: { "@nx/enforce-module-boundaries": ["error", { allow: ["^a$"] }] } };
@@ -184,5 +189,61 @@ describe("extractBoundaryRule", () => {
     const value = ["error", { depConstraints: [] }];
     const { note } = extractBoundaryRule([entryOf(value), entryOf(value)]);
     expect(note).toBeUndefined();
+  });
+
+  it("falls back to the most recent earlier entry's options when the winning entry states only a severity (B4)", () => {
+    // ESLint's own flat-config merge (measured against eslint 10.8.0's
+    // FlatConfigArray, `Linter.getConfig`): a later entry that states only a
+    // severity does NOT clear the options an earlier entry stated for the
+    // same rule — it retains them and merges only the severity forward.
+    // Before the fix, extractBoundaryRule parsed ONLY `matches[matches.length
+    // - 1]`, so `[["error", {depConstraints: T}], "warn"]` wrongly threw "no
+    // depConstraints key stated" for a config ESLint is actively enforcing
+    // under table T — the silent-direction failure: a real, running
+    // constraint table refused as if it were absent.
+    const table = [{ sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:util"] }];
+    const withOptions = entryOf(["error", { depConstraints: table }]);
+    const severityOnly = entryOf("warn");
+    const { depConstraints, note } = extractBoundaryRule([withOptions, severityOnly]);
+    expect(depConstraints).toEqual(table);
+    expect(note).toMatch(/states only a severity/);
+  });
+
+  it("still refuses a severity-only winning entry when no earlier entry ever stated options (B4)", () => {
+    // The fallback must not manufacture a table out of nothing — with no
+    // earlier options-bearing entry to fall back to, this is still the S1
+    // refusal.
+    expect(() => extractBoundaryRule([entryOf("warn")])).toThrow(/no depConstraints key stated/);
+  });
+
+  it("does not fall back when the winning entry states its own options — its table wins outright (B4)", () => {
+    const first = entryOf(["error", { depConstraints: [{ sourceTag: "first" }] }]);
+    const last = entryOf(["warn", { depConstraints: [{ sourceTag: "last" }] }]);
+    const { depConstraints, note } = extractBoundaryRule([first, last]);
+    expect(depConstraints).toEqual([{ sourceTag: "last" }]);
+    expect(note).not.toMatch(/states only a severity/);
+  });
+
+  it("refuses an entry carrying a non-empty ignores instead of silently binding tree-wide with it dropped (B5)", () => {
+    // Unlike `files`, `ignores` names a set of paths by construction — there
+    // is no bare-extension shape of it that states languages rather than
+    // territory. Before the fix, `item.ignores` was never read: this entry
+    // bound tree-wide with `note: undefined`, the exclusion silently gone.
+    const scoped = entryWithIgnores(["error", { depConstraints: [] }], ["apps/legacy/**"]);
+    expect(() => extractBoundaryRule([scoped])).toThrow(/ignores/);
+  });
+
+  it("refuses an ignores-scoped entry even when its files is the accepted bare-extension shape (B5)", () => {
+    const scoped = {
+      rules: { "@nx/enforce-module-boundaries": ["error", { depConstraints: [] }] },
+      files: ["**/*.ts"],
+      ignores: ["apps/legacy/**"],
+    };
+    expect(() => extractBoundaryRule([scoped])).toThrow(/ignores/);
+  });
+
+  it("does not refuse an entry whose ignores is an empty array — no exclusion actually stated", () => {
+    const entry = entryWithIgnores(["error", { depConstraints: [] }], []);
+    expect(() => extractBoundaryRule([entry])).not.toThrow();
   });
 });
