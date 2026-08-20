@@ -34,6 +34,12 @@
 //   8. The checker exits 3 on a run that cannot look — the can't-look state must
 //      never read as clean (see `cli.mjs`'s exit contract), and it is proven
 //      here against the installed tarball, not only in source-tree tests.
+//   9. A shipped policy pack, named out of the installed tarball by the
+//      `profiles` path `docs/usage/presets.md` documents, is the law that
+//      judges the tree — exit 1, with the profile and its registry named in the
+//      report. The packs are otherwise only ever read from this repository's
+//      own tree, where `presets/` is present whether or not the manifest ships
+//      it and where `profiles` never resolves through a pnpm symlink.
 //
 // The `pnpm pack` tarball above is also compared, by file selection, against
 // `npm pack --dry-run` of the same tree: the lane verifies the pnpm tarball and
@@ -589,6 +595,86 @@ function verifyCleanAndLspChecks(consumer, label, packageName) {
 }
 
 /**
+ * Check 9 from the header: a shipped policy pack, selected BY NAME out of the
+ * installed tarball, is the law that judges the tree.
+ *
+ * Everything the packs have otherwise been proven by reads them from this
+ * repository's own source tree (`../packages/lattice/src/governance/presets.integration.test.mjs`,
+ * and the fingerprint pin beside it), where `presets/` is present whether or
+ * not `package.json` was ever told to publish it, and where `profiles` never
+ * has to name a path through `node_modules`. Two things only a real install can
+ * answer therefore had no gate: that the pack file is reachable at the path
+ * `../docs/usage/presets.md` tells a consumer to write, and that the containment
+ * check on the `profiles` option accepts it — pnpm makes
+ * `node_modules/<pkg>` a symlink into `node_modules/.pnpm`, and that read is the
+ * one the option resolves through.
+ *
+ * This runs LAST on the Nx consumer and deliberately reuses the tree check 7
+ * already made violating, so the lane pays one `nx reset` and one `check` rather
+ * than a fourth install. Profile selection is Nx-only — the option lives in
+ * `nx.json`'s plugin options and nowhere else, which is why neither the native
+ * nor the Moon consumer runs this.
+ *
+ * `core` is retagged into the pack's own vocabulary so the edge check 7 built
+ * (`core` reaching up into `app`) is one the pack's rows can see: under
+ * `hexagonal`, `layer:domain` may depend on `layer:domain` alone, so
+ * domain → app is a violation, while the `app` → `core` edge the fixture has
+ * carried all along stays legal under the pack's `layer:app` row. Exit 1 is
+ * therefore a claim about the PACK's rows, not a leftover from the workspace's
+ * own `module-boundaries.config.mjs`, which this step stops naming entirely.
+ *
+ * @param {string} consumer absolute path to the installed Nx consumer workspace
+ * @param {string} label appended to each check's message
+ * @param {string} packageName the installed package's name, from the manifest
+ */
+function verifyPresetSelectedCheck(consumer, label, packageName) {
+  const registry = `node_modules/${packageName}/presets/hexagonal.json`;
+  write(consumer, {
+    "libs/core/project.json": `${JSON.stringify(
+      { name: "core", projectType: "library", tags: ["layer:domain"] },
+      null,
+      2,
+    )}\n`,
+    "nx.json": `${JSON.stringify(
+      {
+        plugins: [
+          {
+            plugin: `${packageName}/nx`,
+            // `boundaryConfig` is a profile NAME here, never a filename: the
+            // moment `profiles` is set the two spellings do not mix
+            // (`../docs/concepts/profiles.md`). The workspace's own
+            // module-boundaries.config.mjs is left on disk and no longer named
+            // by anything, so a verdict below can only have come from the pack.
+            options: { boundaryConfig: "hexagonal", profiles: registry },
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  });
+  commitTree(consumer, "select the shipped hexagonal pack by name", false);
+  run("pnpm", ["exec", "nx", "reset"], consumer);
+
+  const judged = run("pnpm", ["exec", "lattice", "check"], consumer);
+  const output = `${judged.stdout ?? ""}${judged.stderr ?? ""}`;
+  check(
+    `a shipped pack installed from the tarball judges the tree, exit 1 (${label})`,
+    judged.status === 1,
+    `exit ${judged.status}\nprofiles: ${registry}\n${output || "(no output)"}`,
+  );
+  // The verdict alone would not say WHICH law produced it. A run that silently
+  // fell back to the workspace's own config would also exit 1 here, and read
+  // identically — so the report has to name the profile and the file it came
+  // from before this check means anything.
+  check(
+    `the report names the profile and the installed registry it was read from (${label})`,
+    /profile "hexagonal"/.test(output) && output.includes(registry),
+    output || "(no output)",
+  );
+}
+
+/**
  * Check 7 from the header: the checker exits 1 on a violating tree.
  * Run AFTER graph/diff checks (4-6) so those proved the clean artifact first.
  *
@@ -875,6 +961,11 @@ try {
 
   verifyCleanAndLspChecks(consumer, "Nx path", packageName);
   verifyViolatingCheck(consumer, "Nx path", () => run("pnpm", ["exec", "nx", "reset"], consumer));
+
+  // 9. A shipped pack, selected by name out of the installed tarball, is the
+  //    law. Last on this consumer because it re-points `nx.json` at the pack
+  //    and reuses the tree check 7 already made violating.
+  verifyPresetSelectedCheck(consumer, "Nx path", packageName);
 
   // --- the native consumer: same physical shape, `lattice.json` instead of
   // `nx.json`, no `nx` requested at all. See this file's header for why this
