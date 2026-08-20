@@ -213,4 +213,49 @@ describe("createDependencies over a real workspace fixture", () => {
     // about the outside.
     expect(deps).toEqual([]);
   });
+
+  it('draws edges to and from a root project (root "."), through the real plugin entry', () => {
+    // `${project.root}/go.mod` for an Nx root project (root ".") built
+    // "./go.mod" — matching no tracked file spelled "go.mod", so the root
+    // project's module never entered the resolver's map: no edge FROM it
+    // (its own imports resolved to nothing) and no edge TO it (nothing else
+    // could match its module path either). This drives the real `nx.mjs`
+    // entry over a real filesystem fixture, the same shape the unit test in
+    // `analysis/go.test.mjs` pins at the resolver level — this one is the
+    // tripwire for the adapter wiring around it.
+    const rootFixture = mkdtempSync(join(tmpdir(), "polyglot-graph-root-"));
+    afterAll(() => rmSync(rootFixture, { recursive: true, force: true }));
+    mkdirSync(join(rootFixture, "libs/lib"), { recursive: true });
+    writeFileSync(join(rootFixture, "go.mod"), "module example.com/acme/root\n\ngo 1.24\n", "utf8");
+    writeFileSync(
+      join(rootFixture, "main.go"),
+      'package main\n\nimport "example.com/acme/lib"\n',
+      "utf8",
+    );
+    writeFileSync(
+      join(rootFixture, "libs/lib/go.mod"),
+      "module example.com/acme/lib\n\ngo 1.24\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(rootFixture, "libs/lib/pkg.go"),
+      'package lib\n\nimport "example.com/acme/root"\n',
+      "utf8",
+    );
+
+    const deps = createDependencies(undefined, {
+      workspaceRoot: rootFixture,
+      projects: { root: { root: "." }, lib: { root: "libs/lib" } },
+      fileMap: {
+        projectFileMap: {
+          root: [{ file: "go.mod" }, { file: "main.go" }],
+          lib: [{ file: "libs/lib/go.mod" }, { file: "libs/lib/pkg.go" }],
+        },
+      },
+    });
+    expect(deps).toEqual([
+      { source: "root", target: "lib", sourceFile: "main.go", type: "static" },
+      { source: "lib", target: "root", sourceFile: "libs/lib/pkg.go", type: "static" },
+    ]);
+  });
 });
