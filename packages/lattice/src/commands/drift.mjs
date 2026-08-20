@@ -377,6 +377,19 @@ export async function driftCommand(commandContext, io = {}) {
     ).map(({ kind, decisionRef }) => ({ kind, decisionRef }));
   }
 
+  // A deferred policy failure that never had to be thrown is still a thing this
+  // run noticed and would otherwise say nothing about. It changes no finding —
+  // no row cited anything, so the law was never consulted — but "noticed and
+  // silent" is the posture this tool exists to refuse, so it rides the same
+  // coverage notes an `optional: true` row does, in both faces.
+  const notes = [...verdict.notes];
+  if (io.configError && decisionRefRows.length === 0) {
+    notes.push(
+      `the workspace's boundary law could not be loaded (${io.configError.message}) — no intent ` +
+        `row carries a decisionRef, so nothing in this verdict was judged against it`,
+    );
+  }
+
   const coverage = {
     complete: true,
     projects: observed.projects.length,
@@ -391,7 +404,7 @@ export async function driftCommand(commandContext, io = {}) {
     // Coverage notes (e.g. an `optional: true` allowed row the team has not
     // built yet) ride here so "optional and absent" never reads as "never
     // checked".
-    notes: verdict.notes,
+    notes,
   };
 
   const context = { root, provider, marker, provenance: resolveProvenance(root) };
@@ -447,10 +460,12 @@ export async function driftCommand(commandContext, io = {}) {
         },
         // Coverage notes (e.g. an `optional: true` allowed row not yet
         // built) already ride `coverage.notes` above for the JSON envelope —
-        // this is the same `verdict.notes` reaching the text face too, so a
-        // warning that exists in the coverage object does not stop at the
-        // reader who only sees the terminal report.
-        notes: verdict.notes,
+        // this is the SAME list reaching the text face too, so a warning that
+        // exists in the coverage object does not stop at the reader who only
+        // sees the terminal report. It is `notes`, not `verdict.notes`,
+        // precisely so the deferred-policy note above cannot reach one face
+        // and not the other.
+        notes,
       }),
       json: renderJson(envelope),
     },

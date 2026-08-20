@@ -411,6 +411,14 @@ describe("driftCommand", () => {
         // The law was never opened, so its absence decides nothing here.
         expect(result.status).toBe("ok");
         expect(result.drift.findings).toEqual([]);
+        // But it is not swallowed either: a run that noticed the failure and
+        // said nothing would be the posture this tool refuses. Both faces, so
+        // a reader of the terminal report learns what a reader of the envelope
+        // does.
+        expect(result.coverage.notes.join(" ")).toContain(
+          "boundary law could not be loaded (lattice: cannot load module-boundaries.config.mjs)",
+        );
+        expect(result.report.text).toContain("boundary law could not be loaded");
       });
 
       it("still refuses loudly when a row DOES cite something — an unread law must not resolve citations", async () => {
