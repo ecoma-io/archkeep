@@ -98,31 +98,158 @@ export function parseMarkdownLinks(text) {
 }
 
 /**
+ * Blanks fenced code blocks (``` or ~~~), replacing every character but the
+ * newlines with a space so the result keeps the original's length and line
+ * breaks — a match position found in the masked text is still a valid index
+ * into the original. Only a fence of the SAME character closes an open one,
+ * per CommonMark. Shared by `headingAnchors` (a heading inside a fence is
+ * source text being shown, not a real heading GitHub renders) and
+ * `parseDocCitations` (a citation inside a fence is an example, not a live
+ * reference).
+ *
+ * @param {string} text
+ * @returns {string} same length and line breaks as `text`, fenced regions blanked
+ */
+export function maskFencedCodeBlocks(text) {
+  const fenceRe = /^(\s*)(`{3,}|~{3,})/;
+  let fenceChar = null; // the character (` or ~) of the currently open fence, or null
+  return text
+    .split("\n")
+    .map((line) => {
+      const fenceMatch = fenceRe.exec(line);
+      if (fenceMatch) {
+        const char = fenceMatch[2][0];
+        if (fenceChar === null) {
+          fenceChar = char;
+        } else if (char === fenceChar) {
+          fenceChar = null;
+        }
+        return line.replace(/[^\n]/g, " ");
+      }
+      if (fenceChar !== null) return line.replace(/[^\n]/g, " ");
+      return line;
+    })
+    .join("\n");
+}
+
+/**
+ * Whether a citation target names this repository's ADR filename PATTERN —
+ * `docs/adr/NNN-slug.md`, written that way in several comments and skills to
+ * describe the naming convention — rather than one real file. "NNN" is a
+ * placeholder for a real ADR number; the one file that convention actually
+ * produces on disk today, `docs/adr/0001-boundary-levels.md`, uses real
+ * digits. Deliberately narrow: an inline code span or backtick span is NOT a
+ * general "this is an example" signal here, because this repository's own
+ * convention is to write a REAL citation the same way — inline, backtick-
+ * wrapped (see `packages/lattice/src/rules/match.mjs`,
+ * `packages/lattice/src/report/json.mjs`, and a dozen others) — so treating
+ * every backtick-wrapped mention as non-live would silently stop checking
+ * all of those. "NNN" is not a real path component under any real
+ * lowercase-kebab doc name in this tree, so matching it specifically cannot
+ * false-positive on a real citation the way a blanket code-span rule would.
+ *
+ * @param {string} target a citation target, e.g. from `parseDocCitations`
+ * @returns {boolean}
+ */
+export function isAdrPlaceholderCitation(target) {
+  return /\/NNN[-\w.]*\.md$/.test(target);
+}
+
+/**
+ * Extracts the comment text of a JS/MJS/source file — `//` line comments and
+ * `/* … *\/` block comments, JSDoc included — and blanks everything else,
+ * length-preserving like the mask functions above. A `docs/…md`-shaped
+ * substring inside a string literal or other code (test fixture data, a
+ * runtime path) is not a citation of this repository's docs; per AGENTS.md a
+ * source-file citation lives in a comment, so only comment text is a
+ * citation surface here.
+ *
+ * Deliberately simple: it does not tokenize string or template literals, so
+ * a `//` or `/*` sequence inside one would be misread as a comment start.
+ * That is the safe direction for a gate to err in (AGENTS.md: loud is
+ * self-correcting, silent is not) — it can only ever make MORE text count as
+ * a comment than really is one, never less, so it cannot hide a real
+ * citation this way, only (in principle) a stray one somewhere unrelated.
+ *
+ * @param {string} text contents of a `.mjs`/`.js` file
+ * @returns {string} same length as `text`, only comment regions kept, everything else blanked
+ */
+function extractComments(text) {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === "/" && text[i + 1] === "/") {
+      const end = text.indexOf("\n", i);
+      const stop = end === -1 ? text.length : end;
+      out += text.slice(i, stop);
+      i = stop;
+      continue;
+    }
+    if (text[i] === "/" && text[i + 1] === "*") {
+      const end = text.indexOf("*/", i + 2);
+      const stop = end === -1 ? text.length : end + 2;
+      out += text.slice(i, stop);
+      i = stop;
+      continue;
+    }
+    out += text[i] === "\n" ? "\n" : " ";
+    i++;
+  }
+  return out;
+}
+
+/**
  * Extracts prose citations of this repository's docs from a text: `docs/…`
  * (workspace-root relative) or `../docs/…` / `./docs/…` (carrying-file
  * relative). Markdown link syntax is removed first so a target that was
  * already judged as a link is not judged a second time by different rules.
  *
+ * A citation is only extracted from a surface where it reads as a LIVE
+ * reference: for a markdown file, that is its prose with fenced code blocks
+ * blanked out (a `docs/…md` mention inside a literal code sample is source
+ * text being shown, not something this gate should resolve); for any other
+ * scanned file, it is that file's COMMENT text ONLY, with the same fenced
+ * masking applied inside it — never a string literal or other code, per the
+ * comment-only citation rule AGENTS.md states. A match naming this
+ * repository's ADR filename PATTERN (`docs/adr/NNN-slug.md`) rather than one
+ * real file is dropped by `isAdrPlaceholderCitation` — see that function for
+ * why an inline code span is deliberately NOT a second, broader exclusion
+ * here.
+ *
  * @param {string} text contents of a `.md`, `.mjs`, or `.js` file
+ * @param {object} [options]
+ * @param {boolean} [options.isMarkdown] whether `text` is a markdown file (default true)
  * @returns {{target: string, line: number}[]} citation targets, 1-based line
  */
-export function parseDocCitations(text) {
+export function parseDocCitations(text, { isMarkdown = true } = {}) {
   const withoutLinks = text.replace(/!?\[[^\]]*\]\([^)]*\)/g, "");
+  const commentsOnly = isMarkdown ? withoutLinks : extractComments(withoutLinks);
+  const surface = maskFencedCodeBlocks(commentsOnly);
   const citations = [];
-  const re = /((?:\.\.?\/)*)(docs\/[a-z0-9_.-]+\/[a-z0-9_.-]+\.md)/g;
+  // Any depth of one or more `docs/` segments — a top-level file like
+  // `docs/why.md`, one nested arbitrarily deep like `docs/…/deep.md`, and any
+  // case (`docs/README.md`) — a fixed two-segment, lowercase-only shape let a
+  // top-level, deep, or uppercase-named doc's citation go unchecked, so
+  // deleting or moving one of those passed silently.
+  const re = /((?:\.\.?\/)*)(docs\/(?:[\w.-]+\/)*[\w.-]+\.md)/g;
   let match;
-  while ((match = re.exec(withoutLinks))) {
+  while ((match = re.exec(surface))) {
     const prefix = match[1];
     const target = `${prefix}${match[2]}`;
+    if (isAdrPlaceholderCitation(target)) continue;
     citations.push({ target, line: text.slice(0, match.index).split("\n").length });
   }
   return citations;
 }
 
 /**
- * GitHub's heading anchor: lowercase, keep letters/numbers/spaces/hyphens/
- * underscores, spaces become hyphens. This is the same normalization GitHub
- * applies when rendering `#heading` links.
+ * GitHub's heading anchor (the `github-slugger` algorithm): lowercase, strip
+ * punctuation (keep letters/numbers/spaces/hyphens/underscores), then map
+ * EACH remaining space to a hyphen individually — never collapsed. A heading
+ * with punctuation next to a space (`Exit 3 — "no verdict"`) removes the
+ * punctuation but keeps both spaces that bordered it, so it slugs to
+ * `exit-3--no-verdict` (two hyphens), not `exit-3-no-verdict` (one) — a
+ * whitespace-collapsing slugger disagrees with GitHub on exactly this shape.
  *
  * @param {string} heading raw heading text
  * @returns {string} the anchor GitHub would give it
@@ -132,13 +259,18 @@ export function githubSlug(heading) {
     .trim()
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s_-]/gu, "")
-    .replace(/\s+/g, "-");
+    .replace(/\s/g, "-");
 }
 
 /**
  * The set of anchors a document's headings produce, including GitHub's
  * duplicate-heading suffixes: the second heading with a slug gets `-1`, the
  * third `-2`, and so on.
+ *
+ * Fenced code blocks are skipped via `maskFencedCodeBlocks`: a `# comment`
+ * inside a bash fence is source text a reader can see, not a heading GitHub
+ * renders — a scan blind to fences mints a phantom anchor for it, and a link
+ * to that anchor then passes here while it is broken on GitHub.
  *
  * @param {string} text contents of a markdown file
  * @returns {Set<string>} every `#anchor` the file's headings legitimately have
@@ -148,7 +280,7 @@ export function headingAnchors(text) {
   const seen = new Map();
   const re = /^#{1,6}\s+(.+)$/gm;
   let match;
-  while ((match = re.exec(text))) {
+  while ((match = re.exec(maskFencedCodeBlocks(text)))) {
     const slug = githubSlug(match[1]);
     const count = seen.get(slug) ?? 0;
     anchors.add(count === 0 ? slug : `${slug}-${count}`);
@@ -314,11 +446,12 @@ function readFacts() {
     if (!SCANNED_EXTENSIONS.some((ext) => path.endsWith(ext))) continue;
     if (IGNORED_PREFIXES.some((prefix) => path.startsWith(prefix))) continue;
     const text = readFileSync(join(root, path), "utf8");
+    const isMarkdown = path.endsWith(".md");
     files.push({
       path,
-      links: path.endsWith(".md") ? parseMarkdownLinks(text) : [],
-      citations: parseDocCitations(text),
-      headings: path.endsWith(".md") ? headingAnchors(text) : new Set(),
+      links: isMarkdown ? parseMarkdownLinks(text) : [],
+      citations: parseDocCitations(text, { isMarkdown }),
+      headings: isMarkdown ? headingAnchors(text) : new Set(),
     });
   }
   return { files, existingPaths };

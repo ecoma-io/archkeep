@@ -42,33 +42,71 @@ export const PACKAGES_DIR = "packages";
 export const CI_WORKFLOW = ".github/workflows/ci.yml";
 
 /**
- * The targets CI runs, taken from the workspace-tool invocation in the workflow.
- * Matches `moon run ...:<target>` (the `...` prefix means "all projects"),
- * stripping the `...:` prefix, and stops at the first token that is not a
- * project-scoped target, so a trailing flag or a YAML line continuation does
- * not become a target called `--parallel`.
+ * The targets CI runs, taken from every `moon run ...:<target>` invocation in
+ * the workflow (the `...` prefix means "all projects").
+ *
+ * Three things a legal edit to `ci.yml` can do, each handled explicitly so
+ * none of them silently narrows the list this script enforces:
+ *   - a shell line continuation (a trailing `\`) splits one invocation across
+ *     physical lines — those lines are joined into one logical line first;
+ *   - the run step can be split into more than one `moon run …` invocation —
+ *     every one found contributes its targets, not just the first;
+ *   - a comment can mention "moon run" in prose — whole-line comments (a
+ *     line whose first non-whitespace character is `#`) are dropped before
+ *     any of the above, so they can never seed or pollute the list.
+ *
+ * Within one invocation, stripping the `...:` prefix and stopping at the
+ * first token that is not a project-scoped target (once a target has been
+ * seen) still applies, so a trailing flag like `--parallel` does not become a
+ * target.
  *
  * @param {string} workflowText contents of `.github/workflows/ci.yml`
- * @returns {string[]} target names, in the order the workflow names them
+ * @returns {string[]} target names, deduplicated, in the order first seen
  */
 export function parseCiTargets(workflowText) {
-  // Moon: `moon run ...:lint ...:test ...:typecheck` — `...:target` means all projects.
-  const moonMatch = /moon\s+run\s+([^\n]*)/.exec(workflowText);
-  if (moonMatch) {
-    const targets = [];
+  const logicalLines = [];
+  let pending = null;
+  for (const rawLine of workflowText.split("\n")) {
+    if (/^\s*#/.test(rawLine)) continue; // whole-line comment — never a source of targets
+    const line = pending !== null ? `${pending} ${rawLine.trim()}` : rawLine;
+    if (/\\\s*$/.test(line)) {
+      // Shell line continuation: strip the trailing backslash and carry the
+      // rest forward to be joined with the next physical line.
+      pending = line.replace(/\\\s*$/, "").trimEnd();
+      continue;
+    }
+    pending = null;
+    logicalLines.push(line);
+  }
+
+  const targets = [];
+  const seen = new Set();
+  for (const line of logicalLines) {
+    // Moon: `moon run ...:lint ...:test ...:typecheck` — `...:target` means all projects.
+    const moonMatch = /moon\s+run\s+(.*)$/.exec(line);
+    if (!moonMatch) continue;
+    // Tracked per line, not globally: a second `moon run` invocation must be
+    // free to skip its OWN leading flags even though earlier lines already
+    // pushed targets — the stop-at-a-flag rule is local to one invocation.
+    const targetsOnThisLine = [];
     for (const word of moonMatch[1].trim().split(/[\s,]+/)) {
-      // Skip flags (e.g. --force) that appear before the target list. Once a
-      // target has been seen, any flag breaks the loop — that is the stop
-      // condition for a trailing flag like --parallel.
-      if (word.startsWith("--") && targets.length === 0) continue;
+      // Skip flags (e.g. --force) that appear before this line's target list.
+      // Once a target has been seen ON THIS LINE, any flag breaks the loop —
+      // that is the stop condition for a trailing flag like --parallel.
+      if (word.startsWith("--") && targetsOnThisLine.length === 0) continue;
       // Strip the `...:` prefix Moon uses for "all projects".
       const target = word.replace(/^\.{3}:/, "");
       if (!/^[a-z][a-z0-9:-]*$/i.test(target)) break;
-      targets.push(target);
+      targetsOnThisLine.push(target);
     }
-    return targets;
+    for (const target of targetsOnThisLine) {
+      if (!seen.has(target)) {
+        seen.add(target);
+        targets.push(target);
+      }
+    }
   }
-  return [];
+  return targets;
 }
 
 /**
