@@ -277,14 +277,36 @@ export function transformMoonGraph(raw) {
   const nodes = Object.create(null);
   /** @type {Record<string, {source: string, target: string, type: string}[]>} */
   const dependencies = Object.create(null);
-  const seen = new Set();
+  // Keyed on the (source, target) PAIR alone, never on `type`: the same
+  // dependency is represented twice in Moon's own output — once in
+  // `raw.graph.edges` (typed only from `scope`, since that tuple carries no
+  // `source` field) and once in the owning node's own `dependencies[]`
+  // (which does carry `source`, and so is the only place a dependency can be
+  // typed `"implicit"` at all). Keying on `[source, target, type]` — the
+  // previous shape — let both survive as two distinct edges for one real
+  // dependency: an `implicit` edge from the second loop, plus a phantom
+  // `static`/`dynamic` duplicate from the first, and only the second loop's
+  // exclusion callers (`../commands/drift.mjs`, `../commands/discover.mjs`)
+  // ever look at `type`, so the phantom slipped past every `edge.type ===
+  // "implicit"` check as a fake code-derived edge. One pair now always
+  // resolves to exactly one entry, and `"implicit"` — Moon's own "no
+  // author-written declaration behind this" fact — always wins over a
+  // scope-derived type for that same pair, in whichever order the two loops
+  // below discover it.
+  /** @type {Map<string, {source: string, target: string, type: string}>} */
+  const edgesByPair = new Map();
   const add = (source, target, type) => {
     if (!source || !target || source === target) return;
     if (!nodes[target]) return;
-    const key = JSON.stringify([source, target, type]);
-    if (seen.has(key)) return;
-    seen.add(key);
-    (dependencies[source] ??= []).push({ source, target, type });
+    const key = JSON.stringify([source, target]);
+    const existing = edgesByPair.get(key);
+    if (existing) {
+      if (type === "implicit" && existing.type !== "implicit") existing.type = "implicit";
+      return;
+    }
+    const entry = { source, target, type };
+    edgesByPair.set(key, entry);
+    (dependencies[source] ??= []).push(entry);
   };
 
   // Build nodes from Moon's data map. Each entry is indexed by integer key
