@@ -63,7 +63,10 @@
  *   paths by construction — there is no shape of it that states languages
  *   rather than territory — so it is folded into the same refusal a
  *   directory-component `files` glob gets, never applied tree-wide with the
- *   exclusion silently dropped.
+ *   exclusion silently dropped. Both scope refusals hold under
+ *   `extractBoundaryRule`'s default; the one caller allowed to bind such an
+ *   entry tree-wide anyway, and why that is not a silent drop there, is
+ *   argued on `extractBoundaryRule` itself (`pathScoped: "bind-tree-wide"`).
  */
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -192,30 +195,58 @@ function parseRuleValue(value, index) {
  *
  * @param {unknown} flatConfig The config module's default export, expected to
  *   be a flat-config array.
+ * @param {{pathScoped?: "refuse"|"bind-tree-wide"}} [readerOptions] What to do
+ *   with an entry that scopes the rule to part of the tree — a
+ *   directory-component `files` glob, or a non-empty `ignores`. The default,
+ *   `"refuse"`, is the only correct answer for an ENFORCER: lattice reads one
+ *   global constraint table, and binding a scoped entry's table tree-wide
+ *   would enforce a law over files the workspace deliberately excluded from
+ *   it. `"bind-tree-wide"` exists for exactly one caller shape — a
+ *   DIFFERENTIAL that feeds the extracted table identically to every engine
+ *   it compares (`../../../scripts/differential-real-trees-child.mjs`): there
+ *   the subject is rule-engine agreement on identical inputs, not fidelity to
+ *   the tree's own lint scope, so applying one table to every file is
+ *   symmetric across engines and cannot manufacture or hide a difference
+ *   between them. The drop is still never silent: binding a path-scoped entry
+ *   under this mode always contributes a `note` naming the entry and the
+ *   scope it stated, so the run that used it says so.
  * @returns {{depConstraints: object[], options: Record<string, unknown>,
  *   note?: string}} The constraint table, the entry's own stated options
  *   (`depConstraints` stripped out), and — only when there is something worth
- *   telling a reader about which entry bound — a note recording it. Three
+ *   telling a reader about which entry bound — a note recording it. Four
  *   independent facts can each contribute a sentence: several unscoped (or
  *   accepted files-scoped) entries configuring the rule differently, the
- *   winning entry itself being files-scoped under the accepted shape, and the
+ *   winning entry itself being files-scoped under the accepted shape, the
  *   winning entry stating only a severity so its options were read off an
- *   earlier entry instead (see `statesOptions`). None of the three is a
+ *   earlier entry instead (see `statesOptions`), and — under
+ *   `pathScoped: "bind-tree-wide"` only — the winning entry being
+ *   path-scoped with its scope dropped tree-wide. None of the four is a
  *   refusal: several overrides layered across a monorepo's `eslint.config.mjs`
  *   composing other configs is a normal, common shape, and ESLint's own
  *   binding rule already says unambiguously which one wins; a bare
- *   source-extension `files` entry states languages, not territory; and a
+ *   source-extension `files` entry states languages, not territory; a
  *   severity-only override is exactly how ESLint expects a later config to
- *   dial a rule up or down without restating its table.
+ *   dial a rule up or down without restating its table; and the fourth fires
+ *   only under an explicit opt-in whose argument sits above.
  * @throws {Error} when `flatConfig` is not an array, an element is not a
  *   plain object or carries an `extends` key, no entry configures the rule,
- *   an entry scopes the rule under a `files` glob with a directory component
+ *   `readerOptions.pathScoped` is a value this reader does not define, an
+ *   entry scopes the rule under a `files` glob with a directory component
  *   or carries a non-empty `ignores` (a per-glob law this reader cannot
- *   express — see below), or the winning entry's severity/options are
- *   malformed (`parseRuleValue`) once any severity-only fallback has been
- *   applied.
+ *   express — see below) while `pathScoped` is `"refuse"`, or the winning
+ *   entry's severity/options are malformed (`parseRuleValue`) once any
+ *   severity-only fallback has been applied.
  */
-export function extractBoundaryRule(flatConfig) {
+export function extractBoundaryRule(flatConfig, readerOptions = {}) {
+  const pathScopedMode = readerOptions.pathScoped ?? "refuse";
+  if (pathScopedMode !== "refuse" && pathScopedMode !== "bind-tree-wide") {
+    throw new Error(
+      `lattice: extractBoundaryRule was called with pathScoped: ` +
+        `${JSON.stringify(readerOptions.pathScoped)} — the only values this reader defines are ` +
+        `"refuse" and "bind-tree-wide". An unrecognised mode is refused rather than read as the ` +
+        "default, because the caller plainly meant something and this reader cannot know what.",
+    );
+  }
   if (!Array.isArray(flatConfig)) {
     throw new Error(
       "lattice: the ESLint config's default export is not a flat-config array, so the module " +
@@ -288,18 +319,18 @@ export function extractBoundaryRule(flatConfig) {
   // scope whose every glob is a bare source-extension pattern (`scope ===
   // "extension"`, see `BARE_EXTENSION_GLOB`) says no such thing and is left
   // in the pool below.
-  const pathScoped = matches.find((match) => match.scope === "path");
-  if (pathScoped !== undefined) {
-    const hasIgnores = Array.isArray(pathScoped.ignores) && pathScoped.ignores.length > 0;
+  const firstPathScoped = matches.find((match) => match.scope === "path");
+  if (firstPathScoped !== undefined && pathScopedMode === "refuse") {
+    const hasIgnores = Array.isArray(firstPathScoped.ignores) && firstPathScoped.ignores.length > 0;
     throw new Error(
       hasIgnores
-        ? `lattice: flatConfig[${pathScoped.index}] configures @nx/enforce-module-boundaries under ` +
-            `ignores: ${JSON.stringify(pathScoped.ignores)} — lattice reads one global constraint ` +
+        ? `lattice: flatConfig[${firstPathScoped.index}] configures @nx/enforce-module-boundaries under ` +
+            `ignores: ${JSON.stringify(firstPathScoped.ignores)} — lattice reads one global constraint ` +
             "table and has no way to express a law that excludes part of the tree. State the rule " +
             "in an entry with no ignores instead, or move ignores to a separate entry that carries " +
             "no @nx/enforce-module-boundaries key."
-        : `lattice: flatConfig[${pathScoped.index}] configures @nx/enforce-module-boundaries under ` +
-            `files: ${JSON.stringify(pathScoped.files)} — lattice reads one global constraint table ` +
+        : `lattice: flatConfig[${firstPathScoped.index}] configures @nx/enforce-module-boundaries under ` +
+            `files: ${JSON.stringify(firstPathScoped.files)} — lattice reads one global constraint table ` +
             "and has no way to express a law that differs per file glob. A files entry whose every " +
             "glob is a bare source-extension pattern over the whole tree (no directory component) is " +
             "accepted instead and applied tree-wide, because that shape states which languages ESLint " +
@@ -370,6 +401,24 @@ export function extractBoundaryRule(flatConfig) {
         `${JSON.stringify(last.files)} — every glob there is a bare source-extension pattern with ` +
         "no directory component, so lattice applied the table tree-wide rather than refusing it " +
         "as a per-directory law.",
+    );
+  }
+  if (last.scope === "path") {
+    // Reachable only under `pathScoped: "bind-tree-wide"` — the refuse mode
+    // threw above on the first path-scoped match. The note is not optional
+    // here: the whole argument for the opt-in (see the `readerOptions` doc)
+    // rests on the dropped scope being stated by the run that dropped it.
+    const scopeFacts = [
+      ...(last.files !== undefined ? [`files: ${JSON.stringify(last.files)}`] : []),
+      ...(Array.isArray(last.ignores) && last.ignores.length > 0
+        ? [`ignores: ${JSON.stringify(last.ignores)}`]
+        : []),
+    ].join(" and ");
+    noteParts.push(
+      `flatConfig[${last.index}] scopes @nx/enforce-module-boundaries under ${scopeFacts} — bound ` +
+        `tree-wide at the caller's explicit request (pathScoped: "bind-tree-wide"): the caller ` +
+        "applies this one table identically to every engine it compares, so the dropped scope is " +
+        "symmetric across them, and this note is the record of the drop.",
     );
   }
 

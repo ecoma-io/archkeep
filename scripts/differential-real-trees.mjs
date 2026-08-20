@@ -125,6 +125,17 @@ export const DIRECTIONS = Object.freeze({
  * pinned commit — a floor `deriveNativeModel`'s output is checked against so a
  * derivation that silently produced an empty or near-empty model cannot pass
  * by comparing nothing against nothing.
+ *
+ * `expectedUpstreamUnreadable` is a third measured fact: how many files
+ * upstream's ESLint run cannot READ at the pinned commit — parse-error
+ * fixtures a linting tool's own repository deliberately carries, classified by
+ * `classifyUpstreamNote` in `differential-real-trees-child.mjs` (its doc
+ * carries the measured argument). Held EXACTLY, both directions
+ * (`upstreamUnreadableBreaches` below): more than pinned is part of the tree
+ * going dark without a human having measured why, fewer is a pin claiming a
+ * could-not-look the run no longer measures. Exact rather than a floor or
+ * ceiling because the sha is pinned — the true number cannot move under an
+ * unchanged harness, so any movement IS the harness changing.
  */
 export const TREES = Object.freeze([
   {
@@ -144,6 +155,13 @@ export const TREES = Object.freeze([
     // --file=`'s 35 nodes at this sha — comfortably above a floor that only
     // needs to catch a derivation that stopped looking.
     expectedNativeProjects: 35,
+    // Measured 2026-08-20 against the pinned commit: exactly two files fail
+    // ESLint's parse — both deliberately-broken parser fixtures of the tree's
+    // own (e2e/plugin-typescript-e2e/mocks/fixtures/default-setup/src/
+    // 1-syntax-errors.ts and packages/plugin-typescript/mocks/fixtures/
+    // basic-setup/src/1-syntax-errors/ts-1136-property-assignment-expected.ts,
+    // each `Parsing error: Property assignment expected.`).
+    expectedUpstreamUnreadable: 2,
   },
   {
     name: "ng-doc",
@@ -160,6 +178,9 @@ export const TREES = Object.freeze([
     // is exactly the "stopped looking" failure this floor exists to name
     // and would have named it falsely.
     expectedNativeProjects: 8,
+    // Measured 2026-08-20 against the pinned commit: every file upstream
+    // lints here parses.
+    expectedUpstreamUnreadable: 0,
   },
 ]);
 
@@ -411,6 +432,56 @@ export function emptyVerdictBreaches(tree, verdictCounts) {
     }
   }
   return breaches;
+}
+
+/**
+ * The upstream could-not-look claim, checked against the pin. A file
+ * upstream's ESLint could not read produces no boundary message, so the
+ * comparison loop never mentions it and its silence would read as "checked,
+ * clean" — `classifyUpstreamNote` in `differential-real-trees-child.mjs` is
+ * what turns each one into a record instead, and this is the gate that keeps
+ * those records from becoming background noise: the list must match the
+ * tree's `expectedUpstreamUnreadable` (absent means 0) EXACTLY, both
+ * directions, for the reason the `TREES` doc comment gives. Never
+ * ledgerable, same as `emptyVerdictBreaches` and for the same reason: a
+ * ledger entry silences a DIFFERENCE with a stated reason, not a part of the
+ * tree the run could not look at.
+ *
+ * A malformed report — no array at all where the child always writes one — is
+ * a breach too, not a zero: `reportNativeLeg` already refuses the equivalent
+ * missing `native` field rather than reading it as a clean leg.
+ *
+ * @param {{name: string, sha: string, expectedUpstreamUnreadable?: number}} tree
+ * @param {unknown} unreadable The child report's `upstreamUnreadable` list.
+ * @returns {string[]}
+ */
+export function upstreamUnreadableBreaches(tree, unreadable) {
+  if (!Array.isArray(unreadable)) {
+    return [
+      `${tree.name}: the child process report carries no upstreamUnreadable list — treated as ` +
+        `could-not-look, never as zero unreadable files.`,
+    ];
+  }
+  const expected = tree.expectedUpstreamUnreadable ?? 0;
+  if (unreadable.length === expected) return [];
+  const files = unreadable
+    .map((entry) => /** @type {{file: string}} */ (entry).file)
+    .sort()
+    .join(", ");
+  if (unreadable.length > expected) {
+    return [
+      `${tree.name}: upstream could not read ${unreadable.length} file(s) at ${tree.sha} ` +
+        `(${files}), more than the ${expected} measured for this pinned commit — each extra file ` +
+        `is a place neither verdict can be compared, so it must be re-measured and pinned with a ` +
+        `reason, never absorbed as agreement.`,
+    ];
+  }
+  return [
+    `${tree.name}: upstream could not read only ${unreadable.length} file(s) at ${tree.sha}` +
+      `${files ? ` (${files})` : ""}, fewer than the ${expected} pinned — a pin claiming a ` +
+      `could-not-look the run no longer measures is stale; re-measure and update ` +
+      `expectedUpstreamUnreadable.`,
+  ];
 }
 
 /**
@@ -847,11 +918,36 @@ function reportTree(tree, result) {
     `verdicts: upstream ${counts.upstreamVerdicts}, this engine ${counts.toolVerdicts}, ` +
       `agreeing ${agreements}`,
   );
+  if (result.boundaryNote) {
+    // The scope-drop (or which-entry-bound) record `extractBoundaryRule`
+    // produced while reading the tree's own config — printed, because a
+    // dropped scope recorded only inside the child's report JSON is a record
+    // with no reader.
+    console.log(`boundary config note: ${result.boundaryNote}`);
+  }
   if (counts.analysisFailures > 0) {
     console.log(
       `analysis failures (this engine's could-not-look records, not verdicts): ` +
         `${counts.analysisFailures} — e.g. ${result.analysisFailureSample.join("; ")}`,
     );
+  }
+  if (counts.upstreamNoiseNotes > 0) {
+    console.log(
+      `upstream noise notes (directives naming rules outside this differential's override ` +
+        `config, and unused directives — measured harmless, see classifyUpstreamNote): ` +
+        `${counts.upstreamNoiseNotes}`,
+    );
+  }
+  // Upstream's could-not-look records, every one — the count is gated below
+  // (`upstreamUnreadableBreaches`), and a gated number whose files are not in
+  // the log sends whoever it fires on back to a kept clone to find them.
+  if (Array.isArray(result.upstreamUnreadable)) {
+    for (const entry of result.upstreamUnreadable) {
+      console.log(
+        `upstream could not read (could-not-look record, not a verdict): ${entry.file} — ` +
+          entry.notes.join("; "),
+      );
+    }
   }
   // Every upstream verdict, so a reader can see WHAT agreed rather than only
   // how much; any verdict the engines disagree on reappears in the difference
@@ -869,10 +965,12 @@ function reportTree(tree, result) {
     differences,
     scopeLedgerToDirections(LEDGER, DIRECTIONS.upstream),
   );
-  const breaches = emptyVerdictBreaches(tree, {
+  const emptyBreaches = emptyVerdictBreaches(tree, {
     upstream: counts.upstreamVerdicts,
     tool: counts.toolVerdicts,
   });
+  const unreadableBreaches = upstreamUnreadableBreaches(tree, result.upstreamUnreadable);
+  const breaches = [...emptyBreaches, ...unreadableBreaches];
   for (const { difference, entry } of explained) {
     console.log(`explained ${difference.direction} ${difference.messageId} @ ${difference.site}`);
     console.log(`  ledger: ${entry.reason}`);
@@ -892,7 +990,14 @@ function reportTree(tree, result) {
       `longer fires — remove it or say what changed.`,
   );
   for (const line of staleLines) console.log(line);
-  const breachLines = breaches.map((breach) => `EMPTY-VERDICT BREACH: ${breach}`);
+  // Two labels, one merged list: each label names which claim was breached —
+  // an engine that answered zero where violations are pinned to exist, versus
+  // an unreadable-file count that moved off its pin — so the issue trail's
+  // reader is not left inferring the class from the sentence.
+  const breachLines = [
+    ...emptyBreaches.map((breach) => `EMPTY-VERDICT BREACH: ${breach}`),
+    ...unreadableBreaches.map((breach) => `UPSTREAM-UNREADABLE BREACH: ${breach}`),
+  ];
   for (const line of breachLines) console.log(line);
 
   // The native leg is reported and classified through the same mechanism
@@ -1002,7 +1107,7 @@ function main() {
       (exit === EXIT.ok
         ? "both engines agree everywhere the ledger does not already explain"
         : exit === EXIT.findings
-          ? "FINDINGS — see UNEXPLAINED / STALE / EMPTY-VERDICT lines above"
+          ? "FINDINGS — see UNEXPLAINED / STALE / BREACH lines above"
           : "INCOMPLETE — at least one tree could not be measured"),
   );
   process.exit(exit);

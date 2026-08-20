@@ -1,66 +1,144 @@
-// Unit tests for the one pure helper the real-tree differential's child
-// process exports: `silentUpstreamFailures`. Everything else in
-// `differential-real-trees-child.mjs` needs a real cloned tree, the tree's own
-// nx, and a real ESLint run — this is the part that does not, and the part
-// bug #39 lived in.
+// Unit tests for the pure helpers the real-tree differential's child process
+// exports: `classifyUpstreamNote` and `partitionUpstreamMessages`. Everything
+// else in `differential-real-trees-child.mjs` needs a real cloned tree, the
+// tree's own nx, and a real ESLint run — this is the part that does not.
 //
-// The case to read first is the SILENT-direction one: a file upstream could
-// not read cleanly, and this engine independently had nothing to say about it
-// either — the shape `noteCount`'s comment claimed was covered while nothing
-// downstream ever read the count it landed in.
+// The case to read first is the SILENT-direction one: a parse-failed file
+// classified as noise would drop out of every map a reader checks, and "zero
+// verdicts" on a file nobody parsed reads exactly like "checked, clean". Every
+// message shape asserted here was measured against this repository's own
+// pinned eslint, driven through the same `ESLint` API the child uses —
+// `classifyUpstreamNote`'s doc comment carries the measurement.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { silentUpstreamFailures } from "./differential-real-trees-child.mjs";
+import {
+  classifyUpstreamNote,
+  partitionUpstreamMessages,
+} from "./differential-real-trees-child.mjs";
 
-test("a note on a file neither engine produced a verdict for is silently hidden — this is the defect", () => {
-  // Bug #39: before the fix, this file's parse-error note only ever fed
-  // `noteCount`, which landed in `counts.upstreamNotes` and was never read
-  // again — not printed by `reportTree`, not gated by any breach. The old
-  // code had no `silentUpstreamFailures` at all, so this file's regression is
-  // the function simply not existing to catch the case.
-  const notesByFile = new Map([["libs/broken/src/index.ts", ["eslint: Parsing error: bad"]]]);
-  const upstreamFiles = new Set(); // no boundary-rule message for this file
-  const toolFiles = new Set(); // this engine reported nothing for it either
-
-  const hidden = silentUpstreamFailures(notesByFile, upstreamFiles, toolFiles);
-
-  assert.deepEqual(hidden, [
-    { file: "libs/broken/src/index.ts", notes: ["eslint: Parsing error: bad"] },
-  ]);
+test("a fatal parse error is unreadable — classified as noise it would masquerade as clean", () => {
+  // The silent direction: the boundary rule never ran on a file ESLint could
+  // not parse, so "no boundary message" there is not a verdict. This is the
+  // exact message shape code-pushup's two parser fixtures produce at the
+  // pinned sha.
+  const message = {
+    ruleId: null,
+    fatal: true,
+    message: "Parsing error: Property assignment expected.",
+  };
+  assert.equal(classifyUpstreamNote(message), "unreadable");
 });
 
-test("a note on a file upstream ALSO reported a boundary verdict for is not hidden", () => {
-  // The file already reached the ordinary comparison loop through
-  // `upstreamByFile`, so it is not part of the invisible set — any
-  // disagreement there is a `differences` entry the ledger already sees.
-  const notesByFile = new Map([["libs/mixed/src/index.ts", ["eslint: some other rule"]]]);
-  const upstreamFiles = new Set(["libs/mixed/src/index.ts"]);
-  const toolFiles = new Set();
-
-  assert.deepEqual(silentUpstreamFailures(notesByFile, upstreamFiles, toolFiles), []);
+test("a directive naming a rule outside the override config is noise — the rule still ran", () => {
+  // Measured: a probe file carrying this directive still had its configured
+  // rule fire on it, so the message impairs nothing this differential
+  // compares. Classifying it unreadable failed a whole release-lane run over
+  // 93 such files (release run 32378064880, 2026-08-20).
+  const message = {
+    ruleId: "functional/no-let",
+    fatal: false,
+    message: "Definition for rule 'functional/no-let' was not found.",
+  };
+  assert.equal(classifyUpstreamNote(message), "noise");
 });
 
-test("a note on a file this engine ALSO reported a violation for is not hidden", () => {
-  const notesByFile = new Map([["libs/mixed/src/index.ts", ["eslint: some other rule"]]]);
-  const upstreamFiles = new Set();
-  const toolFiles = new Set(["libs/mixed/src/index.ts"]);
-
-  assert.deepEqual(silentUpstreamFailures(notesByFile, upstreamFiles, toolFiles), []);
+test("an unused eslint-disable directive is noise — the directive reporter, not a read failure", () => {
+  const message = {
+    ruleId: null,
+    fatal: false,
+    message: "Unused eslint-disable directive (no problems were reported from 'max-lines').",
+  };
+  assert.equal(classifyUpstreamNote(message), "noise");
 });
 
-test("no notes at all means nothing is hidden", () => {
-  assert.deepEqual(silentUpstreamFailures(new Map(), new Set(), new Set()), []);
+test("an unrecognised ruleId-less message is unreadable — fail-closed, never guessed harmless", () => {
+  // ESLint's file-ignored warning is the known member of this class: a file
+  // it covers was never linted at all, which no noise classification may
+  // absorb. Any shape this function has not measured lands here too.
+  const message = {
+    ruleId: null,
+    fatal: false,
+    message: 'File ignored because of a matching ignore pattern. Use "--no-ignore" to disable.',
+  };
+  assert.equal(classifyUpstreamNote(message), "unreadable");
 });
 
-test("multiple silently-masked files are all named, not just the first", () => {
-  const notesByFile = new Map([
-    ["a.ts", ["eslint: parse error"]],
-    ["b.ts", ["eslint: parse error"]],
-  ]);
-  const hidden = silentUpstreamFailures(notesByFile, new Set(), new Set());
-  assert.deepEqual(
-    hidden.map((entry) => entry.file),
-    ["a.ts", "b.ts"],
+test("an unrecognised message that carries a ruleId is unreadable — fail-closed there too", () => {
+  // A real rule message here would mean the override config ran a rule this
+  // differential never configured — not a shape to wave through as noise.
+  const message = { ruleId: "some/rule", fatal: false, message: "something unforeseen" };
+  assert.equal(classifyUpstreamNote(message), "unreadable");
+});
+
+test("a Definition-not-found message WITHOUT a ruleId is unreadable — the measured shape carries one", () => {
+  // The noise classification is two measured (ruleId, text) pairs, not a text
+  // match alone; half a match is an unmeasured shape and stays fail-closed.
+  const message = {
+    ruleId: null,
+    fatal: false,
+    message: "Definition for rule 'functional/no-let' was not found.",
+  };
+  assert.equal(classifyUpstreamNote(message), "unreadable");
+});
+
+test("partition splits one tree's results three ways, keyed by workspace-relative file", () => {
+  const treeRoot = "/tmp/tree";
+  const results = [
+    {
+      filePath: "/tmp/tree/libs/a/src/index.ts",
+      messages: [
+        { ruleId: "@nx/enforce-module-boundaries", fatal: false, message: "not allowed" },
+        {
+          ruleId: "functional/no-let",
+          fatal: false,
+          message: "Definition for rule 'functional/no-let' was not found.",
+        },
+      ],
+    },
+    {
+      filePath: "/tmp/tree/libs/broken/src/index.ts",
+      messages: [{ ruleId: null, fatal: true, message: "Parsing error: bad" }],
+    },
+    { filePath: "/tmp/tree/libs/clean/src/index.ts", messages: [] },
+  ];
+
+  const { upstreamByFile, noiseByFile, unreadableByFile } = partitionUpstreamMessages(
+    results,
+    treeRoot,
   );
+
+  assert.deepEqual([...upstreamByFile.keys()], ["libs/a/src/index.ts"]);
+  assert.equal(upstreamByFile.get("libs/a/src/index.ts")?.[0].message, "not allowed");
+  assert.deepEqual(noiseByFile.get("libs/a/src/index.ts"), [
+    "functional/no-let: Definition for rule 'functional/no-let' was not found.",
+  ]);
+  assert.deepEqual(
+    [...unreadableByFile],
+    [["libs/broken/src/index.ts", ["eslint: Parsing error: bad"]]],
+  );
+});
+
+test("a parse-failed file lands in unreadable even when noise sits beside it on other files", () => {
+  // The regression that broke release run 32378064880 in the OTHER direction:
+  // the old guard threw on the noise files and the whole tree went dark.
+  // Partitioned, the noise files stay comparable and only the parse failure
+  // is a could-not-look record.
+  const results = [
+    {
+      filePath: "/t/a.ts",
+      messages: [{ ruleId: null, fatal: false, message: "Unused eslint-disable directive (x)." }],
+    },
+    {
+      filePath: "/t/b.ts",
+      messages: [{ ruleId: null, fatal: true, message: "Parsing error: bad" }],
+    },
+  ];
+  const { upstreamByFile, noiseByFile, unreadableByFile } = partitionUpstreamMessages(
+    results,
+    "/t",
+  );
+  assert.equal(upstreamByFile.size, 0);
+  assert.deepEqual([...noiseByFile.keys()], ["a.ts"]);
+  assert.deepEqual([...unreadableByFile.keys()], ["b.ts"]);
 });
