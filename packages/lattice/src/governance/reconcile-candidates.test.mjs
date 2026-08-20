@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { buildRankedCandidates } from "./reconcile-candidates.mjs";
+import { reconcileScores } from "./reconcile-score.mjs";
+import { judgeIntent } from "../architecture-intent/judge.mjs";
 
 /** A simple scored element deck, matching the ScoredElement typedef. */
 const element = (overrides) => ({
@@ -26,6 +28,7 @@ describe("buildRankedCandidates", () => {
         }),
       ],
       edges: [],
+      tags: [],
       intentRows: [],
     };
     expect(buildRankedCandidates(scores)).toEqual([]);
@@ -35,6 +38,7 @@ describe("buildRankedCandidates", () => {
     const scores = {
       projects: [element({ name: "orphan", classification: "intentUnknownProject" })],
       edges: [],
+      tags: [],
       intentRows: [],
     };
     const candidates = buildRankedCandidates(scores);
@@ -54,6 +58,7 @@ describe("buildRankedCandidates", () => {
     const scores = {
       projects: [],
       edges: [element({ plane: "edge", name: "a → b", classification: "dependencyNotAllowed" })],
+      tags: [],
       intentRows: [],
     };
     const candidates = buildRankedCandidates(scores);
@@ -68,6 +73,7 @@ describe("buildRankedCandidates", () => {
     const scores = {
       projects: [],
       edges: [],
+      tags: [],
       intentRows: [
         element({
           plane: "project",
@@ -87,13 +93,20 @@ describe("buildRankedCandidates", () => {
     });
   });
 
-  it("proposes tag-change for a missing required tag", () => {
+  it("proposes tag-change for a missing required tag — read from scores.tags, the plane scoreProject actually emits it on", () => {
+    // `projectTagMissing` elements live on `scores.tags` (see
+    // `reconcile-score.mjs`'s `scoreProject`), never on `scores.intentRows` —
+    // a fixture that put it under `intentRows` instead would exercise the
+    // `INTENT_ROW_KIND` mapping without ever exercising the loop that reads
+    // `scores.tags`, which is exactly the bug this test guards (see also the
+    // "reconcile-score → reconcile-candidates" integration test below, which
+    // drives the real chain end to end).
     const scores = {
       projects: [],
       edges: [],
-      intentRows: [
+      tags: [
         element({
-          plane: "project",
+          plane: "tag",
           name: "core  scope-nx",
           state: "absent",
           severity: 3,
@@ -101,6 +114,7 @@ describe("buildRankedCandidates", () => {
           intentRow: { plane: "project", index: 0, kind: "required", key: "core" },
         }),
       ],
+      intentRows: [],
     };
     const candidates = buildRankedCandidates(scores);
     expect(candidates).toHaveLength(1);
@@ -114,6 +128,7 @@ describe("buildRankedCandidates", () => {
     const scores = {
       projects: [],
       edges: [],
+      tags: [],
       intentRows: [
         element({
           plane: "intent-row",
@@ -150,6 +165,7 @@ describe("buildRankedCandidates", () => {
         }),
       ],
       edges: [],
+      tags: [],
       intentRows: [
         element({
           plane: "project",
@@ -176,6 +192,7 @@ describe("buildRankedCandidates", () => {
       edges: [
         element({ plane: "edge", name: "core → app", classification: "intentForbiddenEdge" }),
       ],
+      tags: [],
       intentRows: [
         element({
           plane: "intent-row",
@@ -189,5 +206,46 @@ describe("buildRankedCandidates", () => {
     const candidates = buildRankedCandidates(scores);
     expect(candidates).toHaveLength(1);
     expect(candidates[0].kind).toBe("boundary-change");
+  });
+});
+
+describe("buildRankedCandidates — driven end to end through judgeIntent → reconcileScores", () => {
+  it("a required project missing a required tag reaches --propose as a tag-change candidate, never []", () => {
+    // The regression this guards: `buildRankedCandidates` never iterated
+    // `scores.tags`, the plane `reconcileScores`' `scoreProject` actually
+    // puts a `projectTagMissing` element on. A unit test that fabricates the
+    // element directly under `scores.intentRows` (as the sibling test above
+    // now explains) exercises the classification-to-kind mapping but never
+    // the real wiring bug, because it never goes through `reconcileScores`
+    // at all. This test drives the real chain a `--propose` run actually
+    // takes: `judgeIntent` → `reconcileScores` → `buildRankedCandidates`.
+    const intent = {
+      version: "1",
+      boundaries: [],
+      allowed: [],
+      forbidden: [],
+      forbiddenTags: [],
+      projects: { required: [{ name: "core", tags: ["scope-nx"] }] },
+    };
+    // `core` exists but does not carry the required "scope-nx" tag.
+    const graph = { nodes: { core: { data: { tags: ["type-package"] } } }, dependencies: {} };
+    const verdict = judgeIntent(intent, graph);
+    expect(verdict.findings.some((f) => f.rule === "projectTagMissing")).toBe(true);
+
+    const observed = {
+      projects: [{ name: "core", data: { root: "libs/core", tags: ["type-package"] } }],
+      edges: [],
+    };
+    const scores = reconcileScores(intent, verdict, observed, { failures: [] });
+    expect(scores.tags).toHaveLength(1);
+    expect(scores.tags[0].classification).toBe("projectTagMissing");
+
+    const candidates = buildRankedCandidates(scores);
+    expect(candidates).not.toEqual([]);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({
+      kind: "tag-change",
+      edit: { action: "update required tags" },
+    });
   });
 });
