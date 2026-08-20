@@ -102,7 +102,10 @@ answer is to surface it, never to ignore it.
 
    Drift prints the intent fingerprint and every intent row the observed graph
    violates. Exit 3 means the comparison could not be completed — an
-   _unverifiable_ intent must never be read as _no drift_.
+   _unverifiable_ intent must never be read as _no drift_. A workspace with no
+   intent file has not failed this step; it has declared no Intent, and
+   establishing one is `arch-migrate`'s protocol rather than something to
+   improvise here.
 
 5. **For a planned change, request the planning context.** When about to change
    code (not just read it):

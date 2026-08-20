@@ -2,8 +2,9 @@
 
 The `arch-*` skills teach an AI agent the architecture governance workflow in a
 Lattice-governed repository: establish the architectural facts, make an
-architecture-aware change, get an authoritative verdict, and review changes by
-evidence. They are the agent-facing layer of a three-part architecture:
+architecture-aware change, get an authoritative verdict, review changes by
+evidence, and bring a repository that has no declared model under governance in
+the first place. They are the agent-facing layer of a three-part architecture:
 
 ```
 Lattice CLI (deterministic authority)
@@ -23,16 +24,17 @@ Agent
   plugin discovers skills through its `skills` field; `npx skills add`
   discovers them from the repository-root `skills/` directory.
 
-## The governance lifecycle in four skills
+## The governance lifecycle in five skills
 
 The skills implement one conceptual lifecycle:
 
 ```
 OBSERVE → CONTEXT → CHANGE → CHECK → EVIDENCE → REVIEW
+       ↳ MIGRATE when there is no declared model yet
                 ↘                     ↳ EVOLVE when necessary
 ```
 
-None of the four skills is a single command. Each teaches the agent _when_ to
+None of the five skills is a single command. Each teaches the agent _when_ to
 run the minimum sufficient set of `lattice` operations — `context`, `check`,
 `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`, `history`,
 `health`, `debt`, `impact`, `explain`, `graph`, `provenance`, `adr` — and never
@@ -54,6 +56,7 @@ decision the CLI can only shape, never make.
 | [arch-change](#arch-change)   | Making a change — architecture-aware edit, verifiable evidence      |
 | [arch-check](#arch-check)     | After a change — the authoritative fail-closed gate                 |
 | [arch-review](#arch-review)   | Reviewing a change, PR, or diff — evidence-backed governance review |
+| [arch-migrate](#arch-migrate) | No declared model yet — derive one, review it, adopt it by hand     |
 
 ### arch-context
 
@@ -97,6 +100,20 @@ itself looks stale — reports the discrepancy rather than silently rewriting th
 Intent. Uses a decision tree so a trivial change gets the minimum set and a
 governance change gets the full one.
 
+### arch-migrate
+
+Brings a repository that has no declared model — or one nobody trusts — under
+governance, without hand-writing the Intent up front. The agent observes with
+`lattice discover`, clears the coverage gaps that would make any derived model
+incomplete, derives candidates with `lattice discover --propose`, reviews them
+against what the repository is _for_ (a proposal describes what the code does,
+including what it does wrong), drafts `architecture-intent.json` and the
+boundary config as an explicit diff a human can refuse, converges with the
+`lattice reconcile --propose` loop, and only then hands the gate to `check`.
+The separation it teaches is the point: Lattice derives, a human adopts, and no
+command writes the Intent. The end-to-end path is
+[usage/migration.md](../usage/migration.md).
+
 ## Host independence
 
 Canonical skills live in `skills/` at the repository root. They use only the
@@ -117,7 +134,7 @@ Codex, Cursor, and any agent that reads the Agent Skills standard.
 npx skills add ecoma-io/lattice
 ```
 
-Walks `skills/` at the repository root, discovers all four `SKILL.md` files, and
+Walks `skills/` at the repository root, discovers all five `SKILL.md` files, and
 installs them to each agent platform's native directory. This is the primary
 distribution channel for consumers.
 

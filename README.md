@@ -46,7 +46,7 @@ everywhere. The measurement behind the claim is in
   JSON an agent or a script consumes without parsing prose.
 - **Drift, history and debt** — what diverged from intent, how the architecture
   evolved, and how long each accepted violation has been waiting.
-- **Agent protocol** — four `arch-*` skills that make a coding agent a consumer
+- **Agent protocol** — five `arch-*` skills that make a coding agent a consumer
   of the verdict, never its authority.
 
 ## Get started

@@ -122,9 +122,10 @@ machine-specific toolchain result, no model in the loop, and every verdict names
 what it inspected beside what it found
 ([exit-codes.md](https://github.com/ecoma-io/lattice/blob/main/docs/reference/exit-codes.md)).
 
-**Coding agents** read the same authority through the four `arch-*` skills —
-`arch-context` before an edit, `arch-change` during, `arch-check` after, and
-`arch-review` on a change or PR. The agent is a consumer of the verdict, never
+**Coding agents** read the same authority through the five `arch-*` skills —
+`arch-context` before an edit, `arch-change` during, `arch-check` after,
+`arch-review` on a change or PR, and `arch-migrate` to bring a repository that
+declares no architecture under one. The agent is a consumer of the verdict, never
 its authority: the commands it runs are read-only, and the constraint table is
 a file it cannot edit ([overview.md](https://github.com/ecoma-io/lattice/blob/main/docs/skills/overview.md)).
 
