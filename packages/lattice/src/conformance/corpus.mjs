@@ -1,0 +1,697 @@
+/**
+ * The labeled corpus: architecture styles expressed in Go, Rust and Python,
+ * each with the verdict a person decided in advance.
+ *
+ * ## Why this exists beside the differential
+ *
+ * `./cases.mjs` proves this engine against `@nx/enforce-module-boundaries` —
+ * a real second opinion, and the only one available. It is available for
+ * JavaScript, TypeScript and Vue and for nothing else: ESLint has no parser
+ * for `.go`, `.rs` or `.py`, so on the three languages this tool exists FOR,
+ * the differential's every row is structurally incomparable. Upstream's
+ * silence there is inability, not agreement, and a false negative in that half
+ * is invisible to every mechanism in this directory.
+ *
+ * This corpus is the mechanism for that half. There is no oracle to ask, so
+ * the labels are the oracle: each probe states which rule must fire, on which
+ * import, between which two projects — decided from the policy and the import
+ * before the tool was run, which is the only order in which a label is
+ * evidence rather than a transcription.
+ *
+ * ## What a case is
+ *
+ * One workspace per architecture style, in one language (or two, where the
+ * point is that a boundary holds whichever language reaches across it). Not a
+ * minimal pair: a style — layered, hexagonal, bounded contexts, modular
+ * monolith — because the defects this half is exposed to are about a
+ * language's own shapes (`use super::`, a src-layout package, an intra-module
+ * Go import) meeting a constraint table, and those only appear where the
+ * fixture has enough structure to write them.
+ *
+ * ```js
+ * {
+ *   id, style, languages, intent,          // what this workspace is, and why
+ *   projects: [{name, root, tags, type?, targets?}],
+ *   depConstraints: [...],                 // this workspace's boundary law
+ *   options: {...},                        // only the option keys it changes
+ *   aliases: {...},                        // only where a TypeScript probe needs one
+ *   files: {relativePath: text},           // sources and manifests, nothing else
+ *   probes: [{file, imports, reports, denyAll, why}],
+ * }
+ * ```
+ *
+ * ## What a probe states, and why it takes three numbers rather than one
+ *
+ * - **`reports`** — the exact findings this file must produce under the
+ *   case's own policy, `[]` for a near-miss. Each is `{messageId, specifier,
+ *   target}`; the source project is derived from the file's own path, so no
+ *   label ever restates it. The whole case's findings are compared against
+ *   the union of these, in both directions: a finding no probe claims fails
+ *   the run exactly as loudly as a claimed one that did not arrive.
+ *
+ * - **`imports`** — how many import sites the analyzer must record in this
+ *   file, measured by running `check` scoped to this file alone. This is the
+ *   number that goes red when an analyzer stops reading a shape: a Go block
+ *   import closed early by a `)` in a comment, a Rust `use` behind an
+ *   attribute, a Python import indented inside a function. Without it, an
+ *   analyzer that silently dropped an import would turn a positive probe into
+ *   a "missing finding" (loud) but a near-miss probe into a pass (silent).
+ *
+ * - **`denyAll`** — how many findings this file produces under the corpus's
+ *   forbid-everything policy (`./corpus-fixture.mjs`). This is what makes a
+ *   near-miss mean something: silence under the case's own law, reported
+ *   under a law that forbids everything, is a verdict about the policy. A
+ *   probe silent under BOTH is silent for a reason the corpus states in
+ *   `why` — an import that reaches inside its own project, or a form no rule
+ *   can reach — and the reader is told which.
+ *
+ * - **`why`** — one sentence, mandatory, and the only place a near-miss can
+ *   explain itself. `../../../../AGENTS.md`'s invariant in one field: an
+ *   empty `reports` is a claim, and a claim needs a reason.
+ *
+ * ## What may not appear here
+ *
+ * No project name, tag, module path, crate name or package name from any real
+ * workspace — this one's included. Every name below is invented and means
+ * nothing outside its case: Go module paths under `example.test/`, external
+ * Go modules under `vendor.test/`, crates and Python distributions named for
+ * the role they play in the fixture. A real path from another tree would read
+ * as a fact about this one (`../../../../AGENTS.md`).
+ */
+
+/**
+ * The message ids no probe here reaches, each with the mechanism Go, Rust and
+ * Python do not have.
+ *
+ * Named rather than left to be noticed. The suite requires these plus the ids
+ * the corpus does reach to be exactly `MESSAGE_IDS`, so an id added upstream
+ * lands in neither list and fails the run rather than quietly joining the set
+ * of things nothing here says anything about — the same arrangement the
+ * differential's own "exercises every message id upstream defines" test makes
+ * for its half.
+ *
+ * @type {Readonly<Record<string, string>>}
+ */
+export const OUT_OF_REACH = Object.freeze({
+  noRelativeOrAbsoluteExternals:
+    "needs a specifier that IS a filesystem path; `spelling.path` is false for every Go import, " +
+    "Rust `use` path and Python dotted module (`../analysis/contract.md`)",
+  noImportsOfLazyLoadedLibraries:
+    "needs a dynamic import, a form none of these three languages has — Go's `kind` is always " +
+    "static, and neither Rust's `use` nor Python's `import` has a lazy counterpart the analyzer " +
+    "records as one",
+  nestedBannedExternalImportsViolation:
+    "needs a project's import alias to collide with the name of a package reachable transitively " +
+    "through the npm graph, which is an npm-shaped coincidence no Go module path, crate name or " +
+    "Python distribution can produce here",
+});
+
+export const ARCHITECTURE_CORPUS = [
+  // ------------------------------------------------------------- layered (Go)
+  {
+    id: "layered-architecture-in-go",
+    style: "layered / clean architecture",
+    languages: ["go"],
+    intent:
+      "Dependencies point inward: the domain knows nobody, the use-case layer knows the domain, the adapter layer knows both. The near-misses are the inward imports, which must stay silent, and an external SDK banned out of one layer only. The outward violations both point at `go-transport`, an outer-layer project that imports nothing — an outward edge whose target reaches back would close a cycle, and `noCircularDependencies` is decided before the tag block, so the case would be measuring a different rule than the one it is about.",
+    projects: [
+      { name: "go-domain", root: "libs/go-domain", tags: ["layer:domain"] },
+      { name: "go-usecase", root: "libs/go-usecase", tags: ["layer:usecase"] },
+      { name: "go-adapter", root: "libs/go-adapter", tags: ["layer:adapter"] },
+      { name: "go-transport", root: "libs/go-transport", tags: ["layer:adapter"] },
+    ],
+    depConstraints: [
+      { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+      { sourceTag: "layer:usecase", onlyDependOnLibsWithTags: ["layer:domain", "layer:usecase"] },
+      {
+        sourceTag: "layer:adapter",
+        onlyDependOnLibsWithTags: ["layer:domain", "layer:usecase", "layer:adapter"],
+        bannedExternalImports: ["vendor.test/shell-sdk"],
+      },
+    ],
+    files: {
+      "libs/go-domain/go.mod": "module example.test/go-domain\n\ngo 1.24\n",
+      "libs/go-domain/entity.go":
+        "// Package domain is the layer that must know nobody.\npackage domain\n\nimport (\n\t" +
+        '"example.test/go-transport"\n)\n\n// Order reaches outward, which is the violation this file exists for.\nvar Order = transport.Wire\n',
+      "libs/go-usecase/go.mod": "module example.test/go-usecase\n\ngo 1.24\n",
+      "libs/go-usecase/service.go":
+        "package usecase\n\nimport (\n\t" +
+        '"example.test/go-domain"\n\t"example.test/go-transport"\n)\n\nvar Service = []any{domain.Order, transport.Wire}\n',
+      "libs/go-usecase/sdk.go":
+        'package usecase\n\nimport "vendor.test/shell-sdk"\n\nvar Shell = shellsdk.Handle\n',
+      "libs/go-adapter/go.mod": "module example.test/go-adapter\n\ngo 1.24\n",
+      "libs/go-adapter/repo.go":
+        "package adapter\n\nimport (\n\t" +
+        '"example.test/go-domain"\n\t"example.test/go-usecase"\n)\n\nvar Row = []any{domain.Order, usecase.Service}\n',
+      "libs/go-adapter/store.go":
+        'package adapter\n\nimport "example.test/go-adapter/internal/store"\n\nvar Store = store.Handle\n',
+      "libs/go-adapter/internal/store/store.go": "package store\n\nvar Handle = 1\n",
+      "libs/go-adapter/sdk.go":
+        'package adapter\n\nimport "vendor.test/shell-sdk"\n\nvar Shell = shellsdk.Handle\n',
+      "libs/go-transport/go.mod": "module example.test/go-transport\n\ngo 1.24\n",
+      "libs/go-transport/wire.go":
+        "// Package transport imports nothing, so an outward edge into it cannot close a cycle.\npackage transport\n\nvar Wire = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/go-domain/entity.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/go-transport",
+            target: "go-transport",
+          },
+        ],
+        denyAll: 1,
+        why: "The innermost layer reaching the outermost one — the violation the whole style exists to prevent.",
+      },
+      {
+        file: "libs/go-usecase/service.go",
+        imports: 2,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/go-transport",
+            target: "go-transport",
+          },
+        ],
+        denyAll: 2,
+        why: "Two crossings in one file, one allowed and one not: the domain import must stay silent while the adapter import beside it reports.",
+      },
+      {
+        file: "libs/go-usecase/sdk.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The same external module the adapter layer is banned from, imported by a layer no ban row names — a ban is scoped to the tag that carries it.",
+      },
+      {
+        file: "libs/go-adapter/repo.go",
+        imports: 2,
+        reports: [],
+        denyAll: 2,
+        why: "Both inward imports are what the layering permits; an engine reporting here would be inverting the axis.",
+      },
+      {
+        file: "libs/go-adapter/store.go",
+        imports: 1,
+        reports: [],
+        denyAll: 0,
+        why: "A Go import of the project's own module path resolves back to the project it started in, so the tag block is never reached and the one rule that judges such an import — `noSelfCircularDependencies` — reads it as relative, which is the honest answer for a language with no relative import form. Silent under the deny-all policy too, so its liveness is the import count beside it.",
+      },
+      {
+        file: "libs/go-adapter/sdk.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "bannedExternalImportsViolation",
+            specifier: "vendor.test/shell-sdk",
+            target: "npm:vendor.test/shell-sdk",
+          },
+        ],
+        denyAll: 1,
+        why: "A Go external module is banned out of the layer whose constraint row names it — the enforcement ESLint cannot perform on a .go file at all.",
+      },
+    ],
+  },
+
+  // --------------------------------------------------------- hexagonal (Rust)
+  {
+    id: "hexagonal-ports-and-adapters-in-rust",
+    style: "hexagonal (ports and adapters)",
+    languages: ["rust"],
+    intent:
+      "The core owns the ports and depends on nothing; adapters depend on the core and never on each other. The near-misses are the intra-crate paths Rust writes constantly — `crate::`, `super::` — which a JavaScript-shaped relativeness test once reported as self-circular imports. The core's own outward reach points at `rs-telemetry`, a driven adapter that uses nothing, for the reason the layered Go case states: an outward edge into a crate that reaches back would be judged as a cycle before any tag is read.",
+    projects: [
+      { name: "rs-core", root: "libs/rs-core", tags: ["hex:core"] },
+      { name: "rs-driving", root: "libs/rs-driving", tags: ["hex:driving"] },
+      { name: "rs-driven", root: "libs/rs-driven", tags: ["hex:driven"] },
+      { name: "rs-telemetry", root: "libs/rs-telemetry", tags: ["hex:driven"] },
+    ],
+    depConstraints: [
+      {
+        sourceTag: "hex:core",
+        onlyDependOnLibsWithTags: ["hex:core"],
+        bannedExternalImports: ["shellcrate"],
+      },
+      {
+        sourceTag: "hex:driving",
+        onlyDependOnLibsWithTags: ["hex:core", "hex:driving", "hex:driven"],
+      },
+      { sourceTag: "hex:driving", notDependOnLibsWithTags: ["hex:driven"] },
+      { sourceTag: "hex:driven", onlyDependOnLibsWithTags: ["hex:core", "hex:driven"] },
+    ],
+    files: {
+      "libs/rs-core/Cargo.toml": '[package]\nname = "corpus_core"\nversion = "0.1.0"\n',
+      "libs/rs-core/src/lib.rs": "pub mod ports;\npub mod service;\npub mod shell;\n",
+      "libs/rs-core/src/ports.rs": "pub struct Port;\n",
+      "libs/rs-core/src/service.rs":
+        "use super::ports::Port;\nuse corpus_telemetry::Sink;\n\npub fn open(_: &Port, _: &Sink) {}\n",
+      "libs/rs-core/src/shell.rs":
+        "use shellcrate;\nuse shellcrate::window::Manager;\n\npub fn show(_: &Manager) {\n    let _ = shellcrate::VERSION;\n}\n",
+      "libs/rs-driving/Cargo.toml": '[package]\nname = "corpus_driving"\nversion = "0.1.0"\n',
+      "libs/rs-driving/src/lib.rs":
+        "use corpus_core::ports::Port;\nuse corpus_driven::Pool;\n\npub fn handle(_: &Port, _: &Pool) {}\n",
+      "libs/rs-driven/Cargo.toml": '[package]\nname = "corpus_driven"\nversion = "0.1.0"\n',
+      "libs/rs-driven/src/lib.rs":
+        "use corpus_core::ports::Port;\n\npub struct Pool;\n\npub fn bind(_: &Port) {}\n",
+      "libs/rs-telemetry/Cargo.toml": '[package]\nname = "corpus_telemetry"\nversion = "0.1.0"\n',
+      "libs/rs-telemetry/src/lib.rs":
+        "// This crate uses nothing, so an edge into it cannot close a cycle.\npub struct Sink;\n",
+    },
+    probes: [
+      {
+        file: "libs/rs-core/src/service.rs",
+        imports: 2,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "corpus_telemetry::Sink",
+            target: "rs-telemetry",
+          },
+        ],
+        denyAll: 1,
+        why: "The core reaching a driven adapter is the violation; the `super::ports::Port` beside it is ordinary Rust and must stay silent, which is the half a relativeness test written for JavaScript got wrong.",
+      },
+      {
+        file: "libs/rs-core/src/shell.rs",
+        imports: 2,
+        reports: [
+          {
+            messageId: "bannedExternalImportsViolation",
+            specifier: "shellcrate",
+            target: "npm:shellcrate",
+          },
+        ],
+        denyAll: 1,
+        why: "Only the bare `use shellcrate;` is reachable by a ban: upstream's own matcher tests the specifier against the package name and a `/`-separated prefix, and `shellcrate::window::Manager` is neither — a declared limit this probe pins rather than hides (`./README.md`).",
+      },
+      {
+        file: "libs/rs-driving/src/lib.rs",
+        imports: 2,
+        reports: [
+          {
+            messageId: "notTagsConstraintViolation",
+            specifier: "corpus_core::ports::Port",
+            target: "rs-core",
+          },
+          {
+            messageId: "notTagsConstraintViolation",
+            specifier: "corpus_driven::Pool",
+            target: "rs-driven",
+          },
+        ],
+        denyAll: 2,
+        why: "Two rows match this project and both are held — the AND of several matching constraints is what makes the forbidding one bind — and the forbidding one is TRANSITIVE: the direct `corpus_driven` import violates it, and so does the `corpus_core` import beside it, because the core reaches `rs-telemetry`, which carries the forbidden tag. A reading of this rule that stopped at the direct target would report one of these two and call the file half-clean.",
+      },
+      {
+        file: "libs/rs-driven/src/lib.rs",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "An adapter depending on the core is the direction the style is for.",
+      },
+    ],
+  },
+
+  // ------------------------------------------------- bounded contexts (Python)
+  {
+    id: "bounded-contexts-in-python",
+    style: "DDD bounded contexts",
+    languages: ["python"],
+    intent:
+      "Each context is sealed except for a shared kernel. The near-misses are a relative import inside a package and an import of the kernel; the positives are a cross-context reach and a package importing itself through its own distribution name.",
+    projects: [
+      { name: "py-billing", root: "libs/py-billing", tags: ["context:billing"] },
+      { name: "py-shipping", root: "libs/py-shipping", tags: ["context:shipping"] },
+      { name: "py-kernel", root: "libs/py-kernel", tags: ["context:shared-kernel"] },
+    ],
+    depConstraints: [
+      {
+        sourceTag: "context:billing",
+        onlyDependOnLibsWithTags: ["context:billing", "context:shared-kernel"],
+      },
+      {
+        sourceTag: "context:shipping",
+        onlyDependOnLibsWithTags: ["context:shipping", "context:shared-kernel"],
+      },
+      { sourceTag: "context:shared-kernel", onlyDependOnLibsWithTags: ["context:shared-kernel"] },
+    ],
+    files: {
+      "libs/py-billing/pyproject.toml": '[project]\nname = "billing"\nversion = "0.1.0"\n',
+      "libs/py-billing/src/billing/__init__.py": "",
+      "libs/py-billing/src/billing/ledger.py": "LEDGER = []\n",
+      "libs/py-billing/src/billing/invoice.py":
+        "from kernel.money import Money\nfrom shipping.tracking import Tracker\nfrom .ledger import LEDGER\nimport billing.ledger\n\n" +
+        "TOTAL = (Money, Tracker, LEDGER, billing.ledger)\n",
+      "libs/py-shipping/pyproject.toml": '[project]\nname = "shipping"\nversion = "0.1.0"\n',
+      "libs/py-shipping/src/shipping/__init__.py": "",
+      "libs/py-shipping/src/shipping/tracking.py":
+        "from kernel.money import Money\n\n\nclass Tracker:\n    unit = Money\n",
+      "libs/py-kernel/pyproject.toml": '[project]\nname = "kernel"\nversion = "0.1.0"\n',
+      "libs/py-kernel/src/kernel/__init__.py": "",
+      "libs/py-kernel/src/kernel/money.py": "import decimal\n\nMoney = decimal.Decimal\n",
+    },
+    probes: [
+      {
+        file: "libs/py-billing/src/billing/invoice.py",
+        imports: 4,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "shipping.tracking",
+            target: "py-shipping",
+          },
+          {
+            messageId: "noSelfCircularDependencies",
+            specifier: "billing.ledger",
+            target: "py-billing",
+          },
+        ],
+        denyAll: 3,
+        why: "Four imports, two of them findings: reaching into another context, and reaching the package's own module through its distribution name instead of the relative form written one line above — which must itself stay silent.",
+      },
+      {
+        file: "libs/py-shipping/src/shipping/tracking.py",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The shared kernel is the one thing every context may reach.",
+      },
+      {
+        file: "libs/py-kernel/src/kernel/money.py",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "A standard-library import leaves the workspace, so no tag rule applies; the deny-all run's ban is what proves the site was read at all.",
+      },
+    ],
+  },
+
+  // ------------------------------------- modular monolith (Go and TypeScript)
+  {
+    id: "modular-monolith-across-languages",
+    style: "modular monolith",
+    languages: ["go", "typescript"],
+    intent:
+      "Every module is reachable only through its own api project, and the law is one constraint table for a tree whose modules are written in two languages — the same boundary, met by a Go import path and by a TypeScript alias, plus the spelling rule only the TypeScript half can break.",
+    projects: [
+      {
+        name: "mm-orders-api",
+        root: "libs/mm-orders-api",
+        tags: ["module:orders", "type:api"],
+      },
+      {
+        name: "mm-orders-core",
+        root: "libs/mm-orders-core",
+        tags: ["module:orders", "type:internal"],
+      },
+      {
+        name: "mm-billing-api",
+        root: "libs/mm-billing-api",
+        tags: ["module:billing", "type:api"],
+      },
+      {
+        name: "mm-billing-core",
+        root: "libs/mm-billing-core",
+        tags: ["module:billing", "type:internal"],
+      },
+      { name: "mm-web", root: "libs/mm-web", tags: ["module:web", "type:internal"] },
+    ],
+    depConstraints: [
+      { sourceTag: "module:orders", onlyDependOnLibsWithTags: ["module:orders", "type:api"] },
+      { sourceTag: "module:billing", onlyDependOnLibsWithTags: ["module:billing", "type:api"] },
+      { sourceTag: "module:web", onlyDependOnLibsWithTags: ["type:api"] },
+    ],
+    aliases: {
+      "@corpus/orders-api": "libs/mm-orders-api/src/index.ts",
+      "@corpus/orders-core": "libs/mm-orders-core/src/index.ts",
+    },
+    files: {
+      "libs/mm-orders-api/go.mod": "module example.test/mm-orders-api\n\ngo 1.24\n",
+      "libs/mm-orders-api/api.go": "package api\n\nvar Orders = 1\n",
+      "libs/mm-orders-api/src/index.ts": "export const ordersApi = 1;\n",
+      "libs/mm-orders-core/go.mod": "module example.test/mm-orders-core\n\ngo 1.24\n",
+      "libs/mm-orders-core/core.go":
+        "package core\n\nimport (\n\t" +
+        '"example.test/mm-orders-api"\n\t"example.test/mm-billing-api"\n\t"example.test/mm-billing-core"\n)\n\n' +
+        "var Wiring = []any{api.Orders, api.Billing, core.Billing}\n",
+      "libs/mm-orders-core/src/index.ts": "export const ordersCore = 1;\n",
+      "libs/mm-billing-api/go.mod": "module example.test/mm-billing-api\n\ngo 1.24\n",
+      "libs/mm-billing-api/api.go": "package api\n\nvar Billing = 1\n",
+      "libs/mm-billing-api/src/index.ts": "export const billingApi = 1;\n",
+      "libs/mm-billing-core/go.mod": "module example.test/mm-billing-core\n\ngo 1.24\n",
+      "libs/mm-billing-core/core.go":
+        'package core\n\nimport "example.test/mm-billing-api"\n\nvar Billing = api.Billing\n',
+      "libs/mm-web/src/app.ts":
+        'import { ordersApi } from "@corpus/orders-api";\nimport { ordersCore } from "@corpus/orders-core";\n' +
+        'import { billingApi } from "../../mm-billing-api/src/index";\n\n' +
+        "export const app = [ordersApi, ordersCore, billingApi];\n",
+    },
+    probes: [
+      {
+        file: "libs/mm-orders-core/core.go",
+        imports: 3,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/mm-billing-core",
+            target: "mm-billing-core",
+          },
+        ],
+        denyAll: 3,
+        why: "One module reaching another module's internals is the violation; the same file's imports of its own module and of the other module's api are what the style permits.",
+      },
+      {
+        file: "libs/mm-billing-core/core.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "Inside one module, an internal reaching its own api crosses no boundary the law names.",
+      },
+      {
+        file: "libs/mm-web/src/app.ts",
+        imports: 3,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "@corpus/orders-core",
+            target: "mm-orders-core",
+          },
+          {
+            messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+            specifier: "../../mm-billing-api/src/index",
+            target: "mm-billing-api",
+          },
+        ],
+        denyAll: 3,
+        why: "The same tag law that judged the Go imports above judges this TypeScript file, and the relative crossing shows the axis Go cannot break: the target project is one the web module is allowed to reach, and the spelling is the violation.",
+      },
+    ],
+  },
+
+  // ------------------------------------------------- topology rules (Go tree)
+  {
+    id: "application-and-test-boundaries-in-go",
+    style: "layered / clean architecture",
+    languages: ["go"],
+    intent:
+      "The rules that read the project's shape rather than its tags — an app, an e2e project, a library with no build target — reached from a Go file, where upstream reaches nothing at all.",
+    projects: [
+      { name: "tp-lib", root: "libs/tp-lib", tags: ["stack:lib"], targets: ["build"] },
+      { name: "tp-support", root: "libs/tp-support", tags: ["stack:lib"] },
+      { name: "tp-cli", root: "apps/tp-cli", type: "app", tags: ["stack:app"] },
+      { name: "tp-cli-e2e", root: "apps/tp-cli-e2e", type: "e2e", tags: ["stack:e2e"] },
+    ],
+    depConstraints: [
+      { sourceTag: "*", onlyDependOnLibsWithTags: ["stack:lib", "stack:app", "stack:e2e"] },
+    ],
+    options: { enforceBuildableLibDependency: true },
+    files: {
+      "libs/tp-lib/go.mod": "module example.test/tp-lib\n\ngo 1.24\n",
+      "libs/tp-lib/reach.go":
+        "package lib\n\nimport (\n\t" +
+        '"example.test/tp-cli"\n\t"example.test/tp-cli-e2e"\n\t"example.test/tp-support"\n)\n\n' +
+        "var Reach = []any{cli.Run, e2e.Spec, support.Helper}\n",
+      "libs/tp-support/go.mod": "module example.test/tp-support\n\ngo 1.24\n",
+      "libs/tp-support/support.go": "package support\n\nvar Helper = 1\n",
+      "apps/tp-cli/go.mod": "module example.test/tp-cli\n\ngo 1.24\n",
+      "apps/tp-cli/app.go":
+        'package cli\n\nimport "example.test/tp-support"\n\nvar Run = support.Helper\n',
+      "apps/tp-cli-e2e/go.mod": "module example.test/tp-cli-e2e\n\ngo 1.24\n",
+      "apps/tp-cli-e2e/spec.go": "package e2e\n\nvar Spec = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/tp-lib/reach.go",
+        imports: 3,
+        reports: [
+          {
+            messageId: "noImportsOfApps",
+            specifier: "example.test/tp-cli",
+            target: "tp-cli",
+          },
+          {
+            messageId: "noImportsOfE2e",
+            specifier: "example.test/tp-cli-e2e",
+            target: "tp-cli-e2e",
+          },
+          {
+            messageId: "noImportOfNonBuildableLibraries",
+            specifier: "example.test/tp-support",
+            target: "tp-support",
+          },
+        ],
+        denyAll: 3,
+        why: "Three shape rules on three imports of one file: an app, an e2e project, and a library declaring no build target, all reached from Go — every tag in this tree permits all three, so a tag-only engine would report nothing here.",
+      },
+      {
+        file: "apps/tp-cli/app.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The buildable-library rule only holds a library source, so an application reaching the same non-buildable library is silent — the near-miss that keeps the rule from reading as 'anything reaching tp-support'.",
+      },
+    ],
+  },
+
+  // ------------------------------- cycles and unconstrained projects (Python)
+  {
+    id: "cycles-and-unconstrained-projects-in-python",
+    style: "modular monolith",
+    languages: ["python"],
+    intent:
+      "Three ways a Python workspace loses its boundary without any tag being wrong: two packages importing each other, a project no constraint row matches, and a row that permits nothing.",
+    projects: [
+      { name: "cy-alpha", root: "libs/cy-alpha", tags: ["ring:alpha"] },
+      { name: "cy-beta", root: "libs/cy-beta", tags: ["ring:beta"] },
+      { name: "cy-loose", root: "libs/cy-loose", tags: [] },
+      { name: "cy-sealed", root: "libs/cy-sealed", tags: ["ring:sealed"] },
+    ],
+    depConstraints: [
+      { sourceTag: "ring:alpha", onlyDependOnLibsWithTags: ["ring:alpha", "ring:beta"] },
+      { sourceTag: "ring:beta", onlyDependOnLibsWithTags: ["ring:alpha", "ring:beta"] },
+      { sourceTag: "ring:sealed", onlyDependOnLibsWithTags: [] },
+    ],
+    files: {
+      "libs/cy-alpha/pyproject.toml": '[project]\nname = "alpha"\nversion = "0.1.0"\n',
+      "libs/cy-alpha/src/alpha/__init__.py": "",
+      "libs/cy-alpha/src/alpha/node.py": "import beta.node\n\nPING = beta.node\n",
+      "libs/cy-alpha/src/alpha/util.py": "from .node import PING\n\nUTIL = PING\n",
+      "libs/cy-beta/pyproject.toml": '[project]\nname = "beta"\nversion = "0.1.0"\n',
+      "libs/cy-beta/src/beta/__init__.py": "",
+      "libs/cy-beta/src/beta/node.py": "import alpha.node\n\nPONG = alpha.node\n",
+      "libs/cy-loose/pyproject.toml": '[project]\nname = "loose"\nversion = "0.1.0"\n',
+      "libs/cy-loose/src/loose/__init__.py": "",
+      "libs/cy-loose/src/loose/node.py": "import alpha.node\n\nLOOSE = alpha.node\n",
+      "libs/cy-sealed/pyproject.toml": '[project]\nname = "sealed"\nversion = "0.1.0"\n',
+      "libs/cy-sealed/src/sealed/__init__.py": "",
+      "libs/cy-sealed/src/sealed/node.py": "import alpha.node\n\nSEALED = alpha.node\n",
+    },
+    probes: [
+      {
+        file: "libs/cy-alpha/src/alpha/node.py",
+        imports: 1,
+        reports: [
+          { messageId: "noCircularDependencies", specifier: "beta.node", target: "cy-beta" },
+        ],
+        denyAll: 1,
+        why: "Half of a cycle the tags permit outright — both rows allow the pair, and only the graph shows it closes.",
+      },
+      {
+        file: "libs/cy-beta/src/beta/node.py",
+        imports: 1,
+        reports: [
+          { messageId: "noCircularDependencies", specifier: "alpha.node", target: "cy-alpha" },
+        ],
+        denyAll: 1,
+        why: "The other half, reported at its own site: a cycle read from one end only would leave the other file looking clean.",
+      },
+      {
+        file: "libs/cy-alpha/src/alpha/util.py",
+        imports: 1,
+        reports: [],
+        denyAll: 0,
+        why: "A relative import inside the package reaches no second project, so nothing can report it — the near-miss that keeps the cycle above from reading as 'alpha reports on everything'.",
+      },
+      {
+        file: "libs/cy-loose/src/loose/node.py",
+        imports: 1,
+        reports: [
+          {
+            messageId: "projectWithoutTagsCannotHaveDependencies",
+            specifier: "alpha.node",
+            target: "cy-alpha",
+          },
+        ],
+        denyAll: 1,
+        why: "A project no constraint row matches is an error, not a permission: the inversion that would let every mis-tagged project out of the boundary system silently.",
+      },
+      {
+        file: "libs/cy-sealed/src/sealed/node.py",
+        imports: 1,
+        reports: [
+          {
+            messageId: "emptyOnlyTagsConstraintViolation",
+            specifier: "alpha.node",
+            target: "cy-alpha",
+          },
+        ],
+        denyAll: 1,
+        why: "An empty permit list is its own message: a row that names no tag forbids every dependency rather than allowing any.",
+      },
+    ],
+  },
+
+  // ------------------------------------- transitive dependencies (Go tree)
+  {
+    id: "transitive-dependency-ban-in-go",
+    style: "layered / clean architecture",
+    languages: ["go"],
+    intent:
+      "`banTransitiveDependencies` on a tree whose graph carries no package facts: every external import is reported, and the workspace's own project import beside it is not.",
+    projects: [
+      { name: "tr-client", root: "libs/tr-client", tags: ["stack:lib"] },
+      { name: "tr-core", root: "libs/tr-core", tags: ["stack:lib"] },
+    ],
+    depConstraints: [{ sourceTag: "stack:lib", onlyDependOnLibsWithTags: ["stack:lib"] }],
+    options: { banTransitiveDependencies: true },
+    files: {
+      "libs/tr-client/go.mod": "module example.test/tr-client\n\ngo 1.24\n",
+      "libs/tr-client/client.go":
+        "package client\n\nimport (\n\t" +
+        '"fmt"\n\t"vendor.test/http-sdk"\n\t"example.test/tr-core"\n)\n\n' +
+        "var Client = fmt.Sprint(httpsdk.Get, core.Name)\n",
+      "libs/tr-client/pool.go":
+        'package client\n\nimport "example.test/tr-client/internal/pool"\n\nvar Pool = pool.Handle\n',
+      "libs/tr-client/internal/pool/pool.go": "package pool\n\nvar Handle = 1\n",
+      "libs/tr-core/go.mod": "module example.test/tr-core\n\ngo 1.24\n",
+      "libs/tr-core/core.go": "package core\n\nvar Name = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/tr-client/client.go",
+        imports: 3,
+        reports: [
+          { messageId: "noTransitiveDependencies", specifier: "fmt", target: "npm:fmt" },
+          {
+            messageId: "noTransitiveDependencies",
+            specifier: "vendor.test/http-sdk",
+            target: "npm:vendor.test/http-sdk",
+          },
+        ],
+        denyAll: 5,
+        why: "A native tree states no `declaredPackages`, so with the option on every external import is reported — Go's own standard library included, since the builtin exemption is Node's module list and knows nothing of `fmt`. The workspace project import in the same block is not external and stays silent.",
+      },
+      {
+        file: "libs/tr-client/pool.go",
+        imports: 1,
+        reports: [],
+        denyAll: 0,
+        why: "An import of the project's own module path is not a dependency on anything, transitive or otherwise — the near-miss that keeps the option above from reading as 'every import is reported'.",
+      },
+    ],
+  },
+];

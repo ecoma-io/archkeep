@@ -216,7 +216,11 @@ language fit?
 
 - **ESLint cannot read it** (the Go/Rust/Python case): the fixtures prove _this
   engine_ reaches every rule, and the comparison records that ESLint reports
-  nothing. That asymmetry is the finding.
+  nothing. That asymmetry is the finding. It is also the case that needs a
+  second fixture, in `corpus.mjs`: with no upstream to disagree, a hand-labeled
+  workspace in your language — with the near-misses that must stay silent, and
+  the deny-all measurement that proves the engine saw those sites at all — is
+  the only thing that can catch a rule which stops firing there.
 - **ESLint can read it** (the Vue case): both engines run on the same files and
   must produce the same `messageId` at the same site. Vue is the precedent, and
   the reason this repository once wrongly documented Vue as a blind spot — the
