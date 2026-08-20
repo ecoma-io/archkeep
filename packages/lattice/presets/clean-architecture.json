@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "name": "clean-architecture",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "layer:entities",
+            "onlyDependOnLibsWithTags": ["layer:entities"],
+            "description": "Enterprise business rules sit at the centre: entities depend on nothing outside their own layer.",
+            "remediation": "Move the collaborator into layer:entities, or invert the dependency so the outer layer depends on the entity."
+          },
+          {
+            "sourceTag": "layer:use-cases",
+            "onlyDependOnLibsWithTags": ["layer:use-cases", "layer:entities"],
+            "description": "Application business rules may reach inward to entities and sideways within their own layer, never outward.",
+            "remediation": "Declare a port in layer:use-cases and let layer:interface-adapters implement it."
+          },
+          {
+            "sourceTag": "layer:interface-adapters",
+            "onlyDependOnLibsWithTags": [
+              "layer:interface-adapters",
+              "layer:use-cases",
+              "layer:entities"
+            ],
+            "description": "Controllers, presenters and gateways convert between the outside world and the use cases; they never depend on a framework project.",
+            "remediation": "Keep the framework detail in layer:frameworks and pass it in through the adapter's own interface."
+          },
+          {
+            "sourceTag": "layer:frameworks",
+            "onlyDependOnLibsWithTags": [
+              "layer:frameworks",
+              "layer:interface-adapters",
+              "layer:use-cases",
+              "layer:entities"
+            ],
+            "description": "Drivers, delivery mechanisms and the composition root — the only layer allowed to know every other one.",
+            "remediation": "Nothing inside this layer may be imported from a project tagged with an inner layer; move the shared piece inward instead."
+          }
+        ],
+        "moduleBoundaryOptions": {
+          "allow": [],
+          "buildTargets": ["build"],
+          "enforceBuildableLibDependency": false,
+          "allowCircularSelfDependency": false,
+          "checkDynamicDependenciesExceptions": [],
+          "ignoredCircularDependencies": [],
+          "banTransitiveDependencies": false,
+          "checkNestedExternalImports": false
+        }
+      }
+    },
+    {
+      "name": "clean-architecture-pure-core",
+      "base": "clean-architecture",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "layer:entities",
+            "bannedExternalImports": ["*"],
+            "description": "The Dependency Rule applied to third-party code: entities import no package outside the workspace, Node built-ins included.",
+            "remediation": "Wrap the package behind an interface owned by layer:entities and implement it in an outer layer."
+          },
+          {
+            "sourceTag": "layer:use-cases",
+            "bannedExternalImports": ["*"],
+            "description": "Application business rules stay framework-free for the same reason entities do.",
+            "remediation": "Declare a port for the capability and let layer:interface-adapters bring the package in."
+          }
+        ],
+        "moduleBoundaryOptions": {
+          "checkNestedExternalImports": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "name": "ddd-bounded-contexts",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "layer:domain",
+            "onlyDependOnLibsWithTags": ["layer:domain"],
+            "description": "The model of one bounded context. It names no contract, no service and no store — only model.",
+            "remediation": "Move the collaborator into layer:domain, or express the need as an interface the application layer satisfies."
+          },
+          {
+            "sourceTag": "layer:application",
+            "onlyDependOnLibsWithTags": [
+              "layer:application",
+              "layer:domain",
+              "layer:published-language"
+            ],
+            "description": "Use cases orchestrate the model and speak to other contexts through their published language, never through their model.",
+            "remediation": "Translate at the boundary: consume the other context's layer:published-language project instead of its layer:domain one."
+          },
+          {
+            "sourceTag": "layer:infrastructure",
+            "onlyDependOnLibsWithTags": [
+              "layer:infrastructure",
+              "layer:application",
+              "layer:domain",
+              "layer:published-language"
+            ],
+            "description": "Persistence, messaging and the anti-corruption layer — where another context's shape is allowed to arrive and be translated.",
+            "remediation": "Nothing inside the model or the use cases may import this layer; invert the dependency with an interface they own."
+          },
+          {
+            "sourceTag": "layer:published-language",
+            "onlyDependOnLibsWithTags": ["layer:published-language"],
+            "description": "Integration events and contracts are what other contexts are allowed to couple to, so they may couple to nothing else.",
+            "remediation": "A contract that needs a model type is leaking the model; restate the type in the contract project."
+          }
+        ],
+        "moduleBoundaryOptions": {
+          "allow": [],
+          "buildTargets": ["build"],
+          "enforceBuildableLibDependency": false,
+          "allowCircularSelfDependency": false,
+          "checkDynamicDependenciesExceptions": [],
+          "ignoredCircularDependencies": [],
+          "banTransitiveDependencies": false,
+          "checkNestedExternalImports": false
+        }
+      }
+    },
+    {
+      "name": "ddd-bounded-contexts-isolated",
+      "base": "ddd-bounded-contexts",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "share:private",
+            "notDependOnLibsWithTags": ["share:private"],
+            "description": "Whatever a context keeps to itself is reachable from nothing but itself. Valid only where one project is one bounded context — see the presets page before selecting this profile.",
+            "remediation": "Publish what the other context needs as a share:published contract, and depend on that."
+          }
+        ],
+        "moduleBoundaryOptions": {}
+      }
+    }
+  ]
+}

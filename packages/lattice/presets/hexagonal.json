@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "name": "hexagonal",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "layer:domain",
+            "onlyDependOnLibsWithTags": ["layer:domain"],
+            "description": "The inside of the hexagon. The domain knows neither its ports nor anything that plugs into them.",
+            "remediation": "Move the collaborator into layer:domain, or express the need as a port and let an adapter satisfy it."
+          },
+          {
+            "sourceTag": "layer:ports",
+            "onlyDependOnLibsWithTags": ["layer:ports", "layer:domain"],
+            "description": "A port is the domain's own statement of what it needs or offers, so it may name domain types and other ports.",
+            "remediation": "A port that needs an adapter's type is describing an implementation; keep the type in layer:domain instead."
+          },
+          {
+            "sourceTag": "layer:adapters",
+            "onlyDependOnLibsWithTags": ["layer:ports", "layer:domain"],
+            "description": "An adapter implements a port. It may not depend on another adapter — two adapters that talk to each other have made a driven side into a driving one.",
+            "remediation": "Route the collaboration through a port, or promote the shared piece into layer:domain."
+          },
+          {
+            "sourceTag": "layer:app",
+            "onlyDependOnLibsWithTags": [
+              "layer:app",
+              "layer:adapters",
+              "layer:ports",
+              "layer:domain"
+            ],
+            "description": "The composition root: the one place allowed to name a concrete adapter and wire it to a port.",
+            "remediation": "Nothing inside the hexagon may import this layer; move the wiring outward rather than the dependency inward."
+          }
+        ],
+        "moduleBoundaryOptions": {
+          "allow": [],
+          "buildTargets": ["build"],
+          "enforceBuildableLibDependency": false,
+          "allowCircularSelfDependency": false,
+          "checkDynamicDependenciesExceptions": [],
+          "ignoredCircularDependencies": [],
+          "banTransitiveDependencies": false,
+          "checkNestedExternalImports": false
+        }
+      }
+    },
+    {
+      "name": "hexagonal-pure-domain",
+      "base": "hexagonal",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "layer:domain",
+            "bannedExternalImports": ["*"],
+            "description": "The hexagon's inside takes no third-party package at all, Node built-ins included — every capability arrives through a port.",
+            "remediation": "Declare a port for the capability and implement it in layer:adapters, where the package belongs."
+          }
+        ],
+        "moduleBoundaryOptions": {
+          "checkNestedExternalImports": true
+        }
+      }
+    }
+  ]
+}

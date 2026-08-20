@@ -28,6 +28,7 @@
   "exports": {
     ".": "./index.mjs",
     "./nx": "./nx.mjs",
+    "./presets/*.json": "./presets/*.json",
     "./package.json": "./package.json"
   },
   "files": [
@@ -38,6 +39,7 @@
     "src/",
     "!src/**/*.test.mjs",
     "!src/conformance/",
+    "presets/",
     "LICENSE",
     "README.md"
   ],
