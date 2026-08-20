@@ -62,31 +62,43 @@ every release; its marketplace `vsce publish` step skips — loudly, in the job
 log — until a marketplace publisher account and its `VSCE_PAT` secret exist,
 and runs automatically from the release that follows their arrival.
 
-## The one manual step, and why it is still here
+## The manual step this lane used to need
 
-**A release pull request's checks do not start on their own.** Both required
-gates (`ci-gate`, `analysis-gate`) land on the release branch as runs with
+**A release pull request's checks did not start on their own.** Both required
+gates (`ci-gate`, `analysis-gate`) landed on the release branch as runs with
 conclusion `action_required` and zero jobs — created, never started — so the
-pull request sits at `mergeable_state: blocked` with nothing red to point at.
-Someone has to approve or re-run each of them before the release can merge.
+pull request sat at `mergeable_state: blocked` with nothing red to point at,
+and someone had to approve or re-run each of them before the release could
+merge.
 
 Measured rather than suspected: across every release branch this repository
-has cut, **every first attempt is `action_required` and every success carries
-`run_attempt: 2`.** It has been a hand on every release since 0.1.0, which is
-also why it is written here — an undocumented manual step reads as a broken
-lane to whoever meets it first.
+had cut up to 0.7.1, **every first attempt was `action_required` and every
+success carried `run_attempt: 2`.** A hand on every release since 0.1.0,
+absorbed each time by whoever cut it, which is why it is written down here
+even now that it is fixed — the same measurement is how anyone tells whether
+it has come back.
 
-The cause is the identity that pushes the reformat commit. That commit lands
-through the git-database REST API under `${{ github.token }}` whenever
-`RELEASE_APP_ID` is unset (`release.yml`'s reformat step argues why the API
-route rather than `git commit`), and GitHub holds workflow runs attributed to
-that identity for approval.
+The cause was the identity pushing the reformat commit. That commit lands
+through the git-database REST API (`release.yml`'s reformat step argues why
+the API route rather than `git commit`), and it ran under
+`${{ github.token }}` because the App-token step above it was gated on a
+`vars.RELEASE_APP_ID` variable that no one had set — while the organisation's
+credentials existed the whole time, as the secrets `ECOMA_APP_ID` and
+`ECOMA_APP_KEY`. GitHub holds workflow runs attributed to the workflow token
+for approval, so the gate never firing is what produced the block.
 
-The fix is the branch the workflow already has: set `RELEASE_APP_ID` and its
-private-key secret so the reformat pushes under the App token that step
-already prefers. Until that exists, expect to approve two runs per release —
-and note that [roadmap.md](../roadmap.md)'s fourth 1.0 condition, releases
-landing without a hand on them, is measured against exactly this.
+The lane now gates on `secrets.ECOMA_APP_ID` and mints the App token, so the
+reformat pushes under an ordinary actor whose events start CI normally. Two
+details worth keeping, both argued at the step itself: the gate must read
+`secrets` rather than `vars` because that is where these credentials live,
+and it must sit on the **step** rather than the job, because GitHub's
+context-availability table admits `secrets` in `jobs.<job_id>.steps.if` and
+not in `jobs.<job_id>.if` — a job-level gate would evaluate empty forever and
+silently restore the old behaviour.
+
+[roadmap.md](../roadmap.md)'s fourth 1.0 condition — releases landing without
+a hand on them — is measured against exactly this, and the first release cut
+after the fix is what settles whether it is met.
 
 ## Breaking changes
 
