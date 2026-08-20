@@ -392,6 +392,55 @@ describe("driftCommand", () => {
       );
     });
 
+    // The deferred boundary-policy failure, pinned in BOTH directions. Measured
+    // before the fix: a native workspace with a valid `architecture-intent.json`
+    // and no `module-boundaries.config.mjs` exited 3 from `drift` while
+    // `reconcile` and `discover` over the identical tree exited 0 — a fifth
+    // refusal on top of the four `docs/usage/drift.md` documents, fired by a law
+    // whose only reader is the non-verdict decisionRef axis below.
+    describe("the boundary-policy load failure is deferred to the axis that reads it", () => {
+      it("reaches a drift verdict when no row cites anything, even though the policy would not load", async () => {
+        const configError = new Error("lattice: cannot load module-boundaries.config.mjs");
+        const result = await driftCommand(commandContext(), {
+          ...ioWithIntent(
+            intent({ boundaries: [{ name: "packages", match: ["tag:type-package"] }] }),
+          ),
+          config: null,
+          configError,
+        });
+        // The law was never opened, so its absence decides nothing here.
+        expect(result.status).toBe("ok");
+        expect(result.drift.findings).toEqual([]);
+      });
+
+      it("still refuses loudly when a row DOES cite something — an unread law must not resolve citations", async () => {
+        // The silent-direction repro for the deferral: swallowing the error
+        // would hand `declaredFitnessNames` an empty set, and a citation naming
+        // a fitness id the law really declares would be reported unresolved on
+        // the strength of a law nobody read.
+        const configError = new Error("lattice: cannot load module-boundaries.config.mjs");
+        const readAdrContextOverride = vi.fn();
+        await expect(
+          driftCommand(commandContext(), {
+            ...ioWithIntent(
+              intent({
+                boundaries: [{ name: "packages", match: ["tag:type-package"] }],
+                projects: {
+                  required: [{ name: "core", tags: ["type-package"], decisionRef: "F-01" }],
+                },
+              }),
+            ),
+            config: null,
+            configError,
+            readAdrContextOverride,
+          }),
+        ).rejects.toThrow(/cannot load module-boundaries\.config\.mjs/);
+        // Thrown BEFORE the registry read, so no half-resolved citation set can
+        // reach a report.
+        expect(readAdrContextOverride).not.toHaveBeenCalled();
+      });
+    });
+
     it("states a positive line, never silence, when every citation resolves", async () => {
       // Silence here would be indistinguishable from a workspace that never
       // uses decisionRef at all — the same "no fact, no claim" split

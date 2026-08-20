@@ -55,6 +55,19 @@
  * the same posture `./provenance-command.mjs` states for the identical axis,
  * for the identical reason `hasOrigin` never does either.
  *
+ * This axis is also the ONLY thing in `drift` that reads the boundary law, and
+ * it reads only the fitness ids that law DECLARES (`declaredFitnessNames`, F04)
+ * — so the dependence is conditional on an intent row actually carrying a
+ * `decisionRef`. `cli.mjs`'s `runDrift` therefore hands the policy load's
+ * failure over as `io.configError` rather than throwing it where it happens:
+ * a workspace with an intent and no boundary config used to exit 3 from a law
+ * `drift` would never have opened, which is a refusal the four above do not
+ * make and `../../../../docs/usage/drift.md` never documented. Deferred, not
+ * dropped — when a row DOES carry a `decisionRef` the error is thrown here and
+ * the exit-3 refusal is byte-identical to what it always was, because resolving
+ * citations against an empty declared-fitness set would report rows unresolved
+ * on the strength of a law nobody read.
+ *
  * ## Determinism
  *
  * Findings are sorted by the judge's total key — plain string comparison
@@ -268,12 +281,15 @@ function intentRows(intent) {
  *
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{loadIntentOverride?: (root: string) => Promise<object>,
- *   config?: object|null, readAdrContextOverride?: typeof import("./adr.mjs").readAdrContext,
+ *   config?: object|null, configError?: Error|null,
+ *   readAdrContextOverride?: typeof import("./adr.mjs").readAdrContext,
  *   loadAdrRegistryOverride?: typeof import("../governance/adr-registry.mjs").loadAdrRegistry}} [io]
  *   Injectable intent loader for tests. `readAdrContextOverride` (or the
  *   narrower `loadAdrRegistryOverride`, forwarded to the real
  *   `readAdrContext`) stands in for the ADR registry read that resolves each
- *   row's `decisionRef`.
+ *   row's `decisionRef`. `configError` carries a boundary-policy load failure
+ *   the caller chose not to throw at the load site — rethrown here, unchanged,
+ *   only if an intent row actually cites something.
  * @returns {Promise<{status: "ok", drift: object, coverage: object,
  *   report: {text: string, json: string}}>}
  * @throws {Error} on every condition the header lists, all exit-3 class, plus
@@ -341,6 +357,12 @@ export async function driftCommand(commandContext, io = {}) {
   );
   let unresolvedDecisionRefs = [];
   if (decisionRefRows.length > 0) {
+    // The deferred policy-load failure, thrown at the one place the policy is
+    // actually read (see the header's decisionRef section). `knownFitness`
+    // below would otherwise be derived from a law that failed to load, and
+    // every fitness-id citation would report unresolved on that basis — a
+    // loud wrong answer standing in for a refusal.
+    if (io.configError) throw io.configError;
     const adrContext = (io.readAdrContextOverride ?? readAdrContext)(root, {
       tracked: commandContext.tracked,
       loadAdrRegistryOverride: io.loadAdrRegistryOverride,

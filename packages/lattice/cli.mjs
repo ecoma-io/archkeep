@@ -1675,8 +1675,23 @@ async function runDrift(options, { cwd, env }) {
     // workspace's own default — resolvePolicy reads `options.config` as the
     // override, hence `null` here, which selects the workspace's configured
     // boundary law (or a profile, when one is registered).
-    const { config } = await resolvePolicy({ ...options, config: null }, commandContext, cwd);
-    result = await driftCommand(commandContext, { config });
+    //
+    // The failure is DEFERRED rather than thrown here. `drift`'s only reader of
+    // this policy is the non-verdict decisionRef axis, and only for rows that
+    // carry one, so a workspace with an intent and no boundary config was
+    // exiting 3 over a law drift would never have opened — a fifth refusal
+    // neither `docs/usage/drift.md` nor `reconcile`, which makes the same four,
+    // ever had. `driftCommand` rethrows it, unchanged, at the one site that
+    // reads the policy, so every workspace whose intent cites anything keeps the
+    // exact exit-3 it had.
+    let config = null;
+    let configError = null;
+    try {
+      ({ config } = await resolvePolicy({ ...options, config: null }, commandContext, cwd));
+    } catch (error) {
+      configError = /** @type {Error} */ (error);
+    }
+    result = await driftCommand(commandContext, { config, configError });
   } catch (error) {
     const usageError = /is outside the workspace/.test(error?.message ?? "");
     env.err(String(error?.message ?? error));
@@ -2805,7 +2820,12 @@ const PROVENANCE_FLAG_HELP = Object.freeze([
  * surface, not a findings container). Plus `--config` in the `diff` shape:
  * the waivers surface is part of the boundary law, so the law in effect for
  * one run is the same `--config` pick that run's `check` would make — a flag
- * `drift` deliberately lacks, because drift has no boundary-law dependence.
+ * `drift` deliberately lacks, because no drift FINDING is decided by the
+ * boundary law. Drift does read it, for one non-verdict axis only: the fitness
+ * half of a row's `decisionRef` resolves against the ids that law declares
+ * (`runDrift`, and `./src/commands/drift.mjs`'s header). That axis changes no
+ * finding and no exit code, so there is no run whose verdict a `--config` pick
+ * here could move.
  *
  * @type {readonly FlagHelp[]}
  */

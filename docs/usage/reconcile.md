@@ -76,7 +76,9 @@ already build — it does not re-scan the tree.
 ## Fail-closed
 
 `reconcile` refuses loudly on every path that cannot reach a verdict, all exit-3
-class — the same refusals `drift` makes:
+class — the same four refusals [`drift`](drift.md#fail-closed) makes (drift adds
+a fifth, conditional on an intent row carrying a `decisionRef`; reconcile reads
+no boundary law and so makes only these four):
 
 - the intent file cannot be read or parsed;
 - the observed side has incomplete coverage (whole files the analyzer could not
