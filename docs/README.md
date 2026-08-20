@@ -63,6 +63,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained                |
 | [context.md](usage/context.md)                 | The `context` command: architecture constraints for one project                   |
 | [adr.md](usage/adr.md)                         | The `adr` command: recorded decisions, what each binds, and the reverse lookup    |
+| [migration.md](usage/migration.md)             | Bringing an existing repository under governance, step by step                    |
 | [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning                     |
 | [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look                          |
 
@@ -78,7 +79,7 @@ is, what it is not, and the line its neighbours may not cross — and
 
 | page                                            | what it answers                                                  |
 | ----------------------------------------------- | ---------------------------------------------------------------- |
-| [overview.md](skills/overview.md)               | The three-layer architecture, the four skills, host independence |
+| [overview.md](skills/overview.md)               | The three-layer architecture, the five skills, host independence |
 | [installation.md](skills/installation.md)       | npx skills add, Claude Code plugin, manual installation          |
 | [supported-hosts.md](skills/supported-hosts.md) | Feature matrix across agent platforms                            |
 | [claude-code.md](skills/claude-code.md)         | Claude Code specific setup and invocation                        |
@@ -149,6 +150,7 @@ allowed to say it". That table:
 | `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, profiles, projects, drift, discovery, evidence, provenance, adr, waivers, health, fitness functions, reconciliation, governance lifecycle, agentic development, integrations |
 | `docs/concepts/discovery.md`                                                    | Discovery: the proposal-only line, what is observed, the four candidate classes, uncertainty markers                                                                                                                               |
 | `docs/usage/`                                                                   | How a consumer runs it and reads its answers                                                                                                                                                                                       |
+| [`docs/usage/migration.md`](usage/migration.md)                                 | The onboarding ORDER: observe → propose → review → write back → converge → enforce, and which step is allowed to decide what. Each step's detail stays with the page that owns the command                                         |
 | `docs/integrations/`                                                            | The provider and editor integrations at the edge — Nx, Moon, and the VS Code extension                                                                                                                                             |
 | `docs/reference/`                                                               | Schemas, exit codes, command reference, language limits, violation catalogue, the profile registry schema                                                                                                                          |
 | `docs/reference/discovery.md`                                                   | The `discover` command: flags, exit codes, the additive JSON envelope, the proposal never written                                                                                                                                  |
