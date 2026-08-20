@@ -228,7 +228,10 @@ observed project and edge against the declared model and derives the edits that
 would make them agree; `lattice discover --propose` derives candidate
 architecture from what is observed. Both mark their output as proposals that
 are never written — no command writes to the Intent, no command writes an ADR,
-and proposed is never authoritative.
+and proposed is never authoritative. When the model is not merely stale but
+absent — the workspace declares no Intent at all — the review's finding is that
+the repository is ungoverned, and the work of establishing a model is
+`arch-migrate`'s, not a rewrite performed inside the review.
 
 ### 11. Produce the review
 

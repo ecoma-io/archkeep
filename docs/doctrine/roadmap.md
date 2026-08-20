@@ -97,7 +97,7 @@ A new reader should find these capabilities described as present, not promised.
   validated against the observed architecture with no AI-generated intent and
   no semantic inference.
   ([concepts/boundaries.md](../concepts/boundaries.md))
-- **Agentic governance.** The four `arch-*` skills teach agents when to ask the
+- **Agentic governance.** The five `arch-*` skills teach agents when to ask the
   authority and how to read its answers; Claude Code, Codex and opencode run
   the same editor gates; the repository dogfoods its own enforcer in CI.
   ([skills/overview.md](../skills/overview.md),

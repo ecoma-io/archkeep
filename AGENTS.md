@@ -22,7 +22,8 @@ the server. Everything else here is the apparatus that keeps them honest. If you
 are about to write product code, check that it is actually what was asked for.
 
 The repository also ships `arch-*` agent architecture skills (`arch-context`,
-`arch-change`, `arch-check`, `arch-review`) in `skills/` at the root. These are
+`arch-change`, `arch-check`, `arch-review`, `arch-migrate`) in `skills/` at the
+root. These are
 host-independent behavioral protocols that teach an AI agent when and how to use
 Lattice commands. See `docs/skills/overview.md` for the architecture and
 `scripts/check-skills.mjs` for the CI gate that validates them — including the

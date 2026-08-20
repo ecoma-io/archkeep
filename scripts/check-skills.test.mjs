@@ -115,6 +115,10 @@ describe("evaluate", () => {
       "arch-review":
         "`lattice waivers` names every row — a waiver with its term, a permanent " +
         "suppression with what it is hiding.",
+      "arch-migrate":
+        "A proposal is never a decision. `discover --propose` and " +
+        "`reconcile --propose` derive candidates marked proposed / " +
+        "notAuthoritative, and no command writes architecture-intent.json.",
     };
     return byDir[dir] ?? "";
   };
@@ -448,6 +452,31 @@ describe("evaluate", () => {
     );
     const result = evaluate({ ...baseFacts, skills });
     assert.ok(result.failures.some((f) => f.includes("WS1-F01")));
+  });
+
+  // arch-migrate's silent direction: a migration skill that has dropped the
+  // proposal-is-not-a-decision claim still reads as a complete protocol, which
+  // is exactly why an absent claim has to be as loud as a wrong one.
+  it("fails when arch-migrate omits the proposal-is-not-a-decision claim", () => {
+    const skills = allGood().map((s) =>
+      s.dir === "arch-migrate"
+        ? {
+            ...s,
+            text:
+              "Run discover --propose, then write architecture-intent.json from " +
+              "the candidates and re-run check until it is green.",
+          }
+        : s,
+    );
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(
+      result.failures.some((f) => f.includes("arch-migrate") && f.includes("never a decision")),
+    );
+  });
+
+  it("passes when arch-migrate states the proposal-is-not-a-decision claim", () => {
+    const result = evaluate({ ...baseFacts, skills: allGood() });
+    assert.ok(!result.failures.some((f) => f.includes("arch-migrate")));
   });
 
   it("fails when authoring.md requires a metadata.version", () => {

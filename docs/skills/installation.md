@@ -9,7 +9,7 @@ them.
 npx skills add ecoma-io/lattice
 ```
 
-This walks the `skills/` directory in the Lattice repository, discovers all four
+This walks the `skills/` directory in the Lattice repository, discovers all five
 `SKILL.md` files, and installs them to each detected agent platform's native
 directory. It is the primary distribution channel and requires no repository
 configuration.

@@ -137,7 +137,7 @@ different reader needs the answer at a different moment.
   three-question model.
 - **The agent surfaces** — the same CLI, consumed machine-readably. Every
   command's `--format json` envelope is a versioned contract an agent can read
-  without parsing prose, and the four `arch-*` skills teach an agent when to
+  without parsing prose, and the five `arch-*` skills teach an agent when to
   ask and how to act on the answer. An agent is a first-class consumer of the
   surfaces, never an authority over them.
   ([skills/overview.md](../skills/overview.md))

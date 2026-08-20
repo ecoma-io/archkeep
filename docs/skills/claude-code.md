@@ -30,13 +30,14 @@ file in a Lattice-governed project.
 
 ### Verify skills are available
 
-In a Claude Code session, type `/arch` — the four skills should appear as
+In a Claude Code session, type `/arch` — the five skills should appear as
 completions:
 
 - `/arch-context` — understand boundaries before changing
 - `/arch-change` — architecture-aware coding workflow
 - `/arch-check` — validate after changes
 - `/arch-review` — architecture impact for reviews
+- `/arch-migrate` — bring an ungoverned repository under a declared model
 
 ## Using the skills
 

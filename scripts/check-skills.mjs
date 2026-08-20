@@ -35,7 +35,13 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export const SKILLS_DIR = "skills";
-export const EXPECTED_SKILLS = ["arch-context", "arch-change", "arch-check", "arch-review"];
+export const EXPECTED_SKILLS = [
+  "arch-context",
+  "arch-change",
+  "arch-check",
+  "arch-review",
+  "arch-migrate",
+];
 export const PACKAGE_JSON = "packages/lattice/package.json";
 export const ROOT_PACKAGE_JSON = "package.json";
 export const CLAUDE_PLUGIN_MANIFEST = ".claude-plugin/plugin.json";
@@ -346,6 +352,25 @@ export function evaluate({
   const change = skillText.get("arch-change") ?? "";
   const checkText = skillText.get("arch-check") ?? "";
   const review = skillText.get("arch-review") ?? "";
+  const migrate = skillText.get("arch-migrate") ?? "";
+  // arch-migrate is the one skill whose subject is a repository with no
+  // declared model, which makes it the one place an agent is most likely to
+  // write `architecture-intent.json` and call the job done. The separation it
+  // has to teach — Lattice derives, a human adopts — is the whole reason the
+  // `--propose` surfaces refuse to write. A reversion here is silent in the
+  // worst direction: the skill would still read as a competent migration
+  // protocol while having dropped the sentence that keeps the authority on the
+  // human's side, so the gate requires the claim rather than trusting it.
+  if (skillText.has("arch-migrate") && !/A proposal is never a decision/u.test(migrate)) {
+    failures.push(
+      `skills/arch-migrate/SKILL.md must teach that a proposal is never a ` +
+        `decision: \`discover --propose\` and \`reconcile --propose\` derive ` +
+        `candidates marked proposed/notAuthoritative, and no command writes ` +
+        `architecture-intent.json. Without that claim the skill reads as ` +
+        `permission to adopt a derived model silently.`,
+    );
+    lines.push(`FAIL arch-migrate — proposal-is-not-a-decision claim not stated`);
+  }
   if (skillText.has("arch-change") && !/both resolve to\s+the same record/u.test(change)) {
     failures.push(
       `skills/arch-change/SKILL.md must teach that the \`adr:\`-prefixed spelling ` +
