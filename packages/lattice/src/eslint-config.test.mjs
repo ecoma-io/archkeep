@@ -246,4 +246,60 @@ describe("extractBoundaryRule", () => {
     const entry = entryWithIgnores(["error", { depConstraints: [] }], []);
     expect(() => extractBoundaryRule([entry])).not.toThrow();
   });
+
+  it("binds an ignores-scoped entry tree-wide under the explicit opt-in, and says so in the note", () => {
+    // The one caller shape the opt-in exists for: a differential handing this
+    // table identically to every engine it compares. This is ng-doc's real
+    // entry shape at the sha `scripts/differential-real-trees.mjs` pins —
+    // bare-extension files plus a non-empty ignores — which the default
+    // rightly refuses for an enforcer.
+    const scoped = {
+      rules: {
+        "@nx/enforce-module-boundaries": [
+          "error",
+          { depConstraints: [{ sourceTag: "x", onlyDependOnLibsWithTags: ["y"] }] },
+        ],
+      },
+      files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      ignores: ["**/__mocks__/**"],
+    };
+    const { depConstraints, note } = extractBoundaryRule([scoped], {
+      pathScoped: "bind-tree-wide",
+    });
+    expect(depConstraints).toEqual([{ sourceTag: "x", onlyDependOnLibsWithTags: ["y"] }]);
+    // The note is the load-bearing half: a scope dropped with no record is the
+    // silent drop the default refusal exists to prevent, so the opt-in without
+    // a note would be that same bug wearing an option's name.
+    expect(note).toMatch(/ignores: \["\*\*\/__mocks__\/\*\*"\]/);
+    expect(note).toMatch(/bound tree-wide/);
+  });
+
+  it("binds a directory-files-scoped entry tree-wide under the opt-in, note naming the files glob", () => {
+    const scoped = entryOf(["error", { depConstraints: [] }], ["apps/legacy/**/*.ts"]);
+    const { note } = extractBoundaryRule([scoped], { pathScoped: "bind-tree-wide" });
+    expect(note).toMatch(/files: \["apps\/legacy\/\*\*\/\*\.ts"\]/);
+    expect(note).toMatch(/bound tree-wide/);
+  });
+
+  it("still applies last-wins under the opt-in — the mode widens the pool, not the binding rule", () => {
+    const scoped = entryWithIgnores(
+      ["error", { depConstraints: [{ sourceTag: "scoped" }] }],
+      ["**/__mocks__/**"],
+    );
+    const unscopedLast = entryOf(["error", { depConstraints: [{ sourceTag: "last" }] }]);
+    const { depConstraints, note } = extractBoundaryRule([scoped, unscopedLast], {
+      pathScoped: "bind-tree-wide",
+    });
+    expect(depConstraints).toEqual([{ sourceTag: "last" }]);
+    // The winning entry is unscoped, so no scope was dropped and no
+    // scope-drop sentence may claim one was.
+    expect(note ?? "").not.toMatch(/bound tree-wide/);
+  });
+
+  it("refuses a pathScoped mode it does not define, rather than reading it as the default", () => {
+    const entry = entryOf(["error", { depConstraints: [] }]);
+    expect(() =>
+      extractBoundaryRule([entry], { pathScoped: /** @type {any} */ ("bind-scoped") }),
+    ).toThrow(/pathScoped/);
+  });
 });

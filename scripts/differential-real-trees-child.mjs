@@ -21,10 +21,11 @@
 // is rule-engine agreement on identical inputs, not graph construction.
 //
 // The run-vs-import guard at the bottom (`isProgramEntry`) exists so
-// `silentUpstreamFailures` below can be unit-tested by importing this module —
-// every line above that guard used to execute unconditionally at import time,
-// including the `process.exit(2)` a missing CLI argument triggers, which would
-// kill the test process rather than let it assert on the exported function.
+// `classifyUpstreamNote` and `partitionUpstreamMessages` below can be
+// unit-tested by importing this module — every line above that guard used to
+// execute unconditionally at import time, including the `process.exit(2)` a
+// missing CLI argument triggers, which would kill the test process rather
+// than let it assert on the exported functions.
 
 import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -52,42 +53,92 @@ import {
 } from "./differential-real-trees.mjs";
 
 /**
- * Files ESLint reported something on OTHER than the boundary rule — a parse
- * error, or a message from a rule this override config never asked for — that
- * neither engine also produced a comparable verdict for: no boundary-rule
- * message from upstream, no violation from this engine.
+ * What one non-boundary ESLint message means for the file that carries it:
+ * `"noise"` — upstream read the file and ran the boundary rule on it, the
+ * message is a by-product of linting a real tree under this differential's
+ * stripped override config — or `"unreadable"` — upstream could not read the
+ * file, so its silence about boundaries there is not a verdict.
  *
- * Those two facts together are exactly the masquerade the note-counting below
- * was written to prevent, per its own comment: a file upstream could not read
- * cleanly never enters `upstreamByFile` (only a `@nx/enforce-module-boundaries`
- * message lands there), and if this engine independently has nothing to say
- * about the same file either, that file never enters `toolByFile` — so the
- * per-file comparison loop never iterates it, "zero verdicts" on the file
- * looks exactly like "clean", and the note that recorded the parse failure
- * had no reader. Counting it into `counts.upstreamNotes` did not change that:
- * nothing downstream ever read that field either — `reportTree` and
- * `reportNativeLeg` in `differential-real-trees.mjs` print `upstreamReadable`,
- * `analysisFailures` and every verdict count, never this one.
+ * The split matters because the two directions are not symmetric: counting a
+ * noise-only file as unreadable fails a run over messages that impaired
+ * nothing (a real tree's sources are full of `eslint-disable` directives
+ * naming plugins this override config deliberately does not load), while
+ * counting an unreadable file as clean is the silent masquerade — "zero
+ * verdicts" on a file nobody parsed reads exactly like "checked, clean".
  *
- * A file WITH a note that ALSO carries a boundary-rule message, or a tool
- * violation, is not in this set — it already reached the comparison loop by
- * the ordinary route and any disagreement there is a `differences` entry the
- * ledger already classifies.
+ * Exactly two shapes are noise, both measured against this repository's own
+ * pinned eslint (run through the same `ESLint` API this differential uses; a
+ * probe file carrying both shapes plus a configured rule still had that rule
+ * fire on it, which is the fact the classification rests on):
  *
- * @param {Map<string, string[]>} notesByFile Non-boundary-rule ESLint
- *   messages, keyed by workspace-relative file.
- * @param {Set<string>} upstreamFiles Files carrying at least one
- *   `@nx/enforce-module-boundaries` message.
- * @param {Set<string>} toolFiles Files this engine reported a violation on.
- * @returns {{file: string, notes: string[]}[]} Empty when nothing is hidden.
+ * - `Definition for rule '…' was not found.` — an inline directive names a
+ *   rule from a plugin the override config never loaded. `ruleId` is the
+ *   missing rule's name, `fatal` is false, and every configured rule still
+ *   runs on the file.
+ * - `Unused eslint-disable directive …` — the directive reporter, `ruleId`
+ *   null, `fatal` false, same measurement.
+ *
+ * Everything else is `"unreadable"`, fail-closed: a parse error carries
+ * `fatal: true` (measured, same probe), and a message shape this function has
+ * never seen must surface as a could-not-look to be classified by a human —
+ * never absorbed as noise on the guess that it was probably harmless.
+ *
+ * @param {{ruleId?: string|null, fatal?: boolean, message: string}} message
+ * @returns {"noise"|"unreadable"}
  */
-export function silentUpstreamFailures(notesByFile, upstreamFiles, toolFiles) {
-  const hidden = [];
-  for (const [file, notes] of notesByFile) {
-    if (upstreamFiles.has(file) || toolFiles.has(file)) continue;
-    hidden.push({ file, notes });
+export function classifyUpstreamNote(message) {
+  if (message.fatal) return "unreadable";
+  const hasRuleId = message.ruleId !== null && message.ruleId !== undefined;
+  if (hasRuleId && /^Definition for rule '.+' was not found\.$/u.test(message.message)) {
+    return "noise";
   }
-  return hidden;
+  if (!hasRuleId && message.message.startsWith("Unused eslint-disable directive")) {
+    return "noise";
+  }
+  return "unreadable";
+}
+
+/**
+ * Splits upstream's lint results three ways, per workspace-relative file:
+ * boundary-rule messages (the comparable verdicts), noise notes, and
+ * unreadable notes (`classifyUpstreamNote` is the decider and carries the
+ * argument). Pure — results in, three maps out — so the split is testable
+ * without a cloned tree or a real ESLint run.
+ *
+ * A file in `unreadableByFile` must reach the report as a could-not-look
+ * record: it never enters `upstreamByFile` (no boundary message can exist on
+ * a file the rule never ran over), so without that record the comparison loop
+ * would never mention it and its silence would read as agreement — the
+ * masquerade this split exists to prevent. `main` below writes the whole list
+ * into the child's report, and `reportTree` in
+ * `differential-real-trees.mjs` holds its size to the tree's own pinned,
+ * measured expectation from both directions.
+ *
+ * @param {{filePath: string, messages: {ruleId?: string|null, fatal?: boolean, message: string}[]}[]} lintResults
+ * @param {string} treeRoot Absolute tree root `filePath`s are made relative to.
+ * @returns {{upstreamByFile: Map<string, object[]>, noiseByFile: Map<string, string[]>,
+ *   unreadableByFile: Map<string, string[]>}}
+ */
+export function partitionUpstreamMessages(lintResults, treeRoot) {
+  const upstreamByFile = new Map();
+  const noiseByFile = new Map();
+  const unreadableByFile = new Map();
+  const push = (map, key, value) => {
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(value);
+  };
+  for (const result of lintResults) {
+    const relative = result.filePath.slice(treeRoot.length + 1);
+    for (const message of result.messages) {
+      if (message.ruleId === "@nx/enforce-module-boundaries") {
+        push(upstreamByFile, relative, message);
+      } else {
+        const target = classifyUpstreamNote(message) === "noise" ? noiseByFile : unreadableByFile;
+        push(target, relative, `${message.ruleId ?? "eslint"}: ${message.message}`);
+      }
+    }
+  }
+  return { upstreamByFile, noiseByFile, unreadableByFile };
 }
 
 async function main() {
@@ -113,8 +164,18 @@ async function main() {
 
   // The tree's own law: constraint table and options off its own flat config,
   // last matching entry winning exactly as ESLint binds it.
+  // `pathScoped: "bind-tree-wide"` is the one opt-in `extractBoundaryRule`
+  // defines, and this differential is the caller shape its doc admits: the
+  // extracted table is handed identically to both engines below, so a
+  // path-scoped entry's dropped scope is symmetric across them — and the
+  // `note` the drop always produces is written into the report rather than
+  // discarded, so the run that dropped a scope says so.
   const flatConfig = (await import(pathToFileURL(join(treeRoot, configFile)).href)).default;
-  const { depConstraints, options: treeOptions } = extractBoundaryRule(flatConfig);
+  const {
+    depConstraints,
+    options: treeOptions,
+    note: boundaryNote,
+  } = extractBoundaryRule(flatConfig, { pathScoped: "bind-tree-wide" });
 
   // The graph the tree's own nx computed. `nx graph --file=` emits no
   // `externalNodes` (measured against nx 23; `src/analysis/contract.md` records
@@ -166,26 +227,20 @@ async function main() {
     readable,
   );
 
-  const upstreamByFile = new Map();
-  const notesByFile = new Map();
-  for (const result of lintResults) {
-    const relative = result.filePath.slice(treeRoot.length + 1);
-    for (const message of result.messages) {
-      if (message.ruleId === "@nx/enforce-module-boundaries") {
-        if (!upstreamByFile.has(relative)) upstreamByFile.set(relative, []);
-        upstreamByFile.get(relative).push(message);
-      } else {
-        // Everything else — parse errors, directives naming rules outside this
-        // override config — is recorded per file, not merely counted, so
-        // `silentUpstreamFailures` below can tell whether the comparison loop
-        // ever saw this file at all.
-        if (!notesByFile.has(relative)) notesByFile.set(relative, []);
-        notesByFile.get(relative).push(`${message.ruleId ?? "eslint"}: ${message.message}`);
-      }
-    }
-  }
-  let noteCount = 0;
-  for (const notes of notesByFile.values()) noteCount += notes.length;
+  // Three-way split of everything upstream said: comparable boundary
+  // verdicts, harmless directive noise, and could-not-read records —
+  // `classifyUpstreamNote`'s own doc carries the measured argument for the
+  // split. An unreadable file is DATA here, never a thrown run: the report
+  // lists every one, and `reportTree` in `differential-real-trees.mjs` holds
+  // the list to the tree's pinned, measured expectation from both directions,
+  // so a file upstream failed to read still cannot masquerade as a file
+  // upstream read and found clean.
+  const { upstreamByFile, noiseByFile, unreadableByFile } = partitionUpstreamMessages(
+    lintResults,
+    treeRoot,
+  );
+  let noiseNoteCount = 0;
+  for (const notes of noiseByFile.values()) noiseNoteCount += notes.length;
 
   // Per-file comparison, over every file either engine reported on.
   const toolByFile = new Map();
@@ -194,35 +249,17 @@ async function main() {
     toolByFile.get(violation.sourceFile).push(violation);
   }
 
-  // A tree upstream failed to read must never masquerade as a tree upstream
-  // read and found clean. `noteCount` alone could not tell the difference —
-  // see `silentUpstreamFailures`'s own doc comment — so this is the loud path
-  // for the file(s) where that masquerade would otherwise happen: neither
-  // engine produced anything comparable, so nothing below would ever mention
-  // them. Thrown rather than folded into `differences`, because this is not a
-  // disagreement the ledger can classify — it is this run being unable to
-  // look, the same class `measureTree`'s own guards above already throw for.
-  const silentFailures = silentUpstreamFailures(
-    notesByFile,
-    new Set(upstreamByFile.keys()),
-    new Set(toolByFile.keys()),
-  );
-  if (silentFailures.length > 0) {
-    throw new Error(
-      `${silentFailures.length} file(s) upstream could not read cleanly, and this engine also ` +
-        "reported nothing for them — a silent could-not-look this differential must not treat " +
-        `as agreement: ${silentFailures
-          .map(({ file, notes }) => `${file} (${notes.join("; ")})`)
-          .join("; ")}`,
-    );
-  }
-
   let agreements = 0;
   const differences = [];
   const upstreamVerdicts = [];
   for (const file of new Set([...upstreamByFile.keys(), ...toolByFile.keys()])) {
     const upstreamSide = {
-      readable: isUpstreamReadable(file),
+      // A file upstream could not read is not readable, whatever its
+      // extension says: a `stricter` row on it must carry
+      // `upstreamReadable: false`, the same marking the fixture suite gives a
+      // language ESLint has no parser for, not a claim that upstream looked
+      // and disagreed.
+      readable: isUpstreamReadable(file) && !unreadableByFile.has(file),
       messages: upstreamByFile.get(file) ?? [],
       notes: [],
     };
@@ -383,7 +420,8 @@ async function main() {
           importSites: analysis.imports.length,
           analysisFailures: analysis.failures.length,
           upstreamReadable: readable.length,
-          upstreamNotes: noteCount,
+          upstreamNoiseNotes: noiseNoteCount,
+          upstreamUnreadable: unreadableByFile.size,
           upstreamVerdicts: upstreamVerdictTotal,
           toolVerdicts: toolViolations.length,
         },
@@ -398,6 +436,15 @@ async function main() {
         analysisFailureSample: analysis.failures
           .slice(0, 3)
           .map((failure) => `${failure.sourceFile}:${failure.line} ${failure.reason}`),
+        // Upstream's own could-not-look records, the FULL list rather than a
+        // sample: `reportTree` prints every one and holds the count to the
+        // tree's pinned `expectedUpstreamUnreadable`, and a gate cannot hold a
+        // sample to a pin.
+        upstreamUnreadable: [...unreadableByFile].map(([file, notes]) => ({ file, notes })),
+        // The scope-drop record `extractBoundaryRule` produced, if any —
+        // `reportTree` prints it, so the drop this run made is in the run's
+        // own log rather than only in this file's comments.
+        boundaryNote: boundaryNote ?? null,
         upstreamVerdicts,
         toolVerdicts: toolViolations.map((violation) => ({
           messageId: violation.messageId,

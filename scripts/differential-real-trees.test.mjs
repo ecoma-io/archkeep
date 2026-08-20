@@ -28,6 +28,7 @@ import {
   reportNativeLeg,
   scopeLedgerToDirections,
   treeVerdict,
+  upstreamUnreadableBreaches,
 } from "./differential-real-trees.mjs";
 
 const difference = (overrides = {}) => ({
@@ -110,6 +111,53 @@ test("one silent engine is one breach; verdicts on both sides are none", () => {
 test("a tree not measured to contain violations makes no empty-verdict claim", () => {
   const tree = { name: "hypothetical", sha: "abc", expectViolations: false };
   assert.equal(emptyVerdictBreaches(tree, { upstream: 0, tool: 0 }).length, 0);
+});
+
+test("an unpinned unreadable file is a breach — absorbed, it would read as agreement", () => {
+  // The silent direction this gate exists for: a file upstream could not
+  // parse produces no boundary message, so nothing downstream would ever
+  // mention it — "zero verdicts" there is not "checked, clean".
+  const tree = { name: "code-pushup", sha: "abc", expectedUpstreamUnreadable: 0 };
+  const breaches = upstreamUnreadableBreaches(tree, [
+    { file: "libs/broken/src/index.ts", notes: ["eslint: Parsing error: bad"] },
+  ]);
+  assert.equal(breaches.length, 1);
+  assert.match(breaches[0], /could not read 1 file/u);
+  assert.match(breaches[0], /libs\/broken\/src\/index\.ts/u);
+});
+
+test("an unreadable list matching the pin exactly is not a breach", () => {
+  const tree = { name: "code-pushup", sha: "abc", expectedUpstreamUnreadable: 2 };
+  const unreadable = [
+    { file: "a.ts", notes: ["eslint: Parsing error: x"] },
+    { file: "b.ts", notes: ["eslint: Parsing error: y"] },
+  ];
+  assert.deepEqual(upstreamUnreadableBreaches(tree, unreadable), []);
+});
+
+test("fewer unreadable files than pinned is a breach from the other side — a stale pin", () => {
+  // The same both-directions posture the ledger takes: a pin claiming a
+  // could-not-look the run no longer measures is a documented gap that
+  // quietly stopped being real.
+  const tree = { name: "code-pushup", sha: "abc", expectedUpstreamUnreadable: 2 };
+  const breaches = upstreamUnreadableBreaches(tree, [{ file: "a.ts", notes: ["eslint: x"] }]);
+  assert.equal(breaches.length, 1);
+  assert.match(breaches[0], /fewer than the 2 pinned/u);
+});
+
+test("a tree with no expectedUpstreamUnreadable field pins zero, not 'unchecked'", () => {
+  const tree = { name: "hypothetical", sha: "abc" };
+  assert.deepEqual(upstreamUnreadableBreaches(tree, []), []);
+  assert.equal(upstreamUnreadableBreaches(tree, [{ file: "a.ts", notes: ["x"] }]).length, 1);
+});
+
+test("a child report with no upstreamUnreadable list at all is a breach, never zero", () => {
+  // The same refusal `reportNativeLeg` makes for a missing `native` field: a
+  // malformed report must not read as a clean one.
+  const tree = { name: "code-pushup", sha: "abc", expectedUpstreamUnreadable: 0 };
+  const breaches = upstreamUnreadableBreaches(tree, undefined);
+  assert.equal(breaches.length, 1);
+  assert.match(breaches[0], /carries no upstreamUnreadable list/u);
 });
 
 test("extractBoundaryRule takes the LAST configuring entry, as ESLint binds it", () => {
