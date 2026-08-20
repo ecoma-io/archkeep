@@ -147,6 +147,72 @@ function requireGh(args) {
   return result;
 }
 
+/**
+ * The `gh` invocation(s) a decision requires, as argument arrays. Pure, so
+ * the reopen path can be asserted on its argv rather than only read.
+ *
+ * `gh issue edit` has no `--state` flag (checked against `gh issue edit
+ * --help`, which lists `--add-assignee`, `--body`/`-b`, `--title`/`-t`,
+ * `--milestone`, and the `--add-`/`--remove-label` etc. pairs — no state
+ * flag among them); reopening a closed issue is a distinct subcommand,
+ * `gh issue reopen <number>`, which itself takes no `--body`. The old
+ * `reopen` branch called `gh issue edit --state open --body ...`, which
+ * `gh` rejects outright, so a findings run that landed after a human closed
+ * the issue errored out of `main()` and never reopened it — the exact
+ * silent miss the file header's "A missing or malformed envelope exits 1"
+ * paragraph exists to prevent, arriving instead through the one branch that
+ * wasn't exercised against `gh`'s real flag set. `reopen` therefore issues
+ * two calls: `gh issue reopen` to flip the state, then `gh issue edit
+ * --body` to carry the fresher findings body the same way `update` does.
+ *
+ * @param {{action: string, number?: number, title?: string, body?: string, closeComment?: string}} decision
+ * @param {string} repo
+ * @returns {string[][]} zero or more `gh` argument arrays, in call order
+ * @throws {Error} on an `action` this function does not know.
+ */
+export function buildGhCommands(decision, repo) {
+  switch (decision.action) {
+    case "open":
+      return [
+        [
+          "issue",
+          "create",
+          "--repo",
+          repo,
+          "--title",
+          decision.title,
+          "--body",
+          decision.body,
+          "--label",
+          LABEL,
+        ],
+      ];
+    case "update":
+      return [["issue", "edit", "--repo", repo, String(decision.number), "--body", decision.body]];
+    case "reopen":
+      return [
+        ["issue", "reopen", "--repo", repo, String(decision.number)],
+        ["issue", "edit", "--repo", repo, String(decision.number), "--body", decision.body],
+      ];
+    case "close":
+      return [
+        [
+          "issue",
+          "close",
+          "--repo",
+          repo,
+          String(decision.number),
+          "--comment",
+          decision.closeComment,
+        ],
+      ];
+    case "none":
+      return [];
+    default:
+      throw new Error(`unknown decision action ${JSON.stringify(decision.action)}`);
+  }
+}
+
 /** Creates the label when it does not exist yet — `gh issue create --label`
  * refuses an unknown label, and the first run of this mechanism is its own
  * bootstrap. Returns once the label exists, whether created here or already
@@ -259,65 +325,18 @@ function main() {
 
   try {
     ensureLabel(repo);
-    switch (decision.action) {
-      case "open":
-        requireGh([
-          "issue",
-          "create",
-          "--repo",
-          repo,
-          "--title",
-          decision.title,
-          "--body",
-          decision.body,
-          "--label",
-          LABEL,
-        ]);
-        console.log(`opened the ${LABEL} issue for findings`);
-        break;
-      case "update":
-        requireGh([
-          "issue",
-          "edit",
-          "--repo",
-          repo,
-          String(decision.number),
-          "--body",
-          decision.body,
-        ]);
-        console.log(`updated issue #${decision.number}`);
-        break;
-      case "reopen":
-        requireGh([
-          "issue",
-          "edit",
-          "--repo",
-          repo,
-          String(decision.number),
-          "--state",
-          "open",
-          "--body",
-          decision.body,
-        ]);
-        console.log(`reopened issue #${decision.number}`);
-        break;
-      case "close":
-        requireGh([
-          "issue",
-          "close",
-          "--repo",
-          repo,
-          String(decision.number),
-          "--comment",
-          decision.closeComment,
-        ]);
-        console.log(`closed issue #${decision.number}`);
-        break;
-      case "none":
-        console.log(`no issue action: ${decision.reason}`);
-        break;
-      default:
-        throw new Error(`unknown decision action ${JSON.stringify(decision.action)}`);
+    const commands = buildGhCommands(decision, repo);
+    if (commands.length === 0) {
+      console.log(`no issue action: ${decision.reason}`);
+    } else {
+      for (const args of commands) requireGh(args);
+      const summaries = {
+        open: `opened the ${LABEL} issue for findings`,
+        update: `updated issue #${decision.number}`,
+        reopen: `reopened issue #${decision.number}`,
+        close: `closed issue #${decision.number}`,
+      };
+      console.log(summaries[decision.action]);
     }
   } catch (error) {
     console.error(String(error?.message ?? error));

@@ -11,7 +11,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildIssueBody, decideIssue, LABEL } from "./reconcile-differential-issue.mjs";
+import {
+  buildGhCommands,
+  buildIssueBody,
+  decideIssue,
+  LABEL,
+} from "./reconcile-differential-issue.mjs";
 
 const summary = {
   runUrl: "https://github.com/ecoma-io/lattice/actions/runs/42",
@@ -140,4 +145,83 @@ test("buildIssueBody renders the footer contract and only the trees with lines",
 
 test("the label constant is the single handle both the query and the create use", () => {
   assert.equal(LABEL, "conformance-differential");
+});
+
+// `gh issue edit` has no `--state` flag — the old reopen branch built
+// `["issue", "edit", ..., "--state", "open", ...]`, which `gh` rejects, so a
+// findings run that landed after a human closed the issue errored out of
+// `main()` and never reopened it. This is the silent-direction case: assert
+// the actual subcommand used, not just that SOME argv comes back.
+test("reopen issues `gh issue reopen`, never `gh issue edit --state` — the flag gh does not have", () => {
+  const decision = decideIssue({
+    exitClass: "findings",
+    summary,
+    existing: { number: 7, state: "closed" },
+  });
+  const commands = buildGhCommands(decision, "ecoma-io/lattice");
+  assert.equal(commands.length, 2);
+  assert.deepEqual(commands[0], ["issue", "reopen", "--repo", "ecoma-io/lattice", "7"]);
+  // No command may carry a `--state` flag anywhere — that is the exact typo
+  // that made reopening error out against a real `gh`.
+  for (const args of commands) assert.equal(args.includes("--state"), false);
+  // The fresher findings body still lands, via a second, separate `edit` call.
+  assert.deepEqual(commands[1], [
+    "issue",
+    "edit",
+    "--repo",
+    "ecoma-io/lattice",
+    "7",
+    "--body",
+    decision.body,
+  ]);
+});
+
+test("open, update and close each build exactly one gh command, unchanged from before the reopen fix", () => {
+  const openDecision = decideIssue({ exitClass: "findings", summary, existing: undefined });
+  const openCommands = buildGhCommands(openDecision, "ecoma-io/lattice");
+  assert.equal(openCommands.length, 1);
+  assert.deepEqual(openCommands[0], [
+    "issue",
+    "create",
+    "--repo",
+    "ecoma-io/lattice",
+    "--title",
+    openDecision.title,
+    "--body",
+    openDecision.body,
+    "--label",
+    LABEL,
+  ]);
+
+  const updateDecision = decideIssue({
+    exitClass: "findings",
+    summary,
+    existing: { number: 7, state: "open" },
+  });
+  const updateCommands = buildGhCommands(updateDecision, "ecoma-io/lattice");
+  assert.deepEqual(updateCommands, [
+    ["issue", "edit", "--repo", "ecoma-io/lattice", "7", "--body", updateDecision.body],
+  ]);
+
+  const closeDecision = decideIssue({
+    exitClass: "ok",
+    summary,
+    existing: { number: 7, state: "open" },
+  });
+  const closeCommands = buildGhCommands(closeDecision, "ecoma-io/lattice");
+  assert.deepEqual(closeCommands, [
+    ["issue", "close", "--repo", "ecoma-io/lattice", "7", "--comment", closeDecision.closeComment],
+  ]);
+});
+
+test("a none decision requires no gh command at all", () => {
+  const decision = decideIssue({ exitClass: "ok", summary, existing: undefined });
+  assert.deepEqual(buildGhCommands(decision, "ecoma-io/lattice"), []);
+});
+
+test("an action buildGhCommands does not know throws rather than silently doing nothing", () => {
+  assert.throws(
+    () => buildGhCommands({ action: "banana" }, "ecoma-io/lattice"),
+    /unknown decision action/u,
+  );
 });

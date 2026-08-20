@@ -16,7 +16,7 @@
 // finding. Exit code 2 with the findings on stderr is the convention Codex
 // itself documents for blocking hook feedback.
 import { spawnSync } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -52,6 +52,16 @@ function main() {
   ];
   const findings = [];
   for (const file of touched) {
+    // A `*** Delete File:` marker (or any touched path the patch left
+    // absent) has nothing left to gate: `lint-edited-file.mjs` would run
+    // ESLint against a path that no longer exists, and ESLint exits 2 ("No
+    // files matching the pattern") on a missing path the same way it does on
+    // a real lint violation — indistinguishable from this adapter's own
+    // "findings" convention, so every JS/TS deletion was reported as a false
+    // finding. Format and doc-link gates have the same problem for their own
+    // extensions, so the skip applies before any gate runs, not only before
+    // `lint-edited-file.mjs`.
+    if (!existsSync(join(cwd, file))) continue;
     for (const gate of gates) {
       const r = spawnSync(process.execPath, [`scripts/editor-hooks/${gate}`], {
         cwd,

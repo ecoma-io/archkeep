@@ -39,7 +39,7 @@
 // GITHUB_REPOSITORY (`owner/repo`).
 
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -210,6 +210,33 @@ export function main() {
   console.log(`pushed reformat commit ${sha} (verification: ${verification})`);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+/**
+ * Whether this file was RUN rather than imported, compared on real paths —
+ * the naive spelling this replaces (`process.argv[1] ===
+ * fileURLToPath(import.meta.url)`) is false whenever the invoking path
+ * contains a symlink anywhere in it, the same class of bug
+ * `scripts/check-packages.mjs` documents on its own copy of this guard:
+ * Node resolves symlinks before recording a module's URL, but records
+ * `argv[1]` exactly as the caller spelled it, so a workflow checkout reached
+ * through a symlinked path made `main()` never run — the release lane's
+ * reformat push silently no-opped while the step still exited 0.
+ *
+ * @param {string} moduleUrl `import.meta.url` of this module
+ * @param {string | undefined} [argv1] `process.argv[1]`
+ * @returns {boolean}
+ */
+function isProgramEntry(moduleUrl, argv1 = process.argv[1]) {
+  if (!argv1) return false;
+  const real = (path) => {
+    try {
+      return realpathSync(path);
+    } catch {
+      return path;
+    }
+  };
+  return real(argv1) === real(fileURLToPath(moduleUrl));
+}
+
+if (isProgramEntry(import.meta.url)) {
   main();
 }
