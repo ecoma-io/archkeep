@@ -189,6 +189,13 @@ answer is to surface it, never to ignore it.
    context, and let their zero-verdict exits stay out of the change's clean/not
    verdict: `check` is the only command that exits 1 on boundary findings —
    `fitness` also exits 1 when a declared function `fail`s.
+   `lattice report` composes these same surfaces into one governance document,
+   every number taken from the command that owns it, under one law resolved
+   once for the whole page. It is the whole-workspace picture rather than a
+   fact scoped to this change, so prefer the individual commands above while
+   the question is narrow. It never exits 1 either: exit 0 means the document
+   was established, not that the architecture is clean, and exit 3 names every
+   surface it could not establish in a closing `could not inspect` block.
 
 9. **Proceed within constraints.** Only then modify code, staying within the
    import directions the context described.
@@ -208,6 +215,9 @@ code change). Add:
   the facts under the change involve a term-bound suppression, a quality claim,
   an aging ledger, a named quality gate, a decision reference, a stale model, or
   an undeclared one.
+- `report` — when the question is the whole governance picture at once rather
+  than one of those surfaces; it composes them into a single document and
+  reaches for the same numbers.
 - `check` — to see the current violation state (though `context --plan` already
   reports it scoped for reporting).
 

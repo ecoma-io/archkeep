@@ -153,6 +153,24 @@ cites when it says "the declared architecture no longer matches the code".
 
 ### 7. Select supporting evidence as the change warrants
 
+- **The whole governance picture at once** — `lattice report` composes the
+  surfaces below into one document: provenance, the health metrics, the waiver
+  and fitness tables, and the recorded decisions each governed row cites. Every
+  number comes from the same function the owning command calls, and one law is
+  resolved once for the whole page, so two sections can never cite two different
+  laws. Reach for it when the review needs the governance picture; reach for the
+  individual commands below when it needs one surface.
+
+  Read its exit code the way you read `drift`'s. `report` never exits 1 — a live
+  boundary violation and a failing fitness gate are both printed, by name, over
+  exit 0 — so exit 0 means "the document was established", never "the
+  architecture is clean". Exit 3 means at least one surface could not be
+  established, and the closing `could not inspect` block names every one with
+  its reason. An unresolved `decisionRef` is exit 3 here, stricter than the gate:
+  `check` resolves the same citations but fails the build on the intent half
+  only, while this document's whole subject is on whose authority each governed
+  row stands.
+
 - **Health / quality claim** — `lattice health` reports per-metric verdicts
   (a metric whose evidence is unavailable is `unknown`/`not_applicable`, never
   zero); `lattice fitness`(when the policy declares a `fitness` export) judges
