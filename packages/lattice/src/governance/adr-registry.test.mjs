@@ -9,6 +9,7 @@ import {
   ADR_ID_PATTERN,
   adrsBinding,
   boundFitnessIds,
+  declaredFitnessNames,
   loadAdrRegistry,
   parseFrontmatterFields,
   resolveDecisionRef,
@@ -299,6 +300,41 @@ describe("stripAdrPrefix", () => {
 
   it("leaves a differently-cased prefix unchanged — no fuzzy matching", () => {
     expect(stripAdrPrefix("ADR:0001-bind-collaboration")).toBe("ADR:0001-bind-collaboration");
+  });
+});
+
+describe("declaredFitnessNames", () => {
+  it("collects the name field off each well-formed row", () => {
+    expect(declaredFitnessNames({ fitness: [{ name: "hotspot" }, { name: "coverage" }] })).toEqual(
+      new Set(["hotspot", "coverage"]),
+    );
+  });
+
+  it("is empty when the module has no fitness export", () => {
+    expect(declaredFitnessNames({})).toEqual(new Set());
+    expect(declaredFitnessNames(null)).toEqual(new Set());
+    expect(declaredFitnessNames(undefined)).toEqual(new Set());
+  });
+
+  // `config.mjs`'s `findBoundaryConfigViolations` calls this to build its
+  // default `io.resolve` BEFORE `findFitnessViolations` validates the
+  // `fitness` shape (F05) — so a malformed `fitness` export must not throw
+  // here. The proper named violation is `findFitnessViolations`' job; this
+  // function only has to survive the shape so that call is reached.
+  it("does not throw on a non-array fitness export — returns no declared names", () => {
+    expect(declaredFitnessNames({ fitness: {} })).toEqual(new Set());
+    expect(declaredFitnessNames({ fitness: "x" })).toEqual(new Set());
+  });
+
+  it("does not throw on a fitness list holding a non-object row", () => {
+    expect(declaredFitnessNames({ fitness: [null] })).toEqual(new Set());
+    expect(declaredFitnessNames({ fitness: ["not-an-object"] })).toEqual(new Set());
+  });
+
+  it("skips a row with no usable name rather than throwing", () => {
+    expect(declaredFitnessNames({ fitness: [{ name: "ok" }, { name: 5 }, {}] })).toEqual(
+      new Set(["ok"]),
+    );
   });
 });
 
