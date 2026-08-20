@@ -113,10 +113,9 @@ function waiverLines(waivers) {
   );
   for (const row of waivers.rows) {
     const expiry = row.expiresAt === null ? "" : ` until ${row.expiresAt}`;
-    const cites = row.decisionRef === null ? "" : `  [${row.decisionRef}]`;
     lines.push(
       `    ${row.status.padEnd(10)}${row.path}${expiry} — covers ${row.covered} ` +
-        `violation${row.covered === 1 ? "" : "s"}${cites}`,
+        `violation${row.covered === 1 ? "" : "s"}`,
     );
     if (row.reason !== null) lines.push(`      reason: ${row.reason}`);
   }
@@ -173,13 +172,21 @@ function decisionLines(decisions) {
     lines.push("    no governed row cites a decisionRef");
     return lines;
   }
+  // "does not resolve" is a claim about the REF — that nothing in the
+  // workspace answers to it. When the registry itself could not be read, that
+  // claim is not one this run established: it could not look. The two get
+  // different sentences, for the same reason `unknown` and `not_applicable`
+  // do (`count: null` is how the command says the registry was unreadable).
+  const registryUnread = decisions.registry.count === null;
   for (const citation of decisions.citations) {
     const target =
       citation.resolution === "adr" && citation.adr !== null
         ? `${citation.adr.id} (${citation.adr.status})`
         : citation.resolution === "fitness"
           ? `${citation.decisionRef} — a fitness rule this law declares`
-          : `${citation.decisionRef} — does not resolve`;
+          : registryUnread
+            ? `${citation.decisionRef} — unresolved: the decision registry could not be read`
+            : `${citation.decisionRef} — does not resolve`;
     lines.push(`    ${citation.resolution.padEnd(10)}${citation.label} → ${target}`);
   }
   return lines;

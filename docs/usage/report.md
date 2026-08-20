@@ -79,8 +79,17 @@ a stated fact rather than an uninspected one:
   `provenance` reports over exit 0, reported here the same way.
 
 An unresolved `decisionRef` is the opposite case, and it _is_ exit 3: a
-citation naming nothing is a governance claim nobody can check, which is the
-same lane `check` puts it in.
+citation naming nothing is a governance claim nobody can check.
+
+This is **stricter than `check`**, on purpose. `check` resolves the citations
+on both tables — the intent rows and the `depConstraints` rows — but only the
+intent half fails its build; a dangling citation on a constraint row is
+rendered without gating. That is a gate's call to make, and a documentation
+citation is not a broken boundary. This document is the opposite instrument:
+its whole subject is on whose authority each governed row stands, so it holds
+both tables to the same standard. The two never disagree about the fact —
+both name the same unresolved citation, through the same resolver — only about
+whether it should fail your build.
 
 ## Reading the report
 

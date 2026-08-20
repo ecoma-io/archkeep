@@ -156,7 +156,6 @@ describe("formatGovernanceReport — surfaces state what they could not do", () 
               covered: 1,
               reason: "scheduled for removal",
               expiresAt: "2026-01-01T00:00:00.000Z",
-              decisionRef: "0001-layering",
             },
             {
               kind: "suppression",
@@ -165,14 +164,13 @@ describe("formatGovernanceReport — surfaces state what they could not do", () 
               covered: 2,
               reason: null,
               expiresAt: null,
-              decisionRef: null,
             },
           ],
         },
       }),
     );
     expect(text).toContain(
-      "expired   libs/alpha/** until 2026-01-01T00:00:00.000Z — covers 1 violation  [0001-layering]",
+      "expired   libs/alpha/** until 2026-01-01T00:00:00.000Z — covers 1 violation",
     );
     expect(text).toContain("      reason: scheduled for removal");
     // A permanent suppression appears in no other report at all, so it must
@@ -246,6 +244,33 @@ describe("formatGovernanceReport — decisions", () => {
     );
     expect(text).toContain("unknown   forbidden[0] a→b → 0009-missing — does not resolve");
     expect(text).toContain("binds nothing — not yet enforceable");
+  });
+
+  it("does not claim a ref names nothing when the registry could not be read", () => {
+    const text = formatGovernanceReport(
+      input({
+        decisions: {
+          verdict: "unknown",
+          note: "lattice: cannot read docs/adr: ENOTDIR",
+          registry: { dir: "docs/adr", count: null },
+          records: [],
+          citations: [
+            {
+              kind: "depConstraints[0]",
+              label: "depConstraints[0] *",
+              decisionRef: "0001-layering",
+              resolution: "unknown",
+              adr: null,
+            },
+          ],
+        },
+        uninspectable: [{ surface: "decisions", reason: "lattice: cannot read docs/adr: ENOTDIR" }],
+      }),
+    );
+    // "does not resolve" is a claim about the ref; this run could not look, so
+    // it may not make that claim — the ADR may well exist.
+    expect(text).toContain("unresolved: the decision registry could not be read");
+    expect(text).not.toContain("— does not resolve");
   });
 
   it("says so when no governed row cites a decision at all", () => {

@@ -20,11 +20,16 @@
  * There is no new scan, no second traversal, and no second copy of any
  * judgment, which is what makes it impossible for this document to disagree
  * with `health`, `waivers`, `fitness`, `adr` or `provenance` about the same
- * tree. The cost of that is real and accepted: composing whole commands
- * re-derives some work (each one resolves provenance for its own envelope).
- * The alternative — reaching past them into their internals, or caching a
- * result one of them computed — is the disagreement this design exists to
- * refuse.
+ * tree under the same law. (Under a DIFFERENT law it answers a different
+ * question, which is what `--config` asks for: a `report --config other.mjs`
+ * describes `other.mjs`'s world, exactly as `check --config other.mjs` judges
+ * it.) The cost of composing whole commands is real and accepted: each one
+ * resolves provenance for its own envelope, and `fitnessCommand` re-reads the
+ * workspace's intent through `driftForCheck` rather than taking the copy this
+ * command already holds — in a real run both come from the one tracked
+ * `architecture-intent.json`, so they agree. The alternative — reaching past
+ * these commands into their internals, or caching a result one of them
+ * computed — is the disagreement this design exists to refuse.
  *
  * One law governs the whole document. `../../cli.mjs` resolves the boundary
  * policy once (`resolvePolicy`, so `--config` and a `profiles` registry work
@@ -34,10 +39,11 @@
  * ## Descriptive, and what its status means
  *
  * `report` is descriptive: it never exits 1, because a description of how
- * healthy an architecture is is never itself a finding — only `check` and
- * `fitness` carry that lane (`./README.md`). A failing fitness gate or a live
- * boundary violation is therefore RENDERED, loudly and by name, over exit 0;
- * the commands that own those verdicts own their exit codes.
+ * healthy an architecture is is never itself a finding — `check` and `fitness`
+ * are the only two verbs whose verdict carries that lane (`../../CLAUDE.md`,
+ * "What is a stub, and how each one says so"). A failing fitness gate or a
+ * live boundary violation is therefore RENDERED, loudly and by name, over
+ * exit 0; the commands that own those verdicts own their exit codes.
  *
  * What the status does mean is whether the document could be established:
  *
@@ -66,11 +72,23 @@
  * - an **unattested row** (no `origin` record) — a documentation finding
  *   `provenance` reports over exit 0, rendered here the same way.
  *
- * An unresolved `decisionRef` is the opposite case and is a `no-verdict`
- * here, the same lane `check` puts it in (`../../cli.mjs`'s `verdictFor`
- * counts `intentUnresolvedDecisionRefs` into no-verdict): a citation that
- * names nothing is a governance claim nobody can check, and reading it as a
- * pass is exactly the silent direction.
+ * An unresolved `decisionRef` is the opposite case and is a `no-verdict` here:
+ * a citation that names nothing is a governance claim nobody can check, and
+ * reading it as a pass is exactly the silent direction.
+ *
+ * **This is stricter than `check`, deliberately, and the difference is worth
+ * knowing.** `check` resolves the citations on BOTH tables — the intent rows
+ * and the `depConstraints` rows — but folds only the intent half into its
+ * no-verdict lane (`../../cli.mjs` skips a `depConstraints`-shaped row before
+ * counting `intentUnresolvedDecisionRefs`), so a dangling citation on a
+ * constraint row is rendered by the gate without failing the build. That is a
+ * gate's call to make: it fails builds, and a documentation citation is not
+ * a broken boundary. This document is the opposite instrument — its entire
+ * subject is on whose authority each governed row stands — so it holds both
+ * tables to the same standard and cannot claim a verdict over a citation it
+ * could not resolve, wherever the row sits. It changes no exit code of
+ * `check`'s, and the two never disagree about the FACT: both name the same
+ * unresolved citation, through the same `resolveDecisionRef`.
  *
  * ## Determinism
  *
@@ -111,7 +129,20 @@ import {
 
 /**
  * The message a thrown refusal carries, as the report's reason for a surface
- * it could not establish. Every refusal in this package throws an `Error`
+ * it could not establish.
+ *
+ * The catches that call this are deliberately broad, and that is the one
+ * place a reader should push back, so: a composed command throws for exactly
+ * two reasons — a workspace condition it refuses over (incomplete coverage, a
+ * graph that cannot see the tree's edges, an unreadable registry), or a bug in
+ * this package. Turning the first into a named `unknown` is the whole design;
+ * the second lands there too, and still surfaces as a NON-ZERO exit with the
+ * error's own message printed under `could not inspect`. Neither can produce
+ * a clean-looking run, which is the property that matters — a `catch` that
+ * swallows is the defect (`../../../../AGENTS.md`), and one that converts to
+ * a named no-verdict is not one.
+ *
+ * Every refusal in this package throws an `Error`
  * whose message is already the sentence a user reads (`lattice: …`), so the
  * report quotes it rather than inventing a second wording that could drift
  * from the command's own.
@@ -166,10 +197,17 @@ function waiverCounts(surface) {
  * temporary waiver and a permanent suppression — because a permanent row
  * appears in no other report at all (`./waivers.mjs`'s header owns why).
  *
+ * No `decisionRef` here, and that is a decision rather than an omission: a
+ * suppression row has no such field — `../config.mjs`'s `SUPPRESSION_KEYS`
+ * admits `path`, `messageId`, `reason`, `expiresAt` and `origin`, and a row
+ * carrying anything else is refused at load. Rendering one anyway would print
+ * a citation this document never resolved, next to rows whose citations it
+ * did, and a reader would reasonably take the two for the same claim.
+ *
  * @param {object} row
  * @param {"waiver"|"suppression"} kind
  * @returns {{kind: string, path: string, status: string, covered: number,
- *   reason: string|null, expiresAt: string|null, decisionRef: string|null}}
+ *   reason: string|null, expiresAt: string|null}}
  */
 function suppressionRow(row, kind) {
   return {
@@ -179,7 +217,6 @@ function suppressionRow(row, kind) {
     covered: row.covered,
     reason: typeof row.reason === "string" ? row.reason : null,
     expiresAt: typeof row.expiresAt === "string" ? row.expiresAt : null,
-    decisionRef: typeof row.decisionRef === "string" ? row.decisionRef : null,
   };
 }
 
@@ -395,18 +432,28 @@ export async function reportCommand(commandContext, io = {}) {
     }
   }
 
+  // The order of these three tests is load-bearing, and it is NOT the order
+  // they were first written in. An unresolved citation is checked BEFORE the
+  // empty-registry case: a workspace with no ADRs at all whose constraint row
+  // cites `0009-missing` has a citation that resolved to nothing, and reading
+  // that surface as `not_applicable` — "the workspace records no decisions
+  // there" — would state a true sentence in place of the one that matters,
+  // collapsing "nothing to measure" into "measured and could not resolve".
+  // Those two must never read alike (`../report/report-text.mjs` renders both
+  // and says the same).
+  const unresolvedCitation = citations.some((citation) => citation.resolution === "unknown");
   const decisions = {
     verdict:
       registry === null
         ? "unknown"
-        : registry.records.length === 0
-          ? "not_applicable"
-          : citations.some((citation) => citation.resolution === "unknown")
-            ? "unknown"
+        : unresolvedCitation
+          ? "unknown"
+          : registry.records.length === 0
+            ? "not_applicable"
             : "ok",
     note:
       registryRefusal ??
-      (registry !== null && registry.records.length === 0
+      (!unresolvedCitation && registry !== null && registry.records.length === 0
         ? `no ADRs in ${ADR_DIR}/ — the workspace records no decisions there`
         : null),
     registry: { dir: ADR_DIR, count: registry === null ? null : registry.records.length },

@@ -2512,7 +2512,7 @@ async function runHealth(options, { cwd, env }) {
  * `report` is the same posture over a wider document: descriptive, 0 when
  * every surface reached a verdict, 3 when any did not, 2 on a usage error. It
  * never exits 1, because the commands that own a finding own its exit code
- * (`../src/commands/report.mjs` argues both halves).
+ * (`./src/commands/report.mjs` argues both halves).
  *
  * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext

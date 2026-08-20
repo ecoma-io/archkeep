@@ -344,6 +344,31 @@ describe("reportCommand — decisions link a governed row to its record", () => 
     expect(result.report.text).toContain("does not resolve");
   });
 
+  it("walks the intent table's citations too, not only the constraint table", async () => {
+    // Both tables of governed rows carry `decisionRef`, and the document holds
+    // both to the same standard — stricter than `check`, which resolves both
+    // and gates only the intent half. A test over `depConstraints` alone would
+    // not have noticed the intent walk going missing.
+    const root = tree({ adrs: { [ADR_FILE]: ADR_TEXT } });
+    const result = await reportCommand(context({ root, tracked: [ADR_TRACKED] }), {
+      config: config(),
+      intent: intent({
+        forbidden: [{ from: "packages", to: "packages", decisionRef: "0009-does-not-exist" }],
+        allowed: [{ from: "packages", to: "packages", decisionRef: "0001-layering" }],
+      }),
+    });
+
+    const byLabel = Object.fromEntries(
+      result.result.decisions.citations.map((c) => [c.label, c.resolution]),
+    );
+    expect(byLabel["allowed[0] packages→packages"]).toBe("adr");
+    expect(byLabel["forbidden[0] packages→packages"]).toBe("unknown");
+    expect(result.status).toBe("no-verdict");
+    expect(result.result.uninspectable.map((u) => u.surface)).toContain(
+      "decisionRef:forbidden[0] packages→packages",
+    );
+  });
+
   it("holds the document back even when every metric is fine", async () => {
     // The pure case: complete coverage, a clean law, and one citation that
     // resolves to nothing. Health alone would say `ok`; the document may not.
@@ -358,6 +383,27 @@ describe("reportCommand — decisions link a governed row to its record", () => 
     expect(Object.values(result.result.metrics).some((m) => m.verdict === "unknown")).toBe(false);
     expect(result.status).toBe("no-verdict");
     expect(JSON.parse(result.report.json).exitCode).toBe(3);
+  });
+
+  it("does not let an empty registry mask a citation that resolved to nothing", async () => {
+    // The workspace records no ADRs AND a constraint row cites one. Reading
+    // that surface as `not_applicable` would state a true sentence ("records
+    // no decisions") in place of the one that matters ("this citation names
+    // nothing"), which is the not_applicable/unknown collapse the whole
+    // verdict vocabulary exists to prevent.
+    const result = await reportCommand(context({ root: tree() }), {
+      config: config({
+        depConstraints: [
+          { sourceTag: "*", onlyDependOnLibsWithTags: ["*"], decisionRef: "0009-missing" },
+        ],
+      }),
+    });
+
+    expect(result.result.decisions.registry.count).toBe(0);
+    expect(result.result.decisions.verdict).toBe("unknown");
+    expect(result.result.decisions.note).toBeNull();
+    expect(result.status).toBe("no-verdict");
+    expect(result.report.text).not.toContain("not_applicable  decisions");
   });
 
   it("distinguishes an empty registry from one it could not read", async () => {
