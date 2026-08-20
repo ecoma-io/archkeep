@@ -5,9 +5,9 @@ which capabilities belong to which major version, and in what order the project
 earns them. It deliberately owns nothing finer than that: individual features,
 their design and their sequencing live in GitHub issues and milestones, because
 a roadmap that lists fifty features is a backlog wearing a roadmap's name, and
-it is stale the day the first one ships. [doctrine/north-star.md](doctrine/north-star.md)
+it is stale the day the first one ships. [north-star.md](north-star.md)
 owns what "finished" means for the capabilities named here and the refusals
-that hold on the way; [doctrine/architecture-authority.md](doctrine/architecture-authority.md)
+that hold on the way; [architecture-authority.md](architecture-authority.md)
 owns the system boundary every capability stays inside. When a claim in this
 file needs a finish line, that file is the one that binds.
 
@@ -16,7 +16,7 @@ file needs a finish line, that file is the one that binds.
 Lattice is an **architecture governance system for human and agentic software
 development** — a deterministic authority that keeps the intended architecture
 aligned with the observed architecture while humans and agents continuously
-change the codebase. [doctrine/north-star.md](doctrine/north-star.md) owns the
+change the codebase. [north-star.md](north-star.md) owns the
 full sentence and the argument behind it; this document owns the staged path.
 
 Architecture today lives in documents — READMEs, ADRs, diagrams — that nothing
@@ -35,25 +35,25 @@ A new reader should find these capabilities described as present, not promised.
   projects, builds the dependency graph and judges boundaries from its own
   model; Nx and Moon are providers of that model rather than its foundation.
   Single-repo, monorepo and polyrepo layouts are first-class.
-  ([concepts/integrations.md](concepts/integrations.md))
+  ([concepts/integrations.md](../concepts/integrations.md))
 - **A multi-language dependency graph read from source.** Go, Rust, Python,
   TypeScript, JavaScript and Vue imports and manifests, statically — nothing
   invokes a toolchain to answer a question about imports.
-  ([reference/languages.md](reference/languages.md))
+  ([reference/languages.md](../reference/languages.md))
 - **Architecture as code.** Layers, boundaries, dependency constraints and
   ownership declared in a machine-readable model that is reviewed like code, in
-  the repository it governs. ([concepts/boundaries.md](concepts/boundaries.md))
+  the repository it governs. ([concepts/boundaries.md](../concepts/boundaries.md))
 - **Named law profiles.** A workspace may keep several boundary laws in a
   `profiles` registry and select one by name at check time, stacked on a shared
   `base` — resolved loudly, with no silent fallback to a quieter law.
-  ([concepts/profiles.md](concepts/profiles.md))
+  ([concepts/profiles.md](../concepts/profiles.md))
 - **ADR / decision registry.** `docs/adr/` records name the recorded
   architecture decision a rule, fitness gate, or intent row leans on through a
   `decisionRef`, read with `lattice adr`; a reference that resolves to nothing
-  is `unknown`, never a pass. ([concepts/adr.md](concepts/adr.md))
+  is `unknown`, never a pass. ([concepts/adr.md](../concepts/adr.md))
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
-  the same answer. ([reference/exit-codes.md](reference/exit-codes.md))
+  the same answer. ([reference/exit-codes.md](../reference/exit-codes.md))
 - **Sixteen commands — `check`, `graph`, `diff`, `discover`, `drift`,
   `reconcile`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`,
   `explain`, `context`, `provenance`, `adr`** — each with output a script or
@@ -61,47 +61,47 @@ A new reader should find these capabilities described as present, not promised.
   architecture's evolution across captured snapshots — the deterministic half
   of "how it got here" — and `debt` ages the workspace's waivers, gaps and
   drift across that same record.
-  ([reference/cli.md](reference/cli.md), [usage/history.md](usage/history.md),
-  [usage/debt.md](usage/debt.md))
+  ([reference/cli.md](../reference/cli.md), [usage/history.md](../usage/history.md),
+  [usage/debt.md](../usage/debt.md))
 - **Nx and Moon as first-class integrations, not dependencies.** A workspace
   that has Nx or Moon gets graph reuse and `affected` integration; a repository
   that has neither loses nothing.
-  ([integrations/nx.md](integrations/nx.md),
-  [integrations/moon.md](integrations/moon.md))
+  ([integrations/nx.md](../integrations/nx.md),
+  [integrations/moon.md](../integrations/moon.md))
 - **Architecture snapshots with provenance.** `graph` produces a deterministic
   snapshot carrying the git origin of the run; `diff` warns when a baseline
   cannot be attributed to the same repository.
-  ([usage/graph.md](usage/graph.md), [reference/json-output.md](reference/json-output.md))
+  ([usage/graph.md](../usage/graph.md), [reference/json-output.md](../reference/json-output.md))
 - **Meaningful architecture diff.** `diff` separates structural change from
   policy mismatch from rule impact, and refuses an incomplete baseline.
-  ([usage/diff.md](usage/diff.md))
+  ([usage/diff.md](../usage/diff.md))
 - **Basic drift detection.** Four drift signals, with no predictive component:
   boundary violations and configuration drift surface through `check`;
   structural drift and its rule impact surface through `diff`; and
   architecture-intent drift has a descriptive face of its own (`drift`) that
   `check` also folds in by presence.
-  ([concepts/drift.md](concepts/drift.md))
+  ([concepts/drift.md](../concepts/drift.md))
 - **Fitness functions.** Named, declared quality gates — "the graph stays
   cycle-free", "at least 90% of files are analyzed" — judged deterministically
   against the same observed facts `check` reads, and folded into `check` by
   presence so a declared function is enforced on every run.
-  ([concepts/fitness-functions.md](concepts/fitness-functions.md),
-  [usage/fitness.md](usage/fitness.md))
+  ([concepts/fitness-functions.md](../concepts/fitness-functions.md),
+  [usage/fitness.md](../usage/fitness.md))
 - **Architecture planning facts for agents.** `context` and `impact` answer the
   questions an agent asks before and during a change, in machine-readable form;
   `explain` explains a finding after it is reported.
-  ([concepts/agentic-development.md](concepts/agentic-development.md))
+  ([concepts/agentic-development.md](../concepts/agentic-development.md))
 - **Architecture intent as a machine-readable contract.** The boundary config
   is the declared intent: boundaries, allowed and forbidden relationships, and
   the constraints a workspace states about its own structure. Intent is
   validated against the observed architecture with no AI-generated intent and
   no semantic inference.
-  ([concepts/boundaries.md](concepts/boundaries.md))
+  ([concepts/boundaries.md](../concepts/boundaries.md))
 - **Agentic governance.** The four `arch-*` skills teach agents when to ask the
   authority and how to read its answers; Claude Code, Codex and opencode run
   the same editor gates; the repository dogfoods its own enforcer in CI.
-  ([skills/overview.md](skills/overview.md),
-  [doctrine/architecture-authority.md](doctrine/architecture-authority.md))
+  ([skills/overview.md](../skills/overview.md),
+  [architecture-authority.md](architecture-authority.md))
 
 ## 1.x — Universal Agentic Architecture Governance
 
@@ -118,15 +118,15 @@ new feature list:
   `@nx/enforce-module-boundaries` runs over real public workspaces, weekly and
   on demand, as a non-required check that is still treated as a regression when
   it goes red; more real trees is the remaining gap, not a missing feature.
-  ([development/testing.md](development/testing.md))
+  ([development/testing.md](../development/testing.md))
 - **A stable `schemaVersion` promise.** The JSON envelope is versioned and
   documented; 1.0 makes that contract a promise consumers can build on.
-  ([reference/json-output.md](reference/json-output.md))
+  ([reference/json-output.md](../reference/json-output.md))
 
 The VS Code marketplace listing is deliberately **not** on that list. The
 client exists, the `.vsix` attaches to every release, and the release lane
 publishes to the marketplace the moment a publisher account exists
-([integrations/vscode.md](integrations/vscode.md)) — so the listing lands
+([integrations/vscode.md](../integrations/vscode.md)) — so the listing lands
 whenever that account does, independent of what version the package carries,
 and 1.0 does not wait for it.
 
@@ -162,7 +162,7 @@ over a stretch of time in which it had the chance to.
    `.vsix` agreeing, more than once in a row. The 0.5.0 tag that npm never
    received is the failure this condition exists to have stopped happening.
 5. **The `schemaVersion` promise stated where consumers read it.** Item two
-   above, said out loud in [reference/json-output.md](reference/json-output.md)
+   above, said out loud in [reference/json-output.md](../reference/json-output.md)
    rather than implied by the field existing.
 
 None of the five is a feature, and that is the point: what separates 0.x from
@@ -189,7 +189,7 @@ explicit, not silent:
    dependency impact, constraints, allowed boundaries and violations, provided
    to an agent as facts. The agent reasons, plans and decides how to modify
    code; Lattice does not become an LLM.
-   ([doctrine/architecture-authority.md](doctrine/architecture-authority.md))
+   ([architecture-authority.md](architecture-authority.md))
 
 Each of these four is deterministic and inspectable: the verdict is reproducible
 from source, and the authority never reasons about the architecture it reports.
@@ -235,5 +235,5 @@ never in place of it.
 - **Moving the authority.** Any capability that would let an agent, a provider,
   a skill or CI decide whether an architecture is valid — rather than report
   whether it holds — is refused by the boundary in
-  [doctrine/architecture-authority.md](doctrine/architecture-authority.md). The
+  [architecture-authority.md](architecture-authority.md). The
   roadmap stages breadth and reading; it never stages that line.

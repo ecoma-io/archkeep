@@ -155,5 +155,5 @@ The line above is not prose. Each piece of it is held by a mechanism:
 Because the boundary is stable, the roadmap is about breadth and reading, not
 about the boundary itself: which languages a workspace may govern (owned by
 [north-star.md](north-star.md)), which capabilities are in 1.x, and what 2.x
-extends on top of the deterministic core. [roadmap.md](../roadmap.md) owns the
+extends on top of the deterministic core. [roadmap.md](roadmap.md) owns the
 staged path; this document owns the line that path stays inside.

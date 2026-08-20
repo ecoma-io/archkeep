@@ -227,7 +227,7 @@ export function parseDocCitations(text, { isMarkdown = true } = {}) {
   const surface = maskFencedCodeBlocks(commentsOnly);
   const citations = [];
   // Any depth of one or more `docs/` segments — a top-level file like
-  // `docs/why.md`, one nested arbitrarily deep like `docs/…/deep.md`, and any
+  // `docs/README.md`, one nested arbitrarily deep like `docs/…/deep.md`, and any
   // case (`docs/README.md`) — a fixed two-segment, lowercase-only shape let a
   // top-level, deep, or uppercase-named doc's citation go unchecked, so
   // deleting or moving one of those passed silently.

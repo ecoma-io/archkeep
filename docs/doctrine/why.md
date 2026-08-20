@@ -4,7 +4,7 @@ The short version: in a polyglot Nx workspace, two of Nx's best features stop
 working, and neither of them tells you. That was the gap Lattice was extracted
 from. Today Lattice is an architecture governance system that works in any
 repository — Nx and Moon are providers of the project graph, not the
-foundation ([architecture-authority.md](doctrine/architecture-authority.md)).
+foundation ([architecture-authority.md](architecture-authority.md)).
 
 The rest of this page is the evidence for that, because the claim is easy to
 make and the whole project rests on it being true.
@@ -130,7 +130,7 @@ two named places, and why the issue tracker has a
 dedicated form for a missed violation (`.github/ISSUE_TEMPLATE/missed_violation.yml`)
 separate from the ordinary bug form.
 
-[north-star.md](doctrine/north-star.md) is where that stops being a defensive posture and
+[north-star.md](north-star.md) is where that stops being a defensive posture and
 becomes the thing that makes breadth possible.
 
 ## Where it came from

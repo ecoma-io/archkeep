@@ -55,9 +55,8 @@ test("parseDocCitations finds docs/ citations, root-relative and carrying-file r
 
 test("parseDocCitations finds a top-level docs/ citation — not just a two-segment one", () => {
   // The old regex required exactly `docs/<segment>/<segment>.md`, so a
-  // top-level file (`docs/why.md`, `docs/README.md` — both real citations in
-  // this repository) never matched and could be deleted or moved without the
-  // gate noticing.
+  // top-level file (`docs/README.md` — a real citation in this repository)
+  // never matched and could be deleted or moved without the gate noticing.
   const text = "see docs/why.md";
   assert.deepEqual(parseDocCitations(text), [{ target: "docs/why.md", line: 1 }]);
 });

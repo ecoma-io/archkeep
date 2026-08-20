@@ -5,12 +5,13 @@ Two doors. Take the one that matches what you are here to do.
 - **I want to use it** → [getting-started/installation.md](getting-started/installation.md)
 - **I want to change it** → [development/architecture.md](development/architecture.md)
 
-And four documents that are neither, but decide what the rest say:
-[why.md](why.md) — the problem this exists for, with the measurement behind it —
+And four documents that are neither, but decide what the rest say — all four
+live in [doctrine/](doctrine/):
+[why.md](doctrine/why.md) — the problem this exists for, with the measurement behind it —
 [north-star.md](doctrine/north-star.md) — where it is going and what it will refuse on
 the way — [architecture-authority.md](doctrine/architecture-authority.md) — what Lattice
 is, what it is not, and the line its neighbours may not cross — and
-[roadmap.md](roadmap.md) — the staged path there, by major version.
+[roadmap.md](doctrine/roadmap.md) — the staged path there, by major version.
 
 ## Getting started
 
@@ -106,12 +107,14 @@ is, what it is not, and the line its neighbours may not cross — and
 
 ## Doctrine
 
-| page                                                              | what it answers                                                                        |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| [north-star.md](doctrine/north-star.md)                           | The direction, what "finished" means per language, and the refusals                    |
-| [architecture-authority.md](doctrine/architecture-authority.md)   | What Lattice is, what it is not, and the line providers/skills/agents/CI may not cross |
-| [principles.md](doctrine/principles.md)                           | The seven binding principles                                                           |
-| [architecture-governance.md](doctrine/architecture-governance.md) | How Lattice practices what it enforces                                                 |
+| page                                                              | what it answers                                                                         |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| [why.md](doctrine/why.md)                                         | The gap this exists to close, and the measurement that proves it is real                |
+| [north-star.md](doctrine/north-star.md)                           | The direction, what "finished" means per language, and the refusals                     |
+| [architecture-authority.md](doctrine/architecture-authority.md)   | What Lattice is, what it is not, and the line providers/skills/agents/CI may not cross  |
+| [principles.md](doctrine/principles.md)                           | The seven binding principles                                                            |
+| [architecture-governance.md](doctrine/architecture-governance.md) | How Lattice practices what it enforces                                                  |
+| [roadmap.md](doctrine/roadmap.md)                                 | The staged path: what ships today, and which capabilities belong to which major version |
 
 ## Development
 
@@ -137,11 +140,11 @@ allowed to say it". That table:
 | file                                                                            | owns                                                                                                                                                                                                                               |
 | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `README.md`                                                                     | The pitch: what Lattice is in one breath, and the way in                                                                                                                                                                           |
-| [`docs/why.md`](why.md)                                                         | The gap, and the evidence that it is real                                                                                                                                                                                          |
+| [`docs/doctrine/why.md`](doctrine/why.md)                                       | The gap, and the evidence that it is real                                                                                                                                                                                          |
 | [`docs/doctrine/north-star.md`](doctrine/north-star.md)                         | The direction, what "finished" means per language, and the refusals                                                                                                                                                                |
 | [`docs/doctrine/architecture-authority.md`](doctrine/architecture-authority.md) | What Lattice is, what it is not, and the boundary its neighbours may not cross                                                                                                                                                     |
 | [`docs/doctrine/principles.md`](doctrine/principles.md)                         | The seven binding principles                                                                                                                                                                                                       |
-| [`docs/roadmap.md`](roadmap.md)                                                 | The staged path: what ships today, which capabilities belong to which major version, and in what order                                                                                                                             |
+| [`docs/doctrine/roadmap.md`](doctrine/roadmap.md)                               | The staged path: what ships today, which capabilities belong to which major version, and in what order                                                                                                                             |
 | `docs/getting-started/`                                                         | Installation, first project, first policy                                                                                                                                                                                          |
 | `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, profiles, projects, drift, discovery, evidence, provenance, adr, waivers, health, fitness functions, reconciliation, governance lifecycle, agentic development, integrations |
 | `docs/concepts/discovery.md`                                                    | Discovery: the proposal-only line, what is observed, the four candidate classes, uncertainty markers                                                                                                                               |

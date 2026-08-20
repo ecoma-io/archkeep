@@ -66,8 +66,9 @@ test that only pins the message text is half a test.
   plugin.json              the same plugin manifest, for Codex's reader
 docs/
   README.md                the index, and the map of which file owns what
-  north-star.md            the direction, and the refusals that follow from it
-  why.md                   the gap this exists to close, measured
+  doctrine/                the documents that decide what the rest say — why,
+                           north-star, architecture-authority, principles,
+                           architecture-governance, roadmap
   usage/                   for someone using the tool
   development/             for someone changing it
 scripts/

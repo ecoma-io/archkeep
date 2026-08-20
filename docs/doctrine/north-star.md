@@ -25,7 +25,7 @@ started as an Nx plugin closing one instance of the gap — module boundaries fo
 the languages ESLint cannot parse — and the engine underneath was always bigger
 than the integration around it. Today it is a standalone governance system that
 works in any repository, with or without Nx or Moon, and
-[roadmap.md](../roadmap.md) owns that path. What this document says below
+[roadmap.md](roadmap.md) owns that path. What this document says below
 remains the engine's direction: the sentence, the finish line per language, the
 refusals. Nx appears in it as the concrete example it was written against — one
 provider among the integrations, not the foundation.

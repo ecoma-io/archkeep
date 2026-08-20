@@ -97,7 +97,7 @@ distinction.
 
 The three questions and the read-only boundary above are the 1.x agent story —
 **architecture planning facts for agents**, the deterministic half of
-agent-facing governance. [roadmap.md](../roadmap.md) owns the staged path and
+agent-facing governance. [roadmap.md](../doctrine/roadmap.md) owns the staged path and
 lists it among the 1.x capabilities alongside the `arch-*` skills and the host
 integrations. What 2.x adds — agent-assisted planning help, richer context,
 approval gates, post-change verification that does more than re-run `check`, and

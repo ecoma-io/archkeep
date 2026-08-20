@@ -101,7 +101,7 @@ lane to a **startup failure**, a run with zero jobs and no log to read, which
 is the least diagnosable red a workflow can produce. Read the table, believe
 the guide.
 
-[roadmap.md](../roadmap.md)'s fourth 1.0 condition — releases landing without
+[roadmap.md](../doctrine/roadmap.md)'s fourth 1.0 condition — releases landing without
 a hand on them — is measured against exactly this, and the first release cut
 after the fix is what settles whether it is met.
 
