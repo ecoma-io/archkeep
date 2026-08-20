@@ -556,6 +556,70 @@ describe("a native lattice.json workspace, driven through the real provider", ()
     }
   });
 
+  it("still dispatches natively when lattice.json exists on disk but git does not track it", () => {
+    // The dispatch-parity bug (S-bug C): `buildWorkspaceIndex` used to gate the
+    // native branch on `files.includes(LATTICE_MODEL_FILE)` — `files` being
+    // git's TRACKED list — while `../../cli.mjs`'s dispatch
+    // (`../commands/context.mjs`'s `markersAt`) and this server's own
+    // `readWorkspaceOptions` (`./server.mjs`'s `markersAt`) both gate on
+    // `existsSync`, plain filesystem presence. An existing-but-untracked
+    // `lattice.json` — written to the tree but never `git add`ed — passes the
+    // CLI's test and fails the old index's, so `lattice check` on this exact
+    // tree exits 1 on the real crossing while the editor fell through to
+    // `discoverProjects`, found no `project.json` for a native-only tree, and
+    // published `analyzed: true` with an empty diagnostic list — a clean file
+    // for a real violation. The red direction: with the old `files.includes`
+    // gate, `nativeMarker` here is `false`, `graph.nodes` is empty, and the
+    // `diagnoseDocument` call below returns `analyzed: true, diagnostics: []`.
+    const untrackedRoot = mkdtempSync(join(tmpdir(), "lattice-native-untracked-"));
+    const write4 = (relativePath, text) => {
+      const absolute = join(untrackedRoot, relativePath);
+      mkdirSync(dirname(absolute), { recursive: true });
+      writeFileSync(absolute, text, "utf8");
+    };
+    try {
+      write4("apps/inner/go.mod", "module native.test/inner\n\ngo 1.23\n");
+      write4("apps/inner/main.go", INNER_GO);
+      write4("apps/outer/go.mod", "module native.test/outer\n\ngo 1.23\n");
+      write4("apps/outer/outer.go", "package outer\n");
+      execFileSync("git", ["init", "-q"], { cwd: untrackedRoot, env: environmentForTree() });
+      // Every file is staged EXCEPT lattice.json, added last and deliberately
+      // left out — the exact state a developer is in the moment they create
+      // one and have not yet run `git add`.
+      execFileSync("git", ["add", "-A"], { cwd: untrackedRoot, env: environmentForTree() });
+      writeFileSync(
+        join(untrackedRoot, "lattice.json"),
+        JSON.stringify({
+          projects: {
+            declared: [
+              { root: "apps/inner", tags: ["zone:inner"] },
+              { root: "apps/outer", tags: ["zone:outer"] },
+            ],
+          },
+        }),
+      );
+
+      const index = buildWorkspaceIndex({ root: untrackedRoot });
+
+      expect(index.nativeMarker).toBe(true);
+      expect(index.nativeModelFailure).toBeNull();
+      expect(Object.keys(index.graph.nodes).sort()).toEqual(["inner", "outer"]);
+
+      const { analyzed, diagnostics } = diagnoseDocument({
+        sourceFile: "apps/inner/main.go",
+        text: INNER_GO,
+        index,
+        config,
+      });
+
+      expect(analyzed).toBe(true);
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0].code).toBe("onlyTagsConstraintViolation");
+    } finally {
+      rmSync(untrackedRoot, { recursive: true, force: true });
+    }
+  });
+
   it("refuses to call a document analyzed when lattice.json itself is broken", () => {
     // A second, independently broken root: `projects.declared[0].root` points
     // at a directory with no tracked file under it at all, which
