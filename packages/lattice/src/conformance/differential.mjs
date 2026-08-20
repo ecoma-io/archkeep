@@ -114,6 +114,20 @@ export function compareFile(file, upstream, tool) {
  * the reason. A claim that no longer matches reality is a failure of the same
  * weight as a disagreement.
  *
+ * ## Files a case never probes
+ *
+ * A case's tree carries more files than it probes — barrel files and import
+ * targets that exist only so a probe file has something to import, never
+ * meant to trigger anything themselves (none of them write an import of their
+ * own). The loop above only ever looks at `spec.probes`, so a violation this
+ * engine reports on one of those other files — a false positive, or a site
+ * misattributed to the wrong file by a resolver bug — had no probe to compare
+ * it against and was invisible to every check here. The second loop below
+ * closes that: every `toolViolations` entry belonging to this case is checked
+ * against the probe list, and one naming a file no probe declares is a breach
+ * on its own — no probe means no declared verdict, stricter or otherwise, for
+ * this engine to have reached.
+ *
  * @returns {{rows: object[], breaches: string[]}} `breaches` is empty when the
  *   case behaved as declared; each entry names exactly what did not.
  */
@@ -121,6 +135,7 @@ export function compareCase(materialized, upstreamByFile, toolViolations) {
   const { spec } = materialized;
   const rows = [];
   const breaches = [];
+  const probeFiles = new Set(spec.probes.map((probe) => `${spec.id}/${probe.file}`));
 
   for (const probe of spec.probes) {
     const file = `${spec.id}/${probe.file}`;
@@ -193,6 +208,18 @@ export function compareCase(materialized, upstreamByFile, toolViolations) {
       ...comparison,
     });
   }
+
+  for (const violation of toolViolations) {
+    if (!violation.sourceFile.startsWith(`${spec.id}/`)) continue;
+    if (probeFiles.has(violation.sourceFile)) continue;
+    breaches.push(
+      `${spec.id} / ${violation.sourceFile}: this engine reports ${violation.messageId} on a ` +
+        `file no probe names. Every file this case owns is either clean by construction or a ` +
+        `declared probe; a finding here is a false positive or a site misattributed to the wrong ` +
+        `file, and no probe exists to catch it.`,
+    );
+  }
+
   return { rows, breaches };
 }
 
