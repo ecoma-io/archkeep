@@ -466,8 +466,8 @@ async function main() {
  * symlinked checkout the naive comparison is false and `main()` silently
  * never runs. Duplicated rather than imported — the same duplication already
  * stands across `scripts/check-packages.mjs`, `scripts/check-skills.mjs`,
- * `scripts/check-docs-links.mjs`, `scripts/reconcile-differential-issue.mjs`,
- * `scripts/smoke-e2e.mjs` and `scripts/verify-vsix.mjs`.
+ * `scripts/check-docs-links.mjs`, `scripts/reconcile-differential-issue.mjs`
+ * and `scripts/verify-vsix.mjs`.
  */
 function isProgramEntry(moduleUrl, argv1 = process.argv[1]) {
   if (!argv1) return false;

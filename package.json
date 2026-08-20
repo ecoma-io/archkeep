@@ -48,8 +48,7 @@
     "check-docs-links": "node scripts/check-docs-links.mjs",
     "test": "node --test \"scripts/**/*.test.mjs\"",
     "typecheck": "tsc -p scripts/tsconfig.json",
-    "e2e": "vitest run --config packages/lattice/e2e/vitest.config.mjs",
-    "e2e:smoke": "node scripts/smoke-e2e.mjs"
+    "e2e": "vitest run --config packages/lattice/e2e/vitest.config.mjs"
   },
   "dependencies": {
     "smol-toml": "1.7.1",
