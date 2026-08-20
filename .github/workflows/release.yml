@@ -46,6 +46,13 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+    # Hoisted so the App-token step below has something its `if:` is allowed
+    # to read — see that step for why it cannot test `secrets` itself. Only
+    # the id is lifted: the private key is passed straight into the action's
+    # `with:`, where the `secrets` context IS available, so it never becomes
+    # an environment variable any later step in this job could read.
+    env:
+      RELEASE_APP_ID: ${{ secrets.ECOMA_APP_ID }}
     outputs:
       # One component, one output pair. release-please emits the un-prefixed
       # `release_created` and `tag_name` only for a component at the repository
@@ -90,22 +97,25 @@ jobs:
       # So the token is minted: an App token is an ordinary actor, and its pull
       # request triggers CI the way a contributor's does.
       #
-      # The gate reads `secrets`, not `vars`, because both credentials are
-      # organisation SECRETS (`ECOMA_APP_ID`, `ECOMA_APP_KEY`). An id is not
-      # itself sensitive, but where the organisation chose to store it is not
-      # this workflow's decision to relitigate — and a `vars.` gate against a
-      # secret-stored id is precisely what kept this step skipped while
-      # everything read as configured.
+      # The credentials are organisation SECRETS (`ECOMA_APP_ID`,
+      # `ECOMA_APP_KEY`), not variables. A `vars.` gate against a
+      # secret-stored id is precisely what kept this step skipped for seven
+      # releases while everything read as configured.
       #
-      # That gate has to live on the STEP. GitHub's context-availability table
-      # admits `secrets` in `jobs.<job_id>.steps.if` and NOT in
-      # `jobs.<job_id>.if` (checked against the current reference, not
-      # remembered), so a job-level spelling of this condition would evaluate
-      # empty every time and this step would go back to never running with
-      # nothing saying so.
+      # The gate therefore reads `env`, hoisted from the secret at job level,
+      # and NOT `secrets` directly. That is not a style choice, and it is
+      # worth the sentence because GitHub's own documentation contradicts
+      # itself here: the context-availability table lists `secrets` among the
+      # contexts for `jobs.<job_id>.steps.if`, while the secrets guide states
+      # flatly that "Secrets cannot be directly referenced in `if:`
+      # conditionals" and prescribes exactly this hoist. The runtime agrees
+      # with the guide — measured, not reasoned: `if: secrets.ECOMA_APP_ID
+      # != ''` took the whole lane to a startup failure, a run with zero jobs
+      # and no log to read, which is the least diagnosable red a workflow can
+      # produce. Read the table, believe the guide.
       - name: Mint a GitHub App token
         id: app-token
-        if: secrets.ECOMA_APP_ID != ''
+        if: env.RELEASE_APP_ID != ''
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.ECOMA_APP_ID }}
