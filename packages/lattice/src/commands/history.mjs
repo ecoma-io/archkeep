@@ -25,7 +25,7 @@
  * degrading it.
  *
  * It is descriptive: it never exits 1. A description of how the architecture
- * evolved is never a finding (only `check` ever exits 1). An empty directory
+ * evolved is never a finding. An empty directory
  * or an unreadable snapshot is a no-verdict run (exit 3), never a record of
  * nothing.
  *

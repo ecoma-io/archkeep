@@ -4,7 +4,7 @@ import { explainCommand, findSite, parseSite } from "./explain.mjs";
 
 /**
  * What `explain` guarantees: an honest explanation of one import site's judgment,
- * never a finding itself. It never exits 1 (only `check` does). It refuses to
+ * never a finding itself. It never exits 1. It refuses to
  * explain when the graph is known to be incomplete (unregistered Nx plugin with
  * polyglot manifests), and it refuses when the site does not exist or the file
  * could not be analyzed at all — because explaining a position that was never

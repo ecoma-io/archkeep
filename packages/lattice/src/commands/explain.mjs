@@ -5,7 +5,7 @@
  * record, and explains the judgment: which constraint row matched, which tags
  * applied, whether it is a violation and why. It is descriptive: it never
  * exits 1, because an explanation of what the rules decided is never a finding
- * (only `check` ever exits 1).
+ * .
  *
  * What it needs from its caller is a site string, a `CommandContext`, and the
  * loaded boundary config — the preamble every command shares

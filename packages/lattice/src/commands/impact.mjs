@@ -4,7 +4,7 @@
  * Given a project name, `impact` lists every project that transitively depends
  * on it — the set a developer needs to consider before changing that project.
  * It is descriptive: it never exits 1, because a description of what depends
- * on a project is never a finding (only `check` ever exits 1).
+ * on a project is never a finding.
  *
  * The result separates **direct** dependents (projects whose edges point
  * straight at the target) from **transitive** ones (reachable only through

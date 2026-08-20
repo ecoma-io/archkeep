@@ -7,7 +7,7 @@
  * context this run resolves, and computes what changed between them: projects
  * added, removed, or changed in metadata, and edges added, removed, or changed
  * in type. It is descriptive: it never exits 1, because a description of what changed is
- * never a finding (only `check` ever exits 1).
+ * never a finding.
  *
  * When a boundary config is provided (via `--config` or the workspace's own
  * declaration), `diff` also computes the rule-impact: which boundary violations
@@ -498,7 +498,7 @@ export function diffCommand(
 
   // Diff is descriptive — always status "ok" when it completes. Even an
   // architecture with many changes is not a "finding" in the boundary-enforcement
-  // sense; only `check` exits 1.
+  // sense, so this command never claims a violation's exit code.
   const status = "ok";
   const exitCode = 0;
 
