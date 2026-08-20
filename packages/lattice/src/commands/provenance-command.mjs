@@ -154,6 +154,21 @@ export function configRows(config) {
 }
 
 /**
+ * Why an unresolved `decisionRef` is a finding, in the one wording every
+ * surface that reports one uses. Exported because `report`
+ * (`./report.mjs`) names the same condition in its own document, and a second
+ * hand-written copy of this sentence would drift from this one the first time
+ * either changed — the rule against stating a rule twice
+ * (`../../../../AGENTS.md`), applied to the sentence that carries it.
+ *
+ * @param {string} decisionRef The citation that resolved to nothing.
+ * @returns {string}
+ */
+export function unresolvedDecisionRefNote(decisionRef) {
+  return `"${decisionRef}" does not resolve — no matching ADR, rule, or fitness record`;
+}
+
+/**
  * The provenance verdict: three answer surfaces, each fail-closed.
  *
  * `repo` is the git provenance, `established` whether git could answer,
@@ -256,7 +271,7 @@ export async function provenanceCommand(commandContext, io = {}) {
     kind,
     label: rowLabel(kind, row),
     decisionRef,
-    note: `"${decisionRef}" does not resolve — no matching ADR, rule, or fitness record`,
+    note: unresolvedDecisionRefNote(decisionRef),
   }));
 
   const establishment = repo !== null;

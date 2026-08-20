@@ -3,7 +3,8 @@
 `check --format json`, `graph --format json`, `diff --format json`,
 `discover --format json`, `drift --format json`, `reconcile --format json`,
 `waivers --format json`, `fitness --format json`, `history --format json`,
-`health --format json`, `debt --format json`, `impact --format json`,
+`health --format json`, `report --format json`, `debt --format json`,
+`impact --format json`,
 `explain --format json`, `context --format json`, `provenance --format
 json`, and `adr --format json` wrap the same verdict the terminal report
 and SARIF already carry in one versioned envelope. They change no exit code and no byte
@@ -66,8 +67,8 @@ two envelopes to detect real drift knows what to strip first.
 
 `command` is the one field that varies by which command produced the envelope —
 `"check"`, `"graph"`, `"diff"`, `"discover"`, `"drift"`, `"reconcile"`,
-`"waivers"`, `"fitness"`, `"history"`, `"health"`, `"debt"`, `"impact"`,
-`"explain"`, `"context"`, `"provenance"`, or `"adr"`. `src/report/json.mjs`
+`"waivers"`, `"fitness"`, `"history"`, `"health"`, `"report"`, `"debt"`,
+`"impact"`, `"explain"`, `"context"`, `"provenance"`, or `"adr"`. `src/report/json.mjs`
 (the module that builds the envelope) and `src/commands/README.md` (the
 module layout it follows) are both written for each command to reuse the same
 wrapper.
@@ -78,7 +79,7 @@ wrapper.
 | --------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/lattice"`; `version` is the installed package's own `package.json` version.                                                                                                                                                                                                                                                                                                                                                      |
-| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"discover"`, `"drift"`, `"reconcile"`, `"waivers"`, `"fitness"`, `"history"`, `"health"`, `"debt"`, `"impact"`, `"explain"`, `"context"`, `"provenance"`, or `"adr"`.                                                                                                                                                                                                                  |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"discover"`, `"drift"`, `"reconcile"`, `"waivers"`, `"fitness"`, `"history"`, `"health"`, `"report"`, `"debt"`, `"impact"`, `"explain"`, `"context"`, `"provenance"`, or `"adr"`.                                                                                                                                                                                                      |
 | `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"lattice.json"`, `".moon"`, or `".config/moon"`) — except on an `adr` envelope, which reads no project model and carries `provider: "native"`, `marker: "docs/adr"` ([adr.md](adr.md)). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                                                                                                                                                                                                                                                |
@@ -402,6 +403,33 @@ The `coverage` envelope field carries the run's completeness facts, and
 `coverage.notes` discloses an unregistered Nx plugin (a graph with no
 Go/Rust/Python edges) so the metrics that needed those edges read `unknown`
 rather than a measured zero.
+
+## `result` (for `command: "report"`)
+
+`report` is the whole governance document in one envelope: the same `metrics`
+and `trends` `health` emits, plus the waiver surface, the fitness gates, the
+recorded decisions each governed row cites, and the run's provenance. Every
+number is produced by the function the owning command calls, so a consumer
+reading this envelope and one reading `health`/`waivers`/`fitness`/`adr` cannot
+disagree about the same tree.
+
+It is descriptive: `status` is `"ok"` (exit 0) or `"no-verdict"` (exit 3),
+never `"findings"` — a live boundary violation or a failing fitness gate is
+carried in the payload and still exits 0, because the commands that own those
+verdicts own their exit codes. It carries **no `decision` field**: a decision
+must agree with its status, and this status is about whether the document could
+be _established_, not about whether the architecture is healthy.
+
+| field           | type             | meaning                                                                                                                                                                                                                                                                                                             |
+| --------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trendDir`      | `null` \| string | The snapshot directory read for trends, or `null` when none was given.                                                                                                                                                                                                                                              |
+| `metrics`       | object           | `health`'s metrics, unchanged — see the `health` section above for every entry and the `value`-only-when-measured rule.                                                                                                                                                                                             |
+| `trends`        | `null` \| object | `health`'s trends, unchanged.                                                                                                                                                                                                                                                                                       |
+| `waivers`       | object           | `{verdict, note, counts, rows}`. `not_applicable` when no boundary law is declared, `unknown` (with `counts: null`) when the surface could not be established. Each row is `{kind, path, status, covered, reason, expiresAt, decisionRef}` — `remainingMs` is deliberately absent (see the determinism note above). |
+| `fitness`       | object           | `{verdict, note, functions}`. `not_applicable` when the law declares no gates. Each function is `{name, verdict, message, adrs}`, where `adrs` is the ADR ids binding it, `[]` when none does, and `null` when the registry could not be read.                                                                      |
+| `decisions`     | object           | `{verdict, note, registry: {dir, count}, records, citations}`. `count` is `null` when the registry could not be read (never `0`, which is the real "this workspace records no ADRs"). Each citation is `{kind, label, decisionRef, resolution, adr}` with `resolution` one of `adr`, `fitness`, `unknown`.          |
+| `provenance`    | object           | `{repo, established, policySource, rows}`. `established: false` carries `{commit: null, remote: null, dirty: null}` — a stated absence, not a claim. `rows.unattested` names every governed row with no `origin` record.                                                                                            |
+| `uninspectable` | object[]         | Every piece of evidence the run could not establish, as `{surface, reason}`. **Unconditional**: an empty array is itself the claim "every surface was inspectable". Non-empty exactly when `status` is `"no-verdict"`.                                                                                              |
 
 ## `result` (for `command: "debt"`)
 

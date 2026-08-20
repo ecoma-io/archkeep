@@ -83,6 +83,19 @@ commands share rather than a command. It composes `../workspace.mjs`,
   boundary config the way `drift` does — a row list built from a file it could
   not read is a claim about rows that do not exist. Descriptive: never exits 1.
 
+- **`report`** (`./report.mjs`'s `reportCommand`) — one architecture governance
+  document: how healthy the architecture is, and why. Composes `healthCommand`,
+  `waiversCommand`, `fitnessCommand`, the ADR registry (`readAdrContext` plus
+  `resolveDecisionRef`) and `resolveProvenance` — every number through the
+  function that owns it, so no section can disagree with the command it came
+  from — over ONE boundary law `cli.mjs` resolved for the whole page. Links each
+  governed row carrying a `decisionRef` to the record it cites, and each declared
+  fitness gate to the ADRs binding it; a citation that resolves to nothing reads
+  `unknown`, never a pass. `result.uninspectable` names every surface the run
+  could not establish and is what makes the status `no-verdict` (exit 3).
+  Descriptive: never exits 1 — a live violation or a failing gate is reported
+  over exit 0.
+
 - **`discover`** (`./discover.mjs`'s `discoverCommand`) — the observed
   architecture, and under `--propose` the candidate architecture those
   observations imply. Builds the observed `{projects, edges}` from the same

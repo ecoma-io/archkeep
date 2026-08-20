@@ -16,6 +16,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 | `waivers`    | (none)               | List the boundary waivers and permanent suppressions on the table                                  | no               |
 | `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                                             | no               |
 | `health`     | `[<snapshot-dir>]`   | Describe architecture health metrics and trends                                                    | no               |
+| `report`     | `[<snapshot-dir>]`   | One governance document: how healthy the architecture is, and why                                  | no               |
 | `debt`       | `<dir>`              | Print the architecture-debt ledger across snapshots                                                | no               |
 | `impact`     | `<project>`          | List projects that depend on the named project                                                     | no               |
 | `explain`    | `<file:line:column>` | Explain the judgment for one import site                                                           | no               |
@@ -104,6 +105,18 @@ reports the current run's metrics without a trend. Health is descriptive — it
 never exits 1 — and it exits 3 whenever any metric reads `unknown`: a run that
 could not fully inspect its own evidence is not a healthy run, and "cannot
 look" must never read as "clean".
+
+### `report`
+
+| flag       | argument       | default                  | meaning                                                                     |
+| ---------- | -------------- | ------------------------ | --------------------------------------------------------------------------- |
+| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                             |
+| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                               |
+| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. |
+
+The optional positional argument is `health`'s — the snapshot directory for
+trends. The `--config` this command resolves governs every section of the
+document, which is what keeps the page citing one law rather than several.
 
 ### `fitness`
 
@@ -282,7 +295,7 @@ analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
 A descriptive command (`graph`, `diff`, `drift`, `discover`, `reconcile`,
-`waivers`, `history`, `health`, `debt`, `impact`, `explain`,
+`waivers`, `history`, `health`, `report`, `debt`, `impact`, `explain`,
 `context`, `provenance`, `adr`) exits 0 when it completes, 3 when coverage is
 incomplete or a metric is `unknown`, and 2 on usage error. None exits 1,
 because a descriptive result is never a finding. `fitness` is the exception —
@@ -367,6 +380,20 @@ measure carries no number. Given a snapshot directory, the same structural
 metrics are reported across the snapshots `history` reads, with the disclosure
 that rule-impact cannot be re-derived from stored bytes. Descriptive — a
 description of health is never itself a finding.
+
+### `report [<snapshot-dir>]`
+
+One governance document: the health metrics, the waiver and permanent-suppression
+table, the declared fitness gates, the recorded decisions each governed row
+cites, and the run's provenance — composed from the same functions `health`,
+`waivers`, `fitness`, `adr` and `provenance` call, so no section can disagree
+with the command that owns it. One boundary law, resolved once, governs the
+whole page. Each governed row carrying a `decisionRef` is linked to the record
+it cites and that record's status; a citation resolving to nothing reads
+`unknown`, never a pass. Descriptive: it never exits 1 — a live violation or a
+failing gate is printed over exit 0 — and it exits 3 when any surface could not
+be established, with the closing `could not inspect` block naming every one.
+See [../usage/report.md](../usage/report.md) for the full report shapes.
 
 ### `debt <dir>`
 

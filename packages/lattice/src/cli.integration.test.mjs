@@ -5533,6 +5533,32 @@ var _ = adapter.Name
     expect(text).toContain("health over complete coverage");
   });
 
+  it("report resolves the profile and names the law that governed the document", async () => {
+    // The whole point of the governance document is that ONE law governs all
+    // of it, so a profile-selected workspace is exactly where a second law
+    // could sneak in: the sections are composed from four commands, and only
+    // `resolvePolicy`'s single answer being threaded through all of them keeps
+    // them citing the same table. A profile that failed to resolve would reach
+    // the ladder's message instead of the document.
+    const streams = profEnv();
+    expect(await runCli(["report"], streams)).toBe(EXIT.ok);
+    const text = streams.lines.out.join("\n");
+    expect(text).not.toContain(WRONG_REASON);
+    expect(text).toContain("architecture governance report");
+    expect(text).toContain("report over complete coverage");
+    expect(text).toContain("policy      ");
+    // Descriptive over a tree whose `explain` case above finds a real
+    // violation: the document reports it and still exits 0, because only
+    // `check` and `fitness` carry the findings lane.
+    expect(text).toContain("could not inspect");
+  });
+
+  it("report refuses a second positional argument as a usage error", async () => {
+    const streams = profEnv();
+    expect(await runCli(["report", "one", "two"], streams)).toBe(EXIT.usage);
+    expect(streams.lines.err.join("\n")).toContain("report takes at most one positional argument");
+  });
+
   it("diff detects a real policy change under an unchanged profile NAME (P1-17)", async () => {
     // Its own tmpdir workspace, mutated mid-test — kept separate from the
     // read-only fixture above for the same reason P1-25's `buildRoot` factory
