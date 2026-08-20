@@ -22,8 +22,10 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { languageOf } from "../analysis/registry.mjs";
 import { MESSAGE_IDS } from "../rules/messages.mjs";
 import { CONFORMANCE_CASES } from "./cases.mjs";
+import { ARCHITECTURE_CORPUS } from "./corpus.mjs";
 import { isUpstreamReadable } from "./engines.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -144,5 +146,114 @@ describe("the numbers README.md states about this catalogue", () => {
       "rows in the differential table (zero means this pattern no longer matches its shape)",
     ).toBe(MESSAGE_IDS.length);
     expect([...rows].sort()).toEqual([...MESSAGE_IDS].sort());
+  });
+});
+
+/** Every probe in the labeled corpus, across every case. */
+const corpusProbes = ARCHITECTURE_CORPUS.flatMap((spec) => spec.probes);
+
+describe("the numbers README.md states about the labeled corpus", () => {
+  // The corpus half of this file, and it is the half whose numbers cost the
+  // least to state and the most to be wrong about: nothing outside this
+  // directory measures Go, Rust or Python conformance, so a reader deciding
+  // whether to trust that half has only these figures and the run behind them.
+  it("counts the cases, probes and projects the corpus actually holds", () => {
+    const [cases, probeCount, projects] = statedNumbers(
+      /\*\*(\d+) fixture workspaces, (\d+) probes, (\d+) projects\*\*, carrying/gu,
+      "the size of the labeled corpus",
+    );
+
+    expect(cases, correction("N fixture workspaces … carrying")).toBe(ARCHITECTURE_CORPUS.length);
+    expect(probeCount, correction("N probes … carrying")).toBe(corpusProbes.length);
+    expect(projects, correction("N projects, carrying")).toBe(
+      ARCHITECTURE_CORPUS.flatMap((spec) => /** @type {readonly any[]} */ (spec.projects)).length,
+    );
+  });
+
+  it("counts the labeled findings and the probes that must produce none", () => {
+    // The near-miss half is the load-bearing one here for the same reason it
+    // is next door: a corpus of positives proves an engine can be loud.
+    const [findings, nearMisses] = statedNumbers(
+      /carrying (\d+) labeled findings\s+and (\d+) near-miss probes/gu,
+      "how many findings and near-misses the corpus carries",
+    );
+
+    expect(findings, correction("N labeled findings")).toBe(
+      corpusProbes.flatMap((probe) => /** @type {readonly any[]} */ (probe.reports)).length,
+    );
+    expect(nearMisses, correction("N near-miss probes")).toBe(
+      corpusProbes.filter((probe) => probe.reports.length === 0).length,
+    );
+  });
+
+  it("holds every cell of the rule-by-language table to the catalogue", () => {
+    // Unlike the differential table above, every cell here is derivable
+    // without running anything: a corpus label says which rule fires on which
+    // file, and the file's extension says which language it is. So the whole
+    // table is checked rather than only its row set — a cell that drifts is a
+    // claim about coverage that nothing else in this repository would catch.
+    const LANGUAGES = ["go", "rust", "python", "typescript"];
+    const derived = new Map();
+    // A probe in a language this table has no column for would otherwise be
+    // counted into `row[-1]` — a property, not a cell — and the finding would
+    // vanish from a table that still added up. Collected and asserted instead,
+    // because "the table has no column for that" is a fact about the README
+    // that has to be fixed there rather than dropped here.
+    const uncolumned = [];
+    for (const spec of ARCHITECTURE_CORPUS) {
+      for (const probe of spec.probes) {
+        const language = languageOf(probe.file);
+        const column = LANGUAGES.indexOf(language);
+        for (const report of probe.reports) {
+          if (column === -1) {
+            uncolumned.push(`${spec.id}: ${probe.file} reports in ${language}`);
+            continue;
+          }
+          const row = derived.get(report.messageId) ?? LANGUAGES.map(() => 0);
+          row[column] += 1;
+          derived.set(report.messageId, row);
+        }
+      }
+    }
+    expect(uncolumned, "findings in a language the stated table has no column for").toEqual([]);
+
+    const stated = new Map(
+      [...README.matchAll(/^\| `(\w+)` +\| +(\d+) \| +(\d+) \| +(\d+) \| +(\d+) \|$/gmu)].map(
+        (match) => [match[1], match.slice(2).map(Number)],
+      ),
+    );
+
+    // Zero rows means the pattern stopped matching the table rather than the
+    // table emptying — the same failure mode the differential table's own
+    // guard names, and the same wording, because the reader is sent to the
+    // wrong file by "expected 0 to be 12" either way.
+    expect(
+      stated.size,
+      "rows in the rule-by-language table (zero means this pattern no longer matches its shape)",
+    ).toBe(derived.size);
+    for (const [messageId, counts] of derived) {
+      expect(stated.get(messageId), correction(`the ${messageId} row`)).toEqual(counts);
+    }
+  });
+
+  it("states how many message ids the corpus reaches, and over how many languages", () => {
+    const [reached, ofTotal, languageCount] = statedNumbers(
+      /\*\*(\d+) of the (\d+) message ids, over (\d+) languages\.\*\*/gu,
+      "how much of the rule set the corpus reaches",
+    );
+    const ids = new Set(
+      corpusProbes.flatMap((probe) =>
+        /** @type {readonly any[]} */ (probe.reports).map((report) => report.messageId),
+      ),
+    );
+    const languages = new Set(
+      corpusProbes
+        .filter((probe) => probe.reports.length > 0)
+        .map((probe) => languageOf(probe.file)),
+    );
+
+    expect(reached, correction("N of the … message ids")).toBe(ids.size);
+    expect(ofTotal, correction("of the N message ids")).toBe(MESSAGE_IDS.length);
+    expect(languageCount, correction("over N languages")).toBe(languages.size);
   });
 });

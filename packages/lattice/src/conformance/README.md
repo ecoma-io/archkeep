@@ -39,11 +39,15 @@ Fixtures exist only while the suite runs, which is what keeps them out of the
 workspace's own lint, typecheck and build — the same containment
 `src/graph/create-dependencies.integration.test.mjs` uses.
 
+`corpus.integration.test.mjs` is the other half of this directory and answers
+a question the differential structurally cannot — see "The labeled corpus"
+below, which owns everything about it.
+
 Three other files here check the project against its own declarations rather
 than against ESLint, and they are cheap where the differential is not:
 `boundary.test.mjs` holds the shipped tool to what it is allowed to depend on,
-`stated-counts.integration.test.mjs` holds this file's catalogue sizes to the
-catalogue, and `plugin-catalogue.integration.test.mjs` holds the Claude Code
+`stated-counts.integration.test.mjs` holds both catalogues' sizes to the
+catalogues, and `plugin-catalogue.integration.test.mjs` holds the Claude Code
 plugin manifests to each other.
 
 ### Two mechanics worth knowing before changing anything here
@@ -277,6 +281,154 @@ single-file components wherever that parser is set up. The
 `banned-external-import-in-a-vue-single-file-component`
 case confirms it: ESLint reports the banned import, and the two engines agree.
 Vue was never a blind spot.
+
+## The labeled corpus — where there is no upstream to ask
+
+Everything above compares two engines. On `.go`, `.rs` and `.py` there is only
+one, and the four `however-…-is-spelled` cases are the whole of what the
+differential can say there: one import written several ways must reach one
+verdict. That catches an analyzer blind to a shape. It cannot catch a RULE
+that stopped firing, because every spelling of the import would go quiet
+together and agree.
+
+`corpus.mjs` is the answer to that: architecture styles — layered/clean,
+hexagonal, DDD bounded contexts, modular monolith — built in the three
+languages ESLint cannot read, with the verdict decided from the policy and the
+import BEFORE the tool was run. There is no oracle, so the labels are the
+oracle, and the suite's whole design is about stopping them from becoming a
+transcription of what the tool printed.
+
+**7 fixture workspaces, 25 probes, 26 projects**, carrying 21 labeled findings
+and 10 near-miss probes that must produce nothing.
+
+### How it runs, and why it runs the whole command
+
+`corpus.integration.test.mjs` materialises each case into its OWN throwaway
+root under the OS temp dir — no shared root, because nothing here loads Nx and
+so nothing needs the one-root-per-process discipline the differential lives
+under — and then asks the question a consumer asks: `cli.mjs`'s `check`, in
+`--format json`, over a native (`lattice.json`) workspace. Discovery, analysis,
+the native graph, the rules and the report all run; the two seams that would
+otherwise need a real environment (`git ls-files` and Nx) are the injectable
+arguments `check` already takes. A corpus that re-assembled the pipeline itself
+could keep passing while the composition a consumer runs came apart.
+
+### The three numbers a probe states, and what each one catches
+
+A probe is one source file, and it makes three independent statements. They
+are independent on purpose: each covers a way the other two can be satisfied by
+an engine that did nothing.
+
+| the label | what it states                                                       | what its failure means                                                      |
+| --------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `reports` | the exact findings this file must produce                            | a missing one is the silent direction; an extra one is a false positive     |
+| `imports` | how many import sites the analyzer records here                      | the analyzer stopped reading a shape — the failure a near-miss would hide   |
+| `denyAll` | how many findings it produces under a policy that forbids everything | the site is not visible to the engine at all, so its silence proved nothing |
+
+`denyAll` is what makes a near-miss an assertion. Every case tree also carries
+a second policy whose single row matches every project, permits a tag nothing
+carries, and bans `*`; under it, an import that reaches another project or a
+package a ban can match MUST report. Silence under the case's own law, read
+against a report under a law that forbids everything, is a verdict about the
+policy. A probe silent under both says in its mandatory `why` which unreachable
+shape it is — an import that stays inside its own project, or a form no rule
+can reach.
+
+The case's findings are compared against the union of its probes' `reports` in
+BOTH directions, so a finding no probe claims fails as loudly as a claimed one
+that never arrived; and every finding's `line`/`column` is checked against the
+fixture text rather than against a literal in the label — the specifier has to
+start where the diagnostic points.
+
+### What the corpus reaches
+
+**12 of the 15 message ids, over 4 languages.** The table is derived from the
+catalogue by `stated-counts.integration.test.mjs`, which fails when a cell
+moves:
+
+| messageId                                    |  Go | Rust | Python | TypeScript |
+| -------------------------------------------- | --: | ---: | -----: | ---------: |
+| `onlyTagsConstraintViolation`                |   3 |    1 |      1 |          1 |
+| `notTagsConstraintViolation`                 |   0 |    2 |      0 |          0 |
+| `emptyOnlyTagsConstraintViolation`           |   0 |    0 |      1 |          0 |
+| `projectWithoutTagsCannotHaveDependencies`   |   0 |    0 |      1 |          0 |
+| `bannedExternalImportsViolation`             |   1 |    1 |      0 |          0 |
+| `noTransitiveDependencies`                   |   2 |    0 |      0 |          0 |
+| `noCircularDependencies`                     |   0 |    0 |      2 |          0 |
+| `noSelfCircularDependencies`                 |   0 |    0 |      1 |          0 |
+| `noImportsOfApps`                            |   1 |    0 |      0 |          0 |
+| `noImportsOfE2e`                             |   1 |    0 |      0 |          0 |
+| `noImportOfNonBuildableLibraries`            |   1 |    0 |      0 |          0 |
+| `noRelativeOrAbsoluteImportsAcrossLibraries` |   0 |    0 |      0 |          1 |
+
+TypeScript appears in one case only, and only where it sharpens the point: the
+modular monolith is one constraint table over a tree whose modules are written
+in two languages, and the relative crossing in its web module is the axis Go
+cannot break — the target project is one the module is allowed to reach, and
+the spelling is the violation.
+
+The three ids no probe reaches are named rather than left to be noticed, and
+each needs a mechanism these three languages do not have:
+`noRelativeOrAbsoluteExternals` needs a specifier that IS a filesystem path,
+which `spelling.path` is false for in all three (`../analysis/contract.md`);
+`noImportsOfLazyLoadedLibraries` needs a dynamic import; and
+`nestedBannedExternalImportsViolation` needs a project alias colliding with a
+nested npm package name. `corpus.mjs`'s `OUT_OF_REACH` states them with those
+reasons, and the suite requires the reached and the unreachable ids to add up
+to all fifteen — so an id added upstream lands in neither and fails the run.
+
+### What the first run corrected, and how each correction was decided
+
+Labels written in advance are wrong sometimes, and which side gets changed is
+the whole question. Three were wrong on the first run:
+
+- **Two claimed a tag violation on an edge that closed a cycle.** The FIXTURE
+  was wrong, not the label: `noCircularDependencies` is decided before the tag
+  block, so those cases were measuring the cycle rule while claiming to measure
+  the tag rule. Both outward edges now point at a project that imports nothing.
+- **One claimed a single `notTagsConstraintViolation` where the engine reported
+  two.** The LABEL was wrong, and it was corrected only after reading the
+  installed plugin: upstream's `findDependenciesWithTags` collects every
+  project reachable from the target, so an import of the core violates a
+  `notDependOnLibsWithTags` row when the core itself reaches something carrying
+  the forbidden tag. The probe now labels both, and says so — a reading of that
+  rule which stopped at the direct target would report one of the two and call
+  the file half-clean.
+
+The order matters more than the count: a label is evidence only while it is
+decided from the policy and the import, and a label edited to match output is a
+transcription. When the run disagrees, the question is which of the two is
+wrong — and answering it means going to upstream's source or to the fixture,
+not to the label.
+
+### Declared limits of this corpus
+
+- **A Rust external ban only reaches the bare `use crate_name;` form.**
+  `libs/rs-core/src/shell.rs` carries both spellings and labels the deep one as
+  silent, because upstream's own matcher tests the specifier against the
+  package name and a `/`-separated prefix and `shellcrate::window::Manager` is
+  neither — the same measurement the "`@tauri-apps/*` ban" section above
+  records. Pinned as a label rather than hidden: a limit with a probe on it
+  cannot quietly become a different limit.
+- **Under `banTransitiveDependencies`, a Go standard-library import is
+  reported.** `transitive-dependency-ban-in-go` labels `import "fmt"` as a
+  finding, because the builtin exemption is Node's own module list
+  (`isBuiltinModuleImport`) and knows nothing of Go's standard library, and a
+  native tree supplies no `declaredPackages` for the check to clear the import
+  against. The loud direction, and pinned so it stays a decision someone can
+  read rather than a surprise in a consumer's first run with that option on.
+- **Every case runs against the native provider only.** Whether the Nx, native
+  and Moon providers agree on one tree is a different question with its own
+  measurement (`../providers/native/differential.integration.test.mjs`, whose
+  cost driver is a real `nx graph` spawn per fixture pair), and duplicating
+  each case here in three provider shapes would pay that cost per case to
+  re-answer it.
+- **Cycles preempt tags, so an outward violation points at a leaf.** Two cases
+  say so in their own `intent`: `noCircularDependencies` is decided before the
+  tag block, so a fixture whose outward edge had a path back would measure the
+  cycle rule while claiming to measure the tag rule. Both cases learned this
+  from the run rather than from the source — the labels were written first and
+  were wrong.
 
 ## Four claims put to the test — two corrected, two confirmed
 
