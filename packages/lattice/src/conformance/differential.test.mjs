@@ -436,6 +436,36 @@ describe("compareCase against what a case CLAIMED", () => {
     expect(breaches[0]).toMatch(/records a false negative that no longer happens/);
   });
 
+  it("breaches on a violation this engine reports on a file no probe names", () => {
+    // Bug #36: `compareCase` used to iterate `spec.probes` alone, so a
+    // violation on any other file the case owns — a false positive, or a site
+    // misattributed to the wrong file — was filtered out by the per-probe
+    // `sourceFile === file` match before it ever reached a breach check. This
+    // is the silent direction: old code returns `breaches: []` here.
+    const materialized = materializedOf([cleanProbe({ upstream: [] })]);
+    const { breaches } = compareCase(materialized, new Map(), [
+      { ...specifier("noImportsOfApps"), sourceFile: "case/unrelated-barrel.ts" },
+    ]);
+    expect(
+      breaches.some(
+        (breach) =>
+          breach.includes("case/unrelated-barrel.ts") &&
+          /no probe names/.test(breach) &&
+          /noImportsOfApps/.test(breach),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not breach a violation this engine reports at a declared probe", () => {
+    // The companion case: a violation on the probe's own file must not trip
+    // the new non-probe check, only the ordinary declared-verdict checks.
+    const materialized = materializedOf([
+      cleanProbe({ upstream: [], tool: ["noImportsOfApps"], divergence: { reason: "r" } }),
+    ]);
+    const { breaches } = compareCase(materialized, new Map(), [caseViolation("noImportsOfApps")]);
+    expect(breaches.every((breach) => !/no probe names/.test(breach))).toBe(true);
+  });
+
   it("attributes a stricter hit with no declared reason to 'undeclared'", () => {
     const rows = [
       {
