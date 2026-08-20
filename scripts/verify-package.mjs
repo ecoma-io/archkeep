@@ -672,6 +672,17 @@ function verifyPresetSelectedCheck(consumer, label, packageName) {
     /profile "hexagonal"/.test(output) && output.includes(registry),
     output || "(no output)",
   );
+  // And the finding has to be the PACK's. Exit 1 is reachable from several
+  // classes a check counts — a dead tsconfig alias, go.work drift — none of
+  // which would prove a shipped row ran. So this pins the row itself: the
+  // constraint the pack ships, at the position check 7's file put it.
+  check(
+    `the finding is the pack's own row, at its file:line:column (${label})`,
+    output.includes("onlyTagsConstraintViolation") &&
+      /libs\/core\/violate\.go:\d+:\d+/.test(output) &&
+      output.includes("sourceTag layer:domain → onlyDependOnLibsWithTags [layer:domain]"),
+    output || "(no output)",
+  );
 }
 
 /**
