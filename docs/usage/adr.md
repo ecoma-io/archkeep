@@ -67,7 +67,7 @@ docs/adr/ …`: the record is missing, and the run reports **no-verdict**,
 ## Exit codes
 
 `adr` is descriptive: it never exits 1 — a description of what is recorded is
-never a finding. Only `check` exits 1.
+never a finding.
 
 | code | meaning                                                                                                                                                                        |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

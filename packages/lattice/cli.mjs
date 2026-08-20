@@ -1901,11 +1901,13 @@ async function runWaivers(options, { cwd, env }) {
  * `fitness`'s `run`: resolves the command context, drives `fitnessCommand`,
  * writes the report where it belongs, and returns the process's exit code.
  *
- * Like `drift`, fitness is descriptive: the verdict table prints and the
- * command exits 0 when it completes, 3 when the run could not reach a
- * verdict. Only `check` exits 1, and only `check` folds a `fail` into exit 1 —
- * a descriptive command never claims a violation's exit code
- * (`../src/commands/fitness.mjs` states the posture).
+ * Unlike `drift`, fitness is a VERDICT: a `fail` exits 1, an `unknown` exits 3,
+ * and a run where everything passed (or did not apply) exits 0. The mapping
+ * sits at the tail of this function, and `../src/commands/fitness.mjs` states
+ * the posture — a failing fitness function is a finding, not a print job
+ * (D-09). `check` folds the same `fail` into its own exit 1 by presence, so the
+ * two faces agree; `check` and `fitness` are the only verbs whose verdict
+ * carries that code.
  *
  * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext

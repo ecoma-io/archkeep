@@ -112,7 +112,7 @@ server, or a database.
 | 2    | Usage error: wrong argument count, unknown flag, or `--output` pointing inside the history directory (the report would be read back as a snapshot). |
 | 3    | The directory is empty or unreadable, a snapshot is unreadable or malformed, or (under `--capture`) the head graph has incomplete coverage.         |
 
-`history` never exits 1. Evolution is not a finding — only `check` exits 1.
+`history` never exits 1. Evolution is not a finding.
 
 ## Example
 
