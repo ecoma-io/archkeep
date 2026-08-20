@@ -59,7 +59,8 @@ No edge, no record, and the file reports clean with a violation sitting in it.
 **`import` opens its line, after indentation only, or follows a `;` on the same
 line** — the same statement separator `gofmt` inserts automatically at a
 newline, so `import "a"; import "b"` reads both, the same as one per line, and
-so does `import ("a"; "b")` inside a block. The path itself may be quoted or,
+so do `import ("a"; "b")` inside a block and a block whose opener itself
+follows one, `package main; import ("a")`. The path itself may be quoted or,
 since Go treats a raw string as an equally legal string literal, backtick-
 delimited; both spellings are read the same way, though only the quoted form
 is what `gofmt` ever writes.
