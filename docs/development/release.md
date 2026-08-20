@@ -87,14 +87,19 @@ credentials existed the whole time, as the secrets `ECOMA_APP_ID` and
 `ECOMA_APP_KEY`. GitHub holds workflow runs attributed to the workflow token
 for approval, so the gate never firing is what produced the block.
 
-The lane now gates on `secrets.ECOMA_APP_ID` and mints the App token, so the
-reformat pushes under an ordinary actor whose events start CI normally. Two
-details worth keeping, both argued at the step itself: the gate must read
-`secrets` rather than `vars` because that is where these credentials live,
-and it must sit on the **step** rather than the job, because GitHub's
-context-availability table admits `secrets` in `jobs.<job_id>.steps.if` and
-not in `jobs.<job_id>.if` — a job-level gate would evaluate empty forever and
-silently restore the old behaviour.
+The lane now hoists that secret into a job-level `env` and gates the
+App-token step on it, so the reformat pushes under an ordinary actor whose
+events start CI normally.
+
+The gate cannot read the secret directly, and the reason is worth knowing
+because GitHub's documentation contradicts itself: the context-availability
+table lists `secrets` among the contexts for `jobs.<job_id>.steps.if`, while
+the secrets guide states that "Secrets cannot be directly referenced in `if:`
+conditionals" and prescribes the hoist. The runtime sides with the guide —
+measured, not reasoned: gating on `secrets.ECOMA_APP_ID` took the release
+lane to a **startup failure**, a run with zero jobs and no log to read, which
+is the least diagnosable red a workflow can produce. Read the table, believe
+the guide.
 
 [roadmap.md](../roadmap.md)'s fourth 1.0 condition — releases landing without
 a hand on them — is measured against exactly this, and the first release cut
