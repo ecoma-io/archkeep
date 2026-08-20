@@ -452,4 +452,54 @@ describe("formatDiffReport", () => {
     });
     expect(report).toContain("type  (none) → lib");
   });
+
+  // Bug B: `../commands/diff.mjs` pushes provider-mismatch, cross-repo,
+  // one-sided-policy, and rule-impact-scope warnings onto `coverage.notes` —
+  // the same object this formatter already receives whole — but this
+  // formatter never read that field, so a diff run carrying a real warning
+  // (in the JSON envelope) showed a clean "no changes" text report with no
+  // trace of it. The silent direction: a warning that exists in the coverage
+  // object and never reaches the reader.
+  it("folds coverage.notes into the summary line, the way check's text face folds its own notes", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 2, edges: 1 },
+        head: { projects: 2, edges: 1 },
+        addedProjects: [],
+        removedProjects: [],
+        addedEdges: [],
+        removedEdges: [],
+      },
+      coverage: {
+        imports: 3,
+        analyzedFiles: 4,
+        projects: 2,
+        notes: ["baseline provider (nx) differs from head provider (moon)"],
+      },
+    });
+    expect(report).toContain(
+      "no changes between baseline and head (3 imports in 4 files across 2 projects; " +
+        "baseline provider (nx) differs from head provider (moon))",
+    );
+  });
+
+  it("folds multiple coverage.notes onto the same line, semicolon-joined", () => {
+    const report = formatDiffReport({
+      diff: {
+        baseline: { path: "/snap.json", projects: 1, edges: 0 },
+        head: { projects: 2, edges: 0 },
+        addedProjects: [{ name: "beta", root: "libs/beta", tags: [] }],
+        removedProjects: [],
+        addedEdges: [],
+        removedEdges: [],
+      },
+      coverage: {
+        imports: 0,
+        analyzedFiles: 0,
+        projects: 2,
+        notes: ["note one", "note two"],
+      },
+    });
+    expect(report).toContain("(0 imports in 0 files across 2 projects; note one; note two)");
+  });
 });

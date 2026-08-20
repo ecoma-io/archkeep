@@ -137,15 +137,48 @@ function scanTemplate(src, i) {
   return j;
 }
 
+/**
+ * Whether the `/` at `src[i]` opens a regex literal rather than a division —
+ * decided from the last SIGNIFICANT character before it, skipping over any
+ * run of spaces/tabs first. Checking only the immediately-previous character
+ * (as this used to) misreads a normally-spaced regex like `= /re/` as
+ * division, because the character right before the slash is a space rather
+ * than the leading `=`; read as division the slash is left unmasked, and a
+ * `'`/`"` inside the pattern (e.g. `/don't/`) then opens the string-mask
+ * branch on real code that follows, silently swallowing it.
+ *
+ * @param {string} src
+ * @param {number} i Index of the `/`.
+ * @returns {boolean}
+ */
+function isRegexPosition(src, i) {
+  let p = i - 1;
+  while (p >= 0 && (src[p] === " " || src[p] === "\t")) p--;
+  const prevChar = p < 0 ? undefined : src[p];
+  return prevChar === undefined || /[=([{}!|&?:;,~^<>+\-*/%\n]/.test(prevChar);
+}
+
 export function maskNonCode(src) {
   let result = "";
   let i = 0;
   while (i < src.length) {
-    // Single-line comment
+    // Single-line comment. The trailing `\n` (when there is one) is kept as a
+    // literal newline rather than folded into the run of spaces: dropping it
+    // shortens the masked result by one character per comment, which breaks
+    // the same-length contract this header promises — every `match.index`
+    // after the comment would then point one byte too early in `src`, and a
+    // consumer computing a line number from that offset would land on the
+    // wrong line (the determinism guard's regression: a `Date.now()` right
+    // after an allow-listed line silently inheriting that line's exemption).
     if (src[i] === "/" && src[i + 1] === "/") {
       const end = src.indexOf("\n", i);
-      result += " ".repeat((end === -1 ? src.length : end) - i);
-      i = end === -1 ? src.length : end + 1;
+      if (end === -1) {
+        result += " ".repeat(src.length - i);
+        i = src.length;
+      } else {
+        result += " ".repeat(end - i) + "\n";
+        i = end + 1;
+      }
       continue;
     }
     // Block comment
@@ -189,8 +222,9 @@ export function maskNonCode(src) {
       continue;
     }
     // Regex literal (simplified: /pattern/flags) — keyed off a leading
-    // operator so a division after an identifier is not a regex.
-    if (src[i] === "/" && i > 0 && /[=([{}!|&?:;,~^<>+\-*/%\n]/.test(src[i - 1])) {
+    // operator so a division after an identifier is not a regex; see
+    // `isRegexPosition` for why whitespace before the `/` is skipped first.
+    if (src[i] === "/" && isRegexPosition(src, i)) {
       let j = i + 1;
       while (j < src.length && src[j] !== "/") {
         if (src[j] === "\\") {

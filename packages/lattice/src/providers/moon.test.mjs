@@ -457,6 +457,32 @@ describe("transformMoonGraph — implicit dependencies", () => {
     expect(result.dependencies.web).toEqual([{ source: "web", target: "api", type: "static" }]);
   });
 
+  // Silent-direction regression: unlike the "types the edge itself implicit"
+  // case above (which clears `raw.graph.edges` and so only ever exercises the
+  // second loop), Moon's real output carries the SAME dependency in BOTH
+  // places at once — the edge tuple in `raw.graph.edges` (typed only from
+  // `scope`) and the owning node's own `dependencies[]` entry (which carries
+  // `source: "implicit"`). Before the fix, the two loops disagreed on `type`
+  // for that one pair and the old `[source, target, type]` dedup key let both
+  // survive: a correct `implicit` edge, plus a phantom `static` duplicate
+  // that `../commands/drift.mjs` and `../commands/discover.mjs` — which
+  // exclude only `edge.type === "implicit"` — would count as a real,
+  // code-derived edge. A workspace with exactly one implicit dependency must
+  // report exactly one edge for it, typed `implicit`; reporting two (one of
+  // them mistyped as code-derived) is the silent false negative this test
+  // pins closed.
+  it("collapses a dependency present in BOTH raw.graph.edges and the node's own dependencies[] into one implicit edge, never a phantom static duplicate", () => {
+    const raw = twoProjectGraph();
+    // raw.graph.edges already carries the web→api tuple with scope
+    // "production" (from twoProjectGraph's default) — left as-is, so it is
+    // present exactly the way Moon emits it: with no `source` field.
+    raw.data["0"].dependencies = [{ id: "api", scope: "production", source: "implicit" }];
+    const result = transformMoonGraph(raw);
+    expect(result.dependencies.web).toEqual([{ source: "web", target: "api", type: "implicit" }]);
+    // Exactly one edge for the pair — no separate `static` entry survives.
+    expect(result.dependencies.web).toHaveLength(1);
+  });
+
   it("still skips a root-scoped edge even when its source is implicit", () => {
     // scope === "root" is checked first: a root-to-project edge is not a
     // project-to-project boundary either way, implicit or not.

@@ -18,6 +18,13 @@
  * their `rule`. This report is deterministic as long as the taxonomy list is,
  * and it never re-sorts: the judge already orders findings by total key.
  *
+ * `notes` — coverage warnings the judge attaches (`../architecture-intent/judge.mjs`'s
+ * `verdict.notes`; today an `optional: true` allowed row the team has not
+ * built yet) — fold into the "observed" summary line the same way `check`'s
+ * text face folds its own `notes` into its "inspected" line
+ * (`../report/text.mjs`'s `formatReport`): appended as `; note`, never a
+ * section a caller could silently drop.
+ *
  * This module decides nothing. A formatter that filtered would be a rule
  * wearing a formatter's name (`./README.md`).
  */
@@ -74,6 +81,7 @@ function formatFinding(finding) {
  *   message: string}[],
  *   intent: {fingerprint: string, rows: number},
  *   observed: {projects: number, edges: number, implicitEdges: number},
+ *   notes?: string[],
  *   unresolvedDecisionRefs?: {kind: string, decisionRef: string}[],
  *   decisionRefsChecked?: number}} input
  *   `unresolvedDecisionRefs` — rows whose `decisionRef` cites no ADR, rule, or
@@ -84,12 +92,15 @@ function formatFinding(finding) {
  *   same "no fact, no claim" distinction `formatGoWork` states: a section
  *   appears when the axis was exercised, silence only when it was not, so
  *   "every citation resolves" is never confused with "nothing uses the field".
+ *   `notes` — coverage warnings (an `optional: true` allowed row not yet
+ *   built) — fold into the "observed" line; empty/absent changes nothing.
  * @returns {string}
  */
 export function formatDriftReport({
   findings,
   intent,
   observed,
+  notes = [],
   unresolvedDecisionRefs = [],
   decisionRefsChecked = unresolvedDecisionRefs.length,
 }) {
@@ -102,9 +113,13 @@ export function formatDriftReport({
     observed.implicitEdges > 0
       ? ` (${observed.implicitEdges} implicit edge${observed.implicitEdges === 1 ? "" : "s"} excluded)`
       : "";
+  // `notes` folds in here, the same "; note" convention `check`'s text face
+  // uses for its own coverage notes — appended, not a section a caller could
+  // silently drop.
+  const notesSuffix = notes.length > 0 ? `; ${notes.join("; ")}` : "";
   sections.push(
     `observed  ${observed.projects} project${observed.projects === 1 ? "" : "s"}, ` +
-      `${observed.edges} edge${observed.edges === 1 ? "" : "s"}${excluded}`,
+      `${observed.edges} edge${observed.edges === 1 ? "" : "s"}${excluded}${notesSuffix}`,
   );
 
   const byId = new Map();

@@ -297,6 +297,62 @@ describe("braceExpansionCount", () => {
     for (let i = 0; i < 20_000; i++) pattern = `{${pattern}}`;
     expect(() => braceExpansionCount(pattern, MAX_GLOB_EXPANSIONS)).not.toThrow();
   });
+
+  it("counts a minimatch numeric RANGE as its full cardinality, not as one comma-free alternative", () => {
+    // `path.posix.matchesGlob` expands `{start..end}` combinatorially even
+    // though it contains no comma — the shape `braceExpansionCount` used to
+    // see as a single, comma-free alternative and count as 1. Verified
+    // directly against the real matcher: `posix.matchesGlob("5", "{1..10}")`
+    // is `true` and `posix.matchesGlob("15", "{1..10}")` is `false`, so the
+    // group really does stand for all ten of "1".."10", not the four literal
+    // characters "1..10".
+    expect(braceExpansionCount("{1..10}", 1000)).toBe(10);
+    expect(braceExpansionCount("x{1..5}y", 1000)).toBe(5);
+    // A descending range still counts by span, not by sign.
+    expect(braceExpansionCount("{10..1}", 1000)).toBe(10);
+    // A step narrows the count the same way it narrows the real expansion.
+    expect(braceExpansionCount("{1..10..2}", 1000)).toBe(5);
+  });
+
+  it("counts a minimatch single-letter alpha RANGE the same way", () => {
+    // `posix.matchesGlob("c", "{a..e}")` is `true`; the group stands for
+    // "a".."e" (5 letters), not the literal four-character string "a..e".
+    expect(braceExpansionCount("{a..e}", 1000)).toBe(5);
+    expect(braceExpansionCount("{A..E}", 1000)).toBe(5);
+  });
+
+  it("does not misread a comma union or a multi-character group as a range", () => {
+    // A comma present anywhere in the group defeats range syntax in the real
+    // matcher (verified: `posix.matchesGlob("5", "{1..10,x}")` is `false`,
+    // while `posix.matchesGlob("1..10", "{1..10,x}")` is `true`) — the
+    // group's two alternatives are the literal strings "1..10" and "x".
+    expect(braceExpansionCount("{1..10,x}", 1000)).toBe(2);
+    // Two-or-more-character endpoints are never range syntax.
+    expect(braceExpansionCount("{ab..cd}", 1000)).toBe(1);
+  });
+
+  it("refuses a RANGE pattern whose cardinality alone exceeds the cap, in bounded time", () => {
+    // The bug this closes: a pattern with zero commas used to be counted as
+    // 1 alternative regardless of its range span, so `{1..20000}` sailed
+    // through `globComplexityError`'s cap of 512 uncounted — and, unguarded,
+    // cost `path.posix.matchesGlob` on the order of a MINUTE for one call
+    // (the sibling `{1..300000}` case in this bug's report measured ~110
+    // seconds). This only exercises the counter, never the real matcher, so
+    // it must return near-instantly regardless.
+    const start = performance.now();
+    const count = braceExpansionCount("{1..20000}", MAX_GLOB_EXPANSIONS);
+    const elapsed = performance.now() - start;
+    expect(count).toBe(MAX_GLOB_EXPANSIONS + 1);
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it("refuses four chained alpha ranges (26**4 alternatives) without ever materializing them", () => {
+    const start = performance.now();
+    const count = braceExpansionCount("{a..z}{a..z}{a..z}{a..z}", MAX_GLOB_EXPANSIONS);
+    const elapsed = performance.now() - start;
+    expect(count).toBe(MAX_GLOB_EXPANSIONS + 1); // exact total is 26**4 = 456976
+    expect(elapsed).toBeLessThan(500);
+  });
 });
 
 describe("globComplexityError", () => {
@@ -333,6 +389,35 @@ describe("globComplexityError", () => {
     // not against this function's own (near-zero) cost.
     expect(elapsed).toBeLessThan(500);
   });
+
+  it("refuses a minimatch RANGE pattern the same as an equal-cardinality comma union — this is bug 1's config-load fix", () => {
+    // This is the exact silent-guard-failure this fix closes: before it,
+    // `braceExpansionCount("{1..20000}", 512)` returned 1 (no comma inside
+    // the group), so this pattern sailed past the cap and reached
+    // `boundarySuppressions[].path` / `coverage.exempt[].path` /
+    // `projectRules[].match` / `projects.infer.include`/`exclude` validation
+    // as though it were cheap — every one of those fields is
+    // attacker-controlled config (`../../../../SECURITY.md`). Now it is
+    // refused loudly at config load, the same way a 20000-way comma union
+    // already was.
+    const error = globComplexityError("{1..20000}");
+    expect(error).not.toBeNull();
+    expect(error).toMatch(new RegExp(`more than ${MAX_GLOB_EXPANSIONS} brace-driven alternatives`));
+  });
+
+  it("refuses four chained alpha ranges the same way, and stays fast doing it", () => {
+    const start = performance.now();
+    const error = globComplexityError("{a..z}{a..z}{a..z}{a..z}");
+    const elapsed = performance.now() - start;
+    expect(error).not.toBeNull();
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it("still accepts an ordinary small range and an ordinary small comma group", () => {
+    expect(globComplexityError("{1..5}")).toBeNull();
+    expect(globComplexityError("v{1..3}/README.md")).toBeNull();
+    expect(globComplexityError("{apps,libs,packages}/*/README.md")).toBeNull();
+  });
 });
 
 describe("safeMatchesGlob", () => {
@@ -350,6 +435,17 @@ describe("safeMatchesGlob", () => {
     const bomb = bracePattern(13);
     const start = performance.now();
     expect(() => safeMatchesGlob("x-nomatch-y", bomb)).toThrow(/brace-driven alternatives/);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it("throws quickly on a RANGE-bomb pattern instead of running the real matcher for ~110 seconds", () => {
+    // Verified directly (not asserted here — see this bug's report): a single
+    // unguarded `safeMatchesGlob(..., "{1..300000}")` call cost roughly 110
+    // seconds against `path.posix.matchesGlob` before this fix. This test
+    // only has to prove the guard now fires before that call is ever made.
+    const start = performance.now();
+    expect(() => safeMatchesGlob("x-nomatch-y", "{1..20000}")).toThrow(/brace-driven alternatives/);
     const elapsed = performance.now() - start;
     expect(elapsed).toBeLessThan(500);
   });

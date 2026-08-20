@@ -13,9 +13,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { REFORMAT_FILES, treePayload } from "./push-reformatted-files.mjs";
 
@@ -61,6 +63,33 @@ test("treePayload keeps a file that already ends in a newline at exactly one new
 test("treePayload throws loudly when a file is missing rather than omitting it silently", () => {
   const root = mkdtempSync(join(tmpdir(), "r0b-tree-"));
   assert.throws(() => treePayload("abc", ["does-not-exist.json"], root), /does-not-exist\.json/);
+});
+
+// The naive entry guard this replaced —
+// `process.argv[1] === fileURLToPath(import.meta.url)` — is false whenever
+// the invoking path contains a symlink anywhere in it: Node resolves
+// symlinks before recording a module's URL, but records `argv[1]` exactly
+// as the caller spelled it. Measured directly: run through a symlinked
+// checkout with the required env unset, the OLD code exits 0 with no output
+// at all — `main()` never ran, so the release lane's reformat push silently
+// no-opped while the step still read green. The fix must reach `main()`
+// regardless of the symlink, and `main()` itself must then fail LOUDLY on
+// the missing env rather than the guard silently skipping it.
+test("invoked through a symlinked path, main() still runs and fails loudly on missing env", () => {
+  const realScript = fileURLToPath(new URL("./push-reformatted-files.mjs", import.meta.url));
+  const tmp = mkdtempSync(join(tmpdir(), "r0b-symlink-"));
+  const link = join(tmp, "scripts-link");
+  symlinkSync(dirname(realScript), link);
+  const scriptViaSymlink = join(link, "push-reformatted-files.mjs");
+
+  const env = { ...process.env };
+  delete env.GITHUB_REPOSITORY;
+  delete env.GH_TOKEN;
+
+  const result = spawnSync(process.execPath, [scriptViaSymlink], { encoding: "utf8", env });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /GITHUB_REPOSITORY is required/u);
 });
 
 test("the reformat list is the five files the lane owns", () => {
