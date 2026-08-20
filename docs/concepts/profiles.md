@@ -35,6 +35,11 @@ Each is a case where the file was the wrong unit of change. A profile registry
 makes the law a set of named options a run selects, instead of one document a
 run mutates.
 
+A fourth case is a registry you did not write: Lattice ships four architecture
+styles as ready-made registries, which a workspace copies in or points at —
+[presets.md](../usage/presets.md) is the catalogue and the adoption path. They
+are registries like any other, so nothing below is special-cased for them.
+
 ## How one is declared
 
 The registry is a JSON file named by the `profiles` plugin option

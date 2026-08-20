@@ -45,6 +45,15 @@ load, naming the key.
 | `allowedExternalImports`   | string[] | Allowlist for third-party specifiers.                                   |
 | `bannedExternalImports`    | string[] | Denylist for third-party specifiers.                                    |
 
+`bannedExternalImports` judges every specifier that leaves the workspace, and
+Node's built-in modules are among them: a row banning `*` reports `node:fs` the
+same way it reports an installed package. `banTransitiveDependencies` is the
+option that exempts built-ins, and it is a different question -- a built-in has
+no manifest entry to be missing from, so counting it as an undeclared transitive
+dependency would report every workspace. A row meant to keep frameworks out of a
+layer without touching the standard library names the packages, or their scope,
+rather than `*`.
+
 ### Documentation fields (optional)
 
 | field         | type   | meaning                                                                                               |
