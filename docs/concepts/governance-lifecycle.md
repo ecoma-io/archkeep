@@ -109,7 +109,11 @@ the law's own selectors, not observations of it:
 - **Health / debt** — `lattice health` reports per-metric verdicts (a metric
   whose evidence is unavailable is `unknown`/`not_applicable`, never zero);
   `lattice debt` ages waivers, gaps and drift across snapshots. Both are
-  reports, never gates.
+  reports, never gates. `lattice report` gathers the health metrics with the
+  waiver, fitness and decision surfaces above into one document, every number
+  taken from the command that owns it and one boundary law resolved once for
+  the whole page, so no two sections can answer from two
+  ([usage/report.md](../usage/report.md)).
 - **Reconcile / discover** — `lattice reconcile --propose` scores every
   observed project and edge against the declared model and derives the edits
   that would make them agree; `lattice discover --propose` derives candidate

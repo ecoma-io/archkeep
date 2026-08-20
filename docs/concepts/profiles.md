@@ -168,7 +168,7 @@ plugin option".
 
 Every command that reads a boundary law resolves a profile by name, not only
 `check`: `context`, `graph`, `explain`, `impact`, `diff`, `fitness`, `waivers`,
-`debt`, `health`, and `history --capture` share `check`'s own config-resolution
+`debt`, `health`, `report`, and `history --capture` share `check`'s own config-resolution
 step, so a profile-selected workspace reads `--config`/`boundaryConfig` as a
 profile NAME everywhere a boundary law is read, never as a file path. The four
 loud conditions above apply identically on every one of them — an unknown

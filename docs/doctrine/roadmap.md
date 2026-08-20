@@ -47,6 +47,12 @@ A new reader should find these capabilities described as present, not promised.
   `profiles` registry and select one by name at check time, stacked on a shared
   `base` — resolved loudly, with no silent fallback to a quieter law.
   ([concepts/profiles.md](../concepts/profiles.md))
+- **Four architecture styles shipped as policy packs.** Clean Architecture,
+  hexagonal, layered modular monolith and DDD bounded contexts ride inside the
+  package as profile registries, read by the same loader, validated by the same
+  validator and enforced by the same path a registry a workspace wrote itself
+  takes. A pack saves the blank page, not a mechanism.
+  ([usage/presets.md](../usage/presets.md))
 - **ADR / decision registry.** `docs/adr/` records name the recorded
   architecture decision a rule, fitness gate, or intent row leans on through a
   `decisionRef`, read with `lattice adr`; a reference that resolves to nothing
@@ -54,15 +60,17 @@ A new reader should find these capabilities described as present, not promised.
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer. ([reference/exit-codes.md](../reference/exit-codes.md))
-- **Sixteen commands — `check`, `graph`, `diff`, `discover`, `drift`,
-  `reconcile`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`,
-  `explain`, `context`, `provenance`, `adr`** — each with output a script or
-  an agent can consume without parsing prose. `history` records the
+- **Seventeen commands — `check`, `graph`, `diff`, `discover`, `drift`,
+  `reconcile`, `waivers`, `fitness`, `history`, `health`, `report`, `debt`,
+  `impact`, `explain`, `context`, `provenance`, `adr`** — each with output a
+  script or an agent can consume without parsing prose. `history` records the
   architecture's evolution across captured snapshots — the deterministic half
-  of "how it got here" — and `debt` ages the workspace's waivers, gaps and
-  drift across that same record.
+  of "how it got here" — `debt` ages the workspace's waivers, gaps and
+  drift across that same record, and `report` composes health, waivers,
+  fitness, the decision registry and provenance into one governance document
+  under a single resolved law, so no two sections can answer from two.
   ([reference/cli.md](../reference/cli.md), [usage/history.md](../usage/history.md),
-  [usage/debt.md](../usage/debt.md))
+  [usage/debt.md](../usage/debt.md), [usage/report.md](../usage/report.md))
 - **Nx and Moon as first-class integrations, not dependencies.** A workspace
   that has Nx or Moon gets graph reuse and `affected` integration; a repository
   that has neither loses nothing.

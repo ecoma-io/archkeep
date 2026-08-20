@@ -104,7 +104,7 @@ return unchecked > 0 ? 3 : 0;
 Exit 0 was the bug. A checker that could not look must never be mistaken for one
 that looked and found nothing.
 
-## The sixteen commands
+## The seventeen commands
 
 | command      | what it does                                                                          | finds violations |
 | ------------ | ------------------------------------------------------------------------------------- | ---------------- |
@@ -118,6 +118,7 @@ that looked and found nothing.
 | `fitness`    | Judges the workspace's named quality gates (folded into `check` by presence)          | no               |
 | `history`    | Describes how the architecture evolved across a directory of snapshots                | no               |
 | `health`     | Per-metric verdicts; an unmeasured metric is `unknown`/`not_applicable`, never zero   | no               |
+| `report`     | Composes health, waivers, fitness, decisions and provenance under one resolved law    | no               |
 | `debt`       | Ages waivers, gaps and drift across snapshots — a ledger, not a gate                  | no               |
 | `impact`     | Lists projects that depend on the named one, with constraint context¹                 | no               |
 | `explain`    | Explains the judgment for one import site                                             | no               |
@@ -127,7 +128,7 @@ that looked and found nothing.
 
 `check` is the only command that exits 1 on boundary findings — with one
 companion: `fitness` exits 1 when a declared function fails (a failing fitness
-function is a finding, not a print job). The other fourteen are descriptive or
+function is a finding, not a print job). The other fifteen are descriptive or
 proposal-only: they answer questions about the architecture without claiming a
 violation. `context` answers the question an agent asks _before_ editing (what
 is this project allowed to reach?); `impact` answers the question during

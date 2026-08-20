@@ -47,7 +47,10 @@ workspace's boundary law cannot be loaded, `drift` exits 3. The fitness half of
 a citation resolves against the ids that law declares, so resolving citations
 without it would report rows unresolved on the strength of a law nobody read. A
 workspace whose intent carries no `decisionRef` never opens the boundary law at
-all, and a missing or unloadable one changes nothing about its drift verdict.
+all, and a missing or unloadable one changes nothing about its drift verdict —
+but the run still says so out loud rather than passing over it in silence: the
+failure rides the observed line as a coverage note naming both halves, that the
+law could not be loaded and that nothing in this verdict was judged against it.
 
 An empty finding list must mean exactly "the observed architecture matches the
 intended one". When a comparison cannot be completed, `drift` exits 3 with a
