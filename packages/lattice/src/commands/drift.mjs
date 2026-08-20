@@ -423,6 +423,12 @@ export async function driftCommand(commandContext, io = {}) {
           edges: result.observed.edges,
           implicitEdges: result.observed.implicitEdges,
         },
+        // Coverage notes (e.g. an `optional: true` allowed row not yet
+        // built) already ride `coverage.notes` above for the JSON envelope —
+        // this is the same `verdict.notes` reaching the text face too, so a
+        // warning that exists in the coverage object does not stop at the
+        // reader who only sees the terminal report.
+        notes: verdict.notes,
       }),
       json: renderJson(envelope),
     },

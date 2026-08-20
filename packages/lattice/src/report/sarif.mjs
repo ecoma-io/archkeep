@@ -35,7 +35,11 @@
  * because the run did complete. go.work drift findings and dead tsconfig path
  * aliases ARE results, under their own rule ids: they are verdicts the run
  * fails on, not trouble it hit (`sarifGoWorkResult`,
- * `sarifTsconfigPathsResult`).
+ * `sarifTsconfigPathsResult`). A `fail`-verdict fitness function follows the
+ * same rule — it is exactly as build-failing as a boundary violation
+ * (`verdictFor`'s `fitnessFail`) — while an `unknown`-verdict one (the run
+ * could not determine it) is trouble the tool hit, not a finding, so it rides
+ * a notification instead (`sarifFitnessResult`, `sarifFitnessNotification`).
  *
  * **The driver carries no `version`/`semanticVersion`, and that is now a gap
  * rather than a decision.** It was written when this package was unversioned and
@@ -56,6 +60,13 @@ import { formatConstraint } from "./text.mjs";
 /** The schema every consumer of this file validates against. */
 export const SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json";
 export const SARIF_VERSION = "2.1.0";
+
+/**
+ * The single rule id every failing fitness function's result shares — see
+ * `sarifRules()`'s own comment for why one id stands in for the whole
+ * open-ended, workspace-declared set.
+ */
+export const FITNESS_FAILED_RULE_ID = "fitnessFunctionFailed";
 
 /**
  * A workspace-relative path as a URI reference: each segment percent-encoded,
@@ -124,6 +135,23 @@ export function sarifRules() {
       fullDescription: { text: INTENT_MESSAGES[id] },
       defaultConfiguration: { level: "error" },
     })),
+    // One entry, not a catalogue: a fitness function's `name` is
+    // workspace-declared and open-ended (`../governance/fitness-registry.mjs`),
+    // unlike the fixed message-id tables above, so it cannot be pre-catalogued
+    // the same way — the specific function is named in the result's message
+    // and `properties.name` instead (`sarifFitnessResult`).
+    {
+      id: FITNESS_FAILED_RULE_ID,
+      name: FITNESS_FAILED_RULE_ID,
+      shortDescription: { text: "A declared fitness function failed its verdict." },
+      fullDescription: {
+        text:
+          "A fitness function declared in the boundary policy's `fitness` list judged its " +
+          "matched projects and returned `fail` — the function name and reason are in the " +
+          "result message and the `name` property.",
+      },
+      defaultConfiguration: { level: "error" },
+    },
   ];
 }
 
@@ -322,6 +350,67 @@ export function sarifIntentResult(finding) {
 }
 
 /**
+ * One `fail`-verdict fitness function as a SARIF result.
+ *
+ * A result for the same reason a go.work drift finding is one: `check` fails
+ * the build on it (`verdictFor`'s `fitnessFail`), and an empty results array
+ * on that run would be exactly the silent SARIF this function exists to
+ * close. Positionless by construction — a fitness verdict judges the graph,
+ * not a source site — so the location carries the boundary policy file that
+ * declared the function, when the run resolved one (it always does, in
+ * practice: a fitness verdict cannot exist without the `fitness` list that
+ * only a loaded policy carries), the same "artifact alone, never a fabricated
+ * line 1" convention `sarifIntentResult` and `sarifNotification` state.
+ *
+ * @param {{name: string, message: string}} decision A `fail` verdict record
+ *   from `evaluateFitness` (`../governance/fitness-registry.mjs`).
+ * @param {string|null} [policySource] Workspace-relative path to the boundary
+ *   policy file that declared the function, or `null`/absent when this run
+ *   resolved none — defensive only.
+ * @returns {object}
+ */
+export function sarifFitnessResult(decision, policySource = null) {
+  const result = {
+    ruleId: FITNESS_FAILED_RULE_ID,
+    ruleIndex:
+      MESSAGE_IDS.length +
+      GO_WORK_MESSAGE_IDS.length +
+      TSCONFIG_PATHS_MESSAGE_IDS.length +
+      INTENT_MESSAGE_IDS.length,
+    level: "error",
+    message: { text: `Fitness function "${decision.name}" failed: ${decision.message}` },
+    properties: { name: decision.name },
+  };
+  if (policySource !== null) {
+    result.locations = [
+      { physicalLocation: { artifactLocation: { uri: toUriReference(policySource) } } },
+    ];
+  }
+  return result;
+}
+
+/**
+ * One `unknown`-verdict fitness function as a tool-execution notification.
+ *
+ * Not a result: an `unknown` verdict means the run could not determine the
+ * function (`check` exits 3 on it, never 1 — `verdictFor`'s `fitnessUnknown`),
+ * which is trouble the tool hit rather than a verdict it reached, the same
+ * distinction `sarifNotification` draws for an unparseable file.
+ *
+ * @param {{name: string, message: string}} decision An `unknown` verdict
+ *   record from `evaluateFitness`.
+ * @returns {object}
+ */
+export function sarifFitnessNotification(decision) {
+  return {
+    level: "warning",
+    message: {
+      text: `Fitness function "${decision.name}" could not be determined: ${decision.message}`,
+    },
+  };
+}
+
+/**
  * One analysis failure as a tool-execution notification.
  *
  * A failure with no position is about the file as a whole (`line`/`column`
@@ -358,11 +447,26 @@ export function sarifNotification(failure) {
  * built by anything other than `check` — nothing does today — stays
  * byte-identical to before this field existed.
  *
+ * `fitness` — the per-function verdict records `check` already computes
+ * (`../governance/fitness-registry.mjs`'s `evaluateFitness`) — was the one
+ * finding kind this function never rendered at all: `check --format sarif`
+ * exits 1 on a `fail`-verdict fitness function (`verdictFor`'s `fitnessFail`)
+ * while this function produced zero results and zero notifications for it, so
+ * a red CI job uploaded an empty SARIF log. Each `fail` decision becomes a
+ * result (`sarifFitnessResult`) and each `unknown` one a notification
+ * (`sarifFitnessNotification`), the same fail/could-not-determine split every
+ * other finding kind above already keeps. `fitnessOverall` carries no
+ * information this function needs beyond what each decision's own `verdict`
+ * already states, so it is not read here — `formatReport` (text) is the
+ * consumer that needs the aggregate label.
+ *
  * @param {{violations: object[], failures: object[],
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
  *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
  *   declaredEdges?: {findings: object[], judged?: number}|null,
  *   intent?: {findings: object[]}|null,
+ *   fitness?: {name: string, message: string, verdict: string}[],
+ *   fitnessOverall?: {verdict: string},
  *   policy?: {profile: string|null, source: string, fingerprint: string}|null}} run
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
@@ -373,8 +477,12 @@ export function buildSarifLog({
   tsconfigPaths,
   declaredEdges,
   intent,
+  fitness,
   policy = null,
 }) {
+  const fitnessDecisions = fitness ?? [];
+  const fitnessFailed = fitnessDecisions.filter((decision) => decision.verdict === "fail");
+  const fitnessUnresolved = fitnessDecisions.filter((decision) => decision.verdict === "unknown");
   const waived = violations.filter((violation) => violation.waivedBy);
   // A waived count rides as a notification so a consumer scanning for "did
   // this run accept anything" finds it without reading every result's
@@ -410,6 +518,7 @@ export function buildSarifLog({
           ...(tsconfigPaths?.findings ?? []).map(sarifTsconfigPathsResult),
           ...(declaredEdges?.findings ?? []).map(sarifDeclaredEdgeResult),
           ...(intent?.findings ?? []).map(sarifIntentResult),
+          ...fitnessFailed.map((decision) => sarifFitnessResult(decision, policy?.source ?? null)),
         ],
         invocations: [
           {
@@ -417,7 +526,11 @@ export function buildSarifLog({
             // are results rather than errors. Reporting false here makes GitHub
             // treat the upload as a broken analysis and drop the annotations.
             executionSuccessful: true,
-            toolExecutionNotifications: [...failures.map(sarifNotification), ...waiverNote],
+            toolExecutionNotifications: [
+              ...failures.map(sarifNotification),
+              ...fitnessUnresolved.map(sarifFitnessNotification),
+              ...waiverNote,
+            ],
           },
         ],
       },
@@ -433,6 +546,8 @@ export function buildSarifLog({
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
  *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
  *   intent?: {findings: object[]}|null,
+ *   fitness?: {name: string, message: string, verdict: string}[],
+ *   fitnessOverall?: {verdict: string},
  *   policy?: {profile: string|null, source: string, fingerprint: string}|null}} run
  * @returns {string}
  */

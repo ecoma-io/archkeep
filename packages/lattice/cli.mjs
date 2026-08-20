@@ -528,18 +528,21 @@ function verdictFor({
         // intent both failed, name both — a reason naming only the file count
         // would hide the unresolved intent boundary from a reader acting on
         // the reason alone (it stays visible in result.intent.unresolved, and
-        // status is still no-verdict, so nothing is silent).
+        // status is still no-verdict, so nothing is silent). Each clause below
+        // is independent of the others — none is gated on a sibling clause
+        // being zero — so a tree that fails on several axes at once names
+        // every one of them, not just the first the array happens to check.
         reason: [
           unchecked > 0
             ? `${unchecked} file${unchecked === 1 ? "" : "s"} could not be analyzed — coverage incomplete`
             : null,
-          unchecked === 0 && intentUnresolved > 0
+          intentUnresolved > 0
             ? `${intentUnresolved} architecture-intent boundary or row${intentUnresolved === 1 ? "" : "s"} could not be established`
             : null,
-          intentUnresolved === 0 && intentUnresolvedDecisionRefs > 0
+          intentUnresolvedDecisionRefs > 0
             ? `${intentUnresolvedDecisionRefs} intent row${intentUnresolvedDecisionRefs === 1 ? "" : "s"} ${intentUnresolvedDecisionRefs === 1 ? "cites" : "cite"} a decisionRef that does not resolve`
             : null,
-          intentUnresolved === 0 && intentUnresolvedDecisionRefs === 0 && fitnessUnknown > 0
+          fitnessUnknown > 0
             ? `${fitnessUnknown} fitness function${fitnessUnknown === 1 ? "" : "s"} could not be determined`
             : null,
         ]
@@ -1378,6 +1381,15 @@ async function runCheck(options, { cwd, env }) {
           : "") +
         (result.intentFindings > 0
           ? `, ${result.intentFindings} architecture-intent finding${result.intentFindings === 1 ? "" : "s"}`
+          : "") +
+        // Fitness drives the exit code exactly like every count above it
+        // (`verdictFor`) — omitting it here is what let a fitness-only
+        // failure log "0 violations …" beside a non-zero exit.
+        (result.fitnessFail > 0
+          ? `, ${result.fitnessFail} fitness function${result.fitnessFail === 1 ? "" : "s"} failed`
+          : "") +
+        (result.fitnessUnknown > 0
+          ? `, ${result.fitnessUnknown} fitness function${result.fitnessUnknown === 1 ? "" : "s"} undetermined`
           : "") +
         (result.unchecked > 0
           ? `, ${result.unchecked} file${result.unchecked === 1 ? "" : "s"} not analyzed`
@@ -2237,7 +2249,13 @@ async function runHistory(options, { cwd, env }) {
   // is a `history` envelope, which `parseBaseline` refuses as a non-`graph`
   // snapshot). Refuse loudly instead of eventually failing on a poisoned dir.
   if (options.output) {
-    const outputAbs = isAbsolute(options.output) ? options.output : resolve(cwd, options.output);
+    // `resolve()` on the absolute branch too — not just the raw path — the
+    // same normalization `writeOutputReport` applies, so an absolute
+    // `--output` carrying a `..` segment that resolves INTO the history
+    // directory cannot slip past this guard unnormalized.
+    const outputAbs = isAbsolute(options.output)
+      ? resolve(options.output)
+      : resolve(cwd, options.output);
     if (dirname(outputAbs) === dir) {
       env.err(
         `lattice: --output '${options.output}' is inside the history directory '${dir}' — ` +

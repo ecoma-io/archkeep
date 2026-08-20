@@ -274,6 +274,41 @@ describe("driftCommand", () => {
     );
   });
 
+  it("shows an optional-and-unbuilt allowed row's coverage note in the text report (bug B)", async () => {
+    // `judgeIntent` pushes this onto `verdict.notes` — a documentation fact,
+    // never a drift finding. Before this fix, `driftCommand`'s own call to
+    // `formatDriftReport` never forwarded `notes`, so the warning reached
+    // `coverage.notes` in the JSON envelope (and `check`'s equivalent text
+    // face, via `driftForCheck`) but never this command's own `report.text` —
+    // a silent gap between the two faces of the identical fact.
+    const result = await driftCommand(
+      commandContext({
+        graph: {
+          nodes: {
+            core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
+            app: { name: "app", data: { root: "apps/app", tags: ["type-application"] } },
+          },
+          dependencies: {},
+        },
+      }),
+      ioWithIntent(
+        intent({
+          boundaries: [
+            { name: "packages", match: ["tag:type-package"] },
+            { name: "apps", match: ["tag:type-application"] },
+          ],
+          allowed: [{ from: "apps", to: "packages", optional: true }],
+        }),
+      ),
+    );
+    expect(result.drift.findings).toEqual([]);
+    const note =
+      'optional allowed intent "apps" → "packages" is not yet observed — aspirational, not drift';
+    expect(result.coverage.notes).toEqual([note]);
+    expect(result.report.text).toContain(note);
+    expect(result.report.text).toContain("✔ no drift");
+  });
+
   it("refuses over incomplete coverage — every 'project missing' would be ambiguous", async () => {
     await expect(
       driftCommand(
