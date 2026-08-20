@@ -2,7 +2,7 @@
 
 Conventions for writing new skills in the `arch-*` namespace. The gate —
 `scripts/check-skills.mjs` in CI — validates `name`, `description`, and the
-host-independence contract below, and holds the five-file version chain
+host-independence contract below, and holds the version chain
 ([versioning.md](versioning.md)); these conventions are the part of that gate
 the authoring side must meet.
 

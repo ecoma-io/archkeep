@@ -13,6 +13,13 @@
 #   2. cubic owns what none of them reach: defects where a gate script or plugin
 #      REPORTS NOTHING rather than reporting an error — the silent failure
 #      direction that is indistinguishable from a clean workspace.
+#   3. For the `arch-*` skills and their host docs, the same silent direction is
+#      a STALE CLAIM: a command, flag, exit code, or host directory the text
+#      still teaches after the mechanism moved. `check-skills.mjs` pins the
+#      regressions it already knows as regexes; cubic owns the claims no regex
+#      anticipated — which is why markdown is reviewable here (only
+#      CHANGELOG.md, a generated file, is ignored) while the instructions below
+#      forbid reviewing its prose.
 #
 # The reasoning lives in this file rather than in CONTRIBUTING.md because a
 # config file is read by whoever is editing it, and nothing else loads with it.
@@ -56,9 +63,18 @@ reviews:
 
     Do NOT report formatting or style: Prettier and ESLint decide those.
 
+    In Markdown files, review claims, never prose. The skills under skills/
+    and the docs under docs/ are behavioral protocol and stated mechanism: a
+    claim that no longer matches the code — a command, flag, exit code, JSON
+    envelope key, config surface, install path, or host directory that moved —
+    misdirects its reader exactly the way a silent gate does, because the stale
+    sentence reads as current. Flag those. Never comment on wording, tone,
+    structure, or link resolution: Prettier owns form and
+    scripts/check-docs-links.mjs owns references.
+
   ignore:
     files:
-      - "**/*.md"
+      - CHANGELOG.md
       - pnpm-lock.yaml
       - "**/dist/**"
       - "**/coverage/**"
@@ -88,6 +104,49 @@ reviews:
       include:
         - scripts/**
         - packages/**
+
+    - name: A skill teaches only the CLI that ships beside it
+      description: >
+        Every mechanism claim in skills/*/SKILL.md — a command name, a flag, an
+        exit code, a JSON envelope key, a config surface — must match
+        packages/lattice in the same tree. Flag both directions: a change to
+        the CLI's command surface (commands, flags, exit codes, envelope keys,
+        the config surfaces a provider reads) that does not touch the skill
+        teaching it, and a skill edit whose claim the code does not implement.
+        scripts/check-skills.mjs pins the stale claims it already knows as
+        regexes; this rule owns the ones no regex anticipated.
+      include:
+        - skills/**
+        - packages/lattice/**
+
+    - name: Canonical skills are host- and provider-independent
+      description: >
+        The arch-* skills must work unchanged on every Agent Skills host
+        (Claude Code, Codex, Cursor, Copilot, Windsurf, opencode) and describe
+        every project-model provider the engine ships (Nx, native
+        lattice.json, Moon). Flag frontmatter beyond
+        name/description/compatibility (metadata and allowed-tools are
+        spec-legal but refused here by decision — docs/skills/authoring.md),
+        any skill body that assumes a single agent host (a slash-command
+        spelling, an install path like .claude/ or .agents/, a host-specific
+        permission or tool name — invocation and installation belong to
+        docs/skills/), and any workspace-facing instruction that names one
+        provider's config surface as if it were the only one.
+      include:
+        - skills/**
+
+    - name: A host-matrix row is a claim about someone else's software
+      description: >
+        docs/skills/supported-hosts.md and docs/skills/installation.md state
+        facts about third-party hosts and the `npx skills` CLI — discovery
+        directories, invocation syntax, flags. Flag any added or changed row,
+        directory, or flag that is not verified against the named tool's
+        current documentation, and any command line a tool does not actually
+        ship. No gate in this repository can execute another vendor's host, so
+        this is the one place "Verify before you write" (AGENTS.md) has no
+        deterministic backstop.
+      include:
+        - docs/skills/**
 
     - name: pull_request_target never executes head code
       description: >

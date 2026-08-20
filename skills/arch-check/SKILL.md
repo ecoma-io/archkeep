@@ -38,12 +38,18 @@ leave it sound must show the check green.
    ```
 
    Know whether this workspace enforces by **file** or by **named profile**
-   before you read the verdict. A `profiles` registry in the plugin options
-   makes `boundaryConfig` (and a one-run `--config` override) a profile NAME
-   selected from that registry, not a file path; without one, both are file
-   paths. The default `check` enforces the profile `boundaryConfig` selects —
-   read the `boundaryConfig` value in `nx.json`'s plugin options, because that
-   string IS the active profile name, and the bare run resolves it. If you pass
+   before you read the verdict. Where `boundaryConfig` is declared follows
+   from the project model (`arch-context`, "Know which law is in effect"):
+   `nx.json`'s plugin options in an Nx workspace, `lattice.json`'s own
+   `boundaryConfig` field in a native one (a filename, or the policy inline),
+   and the conventional default `module-boundaries.config.mjs` in a Moon
+   workspace, where only `--config` selects another file for one run. A
+   `profiles` registry — an Nx plugin option only — makes `boundaryConfig`
+   (and a one-run `--config` override) a profile NAME selected from that
+   registry, not a file path; without one, both are file paths. The default
+   `check` enforces the profile `boundaryConfig` selects — read the
+   `boundaryConfig` value in `nx.json`'s plugin options, because that string
+   IS the active profile name, and the bare run resolves it. If you pass
    `--config`, it must equal that value to be a verification of the active law.
    Review a different law without touching the registered one the same way the
    CLI overrides a filename:

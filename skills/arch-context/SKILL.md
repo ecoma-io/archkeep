@@ -26,10 +26,24 @@ answer is to surface it, never to ignore it.
    directory the change touches. If unsure, list projects with
    `lattice graph --format json` and match by root directory.
 
-2. **Know which law is in effect.** A workspace enforces either by **file** or
-   by **named profile**. Check whether `nx.json`'s plugin options for
-   `@ecoma-io/lattice/nx` carry a `profiles` option (`profiles` is an Nx plugin
-   option only — a native `lattice.json` workspace has none, by design):
+2. **Know which law is in effect.** First identify the project model by the
+   marker at the workspace root — exactly one is present, and it decides where
+   the law is declared:
+
+   - **`nx.json`** (Nx) — the plugin options for `@ecoma-io/lattice/nx` carry
+     `boundaryConfig`, and possibly a `profiles` option.
+   - **`lattice.json`** (native) — the file's own `boundaryConfig` field names
+     the policy, or holds it inline as an object. No `profiles` surface, by
+     design.
+   - **`.moon/`** (Moon) — no options table exists: `boundaryConfig` is
+     `module-boundaries.config.mjs` by convention, `--config` overrides it for
+     one run, and there is no `profiles` surface
+     ([docs/integrations/moon.md](../../docs/integrations/moon.md)).
+
+   A workspace enforces either by **file** or by **named profile**. In an Nx
+   workspace, check whether the plugin options carry a `profiles` option
+   (`profiles` is an Nx plugin option only — the other two providers have
+   none, by design):
 
    - **No `profiles` option** — the default. `boundaryConfig` / `--config`
      names a policy _file_ (`module-boundaries.config.*`), exactly as before.

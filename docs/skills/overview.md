@@ -20,8 +20,8 @@ Agent
 - **Skills** = behavioral protocol. Host-independent `SKILL.md` files at the
   repository root `skills/` directory, teaching WHEN/WHY/HOW/FAILURE.
 - **Host integrations** = packaging for each agent platform. The Claude Code
-  plugin discovers skills through its `skills` field; `npx skills add` discovers
-  them from `skills/` at depth 1.
+  plugin discovers skills through its `skills` field; `npx skills add`
+  discovers them from the repository-root `skills/` directory.
 
 ## The governance lifecycle in four skills
 

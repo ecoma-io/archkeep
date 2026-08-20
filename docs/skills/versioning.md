@@ -7,15 +7,19 @@ how the sync works, what enforces it, and what happens on release.
 ## The version chain
 
 ```
-packages/lattice/package.json (source of truth)
+package.json (repository root — what release-please bumps directly)
+  = packages/lattice/package.json (the baseline the gate compares against)
   = .claude-plugin/plugin.json
   = .claude-plugin/marketplace.json (entry version)
   = .codex-plugin/plugin.json
   = packages/lattice-vscode/package.json
 ```
 
-All five must agree. The extension is on the list because it pairs with the
-engine it is released with, and one version is what makes the pairing visible.
+All six must agree. The root `package.json` is the release-please `"."`
+component — the one file it bumps directly; the other five are copies of it
+written by `extra-files`. The extension is on the list because it pairs with
+the engine it is released with, and one version is what makes the pairing
+visible.
 
 The `arch-*` skills carry **no version** by decision. A consumer's skills are
 installed with the plugin that ships them, so the version that matters is the
@@ -28,11 +32,13 @@ version is the pairing.
 
 `scripts/check-skills.mjs` runs in CI and validates:
 
-1. `.claude-plugin/plugin.json` version matches the package version
-2. `.claude-plugin/marketplace.json` entry version matches the package version
-3. `.codex-plugin/plugin.json` version matches the package version
-4. `packages/lattice-vscode/package.json` version matches the package version
-5. No host-specific frontmatter fields have leaked into canonical skills
+1. The repository root `package.json` version matches the package version —
+   the baseline itself checked against the file release-please actually bumps
+2. `.claude-plugin/plugin.json` version matches the package version
+3. `.claude-plugin/marketplace.json` entry version matches the package version
+4. `.codex-plugin/plugin.json` version matches the package version
+5. `packages/lattice-vscode/package.json` version matches the package version
+6. No host-specific frontmatter fields have leaked into canonical skills
 
 A version mismatch fails the build. There is no warning tier.
 

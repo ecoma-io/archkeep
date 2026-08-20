@@ -69,9 +69,12 @@ confirm it.
    binds is a governance decision: a change that satisfies the rule table but
    contradicts the recorded decision is a review finding waiting to happen.
    An ADR id the registry does not know exits 3 — the grounding is `unknown`,
-   never a pass. A fitness row cannot carry a `decisionRef` (it accepts
-   exactly `name`/`match`/`condition`/`reason`), and a record whose status is
-   `superseded` still binds its rows until a replacement is authored.
+   never a pass. A fitness row is a policy decision like any other row: beside
+   `name`/`match`/`condition`/`reason` it carries the same governance block
+   keys (`origin`, `rationale`, `decisionRef`, `fitnessBindings`), so a
+   fitness gate's `decisionRef` resolves exactly as a constraint row's does. A
+   record whose status is `superseded` still binds its rows until a
+   replacement is authored.
 
 3. **Make the smallest coherent change.** Change the code, staying inside the
    import directions the context described. A source-code change is **not**
@@ -111,14 +114,18 @@ confirm it.
 
    A full-workspace check is the verdict. A scoped check on the changed files is
    faster but omits cycle and lazy-load rules — it is a pre-check, not the gate.
-   The check enforces the law in effect: the profile `boundaryConfig` selects in
-   a profile-selected workspace (a one-run `lattice check --config <name>`
-   overrides the selection). Read the `boundaryConfig` value in `nx.json`'s
-   plugin options — that string IS the active profile name — and verify the
-   check resolves exactly it; a check that resolves a different profile than the
-   one in effect is not the verdict the change needs. Write the law down at the
-   start of the change — `--config <NAME>` in effect — so the evaluation step 9
-   reports is the one the change was actually made against.
+   The check enforces the law in effect, declared where the project model puts
+   it (`arch-context`, "Know which law is in effect"): in a profile-selected
+   workspace — which is always an Nx one — the profile `boundaryConfig`
+   selects (a one-run `lattice check --config <name>` overrides the
+   selection). There, read the `boundaryConfig` value in `nx.json`'s plugin
+   options — that string IS the active profile name — and verify the check
+   resolves exactly it; a check that resolves a different profile than the one
+   in effect is not the verdict the change needs. In a native or Moon
+   workspace the law is the policy file (or `lattice.json`'s inline policy)
+   itself. Write the law down at the start of the change — `--config <NAME>`
+   in effect — so the evaluation step 9 reports is the one the change was
+   actually made against.
 
 6. **Inspect drift when the architecture changed or the Intent is at stake.**
    If the change created or removed projects or edges, or touches anything the
