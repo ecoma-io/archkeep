@@ -459,12 +459,36 @@ export function stripRuleFitnessPrefix(ref) {
  * no `fitness:`-shaped ref can ever resolve, which is the correct answer: a
  * rule that cannot be measured is no more bound than one that does not exist.
  *
- * @param {{fitness?: {name: string}[]}|null|undefined} config The loaded
- *   boundary config, or `null`/`undefined` when a caller has none.
+ * A `fitness` export that is not an array, or that holds a row that is not a
+ * plain object, is malformed — `findFitnessViolations`
+ * (`./fitness-registry.mjs`) is what reports that, by name. This function
+ * runs BEFORE that validation (`findBoundaryConfigViolations` builds its
+ * default `io.resolve` from this, ahead of the `findFitnessViolations` call),
+ * so it must never throw on a shape the validator has not yet had a chance to
+ * name: a `.map` on a non-array, or a `.name` read off a non-object row,
+ * would surface as a raw, unprefixed `TypeError` instead of the contracted
+ * `lattice: <path> is malformed: fitness: …` message — loud, but naming
+ * nothing, which is its own silent-direction failure (`../../../../AGENTS.md`).
+ * Defensive here does not mean silent: an unusable `fitness` still yields no
+ * declared names, so a row citing one resolves to "unknown" exactly as it
+ * would once `findFitnessViolations` reports the malformed shape and the run
+ * exits non-zero.
+ *
+ * @param {unknown} config The loaded boundary config, or `null`/`undefined`
+ *   when a caller has none, or any other shape a not-yet-validated `fitness`
+ *   export may carry.
  * @returns {Set<string>}
  */
 export function declaredFitnessNames(config) {
-  return new Set((config?.fitness ?? []).map((row) => row.name));
+  const fitness = /** @type {{fitness?: unknown}} */ (config)?.fitness;
+  if (!Array.isArray(fitness)) return new Set();
+  const names = [];
+  for (const row of fitness) {
+    if (row !== null && typeof row === "object" && typeof row.name === "string") {
+      names.push(row.name);
+    }
+  }
+  return new Set(names);
 }
 
 /**

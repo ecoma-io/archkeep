@@ -166,6 +166,87 @@ describe("resolveRustDependencies", () => {
       },
     ]);
   });
+
+  it("draws edges in both directions when a project sits at the workspace root", () => {
+    // Two silent-miss directions in one fixture. Before the fix: (1) the root
+    // project's own manifest was looked up as `${"" }/Cargo.toml` = "/Cargo.toml"
+    // (a leading slash), which matches no entry `filesOf` ever lists — the root
+    // project was never even added to `crates`/`projectByRoot`, so BOTH edges
+    // below would vanish, not just one. (2) even with that fixed, a dependency
+    // FROM the nested project INTO the root project resolves `pathDir` to `""`
+    // via `normalizePath`, which the old `if (!pathDir) continue;` guard read as
+    // "no target" and dropped — the other direction of a root-project edge.
+    const rootProjects = [
+      { name: "root", root: "" },
+      { name: "leaf", root: "libs/leaf" },
+    ];
+    const rootFiles = { root: ["Cargo.toml"], leaf: ["libs/leaf/Cargo.toml"] };
+    const rootFilesOf = (name) => rootFiles[name] ?? [];
+    const rootContents = {
+      "Cargo.toml":
+        '[package]\nname = "root_crate"\nversion = "0.1.0"\n\n[dependencies]\n' +
+        'leaf = { path = "libs/leaf" }\n',
+      "libs/leaf/Cargo.toml":
+        '[package]\nname = "leaf"\nversion = "0.1.0"\n\n[dependencies]\n' +
+        'root_crate = { path = "../.." }\n',
+    };
+    expect(
+      resolveRustDependencies(rootProjects, rootFilesOf, (p) => rootContents[p] ?? null),
+    ).toEqual(
+      expect.arrayContaining([
+        { source: "root", target: "leaf", sourceFile: "Cargo.toml", type: "static" },
+        {
+          source: "leaf",
+          target: "root",
+          sourceFile: "libs/leaf/Cargo.toml",
+          type: "static",
+        },
+      ]),
+    );
+    expect(
+      resolveRustDependencies(rootProjects, rootFilesOf, (p) => rootContents[p] ?? null),
+    ).toHaveLength(2);
+  });
+
+  it("draws edges in both directions when the root project uses Nx's `.` spelling", () => {
+    // The production spelling, and the ONLY one that reaches this resolver
+    // from a real Nx graph — `""` above is a fixture convenience, never what
+    // Nx actually sends. Before the fix, `projectByRoot` was keyed on the RAW
+    // `project.root`, so it held `"."` while a dependency pointing AT the
+    // root normalizes `pathDir` to `""` (via `normalizePath`) — `"." !== ""`,
+    // so `projectByRoot.get("")` missed and the leaf→root edge (and, by the
+    // same map, any `root→leaf` lookup keyed the other way) vanished
+    // silently. `projectByRoot` is now keyed by the NORMALIZED root, so both
+    // spellings land on the same key.
+    const dotProjects = [
+      { name: "root", root: "." },
+      { name: "leaf", root: "libs/leaf" },
+    ];
+    const dotFiles = { root: ["Cargo.toml"], leaf: ["libs/leaf/Cargo.toml"] };
+    const dotFilesOf = (name) => dotFiles[name] ?? [];
+    const dotContents = {
+      "Cargo.toml":
+        '[package]\nname = "root_crate"\nversion = "0.1.0"\n\n[dependencies]\n' +
+        'leaf = { path = "libs/leaf" }\n',
+      "libs/leaf/Cargo.toml":
+        '[package]\nname = "leaf"\nversion = "0.1.0"\n\n[dependencies]\n' +
+        'root_crate = { path = "../.." }\n',
+    };
+    expect(resolveRustDependencies(dotProjects, dotFilesOf, (p) => dotContents[p] ?? null)).toEqual(
+      expect.arrayContaining([
+        { source: "root", target: "leaf", sourceFile: "Cargo.toml", type: "static" },
+        {
+          source: "leaf",
+          target: "root",
+          sourceFile: "libs/leaf/Cargo.toml",
+          type: "static",
+        },
+      ]),
+    );
+    expect(
+      resolveRustDependencies(dotProjects, dotFilesOf, (p) => dotContents[p] ?? null),
+    ).toHaveLength(2);
+  });
 });
 
 describe("crate naming", () => {
@@ -290,6 +371,45 @@ describe("parseRustUseSites", () => {
     // `;` that merely calls a method must not be read as one.
     const source = "fn main() { let s = f(); s.trim(); }\n";
     expect(parseRustUseSites(source)).toEqual([]);
+  });
+
+  it("reads a second (and third) use sharing the same line", () => {
+    // The silent-miss direction: before the fix, the main `use` regex
+    // consumed the terminating `;`, so `matchAll` resumed past it and the
+    // next `use` had no `(?:^|[{;}])` anchor left to open on — only the
+    // first `use` on the line was ever recorded.
+    const source = "use aaa::x; use bbb::y; use ccc::z;\n";
+    expect(parseRustUseSites(source).map((site) => site.specifier)).toEqual([
+      "aaa::x",
+      "bbb::y",
+      "ccc::z",
+    ]);
+  });
+
+  it("reads a use behind a same-line attribute whose own content holds a bracketed string", () => {
+    // The silent-miss direction: `#\[[^\]]*\]` stopped at the FIRST `]`, which
+    // a quoted string inside the attribute can supply before the attribute's
+    // own closing bracket — dropping the `use` entirely, with no record and
+    // no failure.
+    const source = '#[doc = "see [link]"] use aaa::x;\n';
+    expect(parseRustUseSites(source).map((site) => site.specifier)).toEqual(["aaa::x"]);
+  });
+
+  it("returns promptly on a quote-heavy same-line attribute with no closing bracket (ReDoS)", () => {
+    // `.rs` file contents are attacker-supplied per SECURITY.md. The quote-
+    // aware attribute pattern's two branches — a quoted string, or a single
+    // non-`]` character — used to overlap on `"` (`[^\]]` also matches `"`),
+    // giving the regex engine two ways to reach the same position for every
+    // quote character; with no closing `]` ever arriving, that ambiguity
+    // backtracks exponentially (measured on the pre-fix pattern: ~285ms at 30
+    // quote characters, seconds at ~50, unusable well before 2000). The
+    // fallback now excludes `"` (`[^"\]]`), so `"` can only start the string
+    // branch and the match is linear. This must return in well under a
+    // second, not merely "eventually".
+    const start = Date.now();
+    const pathological = `#[${'"'.repeat(2000)}\n`;
+    parseRustUseSites(pathological);
+    expect(Date.now() - start).toBeLessThan(1000);
   });
 });
 
@@ -496,6 +616,23 @@ describe("analyzeRust", () => {
     ]);
   });
 
+  it("reports a banned import that follows another use on the same line", () => {
+    // analyzeRust-level silent-miss: with the pre-fix regex, only the first
+    // `use` on a shared line was ever recorded, so a rule checking
+    // `bannedExternalImports` against `banned_ffi` would see nothing at all
+    // for a file that plainly imports it — an enforcement gap indistinguishable
+    // from a clean file.
+    const { imports, failures } = analyze("use std::fmt; use banned_ffi::raw;\n");
+    expect(failures).toEqual([]);
+    expect(imports.map((record) => record.specifier)).toEqual(["std::fmt", "banned_ffi::raw"]);
+    expect(imports[1].resolved).toEqual({
+      target: null,
+      file: null,
+      external: true,
+      packageName: "banned_ffi",
+    });
+  });
+
   it("returns an envelope rather than throwing when the workspace misbehaves", () => {
     const hostile = {
       ...workspace,
@@ -657,5 +794,92 @@ describe('analyzeRust — a dependency renamed via `package = "…"`', () => {
       workspace: withSibling,
     });
     expect(app.imports[0].resolved.target).toBe("engine");
+  });
+
+  it("crosses the boundary when a rename points at the workspace-root project", () => {
+    // The same `pathDir === ""` case as the edge resolver's root-project test,
+    // now for `renamedDepsOf`: before the fix, `if (!pathDir || !renamed)
+    // continue;` treated the root project's empty-string `pathDir` as "no
+    // target" and dropped the alias — `use dep::…` would resolve
+    // `external: true, target: null`, indistinguishable from an actual
+    // external crate.
+    const ws = {
+      root: "/w",
+      projects: [
+        { name: "root", root: "" },
+        { name: "app", root: "apps/app" },
+      ],
+      filesOf: (name) =>
+        ({
+          root: ["Cargo.toml"],
+          app: ["apps/app/Cargo.toml", "apps/app/src/main.rs"],
+        })[name] ?? [],
+      readFile: (path) =>
+        ({
+          "Cargo.toml": '[package]\nname = "core_root"\nversion = "0.1.0"\n',
+          "apps/app/Cargo.toml":
+            '[package]\nname = "app"\nversion = "0.1.0"\n\n[dependencies]\n' +
+            'dep = { package = "core_root", path = "../.." }\n',
+        })[path] ?? null,
+    };
+    expect(resolveRustDependencies(ws.projects, ws.filesOf, ws.readFile)).toEqual([
+      { source: "app", target: "root", sourceFile: "apps/app/Cargo.toml", type: "static" },
+    ]);
+    const { imports, failures } = analyzeRust({
+      sourceFile: "apps/app/src/main.rs",
+      text: "use dep::widget;\n",
+      workspace: ws,
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toEqual({
+      target: "root",
+      file: null,
+      external: false,
+      packageName: null,
+    });
+  });
+
+  it("crosses the boundary when a rename points at a root project spelled Nx's `.` way", () => {
+    // The production spelling of the test right above: before the fix,
+    // `renamedDepsOf`'s `projectByRoot` was keyed on the raw `"."`, which
+    // never equals the `""` a rename pointing at the root normalizes
+    // `pathDir` to — the alias was dropped and `use dep::…` resolved
+    // `external: true, target: null`, indistinguishable from a real external
+    // crate. `projectByRoot` is now keyed by the normalized root, so `"."`
+    // and `""` match the same project.
+    const ws = {
+      root: "/w",
+      projects: [
+        { name: "root", root: "." },
+        { name: "app", root: "apps/app" },
+      ],
+      filesOf: (name) =>
+        ({
+          root: ["Cargo.toml"],
+          app: ["apps/app/Cargo.toml", "apps/app/src/main.rs"],
+        })[name] ?? [],
+      readFile: (path) =>
+        ({
+          "Cargo.toml": '[package]\nname = "core_root"\nversion = "0.1.0"\n',
+          "apps/app/Cargo.toml":
+            '[package]\nname = "app"\nversion = "0.1.0"\n\n[dependencies]\n' +
+            'dep = { package = "core_root", path = "../.." }\n',
+        })[path] ?? null,
+    };
+    expect(resolveRustDependencies(ws.projects, ws.filesOf, ws.readFile)).toEqual([
+      { source: "app", target: "root", sourceFile: "apps/app/Cargo.toml", type: "static" },
+    ]);
+    const { imports, failures } = analyzeRust({
+      sourceFile: "apps/app/src/main.rs",
+      text: "use dep::widget;\n",
+      workspace: ws,
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toEqual({
+      target: "root",
+      file: null,
+      external: false,
+      packageName: null,
+    });
   });
 });

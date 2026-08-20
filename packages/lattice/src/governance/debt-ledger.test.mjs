@@ -82,6 +82,15 @@ describe("computeDebtLedger", () => {
     // The same fate the gate applies — an expired waiver covers nothing.
     expect(ledger.bySeverity.medium).toBe(1);
     expect(ledger.bySeverity.low).toBe(0);
+    // `byKind` must count `"expired-waiver"` under its own key — an aggregate
+    // that only ever seeded `waiver`/`aspirational-gap`/`drift`/`unresolved`
+    // reads `byKind["expired-waiver"]` as `undefined`, and `undefined + 1` is
+    // `NaN` — which serializes to JSON `null`, not a number a caller can sum.
+    // The sum-to-total check is the tripwire: a silently-uncounted kind still
+    // shows up in `entries`/`total`, so only the per-kind aggregate would lie.
+    expect(ledger.byKind["expired-waiver"]).toBe(1);
+    const sumOfKinds = Object.values(ledger.byKind).reduce((a, b) => a + b, 0);
+    expect(sumOfKinds).toBe(ledger.total);
   });
 
   it("keeps a still-active waiver low — the F06 complement", () => {
@@ -188,7 +197,13 @@ describe("computeDebtLedger", () => {
     );
     expect(ledger.total).toBe(0);
     expect(ledger.entries).toEqual([]);
-    expect(ledger.byKind).toEqual({ waiver: 0, "aspirational-gap": 0, drift: 0, unresolved: 0 });
+    expect(ledger.byKind).toEqual({
+      waiver: 0,
+      "expired-waiver": 0,
+      "aspirational-gap": 0,
+      drift: 0,
+      unresolved: 0,
+    });
     expect(ledger.bySeverity).toEqual({ high: 0, medium: 0, low: 0 });
   });
 
