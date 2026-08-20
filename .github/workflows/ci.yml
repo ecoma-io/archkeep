@@ -34,9 +34,9 @@ jobs:
     strategy:
       # 24 is the current default (`.node-version`, which every other job in
       # this repository still reads); 22 is the `engines.node` floor this
-      # package promises. Both legs run the IDENTICAL suite — there is no
-      # separate smoke subset that could go green while the full path does
-      # not — so a Node-24-only API entering shipped code or a test fails the
+      # package promises. Both legs run the IDENTICAL suite — the 22 leg is
+      # not a reduced subset that could pass over what the 24 leg would
+      # run — so a Node-24-only API entering shipped code or a test fails the
       # 22 leg here rather than in a consumer's CI later.
       matrix:
         node: [24, 22]
@@ -284,9 +284,28 @@ jobs:
         run: node scripts/verify-package.mjs packages/lattice
 
   verify-e2e:
-    name: Verify (E2E)
+    name: Verify (E2E ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      # One suite, two runners. Sharding is by test FILE, and the assignment
+      # is vitest's, not this file's: measured against vitest 4.1.10, it
+      # hashes each resolved file's workspace-relative path with SHA-1, sorts
+      # by that hash, and gives each shard a contiguous slice. Deterministic
+      # run to run, and every file lands in exactly one shard — but the sort
+      # key is a path, not a cost, so the two legs are not expected to take
+      # equal wall time and nothing here should be written as though they do.
+      #
+      # That same hashing is why the split cannot be tuned by ordering:
+      # `shard()` re-sorts by hash whatever order it is handed, so a vitest
+      # `sequence` option would change execution order within a shard and not
+      # which shard a file belongs to. What does move a file is its NAME
+      # (the hash is of the path) or a change in how many e2e files there
+      # are (the slice boundaries move with the count) — so rebalancing is
+      # not a knob this file has, and an uneven pair is a fact to live with
+      # rather than a setting to correct.
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -302,21 +321,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The smoke subset covers the fastest E2E scenarios, one per main command
-      # (native clean/violating check, graph, self-baseline diff, history's
-      # no-verdict, intent's forbidden-edge, plus the language providers). The
-      # full suite adds parity, determinism, Moon, and extended command
-      # coverage. verify-core already proves lint, unit tests, typecheck,
-      # self-check, and the packed artifact — the E2E suite does not duplicate
-      # those. It packs its own artifact from source and installs it fresh,
-      # proving the real CLI works as an installed package. `e2e:smoke` also
-      # fails when zero tests ran, so a renamed or misnamed smoke describe can
-      # never turn the fast signal green-while-empty.
-      - name: E2E smoke tests
-        run: pnpm e2e:smoke
-
-      - name: E2E full tests
-        run: pnpm e2e
+      # One shard of the E2E suite. It packs its own artifact from source and
+      # installs it fresh, proving the real CLI works as an installed package;
+      # verify-core already proves lint, unit tests, typecheck, self-check,
+      # and the packed artifact, so nothing here duplicates those.
+      #
+      # A green shard has to mean "these files ran and passed", so both ways a
+      # shard can end up running nothing exit 1 — measured against vitest
+      # 4.1.10:
+      #   - No test file resolved at all: `No test files found, exiting with
+      #     code 1`, because `passWithNoTests` defaults to false.
+      #   - Fewer files resolved than there are shards: `--shard <count> must
+      #     be a smaller than count of test files`, thrown before any test
+      #     runs. This is the one that would bite if the `include` glob or a
+      #     mass rename ever left a single e2e file behind.
+      # Nothing selects by test NAME any more, so the third way — a `-t`
+      # pattern matching zero tests, which vitest reports as skipped and exits
+      # 0 for — is no longer reachable from this workflow at all.
+      - name: E2E tests (shard ${{ matrix.shard }}/2)
+        run: pnpm e2e --shard=${{ matrix.shard }}/2
 
   ci-gate:
     name: ci-gate
