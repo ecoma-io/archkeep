@@ -67,6 +67,7 @@
  *   how it was written — `isOwnProjectImport` states why that is the honest
  *   answer for a language whose package graph cannot cycle.
  */
+import { normalizePath } from "./manifest-util.mjs";
 import {
   emptyResult,
   fileFailure,
@@ -76,10 +77,24 @@ import {
   trackedManifests,
 } from "./source-util.mjs";
 
-/** Module path declared in a go.mod, or null. */
+/**
+ * Module path declared in a go.mod, or null.
+ *
+ * The token may be `"`-quoted — `module "example.com/beta"` is legal,
+ * gofmt-clean go.mod syntax, the same string-literal spelling an import path
+ * uses. The quotes are not part of the path: kept, they would silently break
+ * every comparison against an (unquoted) import path, dropping the edge in
+ * both directions for a module declared this way. A backquoted module path is
+ * NOT stripped here because it is not legal go.mod syntax to begin with — the
+ * real toolchain rejects it, so there is nothing gofmt-clean to preserve.
+ */
 export function parseGoModulePath(goModText) {
   const match = goModText.match(/^module\s+(\S+)/m);
-  return match ? match[1] : null;
+  if (!match) return null;
+  const token = match[1];
+  return token.length >= 2 && token.startsWith('"') && token.endsWith('"')
+    ? token.slice(1, -1)
+    : token;
 }
 
 /** Every character of `text` except its line breaks, replaced by a space. */
@@ -149,6 +164,14 @@ export function maskGoComments(goText) {
   return masked + goText.slice(copied);
 }
 
+// An import alias is a Go identifier: `\p{L}` is what `unicode.IsLetter`
+// accepts as a starting rune (gofmt permits `import π "…"`), and the ASCII
+// `[A-Za-z_.]` this used to be silently dropped every non-ASCII one — a
+// silent missed edge/import, not a rejection. The `u` flag both regexes below
+// are built with is what makes `\p{...}` a Unicode class rather than a
+// literal `p`.
+const GO_IMPORT_ALIAS = "[\\p{L}_.][\\p{L}\\p{Nd}_.]*";
+
 /**
  * Every import in a .go file with the offset of its quoted path, in source
  * order and WITHOUT deduplication — one entry per written import, which is
@@ -166,17 +189,21 @@ export function parseGoImportSites(goText) {
   // import "p" | import alias "p" | import _ "p" | import . "p" — the path
   // quoted or backtick-delimited, and the whole spec opening either a line or
   // (see the header) a `;`-separated continuation of one.
-  for (const m of source.matchAll(
-    /(?:^|;)\s*import\s+(?:[A-Za-z_.][\w.]*\s+)?(?:"([^"]+)"|`([^`]+)`)/gm,
-  )) {
+  const singleForm = new RegExp(
+    `(?:^|;)\\s*import\\s+(?:${GO_IMPORT_ALIAS}\\s+)?(?:"([^"]+)"|\`([^\`]+)\`)`,
+    "gmu",
+  );
+  for (const m of source.matchAll(singleForm)) {
     const quote = m[1] !== undefined ? '"' : "`";
     sites.push({ specifier: m[1] ?? m[2], offset: m.index + m[0].indexOf(quote) });
   }
+  const blockForm = new RegExp(
+    `(?:^|;)\\s*(?:${GO_IMPORT_ALIAS}\\s+)?(?:"([^"]+)"|\`([^\`]+)\`)`,
+    "gmu",
+  );
   for (const block of source.matchAll(/^\s*import\s*\(([\s\S]*?)\)/gm)) {
     const contentOffset = block.index + block[0].indexOf("(") + 1;
-    for (const m of block[1].matchAll(
-      /(?:^|;)\s*(?:[A-Za-z_.][\w.]*\s+)?(?:"([^"]+)"|`([^`]+)`)/gm,
-    )) {
+    for (const m of block[1].matchAll(blockForm)) {
       const quote = m[1] !== undefined ? '"' : "`";
       sites.push({
         specifier: m[1] ?? m[2],
@@ -203,7 +230,7 @@ export function resolveGoDependencies(projects, filesOf, readFile) {
   const moduleOf = new Map(); // module path -> project name
   const goProjects = [];
   for (const project of projects) {
-    const goModPath = `${project.root}/go.mod`;
+    const goModPath = normalizePath(project.root, "go.mod");
     if (!filesOf(project.name).includes(goModPath)) continue;
     const modulePath = parseGoModulePath(readFile(goModPath) ?? "");
     if (!modulePath) continue;
