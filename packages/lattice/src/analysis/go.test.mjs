@@ -250,6 +250,40 @@ describe("parseGoImports", () => {
     expect(parseGoImports('package main\n\nimport ("fmt"; "os")\n').sort()).toEqual(["fmt", "os"]);
   });
 
+  it("reads a block whose OPENER follows a `;`, instead of dropping every path in it", () => {
+    // The silent direction, and the same class the `;` case above was fixed
+    // for — fixed there only for the single form. `package main; import (…)`
+    // is legal Go that compiles: `;` is the statement separator gofmt inserts
+    // at a newline. Anchored on `^` alone, the block regex found no block at
+    // all, so EVERY path inside it vanished — no import record, no graph edge,
+    // and no failure either, which is byte-for-byte a file that imports
+    // nothing. A file importing one project reported as importing none is the
+    // boundary check going quiet, not a formatting quibble.
+    expect(parseGoImports('package main; import (\n\t"example.com/beta/store"\n)\n')).toEqual([
+      "example.com/beta/store",
+    ]);
+    // The same block reached after a single-form import on the same line: the
+    // single form is read either way, so a regression here would show up as
+    // the block's paths alone going missing.
+    expect(
+      parseGoImports('package main\n\nimport "fmt"; import (\n\t"example.com/beta/store"\n)\n'),
+    ).toEqual(["fmt", "example.com/beta/store"]);
+  });
+
+  it("counts a `;`-opened block's paths once, not twice", () => {
+    // `singleForm` requires a quote or an alias after `import`, so `import (`
+    // can never match it — the guard that lets the block opener take the same
+    // `(?:^|;)` prefix without every path being recorded by both regexes. A
+    // duplicate would be the loud direction, but it would also double every
+    // import-site record a report prints.
+    const sites = parseGoImportSites('package main; import (\n\t"example.com/beta/store"\n)\n');
+    expect(sites).toHaveLength(1);
+    // The offset still names the byte the path is quoted at, which is what
+    // `positionAt` turns into the `file:line:column` a reader opens.
+    const src = 'package main; import (\n\t"example.com/beta/store"\n)\n';
+    expect(src.slice(sites[0].offset, sites[0].offset + 1)).toBe('"');
+  });
+
   it("reads a single-form import whose alias is a non-ASCII identifier", () => {
     // `unicode.IsLetter` — what Go itself uses to admit an identifier's first
     // rune — accepts any Unicode letter, not only ASCII; `import π "…"` is

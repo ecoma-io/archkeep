@@ -34,8 +34,9 @@
  * `import` opens its line, after indentation only, OR follows a `;` on the
  * same line — the same statement separator `gofmt` inserts automatically at
  * a newline, so an explicit one reopens an import exactly the way a fresh
- * line does: `import "a"; import "b"` and, inside a block, `import ("a";
- * "b")` both read as two imports, not one followed by inert text. The path
+ * line does: `import "a"; import "b"`, inside a block, `import ("a"; "b")`,
+ * and a block whose opener follows one, `package main; import ("a")`, all
+ * read every path they hold, not one followed by inert text. The path
  * itself may be a quoted string or, since Go treats a raw string as an
  * equally legal string literal, backtick-delimited — both spellings are read
  * the same way, though only the quoted form is what `gofmt` ever writes.
@@ -201,7 +202,15 @@ export function parseGoImportSites(goText) {
     `(?:^|;)\\s*(?:${GO_IMPORT_ALIAS}\\s+)?(?:"([^"]+)"|\`([^\`]+)\`)`,
     "gmu",
   );
-  for (const block of source.matchAll(/^\s*import\s*\(([\s\S]*?)\)/gm)) {
+  // The block opener takes the SAME `(?:^|;)` prefix the single form does, and
+  // for the same reason the header gives: `;` is the statement separator gofmt
+  // inserts at a newline, so `package main; import (…)` opens a block exactly
+  // the way a fresh line does. Anchoring this one on `^` alone read that file
+  // as having no block at all — every path inside it dropped with no record and
+  // no failure, which is the silent direction the single form was already fixed
+  // for. `import (` can never also match `singleForm` above, which requires a
+  // quote or an alias after `import`, so no site is counted twice.
+  for (const block of source.matchAll(/(?:^|;)\s*import\s*\(([\s\S]*?)\)/gm)) {
     const contentOffset = block.index + block[0].indexOf("(") + 1;
     for (const m of block[1].matchAll(blockForm)) {
       const quote = m[1] !== undefined ? '"' : "`";
