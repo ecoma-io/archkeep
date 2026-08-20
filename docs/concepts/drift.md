@@ -120,7 +120,7 @@ file exists and is tracked, `check` already counts it.
 
 The four signals above are basic drift detection, and they are a 1.x
 capability: deterministic, computed from graph, policy, snapshot, diff and
-intent, with no predictive component. [roadmap.md](../roadmap.md) owns the
+intent, with no predictive component. [roadmap.md](../doctrine/roadmap.md) owns the
 staged path and lists this alongside the other 1.x capabilities. What 2.x adds
 on top — advanced and predictive drift, historical evolution intelligence, a
 recommendation component — is direction, not a promise; the deterministic

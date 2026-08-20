@@ -19,7 +19,7 @@ knows a dependency exists when it is an edge in the project graph, and Nx infers
 no edge for a Go import, a Cargo path dependency, or a `pyproject.toml` path
 dependency. An under-selecting `affected` and an absent boundary rule look
 exactly like a clean workspace, which is why the silence goes unnoticed (the
-measurement: [why.md](https://github.com/ecoma-io/lattice/blob/main/docs/why.md)).
+measurement: [why.md](https://github.com/ecoma-io/lattice/blob/main/docs/doctrine/why.md)).
 
 Lattice closes both gaps with one analysis, served three ways — a CLI
 (`lattice check`), a language server (`lattice-lsp`), and an Nx plugin

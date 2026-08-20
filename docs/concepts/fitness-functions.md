@@ -137,5 +137,5 @@ checked" — the silent direction this whole tool exists to end.
 
 Fitness functions are a 1.x capability: deterministic, computed from the
 observed graph, analysis, intent and policy, with no predictive component.
-[roadmap.md](../roadmap.md) owns the staged path and lists this alongside the
+[roadmap.md](../doctrine/roadmap.md) owns the staged path and lists this alongside the
 other 1.x capabilities.
