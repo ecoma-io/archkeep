@@ -255,8 +255,10 @@ function candidateFromElement(element, kindByClassification) {
  *
  * Two disjoint sources, so a divergence is never proposed twice: observed
  * elements with no intent row of their own (`intentUnknownProject`,
- * `dependencyNotAllowed`) propose `add`, and intent rows propose the edit that
- * changes the row itself (`removal`, `tag-change`, `boundary-change`).
+ * `dependencyNotAllowed`, read from `scores.projects`/`scores.edges`) propose
+ * `add`, and intent rows propose the edit that changes the row itself
+ * (`removal`, `tag-change`, `boundary-change`, read from `scores.tags` — the
+ * per-required-tag elements `scoreProject` emits — and `scores.intentRows`).
  * Candidates are ranked by severity (higher first — every `unexpected` before
  * every `absent`), then by plane, then name — byte-identical across runs over
  * an unchanged tree and intent.
@@ -273,6 +275,15 @@ export function buildRankedCandidates(scores) {
   }
   for (const element of scores.edges) {
     const candidate = candidateFromElement(element, OBSERVED_ELEMENT_KIND);
+    if (candidate !== null) candidates.push(candidate);
+  }
+  // `scores.tags` carries `projectTagMissing` elements (a required project's
+  // missing required tag) — an intent-row-owned divergence like `removal` and
+  // `boundary-change`, so it reads the same INTENT_ROW_KIND table. Omitting
+  // this loop left `projectTagMissing → "tag-change"` dead: `--propose` could
+  // never surface the one candidate kind that repairs a missing required tag.
+  for (const element of scores.tags) {
+    const candidate = candidateFromElement(element, INTENT_ROW_KIND);
     if (candidate !== null) candidates.push(candidate);
   }
   for (const element of scores.intentRows) {
