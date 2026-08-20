@@ -53,6 +53,23 @@ test("parseDocCitations finds docs/ citations, root-relative and carrying-file r
   ]);
 });
 
+test("parseDocCitations finds a top-level docs/ citation — not just a two-segment one", () => {
+  // The old regex required exactly `docs/<segment>/<segment>.md`, so a
+  // top-level file (`docs/why.md`, `docs/README.md` — both real citations in
+  // this repository) never matched and could be deleted or moved without the
+  // gate noticing.
+  const text = "see docs/why.md";
+  assert.deepEqual(parseDocCitations(text), [{ target: "docs/why.md", line: 1 }]);
+});
+
+test("parseDocCitations finds an uppercase-named and a three-deep docs/ citation", () => {
+  const text = "cited in docs/README.md and also docs/usage/native/checking.md";
+  assert.deepEqual(parseDocCitations(text), [
+    { target: "docs/README.md", line: 1 },
+    { target: "docs/usage/native/checking.md", line: 1 },
+  ]);
+});
+
 test("parseDocCitations does not double-judge a markdown link target as a citation", () => {
   // `usage/configuration.md` is not a `docs/…` citation, and the `docs/…`
   // target it DOES carry is a link, already judged by the link parser with
@@ -62,13 +79,73 @@ test("parseDocCitations does not double-judge a markdown link target as a citati
   assert.deepEqual(parseDocCitations(text), []);
 });
 
+test("parseDocCitations drops a docs/adr/NNN-slug.md placeholder citation, backticked or not", () => {
+  // The real production text (adr.mjs, arch-change/SKILL.md) writes this
+  // inline-backtick-wrapped, describing the ADR filename PATTERN rather than
+  // one real file — `NNN` is a placeholder for a real number, never a real
+  // path component. Dropped whether or not it is backtick-wrapped, so a
+  // maintainer copying it into plain prose does not accidentally make it
+  // start failing.
+  const backticked = "open `docs/adr/NNN-slug.md` and read the prose";
+  const plain = "open docs/adr/NNN-slug.md and read the prose";
+  assert.deepEqual(parseDocCitations(backticked), []);
+  assert.deepEqual(parseDocCitations(plain), []);
+});
+
+test("parseDocCitations still finds a REAL backtick-wrapped citation — the placeholder rule does not narrow this", () => {
+  // This repository's own convention for a live citation IS inline,
+  // backtick-wrapped prose (see packages/lattice/src/rules/match.mjs,
+  // src/report/json.mjs, and others) — the ADR-placeholder exclusion above
+  // is deliberately narrow (matched on the literal "NNN" token) so it does
+  // not also silence citations like this one, which name one real file.
+  const text = "per `docs/reference/policy-schema.md`, the field is optional";
+  assert.deepEqual(parseDocCitations(text), [
+    { target: "docs/reference/policy-schema.md", line: 1 },
+  ]);
+});
+
+test("parseDocCitations skips a docs/…md mention inside a fenced code block", () => {
+  const text = ["See below:", "```", "docs/example-config.md", "```"].join("\n");
+  assert.deepEqual(parseDocCitations(text), []);
+});
+
+test("parseDocCitations, for a non-markdown file, only extracts citations from COMMENTS", () => {
+  // `write("docs/readme.md", …)` and `path: "docs/x.md"` are JS string
+  // literals in test-fixture code, not citations of this repository's docs —
+  // AGENTS.md's citation rule is about comments. A real citation just above,
+  // in a `//` comment, is still found.
+  const text = [
+    "// see docs/reference/cli.md for the format",
+    'write("docs/readme.md", "# docs\\n");',
+    'const fixture = { path: "docs/x.md" };',
+  ].join("\n");
+  assert.deepEqual(parseDocCitations(text, { isMarkdown: false }), [
+    { target: "docs/reference/cli.md", line: 1 },
+  ]);
+});
+
+test("parseDocCitations, for a non-markdown file, finds a citation in a block/JSDoc comment", () => {
+  const text = ["/**", " * per docs/reference/policy-schema.md", " */", "export const x = 1;"].join(
+    "\n",
+  );
+  assert.deepEqual(parseDocCitations(text, { isMarkdown: false }), [
+    { target: "docs/reference/policy-schema.md", line: 2 },
+  ]);
+});
+
 test("githubSlug normalizes like GitHub's heading anchors", () => {
   assert.equal(githubSlug("boundaryConfig"), "boundaryconfig");
   assert.equal(
     githubSlug("nx affected still misses a dependency"),
     "nx-affected-still-misses-a-dependency",
   );
-  assert.equal(githubSlug('Exit 3 — "no verdict"'), "exit-3-no-verdict");
+  // Punctuation is stripped, but EACH space that bordered it survives and
+  // becomes its own hyphen — a collapsing slugger merges the two spaces
+  // either side of the removed em-dash into one hyphen and gets
+  // "exit-3-no-verdict", which is not the anchor GitHub actually renders for
+  // this heading. Corrected from that value: the old assertion pinned the
+  // collapsed (wrong) slug, which is the bug this case exists to catch.
+  assert.equal(githubSlug('Exit 3 — "no verdict"'), "exit-3--no-verdict");
   assert.equal(githubSlug("PLAIN"), "plain");
 });
 
@@ -84,6 +161,38 @@ test("headingAnchors covers every heading and GitHub's duplicate suffix", () => 
     [...headingAnchors(text)].sort(),
     ["one", "three", "two-repeated", "two-repeated-1"].sort(),
   );
+});
+
+test("headingAnchors ignores a '#' line inside a fenced code block", () => {
+  // A `# install deps` line inside a bash fence is source text a reader
+  // sees, not a heading GitHub renders — a scan blind to fences mints a
+  // phantom anchor for it, so a link to `#install-deps` would pass here
+  // while it is broken on GitHub, which never rendered that heading at all.
+  const text = `# Setup
+
+\`\`\`bash
+# install deps
+pnpm install
+\`\`\`
+
+## Real heading`;
+  assert.deepEqual([...headingAnchors(text)].sort(), ["real-heading", "setup"].sort());
+});
+
+test("headingAnchors only closes a fence with the same character", () => {
+  // CommonMark: a \`\`\` fence is not closed by a ~~~ line, so a heading-shaped
+  // line between them (misread as "still inside a fence" or "back outside
+  // one" by a naive matcher) must be handled by the same rule either way —
+  // here neither line inside is a real heading, and the real one after both
+  // fences close still counts.
+  const text = `\`\`\`
+~~~
+# not a heading
+~~~
+\`\`\`
+
+## After`;
+  assert.deepEqual([...headingAnchors(text)], ["after"]);
 });
 
 test("withDirectories adds every parent directory of a path", () => {
@@ -170,6 +279,25 @@ test("evaluate passes a same-file anchor that matches a heading", () => {
   assert.equal(failures.length, 0);
 });
 
+test("evaluate FAILS a link to an anchor that only exists inside a fenced code block", () => {
+  // `headings` here is what `headingAnchors` would actually return for a doc
+  // whose only `# install deps` is inside a bash fence — i.e. it does NOT
+  // include "install-deps", because that heading is source text, not a real
+  // one. A link to it must fail instead of passing on a phantom anchor.
+  const { failures } = evaluate({
+    files: [
+      file("docs/f.md", {
+        links: [{ target: "#install-deps", line: 6 }],
+        headings: new Set(),
+      }),
+    ],
+    existingPaths: new Set([abs("docs/f.md")]),
+    root: "/repo",
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /#install-deps/);
+});
+
 test("evaluate FAILS a same-file anchor even when the file exists — the heading is gone", () => {
   const { failures } = evaluate({
     files: [
@@ -194,6 +322,20 @@ test("evaluate checks only the file half of a file.md#fragment link", () => {
     root: "/repo",
   });
   assert.equal(failures.length, 0);
+});
+
+test("evaluate FAILS a top-level docs/ citation that does not exist — the silent direction", () => {
+  // `docs/why.md` has one segment after `docs/`, not two — the shape the old
+  // citation regex silently ignored. A citation of it must still be checked.
+  const { failures } = evaluate({
+    files: [
+      file("packages/lattice/src/x.mjs", { citations: [{ target: "docs/why.md", line: 7 }] }),
+    ],
+    existingPaths: new Set(),
+    root: "/repo",
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /docs\/why\.md/);
 });
 
 test("evaluate FAILS a root-relative docs/ citation that does not exist", () => {

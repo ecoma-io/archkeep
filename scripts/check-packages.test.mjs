@@ -49,6 +49,43 @@ test("a flag after the first target still stops the loop", () => {
   assert.deepEqual(parseCiTargets(workflow), ["lint"]);
 });
 
+test("joins a shell line continuation into one logical invocation", () => {
+  // A `moon run ...:lint \` followed on the next physical line by
+  // `...:test ...:typecheck` is one invocation split across two lines by a
+  // shell continuation, not two separate ones — all three targets must be
+  // read, not just the ones on the first physical line.
+  const workflow = [
+    "      - run: |",
+    "          pnpm exec moon run --force ...:lint \\",
+    "            ...:test ...:typecheck",
+    "",
+  ].join("\n");
+  assert.deepEqual(parseCiTargets(workflow), ["lint", "test", "typecheck"]);
+});
+
+test("unions targets across two separate moon run invocations", () => {
+  // CI can (and once did) split the real run across more than one `moon run`
+  // step; every invocation found must contribute, not just the first.
+  const workflow = [
+    "      - run: moon run ...:lint",
+    "      - run: moon run ...:test ...:typecheck",
+    "",
+  ].join("\n");
+  assert.deepEqual(parseCiTargets(workflow), ["lint", "test", "typecheck"]);
+});
+
+test("a comment mentioning 'moon run' does not seed or pollute the target list", () => {
+  // A whole-line comment is dropped before targets are extracted, so prose
+  // that happens to contain the words "moon run" can never become the
+  // source of the enforced target list.
+  const workflow = [
+    "      # See the moon run wiki for available targets: build, deploy, hack",
+    "      - run: pnpm test",
+    "",
+  ].join("\n");
+  assert.deepEqual(parseCiTargets(workflow), []);
+});
+
 test("reports no targets when the workflow does not run the workspace's targets", () => {
   // The caller treats this as a hard failure rather than as "nothing to check":
   // a workflow with no moon run means this script no longer knows what green is.

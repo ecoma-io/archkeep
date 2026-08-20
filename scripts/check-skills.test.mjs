@@ -1,7 +1,37 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { evaluate, EXPECTED_SKILLS, parseSkillFrontmatter } from "./check-skills.mjs";
+import {
+  evaluate,
+  EXPECTED_SKILLS,
+  parseSkillFrontmatter,
+  selectMarketplaceVersion,
+} from "./check-skills.mjs";
+
+describe("selectMarketplaceVersion", () => {
+  it("picks the entry by name, not array position", () => {
+    // A positional read (`catalogue.plugins[0]`) is correct only as long as
+    // `lattice` happens to be first — a second plugin prepended to the
+    // catalogue would leave the real entry unchecked while a positional read
+    // silently validates the decoy's version instead.
+    const catalogue = {
+      plugins: [
+        { name: "decoy", version: "9.9.9" },
+        { name: "lattice", version: "0.7.1" },
+      ],
+    };
+    assert.equal(selectMarketplaceVersion(catalogue, "lattice"), "0.7.1");
+  });
+
+  it("returns '?' when no entry matches the plugin name", () => {
+    const catalogue = { plugins: [{ name: "decoy", version: "9.9.9" }] };
+    assert.equal(selectMarketplaceVersion(catalogue, "lattice"), "?");
+  });
+
+  it("returns '?' when the catalogue has no plugins list", () => {
+    assert.equal(selectMarketplaceVersion({}, "lattice"), "?");
+  });
+});
 
 describe("parseSkillFrontmatter", () => {
   it("parses valid frontmatter with all fields", () => {
@@ -95,6 +125,7 @@ describe("evaluate", () => {
   const baseFacts = {
     skillDirs: [...EXPECTED_SKILLS],
     packageVersion: "0.4.0",
+    rootVersion: "0.4.0",
     pluginVersion: "0.4.0",
     marketplaceVersion: "0.4.0",
     codexPluginVersion: "0.4.0",
@@ -174,6 +205,22 @@ describe("evaluate", () => {
       skills,
     });
     assert.ok(result.failures.some((f) => f.includes("host-specific")));
+  });
+
+  it("fails when the root package.json version disagrees with packages/lattice/package.json", () => {
+    // release-please bumps the root "." component directly; every other
+    // check compares a file against `packageVersion` as the baseline, but
+    // without this check that baseline itself was never verified against the
+    // thing release-please actually writes — a drift here read as "every
+    // file agrees" while the source had already moved.
+    const result = evaluate({
+      ...baseFacts,
+      rootVersion: "1.0.1",
+      skills: allGood(),
+    });
+    assert.ok(
+      result.failures.some((f) => f.includes("package.json (root)") && f.includes("1.0.1")),
+    );
   });
 
   it("fails when plugin version does not match package version", () => {

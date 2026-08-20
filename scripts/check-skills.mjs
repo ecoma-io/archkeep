@@ -15,12 +15,18 @@
 // without a filesystem and without a mocking library.
 //
 // The version it checks against comes from `packages/lattice/package.json` —
-// the single source of truth for the Lattice release version. The Claude Code
-// plugin manifest version, the marketplace entry version, the Codex plugin
-// manifest version, and the VS Code extension's package.json version must all
-// match it. Skills themselves carry no version by decision — a consumer's
-// installed skills pair with the engine they ship beside, so the version that
-// matters is the plugin's, not a per-skill one (docs/skills/versioning.md).
+// the baseline docs/skills/versioning.md calls the source of truth. The Claude
+// Code plugin manifest version, the marketplace entry version, the Codex
+// plugin manifest version, and the VS Code extension's package.json version
+// must all match it — and so must the repository ROOT `package.json`, which
+// is what release-please's "." component actually bumps directly; the other
+// five (this baseline included) are copies of it via `extra-files`. Checking
+// every copy against a baseline that was never itself checked against the
+// thing it copies from is the gap this script closes: a drift there would
+// have read as "everything agrees" right up to the file nothing compared.
+// Skills themselves carry no version by decision — a consumer's installed
+// skills pair with the engine they ship beside, so the version that matters
+// is the plugin's, not a per-skill one (docs/skills/versioning.md).
 
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -31,8 +37,10 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const SKILLS_DIR = "skills";
 export const EXPECTED_SKILLS = ["arch-context", "arch-change", "arch-check", "arch-review"];
 export const PACKAGE_JSON = "packages/lattice/package.json";
+export const ROOT_PACKAGE_JSON = "package.json";
 export const CLAUDE_PLUGIN_MANIFEST = ".claude-plugin/plugin.json";
 export const MARKETPLACE_CATALOGUE = ".claude-plugin/marketplace.json";
+export const MARKETPLACE_PLUGIN_NAME = "lattice";
 export const CODEX_PLUGIN_MANIFEST = ".codex-plugin/plugin.json";
 export const VSCODE_PACKAGE_JSON = "packages/lattice-vscode/package.json";
 
@@ -120,11 +128,31 @@ function unquote(value) {
 }
 
 /**
+ * The version of a marketplace catalogue's matching plugin entry, selected by
+ * name/identity rather than array position. `.claude-plugin/marketplace.json`
+ * is a catalogue and `plugins` is a list this repository controls today, but
+ * nothing stops it growing a second entry — a decoy plugin prepended ahead of
+ * `lattice` would leave the real entry unchecked by a positional read while
+ * still returning a plausible-looking version string.
+ *
+ * @param {{plugins?: {name?: string, version?: string}[]}} catalogue parsed marketplace.json
+ * @param {string} pluginName the plugin identity to select (`MARKETPLACE_PLUGIN_NAME`)
+ * @returns {string} the matching entry's version, or "?" when no entry matches
+ */
+export function selectMarketplaceVersion(catalogue, pluginName) {
+  const entry = (catalogue.plugins ?? []).find((plugin) => plugin?.name === pluginName);
+  return entry?.version ?? "?";
+}
+
+/**
  * Judges the skill facts and returns verdict lines and failures.
  *
  * @param {object} input
  * @param {string[]} input.skillDirs directory names under skills/
  * @param {string} input.packageVersion version from packages/lattice/package.json
+ * @param {string} input.rootVersion version from the repository root package.json — the
+ *   release-please "." component release-please writes directly; the other four files
+ *   (including packages/lattice/package.json) are copies of it via `extra-files`
  * @param {string} input.pluginVersion version from the Claude Code plugin manifest
  * @param {string} input.marketplaceVersion version from the marketplace.json entry
  * @param {string} input.codexPluginVersion version from the Codex plugin manifest
@@ -138,6 +166,7 @@ function unquote(value) {
 export function evaluate({
   skillDirs,
   packageVersion,
+  rootVersion,
   pluginVersion,
   marketplaceVersion,
   codexPluginVersion,
@@ -355,6 +384,23 @@ export function evaluate({
   // not contain `metadata`" phrasing stays green while a listing that includes
   // it still fails.
 
+  // 7c. Root package.json version — the "." release-please component that
+  // release-please writes directly — must match packages/lattice/package.json.
+  // Every other check below compares a file against `packageVersion` as the
+  // baseline, but that baseline was never itself checked against the file
+  // release-please actually bumps: a drift there would leave every other
+  // check reading "in sync" against a baseline that had already fallen
+  // behind, which is silent in exactly the shape this gate exists to refuse.
+  if (rootVersion !== packageVersion) {
+    failures.push(
+      `package.json (root) version is "${rootVersion}" but packages/lattice/package.json ` +
+        `version is "${packageVersion}". release-please bumps the root "." component ` +
+        `directly and copies it into packages/lattice/package.json via extra-files — if ` +
+        `the two disagree the version chain has drifted at its source.`,
+    );
+    lines.push(`FAIL package.json (root) — version mismatch`);
+  }
+
   // 8. Plugin version must match package version
   if (pluginVersion !== packageVersion) {
     failures.push(
@@ -399,12 +445,18 @@ export function evaluate({
  * Reads the filesystem and returns the facts `evaluate` needs.
  * This is the only function that touches the outside world.
  *
- * @returns {{skillDirs: string[], packageVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, skills: object[], authoring: string, overview: string}}
+ * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, skills: object[], authoring: string, overview: string}}
  */
 export function readSkillFacts() {
   const pkgPath = join(root, PACKAGE_JSON);
   const pkg = existsSync(pkgPath) ? JSON.parse(readFileSync(pkgPath, "utf8")) : { version: "?" };
   const packageVersion = pkg.version;
+
+  const rootPkgPath = join(root, ROOT_PACKAGE_JSON);
+  const rootPkg = existsSync(rootPkgPath)
+    ? JSON.parse(readFileSync(rootPkgPath, "utf8"))
+    : { version: "?" };
+  const rootVersion = rootPkg.version;
 
   const manifestPath = join(root, CLAUDE_PLUGIN_MANIFEST);
   const manifest = existsSync(manifestPath)
@@ -415,8 +467,8 @@ export function readSkillFacts() {
   const cataloguePath = join(root, MARKETPLACE_CATALOGUE);
   const catalogue = existsSync(cataloguePath)
     ? JSON.parse(readFileSync(cataloguePath, "utf8"))
-    : { plugins: [{ version: "?" }] };
-  const marketplaceVersion = catalogue.plugins[0]?.version ?? "?";
+    : { plugins: [] };
+  const marketplaceVersion = selectMarketplaceVersion(catalogue, MARKETPLACE_PLUGIN_NAME);
 
   const codexPath = join(root, CODEX_PLUGIN_MANIFEST);
   const codex = existsSync(codexPath)
@@ -470,6 +522,7 @@ export function readSkillFacts() {
   return {
     skillDirs,
     packageVersion,
+    rootVersion,
     pluginVersion,
     marketplaceVersion,
     codexPluginVersion,
