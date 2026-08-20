@@ -31,6 +31,8 @@ vi.mock("./text.mjs", () => ({ formatConstraint: () => "THE CONSTRAINT" }));
 import {
   buildSarifLog,
   formatSarif,
+  sarifFitnessNotification,
+  sarifFitnessResult,
   sarifIntentResult,
   sarifRules,
   toUriReference,
@@ -114,8 +116,9 @@ describe("the rule catalogue", () => {
       "driftRule",
       "deadAliasRule",
       "intentForbiddenEdge",
+      "fitnessFunctionFailed",
     ]);
-    expect(log().tool.driver.rules).toHaveLength(5);
+    expect(log().tool.driver.rules).toHaveLength(6);
   });
 
   it("keeps the whole template as the description and its first line as the summary", () => {
@@ -419,6 +422,144 @@ describe("an architecture-intent finding", () => {
     expect(result.locations[0].physicalLocation.artifactLocation.uri).toBe(
       "architecture-intent.json",
     );
+  });
+});
+
+describe("a fitness finding (bug A)", () => {
+  // Before this fix, `buildSarifLog` had no fitness arm at all: `check
+  // --format sarif` exits 1 on a `fail`-verdict fitness function
+  // (`cli.mjs`'s `verdictFor`, `fitnessFail`) while this module produced zero
+  // results and zero notifications for it — a red CI job with an empty
+  // upload, the exact silent SARIF the rest of this file's kinds already
+  // guard against.
+  const failDecision = (overrides = {}) => ({
+    name: "domain-may-not-reach-adapter",
+    verdict: "fail",
+    message: '1 edge carries "layer:domain" → "layer:adapter" — forbidden',
+    ...overrides,
+  });
+  const unknownDecision = (overrides = {}) => ({
+    name: "full-coverage",
+    verdict: "unknown",
+    message: "coverage-minimum cannot be judged for a scoped run",
+    ...overrides,
+  });
+
+  it("is a result whose ruleId resolves in the catalogue, exactly like a violation's", () => {
+    const built = log({ fitness: [failDecision()] });
+    const [result] = built.results;
+    expect(result.ruleId).toBe("fitnessFunctionFailed");
+    expect(built.tool.driver.rules[result.ruleIndex].id).toBe("fitnessFunctionFailed");
+    expect(result.level).toBe("error");
+    expect(result.message.text).toContain("domain-may-not-reach-adapter");
+    expect(result.message.text).toContain("forbidden");
+    expect(result.properties.name).toBe("domain-may-not-reach-adapter");
+  });
+
+  it("carries the boundary policy file alone and no region — the finding is positionless by construction", () => {
+    const built = log({
+      fitness: [failDecision()],
+      policy: { profile: null, source: "module-boundaries.config.mjs", fingerprint: "cafef00d" },
+    });
+    expect(built.results[0].locations[0].physicalLocation).toEqual({
+      artifactLocation: { uri: "module-boundaries.config.mjs" },
+    });
+  });
+
+  it("carries no locations at all when this run resolved no policy source — defensive, never a fabricated path", () => {
+    const built = log({ fitness: [failDecision()] });
+    expect(built.results[0].locations).toBeUndefined();
+  });
+
+  it("a pass or not_applicable decision produces neither a result nor a notification", () => {
+    const built = log({
+      fitness: [
+        { name: "clean", verdict: "pass", message: "1 matched project, no violation" },
+        {
+          name: "unrelated",
+          verdict: "not_applicable",
+          message: "matches nothing",
+          notApplicableReason: "no matched project",
+        },
+      ],
+    });
+    expect(built.results).toEqual([]);
+    expect(built.invocations[0].toolExecutionNotifications).toEqual([]);
+  });
+
+  it("an unknown-verdict decision rides a notification, not a result — trouble the tool hit, not a verdict it reached", () => {
+    const built = log({ fitness: [unknownDecision()] });
+    expect(built.results).toEqual([]);
+    const [notification] = built.invocations[0].toolExecutionNotifications;
+    expect(notification.level).toBe("warning");
+    expect(notification.message.text).toContain("full-coverage");
+    expect(notification.message.text).toContain("could not be determined");
+  });
+
+  it("appears beside the violations, drift findings, dead aliases and intent findings, none replacing another", () => {
+    const built = log({
+      violations: [violation()],
+      goWork: {
+        findings: [
+          {
+            messageId: "driftRule",
+            file: "go.work",
+            line: 4,
+            column: 2,
+            directory: "libs/gone",
+            project: null,
+            message: "the drift",
+          },
+        ],
+        moduleProjects: 2,
+      },
+      tsconfigPaths: {
+        findings: [
+          {
+            messageId: "deadAliasRule",
+            file: "tsconfig.base.json",
+            line: null,
+            column: null,
+            alias: "@acme/gone",
+            targets: ["libs/gone/src/index.ts"],
+            message: "the dead alias",
+          },
+        ],
+        aliases: 1,
+        unjudged: 0,
+      },
+      intent: {
+        findings: [
+          {
+            rule: "intentForbiddenEdge",
+            source: "acme/libs/engine-domain",
+            target: "acme/libs/engine-adapters",
+            boundaryFrom: "domain",
+            boundaryTo: "adapters",
+            message: "core → adapters — architecture-intent.json forbids this reach",
+          },
+        ],
+      },
+      fitness: [failDecision()],
+    });
+    expect(built.results.map((result) => result.ruleId)).toEqual([
+      "secondRule",
+      "driftRule",
+      "deadAliasRule",
+      "intentForbiddenEdge",
+      "fitnessFunctionFailed",
+    ]);
+  });
+
+  it("renders directly, not only through buildSarifLog", () => {
+    const result = sarifFitnessResult(failDecision(), "module-boundaries.config.mjs");
+    expect(result.ruleId).toBe("fitnessFunctionFailed");
+    expect(result.locations[0].physicalLocation.artifactLocation.uri).toBe(
+      "module-boundaries.config.mjs",
+    );
+    const notification = sarifFitnessNotification(unknownDecision());
+    expect(notification.level).toBe("warning");
+    expect(notification.message.text).toContain("full-coverage");
   });
 });
 

@@ -49,6 +49,25 @@
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { resolveMembers } from "../architecture-intent/selectors.mjs";
 
+/**
+ * A collision-free key for one (boundaryFrom, boundaryTo) pair — matching
+ * `edgeKey` in `../architecture-intent/judge.mjs`. A plain `${a}${b}` join
+ * (as this used to be) lets two distinct pairs collide: `{from:"web",
+ * to:"app-core"}` and `{from:"web-app", to:"core"}` both join to
+ * `"webapp-core"`, so one divergent row's finding would be read back for the
+ * other and silently score a `match` where a real `intentForbiddenEdge` or
+ * `intentAllowedMissing` sits. `JSON.stringify` of each side is unambiguous
+ * for any strings a graph can name, unlike a delimiter join, which any
+ * delimiter could appear inside.
+ *
+ * @param {string} from
+ * @param {string} to
+ * @returns {string}
+ */
+function boundaryKey(from, to) {
+  return `${JSON.stringify(from)}>${JSON.stringify(to)}`;
+}
+
 /** The severity a state earns — the sort key a ranked proposal list uses. */
 export const SEVERITY_ORDER = Object.freeze({
   unexpected: 4,
@@ -270,7 +289,7 @@ export function scoreIntentRows(intent, judgeVerdict, observed, tagsByProject) {
   const boundaryFinding = new Map();
   for (const finding of judgeVerdict.findings) {
     if (finding.boundaryFrom === null) continue;
-    boundaryFinding.set(`${finding.boundaryFrom}${finding.boundaryTo}`, finding.rule);
+    boundaryFinding.set(boundaryKey(finding.boundaryFrom, finding.boundaryTo), finding.rule);
   }
 
   let index = 0;
@@ -350,7 +369,7 @@ export function scoreIntentRows(intent, judgeVerdict, observed, tagsByProject) {
   }
 
   for (const allowed of intent.allowed ?? []) {
-    const rule = boundaryFinding.get(`${allowed.from}${allowed.to}`);
+    const rule = boundaryFinding.get(boundaryKey(allowed.from, allowed.to));
     row(
       "intent-row",
       `${allowed.from} → ${allowed.to}`,
@@ -361,7 +380,7 @@ export function scoreIntentRows(intent, judgeVerdict, observed, tagsByProject) {
     );
   }
   for (const forbidden of intent.forbidden ?? []) {
-    const rule = boundaryFinding.get(`${forbidden.from}${forbidden.to}`);
+    const rule = boundaryFinding.get(boundaryKey(forbidden.from, forbidden.to));
     row(
       "intent-row",
       `${forbidden.from} → ${forbidden.to}`,

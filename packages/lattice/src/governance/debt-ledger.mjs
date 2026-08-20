@@ -252,7 +252,18 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
           : 0,
   );
 
-  const byKind = { waiver: 0, "aspirational-gap": 0, drift: 0, unresolved: 0 };
+  // `expired-waiver` is a real `kind` an entry above can carry (a lapsed
+  // waiver, F06) — seeding every kind an entry can hold is what keeps
+  // `byKind[entry.kind] += 1` from landing on `undefined + 1` (`NaN`, which
+  // serializes as JSON `null`) for that one kind, and what keeps
+  // `sum(Object.values(byKind)) === total` true for every entry set.
+  const byKind = {
+    waiver: 0,
+    "expired-waiver": 0,
+    "aspirational-gap": 0,
+    drift: 0,
+    unresolved: 0,
+  };
   const bySeverity = { high: 0, medium: 0, low: 0 };
   for (const entry of entries) {
     byKind[entry.kind] += 1;

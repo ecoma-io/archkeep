@@ -22,6 +22,15 @@
  * section is absent when no config was given, so a diff without `--config` is
  * unchanged from its prior output.
  *
+ * `coverage.notes` — provider-mismatch, cross-repository, one-sided-policy,
+ * and rule-impact-scope warnings `../commands/diff.mjs` pushes there — fold
+ * into the summary line the same way `check`'s text face folds `notes` into
+ * its own "inspected" line (`../report/text.mjs`'s `formatReport`): appended
+ * as `; note`, matching the presentation `check`'s text face already uses.
+ * Before this, a note pushed onto `coverage.notes` — a provider migration
+ * across baseline and head, say — rode the JSON envelope but never reached
+ * the text a terminal user actually reads.
+ *
  * This module decides nothing. A formatter that filtered would be a rule
  * wearing a formatter's name (`../README.md`).
  */
@@ -181,11 +190,16 @@ export function formatDiffReport({ diff, coverage }) {
   }
 
   // The summary line states what was compared, so "no changes" reads as a
-  // claim about coverage, not as silence.
+  // claim about coverage, not as silence. `coverage.notes` — the same
+  // provider/cross-repo/policy/rule-impact-scope warnings the JSON envelope
+  // already carries — ride here too, exactly the way `check`'s text face
+  // folds its own `notes` into its "inspected" line: appended, never a
+  // section a caller could silently omit.
   const inspected =
     `${coverage.imports} import${coverage.imports === 1 ? "" : "s"} in ` +
     `${coverage.analyzedFiles} file${coverage.analyzedFiles === 1 ? "" : "s"} across ` +
-    `${coverage.projects} project${coverage.projects === 1 ? "" : "s"}`;
+    `${coverage.projects} project${coverage.projects === 1 ? "" : "s"}` +
+    (coverage.notes && coverage.notes.length > 0 ? `; ${coverage.notes.join("; ")}` : "");
 
   if (!hasChanges) {
     sections.push(`✔ no changes between baseline and head (${inspected})`);

@@ -82,6 +82,35 @@ describe("formatDriftReport", () => {
     const second = formatDriftReport({ findings: [finding()], intent, observed });
     expect(first).toBe(second);
   });
+
+  // Bug B: `judgeIntent`'s `verdict.notes` (e.g. an `optional: true` allowed
+  // row the team has not built yet, `../architecture-intent/judge.mjs`) used
+  // to have nowhere to go in this report — this formatter never read a
+  // `notes` field at all, so a workspace using that axis got a clean-looking
+  // "no drift" line with no trace of the note. Matches how `check`'s text
+  // face folds its own `notes` into its "inspected" line.
+  it("folds notes into the observed line, the way check's text face folds its own notes", () => {
+    const text = formatDriftReport({
+      findings: [],
+      intent,
+      observed,
+      notes: ['allowed row app → optional-db is "optional" and not yet observed'],
+    });
+    expect(text).toContain(
+      'observed  2 projects, 1 edge; allowed row app → optional-db is "optional" and not yet observed',
+    );
+    expect(text).toContain("✔ no drift");
+  });
+
+  it("folds multiple notes onto the same line, semicolon-joined", () => {
+    const text = formatDriftReport({
+      findings: [],
+      intent,
+      observed,
+      notes: ["note one", "note two"],
+    });
+    expect(text).toContain("observed  2 projects, 1 edge; note one; note two");
+  });
 });
 
 // P1-02: a row's decisionRef used to reach every report unverified. This

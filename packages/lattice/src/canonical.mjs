@@ -25,7 +25,19 @@
 export function canonicalizeJson(value) {
   return JSON.stringify(value, (key, current) => {
     if (current !== null && typeof current === "object" && !Array.isArray(current)) {
-      const sorted = {};
+      // A null-prototype accumulator, not `{}`: `JSON.parse('{"__proto__":…}')`
+      // produces an OWN key literally named "__proto__" (JSON has no notion of
+      // prototypes), and `sorted[keyName] = …` on an ordinary object treats
+      // that one key specially — it sets the object's prototype instead of
+      // creating an own property, so the key silently vanishes from
+      // `JSON.stringify`'s output. Two documents that disagree only in a
+      // `__proto__` field would then canonicalize identically, a silent
+      // fingerprint collision (`../../../AGENTS.md`, "An empty result is a claim,
+      // not a shrug" — this is the same failure shape: two different inputs
+      // must never produce one indistinguishable output). `Object.create(null)`
+      // has no `__proto__` accessor to intercept the assignment, so every key
+      // — "__proto__" included — always becomes a real own property.
+      const sorted = Object.create(null);
       for (const keyName of Object.keys(current).sort()) {
         sorted[keyName] = current[keyName];
       }

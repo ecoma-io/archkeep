@@ -13,8 +13,12 @@
  *   `[project.optional-dependencies].*`, or `[dependency-groups].*` creates an
  *   edge only when `[tool.uv.sources]` routes that name to the workspace
  *   (`{ workspace = true }`) or to a path that is another project's directory.
- *   Unchanged, including its quiet handling of a path source that resolves to
- *   no project.
+ *   A source may also be uv's documented multiple-sources-by-marker form — an
+ *   ARRAY of source tables, one selected per environment marker at install
+ *   time — and each element is read the same way a lone table is; a static
+ *   reader cannot evaluate the markers, so any entry that names a workspace
+ *   project draws the edge. Quiet handling of a path source that resolves to
+ *   no project is unchanged.
  * - **Poetry** — `name = { path = "…" }` in `[tool.poetry.dependencies]` or
  *   `[tool.poetry.group.<group>.dependencies]`
  *   (https://python-poetry.org/docs/dependency-specification/ §"Path
@@ -366,7 +370,7 @@ export function resolvePythonDependencies(projects, filesOf, readFile) {
     projectByRoot.set(project.root, project.name);
   }
   for (const project of projects) {
-    const manifestPath = `${project.root}/pyproject.toml`;
+    const manifestPath = normalizePath(project.root, "pyproject.toml");
     if (!filesOf(project.name).includes(manifestPath)) continue;
     const manifest = parseManifest(readFile(manifestPath) ?? "");
     if (manifest === null) continue; // malformed mid-keystroke must not fail the graph — see header
@@ -374,7 +378,12 @@ export function resolvePythonDependencies(projects, filesOf, readFile) {
     const packageName = manifest.project?.name;
     if (!packageName) continue; // a uv workspace root without [project] is not a package
     projectByPackage.set(normalizePackageName(packageName), project.name);
-    packageProjectByRoot.set(project.root, project.name);
+    // Keyed normalized: the only lookup (below) normalizes its side too, and
+    // `normalizePath` collapses the Nx root spelling `"."` to `""` — keying
+    // this map by the raw `project.root` left the root project's key (`"."`)
+    // and a `path` source's lookup (`""`) unable to ever meet, so a uv `path`
+    // source that named the workspace root drew no edge.
+    packageProjectByRoot.set(normalizePath(project.root, ""), project.name);
     packages.push({ project, manifest, manifestPath });
   }
 
@@ -387,11 +396,19 @@ export function resolvePythonDependencies(projects, filesOf, readFile) {
     for (const depName of collectDeclaredDependencies(manifest)) {
       const spec = sourceOf.get(depName);
       if (typeof spec !== "object" || spec === null) continue;
+      // uv's documented multiple-sources-by-marker form is an ARRAY of source
+      // tables rather than one: `beta = [{ workspace = true, marker = "…" },
+      // { path = "…", marker = "…" }]`. Each entry is read the same way a lone
+      // table is; the first entry that names a workspace project wins.
       let target = null;
-      if (spec.workspace === true) {
-        target = projectByPackage.get(depName) ?? null;
-      } else if (typeof spec.path === "string") {
-        target = packageProjectByRoot.get(normalizePath(project.root, spec.path)) ?? null;
+      for (const entry of Array.isArray(spec) ? spec : [spec]) {
+        if (typeof entry !== "object" || entry === null) continue;
+        if (entry.workspace === true) {
+          target = projectByPackage.get(depName) ?? null;
+        } else if (typeof entry.path === "string") {
+          target = packageProjectByRoot.get(normalizePath(project.root, entry.path)) ?? null;
+        }
+        if (target) break;
       }
       if (target && target !== project.name) {
         dependencies.push({
@@ -833,8 +850,17 @@ function resolveRelativeModule(specifier, ownPackage) {
 }
 
 const IMPORT_STATEMENT = /^[ \t]*import[ \t]+/;
+// The space before `import` is mandatory after a module NAME — Python's
+// tokenizer reads `.modimport` as one identifier and then has no `import`
+// keyword left, a syntax error (verified: `python3 -c 'import ast;
+// ast.parse("from .modimport x")'`) — but a bare run of dots needs none:
+// `from .import x` and `from ..import y` are both valid (level=1/level=2,
+// module=None), because a `.` is never part of an identifier and so already
+// ends the token the same way whitespace would. The `(?<=\.)` alternative
+// captures exactly that one case; a module-name arm can still satisfy it only
+// by ending right after a dot, which is the same rule stated the other way.
 const FROM_STATEMENT =
-  /^([ \t]*from[ \t]+)(\.+[A-Za-z_][\w.]*|\.+|[A-Za-z_][\w.]*)([ \t]+import\b)/;
+  /^([ \t]*from[ \t]+)(\.+[A-Za-z_][\w.]*|\.+|[A-Za-z_][\w.]*)(?:[ \t]+|(?<=\.))import\b/;
 const DOTTED_NAME = /^[ \t]*([A-Za-z_][\w.]*)/;
 
 /**
@@ -868,8 +894,24 @@ function blankParenGroup(text) {
  * one, and a `#` comment is inert, so a paren written in prose after `#` —
  * `from x import (a, b)  # (see` — never looks like a group still open. A
  * trailing `(` in a comment joining the next physical line is how a real
- * `import` on that line silently vanished. */
-function hasUnclosedParen(text) {
+ * `import` on that line silently vanished.
+ *
+ * `text` may be several physical lines already concatenated with no
+ * separator (`joinContinuedStatement` appends each one directly, so no `\n`
+ * marks where one ends and the next begins) — `lineStarts` names those
+ * boundaries, the offset each later physical line begins at. Without them a
+ * `#` on an EARLIER line reads as running to the end of the whole joined
+ * blob rather than just that line, which is what let a comment before an
+ * interior line's own content swallow every `)` still to come and every
+ * import after it. A comment always ends at the next such boundary — or, on
+ * the last physical line seen so far, at the end of `text` itself, the same
+ * as before.
+ *
+ * @param {string} text
+ * @param {number[]} [lineStarts] Ascending offsets into `text` where a new
+ *   physical line begins; empty when `text` is a single line.
+ */
+function hasUnclosedParen(text, lineStarts = []) {
   let depth = 0;
   let quote = null;
   for (let i = 0; i < text.length; i++) {
@@ -882,7 +924,12 @@ function hasUnclosedParen(text) {
       quote = ch;
       continue;
     }
-    if (ch === "#") break; // a comment runs to the end of the line, inert
+    if (ch === "#") {
+      const next = lineStarts.find((start) => start > i);
+      if (next === undefined) break; // last physical line: comment runs to the end
+      i = next - 1; // the loop's own `i++` lands exactly on the next line's start
+      continue;
+    }
     if (ch === "(") depth++;
     else if (ch === ")") depth = Math.max(0, depth - 1);
   }
@@ -945,7 +992,17 @@ function joinContinuedStatement(physicalLines, lineOffsets, index) {
   const segments = [{ start: 0, offset: lineOffsets[index] }];
   let text = physicalLines[index];
   let end = index;
-  while (end + 1 < physicalLines.length && (text.endsWith("\\") || hasUnclosedParen(text))) {
+  while (
+    end + 1 < physicalLines.length &&
+    // `segments[0].start` is always 0 (the start of `text` itself, not a
+    // later line's boundary) — only the ones appended since are boundaries a
+    // `#` comment must stop at.
+    (text.endsWith("\\") ||
+      hasUnclosedParen(
+        text,
+        segments.slice(1).map((s) => s.start),
+      ))
+  ) {
     end++;
     text = text.endsWith("\\") ? `${text.slice(0, -1)} ` : text; // swap `\` for a space
     segments.push({ start: text.length, offset: lineOffsets[end] });
