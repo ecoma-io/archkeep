@@ -1109,6 +1109,219 @@ export const moduleBoundaryOptions = {
   });
 });
 
+describe("a failing fitness function reaches every report face (bugs A and E)", () => {
+  // Its own fixture: a clean boundary (no depConstraints violation) so a
+  // fitness-only failure is isolated from every other finding kind. The
+  // domain→adapter edge that the fitness function judges is injected straight
+  // onto the graph, the same way the go.work fixture above injects its own
+  // edges — a fitness function reads `commandContext.graph.dependencies`
+  // directly (`../governance/fitness-rules.mjs`), never the analyzed imports.
+  const fitnessRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-fitness-"));
+  afterAll(() => rmSync(fitnessRoot, { recursive: true, force: true }));
+
+  const writeFitness = (relativePath, text) => {
+    mkdirSync(join(fitnessRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(fitnessRoot, relativePath), text);
+  };
+
+  writeFitness("nx.json", "{}\n");
+  writeFitness(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+  { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const fitness = [
+  {
+    name: "domain-may-not-reach-adapter",
+    match: ["*"],
+    condition: {
+      type: "layer-dependency",
+      from: "layer:domain",
+      to: "layer:adapter",
+      direction: "forbidden",
+    },
+    reason: "the domain layer must never reach the adapter",
+  },
+];
+`,
+  );
+  writeFitness("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeFitness("libs/domain/doc.go", "package domain\n");
+  writeFitness("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.24\n");
+  writeFitness("libs/adapter/adapter.go", "package adapter\n");
+
+  const fitnessContext = {
+    cwd: fitnessRoot,
+    readGraph: () => ({
+      nodes: {
+        domain: {
+          name: "domain",
+          type: "lib",
+          data: { root: "libs/domain", tags: ["layer:domain"] },
+        },
+        adapter: {
+          name: "adapter",
+          type: "lib",
+          data: { root: "libs/adapter", tags: ["layer:adapter"] },
+        },
+      },
+      dependencies: { domain: [{ target: "adapter" }], adapter: [] },
+    }),
+    listFiles: () => [
+      "nx.json",
+      "module-boundaries.config.mjs",
+      "libs/domain/go.mod",
+      "libs/domain/doc.go",
+      "libs/adapter/go.mod",
+      "libs/adapter/adapter.go",
+    ],
+  };
+
+  const fitnessEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      ...fitnessContext,
+    };
+  };
+
+  it("carries a failing fitness function into the SARIF report as a result, so a code-scanning consumer sees the red (bug A)", async () => {
+    // Before this fix, `buildSarifLog` had no fitness arm: on a fitness-only
+    // failure — no boundary violation, no go.work/tsconfig/intent finding —
+    // the whole `results` array was empty and no notification named the
+    // failure either, despite `check` exiting 1 on it.
+    const { report, violations, fitnessFail } = await check(
+      { format: "sarif", config: null, paths: [] },
+      fitnessContext,
+    );
+    expect(violations).toBe(0);
+    expect(fitnessFail).toBe(1);
+    const run = JSON.parse(report).runs[0];
+    expect(run.results.length).toBeGreaterThan(0);
+    const [result] = run.results;
+    expect(result.ruleId).toBe("fitnessFunctionFailed");
+    expect(run.tool.driver.rules[result.ruleIndex].id).toBe("fitnessFunctionFailed");
+    expect(result.message.text).toContain("domain-may-not-reach-adapter");
+  });
+
+  it("counts the fitness failure on the stderr summary of an --output run, beside the violations (bug E)", async () => {
+    // Before this fix, the summary line enumerated every other finding kind
+    // (violations, waived, declared-edge, go.work, tsconfig, intent,
+    // unchecked) but never fitness, even though fitness drives the exit code
+    // exactly like every one of those — a fitness-only failure logged
+    // "0 violations …" beside a non-zero exit.
+    const target = join(fitnessRoot, "fitness-check.json");
+    const streams = fitnessEnv();
+    expect(await runCli(["check", "--format", "json", "--output", target], streams)).toBe(
+      EXIT.violations,
+    );
+    expect(streams.lines.err.join("\n")).toContain("1 fitness function failed");
+  });
+});
+
+describe("decision.reason names every blocking no-verdict cause at once (bug D)", () => {
+  // A malformed pyproject.toml (a whole-file analysis failure → `unchecked`)
+  // and an architecture-intent.json boundary matching zero observed projects
+  // (→ `intentUnresolved`) in the SAME run — two independent no-verdict
+  // causes at once. `verdictFor`'s comment has always promised "when coverage
+  // and intent both failed, name both", but the intent clause was gated
+  // `unchecked === 0 && intentUnresolved > 0` — true only when coverage did
+  // NOT also fail — so a tree failing both used to name only the file count,
+  // hiding the unresolved intent boundary from a reader acting on the reason
+  // string alone.
+  it("names both coverage and intent in decision.reason when both fail together", async () => {
+    const root = mkdtempSync(join(tmpdir(), "polyglot-cli-bugd-"));
+    try {
+      const w = (p, t) => {
+        mkdirSync(join(root, p, ".."), { recursive: true });
+        writeFileSync(join(root, p), t);
+      };
+      w(
+        "lattice.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "apps/a", name: "a", type: "lib", tags: [] }] },
+          coverage: {
+            exempt: [{ path: "module-boundaries.config.mjs", reason: "workspace tooling config" }],
+          },
+        }),
+      );
+      w(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: [],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      // Malformed TOML — `[project` never closes — the same audit-D-03 shape
+      // used above, which becomes a whole-file failure (`unchecked`). A real
+      // `.py` file under the project is required too: without one, analysis
+      // never has a reason to read the project's manifest at all, and the
+      // malformed file produces no failure to begin with.
+      w("apps/a/pyproject.toml", '[project\nname = "a"\n');
+      w("apps/a/src/a_main.py", "import os\nprint(os.getcwd())\n");
+      // A boundary naming a project this workspace does not have — matches
+      // zero observed projects, the same `unresolved` shape F01 exercises.
+      w(
+        "architecture-intent.json",
+        JSON.stringify({
+          version: "1",
+          boundaries: [{ name: "ghost", match: ["name:does-not-exist"] }],
+        }),
+      );
+      const files = [
+        "lattice.json",
+        "module-boundaries.config.mjs",
+        "apps/a/pyproject.toml",
+        "apps/a/src/a_main.py",
+        "architecture-intent.json",
+      ];
+      const streams = {
+        out: (t) => streams.lines.out.push(t),
+        err: (t) => streams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: root,
+        listFiles: () => files,
+      };
+      expect(await runCli(["check", "--format", "json"], streams)).toBe(EXIT.error);
+      const envelope = JSON.parse(streams.lines.out.join("\n"));
+      expect(envelope.status).toBe("no-verdict");
+      expect(envelope.coverage.complete).toBe(false);
+      expect(envelope.result.intent.unresolved.length).toBeGreaterThan(0);
+      // Both halves named in the SAME reason string — the regression this
+      // test guards against is the intent clause going silent the moment
+      // coverage also failed.
+      expect(envelope.decision.reason).toContain("could not be analyzed — coverage incomplete");
+      expect(envelope.decision.reason).toContain(
+        "architecture-intent boundary or row could not be established",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("the go.work drift check in a workspace with no Go projects at all", () => {
   // Audit finding P1-03's exact evidence, reproduced end to end rather than
   // only at the parser: a workspace whose graph carries zero go.mod projects
@@ -6926,6 +7139,30 @@ describe("`history` capture and describe against the Nx fixture", () => {
         ["history", histDir, "--format", "json", "--output", join(histDir, "report.json")],
         streams,
       ),
+    ).toBe(EXIT.usage);
+    expect(streams.lines.err.join("\n")).toContain("inside the history directory");
+    expect(existsSync(join(histDir, "report.json"))).toBe(false);
+  });
+
+  it("refuses an absolute --output path whose '..' segments resolve into the history directory (bug C)", async () => {
+    // Same guard as above, but the path is absolute AND carries a `..` that
+    // only resolves into the history directory after normalization. Before
+    // this fix, `isAbsolute(options.output) ? options.output : resolve(cwd,
+    // options.output)` used the absolute branch raw — unresolved — so
+    // `dirname(outputAbs)` never matched the history directory and the guard
+    // was skipped. `writeOutputReport` itself resolves the path correctly, so
+    // the run used to succeed and land the report INSIDE the directory
+    // `history` reads, poisoning every later run — exactly the silent
+    // self-footgun the guard above exists to prevent.
+    const streams = env();
+    // Built with string interpolation, not `join()` — `path.join` normalizes
+    // the `..` away before it ever reaches the CLI, which would leave
+    // `options.output` as a plain in-dir path the OLD code already refused,
+    // pinning nothing. A literal `..` has to survive to `runHistory` for this
+    // case to exercise the difference between the raw and the resolved path.
+    const sneaky = `${histDir}/escape/../report.json`;
+    expect(
+      await runCli(["history", histDir, "--format", "json", "--output", sneaky], streams),
     ).toBe(EXIT.usage);
     expect(streams.lines.err.join("\n")).toContain("inside the history directory");
     expect(existsSync(join(histDir, "report.json"))).toBe(false);

@@ -5,7 +5,7 @@ import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
 import { MESSAGE_IDS, renderMessage } from "../rules/messages.mjs";
 import { TSCONFIG_PATHS_MESSAGE_IDS, TSCONFIG_PATHS_MESSAGES } from "../tsconfig-paths.mjs";
 
-import { buildSarifLog } from "./sarif.mjs";
+import { FITNESS_FAILED_RULE_ID, buildSarifLog } from "./sarif.mjs";
 
 /**
  * The real message table, the real constraint renderer, and every `messageId`
@@ -84,6 +84,26 @@ const everyIntentFinding = () =>
     message: INTENT_MESSAGES[messageId],
   }));
 
+/**
+ * One `fail` and one `unknown` fitness decision — the two verdicts
+ * `buildSarifLog` renders at all (`pass`/`not_applicable` produce nothing,
+ * same as a clean boundary). Unlike the message-id-driven kinds above, a
+ * fitness function's `name` is workspace-declared rather than drawn from a
+ * fixed catalogue, so there is no `*_MESSAGE_IDS` table to enumerate here.
+ */
+const everyFitnessDecision = () => [
+  {
+    name: "domain-may-not-reach-adapter",
+    verdict: "fail",
+    message: '1 edge carries "layer:domain" → "layer:adapter" — forbidden',
+  },
+  {
+    name: "full-coverage",
+    verdict: "unknown",
+    message: "coverage-minimum cannot be judged for a scoped run",
+  },
+];
+
 const log = buildSarifLog({
   violations: everyViolation(),
   failures: [
@@ -93,6 +113,8 @@ const log = buildSarifLog({
   goWork: { findings: everyDriftFinding(), moduleProjects: 2 },
   tsconfigPaths: { findings: everyDeadAliasFinding(), aliases: 3, unjudged: 0 },
   intent: { findings: everyIntentFinding() },
+  fitness: everyFitnessDecision(),
+  policy: { profile: null, source: "module-boundaries.config.mjs", fingerprint: "deadbeef" },
 });
 
 describe("the SARIF log against what GitHub requires of an upload", () => {
@@ -109,6 +131,7 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
       ...GO_WORK_MESSAGE_IDS,
       ...TSCONFIG_PATHS_MESSAGE_IDS,
       ...INTENT_MESSAGE_IDS,
+      FITNESS_FAILED_RULE_ID,
     ]);
     expect(ids.every((id) => typeof id === "string" && id !== "")).toBe(true);
   });
@@ -140,13 +163,14 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
       if (
         result.ruleId === "goWorkMissingUse" ||
         result.ruleId === "tsconfigDeadPathAlias" ||
-        INTENT_MESSAGE_IDS.includes(result.ruleId)
+        INTENT_MESSAGE_IDS.includes(result.ruleId) ||
+        result.ruleId === FITNESS_FAILED_RULE_ID
       ) {
         // The results about a thing that does not exist — a use entry never
         // written, an alias with no position in the parsed options, an
-        // architecture-intent finding that judges a graph edge with no source
-        // site: no region, rather than a fabricated line 1 marking text the
-        // finding is not about.
+        // architecture-intent finding or a fitness verdict that judges the
+        // graph rather than a source site: no region, rather than a
+        // fabricated line 1 marking text the finding is not about.
         expect(region).toBeUndefined();
         continue;
       }
@@ -155,14 +179,18 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
     }
   });
 
-  it("reports one result per violation, drift finding, dead alias and intent finding, and none for a failure", () => {
+  it("reports one result per violation, drift finding, dead alias, intent finding and failing fitness function", () => {
     expect(log.runs[0].results).toHaveLength(
       MESSAGE_IDS.length +
         GO_WORK_MESSAGE_IDS.length +
         TSCONFIG_PATHS_MESSAGE_IDS.length +
-        INTENT_MESSAGE_IDS.length,
+        INTENT_MESSAGE_IDS.length +
+        1, // the one `fail`-verdict fitness decision in `everyFitnessDecision()`
     );
-    expect(log.runs[0].invocations[0].toolExecutionNotifications).toHaveLength(2);
+    // The two analysis failures, plus the one `unknown`-verdict fitness
+    // decision — a fitness function the run could not determine is trouble
+    // the tool hit, not a verdict, the same lane an unparseable file rides.
+    expect(log.runs[0].invocations[0].toolExecutionNotifications).toHaveLength(3);
   });
 
   it("survives a JSON round trip unchanged, which is the only form GitHub ever sees", () => {
