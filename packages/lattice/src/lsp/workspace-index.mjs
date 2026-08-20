@@ -277,7 +277,22 @@ export function buildWorkspaceIndex({
   // A root carrying LATTICE_MODEL_FILE has a project model this module does
   // not read from `project.json` at all — see this file's header — so it is
   // handed to the native branch below rather than to `discoverProjects`.
-  if (files.includes(LATTICE_MODEL_FILE)) {
+  //
+  // Detected by READING the file, not by whether git tracks it: `../../cli.mjs`
+  // and this server's own `readWorkspaceOptions` (`./server.mjs`'s `markersAt`)
+  // both dispatch on `existsSync(join(root, LATTICE_MODEL_FILE))` — plain
+  // filesystem existence — and an untracked-but-present `lattice.json` (added
+  // to the tree but not yet `git add`ed) exists by that test. Dispatching here
+  // on `files.includes(...)` instead — `files` is the TRACKED list `listFiles`
+  // returns — disagreed with both of them: this branch would fall through to
+  // `discoverProjects`, find no `project.json` for a native-only tree, and
+  // build a zero-node, zero-edge index that publishes `analyzed: true` with an
+  // empty diagnostic list on a workspace `lattice check` exits 1 on — the gap
+  // machinery below has no entry for "wrong provider" to report. `readFile`
+  // reads the real filesystem the same way `existsSync` does (through
+  // `readFileAt`, `./workspace-index.mjs`'s own `readWorkspaceFile` by
+  // default), so this now agrees with the CLI regardless of git's index.
+  if (readFile(LATTICE_MODEL_FILE) !== null) {
     return buildNativeWorkspaceIndex({ root, files, readFile, tsConfig });
   }
 

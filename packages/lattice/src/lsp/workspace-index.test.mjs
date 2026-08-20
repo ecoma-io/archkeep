@@ -799,6 +799,34 @@ describe("the native branch buildWorkspaceIndex takes for a lattice.json root", 
     expect(indexGaps(index)).toHaveLength(1);
   });
 
+  it("dispatches natively for an untracked lattice.json, agreeing with the CLI's existsSync gate", () => {
+    // S-bug C, unit tier: `listFiles` here stands in for git's TRACKED list —
+    // `lattice.json` is deliberately absent from it — while `readFileAt` stands
+    // in for the real filesystem, where the file DOES exist. The old gate,
+    // `files.includes(LATTICE_MODEL_FILE)`, only ever consulted the tracked
+    // list and fell through to `discoverProjects`, which finds nothing for a
+    // native-only tree with no `project.json`: a zero-node index reads clean
+    // on a tree `../../cli.mjs check`'s `existsSync`-based `markersAt`
+    // (`../commands/context.mjs`) dispatches to the native provider and finds
+    // a real violation in. The red direction: with the old gate,
+    // `index.nativeMarker` here is `false` and `graph.nodes` is `{}`.
+    const trackedFiles = { "apps/a/main.go": "package a\n" };
+    const onDisk = {
+      ...trackedFiles,
+      "lattice.json": '{"projects":{"declared":[{"root":"apps/a"}]}}',
+    };
+    const index = buildWorkspaceIndex({
+      root: "/fixture",
+      listFiles: () => Object.keys(trackedFiles),
+      readFileAt: (_root, path) => onDisk[path] ?? null,
+    });
+
+    expect(index.nativeMarker).toBe(true);
+    expect(index.nativeModelFailure).toBeNull();
+    expect(Object.keys(index.graph.nodes)).toEqual(["a"]);
+    expect(indexGaps(index)).toEqual([]);
+  });
+
   it("leaves nativeMarker false for a tree with no lattice.json at its root", () => {
     const index = buildWorkspaceIndex({
       root: "/fixture",

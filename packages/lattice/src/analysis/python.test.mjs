@@ -105,6 +105,107 @@ describe("resolvePythonDependencies", () => {
     };
     expect(resolvePythonDependencies(projects, filesOf, (p) => contents[p] ?? null)).toEqual([]);
   });
+
+  it("draws an edge from uv's array-of-sources-by-marker form, not only a lone table", () => {
+    // uv's documented multiple-sources form routes one name through several
+    // source tables, one picked per environment marker at install time:
+    // `acme-beta = [ { workspace = true, marker = "…" }, { path = "…", marker
+    // = "…" } ]`. `typeof spec === "object"` is also true for an ARRAY, so
+    // before this fix the guard passed and fell straight through: an array
+    // has no `.workspace`/`.path` of its own, so `target` stayed `null` and
+    // the edge this manifest plainly declares was silently never drawn.
+    const contents = {
+      "acme/libs/alpha/pyproject.toml": [
+        "[project]",
+        'name = "acme-alpha"',
+        'version = "0.1.0"',
+        'dependencies = ["acme-beta"]',
+        "[tool.uv.sources]",
+        "acme-beta = [",
+        "  { workspace = true, marker = \"sys_platform == 'linux'\" },",
+        "  { workspace = true, marker = \"sys_platform == 'darwin'\" },",
+        "]",
+      ].join("\n"),
+      "acme/libs/beta/pyproject.toml": betaManifest,
+    };
+    expect(resolvePythonDependencies(projects, filesOf, (p) => contents[p] ?? null)).toEqual([
+      {
+        source: "alpha",
+        target: "beta",
+        sourceFile: "acme/libs/alpha/pyproject.toml",
+        type: "static",
+      },
+    ]);
+  });
+});
+
+describe("resolvePythonDependencies — root project", () => {
+  it("draws an edge from the workspace root project's own pyproject.toml", () => {
+    // `resolvePythonDependencies` built the manifest path as a template
+    // string, `${project.root}/pyproject.toml`; for a root project
+    // (`root: ""`) that reads `/pyproject.toml` — a leading slash the tracked
+    // file list never carries — so `filesOf(...).includes(manifestPath)`
+    // never matched and the root's own dependency declarations were silently
+    // never read, exactly like the Go/Rust resolvers' analogous root-project
+    // gap.
+    const projects = [
+      { name: "root", root: "" },
+      { name: "beta", root: "libs/beta" },
+    ];
+    const files = {
+      root: ["pyproject.toml"],
+      beta: ["libs/beta/pyproject.toml"],
+    };
+    const filesOf = (name) => files[name] ?? [];
+    const contents = {
+      "pyproject.toml": [
+        "[project]",
+        'name = "acme-root"',
+        'version = "0.1.0"',
+        'dependencies = ["acme-beta"]',
+        "[tool.uv.sources]",
+        "acme-beta = { workspace = true }",
+      ].join("\n"),
+      "libs/beta/pyproject.toml": '[project]\nname = "acme-beta"\nversion = "0.1.0"\n',
+    };
+    expect(resolvePythonDependencies(projects, filesOf, (p) => contents[p] ?? null)).toEqual([
+      { source: "root", target: "beta", sourceFile: "pyproject.toml", type: "static" },
+    ]);
+  });
+
+  it("draws an edge from a uv path source that points AT the root project, spelled `.`", () => {
+    // The reverse direction of the same gap: `packageProjectByRoot` (the map a
+    // uv `path` source resolves against) was keyed by the RAW `project.root`,
+    // while its only lookup normalizes first. `normalizePath` collapses the Nx
+    // root spelling `"."` to `""`, so the key (`"."`) and the lookup (`""`)
+    // never met — a `path` source naming the root project drew no edge.
+    // `"."` is the production spelling: `create-dependencies.mjs` passes
+    // `config.root` raw, and Nx spells the workspace-root project `.`; only
+    // native `lattice.json` spells it `""` (the case the test above covers).
+    const projects = [
+      { name: "root", root: "." },
+      { name: "leaf", root: "libs/leaf" },
+    ];
+    const files = {
+      root: ["pyproject.toml"],
+      leaf: ["libs/leaf/pyproject.toml"],
+    };
+    const filesOf = (name) => files[name] ?? [];
+    const contents = {
+      "pyproject.toml": '[project]\nname = "acme-root"\nversion = "0.1.0"\n',
+      "libs/leaf/pyproject.toml": [
+        "[project]",
+        'name = "acme-leaf"',
+        'version = "0.1.0"',
+        'dependencies = ["acme-root"]',
+        "[tool.uv.sources]",
+        'acme-root = { path = "../.." }', // "libs/leaf" + "../.." -> the workspace root
+      ].join("\n"),
+    };
+    expect(resolvePythonDependencies(projects, filesOf, (p) => contents[p] ?? null)).toEqual([
+      { source: "leaf", target: "root", sourceFile: "libs/leaf/pyproject.toml", type: "static" },
+    ]);
+  });
 });
 
 describe("resolvePythonDependencies — Poetry and PDM path declarations", () => {
@@ -639,6 +740,22 @@ describe("parsePythonImportSites", () => {
     ).toEqual([".", "..", ".mod", "..pkg.sub"]);
   });
 
+  it("reads a relative import with no space before `import` — valid Python the old regex missed", () => {
+    // Verified against real Python: `ast.parse("from .import x")` and
+    // `ast.parse("from ..import y")` both succeed (level=1/level=2,
+    // module=None) — a bare run of dots is never part of an identifier, so
+    // the tokenizer needs no whitespace to separate it from the `import`
+    // keyword. `FROM_STATEMENT` required `[ \t]+` before `import`
+    // unconditionally, and its dotted-name arm greedily ate `.import` as a
+    // module name, so the whole match failed and the statement produced no
+    // record and no failure at all.
+    expect(
+      parsePythonImportSites(["from .import x", "from ..import y"].join("\n")).map(
+        (site) => site.specifier,
+      ),
+    ).toEqual([".", ".."]);
+  });
+
   it("reads an indented import, which is what catches TYPE_CHECKING and function-local ones", () => {
     const source = [
       "if TYPE_CHECKING:",
@@ -863,6 +980,38 @@ describe("analyzePython", () => {
     const specifiers = imports.map((r) => r.specifier);
     expect(specifiers).toEqual(["beta.store", "beta.other"]);
     expect(specifiers.every((s) => s)).toBe(true);
+  });
+
+  it("closes a multiline paren group across a `#` comment on an interior line (D-07)", () => {
+    // `hasUnclosedParen` treated `#` as ending the scan of the WHOLE joined
+    // blob, not just the physical line it sits on. Re-run on the cumulative
+    // text `joinContinuedStatement` builds, a `#` on line 2 made the group
+    // look permanently open, so the join never found line 3's `)` and kept
+    // pulling lines all the way to EOF — one record (`beta.store`), zero
+    // failures, and `beta.other`/`beta.third` vanished with no trace at all.
+    // Real Python parses three imports here.
+    const source = [
+      "from beta.store import (",
+      "    Thing,  # noqa",
+      ")",
+      "import beta.other",
+      "import beta.third",
+    ].join("\n");
+    const { imports, failures } = analyze(source);
+    expect(failures).toEqual([]);
+    expect(imports.map((r) => r.specifier)).toEqual(["beta.store", "beta.other", "beta.third"]);
+  });
+
+  it("closes a multiline paren group whose comment sits on the OPENING line too (D-07)", () => {
+    const source = [
+      "from beta.store import (  # noqa",
+      "    Thing,",
+      ")",
+      "import beta.other",
+    ].join("\n");
+    const { imports, failures } = analyze(source);
+    expect(failures).toEqual([]);
+    expect(imports.map((r) => r.specifier)).toEqual(["beta.store", "beta.other"]);
   });
 
   it("emits an import that never leaves the project", () => {

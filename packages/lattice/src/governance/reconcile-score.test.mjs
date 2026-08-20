@@ -213,6 +213,50 @@ describe("scoreIntentRows", () => {
     });
   });
 
+  it("does not let two boundary name pairs with a colliding delimiter-free key steal each other's finding", () => {
+    // `{from:"web", to:"appcore"}` and `{from:"webapp", to:"core"}` both join
+    // to the identical string "webappcore" under a plain `${a}${b}` concat
+    // key — the exact collision the collision-free `boundaryKey` helper
+    // exists to avoid (matching `edgeKey` in `../architecture-intent/judge.mjs`).
+    // Both pairs carry a REAL, distinct finding here; under the colliding key
+    // only the LAST-inserted finding survives in the lookup map, so the
+    // forbidden row's own real `intentForbiddenEdge` finding is shadowed by
+    // the allowed row's `intentAllowedMissing` finding and silently reads
+    // back as "match" — a real violation reported as clean.
+    const model = intent({
+      forbidden: [{ from: "web", to: "appcore", reason: "r1" }],
+      allowed: [{ from: "webapp", to: "core", reason: "r2" }],
+    });
+    const verdict = {
+      findings: [
+        {
+          source: "s1",
+          target: "t1",
+          rule: "intentForbiddenEdge",
+          boundaryFrom: "web",
+          boundaryTo: "appcore",
+          message: "m1",
+        },
+        {
+          source: "s2",
+          target: "t2",
+          rule: "intentAllowedMissing",
+          boundaryFrom: "webapp",
+          boundaryTo: "core",
+          message: "m2",
+        },
+      ],
+    };
+    const rows = scoreIntentRows(model, verdict, observed, tagsByProject);
+    const forbiddenRow = rows.find((r) => r.name === "web → appcore");
+    const allowedRow = rows.find((r) => r.name === "webapp → core");
+    expect(forbiddenRow).toMatchObject({
+      state: "unexpected",
+      classification: "intentForbiddenEdge",
+    });
+    expect(allowedRow).toMatchObject({ state: "absent", classification: "intentAllowedMissing" });
+  });
+
   it("scores a satisfied forbidden boundary row as a match", () => {
     const model = intent({ forbidden: [{ from: "packages", to: "apps", reason: "r" }] });
     const rows = scoreIntentRows(model, emptyVerdict, observed, tagsByProject);
