@@ -76,7 +76,12 @@ describe("the shipped policy packs reach a consumer", () => {
     expect(packFiles.length).toBeGreaterThan(0);
   });
 
-  it("puts every pack in the tarball npm would publish", () => {
+  it("puts every pack in the tarball npm would publish", { timeout: 60_000 }, () => {
+    // `npm pack --dry-run` walks the whole package on every run and has been
+    // measured just over vitest's 5s default on a cold CI runner (5.9s on the
+    // Node 24 lane) — a timing red that reads like a packaging regression.
+    // The child process already carries its own 120s ceiling above; this
+    // timeout only stops vitest from racing it.
     const packed = packedPaths();
     expect(packed.filter((path) => path.startsWith("presets/")).sort()).toEqual(
       packFiles.map((name) => `presets/${name}`).sort(),
