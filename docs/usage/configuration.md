@@ -99,18 +99,20 @@ inline law re-diagnoses open files just as editing a policy file does.
 
 ## CLI flags
 
-| flag       | commands that accept it                                                                                                                                            | meaning                                                                          |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `--format` | `check`, `graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`, `explain`, `context`, `provenance`, `adr` | `text` (default), `sarif` (check only), or `json` (versioned envelope)           |
-| `--output` | all commands                                                                                                                                                       | Write the report to a file instead of stdout                                     |
-| `--config` | `check`, `diff`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`, `explain`, `context`                                                                 | Read the boundary law from this file instead of the workspace's `boundaryConfig` |
+| flag       | commands that accept it                                                                                                                                                      | meaning                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `--format` | `check`, `graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`, `history`, `health`, `report`, `debt`, `impact`, `explain`, `context`, `provenance`, `adr` | `text` (default), `sarif` (check only), or `json` (versioned envelope)           |
+| `--output` | all commands                                                                                                                                                                 | Write the report to a file instead of stdout                                     |
+| `--config` | `check`, `diff`, `waivers`, `fitness`, `history`, `health`, `report`, `debt`, `impact`, `explain`, `context`                                                                 | Read the boundary law from this file instead of the workspace's `boundaryConfig` |
 
 `--format sarif` is only available for `check`; every other command produces
 `text` or `json` only. `diff` accepts `--config` because rule-impact analysis
 depends on which boundary law is in effect. `history` accepts it because a
 captured snapshot records the fingerprint of the law in effect. `waivers`,
 `fitness`, `health` and `debt` accept it because the surface they describe is
-the one the law in effect carries. `impact` accepts it for constraint context.
+the one the law in effect carries; `report` accepts it for the same reason and
+resolves it once for every section of the document it composes. `impact`
+accepts it for constraint context.
 `explain` and `context` accept it because the judgment and the matching rows
 both depend on which constraint table governs. `graph`, `discover`, `drift`,
 `reconcile`, `provenance`, and `adr` take no `--config` because they describe
@@ -125,5 +127,6 @@ structure, provenance, or the decision registry — not any boundary law.
   resolver keys off a manifest that is not there.
 - **Project names or tag values.** Everything comes from the project graph
   and the config the workspace declares.
-- **The exit codes.** 0 clean, 1 findings (check only), 2 usage error, 3 no
-  verdict. See [ci.md](ci.md) for the full table.
+- **The exit codes.** 0 clean, 1 findings, 2 usage error, 3 no verdict. See
+  [exit-codes.md](../reference/exit-codes.md) for which commands reach which,
+  and [ci.md](ci.md) for reading them in a pipeline.

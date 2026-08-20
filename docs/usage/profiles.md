@@ -45,7 +45,7 @@ not the law in effect.
 ## Every command resolves it, not only `check`
 
 `context`, `graph`, `explain`, `impact`, `diff`, `fitness`, `waivers`, `debt`,
-`health`, and `history --capture` all read `boundaryConfig` — and `--config`,
+`health`, `report`, and `history --capture` all read `boundaryConfig` — and `--config`,
 on the commands that accept one; `graph` takes no `--config` — the same way
 `check` does: a profile NAME when the workspace names a `profiles` registry,
 never a file path. `lattice context <project>` and

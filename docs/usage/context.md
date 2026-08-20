@@ -11,8 +11,7 @@ lattice context billing-core --format json --output context.json
 `context` takes a project name and shows the architecture constraints that
 govern it: the project's tags, which `depConstraints` rows match those tags,
 and what each row allows or bans. It is descriptive: it never exits 1, because
-a description of what the rules say is never a finding (only `check` ever
-exits 1).
+a description of what the rules say is never a finding.
 
 ## Why this command exists
 

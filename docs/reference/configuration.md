@@ -149,10 +149,10 @@ argument — `lattice <command> --help` is a usage error
 
 ### `--format`
 
-| command                                                                                                                                                   | values                  | default | meaning                                                                                               |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
-| `check`                                                                                                                                                   | `text`, `sarif`, `json` | `text`  | Terminal report, SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope.                |
-| `graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`, `history`, `health`, `debt`, `impact`, `explain`, `context`, `provenance`, `adr` | `text`, `json`          | `text`  | Terminal report or the versioned JSON envelope. No SARIF -- descriptive commands produce no findings. |
+| command                                                                                                                                                             | values                  | default | meaning                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| `check`                                                                                                                                                             | `text`, `sarif`, `json` | `text`  | Terminal report, SARIF 2.1.0 for GitHub code scanning, or the versioned JSON envelope.                |
+| `graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`, `history`, `health`, `report`, `debt`, `impact`, `explain`, `context`, `provenance`, `adr` | `text`, `json`          | `text`  | Terminal report or the versioned JSON envelope. No SARIF -- descriptive commands produce no findings. |
 
 `--format` changes no exit code and no byte of the other two formats. It is an
 additional rendering of the same verdict.
@@ -173,13 +173,15 @@ truncated file.
 | `--config` | `<file>` | (from `boundaryConfig` option) | Read the boundary law from this file instead of the workspace's configured one. |
 
 Accepted by `check`, `diff`, `waivers`, `fitness`, `history`, `health`,
-`debt`, `impact`, `explain`, and `context`. The judgment (`check`, `explain`),
-rule-impact analysis (`diff`), the waiver surface (`waivers` — the rows listed
-are the ones the law carries), the fitness gates (`fitness` — a named rule set
-may live in the same boundary file), the evolution narrative (`history` — the
-captured snapshot records the fingerprint of the law in effect), the per-metric
-verdicts (`health`), the debt ledger (`debt`), constraint context (`impact`),
-and matching rows (`context`) all depend on which boundary law is in effect.
+`report`, `debt`, `impact`, `explain`, and `context`. The judgment (`check`,
+`explain`), rule-impact analysis (`diff`), the waiver surface (`waivers` — the
+rows listed are the ones the law carries), the fitness gates (`fitness` — a
+named rule set may live in the same boundary file), the evolution narrative
+(`history` — the captured snapshot records the fingerprint of the law in
+effect), the per-metric verdicts (`health`), the composed governance document
+(`report` — one law resolved once for every section, so no two can answer from
+two), the debt ledger (`debt`), constraint context (`impact`), and matching
+rows (`context`) all depend on which boundary law is in effect.
 `graph`, `discover`, `drift`, `reconcile`, `provenance`, and `adr` take no
 `--config` because they describe structure or compare against the declared
 intent, not against any boundary law — `adr` reads only the tracked

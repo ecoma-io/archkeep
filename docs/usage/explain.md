@@ -11,8 +11,7 @@ lattice explain libs/alpha/main.go:10:5 --format json --output explanation.json
 `explain` takes a `file:line:column` site, finds the matching import record,
 and explains the judgment: which constraint row matched, which tags applied,
 whether it is a violation and why. It is descriptive: it never exits 1, because
-an explanation of what the rules decided is never a finding (only `check` ever
-exits 1).
+an explanation of what the rules decided is never a finding.
 
 ## What the explanation contains
 

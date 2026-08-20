@@ -37,16 +37,17 @@ OBSERVE → CONTEXT → CHANGE → CHECK → EVIDENCE → REVIEW
 None of the five skills is a single command. Each teaches the agent _when_ to
 run the minimum sufficient set of `lattice` operations — `context`, `check`,
 `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`, `history`,
-`health`, `debt`, `impact`, `explain`, `graph`, `provenance`, `adr` — and never
-requires every command for every change.
+`health`, `report`, `debt`, `impact`, `explain`, `graph`, `provenance`, `adr` —
+and never requires every command for every change.
 
 `check` is the only command that exits 1 on boundary findings — with one
 companion: `fitness` also exits 1 when a declared function `fail`s, because a
 failing fitness function is a finding. Every other command is descriptive or
 proposal-only: `graph`, `diff`, `drift`, `discover`, `reconcile`, `impact`,
-`explain`, `context`, `history`, `waivers`, `health`, `debt`, `provenance`,
-and `adr` never exit 1 on their own, and both `--propose` surfaces mark their
-output as proposals that are never written — no command writes to the Intent.
+`explain`, `context`, `history`, `waivers`, `health`, `report`, `debt`,
+`provenance`, and `adr` never exit 1 on their own, and both `--propose` surfaces
+mark their output as proposals that are never written — no command writes to
+the Intent.
 Reconciling a stale declared architecture with the observed one is a human
 decision the CLI can only shape, never make.
 

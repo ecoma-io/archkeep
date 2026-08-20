@@ -8,7 +8,7 @@ The unit and integration tests under `src/` prove the engine correct against in-
 
 Specifically:
 
-- **Eight of the sixteen public commands** (`check`, `graph`, `diff`, `drift`,
+- **Eight of the seventeen public commands** (`check`, `graph`, `diff`, `drift`,
   `history`, `impact`, `explain`, `context`) produce correct exit codes and
   structured output
 - **Native and Nx consumers** agree on semantics (project names, edge source/target/type, violation rule IDs and file paths)

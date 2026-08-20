@@ -205,7 +205,7 @@ Exit codes: 0 clean — and every selected file was analyzed; 1 findings;
 Ten minutes end to end, most of it spent deciding what your tags mean:
 [**Getting started →**](https://github.com/ecoma-io/lattice/blob/main/docs/getting-started/installation.md). `graph`, `diff`,
 `history`, `drift`, `impact`, `explain`, `context` and the rest of the
-sixteen-command surface are in the [CLI reference](https://github.com/ecoma-io/lattice/blob/main/docs/reference/cli.md).
+seventeen-command surface are in the [CLI reference](https://github.com/ecoma-io/lattice/blob/main/docs/reference/cli.md).
 
 ## Documentation map
 

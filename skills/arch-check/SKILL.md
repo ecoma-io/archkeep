@@ -188,10 +188,10 @@ being read as clean. What a future version folds into the same gate is decided
 by the same rule: an additional deterministic check makes the verdict complete,
 never merely louder.
 
-Fifteen descriptive commands sit **beside** the gate. `graph`, `diff`,
+Sixteen descriptive commands sit **beside** the gate. `graph`, `diff`,
 `drift`, `discover`, `reconcile`, `impact`, `explain`, `context`, `history`,
-`waivers`, `health`, `debt`, `provenance`, and `adr` each describe or propose
-against the same observed facts, and none of them exits 1 on its own
+`waivers`, `health`, `report`, `debt`, `provenance`, and `adr` each describe or
+propose against the same observed facts, and none of them exits 1 on its own
 (describing architecture is not a finding; `debt` ages the ledger rather than
 re-judging it, `health` reports per-metric verdicts where an unmeasured
 metric is `unknown`/`not_applicable`, never zero, and `adr` describes the
@@ -202,7 +202,8 @@ still reach an exit code: `fitness` is the one descriptive command that exits
 1 on its own when a declared function `fail`s (`fail` → 1, `unknown` → 3), and
 a waived violation stays exit `1` in `check`, moved to the "accepted
 violations" section until its term lapses. Those two inform a verdict; the
-rest only inform the reader. A build fails on `check`, and on nothing else.
+rest only inform the reader. A build fails on `check` and on `fitness`, and on
+nothing else.
 
 ## What to do if it fails
 

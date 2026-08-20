@@ -60,8 +60,8 @@ answer is to surface it, never to ignore it.
 
    Every command below that reads a boundary law resolves the active profile
    by name, exactly as `check` does — `context`, `graph`, `diff`, `impact`,
-   `explain`, `fitness`, `history`, `waivers`, `debt`, and `health` all share
-   `check`'s own config-resolution step, so `--config`/`boundaryConfig` is a
+   `explain`, `fitness`, `history`, `waivers`, `debt`, `health`, and `report`
+   all share `check`'s own config-resolution step, so `--config`/`boundaryConfig` is a
    profile NAME everywhere, never a file path, the moment the workspace names
    a `profiles` registry. A descriptive command exiting 3 in a profile
    workspace is therefore a real coverage gap — an unknown profile name, an
