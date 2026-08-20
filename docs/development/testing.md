@@ -90,6 +90,7 @@ tier structurally cannot see.
 | `lsp/editor-config.integration.test.mjs`         | A language reaching the analyzer registry and not the Nx integration's manifest — checked by the CLI, never by an editor, which reads exactly like a clean tree                                                                                                                                                                                                                                                                                                                                                                             |
 | `rules/upstream.integration.test.mjs`            | A copied message or option drifting from the installed `@nx/eslint-plugin`                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `analysis/vue.integration.test.mjs`              | The line a reader finally sees, from the real analyzer pair, against positions computed from the fixture                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `conformance/corpus.integration.test.mjs`        | A rule that stops firing in Go, Rust or Python, where no upstream engine can disagree — hand-labeled architecture workspaces driven through the whole `check` path, with each near-miss measured against a forbid-everything policy so its silence cannot be an engine that never looked                                                                                                                                                                                                                                                    |
 
 **The Vue analyzer is pinned from both sides**, and it is the model for anything
 with a coordinate conversion in it: `vue.test.mjs` mocks the TypeScript analyzer
@@ -126,12 +127,29 @@ there is a regression, and its pure halves (ledger matching, the empty-verdict
 claim) are what `scripts/differential-real-trees.test.mjs` pins under
 `pnpm test`.
 
-Three cheaper files sit beside the differential and check the project against its
-own declarations rather than against ESLint: `boundary.test.mjs` holds the
-shipped tool to what it may depend on, `stated-counts.integration.test.mjs` holds
-the README's catalogue sizes to the catalogue, and
-`plugin-catalogue.integration.test.mjs` holds the Claude Code plugin manifests to
-each other.
+### Conformance — the labeled corpus, where ESLint has no parser
+
+The differential can only speak where ESLint can read the file, which is
+JavaScript, TypeScript and Vue. On `.go`, `.rs` and `.py` — the languages this
+tool exists for — upstream is silent by inability, so no comparison there can
+catch a rule that stopped firing: every spelling of the import would go quiet
+together and still agree.
+
+`corpus.mjs` and `corpus.integration.test.mjs` are that half. Architecture
+styles built in those three languages, each probe carrying the findings a
+person decided in advance, run end to end through `cli.mjs`'s `check` over a
+native (`lattice.json`) workspace. The mechanism that keeps a near-miss from
+being an engine that never looked — a second, forbid-everything policy every
+case tree carries — and the three numbers each probe states are documented in
+that directory's README rather than here, along with the corpus's own sizes,
+which `stated-counts.integration.test.mjs` holds to the catalogue.
+
+Three cheaper files sit beside those two and check the project against its own
+declarations rather than against ESLint: `boundary.test.mjs` holds the shipped
+tool to what it may depend on, `stated-counts.integration.test.mjs` holds the
+README's catalogue sizes to the catalogue, and
+`plugin-catalogue.integration.test.mjs` holds the Claude Code plugin manifests
+to each other.
 
 The same script carries a second, native-provider leg over the same pinned
 trees — never a second clone, never a second script. It derives a
@@ -206,9 +224,9 @@ A **missed violation** — an import that crosses a boundary and produced no out
 — is the worst class of bug this project has, and it earns a permanent regression
 fixture rather than just a fix. Which tier depends on what was silent:
 
-| what was silent                      | where the fixture goes                                                                     |
-| ------------------------------------ | ------------------------------------------------------------------------------------------ |
-| an import the analyzer did not see   | that analyzer's unit tests, plus a line in its limits header if the shape stays unreadable |
-| a rule that should have fired        | `src/conformance/`, so ESLint's verdict is the check                                       |
-| an edge that never reached the graph | `graph/create-dependencies.integration.test.mjs`                                           |
-| a file the editor never received     | `lsp/editor-config.integration.test.mjs`                                                   |
+| what was silent                      | where the fixture goes                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| an import the analyzer did not see   | that analyzer's unit tests, plus a line in its limits header if the shape stays unreadable                                                       |
+| a rule that should have fired        | `src/conformance/` — `cases.mjs` in a language ESLint reads, so its verdict is the check; `corpus.mjs` in Go, Rust or Python, where the label is |
+| an edge that never reached the graph | `graph/create-dependencies.integration.test.mjs`                                                                                                 |
+| a file the editor never received     | `lsp/editor-config.integration.test.mjs`                                                                                                         |
