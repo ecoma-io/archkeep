@@ -1,0 +1,10 @@
+{
+  "clean-architecture#clean-architecture": "28e4dc572cf278e69f05c01bed020cda425ebd7b11bfe04804f21d2f1bbdcb69",
+  "clean-architecture#clean-architecture-pure-core": "85e7d5a36759169190dab1d871acc1d2c733b145306ef33f7b161e641c9f78e4",
+  "ddd-bounded-contexts#ddd-bounded-contexts": "8ec7feb0e6dbf64373e1aaf5bfc9d53d6299de3c11fb38955a5a3857fac04f09",
+  "ddd-bounded-contexts#ddd-bounded-contexts-isolated": "8ac4183559010abf01e20ae50bffd7611b78417b4af531af6c7a15fbcdc443da",
+  "hexagonal#hexagonal": "08e57312c449a79ce32c4248931e7d9488441fa47f8638fb780fd02602442003",
+  "hexagonal#hexagonal-pure-domain": "3a43406883c6e182592ff1f47347c6f9a04f04690300ea5b9260877dea2f134f",
+  "modular-monolith#modular-monolith": "4b3517e4d4ae1357e675b947d7e4845260fa6d75122f40d8e75ad202d910606a",
+  "modular-monolith#modular-monolith-sealed-kernel": "124a7bafd43abbd87e5218146219d57af6010e9374d80f0c3c1d2ac13a8e2677"
+}
