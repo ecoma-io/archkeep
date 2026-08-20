@@ -606,6 +606,54 @@ describe("keeping up with the buffer and with the tree", () => {
     expect(published(sent)).toHaveLength(2);
   });
 
+  it("re-diagnoses when a nested boundaryConfig path changes, not just its basename", async () => {
+    // The silent-stale direction (S-bug A): `watchedFilesFor` registers a glob
+    // of `**/configs/boundaries.mjs` for a nested `boundaryConfig`, but the old
+    // match compared only the changed URI's BASENAME against the watched
+    // entries — `"boundaries.mjs"` never equals the registered entry
+    // `"configs/boundaries.mjs"`, so a workspace naming a nested config never
+    // re-analyzed when that exact file changed. The red direction: with the
+    // old basename-only match, `build` here stays `1` and this test fails.
+    let build = 0;
+    const { server, sent } = session({
+      readOptions: () => ({ ...DEFAULT_OPTIONS, boundaryConfig: "configs/boundaries.mjs" }),
+      buildIndex: () => {
+        build += 1;
+        return { workspace: {}, graph: { nodes: {} } };
+      },
+    });
+    await server.handle(initialize());
+    await server.handle(didOpen());
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "workspace/didChangeWatchedFiles",
+      params: { changes: [{ uri: `file://${ROOT}/configs/boundaries.mjs`, type: 2 }] },
+    });
+
+    expect(build).toBe(2);
+    expect(published(sent)).toHaveLength(2);
+  });
+
+  it("still re-diagnoses a flat-filename boundaryConfig, unaffected by the path-aware match", async () => {
+    let build = 0;
+    const { server, sent } = session({
+      buildIndex: () => {
+        build += 1;
+        return { workspace: {}, graph: { nodes: {} } };
+      },
+    });
+    await server.handle(initialize());
+    await server.handle(didOpen());
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "workspace/didChangeWatchedFiles",
+      params: { changes: [{ uri: `file://${ROOT}/${DEFAULT_OPTIONS.boundaryConfig}`, type: 2 }] },
+    });
+
+    expect(build).toBe(2);
+    expect(published(sent)).toHaveLength(2);
+  });
+
   it("ignores a watched-files notification about a file no verdict depends on", async () => {
     let build = 0;
     const { server, sent } = session({
@@ -925,6 +973,45 @@ describe("message shapes the protocol allows and the server must survive", () =>
     expect(changed.diagnostics).not.toHaveLength(0);
     expect(changed.diagnostics[0].code).toBe("analysisFailure");
     expect(changed.diagnostics[0].message).toContain("unknown");
+    expect(diagnoseDocument).not.toHaveBeenCalled();
+  });
+
+  it("marks a document unanalyzable when a full change is followed by a ranged one", async () => {
+    // The silent direction (S-bug B): LSP applies `contentChanges` sequentially,
+    // so a ranged edit ordered AFTER a full change is still part of the true
+    // final text. The old code found the last change with no `range` by
+    // searching from the END of the array and stopped there, so a full change
+    // followed by a ranged one was treated as though the full change were the
+    // whole story — the trailing ranged edit was silently dropped, the
+    // document was analyzed from text this server does not actually have, and
+    // a clean result published `analyzed: true` with `[]`. That is a THIRD,
+    // unnamed place an empty list would leave the workspace; the design allows
+    // exactly two (`./server.mjs`'s header). The red direction: with the old
+    // code this test's diagnostics come back `[]` and `diagnoseDocument` is
+    // called; the fix must publish the loud `analysisFailure` diagnostic
+    // instead and never even reach `diagnoseDocument`.
+    const { server, sent } = session();
+    await server.handle(initialize());
+    await server.handle(didOpen());
+    diagnoseDocument.mockClear();
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: {
+        textDocument: { uri: URI, version: 2 },
+        contentChanges: [
+          { text: "package inner\n" },
+          {
+            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+            text: "P",
+          },
+        ],
+      },
+    });
+
+    const changed = published(sent).at(-1);
+    expect(changed.diagnostics).toHaveLength(1);
+    expect(changed.diagnostics[0].code).toBe("analysisFailure");
     expect(diagnoseDocument).not.toHaveBeenCalled();
   });
 

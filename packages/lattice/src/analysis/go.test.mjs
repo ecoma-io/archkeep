@@ -49,6 +49,14 @@ describe("parseGoModulePath", () => {
   it("returns null when no module directive exists", () => {
     expect(parseGoModulePath("go 1.24\n")).toBeNull();
   });
+
+  it('strips a `"`-quoted module path, so an import of it can still resolve', () => {
+    // `module "example.com/beta"` is legal, gofmt-clean go.mod syntax — the
+    // same string-literal spelling an import path uses. Kept quoted, this
+    // never equals the unquoted specifier an importing file writes, so the
+    // project silently drops out of the module map in both edge directions.
+    expect(parseGoModulePath('module "example.com/beta"\n\ngo 1.24\n')).toBe("example.com/beta");
+  });
 });
 
 describe("maskGoComments", () => {
@@ -240,6 +248,21 @@ describe("parseGoImports", () => {
       "os",
     ]);
     expect(parseGoImports('package main\n\nimport ("fmt"; "os")\n').sort()).toEqual(["fmt", "os"]);
+  });
+
+  it("reads a single-form import whose alias is a non-ASCII identifier", () => {
+    // `unicode.IsLetter` — what Go itself uses to admit an identifier's first
+    // rune — accepts any Unicode letter, not only ASCII; `import π "…"` is
+    // ordinary, gofmt-clean Go. The old ASCII-only alias class silently
+    // dropped the whole import: no graph edge, no import-site record.
+    expect(parseGoImports('package main\n\nimport π "example.com/beta/mathutil"\n')).toEqual([
+      "example.com/beta/mathutil",
+    ]);
+  });
+
+  it("reads a block-form import whose alias is a non-ASCII identifier", () => {
+    const src = 'package main\n\nimport (\n\tπ "example.com/beta/mathutil"\n)\n';
+    expect(parseGoImports(src)).toEqual(["example.com/beta/mathutil"]);
   });
 
   it("reads an import path spelled as a raw string the same as a quoted one", () => {
@@ -477,6 +500,40 @@ describe("resolveGoDependencies", () => {
       "acme/libs/alpha/main.go": null, // readFile's contract: null means unreadable
     };
     expect(resolveGoDependencies(projects, filesOf, (p) => unreadable[p] ?? null)).toEqual([]);
+  });
+
+  it('draws edges to and from a root project (root "."), in both directions', () => {
+    // `${project.root}/go.mod` for an Nx root project (root "." or "") built
+    // "./go.mod" or "/go.mod" — matching no tracked file spelled "go.mod", so
+    // the root project's module never entered the map: no edge FROM it (its
+    // imports resolved to nothing) and no edge TO it (nothing else could name
+    // its module path either). Both directions are silent, and both must be
+    // checked, since a fix that only widened lookup one way would still miss
+    // the other.
+    const rootProjects = [
+      { name: "root", root: "." },
+      { name: "lib", root: "libs/lib" },
+    ];
+    const rootFiles = {
+      root: ["go.mod", "main.go"],
+      lib: ["libs/lib/go.mod", "libs/lib/pkg.go"],
+    };
+    const rootContents = {
+      "go.mod": "module example.com/acme/root\n",
+      "main.go": 'package main\n\nimport "example.com/acme/lib"\n',
+      "libs/lib/go.mod": "module example.com/acme/lib\n",
+      "libs/lib/pkg.go": 'package lib\n\nimport "example.com/acme/root"\n',
+    };
+    expect(
+      resolveGoDependencies(
+        rootProjects,
+        (name) => rootFiles[name] ?? [],
+        (path) => rootContents[path] ?? null,
+      ),
+    ).toEqual([
+      { source: "root", target: "lib", sourceFile: "main.go", type: "static" },
+      { source: "lib", target: "root", sourceFile: "libs/lib/pkg.go", type: "static" },
+    ]);
   });
 });
 

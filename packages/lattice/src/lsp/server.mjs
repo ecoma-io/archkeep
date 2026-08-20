@@ -540,14 +540,30 @@ export function createServer({
     });
   }
 
-  /** Did any of these changes touch a file the verdict depends on? */
+  /**
+   * Did any of these changes touch a file the verdict depends on?
+   *
+   * Matched against the workspace-relative path, not the basename: a watched
+   * entry can legitimately carry directory components of its own (a
+   * `boundaryConfig` of `configs/boundaries.mjs`, `registerFileWatchers`
+   * turning it into the glob `**\/configs/boundaries.mjs`), and a bare
+   * basename comparison never equals that entry no matter how the real file
+   * changes — the watcher registration would look correct while an edit to
+   * that exact file silently never re-diagnosed anything. The comparison
+   * below mirrors the glob it registered: an exact match on the
+   * workspace-relative path, or that path ending with `/` + the watched
+   * entry, which is what `**\/entry` means for a path at any depth — the
+   * same reach a flat entry (`project.json`, `nx.json`) needs to keep, since
+   * those legitimately live at any depth in the tree.
+   */
   function touchesWatchedFile(changes) {
     const watched = watchedFilesFor(options);
     return (changes ?? []).some((change) => {
       const path = uriToPath(change?.uri);
       if (path === null) return false;
-      const name = path.split(/[\\/]/).pop();
-      return watched.includes(name);
+      const rel = workspaceRelative(root, path);
+      if (rel === null) return false;
+      return watched.some((entry) => rel === entry || rel.endsWith(`/${entry}`));
     });
   }
 
@@ -621,12 +637,32 @@ export function createServer({
         if (!document) return;
         const changes = params?.contentChanges ?? [];
         // Full sync is what this server advertised, so the last change with no
-        // `range` is the whole document. A ranged change means the client
-        // ignored the advertised sync kind; the stored text would then be a
-        // fiction and every position computed from it would be wrong, so the
-        // document is marked unanalyzable rather than analyzed from a text the
-        // server only thinks it has.
-        const full = [...changes].reverse().find((change) => change?.range === undefined);
+        // `range` is meant to be the whole document. A ranged change means the
+        // client ignored the advertised sync kind; the stored text would then
+        // be a fiction and every position computed from it would be wrong, so
+        // the document is marked unanalyzable rather than analyzed from a text
+        // the server only thinks it has.
+        //
+        // The search for that "last full change" has to keep looking past it
+        // for anything ranged that follows: LSP applies `contentChanges`
+        // sequentially, so a ranged edit ordered AFTER the last full change is
+        // still part of the true final text, and treating the full change as
+        // the whole document would silently drop it — analyzing text this
+        // server does not actually have and publishing a verdict about it, the
+        // third, unnamed place an empty list would otherwise leave the
+        // workspace. A mixed batch is the same misbehaving-client case as a
+        // purely incremental one, not a third, quieter outcome.
+        let lastFullIndex = -1;
+        for (let i = changes.length - 1; i >= 0; i -= 1) {
+          if (changes[i]?.range === undefined) {
+            lastFullIndex = i;
+            break;
+          }
+        }
+        const full = lastFullIndex === -1 ? undefined : changes[lastFullIndex];
+        const trailingRanged =
+          lastFullIndex !== -1 &&
+          changes.slice(lastFullIndex + 1).some((change) => change?.range !== undefined);
         if (full === undefined) {
           document.unavailable =
             `this buffer arrived as an incremental change, but the server advertised full ` +
@@ -635,6 +671,17 @@ export function createServer({
           log(
             `lattice: ${uri} arrived as an incremental change, but the server ` +
               `advertised full text synchronisation; its contents are now unknown`,
+          );
+        } else if (trailingRanged) {
+          document.unavailable =
+            `this buffer's change batch carried a full-document change followed by a ranged ` +
+            `one — LSP applies contentChanges sequentially, so the true final text includes ` +
+            `that trailing edit, and this server advertised full text synchronisation only, ` +
+            `so its contents are unknown here rather than the pre-edit text the full change ` +
+            `alone would produce`;
+          log(
+            `lattice: ${uri} arrived with a full change followed by a ranged one; ` +
+              `its contents are now unknown`,
           );
         } else if (typeof full.text !== "string") {
           // `contentChanges: [{}]` — a full change carrying no text. The empty
