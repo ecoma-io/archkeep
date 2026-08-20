@@ -303,12 +303,60 @@ export function findMatchingProjects(patterns, nodes) {
 export const MAX_GLOB_EXPANSIONS = 512;
 
 /**
+ * A brace group's content matches one of these two shapes instead of a
+ * `,`-separated union: `path.posix.matchesGlob` treats `{start..end}` and
+ * `{start..end..step}` as a RANGE, fully expanding every integer (or, with
+ * single letters on both sides, every character) from `start` to `end` —
+ * `{1..300000}` is 300000 alternatives from a comma-free 12-character
+ * pattern, which `braceExpansionCount` would previously see as one
+ * alternative (no `,` inside) and let straight through the cap. Both are
+ * exact-match patterns (no partial match inside a longer group content, the
+ * same way a real range only fires when it is the group's entire body) and
+ * both accept a signed step so a descending range (`{10..1}`) still matches.
+ */
+const NUMERIC_RANGE_PATTERN = /^(-?\d+)\.\.(-?\d+)(?:\.\.(-?\d+))?$/;
+const ALPHA_RANGE_PATTERN = /^([A-Za-z])\.\.([A-Za-z])(?:\.\.(-?\d+))?$/;
+
+/**
+ * How many literal strings a brace group's raw `content` (the text strictly
+ * between one matched `{` and `}`, before any nested group inside it is
+ * resolved) expands to if — and only if — that content is a `{start..end}`
+ * or `{start..end..step}` range in its entirety. `null` when it is not a
+ * range at all (a comma union, a nested group, or a literal), so the caller
+ * falls back to the comma-counting arithmetic that already handles those.
+ *
+ * The cardinality is `floor(|end-start|/max(1,|step|)) + 1` — the same count
+ * real brace expansion produces — computed from the endpoints alone, never by
+ * generating the range: the number can be arbitrarily large (`{1..300000}`)
+ * while this stays a handful of arithmetic operations. `max(1, |step|)`
+ * absorbs a step of `0`, which the real matcher rejects outright — treating
+ * it as step `1` only ever overcounts against that error, the safe direction
+ * for a guard that must never return fewer alternatives than the real
+ * expansion would.
+ *
+ * @param {string} content
+ * @returns {number|null}
+ */
+function rangeCardinality(content) {
+  const numeric = NUMERIC_RANGE_PATTERN.exec(content);
+  const alpha = numeric ? null : ALPHA_RANGE_PATTERN.exec(content);
+  const match = numeric ?? alpha;
+  if (!match) return null;
+  const start = numeric ? Number(match[1]) : match[1].charCodeAt(0);
+  const end = numeric ? Number(match[2]) : match[2].charCodeAt(0);
+  const step = match[3] === undefined ? 1 : Number(match[3]);
+  return Math.floor(Math.abs(end - start) / Math.max(1, Math.abs(step))) + 1;
+}
+
+/**
  * The number of literal strings `pattern`'s brace groups would expand to,
  * without ever generating them: multiplied across a concatenation (`{a,b}c`
- * is 2, `{a,b}{c,d}` is 4) and summed across a `,`-separated union
- * (`{a,{b,c}}` is 2 — `a`, plus the nested pair) — the same arithmetic real
- * brace expansion performs, so the number returned is never smaller than what
- * `path.posix.matchesGlob` would actually have to work through.
+ * is 2, `{a,b}{c,d}` is 4), summed across a `,`-separated union (`{a,{b,c}}`
+ * is 2 — `a`, plus the nested pair), and — per `rangeCardinality` above —
+ * folded in for a `{start..end}`/`{start..end..step}` range exactly the way
+ * a comma union would be, the same arithmetic real brace expansion performs,
+ * so the number returned is never smaller than what `path.posix.matchesGlob`
+ * would actually have to work through.
  *
  * An explicit stack, not recursion: a pattern built from thousands of nested
  * `{` would otherwise make counting itself recurse thousands of frames deep,
@@ -335,14 +383,16 @@ export const MAX_GLOB_EXPANSIONS = 512;
  */
 export function braceExpansionCount(pattern, cap) {
   const limit = cap + 1;
-  /** @type {{alternatives: number, branchProduct: number}[]} */
-  const frames = [{ alternatives: 0, branchProduct: 1 }];
+  /** @type {{alternatives: number, branchProduct: number, start: number}[]} */
+  const frames = [{ alternatives: 0, branchProduct: 1, start: 0 }];
   for (let i = 0; i < pattern.length; i++) {
     const nested = frames.length > 1;
     const top = frames[frames.length - 1];
     const ch = pattern[i];
     if (nested && ch === "}") {
-      top.alternatives += top.branchProduct;
+      const range = top.alternatives === 0 ? rangeCardinality(pattern.slice(top.start, i)) : null;
+      const contribution = range === null ? top.branchProduct : Math.min(range, limit);
+      top.alternatives += contribution;
       frames.pop();
       const parent = frames[frames.length - 1];
       parent.branchProduct = Math.min(parent.branchProduct * top.alternatives, limit);
@@ -350,13 +400,16 @@ export function braceExpansionCount(pattern, cap) {
       top.alternatives += top.branchProduct;
       top.branchProduct = 1;
     } else if (ch === "{") {
-      frames.push({ alternatives: 0, branchProduct: 1 });
+      frames.push({ alternatives: 0, branchProduct: 1, start: i + 1 });
     }
     const current = frames[frames.length - 1];
     if (current.alternatives + current.branchProduct > cap) return limit;
   }
   // An unbalanced '{' leaves frames still open — close each one as though the
-  // pattern had ended right there, folding its count into its parent.
+  // pattern had ended right there, folding its count into its parent. Never a
+  // range: a range that reached end-of-string with no closing '}' is not
+  // valid range syntax either, so it falls back to the same "one alternative"
+  // treatment an unbalanced literal group gets.
   while (frames.length > 1) {
     const frame = frames.pop();
     frame.alternatives += frame.branchProduct;

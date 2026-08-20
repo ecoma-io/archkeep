@@ -15,8 +15,25 @@
 // another file, and the gate's job is to resolve every reference, not to
 // lint one edit in isolation.
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { resolve, sep } from "node:path";
+
+/**
+ * Resolves to the real (symlink-free) absolute path, falling back to a plain
+ * `resolve()` when the path does not exist (e.g. `realpathSync` throws) —
+ * the fallback keeps this usable on a path this hook is about to reject
+ * anyway, without itself throwing on a since-deleted file.
+ *
+ * @param {string} path
+ * @returns {string}
+ */
+export function realPath(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
 
 try {
   if (process.env.CLAUDE_PROJECT_DIR) process.chdir(process.env.CLAUDE_PROJECT_DIR);
@@ -30,7 +47,13 @@ if (!file) process.exit(0);
 
 // A scratch file outside the project is not covered by this repository's
 // doc-reference gate, so checking it would report rules that do not apply.
-if (!resolve(file).startsWith(process.cwd() + sep)) process.exit(0);
+// Resolved on REAL paths, not just `resolve()`: Node resolves symlinks when
+// `chdir`ing, so `process.cwd()` above is already symlink-free, but the
+// naive `resolve(file)` is not — a project checked out through a symlinked
+// parent directory made every edited file compare as "outside the project"
+// and this hook silently exited 0 for the whole session. Same class of bug
+// as `isProgramEntry` in `scripts/check-packages.mjs`.
+if (!realPath(file).startsWith(realPath(process.cwd()) + sep)) process.exit(0);
 
 // Only markdown files carry doc links; an edit that touches no markdown
 // cannot have broken one.

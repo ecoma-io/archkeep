@@ -12,8 +12,25 @@
 // always exits 0 — a file Prettier cannot parse is left untouched for
 // `lint-edited-file.mjs` to report.
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { resolve, sep } from "node:path";
+
+/**
+ * Resolves to the real (symlink-free) absolute path, falling back to a plain
+ * `resolve()` when the path does not exist (e.g. `realpathSync` throws) —
+ * the fallback keeps this usable on a path this hook is about to reject
+ * anyway, without itself throwing on a since-deleted file.
+ *
+ * @param {string} path
+ * @returns {string}
+ */
+export function realPath(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
 
 try {
   if (process.env.CLAUDE_PROJECT_DIR) process.chdir(process.env.CLAUDE_PROJECT_DIR);
@@ -25,8 +42,15 @@ const input = JSON.parse(readFileSync(0, "utf8"));
 const file = input.tool_input?.file_path ?? "";
 if (!file) process.exit(0);
 
-// A scratch file outside the project is not ours to rewrite.
-if (!resolve(file).startsWith(process.cwd() + sep)) process.exit(0);
+// A scratch file outside the project is not ours to rewrite. Resolved on
+// REAL paths, not just `resolve()`: Node resolves symlinks when `chdir`ing,
+// so `process.cwd()` above is already symlink-free, but the naive
+// `resolve(file)` is not — a project checked out through a symlinked parent
+// directory made every edited file compare as "outside the project" and
+// this hook silently exited 0 for the whole session, leaving every edit
+// unformatted. Same class of bug as `isProgramEntry` in
+// `scripts/check-packages.mjs`.
+if (!realPath(file).startsWith(realPath(process.cwd()) + sep)) process.exit(0);
 
 const prettier = "node_modules/prettier/bin/prettier.cjs";
 if (!existsSync(prettier)) process.exit(0); // dependencies not installed yet
