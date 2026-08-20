@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.8.0](https://github.com/ecoma-io/lattice/compare/v0.7.1...v0.8.0) (2026-08-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **lattice:** `check --format sarif` now emits results/notifications for fitness functions (new `fitnessFunctionFailed` rule id); `diff`/`drift` text reports now append `coverage.notes`/`verdict.notes` to their summary line when present; a `history --output` path that resolves into the history directory via `..` is now refused (exit 2) instead of silently accepted; a `check` no-verdict run's `decision.reason` may now name more than one cause; and `check --output`'s stderr summary may now mention fitness counts it previously omitted. Each of these changes reported output on a workspace that already carried the underlying condition — no previously-clean workspace is affected.
+* **lattice:** on an unchanged workspace, a Rust file with two or more `use` statements sharing one line, or a same-line attribute whose own content holds a bracketed string, now reports every crossing instead of silently dropping the later one(s) — a consumer's `bannedExternalImports`/boundary check can newly flag an import it missed before. A workspace where a project sits at the Cargo workspace root — spelled either `""` or Nx's own `"."` — now gets graph edges into and out of that project (both directions) that were previously silently absent, which can newly surface `nx affected`/boundary findings for that project. A `.rs` file with a same-line attribute containing many `"` characters and no closing `]` no longer causes catastrophic backtracking in the CLI or language server.
+* **lattice:** an unchanged Python workspace can now report imports and manifest edges it previously missed — a multi-line `from x import (...)` group with a `#` comment before its closing paren, `from .import x` / `from ..import y`, a uv array-of-sources dependency, a root project's own declared dependencies, and a `path`-form uv source that names the workspace root. A consumer relying on the prior (silent) output will see new findings on code they did not touch.
+* **lattice:** on an unchanged workspace, `reconcile --propose` can now emit `tag-change` candidates for a required project missing a required tag (previously silently omitted, since `buildRankedCandidates` never scanned `scores.tags`). `reconcile` and `drift` can now report a boundary divergence (`intentForbiddenEdge`/`intentAllowedMissing`) that previously silently scored `match` when its `(boundaryFrom, boundaryTo)` pair collided, under naive string concatenation, with another row's pair. `debt`'s JSON and text output no longer serialize `byKind["expired-waiver"]` as `null` for a workspace carrying an expired waiver — it now reports the correct integer count. A consumer's CI or saved baseline for any of these three commands can turn red on a workspace it did not otherwise change.
+* **lattice:** name malformed fitness shapes and stop silently dropping ESLint scope ([#177](https://github.com/ecoma-io/lattice/issues/177))
+* **lattice:** stop the Moon provider from doubling an implicit edge as static ([#176](https://github.com/ecoma-io/lattice/issues/176))
+* **lattice:** on an unchanged Moon workspace, a project dependency that Moon marks implicit (and that also appears in `raw.graph.edges`, the common case) now reports as exactly one `implicit` edge instead of two edges (one `implicit`, one `static`/`dynamic`). `drift`, `discover`, and `check`'s edge-constraint exclusion — everything keying off `edge.type === "implicit"` — now correctly excludes it; previously the phantom `static`/`dynamic` duplicate made it look like a real, code-derived dependency.
+* **lattice:** read Go imports and root-module edges the analyzer silently dropped
+* **lattice:** the Go dependency graph now reports imports and root-module edges it previously dropped; a consumer's `nx affected`/boundary output may change on unchanged code.
+* **lattice:** close three silent-stale gaps in the language server
+* **lattice:** an editor session against an unchanged workspace can now report differently in three cases: (1) editing a boundaryConfig whose path has directory components triggers re-diagnosis where it previously did not; (2) a didChange batch mixing a full change with a trailing ranged edit now publishes a loud analysisFailure diagnostic instead of a (possibly wrong) analyzed:true verdict; (3) a workspace root with a filesystem-present but git-untracked lattice.json is now analyzed through the native provider instead of yielding an empty, falsely-clean index.
+
+### Bug Fixes
+
+* **ci:** gate the App token on env, not on secrets, and unbreak the lane ([#172](https://github.com/ecoma-io/lattice/issues/172)) ([e3bf21e](https://github.com/ecoma-io/lattice/commit/e3bf21ef6933ce8a792f66378a72ba76f3777117))
+* **lattice:** close five silent check/history/report gaps ([#184](https://github.com/ecoma-io/lattice/issues/184)) ([6cf4a66](https://github.com/ecoma-io/lattice/commit/6cf4a66be874a16942c8c8494525ddc88a4c52c0))
+* **lattice:** close five silent false negatives in intent masking and governance reconciliation ([#180](https://github.com/ecoma-io/lattice/issues/180)) ([675ae53](https://github.com/ecoma-io/lattice/commit/675ae53b17307c647e607df099968781e2f9e068))
+* **lattice:** close five silent false negatives in the Python resolver ([#182](https://github.com/ecoma-io/lattice/issues/182)) ([25a349b](https://github.com/ecoma-io/lattice/commit/25a349b115b9299e2bde0fa0f20ee9e4941b2957))
+* **lattice:** close three silent-stale gaps in the language server ([168b64c](https://github.com/ecoma-io/lattice/commit/168b64ce47bf83dde22458dd2170ea150d0ab444))
+* **lattice:** close three silent-stale gaps in the language server ([168b64c](https://github.com/ecoma-io/lattice/commit/168b64ce47bf83dde22458dd2170ea150d0ab444))
+* **lattice:** close two silent gaps in the conformance harness ([#185](https://github.com/ecoma-io/lattice/issues/185)) ([113663c](https://github.com/ecoma-io/lattice/commit/113663c1896879834c96731da1ce6d59355c4051))
+* **lattice:** count minimatch brace ranges and stop __proto__ vanishing in canonical JSON ([#178](https://github.com/ecoma-io/lattice/issues/178)) ([ddc5ce7](https://github.com/ecoma-io/lattice/commit/ddc5ce78dff1d27cff354fdeaa33879db91e0e06))
+* **lattice:** name malformed fitness shapes and stop silently dropping ESLint scope ([16f2f98](https://github.com/ecoma-io/lattice/commit/16f2f98ca457f1e800ba760f04ffd0ffa6de926d))
+* **lattice:** name malformed fitness shapes and stop silently dropping ESLint scope ([#177](https://github.com/ecoma-io/lattice/issues/177)) ([16f2f98](https://github.com/ecoma-io/lattice/commit/16f2f98ca457f1e800ba760f04ffd0ffa6de926d))
+* **lattice:** read Go imports and root-module edges the analyzer silently dropped ([b76b388](https://github.com/ecoma-io/lattice/commit/b76b3883db6508b847ff8e05ceeeb7c374dd32fd))
+* **lattice:** read Go imports and root-module edges the analyzer silently dropped ([b76b388](https://github.com/ecoma-io/lattice/commit/b76b3883db6508b847ff8e05ceeeb7c374dd32fd))
+* **lattice:** stop silently dropping same-line and root-project Rust edges ([#183](https://github.com/ecoma-io/lattice/issues/183)) ([30eb3b7](https://github.com/ecoma-io/lattice/commit/30eb3b78ae152cc76e5355b76a65da2f4cb3404f))
+* **lattice:** stop the Moon provider from doubling an implicit edge as static ([61b894d](https://github.com/ecoma-io/lattice/commit/61b894d5e315afca674053bc9283ee9d0040652a))
+* **lattice:** stop the Moon provider from doubling an implicit edge as static ([#176](https://github.com/ecoma-io/lattice/issues/176)) ([61b894d](https://github.com/ecoma-io/lattice/commit/61b894d5e315afca674053bc9283ee9d0040652a))
+* **workspace:** close five silent gaps in the gate scripts' parsing ([#181](https://github.com/ecoma-io/lattice/issues/181)) ([49181ba](https://github.com/ecoma-io/lattice/commit/49181ba2aa2abbc44ee406892fcf67222d90dd1d))
+* **workspace:** stop editor gates from self-disabling and mis-reporting ([#179](https://github.com/ecoma-io/lattice/issues/179)) ([08827c0](https://github.com/ecoma-io/lattice/commit/08827c03bff3ab82f569e19f3dbc392034d44878))
+
 ## [0.7.1](https://github.com/ecoma-io/lattice/compare/v0.7.0...v0.7.1) (2026-08-19)
 
 
