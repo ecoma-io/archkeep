@@ -6,10 +6,9 @@
 
 <p align="center">
   <strong>A deterministic architecture governance system for humans and coding agents.</strong><br />
-  Observed architecture is compared against declared intent and enforced as a verdict —
-  not a reviewer's belief. Polyglot module boundaries, deterministic evidence,
-  drift detection, evolution history and agent planning context, in any repository,
-  with or without Nx or Moon.<br />
+  Declare your architecture as code — layers, scopes, allowed dependencies — and Lattice
+  turns it into a verdict: every import in Go, Rust, Python, TypeScript, JavaScript and Vue,
+  judged against your declared intent, in any repository, with or without Nx or Moon.<br />
   <em>A rule that reports nothing looks exactly like a rule with nothing to report.</em>
 </p>
 
@@ -22,66 +21,33 @@
 <p align="center">
   <a href="docs/getting-started/installation.md"><strong>Quick&nbsp;start&nbsp;→</strong></a> ·
   <a href="docs/doctrine/why.md">Why&nbsp;it&nbsp;exists</a> ·
-  <a href="docs/doctrine/architecture-authority.md">What&nbsp;it&nbsp;governs</a> ·
   <a href="docs/doctrine/north-star.md">North&nbsp;star</a> ·
   <a href="docs/doctrine/roadmap.md">Roadmap</a> ·
+  <a href="docs/README.md">Docs</a> ·
   <a href="https://ecoma.io">About&nbsp;Ecoma</a>
 </p>
 
 ---
 
-## What Lattice is
+Agentic coding creates architectural decisions faster than human review can
+hold, and in a polyglot repository the existing tools go quiet exactly where
+you need them: ESLint cannot parse Go, Rust or Python, and `nx affected`
+cannot see their edges — an unenforced boundary looks identical to a clean
+workspace. Lattice ends that silence with one deterministic authority serving
+both your CI and your coding agents: same tree, same config, same answer,
+everywhere. The measurement behind the claim is in
+[docs/doctrine/why.md](docs/doctrine/why.md).
 
-Lattice makes your architecture a **verdict instead of a document**. You declare
-the boundaries — layers, scopes, allowed dependencies — as code, and Lattice
-deterministically compares them against what the source actually does: every
-import, every project, every edge, across Go, Rust, Python, TypeScript,
-JavaScript and Vue. Same tree, same config, same answer, everywhere it runs —
-CI, editor, or an agent reading JSON.
-
-It is built for two consumers at once: a human team reviewing its architecture
-like code, and a coding agent that needs the same facts, machine-readably, at
-the moment it touches a boundary. The agent is a consumer of the verdict, never
-its authority.
-
-## Why it exists
-
-Agentic coding raises the rate of architectural decisions past what human
-review can hold. And in a polyglot repository the existing toolchain goes
-quiet exactly where you need it: ESLint cannot parse Go, Rust or Python, so
-boundary tags on those projects have no mechanism behind them, and
-`nx affected` cannot see their edges. The failure is silent — an unenforced
-boundary looks identical to a clean workspace. Lattice exists to end that
-silence, and [docs/doctrine/why.md](docs/doctrine/why.md) holds the measurement
-that proves the gap is real.
-
-## What you get
-
-- **A polyglot architecture graph** — projects, edges and tags read from
-  source, never from a build, in any repository: plain, Nx or Moon.
-- **Boundaries enforced as law** — the `@nx/enforce-module-boundaries`
-  constraint model, extended to every supported language, judged with four
-  exit codes where _could not look_ is never _clean_.
-- **Deterministic evidence** — sixteen commands (`check`, `graph`, `diff`,
-  `drift`, `explain`, `impact`, `context`, and more) with versioned,
-  byte-stable JSON output a script or an agent consumes without parsing prose.
-- **Drift, history and debt** — what diverged from the declared intent, how
-  the architecture evolved across snapshots, and how long each accepted
-  violation has been waiting.
-- **An agent protocol** — four `arch-*` skills that teach a coding agent to
-  read the constraints before editing and get verified by the same gate as CI.
-
-The model behind all of it is in
-[docs/concepts/](docs/concepts/architecture.md); every command, flag and exit
-code is in [docs/reference/cli.md](docs/reference/cli.md).
-
-## The one commitment behind all of it
-
-**An empty result is a claim, not a shrug.** Every path that cannot reach a
-verdict says so instead of returning quietly — a tool that replaced a known gap
-with an unknown one, wearing a green checkmark, would be worse than the silence
-it replaced. The reasoning, and the refusals that follow from it, are in
-[docs/doctrine/north-star.md](docs/doctrine/north-star.md).
+- **Polyglot architecture graph** — projects, edges and tags read from source,
+  never from a build, in any repository: plain, Nx or Moon.
+- **Boundaries enforced as law** — the `@nx/enforce-module-boundaries` model,
+  extended to every supported language, where _could not look_ is never _clean_.
+- **Deterministic evidence** — sixteen commands with versioned, byte-stable
+  JSON an agent or a script consumes without parsing prose.
+- **Drift, history and debt** — what diverged from intent, how the architecture
+  evolved, and how long each accepted violation has been waiting.
+- **Agent protocol** — four `arch-*` skills that make a coding agent a consumer
+  of the verdict, never its authority.
 
 ## Get started
 
@@ -90,51 +56,36 @@ npm install -D @ecoma-io/lattice   # or pnpm / yarn / bun
 ```
 
 Ten minutes end to end, most of it spent deciding what your tags mean:
-
-- [**Installation**](docs/getting-started/installation.md) — prerequisites and
-  what the package provides
-- [**Your first project**](docs/getting-started/first-project.md) — a
-  `lattice.json` workspace, no Nx required
-- [**Your first policy**](docs/getting-started/first-policy.md) — write a
-  constraint table, see a violation, read the verdict
+[**Getting started →**](docs/getting-started/installation.md)
 
 ## Documentation
 
-|                                                                                                                                                        |                                                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| [**Getting started**](docs/getting-started/installation.md)                                                                                            | Install, configure, first violation                                    |
-| [**Doctrine**](docs/doctrine/north-star.md) · [**Roadmap**](docs/doctrine/roadmap.md)                                                                  | The direction, and the staged path (1.x governance → 2.x intelligence) |
-| [Designing boundaries](docs/concepts/boundaries.md)                                                                                                    | The constraint table, and the five semantics that surprise people      |
-| [The fifteen violations](docs/reference/violations.md)                                                                                                 | What each `messageId` means, and what fixes it                         |
-| [What each language sees](docs/reference/languages.md)                                                                                                 | Per-language coverage and every declared parse limit                   |
-| [Commands](docs/reference/cli.md)                                                                                                                      | All sixteen, with every flag and exit code                             |
-| [Nx](docs/integrations/nx.md) · [Moon](docs/integrations/moon.md) · [VS Code](docs/integrations/vscode.md)                                             | The integrations at the edge                                           |
-| [CI](docs/usage/ci.md) · [Troubleshooting](docs/usage/troubleshooting.md)                                                                              | Exit codes in a pipeline, and what to check when it reported nothing   |
-| [Agent skills](docs/skills/overview.md)                                                                                                                | Architecture-aware agent protocol: four `arch-*` skills                |
-| [Architecture](docs/development/architecture.md) · [Adding a language](docs/development/adding-a-language.md) · [Testing](docs/development/testing.md) | For contributors                                                       |
+|                                                                                                            |                                                                        |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [**Getting started**](docs/getting-started/installation.md)                                                | Install, configure, first violation                                    |
+| [**Doctrine**](docs/doctrine/north-star.md) · [**Roadmap**](docs/doctrine/roadmap.md)                      | The direction, and the staged path (1.x governance → 2.x intelligence) |
+| [Concepts](docs/concepts/architecture.md)                                                                  | The model: graph, boundaries, drift, evidence, agents                  |
+| [Usage](docs/usage/checking.md) · [CI](docs/usage/ci.md)                                                   | Running it, and reading its answers                                    |
+| [Reference](docs/reference/cli.md)                                                                         | Every command, flag, exit code, schema and parse limit                 |
+| [Nx](docs/integrations/nx.md) · [Moon](docs/integrations/moon.md) · [VS Code](docs/integrations/vscode.md) | The integrations at the edge                                           |
+| [Agent skills](docs/skills/overview.md)                                                                    | The architecture-aware agent protocol                                  |
+| [Development](docs/development/architecture.md)                                                            | For contributors: how it works inside                                  |
 
 Full index: [**docs/**](docs/README.md). The package's own reference, which
-stands alone as the npm landing page, is
-[here](packages/lattice/README.md).
+stands alone as the npm landing page, is [here](packages/lattice/README.md).
 
 ## Contributing
 
-The most valuable contribution here is a **missed violation** — an import that
-crosses a boundary in a real workspace and produced no output. That is a bug of
-the worst kind this project has, and it has a
-[dedicated issue form](.github/ISSUE_TEMPLATE/missed_violation.yml).
-
-Setup, commands, commit format and how a pull request lands:
-[CONTRIBUTING.md](CONTRIBUTING.md). By participating you agree to the
-[Code of Conduct](CODE_OF_CONDUCT.md). Security reports go through
-[SECURITY.md](SECURITY.md), never a public issue.
+The most valuable contribution is a **missed violation** — a boundary crossed
+in a real workspace with no output; it has a
+[dedicated issue form](.github/ISSUE_TEMPLATE/missed_violation.yml). Everything
+else: [CONTRIBUTING.md](CONTRIBUTING.md) ·
+[Code of Conduct](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md).
 
 ## License
 
 [Apache License 2.0](LICENSE) — © Mai Ngọc Hóa (John Martin) and the Lattice
-contributors. Apache-2.0 rather than MIT because it carries an explicit patent
-grant: for tooling embedded in commercial build pipelines, that is the
-difference between "probably fine" and "written down".
+contributors. Apache-2.0 for its explicit patent grant.
 
 ---
 
