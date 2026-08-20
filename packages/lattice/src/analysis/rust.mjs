@@ -31,13 +31,18 @@
  * project, which is the standard the Go header sets:
  *
  * - **`use` is matched at a line start, after a `;`/`{`/`}`, or after a
- *   same-line attribute block**, read to the first `;`. Every position Rust
- *   allows a `use` statement starts one of those ways, so the same-line gap
- *   this header once named is closed. A `use` inside a raw string literal
- *   that starts its own line would be read, and a `;` inside a comment or
- *   string can let a `use` written there be read — both are the accepted
- *   spurious-record trade (text the file really contains), never a missed
- *   project.
+ *   same-line attribute block**, read up to but NOT consuming the `;` that
+ *   closes it — a lookahead, so that same `;` is still there to open the next
+ *   match's `(?:^|[{;}])` when a second `use` shares the line. Every position
+ *   Rust allows a `use` statement starts one of those ways, and the closing
+ *   `;` is never swallowed, so two or more `use` statements sharing one line
+ *   are each read, not just the first. A same-line attribute's bracketed
+ *   content is read past a balanced quoted string rather than stopping at the
+ *   first `]`, so `#[doc = "see [x]"] use a::b;` still reaches its `use`. A
+ *   `use` inside a raw string literal that starts its own line would be read,
+ *   and a `;` inside a comment or string can let a `use` written there be
+ *   read — both are the accepted spurious-record trade (text the file really
+ *   contains), never a missed project.
  * - **A `use` whose path opens with a brace group** — `use {a::b, c::d};` —
  *   names no crate before the group. It is recorded with `resolved: null` and
  *   a failure, because guessing which of the group's arms was meant is exactly
@@ -109,11 +114,15 @@ export function resolveRustDependencies(projects, filesOf, readFile) {
   const projectByRoot = new Map();
   const crates = [];
   for (const project of projects) {
-    const manifestPath = `${project.root}/Cargo.toml`;
+    const manifestPath = normalizePath(project.root, "Cargo.toml");
     if (!filesOf(project.name).includes(manifestPath)) continue;
     const manifest = parseManifest(readFile(manifestPath) ?? "");
     if (!manifest?.package?.name) continue; // workspace-only manifests are not crates
-    projectByRoot.set(project.root, project.name);
+    // Normalized, not raw: Nx spells the workspace-root project's `root` as
+    // `"."`, which `normalizePath` collapses to `""` — the same value a
+    // dependency pointing AT that project resolves `pathDir` to below. Keying
+    // on the raw `root` would leave `"."` in the map and miss every lookup.
+    projectByRoot.set(normalizePath(project.root, ""), project.name);
     crates.push({ project, manifest, manifestPath });
   }
 
@@ -141,7 +150,14 @@ export function resolveRustDependencies(projects, filesOf, readFile) {
             pathDir = normalizePath(workspace.value.dir, wsSpec.path);
           }
         }
-        if (!pathDir) continue;
+        // `pathDir` is `""` (falsy, but a real answer) when a dependency
+        // points AT the workspace-root project — `normalizePath` resolves an
+        // in-tree path that climbs all the way to the root as the empty
+        // string. `projectByRoot` is keyed the same way (normalized, not
+        // raw), so this matches that project regardless of whether its own
+        // `root` is spelled `""` or Nx's `"."`. Only `null` (no
+        // `path`/`workspace = true` resolved at all) means "no target".
+        if (pathDir === null) continue;
         const target = projectByRoot.get(pathDir);
         if (target && target !== project.name) {
           dependencies.push({
@@ -216,11 +232,17 @@ const crateNamesOf = perWorkspace((workspace) => {
  */
 const renamedDepsOf = perWorkspace((workspace) => {
   const projectByRoot = new Map();
-  for (const project of workspace.projects) projectByRoot.set(project.root, project.name);
+  // Normalized, not raw — see the identical comment in
+  // `resolveRustDependencies` above: Nx's `"."` root spelling and `""` both
+  // have to land on the same map key for a rename pointing at the
+  // workspace-root project to resolve.
+  for (const project of workspace.projects) {
+    projectByRoot.set(normalizePath(project.root, ""), project.name);
+  }
 
   const byProject = new Map();
   for (const project of workspace.projects) {
-    const manifestPath = `${project.root}/Cargo.toml`;
+    const manifestPath = normalizePath(project.root, "Cargo.toml");
     if (!workspace.filesOf(project.name).includes(manifestPath)) continue;
     const manifest = parseManifest(workspace.readFile(manifestPath) ?? "");
     if (!manifest) continue;
@@ -255,8 +277,13 @@ const renamedDepsOf = perWorkspace((workspace) => {
         }
         // A plain `use real::…` resolves through `crateNamesOf`; the alias
         // map is only for names the local spelling does not match, so an
-        // entry that is not a rename contributes nothing here.
-        if (!pathDir || !renamed) continue;
+        // entry that is not a rename contributes nothing here. `pathDir` is
+        // `""` (falsy, but a real answer) when the dependency points AT the
+        // workspace-root project — see the identical guard and its comment in
+        // `resolveRustDependencies` above — so the "no target" check and the
+        // "not a rename" check must stay two separate conditions.
+        if (pathDir === null) continue;
+        if (!renamed) continue;
         const target = projectByRoot.get(pathDir);
         if (target && target !== project.name) aliases.set(crateIdentifier(depName), target);
       }
@@ -344,14 +371,28 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
   // boundary, or after a same-line `#[…]` attribute block — every position
   // Rust allows one. `[{;}]` inside a string or comment can open a spurious
   // match (text the file really contains), never a missed one; the `#[…]`
-  // token is read to its closing `]`, which `cfg` never puts inside a string.
+  // token's content may itself hold a quoted string containing `]`
+  // (`#[doc = "see [x]"]`), so it is read past a balanced quoted string
+  // rather than stopping at the first `]`. The two alternatives inside that
+  // repeated group — a quoted string, or a single non-`]` character — are
+  // kept DISJOINT on `"` (the fallback is `[^"\]]`, not `[^\]]`): letting
+  // both branches match `"` gives the regex engine two ways to reach the
+  // same position for every quote character, and a `.rs` file with many `"`
+  // and no closing `]` then backtracks exponentially over that ambiguity
+  // (measured: ~285ms at 30 quote characters, seconds at ~50, `.rs` content
+  // is attacker-supplied per SECURITY.md). Excluding `"` from the fallback
+  // makes the split unambiguous — linear in input length — while still
+  // reading the same attribute text: `"` can now only ever be consumed by
+  // starting the string branch. The terminating `;` is matched as a
+  // lookahead rather than consumed, so it is still there — unclaimed — for a
+  // second `use` sharing the same line to open its own match against.
   for (const m of rustText.matchAll(
-    /(?:^|[{;}])[ \t]*(?:(?:#\[[^\]]*\][ \t]*)+)?(pub(?:\s*\([^)]*\))?[ \t]+)?use[ \t\r\n]+([^;]*);/gm,
+    /(?:^|[{;}])[ \t]*(?:(?:#\[(?:"(?:[^"\\]|\\.)*"|[^"\]])*\][ \t]*)+)?(pub(?:\s*\([^)]*\))?[ \t]+)?use[ \t\r\n]+([^;]*)(?=;)/gm,
   )) {
-    // The whole match ends with the `;` that closed it, so the path starts
-    // exactly its own length plus that one character back from the end.
+    // The match no longer includes the terminating `;`, so the path starts
+    // exactly its own length back from the end.
     const path = m[2];
-    const pathOffset = m.index + m[0].length - 1 - path.length;
+    const pathOffset = m.index + m[0].length - path.length;
     const lead = path.length - path.trimStart().length;
     // A use path may wrap across lines inside a brace group. The record is
     // printed in `file:line:column: specifier` reports, so line breaks are
