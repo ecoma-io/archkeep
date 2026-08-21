@@ -110,10 +110,10 @@ export const ARCHITECTURE_CORPUS = [
   // ------------------------------------------------------------- layered (Go)
   {
     id: "layered-architecture-in-go",
-    style: "layered / clean architecture",
+    style: "layered (relaxed)",
     languages: ["go"],
     intent:
-      "Dependencies point inward: the domain knows nobody, the use-case layer knows the domain, the adapter layer knows both. The near-misses are the inward imports, which must stay silent, and an external SDK banned out of one layer only. The outward violations both point at `go-transport`, an outer-layer project that imports nothing — an outward edge whose target reaches back would close a cycle, and `noCircularDependencies` is decided before the tag block, so the case would be measuring a different rule than the one it is about.",
+      "The RELAXED reading of layering, and the pair to `strict-layering-in-go`: each layer may reach every layer beneath it, so only an outward edge is a finding and a downward edge that skips a layer is not. Dependencies point inward: the domain knows nobody, the use-case layer knows the domain, the adapter layer knows both. The near-misses are the inward imports, which must stay silent, and an external SDK banned out of one layer only. The outward violations both point at `go-transport`, an outer-layer project that imports nothing — an outward edge whose target reaches back would close a cycle, and `noCircularDependencies` is decided before the tag block, so the case would be measuring a different rule than the one it is about.",
     projects: [
       { name: "go-domain", root: "libs/go-domain", tags: ["layer:domain"] },
       { name: "go-usecase", root: "libs/go-usecase", tags: ["layer:usecase"] },
@@ -495,7 +495,7 @@ export const ARCHITECTURE_CORPUS = [
   // ------------------------------------------------- topology rules (Go tree)
   {
     id: "application-and-test-boundaries-in-go",
-    style: "layered / clean architecture",
+    style: "layered (relaxed)",
     languages: ["go"],
     intent:
       "The rules that read the project's shape rather than its tags — an app, an e2e project, a library with no build target — reached from a Go file, where upstream reaches nothing at all.",
@@ -648,7 +648,7 @@ export const ARCHITECTURE_CORPUS = [
   // ------------------------------------- transitive dependencies (Go tree)
   {
     id: "transitive-dependency-ban-in-go",
-    style: "layered / clean architecture",
+    style: "layered (relaxed)",
     languages: ["go"],
     intent:
       "`banTransitiveDependencies` on a tree whose graph carries no package facts: every external import is reported, and the workspace's own project import beside it is not.",

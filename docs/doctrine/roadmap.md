@@ -47,11 +47,12 @@ A new reader should find these capabilities described as present, not promised.
   `profiles` registry and select one by name at check time, stacked on a shared
   `base` — resolved loudly, with no silent fallback to a quieter law.
   ([concepts/profiles.md](../concepts/profiles.md))
-- **Four architecture styles shipped as policy packs.** Clean Architecture,
-  hexagonal, layered modular monolith and DDD bounded contexts ride inside the
-  package as profile registries, read by the same loader, validated by the same
-  validator and enforced by the same path a registry a workspace wrote itself
-  takes. A pack saves the blank page, not a mechanism.
+- **Six architecture styles shipped as policy packs.** Clean Architecture,
+  hexagonal, traditional layering (strict and relaxed), layered modular
+  monolith, vertical slices and DDD bounded contexts ride inside the package as
+  profile registries, read by the same loader, validated by the same validator
+  and enforced by the same path a registry a workspace wrote itself takes. A
+  pack saves the blank page, not a mechanism.
   ([usage/presets.md](../usage/presets.md))
 - **ADR / decision registry.** `docs/adr/` records name the recorded
   architecture decision a rule, fitness gate, or intent row leans on through a
@@ -90,9 +91,13 @@ A new reader should find these capabilities described as present, not promised.
   `check` also folds in by presence.
   ([concepts/drift.md](../concepts/drift.md))
 - **Fitness functions.** Named, declared quality gates — "the graph stays
-  cycle-free", "at least 90% of files are analyzed" — judged deterministically
-  against the same observed facts `check` reads, and folded into `check` by
-  presence so a declared function is enforced on every run.
+  cycle-free", "at least 90% of files are analyzed", "no slice reaches another
+  slice" — judged deterministically against the same observed facts `check`
+  reads, and folded into `check` by presence so a declared function is enforced
+  on every run. `tag-axis-isolation` is the one condition whose target set is
+  computed relative to the source rather than written into the policy, which is
+  what makes a partition — a module, a bounded context, a slice, a service —
+  enforceable without one constraint row per partition.
   ([concepts/fitness-functions.md](../concepts/fitness-functions.md),
   [usage/fitness.md](../usage/fitness.md))
 - **Architecture planning facts for agents.** `context` and `impact` answer the
