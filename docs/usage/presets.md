@@ -29,18 +29,18 @@ check. Rename the four `layer:` values in your own copy.
 ## The tag vocabulary a pack expects
 
 A pack's rows key on tags, so adopting one means tagging your projects the way
-the pack reads. Two axes cover all four packs, both spelled `axis:value` — what
-a tag means, and how a constraint row matches one, is
+the pack reads. Six axes cover the six packs, all spelled `axis:value` — what a
+tag means, and how a constraint row matches one, is
 [boundaries.md](../concepts/boundaries.md)'s.
 
-| axis       | meaning                                                                          | used by                                                             |
-| ---------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `layer:`   | Where the project sits in the architecture.                                      | every pack but `layered`                                            |
-| `tier:`    | The same idea under the name traditional layering uses for it.                   | `layered`                                                           |
-| `share:`   | Whether the project is part of its context's published surface or private to it. | `ddd-bounded-contexts-isolated`, `ddd-bounded-contexts-partitioned` |
-| `module:`  | Which module a project belongs to.                                               | `modular-monolith-sealed-modules`                                   |
-| `context:` | Which bounded context a project belongs to.                                      | `ddd-bounded-contexts-partitioned`                                  |
-| `feature:` | Which slice a project belongs to.                                                | `vertical-slice`                                                    |
+| axis       | meaning                                                                          | used by                            |
+| ---------- | -------------------------------------------------------------------------------- | ---------------------------------- |
+| `layer:`   | Where the project sits in the architecture.                                      | every pack but `layered`           |
+| `tier:`    | The same idea under the name traditional layering uses for it.                   | `layered`                          |
+| `share:`   | Whether the project is part of its context's published surface or private to it. | `ddd-bounded-contexts-isolated`    |
+| `module:`  | Which module a project belongs to.                                               | `modular-monolith-sealed-modules`  |
+| `context:` | Which bounded context a project belongs to.                                      | `ddd-bounded-contexts-partitioned` |
+| `feature:` | Which slice a project belongs to.                                                | `vertical-slice`                   |
 
 Every project a pack judges needs a `layer:` (or `tier:`) tag it recognises.
 That is not a formality: a project whose tags match no row in the table is
@@ -49,17 +49,14 @@ than escaping the boundary in silence.
 
 ### Where a pack CAN name your modules, and where it still cannot
 
-The bottom four axes are the ones a pack reads **relatively**. A constraint row
-compares a project's tags against tag values written into the policy, so there is
-no row that says "the same value of `context:` as the source" — written as rows,
-per-partition privacy is one row per partition, in your own copy, restated every
-time the tree grows one.
-
-A `tag-axis-isolation` fitness function asks that question directly
-([fitness-functions.md](../concepts/fitness-functions.md)), which is why the
-profiles that key on `module:`, `context:` and `feature:` above ship a fitness
-block rather than more rows. Those profiles name no module, context or feature
-of yours — they name the AXIS, and the values stay yours.
+The bottom three axes — `module:`, `context:`, `feature:` — are the ones a pack
+reads **relatively**, through a `tag-axis-isolation` fitness function rather
+than through more constraint rows.
+[fitness-functions.md](../concepts/fitness-functions.md) owns why a constraint
+row cannot ask that question and what the condition does instead; what matters
+here is the consequence for a pack: a profile keyed on one of those axes names
+no module, context or feature of yours. It names the AXIS, and the values stay
+yours.
 
 What a pack still cannot ship is anything that depends on how your workspace is
 laid out: which of your projects are one module, where a contract lives, which
@@ -155,11 +152,11 @@ profile that closes it: one `tag-axis-isolation` function reading the `module:`
 axis relative to the source, which needs every project to carry a `module:` tag
 and reports a matched project that carries none rather than waving it through.
 
-| profile                           | what it adds                                                                                                                                               |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `modular-monolith`                | The four layer rows.                                                                                                                                       |
-| `modular-monolith-sealed-kernel`  | On top of them: the shared kernel takes no third-party dependency, so it can never force a version on every module at once.                                |
-| `modular-monolith-sealed-modules` | On top of the four rows: a module's internals are reachable only from that module, and cross-module edges land only on a `layer:module` published surface. |
+| profile                           | what it adds                                                                                                                                                                                                                                                           |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modular-monolith`                | The four layer rows.                                                                                                                                                                                                                                                   |
+| `modular-monolith-sealed-kernel`  | On top of them: the shared kernel takes no third-party dependency, so it can never force a version on every module at once.                                                                                                                                            |
+| `modular-monolith-sealed-modules` | On top of the four rows: nothing reaches another module's internals, and a published surface may cross into another module only onto its `layer:module` surface. (An internals project cannot take that route — the base row already forbids it reaching any surface.) |
 
 ## DDD bounded contexts
 
@@ -179,15 +176,17 @@ the only shape a tag list can name.
 `ddd-bounded-contexts-partitioned` is the same intent without that assumption.
 It reads the `context:` axis relative to the source, so a context may span as
 many projects as it needs and only an edge that actually leaves its context is a
-finding — with a `share:published` contract as the one way across. It costs one
-more tag per project (`context:orders`), and a matched project carrying none is
-reported as unjudgeable rather than waved through.
+finding — with a `layer:published-language` contract as the one way across. It
+needs no `share:` axis at all: it matches on the three layer tags the base
+profile's own rows already key on, so it can never quietly select nothing. It
+costs one more tag per project (`context:orders`), and a matched project
+carrying none is reported as unjudgeable rather than waved through.
 
-| profile                            | what it adds                                                                                                                     |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `ddd-bounded-contexts`             | The four layer rows.                                                                                                             |
-| `ddd-bounded-contexts-isolated`    | On top of them: no context reaches another's private projects. One project per context.                                          |
-| `ddd-bounded-contexts-partitioned` | On top of them: no project reaches another CONTEXT's private projects, for contexts of any size. Needs a `context:` tag on each. |
+| profile                            | what it adds                                                                                                                                                                                        |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ddd-bounded-contexts`             | The four layer rows.                                                                                                                                                                                |
+| `ddd-bounded-contexts-isolated`    | On top of them: no context reaches another's private projects. One project per context.                                                                                                             |
+| `ddd-bounded-contexts-partitioned` | On top of them: no `layer:domain`/`application`/`infrastructure` project reaches another CONTEXT, except into its `layer:published-language`. Contexts of any size. Needs a `context:` tag on each. |
 
 ## Choosing a pack, and how far it goes
 
@@ -218,12 +217,14 @@ once the layer rows are green.
 
 The profiles that ship a `tag-axis-isolation` function —
 `modular-monolith-sealed-modules`, `ddd-bounded-contexts-partitioned`, and
-`vertical-slice` — each need one extra tag per project, on the axis they
-partition. Until every matched project carries one, the function is `unknown`
-and `check` exits 3: that is the could-not-look class, not a failure, and it
-names the projects still missing a tag. Tag them, or narrow the profile's
-`match` in your own copy so the function only claims over the projects the axis
-actually describes.
+`vertical-slice` (with `vertical-slice-sealed-kernel` inheriting it) — each need
+one extra tag per project, on the axis they partition. Until every matched
+project carries one, the function names those projects and `check` exits 3 with
+nothing failed: the could-not-look class, not a failure. It names them in the
+`fail` case too, appended to the crossings, so a run that has something to
+report never quietly stops mentioning what it could not judge. Tag them, or
+narrow the profile's `match` in your own copy so the function only claims over
+the projects the axis actually describes.
 
 ## Using a pack
 

@@ -308,7 +308,12 @@ disposition:
   same downward edge that skips a tier is silent in the first and reported in
   the second.
 - `onion-rings-in-python` against `strict-layering-in-go`: an inward edge
-  skipping a ring is what onion is FOR and what strict layering forbids.
+  skipping a ring is what onion is FOR and what strict layering forbids. The
+  shape is not new to the corpus — `layered-architecture-in-go` already carries
+  it incidentally — but this is where it is labeled on both sides, and where a
+  Python package barrel gets to hide an outward dependency behind an
+  `__init__.py`. That case's `intent` says why it exists at all when its rows
+  are isomorphic to the clean-architecture case's.
 - `clean-architecture-dependency-inversion-in-rust` against every layered case:
   an outermost-ring crate whose source dependency points inward at an
   abstraction it implements must stay silent, which is the one shape a reading

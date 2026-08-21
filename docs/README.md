@@ -51,7 +51,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [configuration.md](usage/configuration.md)     | Every surface Lattice reads, and where each option lives                                 |
 | [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                                      |
 | [profiles.md](usage/profiles.md)               | Enforcing a named profile: the option, `--config`, loud failures                         |
-| [presets.md](usage/presets.md)                 | The four shipped policy packs, the tags each expects, and how to adopt one               |
+| [presets.md](usage/presets.md)                 | The six shipped policy packs, the tags each expects, and how to adopt one                |
 | [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph                         |
 | [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis              |
 | [drift.md](usage/drift.md)                     | The `drift` command: observed architecture against the declared intent                   |

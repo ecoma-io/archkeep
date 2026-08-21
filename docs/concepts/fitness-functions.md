@@ -149,9 +149,11 @@ is a transitive question, and `notDependOnLibsWithTags` is the mechanism that
 answers it ([boundaries.md](boundaries.md)) — with the different attribution
 that comes with it. This condition is a claim about direct coupling.
 
-Two shipped policy packs are built on it, and each closes a defect its own
-pack's rows could not: `modular-monolith-sealed-modules` and
-`ddd-bounded-contexts-partitioned` ([presets.md](../usage/presets.md)).
+Three shipped profiles are built on it — `modular-monolith-sealed-modules` and
+`ddd-bounded-contexts-partitioned`, each closing a defect its own pack's rows
+could not, and `vertical-slice`, whose base profile carries one because feature
+isolation has no other spelling. `vertical-slice-sealed-kernel` inherits the
+third ([presets.md](../usage/presets.md)).
 
 The config loader validates the list where it is read: an unknown key, a
 duplicate or ill-formed name, an empty `match`, or a condition field of the

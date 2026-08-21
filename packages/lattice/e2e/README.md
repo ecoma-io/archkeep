@@ -8,9 +8,9 @@ The unit and integration tests under `src/` prove the engine correct against in-
 
 Specifically:
 
-- **Nine of the seventeen public commands** (`check`, `graph`, `diff`, `drift`,
-  `fitness`, `history`, `impact`, `explain`, `context`) produce correct exit
-  codes and structured output
+- **Ten of the seventeen public commands** (`check`, `graph`, `diff`, `drift`,
+  `fitness`, `waivers`, `history`, `impact`, `explain`, `context`) produce
+  correct exit codes and structured output
 - **Native and Nx consumers** agree on semantics (project names, edge source/target/type, violation rule IDs and file paths)
 - **Deterministic output** — two runs over an unchanged tree produce byte-identical JSON
 - **Silent-failure guards** — exit 3 when no verdict is reachable (no workspace marker, incomplete graph, malformed baseline), never exit 0

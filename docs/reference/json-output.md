@@ -356,21 +356,21 @@ its verdict IS a finding: a `fail` is `status: "findings"` and exit `1`, an
 it folds the same registry in (`result.fitness` on a `check` envelope carries
 the same per-function decisions under `functions`).
 
-| field       | type                                                | meaning                                                                                                                       |
-| ----------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `verdict`   | `"pass"`\|`"fail"`\|`"unknown"`\|`"not_applicable"` | The overall verdict across every declared function — the worst one, in the order `fail`, `unknown`, `not_applicable`, `pass`. |
-| `functions` | object[]                                            | One decision per declared function, in declaration order.                                                                     |
+| field       | type                                                | meaning                                                                                                                                                                                                                                                                          |
+| ----------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verdict`   | `"pass"`\|`"fail"`\|`"unknown"`\|`"not_applicable"` | The overall verdict across every declared function: `fail` if any failed, else `unknown` if any is undetermined, else `not_applicable` only when EVERY function is — never when one merely is — else `pass`. [usage/fitness.md](../usage/fitness.md) owns the exit-code mapping. |
+| `functions` | object[]                                            | One decision per declared function, in declaration order.                                                                                                                                                                                                                        |
 
 Each `functions` entry:
 
-| field                 | type     | meaning                                                                                                                                             |
-| --------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`                | string   | The function's declared `name` — not the internal rule name, which stays in `evidence.condition`.                                                   |
-| `verdict`             | string   | One of the four.                                                                                                                                    |
-| `evidence`            | object   | The deterministic facts the verdict is a claim over. Per condition type; every value is sorted or counted, never a clock.                           |
-| `message`             | string   | Human text naming what was decided and why — the same line the text report prints.                                                                  |
-| `rows`                | object[] | The observed detail behind the verdict, per condition. `[]` when the verdict needs none.                                                            |
-| `notApplicableReason` | string?  | Present only on `not_applicable`, per invariant I4 ([evidence.md](evidence.md)) — so "did not apply" is never indistinguishable from "did not run". |
+| field                 | type     | meaning                                                                                                                                                                                                          |
+| --------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                | string   | The function's declared `name`. The condition's internal rule name (`tag-axis-isolation:module`) is not carried on the record at all; a condition whose parameters matter to a consumer puts them in `evidence`. |
+| `verdict`             | string   | One of the four.                                                                                                                                                                                                 |
+| `evidence`            | object   | The deterministic facts the verdict is a claim over. Per condition type; every value is sorted or counted, never a clock.                                                                                        |
+| `message`             | string   | Human text naming what was decided and why — the same line the text report prints.                                                                                                                               |
+| `rows`                | object[] | The observed detail behind the verdict, per condition. `[]` when the verdict needs none.                                                                                                                         |
+| `notApplicableReason` | string?  | Present only on `not_applicable`, per invariant I4 ([evidence.md](evidence.md)) — so "did not apply" is never indistinguishable from "did not run".                                                              |
 
 `rows` is per condition type, and a consumer branching on it should branch on
 the function's condition rather than assume one shape. For `tag-axis-isolation`

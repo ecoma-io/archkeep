@@ -173,10 +173,9 @@ project selectors in the same grammar `match` uses, and absent or empty means
 nothing is exempt.
 
 `tag-axis-isolation` is the one condition whose target set is computed
-_relative to the source_ rather than written into the policy, which is what
-lets one row state a rule that would otherwise be one row per module, context,
-slice or service. [fitness-functions.md](../concepts/fitness-functions.md)
-carries the semantics and the reason a constraint row cannot express it.
+_relative to the source_. [fitness-functions.md](../concepts/fitness-functions.md)
+owns what that means and why a constraint row cannot express it; this page owns
+only the field shapes above.
 
 The verdict semantics and the two faces (`lattice fitness` and `check`'s fold)
 live in [fitness-functions.md](../concepts/fitness-functions.md).

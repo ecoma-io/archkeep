@@ -94,10 +94,9 @@ A new reader should find these capabilities described as present, not promised.
   cycle-free", "at least 90% of files are analyzed", "no slice reaches another
   slice" — judged deterministically against the same observed facts `check`
   reads, and folded into `check` by presence so a declared function is enforced
-  on every run. `tag-axis-isolation` is the one condition whose target set is
-  computed relative to the source rather than written into the policy, which is
-  what makes a partition — a module, a bounded context, a slice, a service —
-  enforceable without one constraint row per partition.
+  on every run. `tag-axis-isolation` makes a partition — a module, a bounded
+  context, a slice, a service — enforceable without one constraint row per
+  partition.
   ([concepts/fitness-functions.md](../concepts/fitness-functions.md),
   [usage/fitness.md](../usage/fitness.md))
 - **Architecture planning facts for agents.** `context` and `impact` answer the
