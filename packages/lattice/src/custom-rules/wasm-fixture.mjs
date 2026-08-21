@@ -150,9 +150,11 @@ const packRange = (range) => BigInt.asIntN(64, (BigInt(range.ptr) << 32n) | BigI
  * @typedef {object} RuleModuleOptions
  * @property {string|Uint8Array} [describeJson] What `lattice_describe` returns.
  * @property {string|Uint8Array} [verdictJson] What `lattice_evaluate` returns.
- * @property {"return"|"trap"|"loop"} [describeBehavior] `"trap"` runs
- *   `unreachable`; `"loop"` never returns, which is the fixture that proves
- *   reading a self-description is budgeted like every other call into a rule.
+ * @property {"return"|"trap"|"loop"|"i32-return"} [describeBehavior] `"trap"`
+ *   runs `unreachable`; `"loop"` never returns, which is the fixture that
+ *   proves reading a self-description is budgeted like every other call into a
+ *   rule; `"i32-return"` declares the wrong result type, so the load half of
+ *   the ABI meets the same not-a-BigInt value the evaluate half can.
  * @property {"return"|"trap"|"loop"|"once"|"i32-return"|"echo"} [evaluateBehavior]
  *   `"loop"` never returns (the timeout fixture); `"once"` answers the full
  *   range on the first call of an instance and a zero-length one after, which
@@ -161,8 +163,10 @@ const packRange = (range) => BigInt.asIntN(64, (BigInt(range.ptr) << 32n) | BigI
  *   instead of the BigInt the packed i64 arrives as; `"echo"` returns the
  *   range it was handed, so the verdict a host reads back IS the evidence it
  *   wrote — the only shape that proves the bytes made the round trip.
- * @property {"bump"|"out-of-bounds"} [allocBehavior] `"out-of-bounds"` hands
- *   back a pointer past the end of memory.
+ * @property {"bump"|"out-of-bounds"|"trap"} [allocBehavior]
+ *   `"out-of-bounds"` hands back a pointer past the end of memory; `"trap"`
+ *   runs `unreachable`, which is what a rule whose allocator refuses a size
+ *   does — the host never reaches the point of writing anything.
  * @property {{ptr: number, len: number}} [describeRange] Overrides the range
  *   `lattice_describe` returns, whatever the data segment actually holds.
  * @property {{ptr: number, len: number}} [verdictRange] The same, for
@@ -220,6 +224,7 @@ export function buildRuleModule(options = {}) {
     [0x60, ...vector([[TYPE_I32], [TYPE_I32]]), ...vector([[TYPE_I64]])], // 2 — (i32, i32) -> i64
     [0x60, ...vector([]), ...vector([])], // 3 — () -> ()
     [0x60, ...vector([[TYPE_I32], [TYPE_I32]]), ...vector([[TYPE_I32]])], // 4 — (i32, i32) -> i32
+    [0x60, ...vector([]), ...vector([[TYPE_I32]])], // 5 — () -> i32
   ];
 
   const imports = withImport
@@ -229,38 +234,48 @@ export function buildRuleModule(options = {}) {
   // is offset by however many the module declared.
   const definedAt = imports.length;
 
-  // `"i32-return"` is the one variant whose evaluate is declared with a
-  // different type: the module is perfectly valid wasm, and only the host's
-  // reading of what came back can tell that it is not the ABI's packed i64.
+  // The `"i32-return"` variants are the ones declared with a different result
+  // type: the module is perfectly valid wasm, and only the host's reading of
+  // what came back can tell that it is not the ABI's packed i64. Each half of
+  // the ABI has its own, because each half reads the value on its own path.
   const evaluateType = evaluateBehavior === "i32-return" ? 4 : 2;
-  const functions = [[...unsignedLeb(1)], [...unsignedLeb(0)], [...unsignedLeb(evaluateType)]];
+  const describeType = describeBehavior === "i32-return" ? 5 : 0;
+  const functions = [
+    [...unsignedLeb(1)],
+    [...unsignedLeb(describeType)],
+    [...unsignedLeb(evaluateType)],
+  ];
   // A fourth `() -> ()` function, named by the start section below.
   if (trapOnStart) functions.push([...unsignedLeb(3)]);
 
   const allocInstructions =
-    allocBehavior === "out-of-bounds"
-      ? // Past the end of memory, ignoring the requested length: the host must
-        // notice before it writes rather than after it has corrupted a heap.
-        [0x41, ...signedLeb(memoryPages * PAGE_BYTES + 16), 0x0b]
-      : [
-          0x23,
-          ...unsignedLeb(0), // global.get $bump — the pointer handed back
-          0x23,
-          ...unsignedLeb(0), // global.get $bump
-          0x20,
-          ...unsignedLeb(0), // local.get 0 — the requested length
-          0x6a, // i32.add
-          0x24,
-          ...unsignedLeb(0), // global.set $bump
-          0x0b,
-        ];
+    allocBehavior === "trap"
+      ? [0x00, 0x0b]
+      : allocBehavior === "out-of-bounds"
+        ? // Past the end of memory, ignoring the requested length: the host must
+          // notice before it writes rather than after it has corrupted a heap.
+          [0x41, ...signedLeb(memoryPages * PAGE_BYTES + 16), 0x0b]
+        : [
+            0x23,
+            ...unsignedLeb(0), // global.get $bump — the pointer handed back
+            0x23,
+            ...unsignedLeb(0), // global.get $bump
+            0x20,
+            ...unsignedLeb(0), // local.get 0 — the requested length
+            0x6a, // i32.add
+            0x24,
+            ...unsignedLeb(0), // global.set $bump
+            0x0b,
+          ];
 
   const describeInstructions =
     describeBehavior === "trap"
       ? [0x00, 0x0b]
       : describeBehavior === "loop"
-        ? LOOP_FOREVER
-        : [0x42, ...signedLeb(packRange(describeAnswer)), 0x0b];
+        ? [...LOOP_FOREVER]
+        : describeBehavior === "i32-return"
+          ? [0x41, ...signedLeb(0), 0x0b]
+          : [0x42, ...signedLeb(packRange(describeAnswer)), 0x0b];
 
   // The growth runs first, so the answer is computed against whatever memory
   // the call ends up holding — which is the order a real allocator works in.

@@ -59,6 +59,7 @@
  */
 
 import { canonicalizeJson } from "../canonical.mjs";
+import { describeValue, isNonEmptyString, isPlainObject } from "./values.mjs";
 
 /** The evidence contract version this engine speaks and every bundle states. */
 export const EVIDENCE_CONTRACT = 1;
@@ -70,25 +71,6 @@ export const EVIDENCE_CONTRACT = 1;
  * restated by the host that consumes it.
  */
 export const EVIDENCE_KINDS = Object.freeze(["model", "graph", "imports", "policy"]);
-
-/** @type {(value: unknown) => value is Record<string, any>} */
-const isPlainObject = (value) =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
-/** @type {(value: unknown) => boolean} */
-const isNonEmptyString = (value) => typeof value === "string" && value.trim() !== "";
-
-/** A value's type, for an error that shows what was actually there. */
-function describeValue(value) {
-  if (Array.isArray(value)) return `an array of ${value.length}`;
-  if (value === null) return "null";
-  if (value === undefined) return "undefined";
-  // A BigInt is the one value `JSON.stringify` THROWS on rather than skipping,
-  // and this runs only on a refusal path — a formatter that threw would
-  // replace the named reason with a TypeError about something else entirely.
-  if (typeof value === "bigint") return `bigint ${value}`;
-  return `${typeof value} (${JSON.stringify(value) ?? String(value)})`;
-}
 
 /**
  * @param {string} detail

@@ -239,6 +239,14 @@ describe("what buildEvidenceBundle refuses, by name", () => {
       "bigint 1",
     ],
     [
+      "rule.name is a value JSON renders as nothing at all",
+      // `JSON.stringify` answers `undefined` for a function rather than
+      // throwing, so the refusal would read "rule.name: ... got function
+      // undefined" without the fallback to `String`.
+      () => buildEvidenceBundle(observed({ rule: { name: () => "no-app-to-ring" } })),
+      "function () =>",
+    ],
+    [
       "the model was never read",
       () => buildEvidenceBundle(observed({ projects: undefined })),
       "the model was never read",

@@ -107,6 +107,7 @@ import { Worker } from "node:worker_threads";
 import { CUSTOM_RULE_NAME_PATTERN } from "../config.mjs";
 import { VERDICTS, isVerdict } from "../governance/verdict.mjs";
 import { EVIDENCE_CONTRACT, EVIDENCE_KINDS } from "./evidence.mjs";
+import { describeValue, isNonEmptyString, isPlainObject } from "./values.mjs";
 
 /**
  * How long one call into a rule gets to answer, in milliseconds. Ten seconds
@@ -274,25 +275,6 @@ function run() {
 
 parentPort.postMessage(run());
 `;
-
-/** @type {(value: unknown) => value is Record<string, any>} */
-const isPlainObject = (value) =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
-/** @type {(value: unknown) => boolean} */
-const isNonEmptyString = (value) => typeof value === "string" && value.trim() !== "";
-
-/** A value's type, for a reason that shows what was actually there. */
-function describeValue(value) {
-  if (Array.isArray(value)) return `an array of ${value.length}`;
-  if (value === null) return "null";
-  if (value === undefined) return "undefined";
-  // A BigInt is the one value `JSON.stringify` THROWS on rather than skipping,
-  // and this runs only on a refusal path — a formatter that threw would
-  // replace the named reason with a TypeError about something else entirely.
-  if (typeof value === "bigint") return `bigint ${value}`;
-  return `${typeof value} ${JSON.stringify(value) ?? String(value)}`;
-}
 
 /** What an unknown thrown value has to say for itself. */
 const messageOf = (error) => (error instanceof Error ? error.message : String(error));
@@ -939,16 +921,28 @@ function findingViolation(finding, index, catalogue) {
  */
 function runInWorker({ module, call, evidence, timeoutMs }) {
   return new Promise((resolve) => {
-    const worker = new Worker(WORKER_SOURCE, {
-      eval: true,
-      workerData: {
-        module,
-        call,
-        evidence,
-        maxBytes: CUSTOM_RULE_MAX_VERDICT_BYTES,
-        memoryLimit: CUSTOM_RULE_MEMORY_LIMIT_BYTES,
-      },
-    });
+    /** @type {Worker} */
+    let worker;
+    try {
+      worker = new Worker(WORKER_SOURCE, {
+        eval: true,
+        workerData: {
+          module,
+          call,
+          evidence,
+          maxBytes: CUSTOM_RULE_MAX_VERDICT_BYTES,
+          memoryLimit: CUSTOM_RULE_MEMORY_LIMIT_BYTES,
+        },
+      });
+    } catch (error) {
+      // Defense in depth: every value in `workerData` is cloneable today, so
+      // nothing reaches this — and a constructor that threw past the promise
+      // would reject `evaluateCustomRule` instead of answering it, turning
+      // the one failure mode this module refuses to have into an exception a
+      // caller has to already be catching.
+      resolve({ outcome: "died", detail: `could not be started (${messageOf(error)})` });
+      return;
+    }
 
     let settled = false;
     /** @param {WorkerOutcome} outcome */

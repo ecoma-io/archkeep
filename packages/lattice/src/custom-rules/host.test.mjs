@@ -144,6 +144,8 @@ describe("the emitted fixtures are modules Node accepts", () => {
     ["the well-formed rule", {}],
     ["a describe that traps", { describeBehavior: "trap" }],
     ["a describe that never returns", { describeBehavior: "loop" }],
+    ["a describe declared to return i32", { describeBehavior: "i32-return" }],
+    ["an allocator that traps", { allocBehavior: "trap" }],
     ["an evaluate that grows its memory", { growPagesOnEvaluate: 2 }],
     ["a memory larger than the limit", { memoryPages: 4097 }],
     ["an evaluate that traps", { evaluateBehavior: "trap" }],
@@ -252,6 +254,11 @@ describe("loadCustomRule", () => {
       "lattice_describe names a range outside its memory",
       () => load({ describeRange: { ptr: 65_000, len: 1_000 } }),
       /returned the range 65000\.\.66000, which is outside its own 65536 bytes/u,
+    ],
+    [
+      "lattice_describe answers something that is not the packed i64",
+      () => load({ describeBehavior: "i32-return" }),
+      /lattice_describe returned number 0, not the packed i64 the ABI fixes/u,
     ],
     [
       "lattice_describe returns bytes that are not UTF-8",
@@ -411,15 +418,6 @@ describe("evaluateCustomRule", () => {
     // write landed where the allocator said and the length survived the ABI —
     // a host that wrote at the wrong offset would still read a valid document
     // out of a canned data segment.
-    const roundTrip = serializeEvidenceBundle(
-      buildEvidenceBundle({
-        rule: { name: RULE },
-        projects: [],
-        edges: [],
-        imports: [],
-        policy: { depConstraints: [], options: {} },
-      }),
-    );
     const echoed = JSON.stringify(verdictOf({ verdict: "unknown", reason: "round trip" }));
     const loaded = await load({ evaluateBehavior: "echo" });
     const result = await evaluateCustomRule({
@@ -429,7 +427,6 @@ describe("evaluateCustomRule", () => {
     });
     expect(result.ok).toBe(true);
     expect(result.verdict).toEqual(JSON.parse(echoed));
-    expect(roundTrip.byteLength).toBeGreaterThan(0);
   });
 
   it("gives every evaluation its own instance", async () => {
@@ -566,6 +563,17 @@ describe("what evaluateCustomRule refuses, by name", () => {
     expect(result.failure.reason).toMatch(/declares needs undefined/u);
   });
 
+  it("refuses when lattice_alloc traps", async () => {
+    // The allocator is the first thing a rule is asked for on the evaluate
+    // path, and a rule that refuses the size never reaches the point of being
+    // handed any evidence — so the trap is named for the export that threw
+    // rather than reported as a rule that judged nothing.
+    assertRefused(
+      await evaluate({ allocBehavior: "trap" }),
+      /lattice_alloc trapped \(unreachable\)/u,
+    );
+  });
+
   it("refuses when lattice_evaluate traps", async () => {
     assertRefused(
       await evaluate({ evaluateBehavior: "trap" }),
@@ -665,6 +673,22 @@ describe("what evaluateCustomRule refuses, by name", () => {
       evidenceBytes: EVIDENCE,
     });
     assertRefused(result, /the worker running it .* before it answered/u);
+  });
+
+  it("refuses when the worker cannot be started at all", async () => {
+    // The guard around the Worker constructor, reached the only way anything
+    // can reach it: `workerData` is cloned synchronously there, and a value
+    // that will not clone throws before any listener exists. Without the
+    // guard the exception would escape the promise and REJECT this call —
+    // which is the one thing this module does not do, because a caller
+    // reading a rejection has to already have been catching one.
+    const loaded = await load();
+    const result = await evaluateCustomRule({
+      module: /** @type {any} */ (() => {}),
+      describe: loaded.describe,
+      evidenceBytes: EVIDENCE,
+    });
+    assertRefused(result, /the worker running it could not be started/u);
   });
 
   it("refuses when the module cannot be instantiated in the worker", async () => {
