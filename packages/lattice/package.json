@@ -39,6 +39,7 @@
     "src/",
     "!src/**/*.test.mjs",
     "!src/conformance/",
+    "!src/custom-rules/wasm-fixture.mjs",
     "presets/",
     "LICENSE",
     "README.md"
