@@ -10,6 +10,17 @@ coverage/
 # Moon's local cache — same reasoning as `.nx/` above.
 .moon/cache/
 
+# Cargo's build directory, for the Rust packages under `packages/`.
+#
+# Stated here rather than in a `.gitignore` beside the crate, and the reason is
+# measured: Prettier reads the ROOT ignore files only, so a crate-local entry
+# leaves `packages/lattice-rule-sdk-rust/target/` visible to `prettier --check .`
+# — which then reports style violations inside cargo's build cache on any
+# machine that has run `cargo test`, while CI (where nothing has built yet)
+# stays green. One entry that both git and Prettier read is the only spelling
+# that makes those two agree.
+packages/*/target/
+
 # Editors / OS
 .DS_Store
 *.local

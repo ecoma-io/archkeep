@@ -1,0 +1,35 @@
+# The Rust rule-authoring SDK — the first package here that is not Nx tooling.
+#
+# Tags use dash separators (type-package, scope-sdk) because Moon tags cannot
+# contain colons, the same reason the two projects beside it do
+# (`../../module-boundaries.config.mjs` argues it once, for the whole tree).
+# `scope-sdk` arrives with this package: it is the second scope the boundary
+# law's scope axis has ever had, and that row is what keeps the SDK and the
+# engine from importing each other by accident.
+id: lattice-rule-sdk-rust
+language: rust
+layer: library
+stack: backend
+tags:
+  - type-package
+  - scope-sdk
+tasks:
+  # `script` rather than `command`, because this task is two commands and a
+  # Moon `command` is one. Both halves are lint in the sense CI means it —
+  # rustfmt decides layout, clippy decides everything else — and splitting them
+  # into two tasks would leave `lint` naming only one of them, so a package
+  # whose formatting had drifted would still report `ok lattice-rule-sdk-rust —
+  # lint, test, typecheck` from `../../scripts/check-packages.mjs`.
+  lint:
+    script: cargo fmt --check && cargo clippy --all-targets -- -D warnings
+  # Runs the unit tests, the golden fixture suite, and the two artifact
+  # checks — deliberately NOT a wasm rebuild. The artifact is committed and
+  # pinned by its digest, so what the suite proves is the bytes in the tree
+  # rather than bytes the runner just made (`./rebuild-example.sh` says the
+  # rest).
+  test:
+    command: cargo test
+  # The Rust half of what `tsc --noEmit` is for the .mjs packages: type
+  # checking with nothing emitted.
+  typecheck:
+    command: cargo check --all-targets

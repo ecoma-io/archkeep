@@ -122,10 +122,42 @@ export const depConstraints = [
   { sourceTag: "type-extension", onlyDependOnLibsWithTags: ["type-package"] },
 
   // Scope axis. `scope-nx` is the Nx-toolchain scope — plugins, and the
-  // language server and CLI that share their analysis. A second scope arrives
-  // with the first package that is not Nx tooling, and this row is what will
-  // then keep the two from importing each other by accident.
+  // language server and CLI that share their analysis. The second scope has
+  // now arrived, so the two rows are read together: each scope may depend
+  // inside itself and nowhere else.
   { sourceTag: "scope-nx", onlyDependOnLibsWithTags: ["scope-nx"] },
+
+  // `scope-sdk` is the rule-authoring scope, and `packages/lattice-rule-sdk-rust`
+  // is the first package in this repository that is not Nx tooling — the
+  // second scope the row above was written in anticipation of. An SDK is a
+  // BINDING for the custom-rule contract
+  // (`docs/adr/0002-custom-rules-one-contract.md`, "SDKs are bindings"): it is
+  // compiled by a rule author, into an artifact a consumer's workspace
+  // declares, and this repository never loads it. The engine is the other
+  // side of that contract, and the two must not converge.
+  //
+  // What the pair of rows prevents, in the direction each is read:
+  //
+  //   lattice → lattice-rule-sdk-rust  ❌  the engine reaching into an SDK
+  //   lattice-rule-sdk-rust → lattice  ❌  an SDK reaching into the engine
+  //
+  // The first is the one with teeth. An engine that imported an SDK would make
+  // the contract's two sides one program, and "the host validates what the SDK
+  // does not" — the split both this repository's host and that SDK's own
+  // documentation lean on — would stop being checkable: a shared helper is a
+  // shared assumption, and two validators that agree because they are the same
+  // code prove nothing about the contract between them. The second is the same
+  // sentence read backwards, and it also keeps a published crate from
+  // depending on a package no crates.io consumer can resolve.
+  //
+  // **The row judges nothing on this workspace today, and that is measured
+  // rather than assumed.** The crate declares two dependencies, serde and
+  // serde_json, both resolved from crates.io, and nothing in this tree imports
+  // it — `node packages/lattice/cli.mjs check` over the three projects reports
+  // no edge in either direction. It is stated anyway, for the reason the eight
+  // options below are written out at their defaults: a law nobody wrote down
+  // is a law the next package gets to define by accident.
+  { sourceTag: "scope-sdk", onlyDependOnLibsWithTags: ["scope-sdk"] },
 ];
 
 /**
