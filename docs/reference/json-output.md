@@ -312,9 +312,9 @@ simply absent.
 | field          | type     | meaning                                                                                                                                                                                                                                                                                                                                                |
 | -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `waivers`      | object[] | Every waiver on the table, sorted by `path` then `expiresAt` (byte-identical across runs). Each row is the suppression row plus `status` (`"active"` \| `"expired"`), `remainingMs` (negative when expired, epoch-ms precision), and `covered` (how many violations it currently accepts, judged against the full finding set with the table removed). |
-| `covered`      | number   | How many waivers currently cover at least one violation.                                                                                                                                                                                                                                                                                               |
-| `expired`      | number   | How many waivers have lapsed — their `expiresAt` is at or before the reference instant, so each covers nothing and its violation re-asserts.                                                                                                                                                                                                           |
-| `stale`        | number   | How many waivers cover no violation right now, active or expired — the count of rows whose reason has lapsed and that are dead weight until edited away.                                                                                                                                                                                               |
+| `covered`      | number   | How many waivers currently match at least one violation.                                                                                                                                                                                                                                                                                               |
+| `expired`      | number   | How many waivers have lapsed — their `expiresAt` is at or before the reference instant, so each ACCEPTS nothing and its violation re-asserts in `check`. It may still MATCH one; see the note below.                                                                                                                                                   |
+| `stale`        | number   | How many waivers match no violation right now, whatever their term — the count of rows that are dead weight until edited away.                                                                                                                                                                                                                         |
 | `suppressions` | object[] | Every PERMANENT suppression on the table (no `expiresAt`), sorted by `path`. Each row is the suppression row plus `covered` — no `status`/`remainingMs`, since a permanent row carries no term.                                                                                                                                                        |
 | `suppressed`   | number   | How many DISTINCT violations, across the whole raw finding set, at least one permanent suppression currently hides. Two overlapping rows covering the same violation still count it once.                                                                                                                                                              |
 
@@ -329,7 +329,16 @@ Each `waivers` entry:
 | `origin`      | string? | Where the row came from, when declared — a ticket id or decision record.                                                                                                                            |
 | `status`      | string  | `"active"` before `expiresAt`, `"expired"` at or after it.                                                                                                                                          |
 | `remainingMs` | number  | Epoch-ms until expiry; negative when expired. The wall clock at the moment of this run, not a fact about the workspace — see "The stability promise" above; `coverage.notes` names it on every run. |
-| `covered`     | number  | Current violations accepted by this row, judged against the full finding set. Zero means the row is stale — covers nothing.                                                                         |
+| `covered`     | number  | Violations this row MATCHES, judged against the full finding set with the whole table removed — independent of the term. Zero means the row is stale: it is about nothing.                          |
+
+`covered` counts what a row is ABOUT, never what it currently accepts, so
+`status` and `covered` move independently: an expired waiver still matching a
+live violation reads `status: "expired"`, `covered: 1`, and does not raise
+`stale`. That is the pairing [waivers.md](../concepts/waivers.md) calls expired
+but not stale, and folding the term into `covered` would collapse the two into
+one number. What an expired row accepts is zero, and that fact appears where it
+acts — the violation is back in `check`'s findings, carrying
+`evidence: "expired waiver"`.
 
 Each `suppressions` entry carries `path`, `reason`, `messageId?` and `origin?`
 with the same meaning as the `waivers` entry above, plus `covered` (current
@@ -337,6 +346,37 @@ violations this row hides, judged against the full finding set — zero means
 the row is dead weight, same as a stale waiver). It carries no `expiresAt`,
 `status` or `remainingMs`: a permanent suppression has no term for those
 fields to describe.
+
+## `result` (for `command: "fitness"`)
+
+`fitness` judges every function the boundary policy declares and renders one
+verdict per function plus an overall one. Unlike the other read-only commands,
+its verdict IS a finding: a `fail` is `status: "findings"` and exit `1`, an
+`unknown` is `"no-verdict"` and exit `3` — the same two lanes `check` uses when
+it folds the same registry in (`result.fitness` on a `check` envelope carries
+the same per-function decisions under `functions`).
+
+| field       | type                                                | meaning                                                                                                                       |
+| ----------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `verdict`   | `"pass"`\|`"fail"`\|`"unknown"`\|`"not_applicable"` | The overall verdict across every declared function — the worst one, in the order `fail`, `unknown`, `not_applicable`, `pass`. |
+| `functions` | object[]                                            | One decision per declared function, in declaration order.                                                                     |
+
+Each `functions` entry:
+
+| field                 | type     | meaning                                                                                                                                             |
+| --------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                | string   | The function's declared `name` — not the internal rule name, which stays in `evidence.condition`.                                                   |
+| `verdict`             | string   | One of the four.                                                                                                                                    |
+| `evidence`            | object   | The deterministic facts the verdict is a claim over. Per condition type; every value is sorted or counted, never a clock.                           |
+| `message`             | string   | Human text naming what was decided and why — the same line the text report prints.                                                                  |
+| `rows`                | object[] | The observed detail behind the verdict, per condition. `[]` when the verdict needs none.                                                            |
+| `notApplicableReason` | string?  | Present only on `not_applicable`, per invariant I4 ([evidence.md](evidence.md)) — so "did not apply" is never indistinguishable from "did not run". |
+
+`rows` is per condition type, and a consumer branching on it should branch on
+the function's condition rather than assume one shape. For `tag-axis-isolation`
+each row is `{source, target, sourceValues, targetValues}` — the edge that
+crossed a partition boundary and the values that placed each end
+([fitness-functions.md](../concepts/fitness-functions.md)).
 
 ## `result` (for `command: "reconcile"`)
 
