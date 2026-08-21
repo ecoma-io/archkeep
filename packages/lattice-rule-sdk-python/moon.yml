@@ -1,0 +1,63 @@
+# The Python rule-authoring SDK — the second of the four SDKs ADR 0002 stages.
+#
+# Tags use dash separators (type-package, scope-sdk) because Moon tags cannot
+# contain colons, the same reason every project beside it does
+# (`../../module-boundaries.config.mjs` argues it once, for the whole tree).
+# `scope-sdk` is the rule-authoring scope the Rust SDK opened; this package
+# joins it, and the row that keeps the SDKs and the engine from importing each
+# other covers it unchanged.
+id: lattice-rule-sdk-python
+language: python
+layer: library
+stack: backend
+tags:
+  - type-package
+  - scope-sdk
+tasks:
+  # `compileall` is the whole of lint here, and the shortfall is stated rather
+  # than papered over: this repository has no Python linter and adding one
+  # would be a new toolchain dependency in every CI leg for a package whose
+  # source is four files. What it DOES check is load-bearing for this package
+  # in a way it would not be for most — every `.py` here is compiled a second
+  # time, by the RustPython inside a rule's artifact, and a file CPython's own
+  # compiler rejects is one that interpreter rejects too, at build time, with a
+  # worse message.
+  #
+  # `tabnanny` is deliberately absent, and the reason is measured rather than
+  # aesthetic: `python3 -m tabnanny <dir>` prints its findings and **exits 0**
+  # (Python 3.11.15), so a task that ran it would report a green build over
+  # every complaint it made — the shape `../../AGENTS.md` calls a gate that
+  # returns early quietly. Turning its output into an exit code would be
+  # writing a gate, which is not what a target is for.
+  #
+  # `PYTHONPYCACHEPREFIX` sends the `__pycache__` trees compileall writes into
+  # `target/`, which the root `.gitignore` already keeps out of git and out of
+  # Prettier's reach — without it a lint run leaves untracked directories
+  # scattered through the package.
+  lint:
+    command: python3 -m compileall -q src examples tests
+    env:
+      PYTHONPYCACHEPREFIX: target/pycache
+  # The golden suite, the runtime's red-direction tests, and the committed
+  # artifact's digest check. `unittest` rather than pytest because pytest is a
+  # dependency and this package has none: an SDK whose test run needs a wheel
+  # installed is an SDK a contributor cannot check out and verify.
+  #
+  # `-t tests` makes the tests directory the discovery root, so it needs no
+  # `__init__.py` — the suite is a set of scripts, not a package, and adding one
+  # would make `tests` importable as a module name from anywhere.
+  test:
+    command: python3 -m unittest discover -s tests -t tests
+    env:
+      PYTHONPYCACHEPREFIX: target/pycache
+  # There is no `typecheck` target, and its absence is the honest answer rather
+  # than an omission. `tsc --noEmit` type-checks the .mjs packages and
+  # `cargo check` type-checks the Rust one because both languages have a
+  # checker in the toolchain the repository already installs. Python has none:
+  # `compileall` above checks syntax and nothing about types, and a target that
+  # ran it under this name would report a passing type check over a file with
+  # no types in it — the placeholder green `../../scripts/check-packages.mjs`
+  # exists to catch. A truthful `typecheck` here needs mypy or pyright, which
+  # is a new dependency and a decision this package cannot make alone; until
+  # then `check-packages` reports `lint, test (no typecheck)`, which is exactly
+  # what is true.
