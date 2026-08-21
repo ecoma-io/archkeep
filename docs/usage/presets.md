@@ -1,8 +1,8 @@
 # Adopting a shipped policy pack
 
-Lattice publishes four architecture styles as ready-made law. Each one is a
+Lattice publishes six architecture styles as ready-made law. Each one is a
 **policy pack**: a profile registry, shipped inside the package, holding the
-constraint rows that make a style enforceable instead of aspirational.
+rows that make a style enforceable instead of aspirational.
 
 A pack is data and nothing else. It is read by the same loader, validated by the
 same validator and enforced by the same path as a registry you wrote yourself —
@@ -10,14 +10,21 @@ same validator and enforced by the same path as a registry you wrote yourself �
 dialect, no option and no second kind of policy beside it. What a pack saves you
 is the blank page, not a mechanism.
 
-The four packs:
+The six packs:
 
 | pack                         | file                                | the style it encodes                                                          |
 | ---------------------------- | ----------------------------------- | ----------------------------------------------------------------------------- |
 | Clean Architecture           | `presets/clean-architecture.json`   | The Dependency Rule: source dependencies point inward, never outward          |
 | Hexagonal (ports & adapters) | `presets/hexagonal.json`            | A domain that knows no adapter, and adapters that do not know each other      |
+| Traditional layering         | `presets/layered.json`              | Tiers stacked top to bottom, in a strict and a relaxed reading                |
 | Layered modular monolith     | `presets/modular-monolith.json`     | Feature modules reached through their published surface, over a shared kernel |
+| Vertical slices              | `presets/vertical-slice.json`       | Feature slices that own their whole stack and never couple to each other      |
 | DDD bounded contexts         | `presets/ddd-bounded-contexts.json` | Contexts integrating through a published language, never through a model      |
+
+Onion architecture is **not** a pack of its own, deliberately: its rings are
+`clean-architecture`'s layers under different names, and shipping a second copy
+of one law under a second vocabulary is two files to keep in step against no
+check. Rename the four `layer:` values in your own copy.
 
 ## The tag vocabulary a pack expects
 
@@ -26,21 +33,37 @@ the pack reads. Two axes cover all four packs, both spelled `axis:value` — wha
 a tag means, and how a constraint row matches one, is
 [boundaries.md](../concepts/boundaries.md)'s.
 
-| axis     | meaning                                                                          | used by                         |
-| -------- | -------------------------------------------------------------------------------- | ------------------------------- |
-| `layer:` | Where the project sits in the architecture. Every pack keys on this axis.        | all four packs                  |
-| `share:` | Whether the project is part of its context's published surface or private to it. | `ddd-bounded-contexts-isolated` |
+| axis       | meaning                                                                          | used by                                                             |
+| ---------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `layer:`   | Where the project sits in the architecture.                                      | every pack but `layered`                                            |
+| `tier:`    | The same idea under the name traditional layering uses for it.                   | `layered`                                                           |
+| `share:`   | Whether the project is part of its context's published surface or private to it. | `ddd-bounded-contexts-isolated`, `ddd-bounded-contexts-partitioned` |
+| `module:`  | Which module a project belongs to.                                               | `modular-monolith-sealed-modules`                                   |
+| `context:` | Which bounded context a project belongs to.                                      | `ddd-bounded-contexts-partitioned`                                  |
+| `feature:` | Which slice a project belongs to.                                                | `vertical-slice`                                                    |
 
-Every project a pack judges needs a `layer:` tag it recognises. That is not a
-formality: a project whose tags match no row in the table is reported, not
-waved through — so a project you forget to tag fails loudly rather than
-escaping the boundary in silence.
+Every project a pack judges needs a `layer:` (or `tier:`) tag it recognises.
+That is not a formality: a project whose tags match no row in the table is
+reported, not waved through — so a project you forget to tag fails loudly rather
+than escaping the boundary in silence.
 
-A pack never names one of **your** contexts, modules or features. It cannot: a
-constraint row matches tags, and there is no row that says "the same value of
-`context:` as the source" — so per-context isolation is one row per context,
-written by you, in your own copy. What a pack ships is the part that is true of
-every workspace in that style; the section on each pack below says exactly where
+### Where a pack CAN name your modules, and where it still cannot
+
+The bottom four axes are the ones a pack reads **relatively**. A constraint row
+compares a project's tags against tag values written into the policy, so there is
+no row that says "the same value of `context:` as the source" — written as rows,
+per-partition privacy is one row per partition, in your own copy, restated every
+time the tree grows one.
+
+A `tag-axis-isolation` fitness function asks that question directly
+([fitness-functions.md](../concepts/fitness-functions.md)), which is why the
+profiles that key on `module:`, `context:` and `feature:` above ship a fitness
+block rather than more rows. Those profiles name no module, context or feature
+of yours — they name the AXIS, and the values stay yours.
+
+What a pack still cannot ship is anything that depends on how your workspace is
+laid out: which of your projects are one module, where a contract lives, which
+target your build produces. The section on each pack below says exactly where
 that line falls.
 
 ## Clean Architecture
@@ -71,6 +94,47 @@ misses.
 | `hexagonal`             | The four layer rows, adapter isolation included.                                        |
 | `hexagonal-pure-domain` | On top of them: the domain imports no third-party package — every capability is a port. |
 
+## Traditional layering
+
+`tier:presentation`, `tier:application`, `tier:domain`, `tier:infrastructure`,
+top to bottom. The pack ships both readings of "layered", because which one a
+team means is a decision and the two disagree about a real edge:
+
+- **`layered-strict`** — a tier may reach its own tier and the one immediately
+  below it. An edge that points downward but SKIPS a tier is a finding.
+- **`layered-relaxed`** — a tier may reach its own and every tier beneath it, at
+  any depth. Only an upward edge is a finding.
+
+`presentation → domain` is the edge that separates them: `layered-strict`
+reports it, `layered-relaxed` does not.
+
+| profile           | what it encodes                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| `layered-strict`  | Each tier reaches its own and the tier immediately below it. A skipped tier reports. |
+| `layered-relaxed` | Each tier reaches its own and everything beneath it. Only upward edges report.       |
+
+Neither profile has a `base`: they are alternatives, not a chain, and selecting
+one is choosing which reading your workspace holds itself to.
+
+## Vertical slices
+
+`layer:slice` for a feature slice that owns its whole stack, `layer:host` for
+the composition root that assembles them, `layer:shared-kernel` for what every
+slice is allowed to share — plus a `feature:` value on each slice saying which
+one it is.
+
+The rows say a slice may reach a slice and the kernel, and the host may reach
+everything; they cannot say **which** slice, because every slice carries the
+same `layer:slice` tag. The `slice-isolation` fitness function in the base
+profile is the whole of feature isolation, reading `feature:` relative to the
+source. The kernel and the host carry no `feature:` tag, so their edges are not
+its subject; a slice that carries none is reported as unjudgeable.
+
+| profile                        | what it adds                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `vertical-slice`               | The three layer rows, plus feature isolation across the `feature:` axis.                            |
+| `vertical-slice-sealed-kernel` | On top of them: the shared kernel takes no third-party dependency, for the modular-monolith reason. |
+
 ## Layered modular monolith
 
 `layer:app` for the deployable, `layer:module` for a feature module's published
@@ -81,10 +145,21 @@ The invariant this pack exists for: the app composes modules through their
 published surfaces and cannot see a module's internals, and the kernel depends
 on nothing that is not itself kernel.
 
-| profile                          | what it adds                                                                                                                |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `modular-monolith`               | The four layer rows.                                                                                                        |
-| `modular-monolith-sealed-kernel` | On top of them: the shared kernel takes no third-party dependency, so it can never force a version on every module at once. |
+**The four rows cannot enforce the word "its own", and this is the sharp edge of
+the pack.** `layer:module-internal → layer:module-internal` is a row matching
+itself, so one module's private implementation reaching ANOTHER module's is
+permitted; so is a module's published surface reaching another module's
+internals. Both are the thing the rows' own descriptions forbid, and neither is
+expressible with tag values alone. `modular-monolith-sealed-modules` is the
+profile that closes it: one `tag-axis-isolation` function reading the `module:`
+axis relative to the source, which needs every project to carry a `module:` tag
+and reports a matched project that carries none rather than waving it through.
+
+| profile                           | what it adds                                                                                                                                               |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modular-monolith`                | The four layer rows.                                                                                                                                       |
+| `modular-monolith-sealed-kernel`  | On top of them: the shared kernel takes no third-party dependency, so it can never force a version on every module at once.                                |
+| `modular-monolith-sealed-modules` | On top of the four rows: a module's internals are reachable only from that module, and cross-module edges land only on a `layer:module` published surface. |
 
 ## DDD bounded contexts
 
@@ -97,22 +172,34 @@ couple to.
 `share:private` or `share:published`, and nothing private becomes reachable from
 anything else private. **That row assumes one project per bounded context.**
 Where a context spans several projects, its own projects are private to each
-other too, and the row will report imports inside a single context — use the
-base profile there and write per-context rows instead.
+other too, and the row reports imports inside a single context — a false
+positive its one row cannot avoid, because `share:private → share:private` is
+the only shape a tag list can name.
 
-| profile                         | what it adds                                                                            |
-| ------------------------------- | --------------------------------------------------------------------------------------- |
-| `ddd-bounded-contexts`          | The four layer rows.                                                                    |
-| `ddd-bounded-contexts-isolated` | On top of them: no context reaches another's private projects. One project per context. |
+`ddd-bounded-contexts-partitioned` is the same intent without that assumption.
+It reads the `context:` axis relative to the source, so a context may span as
+many projects as it needs and only an edge that actually leaves its context is a
+finding — with a `share:published` contract as the one way across. It costs one
+more tag per project (`context:orders`), and a matched project carrying none is
+reported as unjudgeable rather than waved through.
+
+| profile                            | what it adds                                                                                                                     |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `ddd-bounded-contexts`             | The four layer rows.                                                                                                             |
+| `ddd-bounded-contexts-isolated`    | On top of them: no context reaches another's private projects. One project per context.                                          |
+| `ddd-bounded-contexts-partitioned` | On top of them: no project reaches another CONTEXT's private projects, for contexts of any size. Needs a `context:` tag on each. |
 
 ## Choosing a pack, and how far it goes
 
-Each pack's second profile inherits the first and adds rows to it. Because a
-child's rows compose with its base's rather than replacing them
+A derived profile inherits its base and adds to it. Because a child's rows
+compose with its base's rather than replacing them
 ([profiles.md](../concepts/profiles.md) owns that precedence), the only
-direction a `base` chain travels is **tighter**: the second profile of a pack
-always enforces everything the first does, and no `base` can express a
-loosening. Relaxing a shipped row means editing your own copy of the file.
+direction a `base` chain travels is **tighter**: a derived profile always
+enforces everything its base does, and no `base` can express a loosening.
+Relaxing a shipped row means editing your own copy of the file. `layered` is the
+one pack whose two profiles are alternatives rather than a chain — neither
+derives from the other, because strict and relaxed layering disagree rather than
+stack.
 
 What no pack turns on is as much a decision as what it does.
 `enforceBuildableLibDependency` and `banTransitiveDependencies` are `false` in
@@ -128,6 +215,15 @@ as installed packages ([policy-schema.md](../reference/policy-schema.md)). That
 is the intent — a pure core reaches the outside world through a port — but it is
 the rule most likely to surprise on first run, so select those profiles second,
 once the layer rows are green.
+
+The profiles that ship a `tag-axis-isolation` function —
+`modular-monolith-sealed-modules`, `ddd-bounded-contexts-partitioned`, and
+`vertical-slice` — each need one extra tag per project, on the axis they
+partition. Until every matched project carries one, the function is `unknown`
+and `check` exits 3: that is the could-not-look class, not a failure, and it
+names the projects still missing a tag. Tag them, or narrow the profile's
+`match` in your own copy so the function only claims over the projects the axis
+actually describes.
 
 ## Using a pack
 

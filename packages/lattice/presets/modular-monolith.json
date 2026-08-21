@@ -62,6 +62,24 @@
           "checkNestedExternalImports": true
         }
       }
+    },
+    {
+      "name": "modular-monolith-sealed-modules",
+      "base": "modular-monolith",
+      "block": {
+        "fitness": [
+          {
+            "name": "module-encapsulation",
+            "match": ["tag:layer:module", "tag:layer:module-internal"],
+            "condition": {
+              "type": "tag-axis-isolation",
+              "axis": "module",
+              "exempt": ["tag:layer:module"]
+            },
+            "reason": "The base profile's rows cannot express \"its OWN module's internals\": a tag list names tag values, and every module's internals carry the same layer:module-internal tag. So layer:module-internal reaching ANOTHER module's internals, and a published surface reaching another module's, are both permitted by the four rows above. This function is the half that reads the module: axis relatively — a dependency may leave its module only into something tagged layer:module, which is what a published surface is."
+          }
+        ]
+      }
     }
   ]
 }

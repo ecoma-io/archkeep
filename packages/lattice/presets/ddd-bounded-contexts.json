@@ -65,6 +65,24 @@
         ],
         "moduleBoundaryOptions": {}
       }
+    },
+    {
+      "name": "ddd-bounded-contexts-partitioned",
+      "base": "ddd-bounded-contexts",
+      "block": {
+        "fitness": [
+          {
+            "name": "context-isolation",
+            "match": ["tag:share:private"],
+            "condition": {
+              "type": "tag-axis-isolation",
+              "axis": "context",
+              "exempt": ["tag:share:published"]
+            },
+            "reason": "What ddd-bounded-contexts-isolated means, without its one-project-per-context assumption. That profile forbids share:private depending on share:private, which reports two private projects of the SAME context depending on each other. This one asks the question the style actually asks — does this edge leave its context? — by reading the context: axis relatively, so a context may span as many projects as it needs while still reaching another context only through a share:published contract. Tag every project with a context: value; a matched project carrying none is reported as unjudgeable rather than waved through."
+          }
+        ]
+      }
     }
   ]
 }

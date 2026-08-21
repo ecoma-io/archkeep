@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "name": "layered-strict",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "tier:presentation",
+            "onlyDependOnLibsWithTags": ["tier:presentation", "tier:application"],
+            "description": "Strict layering: presentation may reach its own tier and application, the tier immediately below it, and nothing else.",
+            "remediation": "Route the call through application rather than reaching past it, or move the collaborator up to the tier that is allowed to see it."
+          },
+          {
+            "sourceTag": "tier:application",
+            "onlyDependOnLibsWithTags": ["tier:application", "tier:domain"],
+            "description": "Strict layering: application may reach its own tier and domain, the tier immediately below it, and nothing else.",
+            "remediation": "Route the call through domain rather than reaching past it, or move the collaborator up to the tier that is allowed to see it."
+          },
+          {
+            "sourceTag": "tier:domain",
+            "onlyDependOnLibsWithTags": ["tier:domain", "tier:infrastructure"],
+            "description": "Strict layering: domain may reach its own tier and infrastructure, the tier immediately below it, and nothing else.",
+            "remediation": "Route the call through infrastructure rather than reaching past it, or move the collaborator up to the tier that is allowed to see it."
+          },
+          {
+            "sourceTag": "tier:infrastructure",
+            "onlyDependOnLibsWithTags": ["tier:infrastructure"],
+            "description": "Strict layering: infrastructure may reach its own tier and nothing beneath it, because there is nothing beneath it.",
+            "remediation": "Nothing may be imported from an outer tier here; invert the dependency instead."
+          }
+        ],
+        "moduleBoundaryOptions": {
+          "allow": [],
+          "buildTargets": ["build"],
+          "enforceBuildableLibDependency": false,
+          "allowCircularSelfDependency": false,
+          "checkDynamicDependenciesExceptions": [],
+          "ignoredCircularDependencies": [],
+          "banTransitiveDependencies": false,
+          "checkNestedExternalImports": false
+        }
+      }
+    },
+    {
+      "name": "layered-relaxed",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "tier:presentation",
+            "onlyDependOnLibsWithTags": [
+              "tier:presentation",
+              "tier:application",
+              "tier:domain",
+              "tier:infrastructure"
+            ],
+            "description": "Relaxed layering: presentation may reach its own tier and every tier beneath it, at any depth.",
+            "remediation": "An upward edge is the violation here; invert the dependency, or move the shared piece down to a tier both sides may see."
+          },
+          {
+            "sourceTag": "tier:application",
+            "onlyDependOnLibsWithTags": ["tier:application", "tier:domain", "tier:infrastructure"],
+            "description": "Relaxed layering: application may reach its own tier and every tier beneath it, at any depth.",
+            "remediation": "An upward edge is the violation here; invert the dependency, or move the shared piece down to a tier both sides may see."
+          },
+          {
+            "sourceTag": "tier:domain",
+            "onlyDependOnLibsWithTags": ["tier:domain", "tier:infrastructure"],
+            "description": "Relaxed layering: domain may reach its own tier and every tier beneath it, at any depth.",
+            "remediation": "An upward edge is the violation here; invert the dependency, or move the shared piece down to a tier both sides may see."
+          },
+          {
+            "sourceTag": "tier:infrastructure",
+            "onlyDependOnLibsWithTags": ["tier:infrastructure"],
+            "description": "Relaxed layering: infrastructure may reach its own tier and every tier beneath it, at any depth.",
+            "remediation": "An upward edge is the violation here; invert the dependency, or move the shared piece down to a tier both sides may see."
+          }
+        ],
+        "moduleBoundaryOptions": {
+          "allow": [],
+          "buildTargets": ["build"],
+          "enforceBuildableLibDependency": false,
+          "allowCircularSelfDependency": false,
+          "checkDynamicDependenciesExceptions": [],
+          "ignoredCircularDependencies": [],
+          "banTransitiveDependencies": false,
+          "checkNestedExternalImports": false
+        }
+      }
+    }
+  ]
+}

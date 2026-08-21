@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "name": "vertical-slice",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "layer:slice",
+            "onlyDependOnLibsWithTags": ["layer:slice", "layer:shared-kernel"],
+            "description": "A slice owns its whole stack. The only thing it may reach outside itself is the shared kernel — and which slice it may reach is the feature: axis's question, not this row's.",
+            "remediation": "Move the collaborator into this slice, or promote the shared piece into layer:shared-kernel where every slice may see it."
+          },
+          {
+            "sourceTag": "layer:shared-kernel",
+            "onlyDependOnLibsWithTags": ["layer:shared-kernel"],
+            "description": "Everything depends on the kernel, so anything the kernel depends on is shared by every slice whether or not that slice asked.",
+            "remediation": "A kernel project reaching into a slice has made that slice part of the kernel; move the code, or move the dependency into the slice."
+          },
+          {
+            "sourceTag": "layer:host",
+            "onlyDependOnLibsWithTags": ["layer:host", "layer:slice", "layer:shared-kernel"],
+            "description": "The composition root is the one project allowed to see more than one slice.",
+            "remediation": "Nothing inside a slice may import the host; move the wiring outward rather than the dependency inward."
+          }
+        ],
+        "moduleBoundaryOptions": {
+          "allow": [],
+          "buildTargets": ["build"],
+          "enforceBuildableLibDependency": false,
+          "allowCircularSelfDependency": false,
+          "checkDynamicDependenciesExceptions": [],
+          "ignoredCircularDependencies": [],
+          "banTransitiveDependencies": false,
+          "checkNestedExternalImports": false
+        },
+        "fitness": [
+          {
+            "name": "slice-isolation",
+            "match": ["tag:layer:slice"],
+            "condition": {
+              "type": "tag-axis-isolation",
+              "axis": "feature"
+            },
+            "reason": "The row above says a slice may reach layer:slice, which every slice carries — so on its own it permits any slice to reach any other. Feature isolation is a claim about the feature: axis relative to the source, which no tag list can spell: written as constraint rows it is one row per slice, restated every time the tree grows one. This function is the whole of it, in a form that does not change when a slice is added. The kernel and the host carry no feature: tag, so their edges are not this function's subject; a slice that carries none is reported as unjudgeable rather than waved through."
+          }
+        ]
+      }
+    },
+    {
+      "name": "vertical-slice-sealed-kernel",
+      "base": "vertical-slice",
+      "block": {
+        "depConstraints": [
+          {
+            "sourceTag": "layer:shared-kernel",
+            "bannedExternalImports": ["*"],
+            "description": "Every slice inherits the kernel's third-party dependencies, so the kernel takes none — Node built-ins included.",
+            "remediation": "Keep the package in the slice that needs it, or expose the capability from the kernel as an interface the slice implements."
+          }
+        ],
+        "moduleBoundaryOptions": {
+          "checkNestedExternalImports": true
+        }
+      }
+    }
+  ]
+}
