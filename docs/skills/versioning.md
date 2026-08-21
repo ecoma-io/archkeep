@@ -13,13 +13,17 @@ package.json (repository root — what release-please bumps directly)
   = .claude-plugin/marketplace.json (entry version)
   = .codex-plugin/plugin.json
   = packages/lattice-vscode/package.json
+  = packages/lattice-rule-sdk-rust/Cargo.toml ([package] version)
 ```
 
-All six must agree. The root `package.json` is the release-please `"."`
-component — the one file it bumps directly; the other five are copies of it
+All seven must agree. The root `package.json` is the release-please `"."`
+component — the one file it bumps directly; the other six are copies of it
 written by `extra-files`. The extension is on the list because it pairs with
 the engine it is released with, and one version is what makes the pairing
-visible.
+visible. The Rust rule SDK's crate manifest is on it for the decision
+[adr/0002](../adr/0002-custom-rules-one-contract.md) records: every SDK joins
+this one chain, so "the SDK for engine 0.x" is a fact a reader takes from the
+number rather than a compatibility matrix.
 
 The `arch-*` skills carry **no version** by decision. A consumer's skills are
 installed with the plugin that ships them, so the version that matters is the
@@ -38,7 +42,10 @@ version is the pairing.
 3. `.claude-plugin/marketplace.json` entry version matches the package version
 4. `.codex-plugin/plugin.json` version matches the package version
 5. `packages/lattice-vscode/package.json` version matches the package version
-6. No host-specific frontmatter fields have leaked into canonical skills
+6. `packages/lattice-rule-sdk-rust/Cargo.toml`'s `[package]` version matches
+   the package version — read section-scoped, so a dependency's pin can never
+   stand in for the crate's own number
+7. No host-specific frontmatter fields have leaked into canonical skills
 
 A version mismatch fails the build. There is no warning tier.
 
@@ -58,8 +65,12 @@ the `extra-files` configuration in `release-please-config.json` also bumps:
 - `.codex-plugin/plugin.json` (`$.version`)
 - `packages/lattice/package.json` (`$.version`)
 - `packages/lattice-vscode/package.json` (`$.version`)
+- `packages/lattice-rule-sdk-rust/Cargo.toml` (`$.package.version`, the TOML
+  updater)
 
-These five files are bumped automatically, and `release.yml` reformats the
+These six files are bumped automatically, and `release.yml` reformats the JSON
 `extra-files` after release-please writes them — release-please re-serializes a
 JSON file it touches, which does not match this repository's Prettier layout, so
-the reformat step keeps `format:check` green on the release pull request.
+the reformat step keeps `format:check` green on the release pull request. The
+Cargo manifest stays off that reformat list: Prettier has no TOML parser, and no
+gate checks TOML layout, so there is nothing there to fix.

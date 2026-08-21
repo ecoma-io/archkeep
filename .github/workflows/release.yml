@@ -143,6 +143,9 @@ jobs:
       # — the same defect as `CHANGELOG.md` (which `.prettierignore` already
       # exempts) but for five files no human wrote. Fix them in place, on the
       # branch release-please pushed, before CI ever sees the pull request.
+      # The sixth extra-file, the Rust SDK's Cargo.toml, stays OFF the list
+      # below on purpose: Prettier has no TOML parser (naming the file errors
+      # the run), and no gate checks TOML layout, so there is nothing to fix.
       #
       # The branch is read from the `pr` output rather than named: release-please
       # creates `release-please--branches--<base>--components--<component>`, and
