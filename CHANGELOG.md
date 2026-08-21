@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.9.0](https://github.com/ecoma-io/lattice/compare/v0.8.0...v0.9.0) (2026-08-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **lattice:** `drift` on a workspace that declares an architecture intent, declares no loadable boundary config, and whose intent rows carry no `decisionRef` now completes with exit 0 and a real verdict instead of exiting 3. No workspace that has a boundary config changes verdict, and no workspace whose intent cites anything changes exit code. The direction is a refusal lifting rather than a new finding appearing, so a consumer's CI turns green rather than red — but it is a change to what is reported on an unchanged workspace.
+* **lattice:** read a Go import block whose opener follows a `;` ([#195](https://github.com/ecoma-io/lattice/issues/195))
+* **lattice:** a workspace containing a `;`-opened Go import block now reports the imports inside it, so a boundary violation that was invisible can turn a previously green run red on unchanged sources.
+
+### Features
+
+* **lattice:** add report, one architecture governance document ([#192](https://github.com/ecoma-io/lattice/issues/192)) ([d9114a0](https://github.com/ecoma-io/lattice/commit/d9114a0963597d099ed2eb30728b31e1379bbac0))
+* **lattice:** ship four architecture styles as policy packs ([#191](https://github.com/ecoma-io/lattice/issues/191)) ([cfa4981](https://github.com/ecoma-io/lattice/commit/cfa498182c7231bf2a2ed2c039f5d99c87055b4e))
+* **workspace:** add the arch-migrate skill and the migration workflow guide ([#190](https://github.com/ecoma-io/lattice/issues/190)) ([2b8df8a](https://github.com/ecoma-io/lattice/commit/2b8df8af33d6d3fe763d935ce2495325d336abab))
+
+
+### Bug Fixes
+
+* **lattice:** classify upstream noise and scoped configs instead of failing the differential ([#189](https://github.com/ecoma-io/lattice/issues/189)) ([1993fa7](https://github.com/ecoma-io/lattice/commit/1993fa760c23a1a66536dced8ffeb1a8d4592780))
+* **lattice:** lift drift's undocumented refusal and pin the governance surfaces ([#196](https://github.com/ecoma-io/lattice/issues/196)) ([a7486ec](https://github.com/ecoma-io/lattice/commit/a7486ecfb71ca0f9764c9ab6c487324a06240f9b))
+* **lattice:** read a Go import block whose opener follows a `;` ([6b80844](https://github.com/ecoma-io/lattice/commit/6b80844b3d383d7854bff44f4610af19f82cb044))
+* **lattice:** read a Go import block whose opener follows a `;` ([#195](https://github.com/ecoma-io/lattice/issues/195)) ([6b80844](https://github.com/ecoma-io/lattice/commit/6b80844b3d383d7854bff44f4610af19f82cb044))
+* **workspace:** correct stale skill and host-doc claims, cover all providers ([#188](https://github.com/ecoma-io/lattice/issues/188)) ([0e47f6b](https://github.com/ecoma-io/lattice/commit/0e47f6b48b5fdc3908f1c822ad4948728771f61a))
+
+
+### Documentation
+
+* **docs:** reorganize docs into doctrine/ and slim the README to a landing page ([#186](https://github.com/ecoma-io/lattice/issues/186)) ([630a1ef](https://github.com/ecoma-io/lattice/commit/630a1ef6ac5446cf7347feaefb0570aeb9b4e005))
+* **docs:** sync every page the six governance merges made stale ([#197](https://github.com/ecoma-io/lattice/issues/197)) ([151e5fd](https://github.com/ecoma-io/lattice/commit/151e5fdf03747519ca16e0537dd9ebab89c8c0f4))
+
 ## [0.8.0](https://github.com/ecoma-io/lattice/compare/v0.7.1...v0.8.0) (2026-08-20)
 
 

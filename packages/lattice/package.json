@@ -1,6 +1,6 @@
 {
   "name": "@ecoma-io/lattice",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Architecture enforcement for polyglot repositories — dependency graphs and module boundaries for Go, Rust, Python, TypeScript, JavaScript and Vue",
   "keywords": [
     "architecture",
