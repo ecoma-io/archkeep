@@ -8,9 +8,9 @@ The unit and integration tests under `src/` prove the engine correct against in-
 
 Specifically:
 
-- **Eight of the seventeen public commands** (`check`, `graph`, `diff`, `drift`,
-  `history`, `impact`, `explain`, `context`) produce correct exit codes and
-  structured output
+- **Nine of the seventeen public commands** (`check`, `graph`, `diff`, `drift`,
+  `fitness`, `history`, `impact`, `explain`, `context`) produce correct exit
+  codes and structured output
 - **Native and Nx consumers** agree on semantics (project names, edge source/target/type, violation rule IDs and file paths)
 - **Deterministic output** — two runs over an unchanged tree produce byte-identical JSON
 - **Silent-failure guards** — exit 3 when no verdict is reachable (no workspace marker, incomplete graph, malformed baseline), never exit 0
@@ -64,8 +64,17 @@ fixtures/
   nx-consumer.mjs        Nx workspace: nx.json, project.json, Go sources
   native-consumer.mjs    Native workspace: lattice.json, Go sources, no nx
   native-monorepo.mjs    3-project native monorepo (app → api → core)
+  vertical-slice-consumer.mjs  Feature-sliced tree whose law is a fitness function
+  waiver-law.mjs         One law in three readings: permanent, active waiver, lapsed waiver
   violations.mjs         Files that produce specific violation types
 ```
+
+`vertical-slice-consumer.mjs` is the one fixture whose point is what the
+constraint rows CANNOT see: every slice carries the same `layer:slice` tag, so
+`depConstraints` permits the cross-slice edge and only the declared
+`tag-axis-isolation` function reports it. `check` on that tree prints "no
+boundary violations" and still exits 1, which is the fold `fitness.e2e.mjs`
+exists to pin.
 
 ### Test files
 
@@ -81,6 +90,8 @@ fixtures/
 | `moon.e2e.mjs`        | Moon provider (`check`, `graph`, `diff`, `impact`, `explain`, `context`)                                        |
 | `impact.e2e.mjs`      | `impact` (leaf, mid-chain, root project, unknown project)                                                       |
 | `explain.e2e.mjs`     | `explain` (clean site, violating site, malformed/missing site)                                                  |
+| `fitness.e2e.mjs`     | `fitness` and `check`'s fold of it: clean → coupled → fixed, plus the unjudgeable case (exit 3)                 |
+| `waivers.e2e.mjs`     | The suppression table over a real violation: permanent, active, expired, and the row left stale by a fix        |
 | `parity.e2e.mjs`      | Native/Nx semantic parity (projects, edges, violations, envelope)                                               |
 | `determinism.e2e.mjs` | Repeated-execution byte-identical output                                                                        |
 | `sweep.e2e.mjs`       | Every machine-readable command, run twice, byte-identical                                                       |
