@@ -11,8 +11,8 @@ replaces. Today ESLint is right about JavaScript, TypeScript and Vue and silent
 about Go, Rust and Python — and silence you know about beats a green light you
 cannot trust.
 
-**47 fixture workspaces, 120 probes, 96 projects.** Every one of upstream's
-fifteen message ids is triggered by at least one probe, and 82 of the 120 probes
+**48 fixture workspaces, 125 probes, 100 projects.** Every one of upstream's
+fifteen message ids is triggered by at least one probe, and 84 of the 125 probes
 are near-misses where ESLint must report nothing.
 
 ## How it runs
@@ -291,15 +291,40 @@ verdict. That catches an analyzer blind to a shape. It cannot catch a RULE
 that stopped firing, because every spelling of the import would go quiet
 together and agree.
 
-`corpus.mjs` is the answer to that: architecture styles — layered/clean,
-hexagonal, DDD bounded contexts, modular monolith — built in the three
+`corpus.mjs` is the answer to that: architecture styles — relaxed and strict
+layering, onion, clean architecture, hexagonal, DDD bounded contexts, modular
+monolith, vertical slices, a microservice repository — built in the three
 languages ESLint cannot read, with the verdict decided from the policy and the
 import BEFORE the tool was run. There is no oracle, so the labels are the
 oracle, and the suite's whole design is about stopping them from becoming a
 transcription of what the tool printed.
 
-**7 fixture workspaces, 25 probes, 26 projects**, carrying 21 labeled findings
-and 10 near-miss probes that must produce nothing.
+The styles are not a list of names to be long. Each pair of them is chosen so
+one case's silence is the other case's finding, which is what makes either
+verdict a claim about the constraint table rather than about the engine's
+disposition:
+
+- `layered-architecture-in-go` (relaxed) against `strict-layering-in-go`: the
+  same downward edge that skips a tier is silent in the first and reported in
+  the second.
+- `onion-rings-in-python` against `strict-layering-in-go`: an inward edge
+  skipping a ring is what onion is FOR and what strict layering forbids. The
+  shape is not new to the corpus — `layered-architecture-in-go` already carries
+  it incidentally — but this is where it is labeled on both sides, and where a
+  Python package barrel gets to hide an outward dependency behind an
+  `__init__.py`. That case's `intent` says why it exists at all when its rows
+  are isomorphic to the clean-architecture case's.
+- `clean-architecture-dependency-inversion-in-rust` against every layered case:
+  an outermost-ring crate whose source dependency points inward at an
+  abstraction it implements must stay silent, which is the one shape a reading
+  of "the outer layer depends on nothing" would report.
+- `vertical-slice-features-in-go` and
+  `service-boundaries-with-combo-rows-in-python` against the layered cases: a
+  partition axis rather than a layer axis, where the violation is between peers
+  and no layer ordering exists to decide it.
+
+**12 fixture workspaces, 50 probes, 52 projects**, carrying 33 labeled findings
+and 23 near-miss probes that must produce nothing.
 
 ### How it runs, and why it runs the whole command
 
@@ -348,10 +373,10 @@ moves:
 
 | messageId                                    |  Go | Rust | Python | TypeScript |
 | -------------------------------------------- | --: | ---: | -----: | ---------: |
-| `onlyTagsConstraintViolation`                |   3 |    1 |      1 |          1 |
+| `onlyTagsConstraintViolation`                |   8 |    3 |      4 |          1 |
 | `notTagsConstraintViolation`                 |   0 |    2 |      0 |          0 |
 | `emptyOnlyTagsConstraintViolation`           |   0 |    0 |      1 |          0 |
-| `projectWithoutTagsCannotHaveDependencies`   |   0 |    0 |      1 |          0 |
+| `projectWithoutTagsCannotHaveDependencies`   |   1 |    0 |      2 |          0 |
 | `bannedExternalImportsViolation`             |   1 |    1 |      0 |          0 |
 | `noTransitiveDependencies`                   |   2 |    0 |      0 |          0 |
 | `noCircularDependencies`                     |   0 |    0 |      2 |          0 |
@@ -617,7 +642,7 @@ holding them rather than a plan.
 
 The honest position is still the one the tool already takes: run **both**.
 ESLint stays authoritative for JavaScript, TypeScript and Vue, where it is
-correct and where agreement is measured on the 38 fixture workspaces ESLint can
+correct and where agreement is measured on the 39 fixture workspaces ESLint can
 read plus the two pinned real trees above — evidence that grows with the tree
 table, not a proof over every workspace shape. This tool covers Go,
 Rust and Python, where

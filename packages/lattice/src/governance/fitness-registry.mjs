@@ -58,6 +58,7 @@ import {
   driftFree,
   layerDependency,
   suppressionThreshold,
+  tagAxisIsolation,
   tagConformance,
 } from "./fitness-rules.mjs";
 
@@ -72,6 +73,7 @@ export const CONDITION_TYPES = Object.freeze([
   "coverage-minimum",
   "boundary-suppression-count-within-threshold",
   "drift-free",
+  "tag-axis-isolation",
 ]);
 
 /** The keys a fitness row may carry — the governance block rides additively. */
@@ -197,6 +199,7 @@ function conditionViolations(condition, at) {
     "tag-conformance": ["type", "from", "to", "toDependents"],
     "coverage-minimum": ["type", "statement"],
     "boundary-suppression-count-within-threshold": ["type", "max"],
+    "tag-axis-isolation": ["type", "axis", "exempt"],
   };
   for (const key of keys) {
     if (!allowed[type].includes(key)) {
@@ -250,6 +253,73 @@ function conditionViolations(condition, at) {
       `${at}.condition.max: must be a non-negative integer, got ${describe(condition.max)}`,
     );
   }
+  if (type === "tag-axis-isolation") {
+    violations.push(...tagAxisIsolationViolations(condition, at));
+  }
+  return violations;
+}
+
+/**
+ * `tag-axis-isolation`'s two fields.
+ *
+ * `axis` is the tag prefix a partition is read off, so it must not itself
+ * contain the separator: `module:orders` names the axis `module`, and an
+ * `axis` of `"module:orders"` would ask for the partition value after the
+ * SECOND colon — a row that matches nothing while reading as policy. It is
+ * refused by name rather than allowed to select an empty partition set.
+ *
+ * `exempt` is a list of project selectors naming targets an edge may point at
+ * across a partition boundary. It is validated with the same
+ * `isValidSelector` every `match` list uses, so a `tagz:x` typo is a load
+ * error here for the reason it is one there — an exemption nobody understands
+ * is an exemption that silently applies to nothing, which in THIS field is
+ * the loud direction and in a `match` list is the silent one. Refusing both
+ * keeps one rule for one grammar.
+ */
+function tagAxisIsolationViolations(condition, at) {
+  const violations = [];
+  const { axis, exempt } = condition;
+  if (typeof axis !== "string" || axis.trim() === "") {
+    violations.push(`${at}.condition.axis: must be a non-empty tag axis, got ${describe(axis)}`);
+  } else if (axis.includes(":")) {
+    violations.push(
+      `${at}.condition.axis: must name a tag axis without its separator — ` +
+        `"${axis}" contains ':', so it would read the partition value off the wrong half of a tag ` +
+        `(write "${axis.split(":")[0]}" to partition on ${JSON.stringify(axis.split(":")[0])})`,
+    );
+  }
+  if (exempt !== undefined) {
+    if (!Array.isArray(exempt)) {
+      violations.push(
+        `${at}.condition.exempt: must be an array of project selectors when present, got ${describe(exempt)}`,
+      );
+    } else {
+      exempt.forEach((selector, index) => {
+        if (!isValidSelector(selector)) {
+          violations.push(
+            `${at}.condition.exempt[${index}]: must be a valid project selector ` +
+              `(name:x, tag:x, directory:x, "*", or "!"-prefixed), got ${describe(selector)}`,
+          );
+        }
+      });
+      // A `match` list of only `!` selectors means "everything except those"
+      // — `resolveMembers` seeds an implicit `*` for it
+      // (`../architecture-intent/selectors.mjs`). Read the same way here, an
+      // `exempt` of `["!name:legacy"]` exempts the whole workspace and turns
+      // every verdict this condition can reach into `pass`: a policy that
+      // reads as "do not exempt legacy" and enforces nothing at all. Refused
+      // by name rather than reinterpreted, because BOTH readings are
+      // defensible and a reader cannot tell which one a silent engine chose.
+      if (exempt.length > 0 && exempt.every((selector) => String(selector).startsWith("!"))) {
+        violations.push(
+          `${at}.condition.exempt: names only "!" selectors, which would exempt every project ` +
+            `except those — and so exempt the whole workspace, making this function pass on any ` +
+            `tree. Write the projects to exempt positively, or "*" with the exclusions after it ` +
+            `if exempting nearly everything is really meant.`,
+        );
+      }
+    }
+  }
   return violations;
 }
 
@@ -286,8 +356,11 @@ export function judgeFitnessRow(row, graph, analysis, intent, suppressions) {
   // The rule's own verdict names the RULE (`layer-dependency:from→to`); the
   // declared function's name is what every consumer — the report's verdict
   // table, the JSON envelope, `check`'s exit-code lane — must read, so the
-  // registry stamps it over the rule's internal name. The rule's name stays
-  // in `evidence.condition` for the reader who wants the exact condition.
+  // registry stamps it over the rule's internal name. The rule's name is
+  // DISCARDED, not relocated: this comment used to say it survived in
+  // `evidence.condition`, and no condition has ever written that key. Where a
+  // condition's parameters matter to a reader, the condition itself puts them
+  // in `evidence` (`tag-axis-isolation` carries `axis` there).
   let decision;
   switch (type) {
     case "cycle-free":
@@ -295,6 +368,9 @@ export function judgeFitnessRow(row, graph, analysis, intent, suppressions) {
       break;
     case "layer-dependency":
       decision = layerDependency(graph.nodes, graph.dependencies, names, params);
+      break;
+    case "tag-axis-isolation":
+      decision = tagAxisIsolation(graph.nodes, graph.dependencies, names, params);
       break;
     case "tag-conformance":
       decision = tagConformance(graph.nodes, graph.dependencies, names, params);

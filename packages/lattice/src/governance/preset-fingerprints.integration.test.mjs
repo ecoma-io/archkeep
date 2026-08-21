@@ -58,7 +58,15 @@ const EXPECTED = JSON.parse(readFileSync(join(HERE, "preset-fingerprints.json"),
  * assertion below fails when a resolved pack carries anything outside it, which
  * is what forces this list and that function to be revisited together.
  */
-const FINGERPRINTED_FIELDS = ["depConstraints", "options", "suppressions"];
+const FINGERPRINTED_FIELDS = ["depConstraints", "options", "suppressions", "fitness"];
+
+/**
+ * The fields `../config.mjs`'s `policyFrom` sets on EVERY resolved policy.
+ * `fitness` is not among them: it is contributed only when the policy declares
+ * one, which is why the guard below is a subset check in one direction and a
+ * presence check in the other rather than a single equality.
+ */
+const ALWAYS_RESOLVED = ["depConstraints", "options", "suppressions"];
 
 /** The failure every mismatch below renders. */
 const CHANGED =
@@ -101,12 +109,30 @@ describe("shipped policy pack fingerprints", () => {
   it("resolves every pack to only the fields the fingerprint covers", () => {
     // Without this, a pack growing a field outside the hash would change the
     // law it ships while every pin below still matched.
+    //
+    // A SUBSET rather than an equality, because `fitness` is optional on a
+    // resolved policy (`../config.mjs`'s `policyFrom` contributes the key only
+    // when the policy declares one) — an equality here would demand that every
+    // pack ship a fitness block. The guard's subject is unchanged: a field a
+    // pack resolves to that the hash does not cover still fails, which is the
+    // only direction that could move shipped law behind a still-matching pin.
     for (const { key, policy } of resolved) {
       expect(
-        Object.keys(policy).sort(),
+        Object.keys(policy)
+          .filter((field) => !FINGERPRINTED_FIELDS.includes(field))
+          .sort(),
         `${key} resolves to a field the fingerprint does not hash, so its pin would not move — ` +
           `extend computePolicyFingerprint (../commands/graph.mjs) and re-pin`,
-      ).toEqual([...FINGERPRINTED_FIELDS].sort());
+      ).toEqual([]);
+      // The other direction, which the subset above cannot see: a resolved
+      // policy that LOST one of the three fields `policyFrom` always sets
+      // would still be a subset, and its pin would still match while the pack
+      // shipped less law than it says. `fitness` is deliberately absent from
+      // this list — it is the one optional field.
+      expect(
+        ALWAYS_RESOLVED.filter((field) => !(field in policy)),
+        `${key} resolves without a field every policy carries`,
+      ).toEqual([]);
     }
   });
 

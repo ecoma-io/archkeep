@@ -561,6 +561,444 @@ describe("judgeFitnessRow — drift-free", () => {
   });
 });
 
+describe("judgeFitnessRow — tag-axis-isolation", () => {
+  /** A two-module tree: each module has a published surface and a private inside. */
+  const modules = graph(
+    [
+      ["orders-api", "libs/orders-api", ["module:orders", "layer:module"]],
+      ["orders-internal", "libs/orders-internal", ["module:orders", "layer:module-internal"]],
+      ["billing-api", "libs/billing-api", ["module:billing", "layer:module"]],
+      ["billing-internal", "libs/billing-internal", ["module:billing", "layer:module-internal"]],
+      ["kernel", "libs/kernel", ["layer:shared-kernel"]],
+    ],
+    {
+      "orders-api": [
+        { source: "orders-api", target: "orders-internal", type: "static" },
+        { source: "orders-api", target: "billing-api", type: "static" },
+        { source: "orders-api", target: "kernel", type: "static" },
+      ],
+      "orders-internal": [{ source: "orders-internal", target: "kernel", type: "static" }],
+      "billing-internal": [{ source: "billing-internal", target: "billing-api", type: "static" }],
+    },
+  );
+
+  /** The row the `modular-monolith-sealed-modules` profile ships. */
+  const row = (condition, match = ["tag:layer:module", "tag:layer:module-internal"]) => ({
+    name: "module-encapsulation",
+    match,
+    condition: { type: "tag-axis-isolation", ...condition },
+    reason: "r",
+  });
+
+  it("passes when every judged edge stays inside its own partition", () => {
+    const d = judgeFitnessRow(
+      row({ axis: "module", exempt: ["tag:layer:module"] }),
+      modules,
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("pass");
+    expect(d.evidence).toEqual({
+      projects: 4,
+      axis: "module",
+      exempt: 2,
+      unplaced: 0,
+      crossings: 0,
+    });
+  });
+
+  it("fails a cross-partition edge and names both partitions", () => {
+    const leaking = graph(
+      modules.nodes &&
+        Object.entries(modules.nodes).map(([name, node]) => [name, node.data.root, node.data.tags]),
+      {
+        ...modules.dependencies,
+        "orders-internal": [
+          { source: "orders-internal", target: "billing-internal", type: "static" },
+        ],
+      },
+    );
+    const d = judgeFitnessRow(
+      row({ axis: "module", exempt: ["tag:layer:module"] }),
+      leaking,
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("fail");
+    expect(d.evidence.crossings).toBe(1);
+    expect(d.rows).toEqual([
+      {
+        source: "orders-internal",
+        target: "billing-internal",
+        sourceValues: ["orders"],
+        targetValues: ["billing"],
+      },
+    ]);
+    expect(d.message).toContain("orders-internal (orders) → billing-internal (billing)");
+  });
+
+  it("reports a published surface reaching another module's inside — the shipped pack's blind spot", () => {
+    // `modular-monolith`'s own `layer:module` row permits this edge, because
+    // "another module's internals" and "its own" are the same tag to a tag
+    // list. It is the false negative this condition exists to close, so the
+    // exemption that lets a published surface be a TARGET must not also let
+    // it be a permitted SOURCE of a crossing.
+    const reaching = graph(
+      Object.entries(modules.nodes).map(([name, node]) => [name, node.data.root, node.data.tags]),
+      { "billing-api": [{ source: "billing-api", target: "orders-internal", type: "static" }] },
+    );
+    const d = judgeFitnessRow(
+      row({ axis: "module", exempt: ["tag:layer:module"] }),
+      reaching,
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("fail");
+    expect(d.rows.map((r) => `${r.source}->${r.target}`)).toEqual(["billing-api->orders-internal"]);
+  });
+
+  it("does not judge an edge whose target carries no value on the axis", () => {
+    // The shared kernel belongs to no module, so it is nobody's partition
+    // boundary. Judging it would report every legitimate kernel import.
+    const d = judgeFitnessRow(row({ axis: "module" }), modules, {}, null, []);
+    // `orders-api → billing-api` is a real crossing with no exemption in play;
+    // the two kernel edges are not, and that is the assertion.
+    expect(d.rows.map((r) => `${r.source}->${r.target}`)).toEqual(["orders-api->billing-api"]);
+  });
+
+  it("does not read a source that sits in no partition as crossing out of it", () => {
+    // The near-miss for the source half of the crossing filter. Without the
+    // `sourceValues.length > 0` guard, `[].some(...)` is false, `!false` is
+    // true, and an unplaced SOURCE reaching a placed target reads as a
+    // crossing — reporting a project the condition cannot judge instead of
+    // saying it could not judge it.
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["*"]),
+      graph(
+        [
+          ["untagged", "libs/untagged", ["layer:module"]],
+          ["billing-api", "libs/billing-api", ["module:billing"]],
+        ],
+        { untagged: [{ source: "untagged", target: "billing-api", type: "static" }] },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("unknown");
+    expect(d.evidence.crossings).toBe(0);
+    expect(d.evidence.unplaced).toBe(1);
+  });
+
+  it("judges a crossing into a project its match does not select", () => {
+    // `edgesFrom` deliberately restricts only the SOURCE to the matched set,
+    // where `edgesAmong` (used by the other conditions) restricts both. If it
+    // restricted both, a partition boundary crossed into a project outside the
+    // match — which is most of them, since `match` normally names one role —
+    // would go unjudged. The silent direction, and the reason the helper
+    // exists separately.
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["tag:layer:module-internal"]),
+      graph(
+        [
+          ["orders-internal", "libs/orders-internal", ["module:orders", "layer:module-internal"]],
+          ["billing-api", "libs/billing-api", ["module:billing", "layer:module"]],
+        ],
+        {
+          "orders-internal": [{ source: "orders-internal", target: "billing-api", type: "static" }],
+        },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("fail");
+    expect(d.rows.map((r) => r.target)).toEqual(["billing-api"]);
+  });
+
+  it("counts one edge once when the graph carries it twice", () => {
+    // A provider deduplicates on `[source, target, type]`, so one dependency
+    // can arrive as both a manifest edge and an implicit one. This condition
+    // reads the pair and never the type, so both would otherwise be reported
+    // and `crossings` would describe two edges where the graph has one.
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["*"]),
+      graph(
+        [
+          ["a", "libs/a", ["module:orders"]],
+          ["b", "libs/b", ["module:billing"]],
+        ],
+        {
+          a: [
+            { source: "a", target: "b", type: "static" },
+            { source: "a", target: "b", type: "implicit" },
+          ],
+        },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.evidence.crossings).toBe(1);
+    expect(d.rows).toHaveLength(1);
+  });
+
+  it("places nothing on a bare axis tag that carries no value", () => {
+    // `module:` names an axis and no value. Read as the partition `""`, every
+    // project carrying one would land in the SAME partition and every edge
+    // between them would pass.
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["*"]),
+      graph(
+        [
+          ["a", "libs/a", ["module:"]],
+          ["b", "libs/b", ["module:"]],
+        ],
+        { a: [{ source: "a", target: "b", type: "static" }] },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("unknown");
+    expect(d.evidence.unplaced).toBe(2);
+  });
+
+  it("names the projects it could not place even when it has a crossing to report", () => {
+    // A `fail` that said nothing about them would report a partial look as a
+    // whole one: the reader acts on the crossing and never learns that part of
+    // the subject was never judged.
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["*"]),
+      graph(
+        [
+          ["a", "libs/a", ["module:orders"]],
+          ["b", "libs/b", ["module:billing"]],
+          ["unplaceable", "libs/unplaceable", ["layer:app"]],
+        ],
+        { a: [{ source: "a", target: "b", type: "static" }] },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("fail");
+    expect(d.evidence.unplaced).toBe(1);
+    expect(d.message).toContain("unplaceable");
+  });
+
+  it("yields unknown — never pass — when a matched project sits in no partition", () => {
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["*"]),
+      graph(
+        [
+          ["orders-api", "libs/orders-api", ["module:orders"]],
+          ["kernel", "libs/kernel", ["layer:shared-kernel"]],
+        ],
+        { "orders-api": [{ source: "orders-api", target: "kernel", type: "static" }] },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("unknown");
+    expect(d.evidence.unplaced).toBe(1);
+    expect(d.message).toContain("kernel");
+  });
+
+  it("reports a crossing it found even where the picture is incomplete", () => {
+    // Findings first, could-not-look second — the order `../../cli.mjs`'s
+    // `verdictFor` uses for the run as a whole. Suppressing a determined
+    // crossing behind `unknown` would lose it.
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["*"]),
+      graph(
+        [
+          ["orders-api", "libs/orders-api", ["module:orders"]],
+          ["billing-api", "libs/billing-api", ["module:billing"]],
+          ["kernel", "libs/kernel", ["layer:shared-kernel"]],
+        ],
+        { "orders-api": [{ source: "orders-api", target: "billing-api", type: "static" }] },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("fail");
+    expect(d.evidence.unplaced).toBe(1);
+    expect(d.evidence.crossings).toBe(1);
+  });
+
+  it("exempts nothing when `exempt` is absent or empty", () => {
+    // `resolveMembers([])` seeds an implicit `*`, so routing an empty list
+    // through it would exempt the whole workspace and turn every verdict
+    // here into `pass`. Both spellings of "no exemption" are asserted.
+    for (const condition of [{ axis: "module" }, { axis: "module", exempt: [] }]) {
+      const d = judgeFitnessRow(row(condition), modules, {}, null, []);
+      expect(d.verdict, JSON.stringify(condition)).toBe("fail");
+      expect(d.evidence.exempt).toBe(0);
+      expect(d.rows.map((r) => `${r.source}->${r.target}`)).toEqual(["orders-api->billing-api"]);
+    }
+  });
+
+  it("exempts nothing from a list of only exclusions, rather than everything", () => {
+    // `resolveMembers` seeds an implicit `*` for any list with no positive
+    // selector, not only for the empty one. Read that way, `["!name:x"]`
+    // exempts the whole workspace and this function passes on every tree. The
+    // registry refuses such a list at load; this is the rule's own backstop,
+    // and it errs toward exempting NOTHING.
+    for (const exempt of [["!name:kernel"], ["!tag:layer:module", "!name:kernel"]]) {
+      const d = judgeFitnessRow(row({ axis: "module", exempt }), modules, {}, null, []);
+      expect(d.verdict, JSON.stringify(exempt)).toBe("fail");
+      expect(d.evidence.exempt).toBe(0);
+    }
+  });
+
+  it("treats a project on two values of the axis as sharing either one", () => {
+    const shared = graph(
+      [
+        ["both", "libs/both", ["module:orders", "module:billing"]],
+        ["orders-internal", "libs/orders-internal", ["module:orders"]],
+        ["other", "libs/other", ["module:shipping"]],
+      ],
+      {
+        both: [
+          { source: "both", target: "orders-internal", type: "static" },
+          { source: "both", target: "other", type: "static" },
+        ],
+      },
+    );
+    const d = judgeFitnessRow(row({ axis: "module" }, ["*"]), shared, {}, null, []);
+    expect(d.verdict).toBe("fail");
+    expect(d.rows.map((r) => r.target)).toEqual(["other"]);
+    expect(d.rows[0].sourceValues).toEqual(["billing", "orders"]);
+  });
+
+  it("reads the partition off the FIRST colon of the tag", () => {
+    const versioned = graph(
+      [
+        ["a", "libs/a", ["module:orders:v2"]],
+        ["b", "libs/b", ["module:orders:v1"]],
+      ],
+      { a: [{ source: "a", target: "b", type: "static" }] },
+    );
+    const d = judgeFitnessRow(row({ axis: "module" }, ["*"]), versioned, {}, null, []);
+    // Split on the last colon, both would be `orders` and this edge would pass.
+    expect(d.verdict).toBe("fail");
+    expect(d.rows[0]).toMatchObject({ sourceValues: ["orders:v2"], targetValues: ["orders:v1"] });
+  });
+
+  it("judges only the outgoing edges of a matched source", () => {
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["tag:layer:module-internal"]),
+      graph(
+        Object.entries(modules.nodes).map(([name, node]) => [name, node.data.root, node.data.tags]),
+        {
+          "orders-api": [{ source: "orders-api", target: "billing-api", type: "static" }],
+          "orders-internal": [
+            { source: "orders-internal", target: "billing-internal", type: "static" },
+          ],
+        },
+      ),
+      {},
+      null,
+      [],
+    );
+    // `orders-api → billing-api` crosses the same boundary, but `orders-api`
+    // is not matched, so it is not this function's subject.
+    expect(d.rows.map((r) => r.source)).toEqual(["orders-internal"]);
+  });
+
+  it("is not_applicable when its match selects nothing, and says why (I4)", () => {
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["tag:layer:nothing-carries-this"]),
+      modules,
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("not_applicable");
+    expect(d.notApplicableReason).toContain("selects no observed project");
+  });
+
+  it("orders its rows deterministically", () => {
+    const many = graph(
+      [
+        ["s", "libs/s", ["module:one"]],
+        ["z", "libs/z", ["module:two"]],
+        ["a", "libs/a", ["module:two"]],
+        ["m", "libs/m", ["module:two"]],
+      ],
+      {
+        s: [
+          { source: "s", target: "z", type: "static" },
+          { source: "s", target: "a", type: "static" },
+          { source: "s", target: "m", type: "static" },
+        ],
+      },
+    );
+    const first = judgeFitnessRow(row({ axis: "module" }, ["*"]), many, {}, null, []);
+    const second = judgeFitnessRow(row({ axis: "module" }, ["*"]), many, {}, null, []);
+    expect(first.rows.map((r) => r.target)).toEqual(["a", "m", "z"]);
+    expect(canonicalizeJson(first)).toBe(canonicalizeJson(second));
+  });
+});
+
+describe("tag-axis-isolation row validation", () => {
+  const row = (condition) => [
+    {
+      name: "iso",
+      match: ["*"],
+      condition: { type: "tag-axis-isolation", ...condition },
+      reason: "r",
+    },
+  ];
+
+  it("accepts axis alone and axis with selectors", () => {
+    expect(findFitnessViolations(row({ axis: "module" }))).toEqual([]);
+    expect(
+      findFitnessViolations(row({ axis: "context", exempt: ["tag:share:published", "!name:x"] })),
+    ).toEqual([]);
+  });
+
+  it("refuses an axis that carries its own separator", () => {
+    // `module:orders` as an axis would read the partition off the second
+    // colon, so it would match nothing while reading as policy.
+    const [message] = findFitnessViolations(row({ axis: "module:orders" }));
+    expect(message).toMatch(/contains ':'/u);
+    expect(message).toContain('write "module"');
+  });
+
+  it("refuses a missing axis, a non-array exempt, and a selector nobody can parse", () => {
+    expect(findFitnessViolations(row({}))[0]).toMatch(/condition\.axis: must be a non-empty/u);
+    expect(findFitnessViolations(row({ axis: "m", exempt: "x" }))[0]).toMatch(
+      /condition\.exempt: must be an array/u,
+    );
+    expect(findFitnessViolations(row({ axis: "m", exempt: ["tagz:x"] }))[0]).toMatch(
+      /condition\.exempt\[0\]: must be a valid project selector/u,
+    );
+  });
+
+  it("refuses an exempt list that names only exclusions", () => {
+    // It would exempt every project except those, and so exempt the whole
+    // workspace — a policy reading as "do not exempt legacy" that enforces
+    // nothing at all.
+    const [message] = findFitnessViolations(row({ axis: "m", exempt: ["!name:legacy"] }));
+    expect(message).toMatch(/names only "!" selectors/u);
+    // The spelling that really does mean "nearly everything" stays legal.
+    expect(findFitnessViolations(row({ axis: "m", exempt: ["*", "!name:legacy"] }))).toEqual([]);
+  });
+
+  it("refuses a field this condition does not have", () => {
+    expect(findFitnessViolations(row({ axis: "m", direction: "forbidden" }))[0]).toMatch(
+      /condition\.direction: not a field of condition type "tag-axis-isolation"/u,
+    );
+  });
+});
+
 describe("fitnessSnapshot and evaluateFitness", () => {
   it("attributes owned/analyzed per project from the file ownership map", () => {
     const commandContext = {
@@ -697,7 +1135,7 @@ describe("determinism", () => {
     expect(first).toEqual(second);
   });
 
-  it("declares all six built-in condition types", () => {
+  it("declares all seven built-in condition types", () => {
     expect(CONDITION_TYPES).toEqual([
       "cycle-free",
       "layer-dependency",
@@ -705,6 +1143,7 @@ describe("determinism", () => {
       "coverage-minimum",
       "boundary-suppression-count-within-threshold",
       "drift-free",
+      "tag-axis-isolation",
     ]);
   });
 });

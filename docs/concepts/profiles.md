@@ -101,6 +101,11 @@ effective block and merges on top of it:
   defaulted here any more than they are in a file.
 - **`boundarySuppressions` rows append.** A child cannot un-suppress what its
   base suppressed.
+- **`fitness` rows append.** A child inherits every quality gate its base
+  declares and can add more; it cannot remove or weaken one, and it cannot
+  redefine a base function by reusing its name — two rows sharing a name is a
+  duplicate the registry refuses. A derived profile whose whole law is a fitness
+  row is therefore its base's law plus that row, never instead of it.
 
 A chain may be longer: `c` on `b` on `a`, resolved depth-first, earlier
 profiles first, so a chain reads in the order it was written.

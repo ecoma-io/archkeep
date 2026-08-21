@@ -161,10 +161,21 @@ deciding nothing. Unknown keys in a row, a duplicate name, or an ill-formed
 | `coverage-minimum`                            | `statement`                  | At least `statement` percent of the matched projects' analyzable owned files were analyzed. Zero owned files is `unknown`; a path-scoped run is `not_applicable` — it needs a full, unscoped run. |
 | `boundary-suppression-count-within-threshold` | `max`                        | The number of accepted `boundarySuppressions` is at most `max`.                                                                                                                                   |
 | `drift-free`                                  | —                            | `pass` when the declared architecture intent judges clean; no intent file or a no-verdict intent is `unknown`.                                                                                    |
+| `tag-axis-isolation`                          | `axis`, `exempt` (optional)  | `fail` when a direct edge leaving a matched project reaches a project that carries a value on `axis` and shares none of the source's. A matched project carrying no value on `axis` is `unknown`. |
 
 `from`/`to` are non-empty tag values; `direction` is one of
 `forbidden`/`required`; `toDependents` is one of `only`/`never`; `statement` is
-a percentage between 0 and 100; `max` is a non-negative integer.
+a percentage between 0 and 100; `max` is a non-negative integer; `axis` is a
+non-empty tag axis that must NOT itself contain `:` (an `axis` of
+`"module:orders"` would read the partition off the second colon, so it is
+refused by name rather than allowed to match nothing); `exempt` is a list of
+project selectors in the same grammar `match` uses, and absent or empty means
+nothing is exempt.
+
+`tag-axis-isolation` is the one condition whose target set is computed
+_relative to the source_. [fitness-functions.md](../concepts/fitness-functions.md)
+owns what that means and why a constraint row cannot express it; this page owns
+only the field shapes above.
 
 The verdict semantics and the two faces (`lattice fitness` and `check`'s fold)
 live in [fitness-functions.md](../concepts/fitness-functions.md).
