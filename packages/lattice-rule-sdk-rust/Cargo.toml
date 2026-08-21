@@ -8,10 +8,10 @@
 #
 # The version is the repository's single version (`../../.release-please-manifest.json`),
 # because the releasable unit here is the repository rather than any one package.
-# This manifest is NOT yet in release-please's `extra-files` list
-# (`../../release-please-config.json`), so today the number is held by review
-# alone; the ADR's "Every SDK joins the one version chain" is the change that
-# fixes that, and it lands with the publish lane rather than with the crate.
+# release-please writes it via the `extra-files` TOML updater
+# (`../../release-please-config.json`), and `../../scripts/check-skills.mjs`
+# holds the chain on every pull request — the ADR's "Every SDK joins the one
+# version chain", wired.
 [package]
 name = "lattice-rule-sdk"
 version = "0.9.0"

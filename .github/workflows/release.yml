@@ -21,10 +21,14 @@ name: Release
 # that resolves the server out of the workspace pairs with the engine it is
 # released with, and one version makes the pairing visible.
 #
-# A third destination rides the same guarded arrangement: the PyPI job serves
-# the Python rule SDK (`packages/lattice-rule-sdk-python`,
+# Two more destinations ride the same release, differently guarded because
+# their packages are in different states. The crates.io job serves the Rust
+# rule SDK (`packages/lattice-rule-sdk-rust`), which IS in the tree: it
+# publishes on every release, re-proving the crate from the tagged bytes
+# first, and an empty token fails it red. The PyPI job serves the Python rule
+# SDK (`packages/lattice-rule-sdk-python`,
 # docs/adr/0002-custom-rules-one-contract.md stages it), which does not exist
-# in the tree yet. Until a tagged release carries that package the job says
+# in the tree yet: until a tagged release carries that package the job says
 # loudly that there was nothing to publish — the marketplace step's own
 # pattern — and the moment the package lands, the same release that ships the
 # engine ships it, under the one version everything here shares.
@@ -67,7 +71,7 @@ jobs:
       # ROOT; every path in a manifest gets `<path>--<name>` instead. The
       # component sits at the root (`"."` in release-please-config.json), so
       # its pair is the un-prefixed one, and EVERY publish job — npm, vsix,
-      # PyPI — steers on it. This workflow once read the `packages/lattice--`-prefixed
+      # PyPI, crates.io — steers on it. This workflow once read the `packages/lattice--`-prefixed
       # pair while the component was keyed by its package path — which in a
       # manifest configuration names the release-please output for that path —
       # so it evaluated to the empty string, `released == 'true'` was false,
@@ -226,8 +230,8 @@ jobs:
       # while `release_created` reads empty is precisely the state that published
       # nothing and reported success, and it fails here instead — naming the
       # values rather than leaving a reader to infer which one lied. Every
-      # publish job — npm, vsix, PyPI — keys off the SAME output, so one check
-      # guards them all.
+      # publish job — npm, vsix, PyPI, crates.io — keys off the SAME output,
+      # so one check guards them all.
       # If a second component is ever added back, its path needs a check here
       # too, because the per-path outputs are exactly the spelling that drifted
       # once.
@@ -632,3 +636,95 @@ jobs:
             exit 1
           fi
           python3 -m twine upload --non-interactive packages/lattice-rule-sdk-python/dist/*
+
+  publish-crates:
+    name: Publish the Rust rule SDK to crates.io
+    # The gate expression is the npm job's, verbatim — see the comment there;
+    # a divergence between the publish jobs is a release that ships to one
+    # destination and not another.
+    #
+    # Unlike the PyPI job above, this destination's package IS in the tree, so
+    # the job publishes on every release and its only guard is the token — a
+    # guard that fails RED rather than skipping: the crate is in the tagged
+    # bytes, and a release that does not reach crates.io is the lane shipping
+    # nothing under a green light, the prepare job's tripwire defect by
+    # another door. The token is the ECOMA_CREATES_API_TOKEN organisation
+    # secret — that exact spelling is the name it was created under — and it
+    # reaches cargo only through the environment (CARGO_REGISTRY_TOKEN,
+    # cargo's own documented variable), never through `${{ }}` interpolation.
+    # An org secret must also be GRANTED to this repository to be non-empty
+    # here; the failure message names the secret and the grant, because a
+    # granted-to-other-repos secret reads exactly like a missing one.
+    #
+    # Before anything uploads, the job re-proves the tagged bytes three ways,
+    # because a crates.io version cannot be deleted, only yanked: the crate
+    # version must equal the tag's (read by the SAME parser check-skills
+    # uses — a second sed here would be the two-copies drift that gate
+    # exists to end), the crate's own suite runs, and `cargo publish
+    # --dry-run --locked` packages and verify-builds exactly what the real
+    # publish would upload. Measured before this job existed: the dry run
+    # packages 23 files, 227KiB, verify green, on the preinstalled cargo —
+    # nothing here needs clippy or the wasm target, because the committed
+    # example artifact ships as bytes and `rebuild-example.sh` stays a
+    # contributor command.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      # The tag, not the branch, for the same reason every publish job states:
+      # `main` may have moved, and the crate must hold the tagged bytes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - name: Prove the tagged crate carries the tagged version
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { cargoPackageVersion } from "./scripts/check-skills.mjs";
+            const version = cargoPackageVersion(
+              readFileSync("packages/lattice-rule-sdk-rust/Cargo.toml", "utf8"),
+            );
+            const tag = process.env.TAG;
+            if (`v${version}` !== tag) {
+              console.error(
+                `Cargo.toml says ${version} but the tag is ${tag}. release-please ` +
+                  "writes this manifest via extra-files and check-skills holds the " +
+                  "chain on every pull request; if they disagree HERE, the chain " +
+                  "broke after the last gate that looked, and publishing would " +
+                  "upload a number that is not the release. crates.io uploads " +
+                  "cannot be deleted, so this stops before the upload.",
+              );
+              process.exit(1);
+            }
+          '
+
+      - name: Prove the crate publishes before publishing it
+        working-directory: packages/lattice-rule-sdk-rust
+        run: |
+          cargo test --locked
+          cargo publish --dry-run --locked
+
+      - name: Publish to crates.io
+        working-directory: packages/lattice-rule-sdk-rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.ECOMA_CREATES_API_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "$TAG carries packages/lattice-rule-sdk-rust, but ECOMA_CREATES_API_TOKEN"
+            echo "is empty in this repository's context. It is an organisation secret, so"
+            echo "either the name differs (check the exact spelling — CREATES) or it is"
+            echo "not granted to this repository; grant it under the organisation's"
+            echo "Actions secrets, then re-run this job. Failing red rather than"
+            echo "skipping: the crate is in the tagged bytes, and a release that does"
+            echo "not reach crates.io is the lane shipping nothing under a green light."
+            exit 1
+          fi
+          cargo publish --locked
