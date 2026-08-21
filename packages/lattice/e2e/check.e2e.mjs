@@ -29,7 +29,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("check (smoke)", () => {
+describe("check", () => {
   it("exits 0 on a clean native tree and states what it inspected", () => {
     const result = lattice(nativeConsumer.root, ["check"]);
     expect(result.exitCode).toBe(0);
@@ -63,9 +63,7 @@ describe("check (smoke)", () => {
       violator.cleanup();
     }
   });
-});
 
-describe("check (full)", () => {
   it("exits 1 on a violating Nx tree, naming the rule and position", () => {
     const violator = createNxConsumer(artifact);
     try {

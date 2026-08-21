@@ -23,7 +23,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("Rust language E2E (smoke)", () => {
+describe("Rust language E2E", () => {
   it("Rust module dependencies are discovered in the graph", () => {
     const result = lattice(consumer.root, ["graph", "--format", "json"]);
     expect(result.exitCode).toBe(0);
@@ -49,9 +49,7 @@ describe("Rust language E2E (smoke)", () => {
     expect(result.stdout).toMatch(/[1-9]\d* file/);
     expect(result.stdout).toMatch(/[1-9]\d* project/);
   });
-});
 
-describe("Rust language E2E (full)", () => {
   it("Rust architecture violation is enforced", () => {
     const violator = createNativeLanguageConsumer(artifact, "rust");
     try {

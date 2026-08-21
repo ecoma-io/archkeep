@@ -87,7 +87,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("drift (smoke)", () => {
+describe("drift", () => {
   it("exits 0 on a matching tree and states the intent fingerprint and row count", () => {
     const result = lattice(matching.root, ["drift"]);
     expect(result.exitCode).toBe(0);
@@ -97,9 +97,7 @@ describe("drift (smoke)", () => {
       "✔ no drift — the observed architecture matches the intended one",
     );
   });
-});
 
-describe("drift (full)", () => {
   it("reports a forbidden edge as dependencyForbidden, naming the pair", () => {
     const result = lattice(forbidden.root, ["drift"]);
     expect(result.exitCode).toBe(0); // descriptive — never 1

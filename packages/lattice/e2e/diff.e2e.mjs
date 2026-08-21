@@ -25,20 +25,18 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("diff (smoke)", () => {
+describe("diff", () => {
   it("exits 0 and reports no changes against a self-baseline", () => {
     // Capture a baseline from the clean tree.
-    const baselineFile = join(nativeConsumer.root, "baseline-smoke.json");
+    const baselineFile = join(nativeConsumer.root, "baseline-self-text.json");
     lattice(nativeConsumer.root, ["graph", "--format", "json", "--output", baselineFile]);
     const result = lattice(nativeConsumer.root, ["diff", baselineFile]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("no changes");
   });
-});
 
-describe("diff (full)", () => {
   it("produces a valid JSON envelope for a self-baseline diff", () => {
-    const baselineFile = join(nativeConsumer.root, "baseline-full.json");
+    const baselineFile = join(nativeConsumer.root, "baseline-self-json.json");
     lattice(nativeConsumer.root, ["graph", "--format", "json", "--output", baselineFile]);
     const result = lattice(nativeConsumer.root, ["diff", baselineFile, "--format", "json"]);
     expect(result.exitCode).toBe(0);
@@ -116,12 +114,12 @@ describe("diff (full)", () => {
   });
 });
 
-describe("diff --config (full)", () => {
+describe("diff --config", () => {
   it("self-baseline diff with config shows 'no boundary-rule impact' in text", () => {
     // Bug 1 regression: when the workspace has a boundaryConfig, a self-baseline
     // diff must show "no boundary-rule impact" alongside "no changes" — the two
     // are distinct claims and neither subsumes the other.
-    const baselineFile = join(nativeConsumer.root, "baseline-config-smoke.json");
+    const baselineFile = join(nativeConsumer.root, "baseline-config-text.json");
     lattice(nativeConsumer.root, ["graph", "--format", "json", "--output", baselineFile]);
     const result = lattice(nativeConsumer.root, ["diff", baselineFile]);
     expect(result.exitCode).toBe(0);

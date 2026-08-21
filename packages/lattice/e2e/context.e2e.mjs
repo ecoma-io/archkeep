@@ -24,7 +24,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("context (smoke)", () => {
+describe("context", () => {
   it("exits 0 and returns project tags and constraints in JSON", () => {
     const result = lattice(nativeConsumer.root, ["context", "core", "--format", "json"]);
     expect(result.exitCode).toBe(0);
@@ -34,9 +34,7 @@ describe("context (smoke)", () => {
     const coreConstraint = result.json.result.constraints.find((c) => c.sourceTag === "layer:core");
     expect(coreConstraint).toBeDefined();
   });
-});
 
-describe("context (full)", () => {
   it("reports app constraints with both allowed tags on native consumer", () => {
     // Native boundary law: layer:app may reach layer:app and layer:core.
     const result = lattice(nativeConsumer.root, ["context", "app", "--format", "json"]);

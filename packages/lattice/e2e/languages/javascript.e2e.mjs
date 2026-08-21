@@ -24,7 +24,7 @@ afterAll(() => {
   artifact?.cleanup();
 });
 
-describe("JavaScript language E2E (smoke)", () => {
+describe("JavaScript language E2E", () => {
   it("JavaScript ESM dependencies are discovered in the graph", () => {
     const result = lattice(consumer.root, ["graph", "--format", "json"]);
     expect(result.exitCode).toBe(0);
@@ -48,9 +48,7 @@ describe("JavaScript language E2E (smoke)", () => {
     expect(result.stdout).toMatch(/[1-9]\d* file/);
     expect(result.stdout).toMatch(/[1-9]\d* project/);
   });
-});
 
-describe("JavaScript language E2E (full)", () => {
   it("JavaScript architecture violation is enforced", () => {
     const violator = createNativeLanguageConsumer(artifact, "javascript");
     try {

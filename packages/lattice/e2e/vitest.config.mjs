@@ -23,8 +23,10 @@ export default defineConfig({
     hookTimeout: 120_000,
     // Serial execution: the artifact is packed once per run, and pnpm install
     // mutates the consumer's node_modules. Parallel tests sharing a consumer
-    // directory would race; separate consumers are possible but slower and
-    // the serial overhead is modest (~30 s total for a smoke run).
+    // directory would race; separate consumers are possible but slower. The
+    // parallelism CI buys instead is `--shard`, which splits the FILES across
+    // runners and leaves each runner serial — see the `verify-e2e` job in
+    // `../../../.github/workflows/ci.yml`.
     // Vitest 4 moved pool options to the top level; `fileParallelism: false`
     // replaces the old `poolOptions.forks.maxForks: 1`.
     pool: "forks",

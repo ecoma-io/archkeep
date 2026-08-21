@@ -117,13 +117,11 @@ describe("history capture determinism (E-F05)", () => {
   });
 });
 
-describe("history (smoke)", () => {
+describe("history (empty and capture)", () => {
   it("exits 3 when the directory holds no snapshots — never a record of nothing", () => {
     // The silent-direction case for `history`: an empty directory must be a
     // loud no-verdict (exit 3), never an empty record that reads as "no
     // history" — the same empty-result invariant the rest of the suite holds.
-    // This is the command's fastest and loudest behavior, so it carries the
-    // smoke tag that keeps it in the PR path's quick subset.
     const dir = freshHistoryDir();
     try {
       const result = lattice(nativeConsumer.root, ["history", dir]);
@@ -146,9 +144,7 @@ describe("history (smoke)", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
-});
 
-describe("history (empty and capture)", () => {
   it("captures a snapshot, then deduplicates when nothing changed", () => {
     const dir = freshHistoryDir();
     try {

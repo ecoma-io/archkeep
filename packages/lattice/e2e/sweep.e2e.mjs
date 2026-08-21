@@ -146,7 +146,7 @@ function assertDeterministic(root, args, options = {}) {
   expect(first.stdout).toBe(second.stdout);
 }
 
-describe("determinism sweep (full)", () => {
+describe("determinism sweep", () => {
   it("drift --format json is byte-identical, matching intent, exit 0", () => {
     assertDeterministic(clean.root, ["drift", "--format", "json"], { expectExit: 0 });
   });
@@ -340,7 +340,7 @@ describe("determinism sweep (full)", () => {
 // alongside them. Its assertions live in a separate `describe` only so a
 // failure there reads distinctly from a native-tree failure — the consumer
 // itself lives and dies with the same `beforeAll`/`afterAll` as the rest.
-describe("determinism sweep: profile-selected (full)", () => {
+describe("determinism sweep: profile-selected", () => {
   it("check --format json is byte-identical on a profile-selected Nx tree, exit 0", () => {
     assertDeterministic(profile.root, ["check", "--format", "json"]);
     const result = lattice(profile.root, ["check", "--format", "json"]);
