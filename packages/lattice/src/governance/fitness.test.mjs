@@ -669,6 +669,127 @@ describe("judgeFitnessRow — tag-axis-isolation", () => {
     expect(d.rows.map((r) => `${r.source}->${r.target}`)).toEqual(["orders-api->billing-api"]);
   });
 
+  it("does not read a source that sits in no partition as crossing out of it", () => {
+    // The near-miss for the source half of the crossing filter. Without the
+    // `sourceValues.length > 0` guard, `[].some(...)` is false, `!false` is
+    // true, and an unplaced SOURCE reaching a placed target reads as a
+    // crossing — reporting a project the condition cannot judge instead of
+    // saying it could not judge it.
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["*"]),
+      graph(
+        [
+          ["untagged", "libs/untagged", ["layer:module"]],
+          ["billing-api", "libs/billing-api", ["module:billing"]],
+        ],
+        { untagged: [{ source: "untagged", target: "billing-api", type: "static" }] },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("unknown");
+    expect(d.evidence.crossings).toBe(0);
+    expect(d.evidence.unplaced).toBe(1);
+  });
+
+  it("judges a crossing into a project its match does not select", () => {
+    // `edgesFrom` deliberately restricts only the SOURCE to the matched set,
+    // where `edgesAmong` (used by the other conditions) restricts both. If it
+    // restricted both, a partition boundary crossed into a project outside the
+    // match — which is most of them, since `match` normally names one role —
+    // would go unjudged. The silent direction, and the reason the helper
+    // exists separately.
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["tag:layer:module-internal"]),
+      graph(
+        [
+          ["orders-internal", "libs/orders-internal", ["module:orders", "layer:module-internal"]],
+          ["billing-api", "libs/billing-api", ["module:billing", "layer:module"]],
+        ],
+        {
+          "orders-internal": [{ source: "orders-internal", target: "billing-api", type: "static" }],
+        },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("fail");
+    expect(d.rows.map((r) => r.target)).toEqual(["billing-api"]);
+  });
+
+  it("counts one edge once when the graph carries it twice", () => {
+    // A provider deduplicates on `[source, target, type]`, so one dependency
+    // can arrive as both a manifest edge and an implicit one. This condition
+    // reads the pair and never the type, so both would otherwise be reported
+    // and `crossings` would describe two edges where the graph has one.
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["*"]),
+      graph(
+        [
+          ["a", "libs/a", ["module:orders"]],
+          ["b", "libs/b", ["module:billing"]],
+        ],
+        {
+          a: [
+            { source: "a", target: "b", type: "static" },
+            { source: "a", target: "b", type: "implicit" },
+          ],
+        },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.evidence.crossings).toBe(1);
+    expect(d.rows).toHaveLength(1);
+  });
+
+  it("places nothing on a bare axis tag that carries no value", () => {
+    // `module:` names an axis and no value. Read as the partition `""`, every
+    // project carrying one would land in the SAME partition and every edge
+    // between them would pass.
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["*"]),
+      graph(
+        [
+          ["a", "libs/a", ["module:"]],
+          ["b", "libs/b", ["module:"]],
+        ],
+        { a: [{ source: "a", target: "b", type: "static" }] },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("unknown");
+    expect(d.evidence.unplaced).toBe(2);
+  });
+
+  it("names the projects it could not place even when it has a crossing to report", () => {
+    // A `fail` that said nothing about them would report a partial look as a
+    // whole one: the reader acts on the crossing and never learns that part of
+    // the subject was never judged.
+    const d = judgeFitnessRow(
+      row({ axis: "module" }, ["*"]),
+      graph(
+        [
+          ["a", "libs/a", ["module:orders"]],
+          ["b", "libs/b", ["module:billing"]],
+          ["unplaceable", "libs/unplaceable", ["layer:app"]],
+        ],
+        { a: [{ source: "a", target: "b", type: "static" }] },
+      ),
+      {},
+      null,
+      [],
+    );
+    expect(d.verdict).toBe("fail");
+    expect(d.evidence.unplaced).toBe(1);
+    expect(d.message).toContain("unplaceable");
+  });
+
   it("yields unknown — never pass — when a matched project sits in no partition", () => {
     const d = judgeFitnessRow(
       row({ axis: "module" }, ["*"]),
@@ -720,6 +841,19 @@ describe("judgeFitnessRow — tag-axis-isolation", () => {
       expect(d.verdict, JSON.stringify(condition)).toBe("fail");
       expect(d.evidence.exempt).toBe(0);
       expect(d.rows.map((r) => `${r.source}->${r.target}`)).toEqual(["orders-api->billing-api"]);
+    }
+  });
+
+  it("exempts nothing from a list of only exclusions, rather than everything", () => {
+    // `resolveMembers` seeds an implicit `*` for any list with no positive
+    // selector, not only for the empty one. Read that way, `["!name:x"]`
+    // exempts the whole workspace and this function passes on every tree. The
+    // registry refuses such a list at load; this is the rule's own backstop,
+    // and it errs toward exempting NOTHING.
+    for (const exempt of [["!name:kernel"], ["!tag:layer:module", "!name:kernel"]]) {
+      const d = judgeFitnessRow(row({ axis: "module", exempt }), modules, {}, null, []);
+      expect(d.verdict, JSON.stringify(exempt)).toBe("fail");
+      expect(d.evidence.exempt).toBe(0);
     }
   });
 
@@ -846,6 +980,16 @@ describe("tag-axis-isolation row validation", () => {
     expect(findFitnessViolations(row({ axis: "m", exempt: ["tagz:x"] }))[0]).toMatch(
       /condition\.exempt\[0\]: must be a valid project selector/u,
     );
+  });
+
+  it("refuses an exempt list that names only exclusions", () => {
+    // It would exempt every project except those, and so exempt the whole
+    // workspace — a policy reading as "do not exempt legacy" that enforces
+    // nothing at all.
+    const [message] = findFitnessViolations(row({ axis: "m", exempt: ["!name:legacy"] }));
+    expect(message).toMatch(/names only "!" selectors/u);
+    // The spelling that really does mean "nearly everything" stays legal.
+    expect(findFitnessViolations(row({ axis: "m", exempt: ["*", "!name:legacy"] }))).toEqual([]);
   });
 
   it("refuses a field this condition does not have", () => {

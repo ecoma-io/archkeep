@@ -81,6 +81,12 @@ const graphOf = (projects, dependencies = {}) => ({
  * assertions into `not_applicable` and fails, instead of passing because the
  * case supplied a wider one.
  */
+function declaredFitnessRow(pack, profileName, fitness) {
+  if (fitness === undefined) return null;
+  const policy = profilePolicy(presetPath(pack), profileName, `presets/${pack}.json`);
+  return (policy.fitness ?? []).find((row) => row.name === fitness.function) ?? null;
+}
+
 function judgeFitness(pack, profileName, projects, { function: fitnessName }, { source, target }) {
   const policy = profilePolicy(presetPath(pack), profileName, `presets/${pack}.json`);
   const row = (policy.fitness ?? []).find((candidate) => candidate.name === fitnessName);
@@ -142,9 +148,11 @@ const reachesOutside = (from, packageName) => site(from, { specifier: packageNam
  * @property {string} [forbiddenMessageId] The message id `forbidden` must produce.
  * @property {object} [allowed] An import site the style permits.
  * @property {{function: string, forbidden: {source: string, target: string},
- *   allowed: {source: string, target: string}}} [fitness] The declared fitness
- *   function this profile's law includes, with one edge that must fail it and
- *   one that must pass.
+ *   allowed: {source: string, target: string},
+ *   exempted?: {source: string, target: string}}} [fitness] The declared fitness
+ *   function this profile's law includes, with one edge that must fail it, one
+ *   that must pass, and — when the function declares an `exempt` list — one
+ *   that passes ONLY because of that exemption.
  */
 
 /**
@@ -244,7 +252,9 @@ const CASES = [
         base: "modular-monolith",
         projects: [
           project("orders-api", ["module:orders", "layer:module"]),
+          project("billing-api", ["module:billing", "layer:module"]),
           project("orders-internal", ["module:orders", "layer:module-internal"]),
+          project("orders-core", ["module:orders", "layer:module-internal"]),
           project("billing-internal", ["module:billing", "layer:module-internal"]),
         ],
         // Its whole law is the fitness function: the base's four rows already
@@ -253,7 +263,14 @@ const CASES = [
         fitness: {
           function: "module-encapsulation",
           forbidden: { source: "orders-internal", target: "billing-internal" },
-          allowed: { source: "orders-internal", target: "orders-api" },
+          // Inside one module. NOT `orders-internal → orders-api`: the base
+          // profile's own row forbids an internal reaching a published
+          // surface at all, so asserting a fitness pass on it would claim the
+          // profile permits an edge the same resolved policy rejects.
+          allowed: { source: "orders-internal", target: "orders-core" },
+          // Across modules, permitted only by the exemption — the edge the
+          // pack exists to keep open while closing the two beside it.
+          exempted: { source: "orders-api", target: "billing-api" },
         },
       },
     ],
@@ -292,18 +309,22 @@ const CASES = [
         name: "ddd-bounded-contexts-partitioned",
         base: "ddd-bounded-contexts",
         projects: [
-          project("orders-app", ["context:orders", "layer:application", "share:private"]),
-          project("orders-model", ["context:orders", "layer:domain", "share:private"]),
-          project("billing-model", ["context:billing", "layer:domain", "share:private"]),
+          project("orders-app", ["context:orders", "layer:application"]),
+          project("orders-model", ["context:orders", "layer:domain"]),
+          project("billing-model", ["context:billing", "layer:domain"]),
+          project("billing-contracts", ["context:billing", "layer:published-language"]),
         ],
-        // The pair `ddd-bounded-contexts-isolated` cannot separate: it reports
-        // BOTH of these, because both are share:private → share:private. Only
-        // reading the context: axis relative to the source tells the
-        // cross-context reach from the within-context one.
+        // Tagged the way this profile's own page prescribes: `layer:` plus
+        // `context:`, and no `share:` axis at all. The pair
+        // `ddd-bounded-contexts-isolated` cannot separate is the first two —
+        // it reports BOTH, because both are private-to-private. Only reading
+        // the `context:` axis relative to the source tells the cross-context
+        // reach from the within-context one.
         fitness: {
           function: "context-isolation",
           forbidden: { source: "orders-app", target: "billing-model" },
           allowed: { source: "orders-app", target: "orders-model" },
+          exempted: { source: "orders-app", target: "billing-contracts" },
         },
       },
     ],
@@ -401,7 +422,7 @@ const CASES = [
 describe("shipped policy packs", () => {
   it("exercises every pack the directory holds", () => {
     // The pack list above is hand-kept, so this is what keeps it honest: a
-    // fifth pack added with no case would otherwise ship with nothing driving
+    // pack added with no case would otherwise ship with nothing driving
     // it, and a suite that never ran it would still be green.
     expect(
       readdirSync(PRESETS_DIR)
@@ -450,6 +471,17 @@ describe("shipped policy packs", () => {
     it.each(profiles)(
       "$name carries a case for every half of the law it resolves to",
       ({ name, forbidden, fitness }) => {
+        // The `exempt` half too: an exemption is a hole a profile deliberately
+        // leaves in its own partition rule, and a hole nothing drives through
+        // is a hole nobody has checked the shape of. Deleting `exempt` from a
+        // shipped profile used to leave this suite green.
+        const declared = declaredFitnessRow(pack, name, fitness);
+        if (declared?.condition?.exempt?.length > 0) {
+          expect(
+            fitness.exempted,
+            `${name}'s fitness function declares an exempt list that no case drives through`,
+          ).toBeDefined();
+        }
         // Derived from the resolved policy, never from a flag on the case: a
         // profile that grows a fitness block and no case fails here rather
         // than shipping a function nothing has ever run. The rule half is
@@ -501,6 +533,44 @@ describe("shipped policy packs", () => {
       "$name passes its declared fitness function on the edge that style allows",
       ({ name, projects, fitness }) => {
         expect(judgeFitness(pack, name, projects, fitness, fitness.allowed).verdict).toBe("pass");
+      },
+    );
+
+    it.each(fitnessCases.filter((profile) => profile.fitness.exempted !== undefined))(
+      "$name passes the cross-partition edge only its exemption allows",
+      ({ name, projects, fitness }) => {
+        expect(judgeFitness(pack, name, projects, fitness, fitness.exempted).verdict).toBe("pass");
+        // And it really is the exemption doing it: the same edge judged by the
+        // same row with its `exempt` list removed is a crossing. Without this,
+        // an `exempted` edge that happened to share a partition would pass for
+        // the wrong reason, and deleting `exempt` from the shipped profile
+        // would leave this suite green.
+        const declared = declaredFitnessRow(pack, name, fitness);
+        const condition = { ...declared.condition };
+        delete condition.exempt;
+        const { source, target } = fitness.exempted;
+        const graph = graphOf(projects, { [source]: [{ source, target, type: "static" }] });
+        expect(judgeFitnessRow({ ...declared, condition }, graph, {}, null, []).verdict).toBe(
+          "fail",
+        );
+      },
+    );
+
+    it.each(fitnessCases)(
+      "$name does not claim a fitness pass on an edge its own rules reject",
+      ({ name, projects, fitness }) => {
+        // The two halves of a resolved policy are judged separately, so a
+        // fitness case could assert `pass` on an edge the SAME policy's
+        // constraint rows forbid — a profile that reads as permitting
+        // something it rejects. Every edge a fitness case calls allowed goes
+        // through `evaluate` as well.
+        const policy = profilePolicy(presetPath(pack), name, `presets/${pack}.json`);
+        for (const edge of [fitness.allowed, fitness.exempted].filter(Boolean)) {
+          expect(
+            evaluate([crosses(edge.source, edge.target)], graphOf(projects), policy),
+            `${name}: ${edge.source} → ${edge.target} passes the fitness function but not the rules`,
+          ).toEqual([]);
+        }
       },
     );
 

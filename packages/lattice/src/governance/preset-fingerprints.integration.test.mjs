@@ -60,6 +60,14 @@ const EXPECTED = JSON.parse(readFileSync(join(HERE, "preset-fingerprints.json"),
  */
 const FINGERPRINTED_FIELDS = ["depConstraints", "options", "suppressions", "fitness"];
 
+/**
+ * The fields `../config.mjs`'s `policyFrom` sets on EVERY resolved policy.
+ * `fitness` is not among them: it is contributed only when the policy declares
+ * one, which is why the guard below is a subset check in one direction and a
+ * presence check in the other rather than a single equality.
+ */
+const ALWAYS_RESOLVED = ["depConstraints", "options", "suppressions"];
+
 /** The failure every mismatch below renders. */
 const CHANGED =
   "changing a shipped pack is a breaking change — update the fingerprint AND mark the commit breaking";
@@ -115,6 +123,15 @@ describe("shipped policy pack fingerprints", () => {
           .sort(),
         `${key} resolves to a field the fingerprint does not hash, so its pin would not move — ` +
           `extend computePolicyFingerprint (../commands/graph.mjs) and re-pin`,
+      ).toEqual([]);
+      // The other direction, which the subset above cannot see: a resolved
+      // policy that LOST one of the three fields `policyFrom` always sets
+      // would still be a subset, and its pin would still match while the pack
+      // shipped less law than it says. `fitness` is deliberately absent from
+      // this list — it is the one optional field.
+      expect(
+        ALWAYS_RESOLVED.filter((field) => !(field in policy)),
+        `${key} resolves without a field every policy carries`,
       ).toEqual([]);
     }
   });

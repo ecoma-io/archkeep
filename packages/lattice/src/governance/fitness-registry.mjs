@@ -302,6 +302,22 @@ function tagAxisIsolationViolations(condition, at) {
           );
         }
       });
+      // A `match` list of only `!` selectors means "everything except those"
+      // — `resolveMembers` seeds an implicit `*` for it
+      // (`../architecture-intent/selectors.mjs`). Read the same way here, an
+      // `exempt` of `["!name:legacy"]` exempts the whole workspace and turns
+      // every verdict this condition can reach into `pass`: a policy that
+      // reads as "do not exempt legacy" and enforces nothing at all. Refused
+      // by name rather than reinterpreted, because BOTH readings are
+      // defensible and a reader cannot tell which one a silent engine chose.
+      if (exempt.length > 0 && exempt.every((selector) => String(selector).startsWith("!"))) {
+        violations.push(
+          `${at}.condition.exempt: names only "!" selectors, which would exempt every project ` +
+            `except those — and so exempt the whole workspace, making this function pass on any ` +
+            `tree. Write the projects to exempt positively, or "*" with the exclusions after it ` +
+            `if exempting nearly everything is really meant.`,
+        );
+      }
     }
   }
   return violations;
@@ -340,8 +356,11 @@ export function judgeFitnessRow(row, graph, analysis, intent, suppressions) {
   // The rule's own verdict names the RULE (`layer-dependency:from→to`); the
   // declared function's name is what every consumer — the report's verdict
   // table, the JSON envelope, `check`'s exit-code lane — must read, so the
-  // registry stamps it over the rule's internal name. The rule's name stays
-  // in `evidence.condition` for the reader who wants the exact condition.
+  // registry stamps it over the rule's internal name. The rule's name is
+  // DISCARDED, not relocated: this comment used to say it survived in
+  // `evidence.condition`, and no condition has ever written that key. Where a
+  // condition's parameters matter to a reader, the condition itself puts them
+  // in `evidence` (`tag-axis-isolation` carries `axis` there).
   let decision;
   switch (type) {
     case "cycle-free":

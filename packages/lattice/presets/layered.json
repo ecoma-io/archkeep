@@ -8,26 +8,26 @@
           {
             "sourceTag": "tier:presentation",
             "onlyDependOnLibsWithTags": ["tier:presentation", "tier:application"],
-            "description": "Strict layering: presentation may reach its own tier and application, the tier immediately below it, and nothing else.",
+            "description": "Strict layering: presentation may reach its own tier and application, the tier immediately below it, and nothing else. A downward edge that skips a tier is a finding here.",
             "remediation": "Route the call through application rather than reaching past it, or move the collaborator up to the tier that is allowed to see it."
           },
           {
             "sourceTag": "tier:application",
             "onlyDependOnLibsWithTags": ["tier:application", "tier:domain"],
-            "description": "Strict layering: application may reach its own tier and domain, the tier immediately below it, and nothing else.",
+            "description": "Strict layering: application may reach its own tier and domain, the tier immediately below it, and nothing else. A downward edge that skips a tier is a finding here.",
             "remediation": "Route the call through domain rather than reaching past it, or move the collaborator up to the tier that is allowed to see it."
           },
           {
             "sourceTag": "tier:domain",
             "onlyDependOnLibsWithTags": ["tier:domain", "tier:infrastructure"],
-            "description": "Strict layering: domain may reach its own tier and infrastructure, the tier immediately below it, and nothing else.",
-            "remediation": "Route the call through infrastructure rather than reaching past it, or move the collaborator up to the tier that is allowed to see it."
+            "description": "Strict layering: domain may reach its own tier and infrastructure, the tier immediately below it, and nothing else. There is nothing beneath infrastructure, so every finding this row can produce is an upward edge.",
+            "remediation": "Nothing above may be imported from here; invert the dependency, or move the shared piece down into infrastructure where both sides may see it."
           },
           {
             "sourceTag": "tier:infrastructure",
             "onlyDependOnLibsWithTags": ["tier:infrastructure"],
-            "description": "Strict layering: infrastructure may reach its own tier and nothing beneath it, because there is nothing beneath it.",
-            "remediation": "Nothing may be imported from an outer tier here; invert the dependency instead."
+            "description": "The bottom tier. It may reach its own tier and nothing else, because there is nothing beneath it — so every finding this row can produce is an upward edge.",
+            "remediation": "Nothing above may be imported from here; invert the dependency, or move the shared piece down into this tier where both sides may see it."
           }
         ],
         "moduleBoundaryOptions": {
@@ -72,8 +72,8 @@
           {
             "sourceTag": "tier:infrastructure",
             "onlyDependOnLibsWithTags": ["tier:infrastructure"],
-            "description": "Relaxed layering: infrastructure may reach its own tier and every tier beneath it, at any depth.",
-            "remediation": "An upward edge is the violation here; invert the dependency, or move the shared piece down to a tier both sides may see."
+            "description": "The bottom tier. It may reach its own tier and nothing else, because there is nothing beneath it — so every finding this row can produce is an upward edge.",
+            "remediation": "Nothing above may be imported from here; invert the dependency, or move the shared piece down into this tier where both sides may see it."
           }
         ],
         "moduleBoundaryOptions": {

@@ -73,13 +73,13 @@
         "fitness": [
           {
             "name": "context-isolation",
-            "match": ["tag:share:private"],
+            "match": ["tag:layer:domain", "tag:layer:application", "tag:layer:infrastructure"],
             "condition": {
               "type": "tag-axis-isolation",
               "axis": "context",
-              "exempt": ["tag:share:published"]
+              "exempt": ["tag:layer:published-language"]
             },
-            "reason": "What ddd-bounded-contexts-isolated means, without its one-project-per-context assumption. That profile forbids share:private depending on share:private, which reports two private projects of the SAME context depending on each other. This one asks the question the style actually asks — does this edge leave its context? — by reading the context: axis relatively, so a context may span as many projects as it needs while still reaching another context only through a share:published contract. Tag every project with a context: value; a matched project carrying none is reported as unjudgeable rather than waved through."
+            "reason": "What ddd-bounded-contexts-isolated means, without its one-project-per-context assumption. That profile forbids share:private depending on share:private, which reports two private projects of the SAME context depending on each other. This one asks the question the style actually asks — does this edge leave its context? — by reading the context: axis relative to the source, so a context may span as many projects as it needs while still reaching another context only through a layer:published-language contract. It matches on the three layer tags the base profile's own rows key on, never on a second axis a workspace might not carry: a project matching none of them is already reported by those rows, so this function can never quietly select nothing. Tag every project with a context: value; a matched project carrying none is reported as unjudgeable rather than waved through."
           }
         ]
       }

@@ -281,20 +281,39 @@ function axisValues(nodes, name, axis) {
   const prefix = `${axis}:`;
   const values = new Set();
   for (const tag of tagsOf(nodes, name)) {
-    if (tag.startsWith(prefix)) values.add(tag.slice(prefix.length));
+    if (!tag.startsWith(prefix)) continue;
+    const value = tag.slice(prefix.length);
+    // A bare `module:` names an axis and no value. Reading it as the partition
+    // `""` would put every project carrying one into the SAME partition and
+    // pass every edge between them; leaving it out places the project nowhere,
+    // which is the `unknown` branch below and the loud direction.
+    if (value !== "") values.add(value);
   }
   return [...values].sort();
 }
 
-/** The direct edges leaving any of `sources`, wherever they land, sorted. */
+/**
+ * The direct edges leaving any of `sources`, wherever they land — deduplicated
+ * by the PAIR, and sorted.
+ *
+ * A provider deduplicates on `[source, target, type]`, so one `a → b`
+ * dependency can appear twice when it is both a manifest edge and an implicit
+ * one. This condition judges the pair and never reads `type`, so keeping both
+ * would report the same crossing twice and put a `crossings: 2` on an evidence
+ * record describing one edge. That is the loud direction rather than the
+ * silent one, which is why it is a count bug and not a verdict bug — but a
+ * count in evidence is a claim about the graph, and this one would be wrong.
+ */
 function edgesFrom(dependencies, sources) {
   const inSet = new Set(sources);
-  const edges = [];
+  const seen = new Map();
   for (const [source, list] of Object.entries(dependencies ?? {})) {
     if (!inSet.has(source)) continue;
-    for (const dependency of list ?? []) edges.push({ source, target: dependency.target });
+    for (const dependency of list ?? []) {
+      seen.set(`${source}\u0000${dependency.target}`, { source, target: dependency.target });
+    }
   }
-  return edges.sort((a, b) =>
+  return [...seen.values()].sort((a, b) =>
     a.source === b.source ? (a.target < b.target ? -1 : 1) : a.source < b.source ? -1 : 1,
   );
 }
@@ -364,12 +383,20 @@ function edgesFrom(dependencies, sources) {
  */
 export function tagAxisIsolation(nodes, dependencies, names, { axis, exempt = [] }) {
   const ruleName = `tag-axis-isolation:${axis}`;
-  // `resolveMembers([])` seeds an implicit `*` — an empty list means
-  // "everything except…" to a boundary (`../architecture-intent/selectors.mjs`).
-  // Here an absent `exempt` means "nothing is exempt", so the empty case never
-  // reaches that function: routing it through would exempt the whole workspace
-  // and turn every verdict below into `pass`.
-  const exemptNames = new Set(exempt.length === 0 ? [] : resolveMembers(exempt, nodes));
+  // `resolveMembers` seeds an implicit `*` whenever a list carries NO positive
+  // selector — not only when it is empty (`../architecture-intent/selectors.mjs`,
+  // where "everything except…" is what a boundary's `match` means). Here that
+  // reading would exempt the whole workspace and turn every verdict below into
+  // `pass`, so a list with no positive selector never reaches that function.
+  //
+  // `exemptSelectorViolations` (`./fitness-registry.mjs`) refuses such a list at
+  // load, by name, which is where an author is told about it. This is the
+  // backstop for a caller that assembled a row without validating it, and it
+  // errs toward exempting NOTHING — the stricter of the two answers, so the
+  // gap it covers can only ever over-report.
+  const exemptNames = new Set(
+    exempt.some((selector) => !selector.startsWith("!")) ? resolveMembers(exempt, nodes) : [],
+  );
   const unplaced = names.filter((name) => axisValues(nodes, name, axis).length === 0).sort();
 
   const crossings = edgesFrom(dependencies, names)
@@ -394,6 +421,18 @@ export function tagAxisIsolation(nodes, dependencies, names, { axis, exempt = []
     crossings: crossings.length,
   };
 
+  // Named once, appended to whichever verdict is returned. A `fail` that said
+  // nothing about the projects it could not place would report a partial look
+  // as a whole one: the reader acts on the crossings and never learns that part
+  // of the subject was never judged.
+  const unplacedNote =
+    unplaced.length === 0
+      ? ""
+      : ` ${unplaced.length} matched project${unplaced.length === 1 ? "" : "s"} ` +
+        `${unplaced.length === 1 ? "carries" : "carry"} no "${axis}:" tag, so ` +
+        `${unplaced.length === 1 ? "its" : "their"} dependencies could not be placed: ` +
+        `${unplaced.join(", ")}.`;
+
   if (crossings.length > 0) {
     return fitnessVerdict({
       verdict: "fail",
@@ -407,7 +446,8 @@ export function tagAxisIsolation(nodes, dependencies, names, { axis, exempt = []
             (edge) =>
               `${edge.source} (${edge.sourceValues.join("|")}) → ${edge.target} (${edge.targetValues.join("|")})`,
           )
-          .join(", "),
+          .join(", ") +
+        (unplacedNote === "" ? "" : `.${unplacedNote}`),
       rows: crossings,
     });
   }
@@ -417,12 +457,7 @@ export function tagAxisIsolation(nodes, dependencies, names, { axis, exempt = []
       verdict: "unknown",
       name: ruleName,
       evidence,
-      message:
-        `cannot judge tag-axis-isolation on "${axis}:" — ${unplaced.length} matched ` +
-        `project${unplaced.length === 1 ? "" : "s"} carry no "${axis}:" tag, so ` +
-        `${unplaced.length === 1 ? "it belongs" : "they belong"} to no partition and ` +
-        `${unplaced.length === 1 ? "its" : "their"} dependencies could not be placed: ` +
-        unplaced.join(", "),
+      message: `cannot judge tag-axis-isolation on "${axis}:" —${unplacedNote}`,
       rows: [],
     });
   }
