@@ -143,9 +143,20 @@ export function buildDependencies(dependencies) {
  * config comparison logic.
  *
  * The fingerprint is SHA-256 of the canonicalized JSON for `depConstraints`,
- * `options`, and `suppressions` — the three fields that affect which
- * violations `evaluate` would produce. It changes only when the policy
- * changes, and it is provider-independent (no workspace root, no file paths).
+ * `options`, `suppressions` and — when the policy declares one — `fitness`.
+ * Those are every field of a loaded policy that can change a verdict: the
+ * first three decide which violations `evaluate` produces, and the fourth
+ * decides which fitness functions `check` folds into the same exit code
+ * (`../governance/fitness-registry.mjs`). A field that can fail a build and
+ * is not in the hash is a law that can be rewritten while `diff` reports the
+ * policy unchanged — the silent direction, and the reason the list here and
+ * `policyFrom`'s return shape (`../config.mjs`) are revisited together.
+ *
+ * `fitness` is included only when it is DECLARED, and the absent case
+ * contributes no key rather than an empty array. A policy that declares no
+ * fitness therefore fingerprints exactly as it did before this field was
+ * covered, so extending the hash did not move every existing snapshot's
+ * value — only those whose law it was failing to describe.
  *
  * @param {object} config The loaded boundary config.
  * @returns {string} A hex-encoded SHA-256 fingerprint.
@@ -155,6 +166,7 @@ export function computePolicyFingerprint(config) {
     depConstraints: config.depConstraints ?? [],
     options: config.options ?? {},
     suppressions: config.suppressions ?? [],
+    ...(config.fitness === undefined ? {} : { fitness: config.fitness }),
   };
   // Canonicalise: sort object keys at every depth so insertion order does not
   // affect the hash. Semantic equality, not construction order, is the claim —
