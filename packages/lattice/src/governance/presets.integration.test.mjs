@@ -29,7 +29,7 @@
  * Every project name, root and tag below is invented for these tests, the same
  * convention `../rules/index.test.mjs` keeps and for the same reason — this
  * tool runs over consumers' trees, whose names it has never seen
- * (`../../CLAUDE.md`).
+ * (`../../AGENTS.md`).
  */
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

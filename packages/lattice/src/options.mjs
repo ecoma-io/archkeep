@@ -235,7 +235,7 @@ export function readPluginOptions(workspaceRoot, { readFile = readFileOrNull } =
  * `./providers/native/model.mjs`'s `WORKSPACE_LAYOUT_KEYS` validates for
  * `lattice.json`'s identically-named field, kept as two separate constants
  * because the two files sit on opposite sides of the layer boundary
- * `packages/lattice/CLAUDE.md` draws (`src/options.mjs` owns what a workspace
+ * `packages/lattice/AGENTS.md` draws (`src/options.mjs` owns what a workspace
  * may tell this tool about ITSELF via Nx's own config; `src/providers/native/`
  * owns the `lattice.json` dialect) — a shared constant would import one layer
  * into the other for two frozen strings.

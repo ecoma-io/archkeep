@@ -10,7 +10,7 @@
  * plugin's source and fails when a copy here drifts from it.
  *
  * Copied rather than imported, and rather than derived: this
- * project may import Node built-ins and `typescript` only (`../../CLAUDE.md`),
+ * project may import Node built-ins and `typescript` only (`../../AGENTS.md`),
  * and importing the plugin would pull `@nx/devkit` — a project graph read — into
  * a layer whose whole point is being pure. The value is intrinsic to a fixed
  * external contract, it lives in exactly this one place, and the integration

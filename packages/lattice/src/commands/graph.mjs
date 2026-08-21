@@ -6,7 +6,7 @@
  * native, resolved by `./context.mjs` — and returns it as two sorted arrays:
  * one of projects and one of edges. It strips every internal field the rule
  * engine uses but that is not a fact about the consumer's architecture
- * (`../../CLAUDE.md` documents that snapshots do not publish `mfeRemote`,
+ * (`../../AGENTS.md` documents that snapshots do not publish `mfeRemote`,
  * `entryPoints`, or `declaredPackages`). It is descriptive: it never exits 1,
  * because a snapshot of what is is never a finding.
  *

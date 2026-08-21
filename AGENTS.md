@@ -89,11 +89,19 @@ module-boundaries.config.mjs   this repository's own boundary law
 coverage.config.json           the coverage floor both packages read
 ```
 
-`lattice` carries its own `CLAUDE.md` for everything below this level —
+`lattice` carries its own `AGENTS.md` for everything below this level —
 the layer split, the per-language parse limits, the modelling assumptions. It
 loads when the work happens inside that directory, which is why none of it is
-here. `lattice-vscode` has none: it is a client whose every decision is a pure
-function under `src/`, and its README says what it refuses and why.
+here. Each host reaches it its own way: Claude Code through the one-line
+`CLAUDE.md` import beside it (the same arrangement as this root's `CLAUDE.md`,
+for the reason that file's comment states), Codex by assembling the AGENTS.md
+chain from the root down (`project_doc_max_bytes` in `.codex/config.toml` is
+raised past the two files' measured size, because past that limit Codex
+truncates the chain with no warning line), and opencode through the
+`instructions` glob in `opencode.json`, because it does not walk into
+subdirectories on its own. `lattice-vscode` has none: it is a client whose
+every decision is a pure function under `src/`, and its README says what it
+refuses and why.
 
 ## Rules with teeth
 
@@ -154,7 +162,7 @@ function under `src/`, and its README says what it refuses and why.
   at the same time.
 - **A comment may only cite a document in this repository, and only by a path
   that resolves from where it is written.** This file and
-  `packages/lattice/CLAUDE.md` are the two that exist; there is no
+  `packages/lattice/AGENTS.md` are the two that exist; there is no
   numbered rule list anywhere here, so a citation of the form "Rule 14" or "root
   `CLAUDE.md`" points at nothing a reader can open. The extraction arrived
   carrying thirty of them, plus prose justifying real behaviour with mechanisms

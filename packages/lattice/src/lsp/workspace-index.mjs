@@ -15,7 +15,7 @@
  * `project.json`-shaped graph is built for BOTH the Nx-less native provider
  * and this server, so the two do not grow separate copies of Nx's own
  * `getProjectType` rule and its implicit-dependency expansion
- * (`../../CLAUDE.md`, "`src/providers/` is the only layer allowed to build a
+ * (`../../AGENTS.md`, "`src/providers/` is the only layer allowed to build a
  * graph"). `discoverProjects` and `buildNodes` below are the Nx-shaped
  * branch's own project discovery — reading `project.json` is correct THERE,
  * because a root with no `lattice.json` has no other source of truth to read.
@@ -46,7 +46,7 @@
  *
  * ## What it may assume about the tree, which is nothing
  *
- * No project name, no directory layout, no tag vocabulary (`../../CLAUDE.md` —
+ * No project name, no directory layout, no tag vocabulary (`../../AGENTS.md` —
  * the tool is installed into workspaces it has never seen). Everything below is
  * derived: projects from the `project.json` files that exist (Nx-shaped
  * branch) or from `lattice.json`'s declared∪inferred model (native branch),
@@ -341,7 +341,7 @@ export function buildWorkspaceIndex({
   // editor open on a workspace with a non-default `appsDir`/`libsDir` would
   // draw no diagnostic for exactly the import `lattice check` flags on the
   // same tree — the language server's own stated rule (this package's
-  // `CLAUDE.md`, "An empty diagnostic list must mean 'no violation'"),
+  // `AGENTS.md`, "An empty diagnostic list must mean 'no violation'"),
   // violated from the direction it exists to catch. A read/validation
   // failure is caught rather than thrown onward — one malformed `nx.json`
   // must not blank the whole index — and recorded as `workspaceLayoutFailure`
@@ -640,7 +640,7 @@ export function readWorkspaceFile(root, path) {
   // workspace is outside code read as the workspace's own source, so it is
   // refused rather than read. `null` is a whole-file failure here — the
   // analyzer records it, `analyzeTrackedFiles` surfaces it as an `indexGaps`
-  // diagnostic, never a silently empty index (`../../CLAUDE.md`).
+  // diagnostic, never a silently empty index (`../../AGENTS.md`).
   if (containmentViolation(root, abs) !== null) return null;
   try {
     return readFileSync(abs, "utf8");

@@ -534,7 +534,7 @@ export function formatAcceptedViolations(waived, unresolvedDecisionRefs) {
  * "no violations" is a claim about coverage as much as about correctness: a run
  * that analyzed nothing and a clean tree print the same sentence otherwise, and
  * that indistinguishability is the defect this whole tool exists to end
- * (`../../CLAUDE.md`).
+ * (`../../AGENTS.md`).
  *
  * Waived violations are still `violations` (the engine marks them `waivedBy`,
  * it never removes them), so an all-waived run still renders non-zero — the

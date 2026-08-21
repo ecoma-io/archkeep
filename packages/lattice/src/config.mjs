@@ -392,7 +392,7 @@ const SUPPRESSION_KEYS = ["path", "messageId", "reason", "expiresAt", "origin"];
  * `path` is a glob over the workspace-relative path of the importing file,
  * matched with `node:path`'s own `matchesGlob`, through `./rules/match.mjs`'s
  * `safeMatchesGlob` — the stdlib, deliberately: this project may import no
- * third-party matcher (project `CLAUDE.md`), and the alternative —
+ * third-party matcher (project `AGENTS.md`), and the alternative —
  * hand-rolling an almost-minimatch — is exactly what `projectPatternError`
  * already refuses to do for `ignoredCircularDependencies`. A pattern it
  * cannot parse returns false rather than throwing, which for a suppression

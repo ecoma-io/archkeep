@@ -700,7 +700,7 @@ describe("loadNativeModel", () => {
   // has no `nx.json` — `../../../../../docs/reference/configuration.md`), so it must
   // parse JSONC on its own rather than through `../../nx-json.mjs`'s
   // Nx-reaching parser: that parser's fallback, when `nx` cannot be resolved,
-  // throws asking for it, and `../../../CLAUDE.md` promises the engine runs
+  // throws asking for it, and `../../../AGENTS.md` promises the engine runs
   // with no `nx` installed at all. `./model.mjs` no longer imports
   // `../../nx-json.mjs` at all (removed by this change — grep confirms), so
   // there is no `nx` resolution left on this path to fail: these prove it by

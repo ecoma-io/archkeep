@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { analyzeVue } from "./vue.mjs";
 
 // The TypeScript analyzer is a project-internal collaborator, so this unit
-// tier mocks it (CLAUDE.md test taxonomy). Mocking is also what makes the
+// tier mocks it (AGENTS.md test taxonomy). Mocking is also what makes the
 // central assertion possible at all: the thing that must be right is the TEXT
 // the Vue analyzer hands over, and only a stand-in can see it.
 vi.mock("./typescript.mjs", () => ({

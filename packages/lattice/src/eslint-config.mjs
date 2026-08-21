@@ -436,7 +436,7 @@ export function extractBoundaryRule(flatConfig, readerOptions = {}) {
  * `configPath` (the flat config's own location), never from this package, so
  * a workspace whose plugin is hoisted differently than this package's own
  * dependency tree still resolves the copy it actually lints with
- * (`../CLAUDE.md`: "never assume any workspace's project names, areas, or tag
+ * (`../AGENTS.md`: "never assume any workspace's project names, areas, or tag
  * values" — the same posture applies to which copy of a peer plugin answers).
  *
  * Resolution and loading are two separate steps with two separate refusals:

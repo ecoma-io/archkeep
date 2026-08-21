@@ -287,7 +287,7 @@ function createContext(importSites, graph, config) {
  * Upstream looks the package up in `projectGraph.externalNodes` and BAILS when
  * it is not there — no target, no check. This engine synthesises one instead,
  * and that difference is deliberate: `src/graph/` does not register crates,
- * PyPI distributions or Go modules as external nodes (`../../CLAUDE.md` — only
+ * PyPI distributions or Go modules as external nodes (`../../AGENTS.md` — only
  * project↔project edges matter to `nx affected`), so bailing would mean
  * `bannedExternalImports` silently never fires for any language but JavaScript.
  * A ban that cannot fire is the false negative this tool exists to remove, so

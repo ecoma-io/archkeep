@@ -12,9 +12,9 @@
  * most of its life.
  *
  * `SHIPPED_PACKAGES` below is the single home of what the tool may depend on.
- * It was prose in the project's `CLAUDE.md` before, and prose drifted: the list
+ * It was prose in the project's `AGENTS.md` before, and prose drifted: the list
  * there named three entries while the tree used five. A list nothing reads is a
- * list nobody updates, so `CLAUDE.md` now states the rule and points here.
+ * list nobody updates, so `AGENTS.md` now states the rule and points here.
  *
  * The file list is derived by walking the project rather than written down, so
  * a module added tomorrow is covered without anyone remembering to add it.

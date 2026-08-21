@@ -29,7 +29,7 @@ import { matchesGlob } from "./model.mjs";
  * `files` and `claimed` ride alongside `unclaimed`/`exempted`/`stale` rather
  * than replacing any of them — additive, so an existing caller destructuring
  * this object keeps working unchanged. They exist for the same reason
- * `../../../CLAUDE.md`'s "What is a stub" section gives `cli.mjs check` its
+ * `../../../AGENTS.md`'s "What is a stub" section gives `cli.mjs check` its
  * own inspected-file count: "no violations" is a claim about coverage too,
  * and a caller that wants to state what it inspected (not just what it
  * found) needs the denominator, not only the failing files.

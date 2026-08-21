@@ -3,7 +3,7 @@
 One `check` run, end to end, and why the cuts between layers are where they are.
 
 This page owns the **flow**. What each layer is _allowed to know_ is owned by
-`packages/lattice/CLAUDE.md`,
+`packages/lattice/AGENTS.md`,
 and the record passed between them is frozen in
 `src/analysis/contract.md`.
 Those two bind; this page explains how they fit together.
@@ -56,7 +56,7 @@ On an Nx-registered workspace, `readPluginOptions(root)` reads
 renamed. A `lattice.json` workspace has no `plugins[].options` table to nest
 those under, so it states the same two keys — `boundaryConfig` and
 `tsConfig` — directly on `lattice.json` itself
-(`packages/lattice/CLAUDE.md`'s "The three
+(`packages/lattice/AGENTS.md`'s "The three
 consumers of the options" owns the exact shape). Either way this happens
 _before_ the config is loaded, because it decides _which_ config.
 
@@ -83,7 +83,7 @@ config's location and the tree being judged are separate facts.
 The graph comes from whichever `ProjectModelProvider` the marker found in step 1
 selected — `src/providers/nx.mjs` on an `nx.json` root, `src/providers/moon.mjs`
 on a `.moon/` root, `src/providers/native/` on a `lattice.json` one — and
-`packages/lattice/CLAUDE.md`'s "`src/providers/` is the only layer allowed to
+`packages/lattice/AGENTS.md`'s "`src/providers/` is the only layer allowed to
 build a graph" is the rule that keeps `cli.mjs` and `src/lsp/` from needing to
 know which one they are holding.
 
@@ -118,7 +118,7 @@ files attributed to a project.
 `src/workspace.mjs` is the **only** layer allowed to answer "which files". An
 analyzer is handed one file and a rule is handed records, so the question has to
 land somewhere, and it lands here with the git spawn that comes with it — which
-layer may build the graph itself is `packages/lattice/CLAUDE.md`'s rule.
+layer may build the graph itself is `packages/lattice/AGENTS.md`'s rule.
 
 Before anything is judged, the graph nodes are annotated with the three facts
 `nx graph --file=` cannot carry — `mfeRemote`, `entryPoints` and
@@ -253,7 +253,7 @@ rather than reproduced a second time, so the native provider and the language
 server share one copy of Nx's own `getProjectType` rule (including the `-e2e`
 suffix rule) and its implicit-dependency expansion. `evaluate` is pure and
 takes a graph it does not build either way. Which layers may build one is
-`packages/lattice/CLAUDE.md`'s rule, not this page's.
+`packages/lattice/AGENTS.md`'s rule, not this page's.
 
 That reuse now reaches the native root directly: on a tree whose tracked files
 include `lattice.json`, the index is built through `nativeProvider.discover`

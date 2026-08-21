@@ -18,7 +18,7 @@
  * would disagree exactly where a plugin contributes an edge. For a workspace
  * running under Nx, that graph comes from `./providers/nx.mjs`'s
  * `readProjectGraph`, which spawns `nx graph --file=` rather than importing
- * Nx: `nx` is not on this project's import list (project `CLAUDE.md`), and
+ * Nx: `nx` is not on this project's import list (project `AGENTS.md`), and
  * `nx graph --file=` is a stable documented surface where Nx's internal module
  * layout is not.
  *
@@ -26,7 +26,7 @@
  * alternative — walking the tree — would need its own ignore rules that drift
  * from `.gitignore` the first time a build directory is added. `git ls-files`
  * is the same tracked-file set every resolver in this project already reasons
- * about ("Resolvers read tracked files only", project `CLAUDE.md`).
+ * about ("Resolvers read tracked files only", project `AGENTS.md`).
  */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";

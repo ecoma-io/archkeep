@@ -8,7 +8,7 @@ import { evaluate, MESSAGE_IDS } from "./index.mjs";
  * the records can be written by hand.
  *
  * Every project name, root and tag below is invented for these tests. Nothing
- * here may be read as a fact about this repository (`../../CLAUDE.md` — the
+ * here may be read as a fact about this repository (`../../AGENTS.md` — the
  * tool runs over consumers' trees, whose names it has never seen).
  *
  * Each rule gets its violating case AND the near miss that must stay silent.
@@ -22,7 +22,7 @@ import { evaluate, MESSAGE_IDS } from "./index.mjs";
  * How the JavaScript family spells a specifier — the answer
  * `specifierSpelling` in `../analysis/typescript.mjs` gives, restated because a
  * unit test here may not import a project-internal module unmocked (root
- * `CLAUDE.md`), and mocking the thing whose output shape is the point would
+ * `AGENTS.md`), and mocking the thing whose output shape is the point would
  * make these fixtures state nothing. The real one is pinned beside itself in
  * `typescript.test.mjs`, and the conformance suite drives both together over
  * one tree — a drift between them shows up there rather than hiding here.

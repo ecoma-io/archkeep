@@ -55,7 +55,7 @@
  * verdicts, in the order they are tested:
  *
  * - **Another Nx project's root** — an edge. Exactly the root: the
- *   one-manifest-per-project-root model (`packages/lattice/CLAUDE.md`)
+ *   one-manifest-per-project-root model (`packages/lattice/AGENTS.md`)
  *   is what makes a directory-to-project attribution well defined at all.
  * - **The declaring project itself** (its root, or anything under it, such as
  *   a vendored wheel `file:///${PROJECT_ROOT}/vendor/x.whl`) — no edge. No

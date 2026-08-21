@@ -6,7 +6,7 @@
  * That graph runs through `./analysis/analyze.mjs` to `./analysis/typescript.mjs`,
  * which loads the TypeScript compiler at module scope. `./providers/nx.mjs`
  * only ever needed `runProcess` — to spawn `nx graph` — and so does
- * `./providers/native/` (`../CLAUDE.md`, "`src/providers/` is the only
+ * `./providers/native/` (`../AGENTS.md`, "`src/providers/` is the only
  * layer allowed to build a graph"): a native workspace with no
  * `tsconfig.base.json` at all still has to build one, and a provider that
  * pulled in `typescript` just to run `git ls-files` would fail before the
