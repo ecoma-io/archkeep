@@ -21,6 +21,14 @@ name: Release
 # that resolves the server out of the workspace pairs with the engine it is
 # released with, and one version makes the pairing visible.
 #
+# A third destination rides the same guarded arrangement: the PyPI job serves
+# the Python rule SDK (`packages/lattice-rule-sdk-python`,
+# docs/adr/0002-custom-rules-one-contract.md stages it), which does not exist
+# in the tree yet. Until a tagged release carries that package the job says
+# loudly that there was nothing to publish — the marketplace step's own
+# pattern — and the moment the package lands, the same release that ships the
+# engine ships it, under the one version everything here shares.
+#
 # The releases' lack of signatures on the GitHub release object is named rather
 # than discovered later: the plugin releases carry no asset to sign, and the
 # vsix is uploaded unsigned. npm provenance — the `--provenance` flag below — is
@@ -58,8 +66,8 @@ jobs:
       # `release_created` and `tag_name` only for a component at the repository
       # ROOT; every path in a manifest gets `<path>--<name>` instead. The
       # component sits at the root (`"."` in release-please-config.json), so
-      # its pair is the un-prefixed one, and BOTH publish jobs — npm and vsix —
-      # steer on it. This workflow once read the `packages/lattice--`-prefixed
+      # its pair is the un-prefixed one, and EVERY publish job — npm, vsix,
+      # PyPI — steers on it. This workflow once read the `packages/lattice--`-prefixed
       # pair while the component was keyed by its package path — which in a
       # manifest configuration names the release-please output for that path —
       # so it evaluated to the empty string, `released == 'true'` was false,
@@ -214,8 +222,9 @@ jobs:
       # output the publish jobs steer on must agree: a run that created a release
       # while `release_created` reads empty is precisely the state that published
       # nothing and reported success, and it fails here instead — naming the
-      # values rather than leaving a reader to infer which one lied. Both publish
-      # jobs — npm and vsix — key off the SAME output, so one check guards both.
+      # values rather than leaving a reader to infer which one lied. Every
+      # publish job — npm, vsix, PyPI — keys off the SAME output, so one check
+      # guards them all.
       # If a second component is ever added back, its path needs a check here
       # too, because the per-path outputs are exactly the spelling that drifted
       # once.
@@ -265,7 +274,7 @@ jobs:
   #   pressure the differential's header refuses; shipping under a
   #   findings-red is the one line this lane must never cross.
   #
-  # The waiver expression in both publish jobs is that line, in code: it
+  # The waiver expression in every publish job is that line, in code: it
   # names `exit_class == 'infra'` explicitly — nothing else waives. An
   # UNREADABLE summary yields an empty `exit_class`, `== 'infra'` is false,
   # and the release is blocked: fail-closed is the direction this must err
@@ -273,8 +282,8 @@ jobs:
   # Note the form of the guard too: `result == 'success'`, not
   # `result != 'failure'` — a skipped or cancelled job must read as BLOCKED,
   # because GitHub reports a skipped job as Success on the checks UI. Keep
-  # the two publish jobs' conditions identical; a divergence between them is
-  # a release that ships to one destination and not the other.
+  # every publish job's condition identical; a divergence between them is
+  # a release that ships to one destination and not another.
   verify-conformance:
     name: Differential against real trees (gate)
     needs: prepare
@@ -334,8 +343,8 @@ jobs:
     # as the loud UNVERIFIED label). `== 'success'`, deliberately, not
     # `!= 'failure'`: a skipped or cancelled gate must BLOCK, because a
     # skipped job reports as Success on the checks UI. Keep this expression
-    # identical to `publish-vsix`'s — a divergence ships one destination and
-    # not the other.
+    # identical to the other publish jobs' — a divergence ships one
+    # destination and not another.
     #
     # `!cancelled()` is load-bearing, not decoration. GitHub ANDs an implicit
     # `success()` onto any `if:` that names no status-check function
@@ -528,3 +537,95 @@ jobs:
             echo ""
             echo "\`$TAG\` was published to the VS Code Marketplace from the vsix on its GitHub release."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-pypi:
+    name: Publish the Python rule SDK to PyPI
+    # The gate expression is the npm job's, verbatim — see the comment there;
+    # a divergence between the publish jobs is a release that ships to one
+    # destination and not another.
+    #
+    # This destination is guarded on the PACKAGE rather than on a secret: the
+    # Python rule SDK (`packages/lattice-rule-sdk-python`) is staged by
+    # docs/adr/0002-custom-rules-one-contract.md and has not landed yet, so on
+    # a release whose tag carries no such package this job says loudly that
+    # there was nothing to publish — the marketplace step's own arrangement,
+    # for the same reason: a silent skip and a covered destination read
+    # identically on a green lane. The two guards fail in DIFFERENT
+    # directions on purpose: package absent is the ordinary state and skips
+    # loudly with exit 0, while package present with an empty token FAILS —
+    # a release that carries a Python package and does not reach PyPI is the
+    # lane shipping nothing under a green light, the exact defect the
+    # prepare job's tripwire exists for. The token is the ECOMA_PYPI_API_TOKEN
+    # organisation secret; it reaches twine only through the environment
+    # (TWINE_PASSWORD, documented by twine), never through `${{}}`
+    # interpolation into a script body, and an org secret must be GRANTED to
+    # this repository to be non-empty here — the failure message names that,
+    # because a granted-to-other-repos secret reads exactly like a missing
+    # one.
+    #
+    # The build tools are version-pinned (measured against PyPI 2026-08-21:
+    # build 1.5.0, twine 7.0.0 are current) so the lane cannot drift under a
+    # release; the runner's own python3 builds the sdist and wheel. When the
+    # package lands, its pre-publish proof — the verify-package analogue that
+    # installs the built distribution somewhere that is not this workspace —
+    # arrives in the same change, the arrangement the ADR's release section
+    # states.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # The tag, not the branch, for the same reason every publish job states:
+      # `main` may have moved, and the distribution must hold the tagged bytes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - name: Find the Python rule SDK in this release, or say loudly why not
+        id: sdk
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if [ -f packages/lattice-rule-sdk-python/pyproject.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## PyPI publish SKIPPED"
+              echo ""
+              echo "\`$TAG\` carries no \`packages/lattice-rule-sdk-python\` package, so"
+              echo "nothing was published to PyPI. The Python rule SDK is staged by"
+              echo "ADR 0002 and has not landed; the release that first carries it"
+              echo "publishes it from this job with no workflow change."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "SKIPPED, and here is why: $TAG carries no packages/lattice-rule-sdk-python,"
+            echo "so there is no Python distribution to publish. The job goes live with the"
+            echo "release that first ships that package."
+          fi
+
+      - name: Build the distribution
+        if: steps.sdk.outputs.present == 'true'
+        run: |
+          python3 -m pip install --upgrade 'build==1.5.0' 'twine==7.0.0'
+          python3 -m build packages/lattice-rule-sdk-python
+
+      - name: Publish to PyPI
+        if: steps.sdk.outputs.present == 'true'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.ECOMA_PYPI_API_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if [ -z "$TWINE_PASSWORD" ]; then
+            echo "$TAG carries packages/lattice-rule-sdk-python, but ECOMA_PYPI_API_TOKEN"
+            echo "is empty in this repository's context. It is an organisation secret, so"
+            echo "either it was removed or it is not granted to this repository — grant it"
+            echo "under the organisation's Actions secrets, then re-run this job. Failing"
+            echo "red rather than skipping: a release that carries a Python package and"
+            echo "does not reach PyPI is the lane shipping nothing under a green light."
+            exit 1
+          fi
+          python3 -m twine upload --non-interactive packages/lattice-rule-sdk-python/dist/*
