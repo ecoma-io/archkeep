@@ -140,6 +140,35 @@ describe("reading a boundary config that outlives the process reading it", () =>
     );
   });
 
+  it("loads a policy that declares customRules, and refuses a malformed row the same way the CLI does", async () => {
+    // The fifth top-level law reaches this face through the shared
+    // `policyKeyViolations`/`policyFrom` pair, so no dispatch here knows about
+    // it by name — which is exactly what has to be pinned: a law the CLI reads
+    // and the editor refuses (or silently drops) would make one face's verdict
+    // unexplainable from the other's. The server does not EVALUATE the rows —
+    // a custom rule is a per-run workspace judgment, not a per-file diagnostic,
+    // the same posture fitness takes — so what it owes them is to load them
+    // and to fail loudly on a row it cannot read.
+    const rule = {
+      name: "no-interface-outside-domain",
+      artifact: "tools/rules/no_interface_outside_domain.wasm",
+      sha256: "d".repeat(64),
+      reason: "interfaces are the domain's ports",
+    };
+    write(`${config("zone:custom")}export const customRules = ${JSON.stringify([rule])};\n`);
+    const loaded = await readBoundaryConfig(root, 30, CONFIG_FILE);
+    expect(loaded.customRules).toEqual([rule]);
+
+    write(
+      `${config("zone:custom")}export const customRules = ${JSON.stringify([
+        { ...rule, artifact: "../outside/rule.wasm" },
+      ])};\n`,
+    );
+    await expect(readBoundaryConfig(root, 31, CONFIG_FILE)).rejects.toThrow(
+      /customRules\[0\]\.artifact: .* leaves the workspace/u,
+    );
+  });
+
   it("names the file it could not load, since a missing law enforces nothing silently", async () => {
     const empty = mkdtempSync(join(tmpdir(), "lattice-config-empty-"));
     try {
@@ -330,6 +359,27 @@ describe("the inline dialect, where the law is data on lattice.json rather than 
     await expect(readBoundaryConfig(root, 23, policy)).resolves.toMatchObject({
       depConstraints: [{ sourceTag: "zone:s", onlyDependOnLibsWithTags: ["zone:inner"] }],
     });
+  });
+
+  it("carries customRules through the inline form too, validated by the same tail", async () => {
+    const rule = {
+      name: "no-interface-outside-domain",
+      artifact: "tools/rules/no_interface_outside_domain.wasm",
+      sha256: "e".repeat(64),
+      reason: "interfaces are the domain's ports",
+    };
+    const loaded = await readBoundaryConfig(root, 25, {
+      ...inline("zone:custom"),
+      customRules: [rule],
+    });
+    expect(loaded.customRules).toEqual([rule]);
+
+    await expect(
+      readBoundaryConfig(root, 26, {
+        ...inline("zone:custom"),
+        customRules: [{ ...rule, name: "Not A Rule Name" }],
+      }),
+    ).rejects.toThrow(/customRules\[0\]\.name: must be a non-empty name of lowercase letters/u);
   });
 
   it("reads whatever object it is handed, so an edited inline law is never served from a cache", async () => {

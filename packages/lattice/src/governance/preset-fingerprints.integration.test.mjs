@@ -58,7 +58,13 @@ const EXPECTED = JSON.parse(readFileSync(join(HERE, "preset-fingerprints.json"),
  * assertion below fails when a resolved pack carries anything outside it, which
  * is what forces this list and that function to be revisited together.
  */
-const FINGERPRINTED_FIELDS = ["depConstraints", "options", "suppressions", "fitness"];
+const FINGERPRINTED_FIELDS = [
+  "depConstraints",
+  "options",
+  "suppressions",
+  "fitness",
+  "customRules",
+];
 
 /**
  * The fields `../config.mjs`'s `policyFrom` sets on EVERY resolved policy.

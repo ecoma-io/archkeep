@@ -506,8 +506,37 @@ describe("findNativeModelViolations", () => {
           boundaryConfig: { ...wellFormedPolicy(), extra: "decorative" },
         }),
       ).toEqual([
-        "boundaryConfig.extra: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness, plus '$schema' (for editor validation)",
+        "boundaryConfig.extra: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness, customRules, plus '$schema' (for editor validation)",
       ]);
+    });
+
+    // The fifth top-level law reaches this spelling through the same
+    // `findBoundaryConfigViolations` the other four do — a native workspace
+    // that carries its policy inline declares custom rules exactly as a policy
+    // file does, and a malformed row is refused here rather than at whichever
+    // later run first tried to load the artifact.
+    it("accepts customRules inside an inline policy, and refuses a malformed row by name", () => {
+      const rule = {
+        name: "no-interface-outside-domain",
+        artifact: "tools/rules/no_interface_outside_domain.wasm",
+        sha256: "c".repeat(64),
+        reason: "interfaces are the domain's ports",
+      };
+      expect(
+        findNativeModelViolations({
+          ...wellFormed(),
+          boundaryConfig: { ...wellFormedPolicy(), customRules: [rule] },
+        }),
+      ).toEqual([]);
+      expect(
+        findNativeModelViolations({
+          ...wellFormed(),
+          boundaryConfig: {
+            ...wellFormedPolicy(),
+            customRules: [{ ...rule, sha256: "not-a-digest" }],
+          },
+        })[0],
+      ).toMatch(/^boundaryConfig\.customRules\[0\]\.sha256: must be 64 lowercase hex characters/);
     });
 
     it("accepts $schema inside an inline policy, the same key law a .json policy file has", () => {
