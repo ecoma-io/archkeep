@@ -398,6 +398,14 @@ export function formatIntentSection(intent) {
 }
 
 /**
+ * One glyph per verdict state, shared by every verdict table below. Each
+ * section used to declare its own copy; two copies of a four-glyph table
+ * agree only until one gains a state, which is the drift the
+ * never-state-a-rule-twice bullet in `../../../../AGENTS.md` exists to end.
+ */
+const VERDICT_GLYPH = Object.freeze({ pass: "✔", fail: "✖", unknown: "⚠", not_applicable: "◌" });
+
+/**
  * The fitness section — one line per declared fitness function's verdict,
  * rendered only when the run's policy declared any (`fitness === undefined`).
  *
@@ -421,9 +429,8 @@ export function formatIntentSection(intent) {
  */
 export function formatFitnessSection(decisions, overall) {
   if (decisions.length === 0) return "";
-  const verdictGlyph = { pass: "✔", fail: "✖", unknown: "⚠", not_applicable: "◌" };
   const rows = decisions
-    .map((decision) => `${verdictGlyph[decision.verdict]} ${decision.name}  ${decision.message}`)
+    .map((decision) => `${VERDICT_GLYPH[decision.verdict]} ${decision.name}  ${decision.message}`)
     .join("\n");
   const overallLabel = {
     pass: `✔ fitness: ${decisions.length} function${decisions.length === 1 ? "" : "s"} passed`,
@@ -480,10 +487,9 @@ function customFindingSite(finding) {
 export function formatCustomRulesSection(customRules) {
   if (customRules == null || customRules.decisions.length === 0) return "";
   const { decisions, overall } = customRules;
-  const verdictGlyph = { pass: "✔", fail: "✖", unknown: "⚠", not_applicable: "◌" };
   const entries = decisions.map((decision) => {
     const lines = [
-      `${verdictGlyph[decision.verdict]} ${decision.name}  ${decision.message}`,
+      `${VERDICT_GLYPH[decision.verdict]} ${decision.name}  ${decision.message}`,
       `${DETAIL}reason      ${decision.reason}`,
     ];
     for (const finding of decision.findings ?? []) {
@@ -497,7 +503,7 @@ export function formatCustomRulesSection(customRules) {
   });
   const count = (verdict) => decisions.filter((decision) => decision.verdict === verdict).length;
   const summary =
-    `${verdictGlyph[overall.verdict]} custom rules: ${count("pass")} passed, ` +
+    `${VERDICT_GLYPH[overall.verdict]} custom rules: ${count("pass")} passed, ` +
     `${count("fail")} failed, ${count("unknown")} unknown, ` +
     `${count("not_applicable")} not applicable`;
   return `${entries.join("\n\n")}\n\n${summary}`;
