@@ -15,7 +15,8 @@ commands share rather than a command. It composes `../workspace.mjs`,
 - **`check`** (`../../cli.mjs`'s `runCheck`) — judges every import site against
   the boundary rules and folds in every other finding class a verdict counts:
   declared-edge violations, go.work drift, dead tsconfig path aliases, intent
-  drift, and a failing fitness gate. Exits 1 on any of them, and it is the only
+  drift, a failing fitness gate, and a failing custom rule
+  (`./custom-rules.mjs`). Exits 1 on any of them, and it is the only
   command holding all four exit codes
   ([which verbs carry exit 1 is settled in `docs/concepts/architecture.md`](../../../../docs/concepts/architecture.md)
   — `fitness` is the other one).
@@ -238,6 +239,19 @@ commands share rather than a command. It composes `../workspace.mjs`,
 - **`snapshot-meta.mjs`** — `compareSnapshotMetadata`, shared by `diff` and
   `history`: the provider, provenance (with cross-repo and one-sided
   detection) and policy-fingerprint comparison between a baseline and a head.
+
+- **`custom-rules.mjs`** — the custom-rules fold `check` runs by presence: each
+  row the policy's `customRules` list declares, loaded from its artifact's bytes
+  and judged over the evidence the run already computed. It owns the file
+  reading the host deliberately does not (`../custom-rules/host.mjs` takes
+  bytes, never a path) and the routing of the host's two failure classes: a
+  LOAD failure throws, so the run refuses the way it refuses a malformed
+  boundary config, and an EVALUATE failure becomes that rule's `unknown`
+  verdict with the host's own reason. A path-scoped run answers
+  `not_applicable` for every declared rule before reading anything, the posture
+  `coverage-minimum` takes for the same reason. Returns the verdict records
+  `check` folds into the fitness exit lanes plus the finding catalogue SARIF's
+  descriptors are built from; it prints nothing and decides no exit code.
 
 - **`edge-constraints.mjs`** — edge-constraint analysis shared by `diff` and
   `impact`. Judges a single graph edge against the `depConstraints` table,

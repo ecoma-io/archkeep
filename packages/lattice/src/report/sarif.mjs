@@ -40,6 +40,10 @@
  * (`verdictFor`'s `fitnessFail`) — while an `unknown`-verdict one (the run
  * could not determine it) is trouble the tool hit, not a finding, so it rides
  * a notification instead (`sarifFitnessResult`, `sarifFitnessNotification`).
+ * A declared custom rule (`../commands/custom-rules.mjs`) splits the same way,
+ * with one addition its own function argues: a rule that did NOT apply is a
+ * notification too, because "did not apply" and "applied and found nothing"
+ * are the two states an empty results array cannot tell apart.
  *
  * **The driver carries no `version`/`semanticVersion`, and that is now a gap
  * rather than a decision.** It was written when this package was unversioned and
@@ -102,9 +106,18 @@ export function toUriReference(path) {
  * description should say. The drift rules carry no `upstreamRule` property,
  * because they have none: ESLint has no notion of go.work.
  *
+ * A custom rule's catalogue rides at the END of the array, after every fixed
+ * id, because every `ruleIndex` above is computed as an offset from the fixed
+ * tables' lengths — a descriptor inserted anywhere else would renumber ids
+ * this file has already shipped. The entries are the ones each loaded rule
+ * DECLARED it can report (`../commands/custom-rules.mjs`), not the ones that
+ * fired: a rule described only on the run that reported it and nameless on the
+ * next is exactly what the paragraph above refuses for the built-in ids.
+ *
+ * @param {{ruleId: string, rule: string, findingId: string, message: string}[]} [customCatalogue]
  * @returns {object[]}
  */
-export function sarifRules() {
+export function sarifRules(customCatalogue = []) {
   return [
     ...MESSAGE_IDS.map((id) => ({
       id,
@@ -152,7 +165,109 @@ export function sarifRules() {
       },
       defaultConfiguration: { level: "error" },
     },
+    ...customCatalogue.map((entry) => ({
+      id: entry.ruleId,
+      name: entry.ruleId,
+      shortDescription: { text: entry.message.split("\n")[0] },
+      fullDescription: { text: entry.message },
+      defaultConfiguration: { level: "error" },
+      properties: { customRule: entry.rule, findingId: entry.findingId },
+    })),
   ];
+}
+
+/**
+ * Where a custom rule's descriptors begin in `sarifRules()`'s array — every
+ * fixed id, then the one fitness entry. Derived from the same tables the
+ * offsets above are, so a message id added to any of them moves this with it.
+ */
+const CUSTOM_RULE_INDEX_BASE =
+  MESSAGE_IDS.length +
+  GO_WORK_MESSAGE_IDS.length +
+  TSCONFIG_PATHS_MESSAGE_IDS.length +
+  INTENT_MESSAGE_IDS.length +
+  1;
+
+/**
+ * One custom-rule finding as a SARIF result.
+ *
+ * A result for the same reason a go.work drift finding is one: `check` fails
+ * the build on a `fail`-verdict custom rule (`verdictFor`'s `customRuleFail`),
+ * and a red job uploading an empty results array is the silent SARIF every
+ * finding kind above exists to avoid.
+ *
+ * The location block is OMITTED entirely when the finding names no
+ * `sourceFile` — a custom rule may judge the workspace as a whole, and SARIF
+ * has no way to say "somewhere in this repository" that is not a fabricated
+ * path. `region` follows the same rule one level down: present only when the
+ * rule stated a line, and carrying `startColumn` only when it stated one too,
+ * because a column with no line is a position SARIF cannot express.
+ *
+ * @param {{id: string, message: string, sourceFile?: string, line?: number,
+ *   column?: number, project?: string}} finding A finding from
+ *   `../commands/custom-rules.mjs`, its `id` already namespaced.
+ * @param {number} ruleIndex Its descriptor's index in `sarifRules()`.
+ * @returns {object}
+ */
+export function sarifCustomRuleResult(finding, ruleIndex) {
+  const physicalLocation =
+    finding.sourceFile === undefined
+      ? null
+      : {
+          artifactLocation: { uri: toUriReference(finding.sourceFile) },
+          ...(finding.line === undefined
+            ? {}
+            : {
+                region: {
+                  startLine: finding.line,
+                  ...(finding.column === undefined ? {} : { startColumn: finding.column }),
+                },
+              }),
+        };
+  return {
+    ruleId: finding.id,
+    ruleIndex,
+    level: "error",
+    message: { text: finding.message },
+    // Both blocks below are present only when the rule stated the fact behind
+    // them: an empty property bag and a location naming no file each say
+    // nothing an absent one does not, the same "no fact, no claim" bargain
+    // every other optional field in this file keeps.
+    ...(finding.project === undefined ? {} : { properties: { project: finding.project } }),
+    ...(physicalLocation === null ? {} : { locations: [{ physicalLocation }] }),
+  };
+}
+
+/**
+ * One custom rule that reached no verdict, as a tool-execution notification.
+ *
+ * Two verdicts ride this lane rather than one, and the second is the reason
+ * this function exists at all:
+ *
+ * - `unknown` — the rule loaded and could not judge. Trouble the tool hit, not
+ *   a verdict it reached, exactly as `sarifFitnessNotification` treats an
+ *   undetermined fitness function.
+ * - `not_applicable` — the rule did not apply, which today means a path-scoped
+ *   run (`../commands/custom-rules.mjs`). Unlike a passing rule, which really
+ *   did look and really did find nothing, a rule that did not apply looked at
+ *   nothing — and with no notification a scoped run over a workspace declaring
+ *   custom rules would upload a SARIF log byte-identical to one from a
+ *   workspace that declares none. That indistinguishability is the defect the
+ *   empty-result invariant names (`../../../../AGENTS.md`), so the log says so.
+ *
+ * A `pass` gets nothing, deliberately: "no results" is SARIF's own way of
+ * saying "looked, found nothing", which is exactly what a passing rule means.
+ *
+ * @param {{name: string, verdict: string, message: string}} decision
+ * @returns {object}
+ */
+export function sarifCustomRuleNotification(decision) {
+  const posture =
+    decision.verdict === "not_applicable" ? "did not apply to this run" : "could not be judged";
+  return {
+    level: "warning",
+    message: { text: `Custom rule "${decision.name}" ${posture}: ${decision.message}` },
+  };
 }
 
 /**
@@ -460,6 +575,15 @@ export function sarifNotification(failure) {
  * already states, so it is not read here — `formatReport` (text) is the
  * consumer that needs the aggregate label.
  *
+ * `customRules` — the per-rule verdict records and the finding catalogue
+ * `../commands/custom-rules.mjs` produces — rides the same fail/could-not-tell
+ * split: each `fail` decision's findings become results resolving to their own
+ * descriptor, and each `unknown` or `not_applicable` decision becomes a
+ * notification (`sarifCustomRuleNotification` argues why the second one is
+ * there). A finding on a decision that is not `fail` produces no result: the
+ * rule reached no failing verdict, so an error-level annotation would claim a
+ * judgment it did not make, and the notification names the rule either way.
+ *
  * @param {{violations: object[], failures: object[],
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
  *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
@@ -467,6 +591,8 @@ export function sarifNotification(failure) {
  *   intent?: {findings: object[]}|null,
  *   fitness?: {name: string, message: string, verdict: string}[],
  *   fitnessOverall?: {verdict: string},
+ *   customRules?: {decisions: object[], catalogue: {ruleId: string, rule: string,
+ *     findingId: string, message: string}[]}|null,
  *   policy?: {profile: string|null, source: string, fingerprint: string}|null}} run
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
@@ -478,11 +604,35 @@ export function buildSarifLog({
   declaredEdges,
   intent,
   fitness,
+  customRules,
   policy = null,
 }) {
   const fitnessDecisions = fitness ?? [];
   const fitnessFailed = fitnessDecisions.filter((decision) => decision.verdict === "fail");
   const fitnessUnresolved = fitnessDecisions.filter((decision) => decision.verdict === "unknown");
+  const customCatalogue = customRules?.catalogue ?? [];
+  const customDecisions = customRules?.decisions ?? [];
+  // The descriptor index a finding's namespaced id resolves to, so a result
+  // and its `reportingDescriptor` are looked up from ONE array rather than
+  // from two orderings that could drift apart.
+  const customRuleIndex = new Map(
+    customCatalogue.map((entry, index) => [entry.ruleId, CUSTOM_RULE_INDEX_BASE + index]),
+  );
+  const customResults = customDecisions
+    .filter((decision) => decision.verdict === "fail")
+    .flatMap((decision) =>
+      (decision.findings ?? []).map((finding) =>
+        // `-1` cannot arrive here: the host refuses a verdict naming a finding
+        // id its own catalogue does not declare (`../custom-rules/host.mjs`'s
+        // `findingViolation`), which is where "a finding SARIF drops" is
+        // stopped. `?? -1` is what makes a regression in that guarantee a
+        // visibly broken index rather than an `undefined` GitHub ignores.
+        sarifCustomRuleResult(finding, customRuleIndex.get(finding.id) ?? -1),
+      ),
+    );
+  const customNotifications = customDecisions.filter(
+    (decision) => decision.verdict === "unknown" || decision.verdict === "not_applicable",
+  );
   const waived = violations.filter((violation) => violation.waivedBy);
   // A waived count rides as a notification so a consumer scanning for "did
   // this run accept anything" finds it without reading every result's
@@ -509,7 +659,7 @@ export function buildSarifLog({
     version: SARIF_VERSION,
     runs: [
       {
-        tool: { driver: { name: "lattice", rules: sarifRules() } },
+        tool: { driver: { name: "lattice", rules: sarifRules(customCatalogue) } },
         columnKind: "utf16CodeUnits",
         ...(policy == null ? {} : { properties: { policy } }),
         results: [
@@ -519,6 +669,7 @@ export function buildSarifLog({
           ...(declaredEdges?.findings ?? []).map(sarifDeclaredEdgeResult),
           ...(intent?.findings ?? []).map(sarifIntentResult),
           ...fitnessFailed.map((decision) => sarifFitnessResult(decision, policy?.source ?? null)),
+          ...customResults,
         ],
         invocations: [
           {
@@ -529,6 +680,7 @@ export function buildSarifLog({
             toolExecutionNotifications: [
               ...failures.map(sarifNotification),
               ...fitnessUnresolved.map(sarifFitnessNotification),
+              ...customNotifications.map(sarifCustomRuleNotification),
               ...waiverNote,
             ],
           },
@@ -548,6 +700,7 @@ export function buildSarifLog({
  *   intent?: {findings: object[]}|null,
  *   fitness?: {name: string, message: string, verdict: string}[],
  *   fitnessOverall?: {verdict: string},
+ *   customRules?: {decisions: object[], catalogue: object[]}|null,
  *   policy?: {profile: string|null, source: string, fingerprint: string}|null}} run
  * @returns {string}
  */

@@ -31,6 +31,8 @@ vi.mock("./text.mjs", () => ({ formatConstraint: () => "THE CONSTRAINT" }));
 import {
   buildSarifLog,
   formatSarif,
+  sarifCustomRuleNotification,
+  sarifCustomRuleResult,
   sarifFitnessNotification,
   sarifFitnessResult,
   sarifIntentResult,
@@ -604,5 +606,152 @@ describe("the serialised file", () => {
     const text = formatSarif({ violations: [violation()], failures: [] });
     expect(text.endsWith("\n")).toBe(true);
     expect(JSON.parse(text).runs[0].results).toHaveLength(1);
+  });
+});
+
+describe("a custom rule's descriptors and results", () => {
+  const catalogue = [
+    { ruleId: "custom/a-rule/one", rule: "a-rule", findingId: "one", message: "First\n\nDetail" },
+    { ruleId: "custom/a-rule/two", rule: "a-rule", findingId: "two", message: "Second" },
+  ];
+  const failing = (findings) => ({
+    verdict: "fail",
+    name: "a-rule",
+    message: `reported ${findings.length} finding(s)`,
+    reason: "declared because",
+    findings,
+  });
+
+  it("appends one descriptor per catalogue entry, after every fixed id", () => {
+    // The mocked tables above give four fixed ids plus the fitness one, so a
+    // custom descriptor that landed anywhere else would renumber them.
+    const ids = sarifRules(catalogue).map((rule) => rule.id);
+    expect(ids.slice(-2)).toEqual(["custom/a-rule/one", "custom/a-rule/two"]);
+    const [first] = sarifRules(catalogue).slice(-2);
+    expect(first.shortDescription.text).toBe("First");
+    expect(first.fullDescription.text).toBe("First\n\nDetail");
+    expect(first.properties).toEqual({ customRule: "a-rule", findingId: "one" });
+  });
+
+  it("adds no descriptor at all when no custom rule was loaded", () => {
+    expect(sarifRules()).toEqual(sarifRules([]));
+    expect(sarifRules().some((rule) => rule.id.startsWith("custom/"))).toBe(false);
+  });
+
+  it("carries a region only as far as the rule stated a position", () => {
+    // A column with no line is a position SARIF cannot express, and a
+    // fabricated line would put the annotation on code the rule never named.
+    expect(
+      sarifCustomRuleResult({ id: "custom/a-rule/one", message: "m", sourceFile: "a/b.go" }, 7)
+        .locations[0].physicalLocation.region,
+    ).toBeUndefined();
+    expect(
+      sarifCustomRuleResult(
+        { id: "custom/a-rule/one", message: "m", sourceFile: "a/b.go", line: 4 },
+        7,
+      ).locations[0].physicalLocation.region,
+    ).toEqual({ startLine: 4 });
+    expect(
+      sarifCustomRuleResult(
+        { id: "custom/a-rule/one", message: "m", sourceFile: "a/b.go", line: 4, column: 9 },
+        7,
+      ).locations[0].physicalLocation.region,
+    ).toEqual({ startLine: 4, startColumn: 9 });
+  });
+
+  it("omits the location block entirely for a finding with no file, and keeps its project", () => {
+    const result = sarifCustomRuleResult(
+      { id: "custom/a-rule/two", message: "m", project: "app" },
+      8,
+    );
+    expect(result.locations).toBeUndefined();
+    expect(result.properties).toEqual({ project: "app" });
+    expect(result.ruleIndex).toBe(8);
+    // And no empty property bag when the rule named no project either — an
+    // absent fact says the same thing an empty one would, with less noise.
+    expect(
+      sarifCustomRuleResult({ id: "custom/a-rule/two", message: "m" }, 8).properties,
+    ).toBeUndefined();
+  });
+
+  it("resolves each result to its own descriptor through the log's catalogue", () => {
+    const built = log({
+      customRules: {
+        catalogue,
+        decisions: [
+          failing([
+            { id: "custom/a-rule/two", message: "second finding" },
+            { id: "custom/a-rule/one", message: "first finding", sourceFile: "a/b.go", line: 1 },
+          ]),
+        ],
+      },
+    });
+    expect(built.results).toHaveLength(2);
+    for (const result of built.results) {
+      expect(built.tool.driver.rules[result.ruleIndex].id).toBe(result.ruleId);
+    }
+  });
+
+  it("reports nothing for a passing rule — an empty results array already means 'found nothing'", () => {
+    const built = log({
+      customRules: {
+        catalogue,
+        decisions: [
+          { verdict: "pass", name: "a-rule", message: "clean", reason: "r", findings: [] },
+        ],
+      },
+    });
+    expect(built.results).toEqual([]);
+    expect(built.invocations[0].toolExecutionNotifications).toEqual([]);
+  });
+
+  it("files an undetermined rule and one that did not apply as trouble, not as findings", () => {
+    // The second half is the load-bearing one: without it a scoped run over a
+    // workspace declaring custom rules uploads a log byte-identical to one
+    // from a workspace that declares none.
+    const built = log({
+      customRules: {
+        catalogue,
+        decisions: [
+          { verdict: "unknown", name: "a-rule", message: "it trapped", reason: "r", findings: [] },
+          {
+            verdict: "not_applicable",
+            name: "b-rule",
+            message: "scoped",
+            notApplicableReason: "scoped",
+            reason: "r",
+            findings: [],
+          },
+        ],
+      },
+    });
+    expect(built.results).toEqual([]);
+    expect(built.invocations[0].toolExecutionNotifications.map((n) => n.message.text)).toEqual([
+      'Custom rule "a-rule" could not be judged: it trapped',
+      'Custom rule "b-rule" did not apply to this run: scoped',
+    ]);
+  });
+
+  it("drops no finding a failing rule reported, whatever its own verdict fields say", () => {
+    // The silent direction for this face: a `fail` verdict whose findings
+    // never reached `results` would upload a red run with an empty log.
+    const built = log({
+      customRules: {
+        catalogue,
+        decisions: [failing([{ id: "custom/a-rule/one", message: "only finding" }])],
+      },
+    });
+    expect(built.results.map((result) => result.ruleId)).toEqual(["custom/a-rule/one"]);
+    expect(built.results[0].level).toBe("error");
+  });
+
+  it("names the notification's posture from the verdict", () => {
+    expect(
+      sarifCustomRuleNotification({ verdict: "unknown", name: "x", message: "why" }).message.text,
+    ).toBe('Custom rule "x" could not be judged: why');
+    expect(
+      sarifCustomRuleNotification({ verdict: "not_applicable", name: "x", message: "why" }).message
+        .text,
+    ).toBe('Custom rule "x" did not apply to this run: why');
   });
 });
