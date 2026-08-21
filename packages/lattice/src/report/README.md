@@ -69,7 +69,7 @@ Not here. Language Server Protocol positions are 0-based and the analysis
 record's are 1-based, and the subtraction is in `../lsp/diagnostics.mjs` beside
 the rest of the protocol shaping — because a diagnostic is more than a
 converted position, and splitting it across two directories would put half a
-format in each. `../../CLAUDE.md` records the same division: everything with a
+format in each. `../../AGENTS.md` records the same division: everything with a
 decision in it lives under `src/lsp/`, and `lsp.mjs` holds only the wiring.
 
 ## The two formats say the same thing in different places

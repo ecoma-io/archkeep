@@ -49,7 +49,7 @@
  * No project name, tag value or area from any real workspace. This tool is
  * installed into trees whose vocabulary it cannot predict, and a fixture that
  * assumed any one workspace's would be testing a coincidence (project
- * `CLAUDE.md`). Tags below are invented per case and mean nothing outside it.
+ * `AGENTS.md`). Tags below are invented per case and mean nothing outside it.
  */
 
 /** A barrel file that exports one constant, so an import of it has something to bind. */

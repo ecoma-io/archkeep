@@ -111,7 +111,7 @@ third opts a workspace into named-law selection.
 
 The same options table is read by three faces, each through a different route.
 The differences are load-bearing —
-`packages/lattice/CLAUDE.md`'s
+`packages/lattice/AGENTS.md`'s
 "The three consumers of the options" owns the full detail.
 
 | consumer                           | how it reads the options                                                              |

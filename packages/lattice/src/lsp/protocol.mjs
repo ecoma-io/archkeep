@@ -3,7 +3,7 @@
  * protocol fixes, and the `file:` URI conversion every other module here needs.
  *
  * Implemented directly rather than pulled from `vscode-languageserver`, for the
- * reason the project `../../CLAUDE.md` gives for the whole directory: this tool reaches
+ * reason the project `../../AGENTS.md` gives for the whole directory: this tool reaches
  * outside Node's built-ins only where something it must AGREE with already
  * lives there — TypeScript's own resolver, Vue's own SFC parser, Nx's own JSON
  * reader (`./workspace-index.mjs`). The base protocol is nothing of the kind:

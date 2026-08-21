@@ -23,7 +23,7 @@
  *
  * `nodeTypeOf` and `PROJECT_CONFIG_FILE` live here rather than in
  * `../../lsp/workspace-index.mjs`, which used to define them: this module is
- * the promotion target (`../../../CLAUDE.md`, "`src/providers/` is the layer
+ * the promotion target (`../../../AGENTS.md`, "`src/providers/` is the layer
  * that supplies a graph to `evaluate()`"), and `../../lsp/workspace-index.mjs`
  * now imports both from here. Defining them there instead would mean
  * importing `../../lsp/workspace-index.mjs` from this module — which imports

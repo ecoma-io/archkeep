@@ -628,7 +628,7 @@ function resolveSpecifier(specifier, sourceFile, workspace) {
     //
     // Deliberately narrow. No extension probing, no `index` lookup, no `paths`
     // mapping — the exact named file must exist. Anything more would be the
-    // second resolver `CLAUDE.md` forbids.
+    // second resolver `AGENTS.md` forbids.
     if (specifier.startsWith("./") || specifier.startsWith("../")) {
       // Bundler query and fragment suffixes (`?raw`, `?url#hash`) name the
       // same file with a load-time transform; the raw form stays in the

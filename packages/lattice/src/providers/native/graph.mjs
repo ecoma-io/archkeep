@@ -3,7 +3,7 @@
  * the second half of what `../../lsp/workspace-index.mjs` used to build by
  * hand, promoted here so a native `lattice.json` workspace and the language
  * server share one implementation rather than growing two that drift
- * (`../../../CLAUDE.md`, "`src/providers/` is the layer that supplies a graph
+ * (`../../../AGENTS.md`, "`src/providers/` is the layer that supplies a graph
  * to `evaluate()`").
  */
 import { findMatchingProjects } from "../../rules/match.mjs";

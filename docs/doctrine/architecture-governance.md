@@ -17,7 +17,7 @@ every mechanism in this document is a guard against the silent direction:
   (could not look) against **0** (looked and found nothing) —
   [exit-codes.md](../reference/exit-codes.md).
 - The language server publishes an empty diagnostic list from exactly two named
-  places — packages/lattice/CLAUDE.md.
+  places — packages/lattice/AGENTS.md.
 - An analyzer that cannot read a file records the failure rather than dropping it
   — contract.md.
 

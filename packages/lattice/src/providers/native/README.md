@@ -154,7 +154,7 @@ checker exits 0 on a clean tree and states what it inspected, exits 1 on a
 violating one naming the rule and the site, and the language server answers
 `initialize` when launched through the symlinked path an installed plugin is
 launched by. It also asserts `nx` genuinely does not resolve in the native
-consumer's `node_modules` — the optional-peer claim (`../../../CLAUDE.md`'s
+consumer's `node_modules` — the optional-peer claim (`../../../AGENTS.md`'s
 "Nx is a peer dependency but an optional one") checked against a real install,
 not only against the manifest's `peerDependenciesMeta`. It runs in CI on every
 pull request (`../../../../../.github/workflows/ci.yml`'s "Prove the packed

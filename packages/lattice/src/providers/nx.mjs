@@ -3,7 +3,7 @@
  * implementation.
  *
  * `evaluate(importSites, graph, config)` in `../rules/index.mjs` is pure and
- * takes a graph it does not build (`../../CLAUDE.md`, "Layout, and what each
+ * takes a graph it does not build (`../../AGENTS.md`, "Layout, and what each
  * layer may know"). Something still has to produce that graph, and until this
  * module existed the answer was hardcoded into `../workspace.mjs`: `check()`
  * called `readProjectGraph` and there was nowhere else the graph could come
@@ -22,7 +22,7 @@
  *   `evaluate()` consumes: `{nodes, dependencies}`, plus `externalNodes` and
  *   `workspaceLayout` when the provider's source of truth carries them.
  *   `nx graph --file=` itself emits neither (see `readProjectGraph` below) —
- *   `externalNodes` stays absent, deliberately (`../../CLAUDE.md` argues that
+ *   `externalNodes` stays absent, deliberately (`../../AGENTS.md` argues that
  *   refusal), but `workspaceLayout` is merged back in from `nx.json` by
  *   `readProjectGraph` itself, because that command's own output is not the
  *   whole of what the workspace declared. Everything the source DOES emit

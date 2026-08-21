@@ -97,7 +97,7 @@ export function perWorkspace(build) {
  *
  * The graph resolvers next door look for `<projectRoot>/go.mod` and
  * `<projectRoot>/Cargo.toml` exactly, because an Nx EDGE needs one manifest to
- * stand for one project (`../../CLAUDE.md` — one module/crate/package per
+ * stand for one project (`../../AGENTS.md` — one module/crate/package per
  * project root). Analysis attributes a FILE rather than a manifest, so it can
  * be broader without contradicting that: a crate or module nested inside a
  * project still belongs to the project whose directory contains it. A Tauri app

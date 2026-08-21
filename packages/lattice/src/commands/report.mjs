@@ -40,7 +40,7 @@
  *
  * `report` is descriptive: it never exits 1, because a description of how
  * healthy an architecture is is never itself a finding — `check` and `fitness`
- * are the only two verbs whose verdict carries that lane (`../../CLAUDE.md`,
+ * are the only two verbs whose verdict carries that lane (`../../AGENTS.md`,
  * "What is a stub, and how each one says so"). A failing fitness gate or a
  * live boundary violation is therefore RENDERED, loudly and by name, over
  * exit 0; the commands that own those verdicts own their exit codes.

@@ -11,7 +11,7 @@
  *
  * `eslint`, `@nx/eslint-plugin` and `typescript-eslint` are imported HERE and
  * nowhere else in the project. The tool itself may import Node built-ins,
- * `typescript` and `vue/compiler-sfc` only (project `CLAUDE.md`), and the
+ * `typescript` and `vue/compiler-sfc` only (project `AGENTS.md`), and the
  * `src/rules/` layer's whole value is being pure — importing the plugin would
  * drag `@nx/devkit` and a project-graph read into it. `boundary.test.mjs` is the
  * check that no shipped module ever reaches this directory.

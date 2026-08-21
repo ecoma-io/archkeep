@@ -13,7 +13,7 @@
  * known (`../../workspace.mjs`'s `createWorkspace`/`analyzeWorkspace` resolve
  * every relative import against a project list), so a single `readGraph` call
  * would have to hide a whole analysis pass inside a provider — the layer this
- * package's `../../../CLAUDE.md` reserves for `../../workspace.mjs` alone.
+ * package's `../../../AGENTS.md` reserves for `../../workspace.mjs` alone.
  *
  * This module imports NOTHING from `../../workspace.mjs`: that file's import
  * graph loads the TypeScript compiler at module scope

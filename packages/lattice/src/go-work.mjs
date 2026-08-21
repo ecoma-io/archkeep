@@ -13,7 +13,7 @@
  * boundary violation.
  *
  * The file is read statically, never by invoking `go` — the same refusal every
- * resolver here holds (project `CLAUDE.md`, "Static analysis by design"), for
+ * resolver here holds (project `AGENTS.md`, "Static analysis by design"), for
  * the same reason: this runs on machines that never installed the toolchain.
  * Only a TRACKED `go.work` at the workspace root is read, which is the
  * established keying — a workspace without one pays nothing and the report
@@ -60,7 +60,7 @@
  *   silent.
  *
  * The comparison follows the graph's model — one module per project root,
- * `<projectRoot>/go.mod` (project `CLAUDE.md`, "One module/crate/package per
+ * `<projectRoot>/go.mod` (project `AGENTS.md`, "One module/crate/package per
  * project root"). Consequences, both deliberate: a nested `go.mod` is never
  * REQUIRED to appear in `use`, because the graph does not model it either; but
  * a `use` entry that names one is reported, because that is the moment the

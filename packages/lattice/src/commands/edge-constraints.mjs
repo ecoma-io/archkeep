@@ -39,7 +39,7 @@
  * `src/rules/` judges import sites; this module judges graph edges. They share
  * the tag-matching functions (`findConstraintsFor`, `onlyTagsViolation`,
  * `notTagsViolation`, `emptyOnlyTagsViolation`) but the input is different
- * enough that merging them would blur the layer boundary the CLAUDE.md guards.
+ * enough that merging them would blur the layer boundary the AGENTS.md guards.
  */
 
 import { renderMessage } from "../rules/messages.mjs";

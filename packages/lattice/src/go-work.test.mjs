@@ -160,7 +160,7 @@ describe("refusing a go.work it cannot read", () => {
 /**
  * A two-project workspace the comparisons below perturb one fact at a time.
  * `beta` nests a second go.mod the graph deliberately does not model — the
- * `src-tauri`-style case the project `CLAUDE.md` documents.
+ * `src-tauri`-style case the project `AGENTS.md` documents.
  */
 const facts = () => ({
   workspaceRoot: "/repo/acme",

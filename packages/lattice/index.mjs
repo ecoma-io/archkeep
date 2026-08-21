@@ -71,7 +71,7 @@ export { evaluate, MESSAGE_IDS, MESSAGES, renderMessage } from "./src/rules/inde
  * with this export in place, `nx graph` prints the message below to the
  * terminal, naming the fix. `name` is left for `./nx` alone to export, which
  * keeps this file from looking like a working plugin face — it is the
- * engine, not the face; `CLAUDE.md` ("Layout, and what each layer may know")
+ * engine, not the face; `AGENTS.md` ("Layout, and what each layer may know")
  * says which module carries which.
  *
  * @throws {Error} named `lattice: registered as the engine entry`, always.

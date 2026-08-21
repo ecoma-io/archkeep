@@ -7,6 +7,15 @@
 # parses those paths and feeds each one to the same shared hook scripts
 # Claude Code and opencode use, so the checks have exactly one implementation
 # across every agent.
+
+# The AGENTS.md chain Codex assembles for work inside packages/lattice — the
+# root file plus the package's own — measures ~50 KiB (`wc -c` over the two
+# files), and Codex's default for this limit is 32 KiB. Past it the chain is
+# truncated with no warning line: guidance silently cut mid-file, which is the
+# failure direction ../AGENTS.md exists to refuse. 96 KiB leaves both files
+# room to grow before this number needs another look.
+project_doc_max_bytes = 98304
+
 [[hooks.PostToolUse]]
 matcher = "Edit|Write"
 

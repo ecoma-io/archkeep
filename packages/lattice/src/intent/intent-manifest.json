@@ -69,7 +69,7 @@
         },
         {
           "type": "source-evidence",
-          "path": "CLAUDE.md",
+          "path": "AGENTS.md",
           "assertion": "src/graph/ is a lossy view of analysis, on purpose; src/analysis/ never judges"
         }
       ],

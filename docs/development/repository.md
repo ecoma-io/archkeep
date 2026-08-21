@@ -4,7 +4,7 @@ The workspace that holds Lattice, and how its moving parts relate.
 
 ## The two packages
 
-| package                   | what it ships      | where it goes       | has its own CLAUDE.md |
+| package                   | what it ships      | where it goes       | has its own AGENTS.md |
 | ------------------------- | ------------------ | ------------------- | --------------------- |
 | `packages/lattice`        | the engine         | npm                 | yes                   |
 | `packages/lattice-vscode` | the VS Code client | VS Code marketplace | no                    |

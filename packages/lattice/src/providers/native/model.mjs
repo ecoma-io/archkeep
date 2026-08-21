@@ -13,7 +13,7 @@
  * very module's header used to advertise as accepted — silently depended on
  * `nx` being resolvable from `node_modules`, which is exactly the dependency
  * a native, no-Nx workspace is promised it does not need
- * (`../../../CLAUDE.md`, "the engine and the CLI run without it"). A
+ * (`../../../AGENTS.md`, "the engine and the CLI run without it"). A
  * workspace with no `nx` installed and a commented `lattice.json` — its OWN
  * root marker, the one file this provider cannot proceed without — would
  * fail before discovery ever ran, on a form this module's own docs call
