@@ -744,7 +744,7 @@ describe("customRules — the fifth top-level law", () => {
     // Uppercase is refused rather than folded: the hash is compared against
     // `node:crypto`'s own lowercase hex digest, and a loader that lowercased
     // one side would be a second opinion about which bytes were declared.
-    for (const sha256 of ["abc", "A".repeat(64), "z".repeat(64), 42, undefined]) {
+    for (const sha256 of ["abc", "a".repeat(63), "A".repeat(64), "z".repeat(64), 42, undefined]) {
       expect(
         findBoundaryConfigViolations(withCustomRules([{ ...wellFormedRule(), sha256 }]))[0],
         JSON.stringify(sha256),
@@ -783,6 +783,11 @@ describe("customRules — the fifth top-level law", () => {
         withCustomRules([{ ...wellFormedRule(), params: { tags: ["ok", new Map()] } }]),
       )[0],
     ).toMatch(/^customRules\[0\]\.params\.tags\[1\]: must be JSON data/);
+    expect(
+      findBoundaryConfigViolations(
+        withCustomRules([{ ...wellFormedRule(), params: { deny: undefined } }]),
+      )[0],
+    ).toMatch(/^customRules\[0\]\.params\.deny: must be JSON data, got undefined/);
   });
 
   it("rejects a params table that refers back into itself, which has no serialization at all", () => {
