@@ -267,6 +267,100 @@ path to wasm is the longest; a Python team is not thereby locked out — tier
 one is language-blind, and the contract accepts an artifact from any
 toolchain that can produce one.
 
+### The SDKs live in this repository, under the gates that exist
+
+The SDKs are packages of this monorepo — `packages/lattice-rule-sdk-rust`,
+`-go`, `-ts`, `-python` as each arrives — not four repositories. Three
+reasons, and the third is the deciding one:
+
+- **A gate only binds what sits in its tree.** The conformance suite above is
+  the mechanism that keeps four SDKs one contract, and it only works as a
+  same-diff discipline: a contract change and every SDK's answer to it land
+  together, the same edited-together arrangement the analysis contract
+  already runs with its JSDoc half. Split across repositories, the suite
+  runs against pinned yesterday's SDKs, and green stops meaning current.
+- **`packages/` is where placeholder-green is already caught.**
+  `scripts/check-packages.mjs` refuses a package that runs no CI target, and
+  Moon tasks are plain commands — `cargo test`, `go test`, `pytest` declare
+  exactly the way `vitest run` does today. An SDK outside `packages/` would
+  sit outside the one gate built to notice a package that stopped meaning
+  anything.
+- **One version chain, one sentence.** The releasable unit here is the
+  repository — [skills/versioning.md](../skills/versioning.md) owns the
+  chain — so "contract N ships in engine 0.x" stays one sentence across
+  engine and SDKs instead of a compatibility matrix.
+
+The cost, named: this repository's CI grows the language toolchains that
+build and test the SDKs. That touches no refusal — principle 5 is about what
+the shipped engine needs at check time in a consumer's tree, not about what
+this repository needs to build its own artifacts.
+
+### One name on every registry, one version through the existing lane
+
+The short names are not available where it matters, and that is measured,
+not assumed: on 2026-08-21, crates.io already carries `lattice` and
+`lattice-sdk`, and PyPI carries `lattice`; `lattice-rule-sdk` is free on
+both. So the published name is **`lattice-rule-sdk`** everywhere a registry
+needs one — `lattice-rule-sdk` on crates.io and PyPI,
+`@ecoma-io/lattice-rule-sdk` on npm — and it is also the truer name: this is
+the SDK for authoring rules, not for driving the engine. A registry that
+already names the language does not repeat it; the tree, which holds four,
+does — hence the directory suffixes. Go's name is its path,
+`github.com/ecoma-io/lattice/packages/lattice-rule-sdk-go`, and the length
+is an accepted cost of the monorepo decision above.
+
+Versioning and release ride what exists rather than growing a second lane:
+
+- **Every SDK joins the one version chain.** The Cargo, PyPI and npm
+  manifests join release-please's `extra-files` and the `check-skills` chain
+  in the same change that lands each package — the arrangement
+  [skills/versioning.md](../skills/versioning.md) already holds for the five
+  files it lists.
+- **Go's version is the tag.** A Go module carries no manifest version, and
+  Go's own rule for a module below the repository root is a tag prefixed
+  with the module's directory — so the release lane mints
+  `packages/lattice-rule-sdk-go/v<version>` beside the bare `v<version>` it
+  already tags.
+- **One publish job per registry**, each behind the same pre-publish
+  conformance re-run and never-widening waiver expression the existing
+  publish jobs hold (`release.yml`'s own comments own that argument), and
+  each with its `scripts/verify-package.mjs`-shaped proof: the packed
+  artifact installed into a throwaway workspace of that language, driven
+  through a consumer's first hour before anything is published.
+
+### The order the mechanisms land in
+
+Stages, not dates — [roadmap.md](../doctrine/roadmap.md) refuses dates and
+this record refuses them with it. Each stage carries its own proof, and no
+stage's checkmark is implied by the one before:
+
+1. **Declarative growth.** New condition types as real demand names them —
+   no new surface, no new package, each documented in
+   [reference/policy-schema.md](../reference/policy-schema.md) as it lands.
+2. **The contract, engine-side.** The evidence bundle and its canonical
+   serialization; the fifth policy name across the dialects; the wasm host
+   in the rule stage; the failure taxonomy wired to the existing exit
+   codes; the finding namespace in all three report faces. Proven before
+   any SDK exists: a hand-built wasm fixture rule drives `check` end to
+   end, and the packed-artifact verification grows the consumer-side probe
+   — the contract is proven from the outside first, the same direction
+   `scripts/verify-package.mjs` already proves the package from.
+3. **The golden fixtures, then the first SDK: Rust.** Fixtures generated
+   from the engine, then `packages/lattice-rule-sdk-rust` clearing the
+   whole bar the SDK section states, with the crates.io lane in the same
+   stage. Rust goes first because `wasm32-unknown-unknown` is the one
+   mainstream toolchain that emits a no-import module today.
+4. **TypeScript, Go, Python — in the order their build stories clear the
+   no-import host, measured.** Go's mainstream wasm targets assume a WASI
+   or JavaScript host, so its story must be proven against this host before
+   its SDK is announced; the SDK section already prices Python's distance.
+5. **The first language-namespaced evidence kind**, arriving with the first
+   real rule that needs it — extractor and contract addendum in one change.
+   May overlap stages three and four.
+
+The measure of "shipped" does not move: it stays the last consequence
+below — one SDK, one kind, one real workspace blocking on a custom rule.
+
 ### Refused alternatives, each by name
 
 - **An in-process JavaScript plugin API — the ESLint model.** It would
