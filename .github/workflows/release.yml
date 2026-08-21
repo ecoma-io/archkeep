@@ -21,17 +21,15 @@ name: Release
 # that resolves the server out of the workspace pairs with the engine it is
 # released with, and one version makes the pairing visible.
 #
-# Two more destinations ride the same release, differently guarded because
-# their packages are in different states. The crates.io job serves the Rust
-# rule SDK (`packages/lattice-rule-sdk-rust`), which IS in the tree: it
-# publishes on every release, re-proving the crate from the tagged bytes
-# first, and an empty token fails it red. The PyPI job serves the Python rule
-# SDK (`packages/lattice-rule-sdk-python`,
-# docs/adr/0002-custom-rules-one-contract.md stages it), which does not exist
-# in the tree yet: until a tagged release carries that package the job says
-# loudly that there was nothing to publish — the marketplace step's own
-# pattern — and the moment the package lands, the same release that ships the
-# engine ships it, under the one version everything here shares.
+# Two more destinations ride the same release. The crates.io job serves the
+# Rust rule SDK (`packages/lattice-rule-sdk-rust`): it publishes on every
+# release, re-proving the crate from the tagged bytes first, and an empty
+# token fails it red. The PyPI job serves the Python rule SDK
+# (`packages/lattice-rule-sdk-python`) the same way now that the package is
+# in the tree; its find-the-package guard stays, because it is also the
+# job's honest answer on any old tag re-run from before the package existed,
+# and an empty token with the package present fails red for the same
+# shipped-nothing-under-green reason the crates job states.
 #
 # The releases' lack of signatures on the GitHub release object is named rather
 # than discovered later: the plugin releases carry no asset to sign, and the
@@ -687,9 +685,10 @@ jobs:
         run: |
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
-            import { cargoPackageVersion } from "./scripts/check-skills.mjs";
-            const version = cargoPackageVersion(
+            import { tomlSectionVersion } from "./scripts/check-skills.mjs";
+            const version = tomlSectionVersion(
               readFileSync("packages/lattice-rule-sdk-rust/Cargo.toml", "utf8"),
+              "[package]",
             );
             const tag = process.env.TAG;
             if (`v${version}` !== tag) {

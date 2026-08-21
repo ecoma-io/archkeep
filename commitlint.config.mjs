@@ -18,10 +18,13 @@ export default {
         // has to edit this file to describe itself.
         "lattice",
         "vscode",
-        // `packages/lattice-rule-sdk-rust` — the language, not the directory,
-        // because the SDK per language is what a reader routes on and the
-        // crate itself is named `lattice-rule-sdk` on every registry.
+        // The rule SDKs — the language, not the directory, because the SDK
+        // per language is what a reader routes on and every registry name is
+        // `lattice-rule-sdk` with the language implied.
         "rust-sdk",
+        "go-sdk",
+        "ts-sdk",
+        "python-sdk",
         "workspace",
         "docs",
         "deps",

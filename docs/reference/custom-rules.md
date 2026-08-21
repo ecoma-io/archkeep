@@ -154,9 +154,33 @@ notifications rather than silence; the JSON envelope gains the additive
 
 ## Writing a rule
 
-The Rust SDK — crate `lattice-rule-sdk`, in this repository at
-`packages/lattice-rule-sdk-rust` with its own README — generates the exports
-above from a typed `lattice_rule!` declaration, makes a hollow verdict
-unrepresentable, and fails a malformed declaration at compile time. Any
-toolchain that can emit a no-import core-wasm module implementing this page
-is equally valid: the contract, not the SDK, is the interface.
+Three SDKs ship from this repository, each in its own package with the README
+that owns its build story and declared limits, and each proven by a committed
+reference artifact driven through this very host:
+
+- **Rust** — crate `lattice-rule-sdk`, `packages/lattice-rule-sdk-rust`: a
+  typed `lattice_rule!` declaration generates the exports above, a hollow
+  verdict is unrepresentable, and a malformed declaration fails at compile
+  time. Built with `wasm32-unknown-unknown`.
+- **Go** — module `github.com/ecoma-io/lattice/packages/lattice-rule-sdk-go`:
+  the same typed surface with `Register` from `init`, zero dependencies
+  (`encoding/json` is the stdlib's). Built with TinyGo's freestanding target —
+  standard Go's wasm targets import a host and are refused at load, a measured
+  fact that package's README carries.
+- **TypeScript syntax, AssemblyScript semantics** — npm package
+  `@ecoma-io/lattice-rule-sdk`, `packages/lattice-rule-sdk-ts`: TS-syntax
+  rules compiled by AssemblyScript to a zero-import module. AssemblyScript is
+  not TypeScript's semantics — no `any`, no unions, no `try/catch`, no JS
+  stdlib — and that package's README leads with exactly what differs.
+- **Python** — PyPI distribution `lattice-rule-sdk`,
+  `packages/lattice-rule-sdk-python`: the author writes pure Python, and the
+  build tool bakes it into a Rust carrier embedding the RustPython
+  interpreter, compiled to the same zero-import module (with fixed hash
+  seeding — determinism as a feature). Two declared limits that package's
+  README owns: building needs cargo on the author's machine, and RustPython's
+  15-bit refcount on wasm32 puts a measured object ceiling on very large
+  workspaces — past it the rule answers `unknown` naming the ceiling, never
+  a trap.
+
+Any toolchain that can emit a no-import core-wasm module implementing this
+page is equally valid: the contract, not the SDK, is the interface.

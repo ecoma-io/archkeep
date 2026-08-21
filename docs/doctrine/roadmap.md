@@ -104,10 +104,12 @@ A new reader should find these capabilities described as present, not promised.
   in any language whose toolchain emits a no-import core-wasm module, judged
   by the same deterministic engine over the same observed facts, folded into
   `check` by presence with verdicts in the same four-state vocabulary, and
-  loud on every failure path. The Rust SDK (`lattice-rule-sdk`) ships from
-  this repository on the same version chain; further SDKs arrive as their
-  build stories clear the no-import host, in the order
-  [adr/0002](../adr/0002-custom-rules-one-contract.md) stages.
+  loud on every failure path. Four SDKs ship from this repository on the same
+  version chain — Rust, Go (TinyGo's freestanding target), TypeScript-syntax
+  AssemblyScript, and Python (a RustPython carrier) — each proven by a
+  committed reference artifact whose verdicts are byte-identical across all
+  four, with each build story's measured limits declared in its package
+  ([adr/0002](../adr/0002-custom-rules-one-contract.md) records the staging).
   ([concepts/custom-rules.md](../concepts/custom-rules.md),
   [reference/custom-rules.md](../reference/custom-rules.md))
 - **Architecture planning facts for agents.** `context` and `impact` answer the

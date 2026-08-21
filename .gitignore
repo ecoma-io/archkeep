@@ -49,3 +49,4 @@ pnpm-debug.log*
 # tmpdir(): the fixtures must sit inside the package to be resolvable by the
 # resolver under test.
 packages/lattice/.cli-eslint-config-fixture-*/
+__pycache__/

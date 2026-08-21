@@ -40,6 +40,16 @@
           "type": "toml",
           "path": "packages/lattice-rule-sdk-rust/Cargo.toml",
           "jsonpath": "$.package.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/lattice-rule-sdk-ts/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "toml",
+          "path": "packages/lattice-rule-sdk-python/pyproject.toml",
+          "jsonpath": "$.project.version"
         }
       ],
       "changelog-sections": [

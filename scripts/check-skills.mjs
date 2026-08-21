@@ -20,9 +20,10 @@
 // plugin manifest version, and the VS Code extension's package.json version
 // must all match it — and so must the repository ROOT `package.json`, which
 // is what release-please's "." component actually bumps directly; the other
-// six (this baseline included) are copies of it via `extra-files` — the Rust
-// SDK's Cargo.toml joined the chain with its package, per the ADR 0002
-// decision that every SDK versions with the engine it pairs with. Checking
+// seven (this baseline included) are copies of it via `extra-files` — the
+// Rust SDK's Cargo.toml and the TS SDK's package.json joined the chain with
+// their packages, per the ADR 0002 decision that every SDK versions with the
+// engine it pairs with. Checking
 // every copy against a baseline that was never itself checked against the
 // thing it copies from is the gap this script closes: a drift there would
 // have read as "everything agrees" right up to the file nothing compared.
@@ -52,6 +53,8 @@ export const MARKETPLACE_PLUGIN_NAME = "lattice";
 export const CODEX_PLUGIN_MANIFEST = ".codex-plugin/plugin.json";
 export const VSCODE_PACKAGE_JSON = "packages/lattice-vscode/package.json";
 export const RUST_SDK_CARGO_TOML = "packages/lattice-rule-sdk-rust/Cargo.toml";
+export const TS_SDK_PACKAGE_JSON = "packages/lattice-rule-sdk-ts/package.json";
+export const PYTHON_SDK_PYPROJECT = "packages/lattice-rule-sdk-python/pyproject.toml";
 
 // Host-specific frontmatter fields that must NOT appear in canonical skills.
 // These are Claude Code extensions to the Agent Skills spec.
@@ -137,30 +140,31 @@ function unquote(value) {
 }
 
 /**
- * The `[package]` section's `version` from a Cargo manifest, or "?" when the
- * shape is not there to read — the same fallback every JSON reader above uses,
- * so an absent or unreadable manifest fails the version comparison loudly
- * instead of being skipped.
+ * The named section's `version` from a TOML manifest — Cargo's `[package]`,
+ * pyproject's `[project]` — or "?" when the shape is not there to read: the
+ * same fallback every JSON reader above uses, so an absent or unreadable
+ * manifest fails the version comparison loudly instead of being skipped.
  *
- * A minimal parser in `parseSkillFrontmatter`'s spirit: only the shape cargo
- * itself writes. Scoped to the `[package]` section deliberately — a bare
+ * A minimal parser in `parseSkillFrontmatter`'s spirit: only the shape those
+ * tools themselves write. Scoped to the named section deliberately — a bare
  * `version = "…"` match would also hit a pinned dependency's version under
- * `[dependencies]`, and reading the wrong section's number as the crate's own
- * is the silent direction for a version gate.
+ * `[dependencies]`, and reading the wrong section's number as the manifest's
+ * own is the silent direction for a version gate.
  *
- * @param {string} text full contents of a Cargo.toml
- * @returns {string} the package version, or "?" when it cannot be read
+ * @param {string} text full contents of the TOML file
+ * @param {string} section the section header the version lives under
+ * @returns {string} the section's version, or "?" when it cannot be read
  */
-export function cargoPackageVersion(text) {
+export function tomlSectionVersion(text, section) {
   const lines = text.split("\n");
-  let inPackage = false;
+  let inSection = false;
   for (const line of lines) {
     const trimmed = line.trim();
     if (/^\[/.test(trimmed)) {
-      inPackage = trimmed === "[package]";
+      inSection = trimmed === section;
       continue;
     }
-    if (!inPackage) continue;
+    if (!inSection) continue;
     const match = /^version\s*=\s*"([^"]+)"/.exec(trimmed);
     if (match) return match[1];
   }
@@ -198,6 +202,8 @@ export function selectMarketplaceVersion(catalogue, pluginName) {
  * @param {string} input.codexPluginVersion version from the Codex plugin manifest
  * @param {string} input.vscodeVersion version from packages/lattice-vscode/package.json
  * @param {string} input.cargoVersion version from the Rust SDK's Cargo.toml `[package]` section
+ * @param {string} input.tsSdkVersion version from the TS SDK's package.json
+ * @param {string} input.pySdkVersion version from the Python SDK's pyproject.toml `[project]` section
  * @param {{dir: string, name: string|null, description: string|null, compatibility: string|null, hostFields: string[], text?: string}[]} input.skills
  *   parsed frontmatter plus the full SKILL.md text for each skill
  * @param {string} [input.authoring] text of docs/skills/authoring.md
@@ -213,6 +219,8 @@ export function evaluate({
   codexPluginVersion,
   vscodeVersion,
   cargoVersion,
+  tsSdkVersion,
+  pySdkVersion,
   skills,
   authoring = "",
   overview = "",
@@ -513,6 +521,30 @@ export function evaluate({
     lines.push(`FAIL lattice-rule-sdk-rust/Cargo.toml — version mismatch`);
   }
 
+  // 13. TS SDK package version must match package version — the same chain
+  // decision as check 12, for the npm-published SDK.
+  if (tsSdkVersion !== packageVersion) {
+    failures.push(
+      `packages/lattice-rule-sdk-ts/package.json version is "${tsSdkVersion}" but package ` +
+        `version is "${packageVersion}". The TS SDK versions with the engine it pairs ` +
+        `with (docs/adr/0002-custom-rules-one-contract.md), and release-please writes it ` +
+        `via extra-files — if the two disagree the chain has drifted.`,
+    );
+    lines.push(`FAIL lattice-rule-sdk-ts/package.json — version mismatch`);
+  }
+
+  // 14. Python SDK version must match package version — the same chain
+  // decision as checks 12 and 13, for the PyPI-published SDK.
+  if (pySdkVersion !== packageVersion) {
+    failures.push(
+      `packages/lattice-rule-sdk-python/pyproject.toml version is "${pySdkVersion}" but ` +
+        `package version is "${packageVersion}". The Python SDK versions with the engine ` +
+        `it pairs with (docs/adr/0002-custom-rules-one-contract.md), and release-please ` +
+        `writes it via extra-files — if the two disagree the chain has drifted.`,
+    );
+    lines.push(`FAIL lattice-rule-sdk-python/pyproject.toml — version mismatch`);
+  }
+
   return { lines, failures };
 }
 
@@ -520,7 +552,7 @@ export function evaluate({
  * Reads the filesystem and returns the facts `evaluate` needs.
  * This is the only function that touches the outside world.
  *
- * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, skills: object[], authoring: string, overview: string}}
+ * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, tsSdkVersion: string, pySdkVersion: string, skills: object[], authoring: string, overview: string}}
  */
 export function readSkillFacts() {
   const pkgPath = join(root, PACKAGE_JSON);
@@ -559,7 +591,18 @@ export function readSkillFacts() {
 
   const cargoPath = join(root, RUST_SDK_CARGO_TOML);
   const cargoVersion = existsSync(cargoPath)
-    ? cargoPackageVersion(readFileSync(cargoPath, "utf8"))
+    ? tomlSectionVersion(readFileSync(cargoPath, "utf8"), "[package]")
+    : "?";
+
+  const tsSdkPath = join(root, TS_SDK_PACKAGE_JSON);
+  const tsSdk = existsSync(tsSdkPath)
+    ? JSON.parse(readFileSync(tsSdkPath, "utf8"))
+    : { version: "?" };
+  const tsSdkVersion = tsSdk.version;
+
+  const pyprojectPath = join(root, PYTHON_SDK_PYPROJECT);
+  const pySdkVersion = existsSync(pyprojectPath)
+    ? tomlSectionVersion(readFileSync(pyprojectPath, "utf8"), "[project]")
     : "?";
 
   const skillsDir = join(root, SKILLS_DIR);
@@ -608,6 +651,8 @@ export function readSkillFacts() {
     codexPluginVersion,
     vscodeVersion,
     cargoVersion,
+    tsSdkVersion,
+    pySdkVersion,
     skills,
     authoring: readDoc("docs/skills/authoring.md"),
     overview: readDoc("docs/skills/overview.md"),
