@@ -694,4 +694,566 @@ export const ARCHITECTURE_CORPUS = [
       },
     ],
   },
+
+  // -------------------------------------------------- strict layering (Go)
+  {
+    id: "strict-layering-in-go",
+    style: "layered (strict)",
+    languages: ["go"],
+    intent:
+      "The pair to `layered-architecture-in-go`, which encodes the RELAXED reading: there each layer may reach every layer beneath it, so only an outward edge is a finding. Here each row names its own tier and the one immediately below it, which is the whole of strict layering — a downward edge that skips a tier is a violation even though it points the way the arrows do. Both readings are the same four rows with a different allow-list, so this case is what proves the difference is expressible at all rather than a matter of taste. `sl-view` is a second presentation-tier project that imports nothing, which is what lets the upward edge into it be judged on the tier axis instead of as a cycle.",
+    projects: [
+      { name: "sl-presentation", root: "libs/sl-presentation", tags: ["tier:presentation"] },
+      { name: "sl-view", root: "libs/sl-view", tags: ["tier:presentation"] },
+      { name: "sl-application", root: "libs/sl-application", tags: ["tier:application"] },
+      { name: "sl-domain", root: "libs/sl-domain", tags: ["tier:domain"] },
+      { name: "sl-infrastructure", root: "libs/sl-infrastructure", tags: ["tier:infrastructure"] },
+    ],
+    depConstraints: [
+      {
+        sourceTag: "tier:presentation",
+        onlyDependOnLibsWithTags: ["tier:presentation", "tier:application"],
+      },
+      {
+        sourceTag: "tier:application",
+        onlyDependOnLibsWithTags: ["tier:application", "tier:domain"],
+      },
+      {
+        sourceTag: "tier:domain",
+        onlyDependOnLibsWithTags: ["tier:domain", "tier:infrastructure"],
+      },
+      { sourceTag: "tier:infrastructure", onlyDependOnLibsWithTags: ["tier:infrastructure"] },
+    ],
+    files: {
+      "libs/sl-presentation/go.mod": "module example.test/sl-presentation\n\ngo 1.24\n",
+      "libs/sl-presentation/handler.go":
+        'package presentation\n\nimport "example.test/sl-application"\n\nvar Handler = application.Service\n',
+      "libs/sl-presentation/skip.go":
+        'package presentation\n\nimport "example.test/sl-domain"\n\nvar Skipped = domain.Model\n',
+      "libs/sl-view/go.mod": "module example.test/sl-view\n\ngo 1.24\n",
+      "libs/sl-view/view.go":
+        "// Package view imports nothing, so an edge into it cannot close a cycle.\npackage view\n\nvar Widget = 1\n",
+      "libs/sl-application/go.mod": "module example.test/sl-application\n\ngo 1.24\n",
+      "libs/sl-application/service.go":
+        'package application\n\nimport "example.test/sl-domain"\n\nvar Service = domain.Model\n',
+      "libs/sl-application/bypass.go":
+        'package application\n\nimport "example.test/sl-infrastructure"\n\nvar Bypass = infrastructure.Conn\n',
+      "libs/sl-domain/go.mod": "module example.test/sl-domain\n\ngo 1.24\n",
+      "libs/sl-domain/model.go":
+        'package domain\n\nimport "example.test/sl-infrastructure"\n\nvar Model = infrastructure.Conn\n',
+      "libs/sl-domain/upward.go":
+        'package domain\n\nimport "example.test/sl-view"\n\nvar Upward = view.Widget\n',
+      "libs/sl-infrastructure/go.mod": "module example.test/sl-infrastructure\n\ngo 1.24\n",
+      "libs/sl-infrastructure/db.go": "package infrastructure\n\nvar Conn = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/sl-presentation/handler.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The one downward edge strict layering permits at this tier — presentation to the tier immediately below it.",
+      },
+      {
+        file: "libs/sl-presentation/skip.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/sl-domain",
+            target: "sl-domain",
+          },
+        ],
+        denyAll: 1,
+        why: "The finding strict layering exists for and relaxed layering has no way to express: the edge points downward, which every layered reading allows, and skips the tier between, which only this one forbids.",
+      },
+      {
+        file: "libs/sl-application/service.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The same adjacent-tier shape one rung down, so the near-miss is measured on more than the topmost row.",
+      },
+      {
+        file: "libs/sl-application/bypass.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/sl-infrastructure",
+            target: "sl-infrastructure",
+          },
+        ],
+        denyAll: 1,
+        why: "A second skipped tier, reported by a different row than the first — an engine holding only the first row would call this file clean.",
+      },
+      {
+        file: "libs/sl-domain/model.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The bottom rung's own adjacent edge, which the same table that reported two skips must leave alone.",
+      },
+      {
+        file: "libs/sl-domain/upward.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/sl-view",
+            target: "sl-view",
+          },
+        ],
+        denyAll: 1,
+        why: "The forbidden upward dependency, judged on the tier axis rather than as a cycle: `sl-view` imports nothing, so nothing reaches back and `noCircularDependencies` never fires ahead of the tag block.",
+      },
+    ],
+  },
+
+  // ------------------------------------------------------- onion (Python)
+  {
+    id: "onion-rings-in-python",
+    style: "onion",
+    languages: ["python"],
+    intent:
+      "Four rings, inward-only, and the one thing onion says that strict layering does not: an inward edge may skip as many rings as it likes. `on-app/service.py` reaches past the domain-services ring straight to the model and must stay silent, which is the exact edge `strict-layering-in-go` reports one case above — the two cases together are what show the engine is holding the table rather than a notion of layering. The outward edges point at `on-shell`, an outermost-ring project that imports nothing. The barrel probe is the shape a reviewer cannot see: a ring's own `__init__.py` re-exporting a name from outside the onion, which is an outward dependency written where nobody reads for one.",
+    projects: [
+      { name: "on-model", root: "libs/on-model", tags: ["ring:domain-model"] },
+      { name: "on-services", root: "libs/on-services", tags: ["ring:domain-services"] },
+      { name: "on-app", root: "libs/on-app", tags: ["ring:application-services"] },
+      { name: "on-infra", root: "libs/on-infra", tags: ["ring:infrastructure"] },
+      { name: "on-shell", root: "libs/on-shell", tags: ["ring:infrastructure"] },
+    ],
+    depConstraints: [
+      { sourceTag: "ring:domain-model", onlyDependOnLibsWithTags: ["ring:domain-model"] },
+      {
+        sourceTag: "ring:domain-services",
+        onlyDependOnLibsWithTags: ["ring:domain-services", "ring:domain-model"],
+      },
+      {
+        sourceTag: "ring:application-services",
+        onlyDependOnLibsWithTags: [
+          "ring:application-services",
+          "ring:domain-services",
+          "ring:domain-model",
+        ],
+      },
+      {
+        sourceTag: "ring:infrastructure",
+        onlyDependOnLibsWithTags: [
+          "ring:infrastructure",
+          "ring:application-services",
+          "ring:domain-services",
+          "ring:domain-model",
+        ],
+      },
+    ],
+    files: {
+      "libs/on-model/pyproject.toml": '[project]\nname = "on_model"\nversion = "0.1.0"\n',
+      "libs/on-model/src/on_model/__init__.py":
+        "from on_shell.wire import WIRE\n\nSURFACE = WIRE\n",
+      "libs/on-model/src/on_model/entity.py": "ENTITY = 1\n",
+      "libs/on-model/src/on_model/value.py": "from .entity import ENTITY\n\nVALUE = ENTITY\n",
+      "libs/on-services/pyproject.toml": '[project]\nname = "on_services"\nversion = "0.1.0"\n',
+      "libs/on-services/src/on_services/__init__.py": "",
+      "libs/on-services/src/on_services/policy.py":
+        "from on_model.entity import ENTITY\n\nPOLICY = ENTITY\n",
+      "libs/on-app/pyproject.toml": '[project]\nname = "on_app"\nversion = "0.1.0"\n',
+      "libs/on-app/src/on_app/__init__.py": "",
+      "libs/on-app/src/on_app/service.py":
+        "from on_model.entity import ENTITY\nfrom on_services.policy import POLICY\n\nSERVICE = (ENTITY, POLICY)\n",
+      "libs/on-app/src/on_app/leak.py": "from on_shell.wire import WIRE\n\nLEAK = WIRE\n",
+      "libs/on-infra/pyproject.toml": '[project]\nname = "on_infra"\nversion = "0.1.0"\n',
+      "libs/on-infra/src/on_infra/__init__.py": "",
+      "libs/on-infra/src/on_infra/repo.py":
+        "from on_app.service import SERVICE\nfrom on_services.policy import POLICY\nfrom on_model.entity import ENTITY\n\nREPO = (SERVICE, POLICY, ENTITY)\n",
+      "libs/on-shell/pyproject.toml": '[project]\nname = "on_shell"\nversion = "0.1.0"\n',
+      "libs/on-shell/src/on_shell/__init__.py": "",
+      "libs/on-shell/src/on_shell/wire.py":
+        "# This distribution imports nothing, so an edge into it cannot close a cycle.\nWIRE = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/on-model/src/on_model/__init__.py",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "on_shell.wire",
+            target: "on-shell",
+          },
+        ],
+        denyAll: 1,
+        why: "The innermost ring's own public surface re-exporting a name from the outermost one. A barrel is where an outward dependency hides from review, and the engine reads it as the import it is.",
+      },
+      {
+        file: "libs/on-model/src/on_model/value.py",
+        imports: 1,
+        reports: [],
+        denyAll: 0,
+        why: "A relative import inside one distribution never leaves the project, so no tag rule is reached and the deny-all policy has nothing to forbid either; the import count beside it is what proves the site was read.",
+      },
+      {
+        file: "libs/on-services/src/on_services/policy.py",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "One ring inward, the direction every onion edge is allowed to take.",
+      },
+      {
+        file: "libs/on-app/src/on_app/service.py",
+        imports: 2,
+        reports: [],
+        denyAll: 2,
+        why: "The edge that separates onion from strict layering: `on_model` is two rings inward, skipping `on-services`, and onion permits any inward depth. `strict-layering-in-go` reports the same shape, which is what makes this silence a verdict about the table rather than about the engine.",
+      },
+      {
+        file: "libs/on-app/src/on_app/leak.py",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "on_shell.wire",
+            target: "on-shell",
+          },
+        ],
+        denyAll: 1,
+        why: "An application service reaching the outermost ring — the dependency rule broken from a middle ring rather than from the centre.",
+      },
+      {
+        file: "libs/on-infra/src/on_infra/repo.py",
+        imports: 3,
+        reports: [],
+        denyAll: 3,
+        why: "The outermost ring may reach every ring inside it, at every depth; three silent edges in one file is the widest near-miss the table has.",
+      },
+    ],
+  },
+
+  // ------------------------------ clean architecture, inverted (Rust)
+  {
+    id: "clean-architecture-dependency-inversion-in-rust",
+    style: "clean architecture",
+    languages: ["rust"],
+    intent:
+      "What separates clean architecture from layering is not the direction of the arrows but which arrows are allowed to be inverted, and no case here measured that until this one. `ca-driver` is an outermost-ring crate that implements a trait the use-case ring declares: its source dependency points inward, at the abstraction, while the concrete direction at runtime points outward — the shape an engine that read 'frameworks depend on nothing' as a rule about arrows would report. It must stay silent. Beside it, `ca-entities/src/surface.rs` launders an outward dependency through a `pub use`, which is the only place a Rust crate can hide one, and the interactor reaches outward directly. The outward edges point at `ca-leaf`, a frameworks-ring crate that uses nothing.",
+    projects: [
+      { name: "ca-entities", root: "libs/ca-entities", tags: ["layer:entities"] },
+      { name: "ca-usecases", root: "libs/ca-usecases", tags: ["layer:use-cases"] },
+      { name: "ca-adapters", root: "libs/ca-adapters", tags: ["layer:interface-adapters"] },
+      { name: "ca-driver", root: "libs/ca-driver", tags: ["layer:frameworks"] },
+      { name: "ca-leaf", root: "libs/ca-leaf", tags: ["layer:frameworks"] },
+    ],
+    depConstraints: [
+      { sourceTag: "layer:entities", onlyDependOnLibsWithTags: ["layer:entities"] },
+      {
+        sourceTag: "layer:use-cases",
+        onlyDependOnLibsWithTags: ["layer:use-cases", "layer:entities"],
+      },
+      {
+        sourceTag: "layer:interface-adapters",
+        onlyDependOnLibsWithTags: ["layer:interface-adapters", "layer:use-cases", "layer:entities"],
+      },
+      {
+        sourceTag: "layer:frameworks",
+        onlyDependOnLibsWithTags: [
+          "layer:frameworks",
+          "layer:interface-adapters",
+          "layer:use-cases",
+          "layer:entities",
+        ],
+      },
+    ],
+    files: {
+      "libs/ca-entities/Cargo.toml": '[package]\nname = "ca_entities"\nversion = "0.1.0"\n',
+      "libs/ca-entities/src/lib.rs": "pub mod order;\npub mod surface;\n",
+      "libs/ca-entities/src/order.rs": "pub struct Order;\n",
+      "libs/ca-entities/src/surface.rs": "pub use ca_leaf::Wire;\n",
+      "libs/ca-usecases/Cargo.toml": '[package]\nname = "ca_usecases"\nversion = "0.1.0"\n',
+      "libs/ca-usecases/src/lib.rs": "pub mod interactor;\npub mod port;\n",
+      "libs/ca-usecases/src/port.rs":
+        "use ca_entities::order::Order;\n\npub trait Repository {\n    fn save(&self, order: &Order);\n}\n",
+      "libs/ca-usecases/src/interactor.rs":
+        "use super::port::Repository;\nuse ca_leaf::Wire;\n\npub fn run(_: &dyn Repository, _: &Wire) {}\n",
+      "libs/ca-adapters/Cargo.toml": '[package]\nname = "ca_adapters"\nversion = "0.1.0"\n',
+      "libs/ca-adapters/src/lib.rs":
+        "use ca_entities::order::Order;\nuse ca_usecases::port::Repository;\n\npub fn present(_: &dyn Repository, _: &Order) {}\n",
+      "libs/ca-driver/Cargo.toml": '[package]\nname = "ca_driver"\nversion = "0.1.0"\n',
+      "libs/ca-driver/src/lib.rs":
+        "use ca_entities::order::Order;\nuse ca_usecases::port::Repository;\n\npub struct SqlRepository;\n\nimpl Repository for SqlRepository {\n    fn save(&self, _: &Order) {}\n}\n",
+      "libs/ca-leaf/Cargo.toml": '[package]\nname = "ca_leaf"\nversion = "0.1.0"\n',
+      "libs/ca-leaf/src/lib.rs":
+        "// This crate uses nothing, so an edge into it cannot close a cycle.\npub struct Wire;\n",
+    },
+    probes: [
+      {
+        file: "libs/ca-entities/src/surface.rs",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "ca_leaf::Wire",
+            target: "ca-leaf",
+          },
+        ],
+        denyAll: 1,
+        why: "A `pub use` is a re-export, and a re-export of a framework type from the entity ring's public surface is the dependency rule broken in the one syntax that reads as an export rather than an import.",
+      },
+      {
+        file: "libs/ca-usecases/src/port.rs",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The use-case ring naming an entity type in the port it declares — the inward edge the whole style is built on.",
+      },
+      {
+        file: "libs/ca-usecases/src/interactor.rs",
+        imports: 2,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "ca_leaf::Wire",
+            target: "ca-leaf",
+          },
+        ],
+        denyAll: 1,
+        why: "One outward reach and one intra-crate `super::` path in the same file: the first reports, the second is ordinary Rust that never leaves the crate and stays silent under both policies.",
+      },
+      {
+        file: "libs/ca-adapters/src/lib.rs",
+        imports: 2,
+        reports: [],
+        denyAll: 2,
+        why: "An interface adapter naming both inner rings, which is the layer's whole job.",
+      },
+      {
+        file: "libs/ca-driver/src/lib.rs",
+        imports: 2,
+        reports: [],
+        denyAll: 2,
+        why: "The dependency inversion itself: an outermost-ring crate implements a trait the use-case ring declared, so its source dependencies point inward while the runtime direction is outward. An engine that judged the runtime direction, or that read 'the outer ring depends on nothing' off a diagram, reports here — and would be reporting the one edge the style requires.",
+      },
+    ],
+  },
+
+  // ------------------------------------------- vertical slices (Go)
+  {
+    id: "vertical-slice-features-in-go",
+    style: "vertical slice",
+    languages: ["go"],
+    intent:
+      "A feature-partitioned tree rather than a layered one: the axis is `feature:`, every slice owns its whole stack, and the only thing two slices may share is the kernel. Three things are measured that no layered case can reach — a cross-feature edge, the kernel inverting into a feature, and `vs-checkout`, a slice added to the tree with no constraint row of its own. The last is the one that matters for a partitioned style: the table has to be extended once per slice, so the question is what happens when somebody forgets. It reports, because a source project matching no row is upstream's `projectWithoutTagsCannotHaveDependencies` rather than a pass — which is what makes the one-row-per-slice encoding fail closed as the tree grows. `vs-catalog` imports nothing, so the edges into it are judged on the feature axis instead of as cycles.",
+    projects: [
+      { name: "vs-orders", root: "libs/vs-orders", tags: ["feature:orders"] },
+      { name: "vs-catalog", root: "libs/vs-catalog", tags: ["feature:catalog"] },
+      { name: "vs-checkout", root: "libs/vs-checkout", tags: ["feature:checkout"] },
+      { name: "vs-kernel", root: "libs/vs-kernel", tags: ["layer:shared-kernel"] },
+      { name: "vs-host", root: "libs/vs-host", tags: ["layer:host"] },
+    ],
+    depConstraints: [
+      {
+        sourceTag: "feature:orders",
+        onlyDependOnLibsWithTags: ["feature:orders", "layer:shared-kernel"],
+      },
+      {
+        sourceTag: "feature:catalog",
+        onlyDependOnLibsWithTags: ["feature:catalog", "layer:shared-kernel"],
+      },
+      { sourceTag: "layer:shared-kernel", onlyDependOnLibsWithTags: ["layer:shared-kernel"] },
+      {
+        sourceTag: "layer:host",
+        onlyDependOnLibsWithTags: [
+          "layer:host",
+          "feature:orders",
+          "feature:catalog",
+          "layer:shared-kernel",
+        ],
+      },
+    ],
+    files: {
+      "libs/vs-orders/go.mod": "module example.test/vs-orders\n\ngo 1.24\n",
+      "libs/vs-orders/slice.go":
+        'package orders\n\nimport "example.test/vs-kernel"\n\nvar Slice = kernel.Clock\n',
+      "libs/vs-orders/cross.go":
+        'package orders\n\nimport "example.test/vs-catalog"\n\nvar Cross = catalog.Item\n',
+      "libs/vs-catalog/go.mod": "module example.test/vs-catalog\n\ngo 1.24\n",
+      "libs/vs-catalog/catalog.go":
+        "// Package catalog imports nothing, so an edge into it cannot close a cycle.\npackage catalog\n\nvar Item = 1\n",
+      "libs/vs-checkout/go.mod": "module example.test/vs-checkout\n\ngo 1.24\n",
+      "libs/vs-checkout/checkout.go":
+        'package checkout\n\nimport "example.test/vs-kernel"\n\nvar Checkout = kernel.Clock\n',
+      "libs/vs-kernel/go.mod": "module example.test/vs-kernel\n\ngo 1.24\n",
+      "libs/vs-kernel/kernel.go": "package kernel\n\nvar Clock = 1\n",
+      "libs/vs-kernel/inverted.go":
+        'package kernel\n\nimport "example.test/vs-catalog"\n\nvar Inverted = catalog.Item\n',
+      "libs/vs-host/go.mod": "module example.test/vs-host\n\ngo 1.24\n",
+      "libs/vs-host/main.go":
+        'package host\n\nimport (\n\t"example.test/vs-catalog"\n\t"example.test/vs-orders"\n)\n\nvar App = []any{catalog.Item, orders.Slice}\n',
+    },
+    probes: [
+      {
+        file: "libs/vs-orders/slice.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The kernel is the one thing a slice may reach outside itself.",
+      },
+      {
+        file: "libs/vs-orders/cross.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/vs-catalog",
+            target: "vs-catalog",
+          },
+        ],
+        denyAll: 1,
+        why: "One slice reaching another is the violation the style is defined by; there is no layer axis in this tree for it to be a violation on.",
+      },
+      {
+        file: "libs/vs-kernel/inverted.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/vs-catalog",
+            target: "vs-catalog",
+          },
+        ],
+        denyAll: 1,
+        why: "The kernel reaching into a feature inverts what a shared kernel is: everything may depend on it, so anything it depends on is shared by every slice whether or not that slice asked.",
+      },
+      {
+        file: "libs/vs-checkout/checkout.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "projectWithoutTagsCannotHaveDependencies",
+            specifier: "example.test/vs-kernel",
+            target: "vs-kernel",
+          },
+        ],
+        denyAll: 1,
+        why: "A slice added to the tree whose `feature:` value matches no row in the table. The import it makes is one the other slices are explicitly allowed, so an engine reading 'no rule said no' as a pass would be silent here — and every slice added after this one would inherit that silence.",
+      },
+      {
+        file: "libs/vs-host/main.go",
+        imports: 2,
+        reports: [],
+        denyAll: 2,
+        why: "The composition root is the one project allowed to see more than one slice, which is what keeps the cross-feature finding above from being a claim that nothing may.",
+      },
+    ],
+  },
+
+  // ------------------------- service boundaries, combo rows (Python)
+  {
+    id: "service-boundaries-with-combo-rows-in-python",
+    style: "microservice repository",
+    languages: ["python"],
+    intent:
+      "A repository of services, where the boundary is not one axis but two: which service a project belongs to, and whether it is that service's published contract or its private inside. Every other case here keys its rows on a single tag; these key on `allSourceTags`, which binds only when the source carries EVERY tag listed. That is the one tag mechanism no case in this directory measured, and the direction it fails in is silent: read as OR, the row below would match `ms-orders-tooling` — a project on the service axis with no visibility tag at all — and wave its import through, where the AND reading leaves it matching no row and reports. The near-miss beside it is the point of a published contract: one service reaching another's contract is what the style is for, and reaching its inside is not.",
+    projects: [
+      {
+        name: "ms-orders-api",
+        root: "libs/ms-orders-api",
+        tags: ["service:orders", "visibility:published"],
+      },
+      {
+        name: "ms-orders-core",
+        root: "libs/ms-orders-core",
+        tags: ["service:orders", "visibility:internal"],
+      },
+      { name: "ms-orders-tooling", root: "libs/ms-orders-tooling", tags: ["service:orders"] },
+      {
+        name: "ms-billing-api",
+        root: "libs/ms-billing-api",
+        tags: ["service:billing", "visibility:published"],
+      },
+      {
+        name: "ms-billing-core",
+        root: "libs/ms-billing-core",
+        tags: ["service:billing", "visibility:internal"],
+      },
+      { name: "ms-platform", root: "libs/ms-platform", tags: ["layer:platform"] },
+    ],
+    depConstraints: [
+      {
+        allSourceTags: ["service:orders", "visibility:internal"],
+        onlyDependOnLibsWithTags: ["service:orders", "visibility:published", "layer:platform"],
+      },
+      {
+        allSourceTags: ["service:billing", "visibility:internal"],
+        onlyDependOnLibsWithTags: ["service:billing", "visibility:published", "layer:platform"],
+      },
+      { sourceTag: "visibility:published", onlyDependOnLibsWithTags: ["layer:platform"] },
+      { sourceTag: "layer:platform", onlyDependOnLibsWithTags: ["layer:platform"] },
+    ],
+    files: {
+      "libs/ms-orders-api/pyproject.toml": '[project]\nname = "ms_orders_api"\nversion = "0.1.0"\n',
+      "libs/ms-orders-api/src/ms_orders_api/__init__.py": "",
+      "libs/ms-orders-api/src/ms_orders_api/contract.py": "ORDER = 1\n",
+      "libs/ms-orders-core/pyproject.toml":
+        '[project]\nname = "ms_orders_core"\nversion = "0.1.0"\n',
+      "libs/ms-orders-core/src/ms_orders_core/__init__.py": "",
+      "libs/ms-orders-core/src/ms_orders_core/service.py":
+        "from ms_orders_api.contract import ORDER\nfrom ms_billing_api.contract import INVOICE\n" +
+        "from ms_billing_core.ledger import LEDGER\nfrom ms_platform.log import LOG\n\n" +
+        "SERVICE = (ORDER, INVOICE, LEDGER, LOG)\n",
+      "libs/ms-orders-tooling/pyproject.toml":
+        '[project]\nname = "ms_orders_tooling"\nversion = "0.1.0"\n',
+      "libs/ms-orders-tooling/src/ms_orders_tooling/__init__.py": "",
+      "libs/ms-orders-tooling/src/ms_orders_tooling/tool.py":
+        "from ms_platform.log import LOG\n\nTOOL = LOG\n",
+      "libs/ms-billing-api/pyproject.toml":
+        '[project]\nname = "ms_billing_api"\nversion = "0.1.0"\n',
+      "libs/ms-billing-api/src/ms_billing_api/__init__.py": "",
+      "libs/ms-billing-api/src/ms_billing_api/contract.py": "INVOICE = 1\n",
+      "libs/ms-billing-core/pyproject.toml":
+        '[project]\nname = "ms_billing_core"\nversion = "0.1.0"\n',
+      "libs/ms-billing-core/src/ms_billing_core/__init__.py": "",
+      "libs/ms-billing-core/src/ms_billing_core/ledger.py":
+        "from ms_platform.log import LOG\n\nLEDGER = LOG\n",
+      "libs/ms-platform/pyproject.toml": '[project]\nname = "ms_platform"\nversion = "0.1.0"\n',
+      "libs/ms-platform/src/ms_platform/__init__.py": "",
+      "libs/ms-platform/src/ms_platform/log.py":
+        "# This distribution imports nothing, so an edge into it cannot close a cycle.\nLOG = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/ms-orders-core/src/ms_orders_core/service.py",
+        imports: 4,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "ms_billing_core.ledger",
+            target: "ms-billing-core",
+          },
+        ],
+        denyAll: 4,
+        why: "Four edges out of one service's private inside, and exactly one of them is a finding: its own contract, the other service's contract and the platform library are all permitted, and reaching the other service's inside is not. A combo row that matched on either tag rather than both would still allow all four.",
+      },
+      {
+        file: "libs/ms-billing-core/src/ms_billing_core/ledger.py",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The second combo row, held on a different service, so the near-miss is measured on more than the row the positive above used.",
+      },
+      {
+        file: "libs/ms-orders-tooling/src/ms_orders_tooling/tool.py",
+        imports: 1,
+        reports: [
+          {
+            messageId: "projectWithoutTagsCannotHaveDependencies",
+            specifier: "ms_platform.log",
+            target: "ms-platform",
+          },
+        ],
+        denyAll: 1,
+        why: "The discriminator for `allSourceTags`: this project carries `service:orders` and nothing on the visibility axis, so the orders combo row does not bind and no other row matches it either. The import is one every other row in the table permits, so an OR reading of the combo row is silent here and correct only by accident everywhere else.",
+      },
+    ],
+  },
 ];

@@ -883,6 +883,74 @@ export const CONFORMANCE_CASES = [
     ],
   },
   {
+    id: "a-combo-row-that-binds-only-on-every-tag-it-names",
+    intent:
+      "`allSourceTags` is the one tag mechanism no case here measured, and the direction it fails in is silent. The row below binds only to a project carrying BOTH tags; read as OR it would also bind to `combo-partial`, whose import of an allowed target it would then wave through — while the AND reading leaves that project matching no row at all, which upstream reports. The two probes on `combo-partial` are the discriminator, and they cover both doors the combo test sits in: `findConstraintsFor` for a workspace target, and the separate source filter `hasBannedImport` re-derives for an npm one.",
+    projects: [
+      {
+        name: "combo-source",
+        root: "libs/combo-source",
+        tags: ["kind:service", "grade:internal"],
+        files: {
+          "src/allowed.ts":
+            'import { allowed } from "@combo/allowed";\nexport const a = allowed;\n',
+          "src/denied.ts": 'import { denied } from "@combo/denied";\nexport const b = denied;\n',
+          "src/external.ts": 'import { entry } from "@combo-ban/pkg";\nexport const c = entry;\n',
+        },
+      },
+      {
+        name: "combo-partial",
+        root: "libs/combo-partial",
+        // One of the row's two tags. Everything below turns on this line.
+        tags: ["kind:service"],
+        files: {
+          "src/reach.ts": 'import { allowed } from "@combo/allowed";\nexport const d = allowed;\n',
+          "src/external.ts": 'import { entry } from "@combo-ban/pkg";\nexport const e = entry;\n',
+        },
+      },
+      {
+        name: "combo-allowed",
+        root: "libs/combo-allowed",
+        tags: ["zone:open"],
+        files: { "src/index.ts": barrel("allowed") },
+      },
+      {
+        name: "combo-denied",
+        root: "libs/combo-denied",
+        tags: ["zone:closed"],
+        files: { "src/index.ts": barrel("denied") },
+      },
+    ],
+    aliases: {
+      "@combo/allowed": "libs/combo-allowed/src/index.ts",
+      "@combo/denied": "libs/combo-denied/src/index.ts",
+    },
+    externals: [{ name: "@combo-ban/pkg", files: packageFiles }],
+    depConstraints: [
+      {
+        allSourceTags: ["kind:service", "grade:internal"],
+        onlyDependOnLibsWithTags: ["zone:open"],
+        bannedExternalImports: ["@combo-ban/pkg"],
+      },
+    ],
+    probes: [
+      { file: "libs/combo-source/src/allowed.ts", upstream: [] },
+      { file: "libs/combo-source/src/denied.ts", upstream: ["onlyTagsConstraintViolation"] },
+      { file: "libs/combo-source/src/external.ts", upstream: ["bannedExternalImportsViolation"] },
+      // Matching no row is an error, not a pass — and it is the only thing
+      // that separates AND from OR here, because the target it reaches is one
+      // the combo row would have allowed.
+      {
+        file: "libs/combo-partial/src/reach.ts",
+        upstream: ["projectWithoutTagsCannotHaveDependencies"],
+      },
+      // The same import the file above it is banned from. An npm target
+      // returns before the tag block, so the no-constraint error cannot fire
+      // here — and the ban does not either, because the row does not bind.
+      { file: "libs/combo-partial/src/external.ts", upstream: [] },
+    ],
+  },
+  {
     id: "empty-only-tags-constraint",
     intent:
       "`onlyDependOnLibsWithTags: []` is a rule of its own — it bans TAGGED dependencies, so an untagged target passes it.",
