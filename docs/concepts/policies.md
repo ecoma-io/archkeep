@@ -30,7 +30,7 @@ mistake, not a missing file.
 There is no codemod between dialects, and none is planned: a workspace picks the
 one that fits how it already writes configuration and keeps it.
 
-## The four keys
+## The five keys
 
 Every dialect holds the same things, under the same names — only the syntax
 around them changes:
@@ -51,8 +51,16 @@ around them changes:
   lifecycle [waivers.md](waivers.md) owns; without one it is a permanent
   suppression.
 - **`fitness`** — optional; absent means no named quality gates are declared.
-  Each row is `{ name, match, condition, reason }` — a fitness gate cannot
-  carry a `decisionRef`. See [fitness-functions.md](fitness-functions.md).
+  Each row is `{ name, match, condition, reason }`, and a row may carry the
+  same governance block a constraint row does — `decisionRef` included, so a
+  gate can name the decision behind it ([adr.md](adr.md)). See
+  [fitness-functions.md](fitness-functions.md).
+- **`customRules`** — optional; absent means no custom rules are declared,
+  and a list present but empty is refused (law that judges nothing reads as
+  protection). Each row is `{ name, artifact, sha256, params?, reason }`
+  plus the same governance block, declaring one WebAssembly rule the run
+  judges — [custom-rules.md](custom-rules.md) owns the model,
+  [policy-schema.md](../reference/policy-schema.md) the row.
 
 ## The ES module dialect (`.mjs` / `.js`)
 
@@ -76,22 +84,23 @@ export const boundarySuppressions = [];
 export const fitness = [];
 ```
 
-Exactly four top-level names are recognized — `depConstraints`,
-`moduleBoundaryOptions`, `boundarySuppressions`, `fitness`. Anything else is
-**rejected by name**, for the same reason the `.json` dialect rejects an
-unknown key: a misspelled export (`moduleBoundaryOption` for
+Exactly five top-level names are recognized — `depConstraints`,
+`moduleBoundaryOptions`, `boundarySuppressions`, `fitness`, `customRules`.
+Anything else is **rejected by name**, for the same reason the `.json` dialect
+rejects an unknown key: a misspelled export (`moduleBoundaryOption` for
 `moduleBoundaryOptions`) used to load exit-0 and disappear — a typo'd law is a
 law that is not enforced. Build the table from shared constants in the same file
 if you need one: the file is still a real ES module, it just may not state a
-fifth top-level law.
+sixth top-level law.
 
 ## The JSON dialect (`.json`)
 
 A plain JSON object, read with `JSON.parse` — never JSONC, never `import()`.
 No comments, no trailing commas.
 
-Exactly four top-level keys are recognized — `depConstraints`,
-`moduleBoundaryOptions`, `boundarySuppressions`, `fitness` — plus `$schema`,
+Exactly five top-level keys are recognized — `depConstraints`,
+`moduleBoundaryOptions`, `boundarySuppressions`, `fitness`, `customRules` —
+plus `$schema`,
 which is accepted for editor validation but must be a non-empty string: a value
 an editor cannot validate against reads as a false green. Any other top-level
 key is **rejected by name.**
@@ -112,8 +121,9 @@ its options. Any option the entry does not state is filled in from the
 installed ESLint boundary plugin — its rule's own declared defaults, not a table
 kept here.
 
-`boundarySuppressions` has no equivalent under this dialect. An ESLint flat
-config has no comparable table, and this tool does not invent one.
+`boundarySuppressions` has no equivalent under this dialect, and neither does
+`customRules`. An ESLint flat config has no comparable table for either, and
+this tool does not invent one.
 
 ### What this dialect refuses instead of guessing
 

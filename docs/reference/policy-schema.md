@@ -180,16 +180,38 @@ only the field shapes above.
 The verdict semantics and the two faces (`lattice fitness` and `check`'s fold)
 live in [fitness-functions.md](../concepts/fitness-functions.md).
 
+## `customRules`
+
+An array of declared custom rules — one WebAssembly rule per row, judged once
+per run. [custom-rules.md](custom-rules.md) owns the contract the artifact
+must implement; [../concepts/custom-rules.md](../concepts/custom-rules.md)
+owns the model.
+
+| field      | type   | required | meaning                                                                                                                                                                                                                                                                                    |
+| ---------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`     | string | yes      | Dash-separated lowercase (`a-z`, `0-9`, `-`), unique across the list; must equal the artifact's own describe `name`. Findings render namespaced under it.                                                                                                                                  |
+| `artifact` | string | yes      | Workspace-relative path to the `.wasm` module — never absolute, never escaping the workspace. It need not be tracked; the hash below is the review mechanism.                                                                                                                              |
+| `sha256`   | string | yes      | 64 lowercase hex characters: the artifact's content digest. A mismatch at load refuses the run — what CI judged is byte-identified by the row review approved.                                                                                                                             |
+| `params`   | object | no       | This instance's parameters, handed to the rule inside the evidence bundle. Must be data JSON can carry losslessly — a function, `NaN`, a `Map`, an `undefined` or a cycle is refused at load naming the path, because a rule judged under parameters nobody wrote is the silent direction. |
+| `reason`   | string | yes      | Non-empty. A custom rule is a policy decision, and one with no reason written down is indistinguishable from a policy that quietly stopped applying.                                                                                                                                       |
+
+A row also accepts the same governance block a `depConstraints` row carries
+(`origin`, `rationale`, `decisionRef`, `fitnessBindings` —
+[provenance.md](../concepts/provenance.md) owns those keys). An empty list is
+rejected — law present but judging nothing reads as protection. Unknown keys
+in a row, a duplicate name, or a malformed field are rejected at load, naming
+the key and the row.
+
 ## Three dialects
 
 All three are validated by the same function. A constraint row is checked
 identically whichever dialect wrote it.
 
-| dialect               | selector                   | read as                                             | `boundarySuppressions`       | `moduleBoundaryOptions` defaults                              |
-| --------------------- | -------------------------- | --------------------------------------------------- | ---------------------------- | ------------------------------------------------------------- |
-| `.mjs` / `.js` module | extension                  | ES module, `import()`ed                             | supported                    | none -- all eight required                                    |
-| `.json`               | extension                  | plain JSON, `JSON.parse`d (never JSONC)             | supported                    | none -- all eight required                                    |
-| ESLint flat config    | basename `eslint.config.*` | flat config's `@nx/enforce-module-boundaries` entry | not supported (always empty) | filled from the workspace's own installed `@nx/eslint-plugin` |
+| dialect               | selector                   | read as                                             | `boundarySuppressions`       | `customRules`                | `moduleBoundaryOptions` defaults                              |
+| --------------------- | -------------------------- | --------------------------------------------------- | ---------------------------- | ---------------------------- | ------------------------------------------------------------- |
+| `.mjs` / `.js` module | extension                  | ES module, `import()`ed                             | supported                    | supported                    | none -- all eight required                                    |
+| `.json`               | extension                  | plain JSON, `JSON.parse`d (never JSONC)             | supported                    | supported                    | none -- all eight required                                    |
+| ESLint flat config    | basename `eslint.config.*` | flat config's `@nx/enforce-module-boundaries` entry | not supported (always empty) | not supported (always empty) | filled from the workspace's own installed `@nx/eslint-plugin` |
 
 The ESLint dialect is explicit opt-in only -- lattice never probes for one.
 Legacy `.eslintrc*` names are refused by name. Basename is checked before
@@ -199,7 +221,7 @@ to the Nx ecosystem, see [policies.md](../concepts/policies.md).
 ### Inline policy (`lattice.json` only)
 
 A native workspace may hold the policy object directly on `lattice.json`'s
-`boundaryConfig` field instead of pointing at a filename. Same four keys as
+`boundaryConfig` field instead of pointing at a filename. Same five keys as
 the `.json` dialect, validated by the identical function — `$schema` included,
 accepted and checked the same way a `.json` policy file accepts it. Every face
 reads it: the CLI, the Nx hook, and the language server, which re-reads

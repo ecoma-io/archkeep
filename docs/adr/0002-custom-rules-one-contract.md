@@ -1,20 +1,22 @@
 ---
 id: 0002-custom-rules-one-contract
-status: proposed
+status: accepted
 ---
 
 # Custom rules are one contract, not one system per language
 
 ## Status
 
-Proposed — this records a direction, not a shipped mechanism: nothing in the
-engine loads a custom rule today, and no page under
-[reference/](../reference/) claims otherwise. It is written down now, before
-the first line of that mechanism, because the one thing no later version can
-change without breaking every rule already written is the boundary a rule the
-engine did not write must stay inside — and a boundary is a decision, which is
-what this registry records. Acceptance carries edits this proposal does not
-make itself; they are named under Consequences.
+Accepted. The record was written as a proposal before the first line of its
+mechanism, because the one thing no later version can change without breaking
+every rule already written is the boundary a rule the engine did not write
+must stay inside — and a boundary is a decision, which is what this registry
+records. The mechanisms have since landed under it: the `customRules` policy
+surface, the evidence bundle and core-wasm host, the fold into `check` across
+all three report faces, and the first SDK
+([reference/custom-rules.md](../reference/custom-rules.md) owns the shipped
+contract). The edits acceptance carries are named under Consequences, and
+each landed with the mechanism it describes.
 
 ## Context
 
@@ -411,14 +413,13 @@ below — one SDK, one kind, one real workspace blocking on a custom rule.
   no rule can waive, suppress, or amend anything — acceptance stays with
   the declared suppressions and waivers
   ([concepts/waivers.md](../concepts/waivers.md)).
-- **Acceptance carries the edits this proposal does not make.**
-  [roadmap.md](../doctrine/roadmap.md) stages the capability — tier one
-  extends what its 2.x direction already names "deeper architecture
-  intent"; the contract tier is staged by name as part of accepting this
-  record. The consumer-facing reference and concepts pages arrive with the
-  mechanisms they describe, not before. `SECURITY.md` gains the
-  committed-artifact supply-chain paragraph. The policy loader's fifth
-  top-level name lands with the loader change that reads it.
+- **Acceptance carries edits beyond this record.**
+  [roadmap.md](../doctrine/roadmap.md) lists the shipped capability; the
+  consumer-facing reference and concepts pages arrive with the mechanisms
+  they describe, not before; `SECURITY.md` carries the committed-artifact
+  paragraph; and the policy loader's fifth top-level name lands with the
+  loader change that reads it. Each of those landed with acceptance, in the
+  change that made its sentence true.
 - **The first shipped version is measured by the invariant, not the SDK
   count.** One SDK, one language-namespaced evidence kind and one real
   workspace running a custom rule as a blocking gate prove more than four

@@ -47,6 +47,12 @@ One run combines six verdicts:
 6. **Fitness functions** — when the policy declares them, each function's
    verdict folds in by presence: `fail` → exit 1, `unknown` → exit 3
    ([fitness-functions.md](../concepts/fitness-functions.md)).
+7. **Custom rules** — when the policy declares `customRules`, every declared
+   wasm rule is judged once over the run's observed facts, on the identical
+   fold: a finding is exit 1 under its `custom/<rule>/<finding>` id, an
+   `unknown` is exit 3, and a rule whose artifact will not load refuses the
+   run like a malformed config
+   ([custom-rules.md](../concepts/custom-rules.md)).
 
 The second and third checks are workspace facts, so paths named on the command
 line do not scope them.
@@ -92,7 +98,10 @@ A fitness function that needs the whole tree (`coverage-minimum` today, see
 a scoped run either. It reports `not_applicable` — named as needing a full run,
 never silently skipped — and, unlike a real `unknown`, that does not fail the
 run by itself. A workspace that declares `coverage-minimum` still needs an
-unscoped `check` to actually enforce it.
+unscoped `check` to actually enforce it. Every declared custom rule takes the
+same posture on a scoped run, for the same reason: its evidence is the whole
+tree, so each rule answers `not_applicable` there — named on every face, and
+enforced only by the unscoped run.
 
 ## Formats
 

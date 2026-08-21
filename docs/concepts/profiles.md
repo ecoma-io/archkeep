@@ -8,10 +8,13 @@ once: a registry of named policy blocks, each inheriting from a `base`, with the
 `check` command selecting one by name for a run.
 
 A profile is data, not a new dialect. Each profile's `block` is a policy block
-of the four keys every boundaryConfig dialect already shares —
+of four of the boundary laws every boundaryConfig dialect shares —
 `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, and
 `fitness` ([policies.md](policies.md) owns those dialects) — validated by the
-same validator. The resolution result runs through the same enforcement path as a
+same validator. The fifth law, `customRules`, deliberately does not ride a
+profile: a custom-rule row names a wasm artifact by path and hash, which does
+not travel with a shareable registry, so a block carrying it is refused by
+name until that design exists. The resolution result runs through the same enforcement path as a
 file, so there is exactly ONE way a policy becomes a verdict: a profile is a way
 to name and reuse a policy, never a second kind of policy that could disagree
 with a file about the same row.
@@ -87,7 +90,7 @@ Two top-level keys are recognized — `profiles` (required) and `version`
 (defaults to `1` when absent, must be `1` when present) — plus `$schema`,
 which is tolerated for editor validation. Any other key is rejected by name.
 Each profile may carry only `name`, `base`, and `block`; the block only the
-four policy keys.
+four profile-composable policy keys.
 
 A profile with no `base` stands alone. With a `base`, the child inherits its
 effective block and merges on top of it:
@@ -194,8 +197,9 @@ identity, so anything a change report cites about one of them — "the graph",
 `check`'s reader gets that fact from the report itself.
 
 A profile's `block` carries the four keys `depConstraints`,
-`moduleBoundaryOptions`, `boundarySuppressions`, and `fitness` — the same
-four keys a boundaryConfig dialect already shares ([policies.md](policies.md)
-owns those dialects) — so a profile-selected run folds fitness functions in by
+`moduleBoundaryOptions`, `boundarySuppressions`, and `fitness` — four of the
+laws a boundaryConfig dialect shares ([policies.md](policies.md)
+owns those dialects, `customRules` included, which a profile refuses) — so a
+profile-selected run folds fitness functions in by
 presence, and every key the resolution result carries is one the policy
 validator already knows.

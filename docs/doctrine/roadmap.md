@@ -99,6 +99,17 @@ A new reader should find these capabilities described as present, not promised.
   partition.
   ([concepts/fitness-functions.md](../concepts/fitness-functions.md),
   [usage/fitness.md](../usage/fitness.md))
+- **Custom rules under one contract.** A workspace declares its own rules as
+  committed WebAssembly artifacts in the policy's `customRules` list — written
+  in any language whose toolchain emits a no-import core-wasm module, judged
+  by the same deterministic engine over the same observed facts, folded into
+  `check` by presence with verdicts in the same four-state vocabulary, and
+  loud on every failure path. The Rust SDK (`lattice-rule-sdk`) ships from
+  this repository on the same version chain; further SDKs arrive as their
+  build stories clear the no-import host, in the order
+  [adr/0002](../adr/0002-custom-rules-one-contract.md) stages.
+  ([concepts/custom-rules.md](../concepts/custom-rules.md),
+  [reference/custom-rules.md](../reference/custom-rules.md))
 - **Architecture planning facts for agents.** `context` and `impact` answer the
   questions an agent asks before and during a change, in machine-readable form;
   `explain` explains a finding after it is reported.
