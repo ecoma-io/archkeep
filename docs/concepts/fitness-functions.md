@@ -88,9 +88,70 @@ export const fitness = [
 
 The condition types the registry can evaluate are: `cycle-free`,
 `layer-dependency`, `tag-conformance`, `coverage-minimum`,
-`boundary-suppression-count-within-threshold`, and `drift-free`. Each carries
-the fields its semantics need — the schema is in
-[policy-schema.md](../reference/policy-schema.md).
+`boundary-suppression-count-within-threshold`, `drift-free`, and
+`tag-axis-isolation`. Each carries the fields its semantics need — the schema
+is in [policy-schema.md](../reference/policy-schema.md).
+
+## `tag-axis-isolation`, and the question a constraint row cannot ask
+
+Every other mechanism here compares a project's tags against tag values written
+into the policy: `onlyDependOnLibsWithTags` names the target tags,
+`notDependOnLibsWithTags` names the forbidden ones, `layer-dependency` names
+both sides. None of them can say **"the same value as the source"**.
+
+That matters for every style whose boundary is a _partition_ rather than a
+layer — one module, one bounded context, one feature slice, one service. Their
+projects all carry the same role tag, and the thing that separates them is the
+value on a second axis (`module:orders` against `module:billing`). Written as
+constraint rows, per-partition privacy is one row per partition, restated every
+time the tree grows one:
+
+```js
+{ sourceTag: "module:orders",  onlyDependOnLibsWithTags: ["module:orders",  "type:api"] },
+{ sourceTag: "module:billing", onlyDependOnLibsWithTags: ["module:billing", "type:api"] },
+// …one more, every time a module is added
+```
+
+`tag-axis-isolation` asks the question directly, in one row that does not
+change when a partition is added:
+
+```js
+{
+  name: "module-encapsulation",
+  match: ["tag:layer:module", "tag:layer:module-internal"],
+  condition: { type: "tag-axis-isolation", axis: "module", exempt: ["tag:layer:module"] },
+  reason: "a module's internals are private to it; integration goes through the published surface",
+}
+```
+
+- **`axis`** is the tag prefix a partition is read off. A project's partition is
+  the set of values it carries on that axis: `module:orders` places it in
+  `orders`. The value is everything after the FIRST `:`, so `module:orders:v2`
+  is the partition `orders:v2`.
+- **`match`** selects the **sources**. Every direct dependency leaving a matched
+  project is judged when its target carries a value on the axis. A target that
+  carries none belongs to no partition and is not this function's business —
+  which is what keeps a shared kernel or a platform library from being reported
+  by every slice that legitimately uses it.
+- **`exempt`** names targets an edge may cross a partition boundary into: a
+  published contract, a module's public surface. It takes the same selectors
+  `match` does. Absent or empty means nothing is exempt.
+
+The verdict is `fail` when any judged edge joins two projects that share no
+value on the axis. It is `unknown` — never `pass` — when a matched project
+carries no value on the axis at all, because such a project sits in no
+partition and its dependencies cannot be placed. A crossing that WAS found is
+still reported in that case: findings first, could-not-look second, the same
+order the run as a whole uses ([checking.md](../usage/checking.md)).
+
+Edges are judged **directly**. A dependency laundered through a third project
+is a transitive question, and `notDependOnLibsWithTags` is the mechanism that
+answers it ([boundaries.md](boundaries.md)) — with the different attribution
+that comes with it. This condition is a claim about direct coupling.
+
+Two shipped policy packs are built on it, and each closes a defect its own
+pack's rows could not: `modular-monolith-sealed-modules` and
+`ddd-bounded-contexts-partitioned` ([presets.md](../usage/presets.md)).
 
 The config loader validates the list where it is read: an unknown key, a
 duplicate or ill-formed name, an empty `match`, or a condition field of the

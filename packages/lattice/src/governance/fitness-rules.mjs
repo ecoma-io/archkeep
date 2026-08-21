@@ -12,6 +12,7 @@
  * comparison, and no clock. Time-based fitness belongs behind the shared clock
  * contract (E0), injected at the command boundary — see the registry.
  */
+import { resolveMembers } from "../architecture-intent/selectors.mjs";
 import { buildReachability } from "../rules/reachability.mjs";
 import { fitnessVerdict } from "./verdict.mjs";
 
@@ -256,6 +257,182 @@ export function tagConformance(nodes, dependencies, names, { from, to, toDepende
         ? `target ${nonConforming.map((e) => `"${e.target}"`).join(", ")} outside "${to}"`
         : `target "${to}" projects, which is forbidden`),
     rows: nonConforming,
+  });
+}
+
+/**
+ * The values a project carries on one tag axis — the part after the first `:`
+ * of every `axis:value` tag it has.
+ *
+ * Split on the FIRST colon, so a tag like `module:orders:v2` places the
+ * project in the partition `orders:v2` rather than in `orders`. That is the
+ * same reading `../rules/match.mjs` gives an `axis:value` tag, and the
+ * alternative — splitting on the last colon, or refusing the tag — would
+ * quietly move a project between partitions.
+ *
+ * @param {object} nodes
+ * @param {string} name
+ * @param {string} axis
+ * @returns {string[]} Sorted, deduplicated. Empty when the project carries no
+ *   tag on this axis, which is what `tagAxisIsolation` reads as "belongs to no
+ *   partition".
+ */
+function axisValues(nodes, name, axis) {
+  const prefix = `${axis}:`;
+  const values = new Set();
+  for (const tag of tagsOf(nodes, name)) {
+    if (tag.startsWith(prefix)) values.add(tag.slice(prefix.length));
+  }
+  return [...values].sort();
+}
+
+/** The direct edges leaving any of `sources`, wherever they land, sorted. */
+function edgesFrom(dependencies, sources) {
+  const inSet = new Set(sources);
+  const edges = [];
+  for (const [source, list] of Object.entries(dependencies ?? {})) {
+    if (!inSet.has(source)) continue;
+    for (const dependency of list ?? []) edges.push({ source, target: dependency.target });
+  }
+  return edges.sort((a, b) =>
+    a.source === b.source ? (a.target < b.target ? -1 : 1) : a.source < b.source ? -1 : 1,
+  );
+}
+
+/**
+ * `tag-axis-isolation` — the partition check: two projects sitting on
+ * different values of ONE tag axis may not depend on each other.
+ *
+ * ## Why this exists as a primitive
+ *
+ * Every other mechanism in this tool compares a project's tags against tag
+ * values written in the policy: `onlyDependOnLibsWithTags` names the target
+ * tags, `notDependOnLibsWithTags` names the forbidden ones,
+ * `layer-dependency` names both sides. None of them can say "the same value
+ * as the source", so a style whose boundary is a PARTITION — one module, one
+ * bounded context, one feature slice, one service — has to be written as one
+ * constraint row per partition, restated every time the tree grows a new one.
+ *
+ * That is not only verbose, it is wrong in both directions, and both were
+ * measured on the packs this package ships (`../../presets/`):
+ *
+ *   - **False negative.** `modular-monolith`'s row lets `layer:module-internal`
+ *     depend on `layer:module-internal`, because "its own module's internals"
+ *     is not a thing a tag list can spell. One module's private implementation
+ *     reaching another module's is permitted by the pack whose own row
+ *     description forbids it.
+ *   - **False positive.** `ddd-bounded-contexts-isolated`'s
+ *     `notDependOnLibsWithTags: ["share:private"]` reports an import between
+ *     two private projects of the SAME context, which is why that profile is
+ *     documented as valid only where one project is one context.
+ *
+ * One axis-relative condition answers both, for every partitioned style, in
+ * one row that does not change when a partition is added.
+ *
+ * ## What is judged, and what is not
+ *
+ * `match` selects the SOURCES. Every direct edge leaving a matched project is
+ * judged when its target carries a value on `axis` and is not exempt; an edge
+ * whose target carries no value on the axis belongs to no partition and is
+ * not this condition's business (the shared kernel, a platform library, a
+ * project on another axis entirely). `exempt` is the one escape, and it names
+ * targets — a published contract, a module's public surface — so the pattern
+ * "cross-partition through the published surface only" is one selector rather
+ * than a second condition.
+ *
+ * Edges are DIRECT. A path laundered through a third project is a transitive
+ * question, which `notDependOnLibsWithTags` already answers and answers
+ * differently (it reports at the innocent hop). Naming the limit here is the
+ * honest half: this condition is a claim about direct coupling.
+ *
+ * ## The verdict order, and why `fail` outranks `unknown`
+ *
+ * A matched project carrying no value on the axis cannot be placed in a
+ * partition, so its edges cannot be judged. Reading that as "no violation"
+ * is the silent direction, so it can never produce `pass`. It does not
+ * suppress a crossing that WAS found, either: those are determined facts, and
+ * hiding them behind `unknown` would lose findings. So the order is the one
+ * `../../cli.mjs`'s `verdictFor` already uses for the run as a whole —
+ * findings first, could-not-look second, clean last — with the unplaced count
+ * carried in the evidence of whichever verdict is returned.
+ *
+ * @param {object} nodes
+ * @param {object} dependencies
+ * @param {string[]} names The matched projects — sources only.
+ * @param {{axis: string, exempt?: string[]}} params
+ * @returns {object}
+ */
+export function tagAxisIsolation(nodes, dependencies, names, { axis, exempt = [] }) {
+  const ruleName = `tag-axis-isolation:${axis}`;
+  // `resolveMembers([])` seeds an implicit `*` — an empty list means
+  // "everything except…" to a boundary (`../architecture-intent/selectors.mjs`).
+  // Here an absent `exempt` means "nothing is exempt", so the empty case never
+  // reaches that function: routing it through would exempt the whole workspace
+  // and turn every verdict below into `pass`.
+  const exemptNames = new Set(exempt.length === 0 ? [] : resolveMembers(exempt, nodes));
+  const unplaced = names.filter((name) => axisValues(nodes, name, axis).length === 0).sort();
+
+  const crossings = edgesFrom(dependencies, names)
+    .filter((edge) => !exemptNames.has(edge.target))
+    .map((edge) => ({
+      ...edge,
+      sourceValues: axisValues(nodes, edge.source, axis),
+      targetValues: axisValues(nodes, edge.target, axis),
+    }))
+    .filter(
+      (edge) =>
+        edge.sourceValues.length > 0 &&
+        edge.targetValues.length > 0 &&
+        !edge.sourceValues.some((value) => edge.targetValues.includes(value)),
+    );
+
+  const evidence = {
+    projects: names.length,
+    axis,
+    exempt: exemptNames.size,
+    unplaced: unplaced.length,
+    crossings: crossings.length,
+  };
+
+  if (crossings.length > 0) {
+    return fitnessVerdict({
+      verdict: "fail",
+      name: ruleName,
+      evidence,
+      message:
+        `${crossings.length} dependency edge${crossings.length === 1 ? "" : "s"} cross${crossings.length === 1 ? "es" : ""} ` +
+        `a "${axis}:" boundary: ` +
+        crossings
+          .map(
+            (edge) =>
+              `${edge.source} (${edge.sourceValues.join("|")}) → ${edge.target} (${edge.targetValues.join("|")})`,
+          )
+          .join(", "),
+      rows: crossings,
+    });
+  }
+
+  if (unplaced.length > 0) {
+    return fitnessVerdict({
+      verdict: "unknown",
+      name: ruleName,
+      evidence,
+      message:
+        `cannot judge tag-axis-isolation on "${axis}:" — ${unplaced.length} matched ` +
+        `project${unplaced.length === 1 ? "" : "s"} carry no "${axis}:" tag, so ` +
+        `${unplaced.length === 1 ? "it belongs" : "they belong"} to no partition and ` +
+        `${unplaced.length === 1 ? "its" : "their"} dependencies could not be placed: ` +
+        unplaced.join(", "),
+      rows: [],
+    });
+  }
+
+  return fitnessVerdict({
+    verdict: "pass",
+    name: ruleName,
+    evidence,
+    message: `${names.length} matched project${names.length === 1 ? "" : "s"} keep every dependency inside their own "${axis}:" partition`,
+    rows: [],
   });
 }
 

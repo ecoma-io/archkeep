@@ -58,6 +58,7 @@ import {
   driftFree,
   layerDependency,
   suppressionThreshold,
+  tagAxisIsolation,
   tagConformance,
 } from "./fitness-rules.mjs";
 
@@ -72,6 +73,7 @@ export const CONDITION_TYPES = Object.freeze([
   "coverage-minimum",
   "boundary-suppression-count-within-threshold",
   "drift-free",
+  "tag-axis-isolation",
 ]);
 
 /** The keys a fitness row may carry — the governance block rides additively. */
@@ -197,6 +199,7 @@ function conditionViolations(condition, at) {
     "tag-conformance": ["type", "from", "to", "toDependents"],
     "coverage-minimum": ["type", "statement"],
     "boundary-suppression-count-within-threshold": ["type", "max"],
+    "tag-axis-isolation": ["type", "axis", "exempt"],
   };
   for (const key of keys) {
     if (!allowed[type].includes(key)) {
@@ -250,6 +253,57 @@ function conditionViolations(condition, at) {
       `${at}.condition.max: must be a non-negative integer, got ${describe(condition.max)}`,
     );
   }
+  if (type === "tag-axis-isolation") {
+    violations.push(...tagAxisIsolationViolations(condition, at));
+  }
+  return violations;
+}
+
+/**
+ * `tag-axis-isolation`'s two fields.
+ *
+ * `axis` is the tag prefix a partition is read off, so it must not itself
+ * contain the separator: `module:orders` names the axis `module`, and an
+ * `axis` of `"module:orders"` would ask for the partition value after the
+ * SECOND colon — a row that matches nothing while reading as policy. It is
+ * refused by name rather than allowed to select an empty partition set.
+ *
+ * `exempt` is a list of project selectors naming targets an edge may point at
+ * across a partition boundary. It is validated with the same
+ * `isValidSelector` every `match` list uses, so a `tagz:x` typo is a load
+ * error here for the reason it is one there — an exemption nobody understands
+ * is an exemption that silently applies to nothing, which in THIS field is
+ * the loud direction and in a `match` list is the silent one. Refusing both
+ * keeps one rule for one grammar.
+ */
+function tagAxisIsolationViolations(condition, at) {
+  const violations = [];
+  const { axis, exempt } = condition;
+  if (typeof axis !== "string" || axis.trim() === "") {
+    violations.push(`${at}.condition.axis: must be a non-empty tag axis, got ${describe(axis)}`);
+  } else if (axis.includes(":")) {
+    violations.push(
+      `${at}.condition.axis: must name a tag axis without its separator — ` +
+        `"${axis}" contains ':', so it would read the partition value off the wrong half of a tag ` +
+        `(write "${axis.split(":")[0]}" to partition on ${JSON.stringify(axis.split(":")[0])})`,
+    );
+  }
+  if (exempt !== undefined) {
+    if (!Array.isArray(exempt)) {
+      violations.push(
+        `${at}.condition.exempt: must be an array of project selectors when present, got ${describe(exempt)}`,
+      );
+    } else {
+      exempt.forEach((selector, index) => {
+        if (!isValidSelector(selector)) {
+          violations.push(
+            `${at}.condition.exempt[${index}]: must be a valid project selector ` +
+              `(name:x, tag:x, directory:x, "*", or "!"-prefixed), got ${describe(selector)}`,
+          );
+        }
+      });
+    }
+  }
   return violations;
 }
 
@@ -295,6 +349,9 @@ export function judgeFitnessRow(row, graph, analysis, intent, suppressions) {
       break;
     case "layer-dependency":
       decision = layerDependency(graph.nodes, graph.dependencies, names, params);
+      break;
+    case "tag-axis-isolation":
+      decision = tagAxisIsolation(graph.nodes, graph.dependencies, names, params);
       break;
     case "tag-conformance":
       decision = tagConformance(graph.nodes, graph.dependencies, names, params);
