@@ -21,16 +21,16 @@ ships to a marketplace rather than to npm, and it deliberately does not bundle
 the server. Everything else here is the apparatus that keeps them honest. If you
 are about to write product code, check that it is actually what was asked for.
 
-The repository also ships `arch-*` agent architecture skills (`arch-context`,
-`arch-change`, `arch-check`, `arch-review`, `arch-migrate`) in `skills/` at the
-root. These are
-host-independent behavioral protocols that teach an AI agent when and how to use
-Lattice commands. See `docs/skills/overview.md` for the architecture and
-`scripts/check-skills.mjs` for the CI gate that validates them — including the
-single-version chain `docs/skills/versioning.md` owns, so a version bump that
-lands in the package but nowhere else is a red gate, not a silent drift. The
-skills themselves carry no version by decision; the plugin manifest is the
-version that matters (`docs/skills/versioning.md`).
+The repository also ships the `arch-*` agent architecture skills in `skills/`
+at the root: host-independent behavioral protocols that teach an AI agent when
+and how to use Lattice commands. `scripts/check-skills.mjs` is the CI gate that
+validates them, and its `EXPECTED_SKILLS` list is the roster — not restated
+here, because this paragraph's own copy of it is what drifted the last time a
+skill was added. See `docs/skills/overview.md` for the architecture, and
+`docs/skills/versioning.md` for the single-version chain that gate holds, so a
+version bump that lands in the package but nowhere else is a red gate, not a
+silent drift. The skills themselves carry no version by decision; the plugin
+manifest is the version that matters.
 
 ## The invariant everything is judged against
 
@@ -66,12 +66,10 @@ test that only pins the message text is half a test.
 .codex-plugin/
   plugin.json              the same plugin manifest, for Codex's reader
 docs/
-  README.md                the index, and the map of which file owns what
-  doctrine/                the documents that decide what the rest say — why,
-                           north-star, architecture-authority, principles,
-                           architecture-governance, roadmap
-  usage/                   for someone using the tool
-  development/             for someone changing it
+  README.md                the index, and the map of which file owns what —
+                           docs/'s own subtree included, which is why it is
+                           not drawn here: the drawn copy is what went stale
+                           when doctrine/ arrived
 scripts/
   check-packages.mjs       the gate that makes a green build mean something
   check-packages.test.mjs
@@ -203,52 +201,36 @@ another.
   A repository shipping an enforcer it did not run on itself would be answering a
   consumer's first question with a promise.
 - **The packed artifact, installed somewhere else** —
-  `scripts/verify-package.mjs` runs `pnpm pack`, installs the tarball into a
-  throwaway workspace, and drives four things a consumer's first hour asks: Nx
-  loads the plugin and draws a Go edge, the checker exits 0 on a clean tree and
-  **1** on a violating one, and the language server answers `initialize` through
-  the symlinked path an installed plugin is launched by. It then repeats the
-  clean/violating/language-server three of those four against a SECOND
-  throwaway workspace — `lattice.json` at its root instead of `nx.json`, and no
-  `nx` package requested at all — because those three questions are exactly the
-  ones the package's fixture-only tests (`packages/lattice/src/providers/native/`)
-  cannot answer: a real `pnpm pack` tarball, installed into a tree this
-  repository never built, with no Nx present to fall back on — and again
-  against a THIRD, Moon-shaped workspace (`.moon/workspace.yml` at its root,
-  `@moonrepo/cli` resolving from its own `node_modules`), the third provider
-  face the package ships. It also asserts
-  `nx` does not resolve in that second install, which is the optional-peer claim
-  checked against an actual install rather than only against
-  `peerDependenciesMeta`. Every other gate runs where the tool's dependencies
-  already exist, which is why none of them can see a manifest that resolves
-  nothing — the state this package was actually in, and green, until this
-  script existed. It runs in CI and again in the release lane before
-  `npm publish`, because a version that fails to resolve at install time cannot
-  be unpublished away. Its fixtures resolve `typescript` and `nx` from the
-  package's own declared peer ranges rather than pinning them, so the range is
-  exercised as written: that is what caught `>=5` admitting TypeScript 7, whose
-  entry point exports none of the compiler API this tool delegates to.
+  `scripts/verify-package.mjs` runs `pnpm pack` and installs the tarball into
+  throwaway workspaces this repository never built, one per provider face the
+  package ships — an Nx root, a `lattice.json` root with no `nx` package
+  installed at all, a Moon root — and drives the questions a consumer's first
+  hour asks: the plugin loads and draws an edge Nx cannot infer, the checker's
+  exit contract holds on a clean tree and a violating one, the language server
+  answers `initialize` through the symlinked path an installed plugin is
+  launched by, and the optional-peer claim about `nx` is checked against an
+  actual install rather than only against `peerDependenciesMeta`. Every other
+  gate runs where the tool's dependencies already exist, which is why none of
+  them can see a manifest that resolves nothing — the state this package was
+  actually in, and green, until this script existed. It runs in CI and again
+  in the release lane before `npm publish`, because a version that fails to
+  resolve at install time cannot be unpublished away. The check-by-check
+  roster and each workspace's argument live in the script's own header — the
+  copy beside the code it describes; the fuller retelling this bullet once
+  carried is a copy that already drifted once.
 - **Release (`release.yml`)** — release-please keeps one pull request open
   holding the next version of the root component `"."`, which is every package
-  and skill this repository ships at once. That single version is written into
-  five places by `extra-files` (the chain `docs/skills/versioning.md` owns), and
-  `check-skills` on every PR holds that chain — root manifest included — to
-  itself, so a bump cannot land half-applied. A reformat step then re-applies Prettier to those files,
-  because release-please re-serializes JSON in a layout that fails
-  `format:check`. The publish jobs — npm and the VS Code extension, which
-  share the engine's version by decision — steer on the un-prefixed
-  `release_created` and `tag_name` outputs only a root component emits, and a
-  tripwire compares `paths_released` — the one output carrying no prefix to get
-  wrong — against that pair, failing the lane loudly when a release was cut
-  that no publish job can see: the state that once published nothing while the
-  workflow reported success, which is the same silence as an empty diagnostic.
-  The lane measures, it does not assume — the measured failure is told in the
-  workflow's own comments. The lane also re-runs the conformance differential
-  against the tagged bytes before publish (`verify-conformance`): a
-  findings-red blocks both publish jobs, a could-not-look red proceeds only
-  under a loud UNVERIFIED label — the waiver expression in the publish jobs'
-  `if:` is the line that must never widen (its full argument lives in
-  `release.yml` next to the gate, not here).
+  and skill this repository ships at once, written into five places by
+  `extra-files` — the chain `docs/skills/versioning.md` owns and `check-skills`
+  holds on every PR, so a bump cannot land half-applied. Everything else the
+  lane does to stay honest — the Prettier reformat of release-please's output,
+  the un-prefixed outputs both publish jobs steer on, the `paths_released`
+  tripwire that fails the lane loudly when a release was cut that no publish
+  job can see, the pre-publish conformance re-run and the waiver expression in
+  the publish jobs' `if:` that must never widen — is argued in `release.yml`'s
+  own comments, next to the gates they guard. The lane measures, it does not
+  assume; the fuller retelling this bullet once carried is a copy that already
+  drifted once.
 - **The PR title runs through commitlint.** Squash is the only merge button, so
   the title becomes the subject of the commit on `main` — the one commit message
   that never passes through the `commit-msg` hook. The title reaches the step via
