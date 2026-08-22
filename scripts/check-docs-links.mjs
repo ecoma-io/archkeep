@@ -65,9 +65,18 @@ export const SCANNED_EXTENSIONS = [".md", ".mjs", ".js"];
 // (a gone target is the input, not a defect in the tree). Same argument
 // Semgrep's fixtures get: deliberately unsafe content, checked by its own
 // harness rather than by the gate it is written for.
+// `.agents/skills/` is on the list for a different reason than the fixtures:
+// it is the byte-for-byte copy of `skills/` that check 16 in
+// `check-skills.mjs` pins, so every reference it carries is already judged at
+// the canonical location — and judged CORRECTLY only there, because the
+// skills' relative links (`../../docs/…`) resolve from `skills/<name>/` and
+// land one directory short from the copy's extra depth. Scanning the copy
+// would fail links the canonical legitimately carries; the copy's own honesty
+// is check-skills' job, not this gate's.
 export const IGNORED_PREFIXES = [
   ".github/semgrep/",
   ".claude/worktrees/",
+  ".agents/skills/",
   "scripts/check-docs-links.test.mjs",
 ];
 // The directory a docs/ page may link into — and only into.

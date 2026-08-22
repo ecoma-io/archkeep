@@ -51,6 +51,7 @@ export const CLAUDE_PLUGIN_MANIFEST = ".claude-plugin/plugin.json";
 export const MARKETPLACE_CATALOGUE = ".claude-plugin/marketplace.json";
 export const MARKETPLACE_PLUGIN_NAME = "lattice";
 export const CODEX_PLUGIN_MANIFEST = ".codex-plugin/plugin.json";
+export const AGENTS_SKILLS_DIR = ".agents/skills";
 export const VSCODE_PACKAGE_JSON = "packages/lattice-vscode/package.json";
 export const RUST_SDK_CARGO_TOML = "packages/lattice-rule-sdk-rust/Cargo.toml";
 export const RUST_SDK_CARGO_LOCK = "packages/lattice-rule-sdk-rust/Cargo.lock";
@@ -256,6 +257,12 @@ export function selectMarketplaceVersion(catalogue, pluginName) {
  * @param {string} input.pySdkVersion version from the Python SDK's pyproject.toml `[project]` section
  * @param {{dir: string, name: string|null, description: string|null, compatibility: string|null, hostFields: string[], text?: string}[]} input.skills
  *   parsed frontmatter plus the full SKILL.md text for each skill
+ * @param {Record<string, string>|null} [input.agentsSkillsFiles] every file under
+ *   `.agents/skills`, relative path to content, or null when the directory cannot be
+ *   read. Optional in the type only because the runtime default is null — an unpassed
+ *   fact FAILS check 16, it does not skip it
+ * @param {Record<string, string>|null} [input.skillsFiles] the same map for `skills/`,
+ *   the canonical tree the copy must equal byte for byte, with the same loud default
  * @param {string} [input.authoring] text of docs/skills/authoring.md
  * @param {string} [input.overview] text of docs/skills/overview.md
  * @returns {{lines: string[], failures: string[]}}
@@ -273,6 +280,8 @@ export function evaluate({
   tsSdkVersion,
   pySdkVersion,
   skills,
+  agentsSkillsFiles = null,
+  skillsFiles = null,
   authoring = "",
   overview = "",
 }) {
@@ -644,6 +653,55 @@ export function evaluate({
     lines.push(`FAIL lattice-rule-sdk-rust/Cargo.lock — version mismatch`);
   }
 
+  // 16. `.agents/skills` must equal `skills/` byte for byte, every file. It is
+  // the checked-in COPY that gives Codex (and every other agent reading the
+  // Agent Skills shared project directory) the arch-* skills with no per-user
+  // install — the only repo-scoped route Codex has, since its plugin
+  // registration and enablement are per user in ~/.codex/config.toml
+  // (docs/skills/installation.md). A copy rather than a symlink deliberately:
+  // git on Windows without symlink support checks a symlink out as a plain
+  // text file, which is a session that silently lost every skill. A copy
+  // checks out as files everywhere, and this gate is what keeps it from
+  // drifting — the same arrangement the version chain uses for the files
+  // release-please copies (docs/skills/versioning.md). The defaults are null
+  // rather than empty maps so a caller that forgets to read either tree
+  // fails here instead of skipping the check.
+  if (agentsSkillsFiles === null || skillsFiles === null) {
+    failures.push(
+      `${AGENTS_SKILLS_DIR} or ${SKILLS_DIR}/ could not be read. The copy under ` +
+        `${AGENTS_SKILLS_DIR} is what hands every Codex session the arch-* skills with ` +
+        `no per-user install; unreadable, those sessions start without the skills and ` +
+        `say nothing.`,
+    );
+    lines.push(`FAIL ${AGENTS_SKILLS_DIR} — unreadable`);
+  } else {
+    const drift = [];
+    for (const path of Object.keys(skillsFiles)) {
+      if (!(path in agentsSkillsFiles)) drift.push(`missing ${AGENTS_SKILLS_DIR}/${path}`);
+      else if (agentsSkillsFiles[path] !== skillsFiles[path])
+        drift.push(`differs ${AGENTS_SKILLS_DIR}/${path}`);
+    }
+    for (const path of Object.keys(agentsSkillsFiles)) {
+      if (!(path in skillsFiles)) drift.push(`extra ${AGENTS_SKILLS_DIR}/${path}`);
+    }
+    if (Object.keys(skillsFiles).length === 0) drift.push(`${SKILLS_DIR}/ read as empty`);
+
+    if (drift.length > 0) {
+      failures.push(
+        `${AGENTS_SKILLS_DIR} has drifted from ${SKILLS_DIR}/: ${drift.join("; ")}. ` +
+          `It is the copy that hands every Codex session the arch-* skills with no ` +
+          `per-user install, and an edit that lands in one tree only reaches some ` +
+          `agents and not others, silently. Re-copy with: rm -rf ${AGENTS_SKILLS_DIR} ` +
+          `&& mkdir ${AGENTS_SKILLS_DIR} && cp -r ${SKILLS_DIR}/* ${AGENTS_SKILLS_DIR}/`,
+      );
+      lines.push(`FAIL ${AGENTS_SKILLS_DIR} — drifted from ${SKILLS_DIR}/`);
+    } else {
+      lines.push(
+        `ok   ${AGENTS_SKILLS_DIR} == ${SKILLS_DIR} (${Object.keys(skillsFiles).length} files)`,
+      );
+    }
+  }
+
   return { lines, failures };
 }
 
@@ -651,7 +709,7 @@ export function evaluate({
  * Reads the filesystem and returns the facts `evaluate` needs.
  * This is the only function that touches the outside world.
  *
- * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, cargoLockVersion: string, tsSdkVersion: string, pySdkVersion: string, skills: object[], authoring: string, overview: string}}
+ * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, cargoLockVersion: string, tsSdkVersion: string, pySdkVersion: string, skills: object[], agentsSkillsFiles: Record<string, string>|null, skillsFiles: Record<string, string>|null, authoring: string, overview: string}}
  */
 export function readSkillFacts() {
   const pkgPath = join(root, PACKAGE_JSON);
@@ -743,6 +801,30 @@ export function readSkillFacts() {
     };
   });
 
+  // Every file under a directory, relative path to content — recursive, so a
+  // helper file a skill grows later is compared too, not just SKILL.md. null
+  // (not an empty map) when the directory cannot be read, which `evaluate`
+  // fails loudly rather than skipping.
+  const readTree = (/** @type {string} */ dir) => {
+    try {
+      /** @type {Record<string, string>} */
+      const files = {};
+      const walk = (/** @type {string} */ rel) => {
+        for (const entry of readdirSync(join(dir, rel), { withFileTypes: true })) {
+          const relPath = rel === "" ? entry.name : `${rel}/${entry.name}`;
+          if (entry.isDirectory()) walk(relPath);
+          else files[relPath] = readFileSync(join(dir, relPath), "utf8");
+        }
+      };
+      walk("");
+      return files;
+    } catch {
+      return null;
+    }
+  };
+  const agentsSkillsFiles = readTree(join(root, AGENTS_SKILLS_DIR));
+  const skillsFiles = readTree(skillsDir);
+
   const readDoc = (relPath) =>
     existsSync(join(root, relPath)) ? readFileSync(join(root, relPath), "utf8") : "";
 
@@ -759,6 +841,8 @@ export function readSkillFacts() {
     tsSdkVersion,
     pySdkVersion,
     skills,
+    agentsSkillsFiles,
+    skillsFiles,
     authoring: readDoc("docs/skills/authoring.md"),
     overview: readDoc("docs/skills/overview.md"),
   };

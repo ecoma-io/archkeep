@@ -7,7 +7,7 @@ supports today.
 | Platform       | Project discovery                        | Global discovery              | Invocation          | `--format json` consumption | Skill install              |
 | -------------- | ---------------------------------------- | ----------------------------- | ------------------- | --------------------------- | -------------------------- |
 | Claude Code    | Plugin `skills` field, `.claude/skills/` | `~/.claude/skills/`           | `/arch-*`           | Full                        | Plugin or `npx skills add` |
-| Codex          | `.agents/skills/`                        | `~/.codex/skills/`            | `$arch-*` (mention) | Full                        | `npx skills add`           |
+| Codex          | `.agents/skills/`, plugin `skills` field | `~/.codex/skills/`            | `$arch-*` (mention) | Full                        | Plugin or `npx skills add` |
 | opencode       | `.agents/skills/`                        | `~/.config/opencode/skills/`  | Via agent           | Full                        | `npx skills add`           |
 | Cursor         | `.agents/skills/` or `.cursor/skills/`   | `~/.cursor/skills/`           | `/` in Agent chat   | Full                        | `npx skills add`           |
 | GitHub Copilot | `.agents/skills/` or `.github/skills/`   | `~/.copilot/skills/`          | Via agent           | Full                        | `npx skills add`           |
@@ -42,8 +42,25 @@ directly. See [claude-code.md](claude-code.md).
 ### Codex
 
 Reads AGENTS.md natively, so the skill names and purposes are surfaced through
-that file. Install via `npx skills add ecoma-io/lattice -a codex` for full
-skill discovery.
+that file. For the skills themselves there are two routes:
+`npx skills add ecoma-io/lattice -a codex`, or the plugin — Codex has its own
+catalogue (`.agents/plugins/marketplace.json`) and manifest
+(`.codex-plugin/plugin.json`), installed with `codex plugin marketplace add`
+and `codex plugin add`.
+
+Two things differ from Claude Code and neither is guessable from the Claude Code
+setup. Plugin registration and enablement are per user, in
+`~/.codex/config.toml`, and a repository cannot do either for its contributors —
+there is no counterpart to `extraKnownMarketplaces`, and only a personal
+`~/.agents/plugins/marketplace.json` is discovered without a command. And an
+installed plugin is a **copy** under `~/.codex/plugins/cache/`, not a live path,
+so an edited skill reaches a session only after a re-install.
+
+The project-discovery column is what closes that gap: `.agents/skills/` checked
+into a repository is read by every Codex session there with no command and no
+plugin — which is how the Lattice repository itself ships the skills to its own
+Codex sessions. [installation.md](installation.md) has the commands and the
+measurements.
 
 ### opencode
 

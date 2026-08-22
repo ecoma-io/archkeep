@@ -195,6 +195,8 @@ describe("evaluate", () => {
     cargoLockVersion: "0.4.0",
     tsSdkVersion: "0.4.0",
     pySdkVersion: "0.4.0",
+    agentsSkillsFiles: { "arch-context/SKILL.md": "canonical" },
+    skillsFiles: { "arch-context/SKILL.md": "canonical" },
   };
 
   it("passes when all skills are present, named correctly, and versions match", () => {
@@ -204,6 +206,53 @@ describe("evaluate", () => {
     });
     assert.equal(result.failures.length, 0);
     assert.ok(result.lines.some((l) => l.startsWith("ok")));
+  });
+
+  it("fails when a copied skill file differs from the canonical one", () => {
+    // The silent direction: both trees exist, both list, and Codex sessions run
+    // an edit that never landed — or miss one that did — with no error anywhere.
+    const result = evaluate({
+      ...baseFacts,
+      skills: allGood(),
+      agentsSkillsFiles: { "arch-context/SKILL.md": "stale copy" },
+    });
+    assert.ok(result.failures.some((f) => f.includes("differs .agents/skills")));
+  });
+
+  it("fails when the copy is missing a canonical file, and when it carries an extra one", () => {
+    const missing = evaluate({
+      ...baseFacts,
+      skills: allGood(),
+      agentsSkillsFiles: {},
+    });
+    assert.ok(missing.failures.some((f) => f.includes("missing .agents/skills")));
+
+    const extra = evaluate({
+      ...baseFacts,
+      skills: allGood(),
+      agentsSkillsFiles: {
+        "arch-context/SKILL.md": "canonical",
+        "stray.md": "x",
+      },
+    });
+    assert.ok(extra.failures.some((f) => f.includes("extra .agents/skills")));
+  });
+
+  it("fails when .agents/skills cannot be read at all, reported as null", () => {
+    const result = evaluate({
+      ...baseFacts,
+      skills: allGood(),
+      agentsSkillsFiles: null,
+    });
+    assert.ok(result.failures.some((f) => f.includes(".agents/skills")));
+  });
+
+  it("fails when the fact was never read at all — an unpassed fact is a failure, not a skip", () => {
+    const facts = { ...baseFacts, skills: allGood() };
+    delete facts.agentsSkillsFiles;
+    delete facts.skillsFiles;
+    const result = evaluate(facts);
+    assert.ok(result.failures.some((f) => f.includes(".agents/skills")));
   });
 
   it("fails when an expected skill directory is missing", () => {
