@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/ecoma-io/lattice/compare/v0.11.0...v0.11.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* **workspace:** register the marketplace the enabled plugin names ([#212](https://github.com/ecoma-io/lattice/issues/212)) ([1c0753f](https://github.com/ecoma-io/lattice/commit/1c0753f85b41de841157177871813b13ddf3bc70))
+
 ## [0.11.0](https://github.com/ecoma-io/lattice/compare/v0.10.1...v0.11.0) (2026-08-22)
 
 
