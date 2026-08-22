@@ -234,7 +234,19 @@ jobs:
           # reaches a `run:` body is what `workflow-expression-interpolated-
           # into-run` exists to stop — the shell sees "$RELEASE_BRANCH" as
           # inert data.
-          RELEASE_BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          #
+          # The `|| '{}'` is load-bearing, not defensive noise. A step's `env:`
+          # is evaluated BEFORE its `if:` — the `env` context is legal inside
+          # `if`, so the runner has to build it first — which means the guard
+          # above does NOT keep this expression from running on a release-less
+          # push. `pr` is empty on any run where release-please neither opens
+          # nor updates the release pull request (a `ci:`-only commit, say),
+          # and `fromJSON('')` is a template error that fails the whole job
+          # before a single line of the script runs. Parsing `{}` instead
+          # yields an empty value for a step that is about to be skipped.
+          # The `ref:` on the checkout above needs no such guard: a `uses:`
+          # step's `with:` is evaluated after `if:`, so it skips cleanly.
+          RELEASE_BRANCH: ${{ fromJSON(steps.release.outputs.pr || '{}').headBranchName }}
         run: |
           pnpm install --frozen-lockfile
 
