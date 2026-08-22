@@ -125,6 +125,31 @@ describe("buildNativeGraph", () => {
     expect("workspaceLayout" in graph).toBe(false);
   });
 
+  // #218: the concrete coverage-exempt list rides the graph OBJECT the same
+  // way `workspaceLayout` does — a workspace-wide fact the rules layer reads
+  // off the graph it is handed (`../../rules/index.mjs`'s `exemptedFiles`),
+  // never inside a node's `data`, and never as the globs the rows are
+  // written with.
+  it("threads the concrete coverage-exempt file list onto the graph object", () => {
+    const graph = buildNativeGraph({
+      projects: [project({ name: "a", root: "libs/a" })],
+      importSites: [],
+      projectOf: () => undefined,
+      exemptedFiles: ["libs/loose.ts"],
+    });
+    expect(graph.exemptedFiles).toEqual(["libs/loose.ts"]);
+    expect("exemptedFiles" in graph.nodes.a.data).toBe(false);
+  });
+
+  it("leaves exemptedFiles absent — never an empty array — when nothing was exempted", () => {
+    const graph = buildNativeGraph({
+      projects: [project({ name: "a" })],
+      importSites: [],
+      projectOf: () => undefined,
+    });
+    expect("exemptedFiles" in graph).toBe(false);
+  });
+
   // A project literally named `__proto__` is not a hypothetical — the name
   // comes straight from `lattice.json` or a tracked manifest, both
   // attacker-supplied. The silent-direction bug this pins: `nodes[project.name]

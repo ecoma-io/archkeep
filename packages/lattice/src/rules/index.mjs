@@ -125,6 +125,7 @@ export { MESSAGE_IDS, MESSAGES, renderMessage } from "./messages.mjs";
  *   `nodes[n].data.entryPoints`      — secondary entry points
  *   `nodes[n].data.declaredPackages` — `noTransitiveDependencies`
  *   `workspaceLayout`                — `{libsDir, appsDir}`, Nx's default when absent
+ *   `exemptedFiles`                  — coverage-exempt files; absent means none
  *
  * @typedef {object} ProjectGraph
  * @property {Record<string, object>} nodes Project nodes, `type` one of
@@ -133,6 +134,11 @@ export { MESSAGE_IDS, MESSAGES, renderMessage } from "./messages.mjs";
  *   keys them (`npm:react`), each with `data.packageName`.
  * @property {Record<string, {source: string, target: string, type?: string}[]>} [dependencies]
  * @property {{libsDir: string, appsDir: string}} [workspaceLayout]
+ * @property {string[]} [exemptedFiles] Workspace-relative paths of the tracked,
+ *   analyzable files a native workspace's `coverage.exempt` removed from
+ *   coverage (`../providers/native/coverage.mjs`). CONCRETE paths, never the
+ *   globs the rows are written with — the expansion happened once at
+ *   discovery, over unowned files only, where a stale row is refused loudly.
  */
 
 /** Nx's own node kinds. Anything else is an external node. */
@@ -261,6 +267,19 @@ function createContext(importSites, graph, config) {
   for (const node of Object.values(graph.externalNodes ?? {})) {
     if (node.data?.packageName) externalByPackage.set(node.data.packageName, node);
   }
+  // Coverage exemptions ride the graph the way `workspaceLayout` does: an
+  // optional whole-graph fact the provider measured (`buildNativeGraph`, from
+  // `judgeCoverage`'s concrete list). Anything that is not a list of strings
+  // is read as NONE rather than guessed at — the fail-closed direction here is
+  // toward reporting, because an exemption that does not apply leaves the
+  // site's verdict exactly where it was before this field existed. The globs
+  // never reach this layer at all; see `exemptResolvedFile` for why that is
+  // the load-bearing half.
+  const exemptedFiles = new Set(
+    Array.isArray(graph.exemptedFiles)
+      ? graph.exemptedFiles.filter((file) => typeof file === "string")
+      : [],
+  );
   return {
     graph,
     depConstraints: config.depConstraints,
@@ -271,6 +290,7 @@ function createContext(importSites, graph, config) {
     reach,
     fileIndex,
     externalByPackage,
+    exemptedFiles,
     synthesizedExternals: new Map(),
     ignored: expandIgnoredCircularDependencies(
       config.options.ignoredCircularDependencies,
@@ -343,6 +363,46 @@ function resolveTargetNode(site, ctx) {
   }
   if (resolved.external) return externalNodeFor(site, ctx);
   return undefined;
+}
+
+/**
+ * The coverage-exempt file an import resolved to, or `null`.
+ *
+ * A `coverage.exempt` row answers the coverage question ("this tracked,
+ * analyzable file legitimately belongs to no project") and, since #218, the
+ * boundary question too: importing such a file is neither a project-to-project
+ * edge nor an external one, so it is left unconstrained. The decision keys on
+ * the RESOLVED FILE, not on the specifier's spelling, which is what makes a
+ * relative `../x.js` and an alias pointing at the same file take one answer.
+ *
+ * ## Why this takes concrete paths and never re-globs
+ *
+ * This is the guard that keeps the exempt list from becoming a boundary-off
+ * switch. The globs a workspace writes are expanded exactly once — in
+ * `../providers/native/coverage.mjs`'s `judgeCoverage`, against the TRACKED,
+ * ANALYZABLE files NO PROJECT OWNS, where a row matching none of them is
+ * refused loudly as stale (`../providers/native/index.mjs`). What arrives here
+ * is that expansion's output. So:
+ *
+ * - even a broad row (`**`, a whole directory) can only ever name files
+ *   outside every project — a project-owned file cannot enter the list, so no
+ *   import into one is ever silenced by it;
+ * - membership is exact-path, so an import resolving to nothing real
+ *   (`resolved.file` null), to a file outside the tree, or to an untracked
+ *   file keeps the verdict it had before this mechanism existed.
+ *
+ * Exported because the run's own report must be able to say how many imports
+ * took the unconstrained road (`../../../cli.mjs`'s coverage notes) without a
+ * second copy of this predicate drifting from the engine's.
+ *
+ * @param {object} site An analysis record — see `../analysis/contract.md`.
+ * @param {Set<string>} exemptedFiles The graph's concrete exempt-file set.
+ * @returns {string|null} The exempt file the record resolved to.
+ */
+export function exemptResolvedFile(site, exemptedFiles) {
+  if (!exemptedFiles || exemptedFiles.size === 0) return null;
+  const file = site.resolved?.file;
+  return typeof file === "string" && exemptedFiles.has(file) ? file : null;
 }
 
 /** Builds one `Violation`. */
@@ -480,6 +540,29 @@ function evaluateSite(site, ctx) {
     return [
       violationOf(site, sourceProject, targetProject, "noRelativeOrAbsoluteImportsAcrossLibraries"),
     ];
+  }
+
+  // A coverage-exempt file is resolvable and unconstrained (#218): the record
+  // resolved to a real tracked workspace file that `coverage.exempt` declared
+  // to belong to no project, so this import is neither a project-to-project
+  // edge nor an external one — and it must not be reported as either. Checked
+  // BEFORE any external node is synthesised: without this, a bare or aliased
+  // specifier resolving into an exempt file would become `npm:<specifier>` and
+  // reach the external-import checks as a package that does not exist, which
+  // is exactly the false description this branch exists to stop. The two-part
+  // guard keeps every judgment that needs a claimed target running: no target
+  // by the specifier's own path arithmetic, AND none in the record's
+  // resolution — a file owned by a project can never enter the exempt set
+  // (`exemptResolvedFile`), so this can only ever take a site whose target is
+  // outside every project. What remains reportable here is unchanged: a
+  // relative path resolving outside every project still reaches the
+  // `noRelativeOrAbsoluteExternals` branch below.
+  if (
+    !targetProject &&
+    site.resolved?.target == null &&
+    exemptResolvedFile(site, ctx.exemptedFiles) !== null
+  ) {
+    return [];
   }
 
   targetProject = targetProject ?? resolveTargetNode(site, ctx);

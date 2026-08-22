@@ -170,10 +170,28 @@ export function buildDependencies({ importSites, nodes, projectOf }) {
  * place the default is ever applied — see `./model.mjs`'s
  * `normalizeNativeModel` for why a second default here could drift from it.
  *
- * @param {{projects: {name: string, root: string, type: string, tags: string[], implicitDependencies: string[], targets: string[]}[], importSites: object[], projectOf: (file: string) => string|undefined, workspaceLayout?: {appsDir: string, libsDir: string}}} args
- * @returns {{nodes: Record<string, object>, dependencies: Record<string, object[]>, workspaceLayout?: {appsDir: string, libsDir: string}}}
+ * `exemptedFiles` rides the same way — the CONCRETE list of files
+ * `coverage.exempt` removed from coverage (`./coverage.mjs`'s `judgeCoverage`,
+ * threaded through `../index.mjs`'s `buildGraph` from `discovered.exempted`),
+ * never the globs the rows are written with. The rules layer matches import
+ * resolutions against these exact paths (`../../rules/index.mjs`'s
+ * `exemptResolvedFile`, #218), and the guard that keeps a broad row from
+ * becoming a boundary-off switch lives in what `judgeCoverage` already does:
+ * it expands rows over tracked, analyzable, UNOWNED files only, so a
+ * project-owned file cannot enter this list no matter how wide its row is.
+ * Absent when no file was exempted, so a graph with no exemptions stays
+ * byte-identical to one this field never existed on.
+ *
+ * @param {{projects: {name: string, root: string, type: string, tags: string[], implicitDependencies: string[], targets: string[]}[], importSites: object[], projectOf: (file: string) => string|undefined, workspaceLayout?: {appsDir: string, libsDir: string}, exemptedFiles?: string[]}} args
+ * @returns {{nodes: Record<string, object>, dependencies: Record<string, object[]>, workspaceLayout?: {appsDir: string, libsDir: string}, exemptedFiles?: string[]}}
  */
-export function buildNativeGraph({ projects, importSites, projectOf, workspaceLayout }) {
+export function buildNativeGraph({
+  projects,
+  importSites,
+  projectOf,
+  workspaceLayout,
+  exemptedFiles,
+}) {
   // Null-prototype for the same reason `buildDependencies` above uses one: a
   // project literally named `__proto__` is a name this provider does not
   // control (it comes straight from `lattice.json` or a tracked manifest), and
@@ -211,5 +229,6 @@ export function buildNativeGraph({ projects, importSites, projectOf, workspaceLa
     nodes,
     dependencies: buildDependencies({ importSites, nodes, projectOf }),
     ...(workspaceLayout ? { workspaceLayout } : {}),
+    ...(exemptedFiles && exemptedFiles.length > 0 ? { exemptedFiles } : {}),
   };
 }

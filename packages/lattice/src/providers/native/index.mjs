@@ -117,8 +117,16 @@ export function discover({ root, files, readFile }) {
  * rule `./model.mjs`'s `normalizeNativeModel` documents (`../../rules/index.mjs`'s
  * `createContext` is the one place that ever applies `DEFAULT_WORKSPACE_LAYOUT`).
  *
+ * `exemptedFiles` threads the same way, from `discovered.exempted`: the
+ * concrete files `coverage.exempt` removed from coverage. This is the one
+ * seam both faces of a native workspace flow through — this CLI's native
+ * branch (`../../../src/commands/context.mjs`) and the language server's
+ * (`../../../src/lsp/workspace-index.mjs`) both build their graphs here — so
+ * threading it in the provider is what keeps an editor verdict and a
+ * `lattice check` verdict on the same exempt-file import from disagreeing.
+ *
  * @param {{discovered: ReturnType<typeof discover>, importSites: object[]}} args
- * @returns {{nodes: Record<string, object>, dependencies: Record<string, object[]>, workspaceLayout?: {appsDir: string, libsDir: string}}}
+ * @returns {{nodes: Record<string, object>, dependencies: Record<string, object[]>, workspaceLayout?: {appsDir: string, libsDir: string}, exemptedFiles?: string[]}}
  */
 export function buildGraph({ discovered, importSites }) {
   return buildNativeGraph({
@@ -126,6 +134,7 @@ export function buildGraph({ discovered, importSites }) {
     importSites,
     projectOf: discovered.projectOf,
     workspaceLayout: discovered.model.workspaceLayout,
+    exemptedFiles: discovered.exempted,
   });
 }
 
