@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.10.0](https://github.com/ecoma-io/lattice/compare/v0.9.0...v0.10.0) (2026-08-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **lattice:** a Rust file with a top-level `use { … }` group now reports one import record per arm, each resolving on its own, instead of one unresolvable record and one failure. A workspace whose CI was green over such a file can go red on a boundary its imports really cross. On ripgrep the change is 29 failures and 439 records becoming 0 failures and 482 records; the coverage lane's pinned counts move with it.
+* **lattice:** add tag-axis-isolation, and the corpus that proved it was missing ([#201](https://github.com/ecoma-io/lattice/issues/201))
+
+### Features
+
+* **lattice:** add tag-axis-isolation, and the corpus that proved it was missing ([#201](https://github.com/ecoma-io/lattice/issues/201)) ([9f37cc0](https://github.com/ecoma-io/lattice/commit/9f37cc0e7a05a98bbb62971a68594b9c4e5904a9))
+* **lattice:** custom architecture rules under one contract, with four SDKs ([#202](https://github.com/ecoma-io/lattice/issues/202)) ([91a7f08](https://github.com/ecoma-io/lattice/commit/91a7f08a20a7950a30597a52e3382894f627cef0))
+* **lattice:** gate the promises 1.0 rests on ([#204](https://github.com/ecoma-io/lattice/issues/204)) ([5b9f7f9](https://github.com/ecoma-io/lattice/commit/5b9f7f9cdd6f8479e9eb142fb31dd4a47690420b))
+
+
+### Documentation
+
+* **workspace:** point AGENTS.md at rule owners and make package guidance host-neutral ([#199](https://github.com/ecoma-io/lattice/issues/199)) ([233ceb6](https://github.com/ecoma-io/lattice/commit/233ceb69966b4b126dd6faf4f9d0b5534a89ea7b))
+
 ## [0.9.0](https://github.com/ecoma-io/lattice/compare/v0.8.0...v0.9.0) (2026-08-21)
 
 
