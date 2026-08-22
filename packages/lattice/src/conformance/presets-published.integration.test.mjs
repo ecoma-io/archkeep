@@ -38,6 +38,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
+
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PRESETS_DIR = join(PACKAGE_ROOT, "presets");
 
@@ -59,7 +61,8 @@ function packedPaths() {
   const result = spawnSync("npm", ["pack", "--dry-run", "--json"], {
     cwd: PACKAGE_ROOT,
     encoding: "utf8",
-    timeout: 120_000,
+    timeout: SPAWN_BUDGET_MS,
+    killSignal: "SIGKILL",
   });
   if (result.error) throw result.error;
   if (result.status !== 0) {
@@ -68,7 +71,11 @@ function packedPaths() {
   return JSON.parse(result.stdout)[0].files.map((file) => file.path);
 }
 
-describe("the shipped policy packs reach a consumer", () => {
+// Every test here spawns a child (`npm pack`, or one Node resolve per pack),
+// so the whole suite runs under the derived spawn-test ceiling instead of
+// vitest's 5000 ms default. `../../spawn-budget.mjs` owns both numbers;
+// the cold-CI measurement below is why the ceiling exists, not what sets it.
+describe("the shipped policy packs reach a consumer", { timeout: SPAWN_TEST_BUDGET_MS }, () => {
   it("has packs to ship at all", () => {
     // Without this, every assertion below passes vacuously over an empty list
     // — a preset directory emptied by a bad merge would read as fully
@@ -76,12 +83,12 @@ describe("the shipped policy packs reach a consumer", () => {
     expect(packFiles.length).toBeGreaterThan(0);
   });
 
-  it("puts every pack in the tarball npm would publish", { timeout: 60_000 }, () => {
+  it("puts every pack in the tarball npm would publish", () => {
     // `npm pack --dry-run` walks the whole package on every run and has been
     // measured just over vitest's 5s default on a cold CI runner (5.9s on the
     // Node 24 lane) — a timing red that reads like a packaging regression.
-    // The child process already carries its own 120s ceiling above; this
-    // timeout only stops vitest from racing it.
+    // The child process already carries the shared single-spawn budget above;
+    // this suite's ceiling only stops vitest from racing it (#249).
     const packed = packedPaths();
     expect(packed.filter((path) => path.startsWith("presets/")).sort()).toEqual(
       packFiles.map((name) => `presets/${name}`).sort(),
@@ -97,7 +104,12 @@ describe("the shipped policy packs reach a consumer", () => {
         "--eval",
         `process.stdout.write(import.meta.resolve(${JSON.stringify(specifier)}))`,
       ],
-      { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 60_000 },
+      {
+        cwd: PACKAGE_ROOT,
+        encoding: "utf8",
+        timeout: SPAWN_BUDGET_MS,
+        killSignal: "SIGKILL",
+      },
     );
     if (result.error) throw result.error;
     // A specifier the `exports` map does not name exits non-zero with
