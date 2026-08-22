@@ -10,8 +10,11 @@
 // formatted for review, so what the rule parses here is what the host writes
 // into linear memory there. They are copied byte-identically from
 // ../../../lattice-rule-sdk-rust/fixtures/, and the verdicts pinned below are
-// the ones that crate's tests/golden.rs pins — the two copies are what the
-// cross-SDK conformance gate will hold to each other.
+// the ones that crate's tests/golden.rs pins. What holds the two copies to
+// each other is no longer a promise: ../../../lattice/src/conformance/
+// rule-sdks.integration.test.mjs reads every SDK's copy of every fixture and
+// requires them byte-identical, then drives all four committed artifacts
+// through the engine's real host and requires one verdict document from each.
 //
 // The rule runs through latticerule.EvaluateJSON rather than through the built
 // artifact, because a .wasm file cannot be instantiated from a Go test without

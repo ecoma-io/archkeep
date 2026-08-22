@@ -5,9 +5,10 @@ already speaks, judged by the same deterministic engine as everything else.
 The decision behind the design — one seam, one contract, WebAssembly as the
 carrier, and the alternatives that were refused — is recorded in
 [adr/0002](../adr/0002-custom-rules-one-contract.md); this page owns the
-model a consumer works with, and
+model a consumer works with,
 [reference/custom-rules.md](../reference/custom-rules.md) owns the exact wire
-contract.
+contract, and [usage/custom-rules.md](../usage/custom-rules.md) owns the
+sequence — pick an SDK, write it, build it, declare it, run it, debug it.
 
 ## One seam: evidence in, verdict out
 

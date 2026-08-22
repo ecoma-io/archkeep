@@ -197,10 +197,14 @@ another.
 - **CI (`ci.yml`)** — Prettier, ESLint, `node --test`, `check-packages`,
   `check-skills`, `check-docs-links`, then `moon run`, the tool itself run on
   this tree, and last the packed artifact driven from outside the workspace.
-  `ci-gate` is a check name the branch ruleset requires (alongside
-  `analysis-gate`), so a job added later tightens the gate without touching
-  repository settings. It fails on any needed job that is `skipped` or
-  `cancelled`, because `needs` alone only blocks on `failure`.
+  `ci-gate` is a check name the branch ruleset requires, so a job added later
+  tightens the gate without touching repository settings. It fails on any
+  needed job that is `skipped` or `cancelled`, because `needs` alone only
+  blocks on `failure`. The ruleset's other required context is **`Semgrep`**,
+  named directly — measured on 2026-08-22, not assumed. `analysis-gate` is
+  NOT required, which this sentence claimed for months: CodeQL or Gitleaks
+  going red turns that gate red and still lets a merge through, so the
+  aggregate is a signal to read rather than a wall.
 - **The repository's own module boundaries** — the final CI step runs
   `packages/lattice/cli.mjs check` against `module-boundaries.config.mjs`
   at this root. Every step before it proves the code correct against fixtures it
@@ -297,6 +301,7 @@ pnpm typecheck          # tsc --noEmit over scripts/ — each package has its ow
 pnpm check-packages     # every packages/* directory, and which CI targets it runs
 node scripts/check-skills.mjs    # skills gate: shape, cites, and the manifest version chain
 node scripts/check-docs-links.mjs # doc-reference gate: links, #anchors, citations
+pnpm readiness          # the four 1.0 conditions, read off git and a registry — a report
 moon run ...:lint ...:test ...:typecheck   # each package's own suite
 node packages/lattice/cli.mjs check        # this tree's own boundaries
 ```

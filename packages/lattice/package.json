@@ -40,6 +40,8 @@
     "!src/**/*.test.mjs",
     "!src/conformance/",
     "!src/custom-rules/wasm-fixture.mjs",
+    "!src/report/envelope-shape.json",
+    "!src/custom-rules/evidence-golden.json",
     "presets/",
     "LICENSE",
     "README.md"

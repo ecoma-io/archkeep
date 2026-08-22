@@ -208,7 +208,7 @@ The fix is whatever the failure line names. What is _not_ a fix is treating exit
 ### Blind spots are a different section, and do not fail the run
 
 An import whose specifier is not statically knowable — a computed `import()`
-argument, a Rust `use {a::b, c::d};` with no crate before the brace group — is
+argument, a Rust `use {` whose braces never balance — is
 printed under its own heading. The file _was_ judged; one position in it has no
 answer, and it is declared rather than dropped.
 

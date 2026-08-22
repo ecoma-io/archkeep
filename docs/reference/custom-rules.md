@@ -4,11 +4,13 @@ The exact contract between the engine and a rule it did not write: what a
 declared artifact must export, what bytes it receives and must return, and
 every way the exchange can fail. [concepts/custom-rules.md](../concepts/custom-rules.md)
 owns the model and the refusals; [policy-schema.md](policy-schema.md) owns the
-`customRules` row a workspace declares; this page owns the wire.
+`customRules` row a workspace declares; [usage/custom-rules.md](../usage/custom-rules.md)
+owns the sequence a first rule goes through; this page owns the wire.
 
 The contract is versioned as a whole: every document below carries
-`"contract": 1`, and an engine that cannot speak a rule's contract answers
-`unknown` for that rule — never an approximation.
+`"contract": 1`, and an engine that cannot speak a rule's contract refuses to
+load it — never an approximation. "How the contract changes" below owns what
+moves that number and what does not.
 
 ## The artifact
 
@@ -134,6 +136,81 @@ declared rule silently does not run:
 Every rule loads before any rule evaluates: a run judges the whole declared
 law or refuses it, because half a law half-applied is a verdict nobody
 declared.
+
+## How the contract changes
+
+Two kinds of change, and only one of them moves the number.
+
+**Growth does not.** The evidence bundle grows additively within a contract
+version: a new kind, or a new field inside a kind, arrives without touching
+`"contract": 1`, and a rule compiled before it keeps judging exactly as it
+did. Every SDK's binding accepts members it does not read for precisely this
+reason, and that is measured rather than promised — the conformance suite
+(`packages/lattice/src/conformance/rule-sdks.integration.test.mjs`) hands all
+four reference artifacts a bundle carrying a kind that does not exist and a
+member inside one that does, and requires the verdict not to move by a byte.
+Without that, the first language-namespaced kind would turn every rule already
+written `unknown` on an engine upgrade that added nothing they read.
+
+**A break does.** A field renamed, retyped or removed moves the contract to
+2 — the same rule `schemaVersion` follows for the JSON envelope
+([json-output.md](json-output.md)). A rule built against another contract is
+then refused **at load**, naming both numbers, and the run refuses with it:
+every rule loads before any rule evaluates, because half a law half-applied is
+a verdict nobody declared. It is not a per-rule `unknown`.
+
+**One contract at a time, deliberately.** The engine speaks exactly one, and
+supporting the previous one alongside it is refused: an engine that speaks two
+contracts assembles two bundles, and the second is the shape nobody exercises
+on a real tree — a quietly-supported old contract is a second law nobody
+reads. What makes that affordable is the first paragraph: because growth is
+additive, a bump is rare by construction, and when one comes it is a major
+release in which the engine and all four SDKs move together on the single
+version chain ([../skills/versioning.md](../skills/versioning.md)). A
+workspace upgrades the engine and rebuilds its rules from the matching SDK, in
+one reviewed change.
+
+**`needs` declares compatibility, not projection.** A rule names the kinds it
+reads, and the engine either supplies every one of them or answers `unknown`
+for that rule with the missing kind named. It does not narrow the bundle: all
+four kinds of contract 1 are carried to every rule, whatever it declared, so
+one bundle shape serves every rule and a rule that reads a kind it forgot to
+declare is not silently judging different evidence than its neighbour. The
+first language-namespaced kind changes that in one direction only — such a
+kind is carried **only** to the rules that declare it, because a Go
+declaration table is unbounded by the tree's size and every rule that does not
+want it should not pay to have it serialized
+([adr/0002](../adr/0002-custom-rules-one-contract.md) records the decision).
+
+## Seeing what a rule saw
+
+A rule that answers `unknown` names its cause, and that is often not enough:
+the author still has to reproduce the run. The sandbox that makes a rule
+deterministic — no filesystem, no clock, no environment — is also what leaves
+them with no way to look at the bundle their rule was handed.
+
+`check --evidence-out <dir>` is the window. It writes one `<rule>.json` per
+declared rule into an existing directory, holding the exact document that rule
+was judged over, re-indented from the canonical bytes so it reads in a diff.
+Feed it straight to the replay harness the SDK ships.
+
+Three properties are worth stating, because each is a decision:
+
+- **It changes no verdict and no exit code.** A debugging flag that moved the
+  answer would make every debugged run a different run.
+- **It writes the bundle for a rule that failed to judge.** The evidence is
+  built before the rule is called, so a trap or an exhausted budget still
+  leaves the author their input — which is precisely when they need it.
+- **It never writes nothing silently.** A policy declaring no `customRules`
+  and a path-scoped run each say so on stderr; a declared law that could not
+  be loaded refuses the whole run before any rule is judged, so there is no
+  evidence to write and the run's own refusal is the message.
+
+`explain` is not part of this. It answers about an import site and the
+constraint row that decided it; it does not re-judge a custom rule, because
+the engine has nothing to say about a judgment it did not make. What explains
+a custom finding is the rule's own message, the `reason` its declaring row
+carries, and the bundle above.
 
 ## Scoped runs
 

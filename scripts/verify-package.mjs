@@ -34,7 +34,15 @@
 //   8. The checker exits 3 on a run that cannot look — the can't-look state must
 //      never read as clean (see `cli.mjs`'s exit contract), and it is proven
 //      here against the installed tarball, not only in source-tree tests.
-//   9. A shipped policy pack, named out of the installed tarball by the
+//   9. A committed, SDK-built custom rule is declared as law and judged — red
+//      on an otherwise clean tree so the failure can only be the rule, then
+//      green once the law exempts the depending layer, with `--evidence-out`
+//      writing the bundle in between. ADR 0002 staged this probe with the
+//      contract and it had not landed; every other custom-rule test runs where
+//      the engine's own tree and `node_modules` are already present, so none of
+//      them can see a `files` list that forgot to ship the host or a worker
+//      that cannot start from inside a pnpm symlink.
+//  10. A shipped policy pack, named out of the installed tarball by the
 //      `profiles` path `docs/usage/presets.md` documents, is the law that
 //      judges the tree — exit 1, with the profile and its registry named in the
 //      report. The packs are otherwise only ever read from this repository's
@@ -76,6 +84,7 @@
 
 import { spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -739,6 +748,128 @@ function verifyViolatingCheck(
 }
 
 /**
+ * The custom-rule probe: a real SDK-built artifact, declared as law in a
+ * workspace this repository never built, judged by the installed tarball.
+ *
+ * ADR 0002 staged this as part of the contract landing — "the packed-artifact
+ * verification grows the consumer-side probe — the contract is proven from the
+ * outside first". It did not, and what that left unproven is exactly what this
+ * script exists for: every other custom-rule test runs where the engine's own
+ * source tree, its wasm fixture emitter and its `node_modules` are already
+ * present. None of them can see a `files` list that forgot to ship the host, a
+ * worker that cannot start from inside a pnpm symlink, or a policy loader that
+ * resolves an artifact path against the wrong root.
+ *
+ * The artifact is the Rust SDK's committed reference rule, at the digest that
+ * package records — not a fixture emitted for the occasion. So what runs here
+ * is the whole shipped path end to end: an author's toolchain produced these
+ * bytes, a workspace declares them with a pinned hash, and an installed
+ * `lattice` loads, hashes, instantiates and judges them.
+ *
+ * Both directions are driven, because a gate only proves it runs when it can
+ * go red: the same rule fails the run on an otherwise CLEAN tree — so the red
+ * is the custom rule and nothing else — and then passes once the law exempts
+ * the depending layer. The `--evidence-out` window is driven in the same pass,
+ * since a debugging affordance that only works in this repository's own tree
+ * would be a debugging affordance a consumer does not have.
+ *
+ * The declared rule is left in place afterwards, passing: the violating check
+ * that follows then proves a custom rule and a boundary violation coexist in
+ * one run rather than one masking the other.
+ *
+ * @param {string} consumer absolute path to the installed consumer workspace
+ * @param {string} label appended to each check's message
+ */
+function verifyCustomRuleChecks(consumer, label) {
+  const artifactSource = join(
+    root,
+    "packages",
+    "lattice-rule-sdk-rust",
+    "examples",
+    "forbidden_tag_dependency.wasm",
+  );
+  const artifact = "tools/rules/forbidden_tag_dependency.wasm";
+  const sha256 = readFileSync(`${artifactSource}.sha256`, "utf8").trim();
+
+  mkdirSync(dirname(join(consumer, artifact)), { recursive: true });
+  copyFileSync(artifactSource, join(consumer, artifact));
+
+  // `tools/` is outside every declared project and needs no coverage
+  // exemption, which is itself worth having measured here: an exemption for
+  // it is REFUSED — "matches no unclaimed file" — because a `.wasm` is not a
+  // source any analyzer claims, so it never becomes a coverage gap. A
+  // consumer following the ADR's own example layout has nothing to declare
+  // but the rule row.
+
+  /** The law, with the declared rule's params supplied by the caller. */
+  const lawWith = (params) =>
+    BOUNDARY_CONFIG.replace(
+      "export const boundarySuppressions = [];",
+      "export const customRules = [\n" +
+        `  { name: "forbidden-tag-dependency", artifact: ${JSON.stringify(artifact)}, ` +
+        `sha256: ${JSON.stringify(sha256)}, params: ${JSON.stringify(params)}, ` +
+        `reason: "the app layer is being lifted off core" },\n` +
+        "];\n\nexport const boundarySuppressions = [];",
+    );
+
+  // Red first: `app` depends on `core`, and the rule forbids any edge landing
+  // on a project carrying `layer:core`. The tree is otherwise clean, so a
+  // non-zero exit here can only be the custom rule.
+  write(consumer, {
+    "module-boundaries.config.mjs": lawWith({ forbiddenTag: "layer:core", exemptTags: [] }),
+  });
+  commitTree(consumer, "declare a custom rule that the tree violates", false);
+  const failing = run("pnpm", ["exec", "lattice", "check"], consumer);
+  const failingOutput = `${failing.stdout ?? ""}${failing.stderr ?? ""}`;
+  check(
+    `a committed SDK-built rule fails an otherwise clean tree (${label})`,
+    failing.status === 1 && failingOutput.includes("custom/forbidden-tag-dependency/"),
+    `exit ${failing.status}\n${failingOutput}`,
+  );
+
+  // The evidence window, from outside: the bundle a consumer's author would
+  // replay through their SDK harness.
+  const evidenceDir = join(consumer, "evidence");
+  mkdirSync(evidenceDir, { recursive: true });
+  const dumped = run("pnpm", ["exec", "lattice", "check", "--evidence-out", evidenceDir], consumer);
+  let bundle = null;
+  try {
+    bundle = JSON.parse(readFileSync(join(evidenceDir, "forbidden-tag-dependency.json"), "utf8"));
+  } catch {
+    // Will fail the check below.
+  }
+  check(
+    `--evidence-out writes the bundle the rule was judged over (${label})`,
+    dumped.status === 1 &&
+      bundle !== null &&
+      bundle.contract === 1 &&
+      bundle.rule?.name === "forbidden-tag-dependency" &&
+      Array.isArray(bundle.model?.projects) &&
+      bundle.model.projects.length === 2,
+    `exit ${dumped.status}\n${dumped.stdout ?? ""}${dumped.stderr ?? ""}`,
+  );
+  rmSync(evidenceDir, { recursive: true, force: true });
+
+  // Green second: the same artifact, the same digest, a law that exempts the
+  // depending layer. A rule that could only ever fail would prove nothing
+  // about the pass lane a consumer's green build depends on.
+  write(consumer, {
+    "module-boundaries.config.mjs": lawWith({
+      forbiddenTag: "layer:core",
+      exemptTags: ["layer:app"],
+    }),
+  });
+  commitTree(consumer, "exempt the app layer from the custom rule", false);
+  const passing = run("pnpm", ["exec", "lattice", "check"], consumer);
+  const passingOutput = `${passing.stdout ?? ""}${passing.stderr ?? ""}`;
+  check(
+    `the same rule passes once the law exempts the depending layer (${label})`,
+    passing.status === 0,
+    `exit ${passing.status}\n${passingOutput}`,
+  );
+}
+
+/**
  * Checks 4-6: `graph` and `diff` verification. These run while the tree is
  * still clean — before check 7 introduces violating files — so that the
  * assertions prove the clean installed artifact, not merely that the commands
@@ -1023,6 +1154,11 @@ try {
   // never built, with no Nx present to fall back on. They run before the
   // violating mutation (check 7) so the assertions prove the clean artifact.
   verifyGraphDiffChecks(consumerNative, "native path");
+
+  // A committed, SDK-built custom rule as declared law — both directions,
+  // while the tree is otherwise clean. See the function's own header for why
+  // this cannot be proven anywhere but here.
+  verifyCustomRuleChecks(consumerNative, "native path");
 
   // 7. The checker exits 1 on a violating tree (native path).
   verifyViolatingCheck(consumerNative, "native path");
