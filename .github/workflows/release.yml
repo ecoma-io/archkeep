@@ -208,6 +208,13 @@ jobs:
         with:
           ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
           token: ${{ steps.app-token.outputs.token || github.token }}
+          # The only checkout in this repository that relied on the default.
+          # Nothing below pushes through git — the reformat lands via the REST
+          # API (`push-reformatted-files.mjs`, steered by GH_TOKEN above) — so
+          # the token has no reason to stay on disk for the rest of the job,
+          # and `workflow-checkout-persists-credentials` holds this invariant
+          # on every pull request from now on.
+          persist-credentials: false
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         if: steps.release.outputs.pr != ''
@@ -222,6 +229,12 @@ jobs:
         if: steps.release.outputs.pr != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          # Through the environment, not interpolated into the script: the
+          # branch name is release-please's output, and every expression that
+          # reaches a `run:` body is what `workflow-expression-interpolated-
+          # into-run` exists to stop — the shell sees "$RELEASE_BRANCH" as
+          # inert data.
+          RELEASE_BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
         run: |
           pnpm install --frozen-lockfile
 
@@ -240,7 +253,7 @@ jobs:
           else
             node scripts/push-reformatted-files.mjs \
               --root "$GITHUB_WORKSPACE" \
-              --branch "${{ fromJSON(steps.release.outputs.pr).headBranchName }}"
+              --branch "$RELEASE_BRANCH"
           fi
 
       # The tripwire for the defect above coming back by another spelling.

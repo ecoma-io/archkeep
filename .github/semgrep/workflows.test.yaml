@@ -1,12 +1,21 @@
 # This file is a semgrep --test fixture for workflows.yaml, not a real workflow —
-# it never runs as one; nothing under .github/semgrep is a workflow trigger. The
-# top-level `rules: []` key exists only so that `semgrep --config
+# it never runs as one; nothing under .github/semgrep is a workflow trigger.
+# The top-level `rules: []` key exists only so that `semgrep --config
 # .github/semgrep`, which loads every .yml/.yaml file in that directory as a
 # candidate rule config, sees a valid (empty) config here instead of erroring out
 # with "missing keys ... 'rules'" — see the WHY in workflows.yaml's own header
-# comment. The `on2:`/fake job content below it is ordinary fixture data;
-# `rules: []` does not change how pattern-regex or metavariable-pattern read the
-# rest of the file.
+# comment. The fake-job content below it is ordinary fixture data; `rules: []`
+# does not change how pattern-regex or metavariable-pattern read the rest of the
+# file.
+#
+# Every rule needs both halves — a `ruleid:` case that must match and `ok:`
+# near-misses that must not; why the positive half is the load-bearing one is
+# argued once in ../../AGENTS.md ("The Semgrep directory has two non-obvious
+# constraints") and not restated per fixture here.
+#
+# One rule owns each verdict below: annotation comments bind to the line
+# immediately after them, so two rules that both fire on one step get separate
+# steps rather than stacked annotations.
 rules: []
 
 name: fake workflow, fixture only
@@ -17,10 +26,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # One rule owns each verdict here: these two state persist-credentials:
+      # false explicitly so the pinning rule's cases stay its alone — the
+      # persisted-credentials quartet further down owns the other rule's.
       # ruleid: workflow-action-not-pinned-to-sha
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # ok: workflow-action-not-pinned-to-sha
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       # ruleid: workflow-expression-interpolated-into-run
       - run: echo "${{ github.event.pull_request.title }}"
@@ -30,7 +46,103 @@ jobs:
       - run: echo "$TITLE"
         env:
           TITLE: ${{ github.event.pull_request.title }}
+
+      # The widened sources: second-order outputs, dispatch inputs, and branch
+      # names — including through a fromJSON unwrap, the spelling the one real
+      # site this repository had used.
+      # ruleid: workflow-expression-interpolated-into-run
+      - run: node scripts/example-push.mjs --branch "${{ fromJSON(steps.release.outputs.pr).headBranchName }}"
+      # Function names are case-insensitive in GitHub's expression language.
+      # ruleid: workflow-expression-interpolated-into-run
+      - run: node scripts/example-push.mjs --tag "${{ FromJSON(needs.prepare.outputs.matrix).name }}"
+      # ruleid: workflow-expression-interpolated-into-run
+      - run: |
+          node scripts/example-push.mjs --tag "${{ needs.prepare.outputs.tag }}"
+      # ruleid: workflow-expression-interpolated-into-run
+      - run: deploy --environment ${{ inputs.environment }}
+      # ruleid: workflow-expression-interpolated-into-run
+      - run: echo "${{ github.ref }}"
+
+      # Closed enums are values, not strings an attacker writes; static matrix
+      # entries are workflow-authored; and the env: indirection below is the fix
+      # the message prescribes. None may be reported.
+      # ok: workflow-expression-interpolated-into-run
+      - run: echo "${{ steps.build.outcome }}"
+      # ok: workflow-expression-interpolated-into-run
+      - run: echo "${{ needs.gate.result }}"
+      # ok: workflow-expression-interpolated-into-run
+      - run: pnpm e2e --shard=${{ matrix.shard }}/2
+      # ok: workflow-expression-interpolated-into-run
+      - run: node scripts/example-push.mjs --branch "$BRANCH"
+        env:
+          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+
+      # ruleid: workflow-secret-interpolated-into-run
+      - run: npm publish --//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
+      # Composed into a larger expression is the same leak.
+      # ruleid: workflow-secret-interpolated-into-run
+      - run: deploy --token "${{ secrets.DEPLOY_TOKEN || github.token }}"
+      # ok: workflow-secret-interpolated-into-run
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # SHA-pinned throughout so exactly one rule owns each verdict here: the
+      # pinning rule must stay silent on these lines.
+      # ruleid: workflow-checkout-persists-credentials
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      # ok: workflow-checkout-persists-credentials
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # Carrying other `with:` keys changes nothing: the default still applies.
+      # ruleid: workflow-checkout-persists-credentials
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+      # Opting back IN is stated, not defaulted — still a finding.
+      # ruleid: workflow-checkout-persists-credentials
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: true
+      # Quoting the ref changes nothing — semgrep binds a double-quoted scalar
+      # with its quotes, which is exactly why the rule's regex tolerates one.
+      # SHA-pinned here so this line is this rule's finding alone.
+      # ruleid: workflow-checkout-persists-credentials
+      - uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+
+      # The same quote-tolerance from the pinning rule's side, each line kept
+      # persist-free so only one rule owns it.
+      # ruleid: workflow-action-not-pinned-to-sha
+      - uses: "actions/checkout@v4"
+        with:
+          persist-credentials: false
+      # ok: workflow-action-not-pinned-to-sha
+      - uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+        with:
+          persist-credentials: false
+
+      # Non-checkout actions are nobody's business here.
+      # ok: workflow-checkout-persists-credentials
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+
 on2:
-  # ruleid: workflow-pull-request-target
+  # ruleid: workflow-dangerous-trigger
   pull_request_target:
     branches: [main]
+  # ruleid: workflow-dangerous-trigger
+  workflow_run:
+    workflows: [CI]
+on3:
+  # ok: workflow-dangerous-trigger
+  pull_request:
+    branches: [main]
+
+fixture-containers:
+  # ruleid: workflow-container-image-not-digest-pinned
+  - image: semgrep/semgrep:1.172.0
+  # Quoted values are the same exposure.
+  # ruleid: workflow-container-image-not-digest-pinned
+  - image: "redis:7"
+  # ok: workflow-container-image-not-digest-pinned
+  - image: semgrep/semgrep:1.172.0@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b

@@ -8,6 +8,15 @@
 # The same rules bind the Nx plugin once it lands in `packages/`, for the same
 # reason: it reads a consumer's workspace and shells out over what it finds.
 #
+# The path include names every directory where this repository's own JavaScript
+# executes: `scripts/` (gate scripts and editor hooks), `packages/` (the plugin
+# and SDKs), and `.opencode/plugins/` (the PostToolUse adapter that runs these
+# same gates inside opencode sessions). The last one is the reason the list
+# exists as an allowlist rather than "everywhere": a new executable directory is
+# opt-in here, visibly, in the same diff that adds it — the alternative, an
+# exclude list, covers by default but goes silent the day code lands somewhere
+# nobody remembered to exclude.
+#
 # Fixtures live in scripts.mjs, exercised by `semgrep --test --config
 # .github/semgrep .github/semgrep`. `.mjs` is valid input for
 # `languages: [javascript]` — semgrep's target selection maps it to the same
@@ -21,6 +30,7 @@ rules:
       include:
         - "/scripts/**"
         - "/packages/**"
+        - "/.opencode/plugins/**"
     message: >-
       This child_process call sets `shell: true`. The command then runs through
       `/bin/sh -c`, so a value assembled from a package directory name or a
@@ -52,6 +62,7 @@ rules:
       include:
         - "/scripts/**"
         - "/packages/**"
+        - "/.opencode/plugins/**"
     message: >-
       `exec` and `execSync` take one command STRING and always run it through a
       shell — there is no `shell: false` for them, so the rule above does not
