@@ -109,9 +109,10 @@ inline law re-diagnoses open files just as editing a policy file does.
 | `--evidence-out` | `check`                                                                                                                                                                      | Also write each declared custom rule's evidence bundle into this existing directory, as `<rule>.json` |
 
 `--evidence-out` is `check`'s alone because a custom rule is judged nowhere
-else. It is a debugging window, not a mode: it changes no verdict and no exit
-code, and it never writes nothing silently — a policy declaring no
-`customRules` and a path-scoped run each say so on stderr
+else, and every other command refuses it as an unknown option (exit 2) rather
+than accepting a flag it would ignore. It is a debugging window, not a mode: it
+changes no verdict and no exit code, and it never writes nothing silently — a
+policy declaring no `customRules` and a path-scoped run each say so on stderr
 ([custom-rules.md](custom-rules.md), [cli.md](../reference/cli.md)).
 
 `--format sarif` is only available for `check`; every other command produces

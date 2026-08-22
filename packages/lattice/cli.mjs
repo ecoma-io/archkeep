@@ -655,10 +655,11 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // The config's location is a separate fact from the workspace root, which is
   // why `--config` does not move the root: pointed at a consumer's tree, the
   // tool and the law it enforces are in different trees, and the tree being
-  // judged is still the consumer's. Loaded before the two workspace-level
-  // checks below, the same order `check` has always used — a malformed
-  // `--config` stops the run before either of them runs at all. `resolvePolicy`
-  // owns the profile/file/inline priority — see its own doc for the order and
+  // judged is still the consumer's. Loaded before the three workspace-level
+  // checks below (go.work drift, dead tsconfig path aliases, and the declared
+  // `implicitDependencies` edges), the same order `check` has always used — a
+  // malformed `--config` stops the run before any of them runs at all.
+  // `resolvePolicy` owns the profile/file/inline priority — see its own doc for the order and
   // why a `profiles` registry, when named, takes `--config`/`boundaryConfig`
   // over as a profile NAME rather than a filename. `check` is the one caller
   // of the eleven that also needs to know WHICH profile/file resolved it —
@@ -2821,6 +2822,15 @@ async function runReport(options, { cwd, env }) {
  * from it rather than kept as a second list that could name a flag `--help`
  * does not, or the reverse.
  *
+ * `--evidence-out` belongs to THIS table and no other. It shipped pasted into
+ * six descriptive commands' tables as well, where nothing read the parsed
+ * `evidenceOut` and nothing wrote a bundle: the flag parsed, the run exited 0,
+ * and the directory the author had just created stayed empty — which reads
+ * exactly like "your evidence is fine". A custom rule is judged only by
+ * `check`, so only `check` may offer the window onto what it was handed, and
+ * `src/custom-rules.check.integration.test.mjs` holds that over every row of
+ * `COMMANDS` rather than over a list written beside it.
+ *
  * @type {readonly FlagHelp[]}
  */
 const CHECK_FLAG_HELP = Object.freeze([
@@ -3130,16 +3140,6 @@ const HISTORY_FLAG_HELP = Object.freeze([
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
-  Object.freeze({
-    flag: "--evidence-out",
-    key: "evidenceOut",
-    arg: "<dir>",
-    describe: Object.freeze([
-      "Also write each custom rule's evidence bundle",
-      "into this existing directory, as <rule>.json —",
-      "the exact document the rule was judged over",
-    ]),
-  }),
 ]);
 
 /**
@@ -3174,16 +3174,6 @@ const HEALTH_FLAG_HELP = Object.freeze([
         "Read the boundary law from here instead of",
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
-  }),
-  Object.freeze({
-    flag: "--evidence-out",
-    key: "evidenceOut",
-    arg: "<dir>",
-    describe: Object.freeze([
-      "Also write each custom rule's evidence bundle",
-      "into this existing directory, as <rule>.json —",
-      "the exact document the rule was judged over",
-    ]),
   }),
 ]);
 
@@ -3222,16 +3212,6 @@ const REPORT_FLAG_HELP = Object.freeze([
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
-  Object.freeze({
-    flag: "--evidence-out",
-    key: "evidenceOut",
-    arg: "<dir>",
-    describe: Object.freeze([
-      "Also write each custom rule's evidence bundle",
-      "into this existing directory, as <rule>.json —",
-      "the exact document the rule was judged over",
-    ]),
-  }),
 ]);
 
 /**
@@ -3266,16 +3246,6 @@ const DEBT_FLAG_HELP = Object.freeze([
         "Read the boundary law from here instead of",
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
-  }),
-  Object.freeze({
-    flag: "--evidence-out",
-    key: "evidenceOut",
-    arg: "<dir>",
-    describe: Object.freeze([
-      "Also write each custom rule's evidence bundle",
-      "into this existing directory, as <rule>.json —",
-      "the exact document the rule was judged over",
-    ]),
   }),
 ]);
 
@@ -3345,16 +3315,6 @@ const EXPLAIN_FLAG_HELP = Object.freeze([
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
-  Object.freeze({
-    flag: "--evidence-out",
-    key: "evidenceOut",
-    arg: "<dir>",
-    describe: Object.freeze([
-      "Also write each custom rule's evidence bundle",
-      "into this existing directory, as <rule>.json —",
-      "the exact document the rule was judged over",
-    ]),
-  }),
 ]);
 
 /**
@@ -3404,16 +3364,6 @@ const CONTEXT_FLAG_HELP = Object.freeze([
         "Read the boundary law from here instead of",
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
-  }),
-  Object.freeze({
-    flag: "--evidence-out",
-    key: "evidenceOut",
-    arg: "<dir>",
-    describe: Object.freeze([
-      "Also write each custom rule's evidence bundle",
-      "into this existing directory, as <rule>.json —",
-      "the exact document the rule was judged over",
-    ]),
   }),
 ]);
 
