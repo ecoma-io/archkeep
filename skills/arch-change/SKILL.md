@@ -94,6 +94,22 @@ confirm it.
    debt, and `arch-review` will flag a rule whose `decisionRef` is missing or
    unresolvable.
 
+   **A custom rule is that same law, compiled.** When the change adds or edits
+   one of the workspace's own `customRules`, the edit is not finished when the
+   rule's source is: rebuild the `.wasm` with the SDK for its language (four
+   ship on the engine's own version chain — Rust, Go, TypeScript syntax
+   through AssemblyScript, and Python), commit the artifact, and update the `sha256` the policy row pins, because
+   that digest is what makes "the law CI ran is the law review saw" checkable
+   on a file nobody can read in a diff. A stale digest is not a stale comment:
+   the artifact fails to load and the whole run refuses (exit 3) rather than
+   judging under a law nobody declared. The row's `reason` is mandatory the way
+   a suppression's is, and it takes the same governance block a constraint row
+   does, so everything above about `decisionRef` applies to it unchanged.
+   Nothing is discovered by convention — a rule that is not declared judges
+   nothing. Before writing one at all, check whether a declared `fitness` row
+   already says it: a fitness function needs no toolchain, no artifact and no
+   hash ([docs/usage/custom-rules.md](../../docs/usage/custom-rules.md)).
+
 4. **Inspect the architectural diff when the change is architectural.** If a
    baseline graph snapshot exists (from a prior
    `lattice graph --format json --output baseline.json` run), compare:
@@ -155,7 +171,12 @@ confirm it.
    the step-3 shortcut: done once the check is green, no heavier machinery.
 
 8. **Re-run relevant checks.** Fix any violation by changing the code, not the
-   law, and re-run the full check until it is green.
+   law, and re-run the full check until it is green. A declared custom rule
+   that answered `unknown` is exit 3 — a gate that did not run, never a clean
+   result: get the evidence it was handed with
+   `lattice check --evidence-out <dir>` (an existing directory, one
+   `<rule>.json` per declared rule, no verdict and no exit code moved) and fix
+   the rule or the tree before reporting anything about that law.
 
 9. **Report what changed and why.** State the projects and edges the change
    introduced or removed, the evidence commands that verified it, and any

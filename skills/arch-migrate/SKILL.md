@@ -108,6 +108,33 @@ act easy to perform and easy to refuse — never to perform it silently.
    and the boundary config states which imports are permitted
    ([docs/concepts/policies.md](../../docs/concepts/policies.md)).
 
+   **A shipped policy pack is a starting point for the second file.** Six ship
+   with the package under `presets/` — clean architecture, hexagonal, layered,
+   modular monolith, vertical slice, DDD bounded contexts — each a profile
+   registry that states the tag vocabulary it expects. An Nx workspace either
+   copies one in and names the copy in the `profiles` plugin option (the copy
+   is yours to extend, and a Lattice upgrade then cannot change what CI
+   enforces) or points `profiles` at the file inside `node_modules` and accepts
+   that an upgrade can move the law. A `lattice.json` or Moon workspace has no
+   `profiles` option, so it copies the profile's `block` into its own `.json`
+   boundary law instead — flattening a `base` chain by hand first, base before
+   child, because nothing resolves it once the `block` has left the registry. Adopting a pack is the same act as adopting a derived
+   candidate and gets the same treatment: it is a proposal until a human takes
+   it, the step-4 candidates are what say whether this tree actually matches
+   the style, and a pack whose tag vocabulary the repository does not carry
+   enforces nothing while looking enforced
+   ([docs/usage/presets.md](../../docs/usage/presets.md)).
+
+   **A rule the migration writes is a rule somebody has to defend later.**
+   Where the decision behind a row is not evident from the row, record it as
+   `docs/adr/NNN-slug.md` with `status: proposed` and `bindings` naming the
+   rule id, and give the row that record's `decisionRef` — the same discipline
+   `arch-change` requires of every enforceable rule. Write the record in the
+   same change as the citation: an **intent** row citing an id the registry
+   does not know makes `check` a no-verdict run (exit 3), which is worse than a
+   row that cites nothing. No command writes an ADR — `lattice adr` only reads
+   ([docs/concepts/adr.md](../../docs/concepts/adr.md)).
+
    Write the boundary config before running `drift`: `drift` resolves the
    boundary law and exits 3 when the file `boundaryConfig` names is absent,
    which reads like a failed comparison rather than a missing file.

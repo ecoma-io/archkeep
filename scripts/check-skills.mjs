@@ -341,7 +341,7 @@ export function evaluate({
       // does NOT resolve them" still matches.
       re: /(?:check|the command)\b[^.;\n]{0,40}(?:does\s+not|doesn't|never|won't|is\s+not\s+able\s+to)\s+resolve\w*\b/iu,
       skills: ["arch-check"],
-      why: "`check` resolves each row's decisionRef against the ADR registry (report-only)",
+      why: "`check` resolves each row's decisionRef against the ADR registry — report-only on a `depConstraints` row, exit 3 on an applied intent row",
     },
     {
       // WS1-F03: `waivers` names/lists only the term-bound rows.
@@ -385,7 +385,8 @@ export function evaluate({
       failures.push(
         `A skill still teaches a stale mechanism (${owner}): ${why}. ` +
           `Post-#139 the \`adr:\`-prefixed spelling resolves like the bare slug, ` +
-          `\`check\` resolves decisionRefs report-only, \`lattice waivers\` names ` +
+          `\`check\` resolves decisionRefs (report-only on a constraint row, exit 3 ` +
+          `on an applied intent row), \`lattice waivers\` names ` +
           `permanent suppressions, and skills carry no version by decision. ` +
           `Correct the skill, not this gate.`,
       );
@@ -428,6 +429,32 @@ export function evaluate({
         `decisionRef against the ADR registry (report-only) (audit WS1-F02).`,
     );
     lines.push(`FAIL arch-check — check decisionRef resolution not stated`);
+  }
+  // The intent half of the same lane, required rather than trusted. The
+  // report-only sentence above is true of a `depConstraints` row and false of
+  // an applied intent row, where an unresolvable citation withholds the
+  // verdict (`../packages/lattice/cli.mjs`, the `intentUnresolvedDecisionRefRows`
+  // fold, pinned over a tree carrying no boundary violation at all). A skill
+  // stating only the report-only half reads as a complete account of the
+  // mechanism while leaving an agent to call a no-verdict run clean — the
+  // silent direction, and the direction this exact claim already drifted once.
+  // The claim is matched loosely — either spelling of unresolved, any wording
+  // up to the exit code — so a rephrasing that keeps the claim stays green
+  // while a deletion goes red. What it does bind is the phrase naming the
+  // intent citation, which is the fact a reader must not have to infer.
+  if (
+    skillText.has("arch-check") &&
+    !/(?:unresolvable|unresolved) intent citation[^.\n]{0,80}exit 3/u.test(checkText)
+  ) {
+    failures.push(
+      `skills/arch-check/SKILL.md must teach that an unresolvable intent ` +
+        `citation is a no-verdict run (exit 3): a \`depConstraints\` row's ` +
+        `decisionRef resolves report-only, but an applied intent row citing an ` +
+        `ADR the registry does not know withholds the verdict — a skill ` +
+        `teaching only the report-only half leaves an agent reading exit 3 as ` +
+        `clean.`,
+    );
+    lines.push(`FAIL arch-check — intent decisionRef exit-3 lane not stated`);
   }
   if (
     (skillText.has("arch-check") &&

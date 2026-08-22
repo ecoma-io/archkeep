@@ -135,8 +135,11 @@ describe("evaluate", () => {
         "the same record.",
       "arch-check":
         "`check` resolves each row's `decisionRef` against the ADR registry " +
-        "(report-only — the resolution changes no byte of the verdict) and names an " +
+        "(report-only on a `depConstraints` row) and names an " +
         "unresolved one inline and under `result.unresolvedDecisionRefs`. " +
+        "On an intent row it is the fail-closed lane instead: an unresolvable " +
+        "intent citation is a no-verdict run (exit 3) even beside a clean " +
+        "boundary table. " +
         "`lattice waivers` names every `boundarySuppressions` row — a waiver with " +
         "its term, a permanent suppression with what it is hiding.",
       "arch-review":
@@ -495,6 +498,20 @@ describe("evaluate", () => {
     }));
     const result = evaluate({ ...baseFacts, skills });
     assert.equal(result.failures.length, 0);
+  });
+
+  it("fails when arch-check teaches only the report-only half of the decisionRef lane", () => {
+    const skills = allGood().map((s) => ({
+      ...s,
+      text:
+        s.dir === "arch-check"
+          ? "`check` resolves each row's `decisionRef` against the ADR registry " +
+            "(report-only — the resolution changes no byte of the verdict). " +
+            "`lattice waivers` names every `boundarySuppressions` row."
+          : correctedText(s.dir),
+    }));
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(result.failures.some((f) => f.includes("unresolvable intent")));
   });
 
   it("fails when a skill still says waivers lists only the term-bound rows", () => {
