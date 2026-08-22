@@ -632,12 +632,14 @@ function declaredEdgeManifest({ provider, graph }, sourceProject) {
  * report over a fixture tree, and pins the exact `file:line:column` a
  * developer would act on, without an Nx installation or a git repository.
  *
- * @param {{format: string, config: string|null, paths: string[]}} options
+ * @param {{format: string, config: string|null, paths: string[],
+ *   evidenceOut?: string|null}} options
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} context
  * @returns {Promise<{report: string, violations: number, declaredEdgeFindings: number,
  *   goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number,
  *   intentUnresolved: number, intentUnresolvedDecisionRefs: number, fitnessFail: number,
  *   fitnessUnknown: number, customRuleFail: number, customRuleUnknown: number,
+ *   customRuleEvidence: {rule: string, bytes: Uint8Array}[], customRulesDeclared: boolean,
  *   analyzed: number, unchecked: number, waived?: number}>}
  */
 export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
@@ -986,6 +988,10 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
       rows: config.customRules,
       policy: config,
       scoped: options.paths.length > 0,
+      // Off unless `--evidence-out` asked: the bundle carries every import
+      // site in the tree, and a run nobody asked to inspect should not hold
+      // one per rule in memory.
+      collectEvidence: Boolean(options.evidenceOut),
     });
   }
   const customRuleDecisions = customRules === null ? [] : customRules.decisions;
@@ -1241,6 +1247,13 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     fitnessUnknown,
     customRuleFail,
     customRuleUnknown,
+    // Empty on every run that did not ask for it, and — deliberately — also
+    // on a scoped run and on a policy that declares no custom rule. `runCheck`
+    // tells those three apart before it writes anything, because a
+    // `--evidence-out` that quietly produced no file would be the silent
+    // direction wearing a debugging flag's name.
+    customRuleEvidence: customRules?.evidence ?? [],
+    customRulesDeclared: customRules !== null,
     analyzed,
     unchecked,
   };
@@ -1358,16 +1371,20 @@ function governanceOutputTargets(cwd, configOption) {
  * string, followed `sub` out of the tree. A written path that has no `..` left
  * in it cannot hide a symlink the kernel would walk later.
  *
- * @param {string} outputPath The `--output` flag as the user wrote it.
+ * @param {string} outputPath The flag's value as the user wrote it.
  * @param {string} text The rendered report, newline-terminated by the caller.
  * @param {{err: Function}} env
  * @param {string} cwd This run's working directory, for resolving both
  *   `outputPath` and the governance names above the same way.
  * @param {string|null|undefined} configOption This run's `options.config`.
+ * @param {string} [flagName] The flag being served, for the messages. Every
+ *   caller but one is `--output`; `--evidence-out` writes through the same
+ *   guards and has to name itself, because a refusal that blamed a flag the
+ *   user did not type would send them to the wrong argument.
  * @returns {boolean} `true` on success; `false` after reporting the failure
  *   to `env.err` — the caller's cue to return its own no-verdict exit code.
  */
-function writeOutputReport(outputPath, text, env, cwd, configOption) {
+function writeOutputReport(outputPath, text, env, cwd, configOption, flagName = "--output") {
   // `resolve` normalises BOTH branches — an absolute `--output` keeps its `..`
   // segments collapsed lexically, and a relative one resolves against this
   // run's `cwd`, not the process's. The identical `outputAbs` then feeds the
@@ -1376,7 +1393,7 @@ function writeOutputReport(outputPath, text, env, cwd, configOption) {
   const guardedName = governanceOutputTargets(cwd, configOption).get(outputAbs);
   if (guardedName !== undefined) {
     env.err(
-      `lattice: --output '${outputPath}' resolves to '${guardedName}' — this tool reads that ` +
+      `lattice: ${flagName} '${outputPath}' resolves to '${guardedName}' — this tool reads that ` +
         `file as the workspace's own declared fact, and overwriting it with a report would ` +
         `destroy the declaration instead. Write the report somewhere else.`,
     );
@@ -1386,7 +1403,7 @@ function writeOutputReport(outputPath, text, env, cwd, configOption) {
   if (root !== null) {
     const violation = containmentViolation(root, outputAbs, { forWrite: true });
     if (violation !== null) {
-      env.err(`lattice: --output '${outputPath}' is refused: ${violation}`);
+      env.err(`lattice: ${flagName} '${outputPath}' is refused: ${violation}`);
       return false;
     }
   }
@@ -1408,9 +1425,91 @@ function writeOutputReport(outputPath, text, env, cwd, configOption) {
         // Nothing this run can do about it either way.
       }
     }
-    env.err(`lattice: could not write --output '${outputPath}': ${cause?.message ?? cause}`);
+    env.err(`lattice: could not write ${flagName} '${outputPath}': ${cause?.message ?? cause}`);
     return false;
   }
+}
+
+/**
+ * `--evidence-out`: one file per declared custom rule, holding the exact
+ * document that rule was judged over.
+ *
+ * The sandbox that makes a custom rule deterministic is also what makes one
+ * hard to debug: a rule that answers `unknown` has no way to show its author
+ * what it read, and the author has no way to reproduce the run locally except
+ * by guessing the bundle. This flag is the answer — the bytes the host wrote
+ * into linear memory, on disk, ready to replay through the SDK harness that
+ * package ships.
+ *
+ * **Three ways this can write nothing, and each says so.** A directory left
+ * empty would be indistinguishable from a rule whose evidence was fine, which
+ * is the silent direction wearing a debugging flag's name
+ * (`../../AGENTS.md`). So: a policy that declares no custom rule, a run scoped
+ * to a path (whose evidence would describe a workspace that does not exist —
+ * `./src/commands/custom-rules.mjs` owns that refusal), and the ordinary case
+ * are three different lines on stderr, never one silent no-op.
+ *
+ * Writes go through `writeOutputReport`, so every guard `--output` earned
+ * applies unchanged: the governance targets a report may never overwrite, the
+ * containment check, and the `wx` temp write that refuses to follow a symlink.
+ * The directory must already exist, exactly as `--output`'s parent must —
+ * creating one would mean creating directories on a path the containment
+ * check may be about to refuse.
+ *
+ * A rule name cannot escape the directory: the policy loader holds names to
+ * dash-separated lowercase (`./src/config.mjs`), so no name carries a
+ * separator or a `..` to begin with.
+ *
+ * @param {string} dir The `--evidence-out` value as the user wrote it.
+ * @param {{customRuleEvidence: {rule: string, bytes: Uint8Array}[],
+ *   customRulesDeclared: boolean}} result From `check`.
+ * @param {{err: Function}} env
+ * @param {string} cwd This run's working directory.
+ * @param {string|null} configOption This run's `options.config`.
+ * @param {boolean} scoped Whether `paths` narrowed this run.
+ * @returns {boolean} `true` when everything the run had was written.
+ */
+function writeEvidenceBundles(dir, result, env, cwd, configOption, scoped) {
+  if (!result.customRulesDeclared) {
+    env.err(
+      `lattice: --evidence-out '${dir}' wrote nothing — this workspace's policy declares no ` +
+        `customRules, so there is no rule whose evidence to write.`,
+    );
+    return true;
+  }
+  if (scoped) {
+    env.err(
+      `lattice: --evidence-out '${dir}' wrote nothing — a path-scoped run answers ` +
+        `not_applicable for every custom rule, because a rule's evidence is the whole tree and ` +
+        `this run read part of it. Run check over the whole workspace to write bundles.`,
+    );
+    return true;
+  }
+  const decoder = new TextDecoder();
+  for (const { rule, bytes } of result.customRuleEvidence) {
+    // Re-indented from the canonical bytes rather than written as they came:
+    // the canonical form is one line, and the document a human is about to
+    // read in a diff, a review, or an editor is the one worth writing. Key
+    // order is the canonical order, because `JSON.parse` preserves it.
+    const document = `${JSON.stringify(JSON.parse(decoder.decode(bytes)), null, 2)}\n`;
+    if (
+      !writeOutputReport(
+        join(dir, `${rule}.json`),
+        document,
+        env,
+        cwd,
+        configOption,
+        "--evidence-out",
+      )
+    ) {
+      return false;
+    }
+  }
+  env.err(
+    `lattice: ${result.customRuleEvidence.length} evidence bundle` +
+      `${result.customRuleEvidence.length === 1 ? "" : "s"} → ${dir}`,
+  );
+  return true;
 }
 
 /**
@@ -1419,7 +1518,8 @@ function writeOutputReport(outputPath, text, env, cwd, configOption) {
  * and where output goes lives here, not in `check` itself — `src/commands/README.md`'s
  * rule applied to the one command that predates that rule.
  *
- * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{format: string, output: string|null, config: string|null, paths: string[],
+ *   evidenceOut?: string|null}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -1438,6 +1538,23 @@ async function runCheck(options, { cwd, env }) {
     );
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  // Before the report, so a run whose `--output` is refused still leaves the
+  // author the evidence they asked for — the two flags answer to different
+  // needs and neither should take the other down with it.
+  if (
+    options.evidenceOut &&
+    !writeEvidenceBundles(
+      options.evidenceOut,
+      result,
+      env,
+      cwd,
+      options.config,
+      options.paths.length > 0,
+    )
+  ) {
+    return EXIT.error;
   }
 
   if (options.output) {
@@ -2733,6 +2850,16 @@ const CHECK_FLAG_HELP = Object.freeze([
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
+  Object.freeze({
+    flag: "--evidence-out",
+    key: "evidenceOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Also write each custom rule's evidence bundle",
+      "into this existing directory, as <rule>.json —",
+      "the exact document the rule was judged over",
+    ]),
+  }),
 ]);
 
 /**
@@ -3003,6 +3130,16 @@ const HISTORY_FLAG_HELP = Object.freeze([
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
+  Object.freeze({
+    flag: "--evidence-out",
+    key: "evidenceOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Also write each custom rule's evidence bundle",
+      "into this existing directory, as <rule>.json —",
+      "the exact document the rule was judged over",
+    ]),
+  }),
 ]);
 
 /**
@@ -3037,6 +3174,16 @@ const HEALTH_FLAG_HELP = Object.freeze([
         "Read the boundary law from here instead of",
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
+  }),
+  Object.freeze({
+    flag: "--evidence-out",
+    key: "evidenceOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Also write each custom rule's evidence bundle",
+      "into this existing directory, as <rule>.json —",
+      "the exact document the rule was judged over",
+    ]),
   }),
 ]);
 
@@ -3075,6 +3222,16 @@ const REPORT_FLAG_HELP = Object.freeze([
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
+  Object.freeze({
+    flag: "--evidence-out",
+    key: "evidenceOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Also write each custom rule's evidence bundle",
+      "into this existing directory, as <rule>.json —",
+      "the exact document the rule was judged over",
+    ]),
+  }),
 ]);
 
 /**
@@ -3109,6 +3266,16 @@ const DEBT_FLAG_HELP = Object.freeze([
         "Read the boundary law from here instead of",
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
+  }),
+  Object.freeze({
+    flag: "--evidence-out",
+    key: "evidenceOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Also write each custom rule's evidence bundle",
+      "into this existing directory, as <rule>.json —",
+      "the exact document the rule was judged over",
+    ]),
   }),
 ]);
 
@@ -3178,6 +3345,16 @@ const EXPLAIN_FLAG_HELP = Object.freeze([
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
+  Object.freeze({
+    flag: "--evidence-out",
+    key: "evidenceOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Also write each custom rule's evidence bundle",
+      "into this existing directory, as <rule>.json —",
+      "the exact document the rule was judged over",
+    ]),
+  }),
 ]);
 
 /**
@@ -3228,6 +3405,16 @@ const CONTEXT_FLAG_HELP = Object.freeze([
         inline ? "the inline boundaryConfig in lattice.json" : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
+  Object.freeze({
+    flag: "--evidence-out",
+    key: "evidenceOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Also write each custom rule's evidence bundle",
+      "into this existing directory, as <rule>.json —",
+      "the exact document the rule was judged over",
+    ]),
+  }),
 ]);
 
 /**
@@ -3271,7 +3458,7 @@ const COMMANDS = Object.freeze({
     summary: "Check imports against the boundary rules",
     flagHelp: CHECK_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(CHECK_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    defaults: Object.freeze({ format: "text", output: null, config: null, evidenceOut: null }),
     formats: CHECK_FORMATS,
     run: runCheck,
   }),

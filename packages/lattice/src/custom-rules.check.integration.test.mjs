@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -465,5 +465,116 @@ describe("a workspace that declares no custom rules", () => {
       ...INTENT_MESSAGE_IDS,
       FITNESS_FAILED_RULE_ID,
     ]);
+  });
+});
+
+describe("--evidence-out, the sandbox's window", () => {
+  // The sandbox that makes a custom rule deterministic is what makes one hard
+  // to debug: a rule that answers `unknown` cannot show its author what it
+  // read. These cases pin the answer — the exact document, on disk, for every
+  // declared rule, including the rules that failed to reach a verdict.
+
+  /** A directory to write bundles into, cleaned up with the fixture roots. */
+  const evidenceDir = () => {
+    const dir = mkdtempSync(join(tmpdir(), "custom-rules-evidence-"));
+    roots.push(dir);
+    return dir;
+  };
+
+  it("writes the exact document the rule was judged over, one file per rule", async () => {
+    const fixture = workspace();
+    const dir = evidenceDir();
+    const env = fixture.env();
+
+    expect(await runCli(["check", "--evidence-out", dir], env)).toBe(EXIT.ok);
+
+    const bundle = JSON.parse(readFileSync(join(dir, `${RULE}.json`), "utf8"));
+    expect(bundle.contract).toBe(1);
+    expect(bundle.rule).toEqual({ name: RULE, params: {} });
+    // All four kinds, each carrying the run's real facts — a window that
+    // showed a rule's name and nothing else would not let an author replay
+    // anything.
+    expect(Object.keys(bundle).sort()).toEqual([
+      "contract",
+      "graph",
+      "imports",
+      "model",
+      "policy",
+      "rule",
+    ]);
+    expect(bundle.model.projects.map((project) => project.name)).toEqual(["app", "ring"]);
+    expect(bundle.graph.edges).toEqual([{ source: "app", target: "ring", type: "static" }]);
+    expect(bundle.imports).toHaveLength(1);
+    expect(bundle.imports[0].sourceProject).toBe("app");
+    expect(bundle.policy.depConstraints).toEqual([]);
+  });
+
+  it("writes the bundle for a rule that could NOT judge, which is when it is needed", async () => {
+    // The whole point. A rule that traps leaves its author with a reason and
+    // no way to reproduce the run; the evidence is built before evaluation,
+    // so it survives the trap and reaches the directory anyway.
+    const fixture = workspace({ rule: { evaluateBehavior: "trap" } });
+    const dir = evidenceDir();
+    const env = fixture.env();
+
+    expect(await runCli(["check", "--evidence-out", dir], env)).toBe(EXIT.error);
+    expect(JSON.parse(readFileSync(join(dir, `${RULE}.json`), "utf8")).contract).toBe(1);
+    expect(env.lines.err.join("\n")).toContain("1 evidence bundle");
+  });
+
+  it("leaves the verdict alone — a debugging flag never moves an exit code", async () => {
+    const fixture = workspace({ rule: { verdictJson: FAILING_VERDICT } });
+    const dir = evidenceDir();
+
+    expect(await runCli(["check", "--evidence-out", dir], fixture.env())).toBe(EXIT.violations);
+    expect(await runCli(["check"], fixture.env())).toBe(EXIT.violations);
+  });
+
+  it("says so out loud when a workspace declares no custom rule", async () => {
+    // An empty directory is byte-identical to "your rules' evidence is fine",
+    // which is the silent direction wearing a debugging flag's name.
+    const fixture = workspace({ declare: false });
+    const dir = evidenceDir();
+    const env = fixture.env();
+
+    expect(await runCli(["check", "--evidence-out", dir], env)).toBe(EXIT.ok);
+    expect(readdirSync(dir)).toEqual([]);
+    expect(env.lines.err.join("\n")).toContain("declares no customRules");
+  });
+
+  it("says so out loud on a path-scoped run, naming why there is no bundle", async () => {
+    const fixture = workspace();
+    const dir = evidenceDir();
+    const env = fixture.env();
+
+    expect(await runCli(["check", "libs/app", "--evidence-out", dir], env)).toBe(EXIT.ok);
+    expect(readdirSync(dir)).toEqual([]);
+    expect(env.lines.err.join("\n")).toContain("path-scoped run");
+  });
+
+  it("refuses a directory that does not exist, naming the flag the user typed", async () => {
+    // The message must not blame `--output`: a refusal that names a flag the
+    // user never typed sends them to the wrong argument.
+    const fixture = workspace();
+    const env = fixture.env();
+
+    expect(await runCli(["check", "--evidence-out", join(fixture.root, "nope")], env)).toBe(
+      EXIT.error,
+    );
+    const stderr = env.lines.err.join("\n");
+    expect(stderr).toContain("--evidence-out");
+    expect(stderr).not.toContain("--output");
+  });
+
+  it("writes nothing when the declared law could not be loaded at all", async () => {
+    // A load failure refuses the run before any rule is judged, so there is
+    // no evidence any rule was handed — writing one anyway would describe a
+    // judgment that never happened.
+    const fixture = workspace({ sha256: "9".repeat(64) });
+    const dir = evidenceDir();
+    const env = fixture.env();
+
+    expect(await runCli(["check", "--evidence-out", dir], env)).toBe(EXIT.error);
+    expect(readdirSync(dir)).toEqual([]);
   });
 });

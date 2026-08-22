@@ -135,6 +135,36 @@ Every rule loads before any rule evaluates: a run judges the whole declared
 law or refuses it, because half a law half-applied is a verdict nobody
 declared.
 
+## Seeing what a rule saw
+
+A rule that answers `unknown` names its cause, and that is often not enough:
+the author still has to reproduce the run. The sandbox that makes a rule
+deterministic — no filesystem, no clock, no environment — is also what leaves
+them with no way to look at the bundle their rule was handed.
+
+`check --evidence-out <dir>` is the window. It writes one `<rule>.json` per
+declared rule into an existing directory, holding the exact document that rule
+was judged over, re-indented from the canonical bytes so it reads in a diff.
+Feed it straight to the replay harness the SDK ships.
+
+Three properties are worth stating, because each is a decision:
+
+- **It changes no verdict and no exit code.** A debugging flag that moved the
+  answer would make every debugged run a different run.
+- **It writes the bundle for a rule that failed to judge.** The evidence is
+  built before the rule is called, so a trap or an exhausted budget still
+  leaves the author their input — which is precisely when they need it.
+- **It never writes nothing silently.** A policy declaring no `customRules`
+  and a path-scoped run each say so on stderr; a declared law that could not
+  be loaded refuses the whole run before any rule is judged, so there is no
+  evidence to write and the run's own refusal is the message.
+
+`explain` is not part of this. It answers about an import site and the
+constraint row that decided it; it does not re-judge a custom rule, because
+the engine has nothing to say about a judgment it did not make. What explains
+a custom finding is the rule's own message, the `reason` its declaring row
+carries, and the bundle above.
+
 ## Scoped runs
 
 `check <path>` analyzes a subset of the tree, and a custom rule's evidence is

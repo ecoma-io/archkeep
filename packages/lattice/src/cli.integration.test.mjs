@@ -6413,6 +6413,7 @@ describe("the option surface", () => {
       format: "sarif",
       output: null,
       config: null,
+      evidenceOut: null,
       paths: ["libs"],
     });
     expect(parseCheckArgs(["--format", "sarif"]).format).toBe("sarif");
