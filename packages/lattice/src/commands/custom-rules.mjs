@@ -318,28 +318,46 @@ function judgedDecision(row, verdict) {
  *
  * @param {object} commandContext From `./context.mjs`'s `resolveCommandContext`.
  * @param {{rows: object[], policy: object, scoped?: boolean,
- *   readArtifact?: (artifact: string) => Uint8Array|null, timeoutMs?: number}} run
+ *   readArtifact?: (artifact: string) => Uint8Array|null, collectEvidence?: boolean,
+ *   timeoutMs?: number}} run
  *   `rows` is the validated `customRules` list, `policy` the loaded boundary
  *   policy the `policy` evidence kind is read from, `scoped` set when `paths`
  *   narrowed the run. `readArtifact` is the one seam reaching outside this
  *   process, injectable for the reason every reader in this package is; a
  *   smaller `timeoutMs` lets a test drive the budget without waiting out the
- *   real one.
+ *   real one. `collectEvidence` keeps each rule's serialized bundle for the
+ *   caller — what `../../cli.mjs`'s `--evidence-out` writes out, and off by
+ *   default because the bundle is the largest document a run builds.
  * @returns {Promise<{decisions: object[], overall: {verdict: string},
- *   catalogue: {ruleId: string, rule: string, findingId: string, message: string}[]}>}
+ *   catalogue: {ruleId: string, rule: string, findingId: string, message: string}[],
+ *   evidence: {rule: string, bytes: Uint8Array}[]}>}
  *   `catalogue` is every finding each loaded rule DECLARES it can report — the
  *   reportingDescriptor set a SARIF result resolves against — so a rule that
  *   fired nothing is still described rather than nameless. It is empty on a
- *   scoped run, where nothing was loaded.
+ *   scoped run, where nothing was loaded. `evidence` is empty unless
+ *   `collectEvidence` asked for it, and always empty on a scoped run — the
+ *   two states are told apart by the caller, which knows which it asked for.
  * @throws {Error} on any load-class failure, naming the rule and the reason.
  */
 export async function customRulesForCheck(
   commandContext,
-  { rows, policy, scoped = false, readArtifact, timeoutMs = CUSTOM_RULE_TIMEOUT_MS },
+  {
+    rows,
+    policy,
+    scoped = false,
+    readArtifact,
+    collectEvidence = false,
+    timeoutMs = CUSTOM_RULE_TIMEOUT_MS,
+  },
 ) {
   if (scoped) {
     const decisions = rows.map(scopedDecision);
-    return { decisions, overall: fitnessVerdictFor(decisions), catalogue: [] };
+    // No bundle is built on this path and none is returned: a scoped run's
+    // evidence would describe a workspace that does not exist, and handing an
+    // author bytes their rule was never judged over is worse than handing
+    // them none. `../../cli.mjs`'s `--evidence-out` says so out loud rather
+    // than writing an empty directory.
+    return { decisions, overall: fitnessVerdictFor(decisions), catalogue: [], evidence: [] };
   }
 
   const read = readArtifact ?? readArtifactBytes(commandContext.root);
@@ -377,6 +395,8 @@ export async function customRulesForCheck(
   );
 
   const observed = observedFacts(commandContext, policy);
+  /** @type {{rule: string, bytes: Uint8Array}[]} */
+  const evidence = [];
   const decisions = [];
   for (const { row, module, describe } of loaded) {
     // `row` is handed to the bundle as the declared row itself — read, never
@@ -384,6 +404,11 @@ export async function customRulesForCheck(
     // is what keeps an absent `params` absent on the policy object every later
     // reader sees.
     const evidenceBytes = serializeEvidenceBundle(buildEvidenceBundle({ ...observed, rule: row }));
+    // Collected only when a caller asked for it. The bundle is the largest
+    // document this run builds — every import site in the tree — and keeping
+    // one per rule alive for a run nobody asked to inspect would be memory
+    // spent on a debugging aid that was never requested.
+    if (collectEvidence) evidence.push({ rule: row.name, bytes: evidenceBytes });
     const outcome = await evaluateCustomRule({ module, describe, evidenceBytes, timeoutMs });
     decisions.push(
       outcome.ok
@@ -399,5 +424,5 @@ export async function customRulesForCheck(
     );
   }
 
-  return { decisions, overall: fitnessVerdictFor(decisions), catalogue };
+  return { decisions, overall: fitnessVerdictFor(decisions), catalogue, evidence };
 }

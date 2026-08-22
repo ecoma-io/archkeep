@@ -50,6 +50,19 @@ than against ESLint, and they are cheap where the differential is not:
 catalogues, and `plugin-catalogue.integration.test.mjs` holds the Claude Code
 plugin manifests to each other.
 
+`rule-sdks.integration.test.mjs` is a differential of a different kind, and it
+belongs here for the same reason the ESLint one does: it puts verdicts beside
+verdicts. Every rule-authoring SDK ships a reference artifact and a copy of the
+same evidence fixtures, and
+[`adr/0002`](../../../../docs/adr/0002-custom-rules-one-contract.md) names a
+shared conformance suite — not discipline — as what keeps four SDKs one
+contract. This is that suite: the fixture copies must be byte-identical, every
+committed `.wasm` must load through the engine's real host at the digest its
+own package records, and all of them must answer one verdict document per
+fixture, which must also be the recorded one. `rule-sdks.mjs` holds the roster
+and the expectations; no count is restated here, because the roster is the
+catalogue and a number beside it would be the copy that drifts.
+
 ### Two mechanics worth knowing before changing anything here
 
 **One workspace root per process.** `@nx/devkit` resolves its workspace root

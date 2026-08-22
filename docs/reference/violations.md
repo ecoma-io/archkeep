@@ -319,7 +319,7 @@ exit-3 refusal instead of a pass.
 ## Three things that are not violations
 
 **Unresolvable import sites.** A specifier that is not statically knowable — a
-computed `import()` argument, a Rust brace group with no leading crate name, a
+computed `import()` argument, a Rust `use` whose braces do not balance, a
 literal package import that names no declared project and cannot resolve — is
 printed under its own heading as a declared blind spot. The file _was_ judged;
 one position in it has no answer. The run does not fail on these: a workspace

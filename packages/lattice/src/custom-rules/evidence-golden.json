@@ -1,0 +1,95 @@
+{
+  "contract": 1,
+  "graph": {
+    "edges": [
+      {
+        "source": "app",
+        "sourceFile": "libs/app/main.go",
+        "target": "core",
+        "type": "static"
+      }
+    ]
+  },
+  "imports": [
+    {
+      "column": 2,
+      "kind": "static",
+      "line": 4,
+      "resolved": {
+        "external": false,
+        "file": null,
+        "packageName": null,
+        "target": "core"
+      },
+      "sourceFile": "libs/app/main.go",
+      "sourceProject": "app",
+      "specifier": "example.test/core",
+      "spelling": {
+        "path": false,
+        "relative": false
+      }
+    },
+    {
+      "column": 2,
+      "kind": "static",
+      "line": 5,
+      "resolved": {
+        "external": true,
+        "file": null,
+        "packageName": "example.test/nowhere",
+        "target": null
+      },
+      "sourceFile": "libs/app/main.go",
+      "sourceProject": "app",
+      "specifier": "example.test/nowhere",
+      "spelling": {
+        "path": false,
+        "relative": false
+      }
+    }
+  ],
+  "model": {
+    "projects": [
+      {
+        "name": "app",
+        "root": "libs/app",
+        "tags": ["layer-app"]
+      },
+      {
+        "name": "core",
+        "root": "libs/core",
+        "tags": ["layer-core"]
+      },
+      {
+        "name": "loose",
+        "root": "libs/loose",
+        "tags": []
+      }
+    ]
+  },
+  "policy": {
+    "depConstraints": [
+      {
+        "onlyDependOnLibsWithTags": ["layer-core"],
+        "sourceTag": "layer-app"
+      }
+    ],
+    "moduleBoundaryOptions": {
+      "allow": [],
+      "allowCircularSelfDependency": false,
+      "banTransitiveDependencies": false,
+      "buildTargets": ["build"],
+      "checkDynamicDependenciesExceptions": [],
+      "checkNestedExternalImports": false,
+      "enforceBuildableLibDependency": false,
+      "ignoredCircularDependencies": []
+    }
+  },
+  "rule": {
+    "name": "no-app-to-loose",
+    "params": {
+      "exemptTags": [],
+      "forbiddenTag": "layer-loose"
+    }
+  }
+}

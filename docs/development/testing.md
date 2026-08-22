@@ -90,6 +90,7 @@ tier structurally cannot see.
 | `lsp/editor-config.integration.test.mjs`         | A language reaching the analyzer registry and not the Nx integration's manifest — checked by the CLI, never by an editor, which reads exactly like a clean tree                                                                                                                                                                                                                                                                                                                                                                             |
 | `rules/upstream.integration.test.mjs`            | A copied message or option drifting from the installed `@nx/eslint-plugin`                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `analysis/vue.integration.test.mjs`              | The line a reader finally sees, from the real analyzer pair, against positions computed from the fixture                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `conformance/rule-sdks.integration.test.mjs`     | Four rule-authoring SDKs drifting into four laws while all four suites stay green — every SDK's fixture copies held byte-identical, every committed `.wasm` loaded through the engine's real host at its recorded digest, and one verdict document required from all of them per fixture, which must also be the recorded one. Three of the four SDK suites replay their reference rule as native code, so without this the artifact a consumer runs was proven only by its digest                                                          |
 | `conformance/corpus.integration.test.mjs`        | A rule that stops firing in Go, Rust or Python, where no upstream engine can disagree — hand-labeled architecture workspaces driven through the whole `check` path, with each near-miss measured against a forbid-everything policy so its silence cannot be an engine that never looked                                                                                                                                                                                                                                                    |
 
 **The Vue analyzer is pinned from both sides**, and it is the model for anything
@@ -97,6 +98,30 @@ with a coordinate conversion in it: `vue.test.mjs` mocks the TypeScript analyzer
 to pin the text handed over — the whole file with everything outside the script
 block blanked, so no arithmetic can be wrong — and the integration test drives the
 real pair.
+
+### Analyzer coverage on real trees — where there is no oracle at all
+
+`scripts/coverage-real-trees.mjs` asks the question the ESLint differential
+structurally cannot. `.go`, `.rs` and `.py` never reach the upstream rule, so
+upstream's silence about them is inability rather than a verdict, and there is
+nothing to disagree with. This lane needs no oracle: it clones real public
+repositories at pinned shas — one Go, one Rust, one Python — runs the real
+analyzers over every tracked source file, and holds three counts EXACTLY in
+both directions: files read, import records produced, failures reported.
+
+Exactness is legitimate because the sha is pinned: the tree cannot move under
+the harness, so any movement is the harness changing. Fewer records is an
+analyzer that went quiet on a syntax it used to read — the silent direction,
+and the reason the lane exists. **Fewer failures is a breach too**: a failure
+that stopped being reported is a file that now looks read.
+
+It runs weekly beside the differential, in the same workflow and with the same
+posture — not a required check, because it depends on third-party repositories
+being reachable, and a red run is a regression rather than a flake. Its tree
+table records what each count means, including the gap its first run found and
+the fix that followed: the Rust analyzer could not read a top-level
+`use { a::b, c::d };` brace group, which ripgrep writes 29 times, and reading it
+as the list of paths it is turned 29 failures into 72 records.
 
 ### Conformance — the differential against ESLint
 

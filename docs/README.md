@@ -66,6 +66,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained                       |
 | [context.md](usage/context.md)                 | The `context` command: architecture constraints for one project                          |
 | [adr.md](usage/adr.md)                         | The `adr` command: recorded decisions, what each binds, and the reverse lookup           |
+| [custom-rules.md](usage/custom-rules.md)       | Writing, building, declaring, running and debugging a rule of your own                   |
 | [migration.md](usage/migration.md)             | Bringing an existing repository under governance, step by step                           |
 | [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning                            |
 | [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look                                 |

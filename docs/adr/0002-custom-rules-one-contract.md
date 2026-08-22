@@ -185,6 +185,17 @@ computed from partial evidence is a pass nobody earned. A rule that needs a
 fact no kind carries is a feature request for an extractor, not a license
 to parse.
 
+`needs` declares compatibility rather than projection, and the two families
+of kind are decided differently. The core kinds — the four contract 1
+carries — go to every rule whatever it declared: one bundle shape serves
+every rule, and a rule reading a kind it forgot to declare is not quietly
+judging different evidence than the rule beside it. A language-namespaced
+kind is the opposite case and is carried **only** to the rules that declare
+it, because a Go declaration table is bounded by the tree rather than by the
+contract, and a rule that never asked for it should not pay to have it
+serialized on every run. That split lands with the first such kind; until
+then there is nothing to project.
+
 This is also what keeps a language-aware rule inside the one ecosystem: a
 Go-aware rule and a language-neutral rule differ only in the kinds they
 declare — same shape, same lifecycle, same verdicts, same report.
@@ -395,7 +406,11 @@ below — one SDK, one kind, one real workspace blocking on a custom rule.
   an evidence kind reports can change a custom rule's verdict on an
   unchanged workspace — from the first shipped kind onward, the evidence
   contract carries the same breaking-change discipline `AGENTS.md` already
-  applies to what is reported.
+  applies to what is reported. What holds that discipline is a golden:
+  `packages/lattice/src/custom-rules/evidence-golden.integration.test.mjs`
+  drives a fixture workspace through the real pipeline and pins the bundle's
+  bytes, so a change to what any kind reports arrives as a diff to argue
+  rather than as a silently different document.
 - **A workspace's rule changing that workspace's verdicts is the
   workspace's own change** — the law moved, reviewed like code. The
   engine's compatibility promise covers what it feeds a rule, never what
