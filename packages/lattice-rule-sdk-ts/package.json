@@ -1,6 +1,6 @@
 {
   "name": "@ecoma-io/lattice-rule-sdk",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "private": false,
   "description": "Author Lattice custom architecture rules in AssemblyScript (TypeScript syntax) and compile them to core WebAssembly.",
   "keywords": [
@@ -27,6 +27,7 @@
     "examples/",
     "fixtures/",
     "asconfig.json",
+    "LICENSE",
     "README.md"
   ],
   "devDependencies": {

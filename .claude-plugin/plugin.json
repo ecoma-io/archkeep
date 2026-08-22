@@ -3,7 +3,7 @@
   "$comment": "The plugin this repository's marketplace offers, and the marketplace source is `\"./\"`, so the plugin root IS the repository root. That is what makes both halves of the offer reachable from a consumer's plugin cache: `skills` points at the repository-root `skills/` directory (the canonical arch-* skills, host-independent SKILL.md files), and `lspServers` launches the package's own server at `packages/lattice/lsp.mjs` with `${CLAUDE_PLUGIN_ROOT}` resolved to wherever this plugin was installed. The route stays on the four extensions ESLint cannot reach — the argument lives in `src/lsp/editor-config.integration.test.mjs`, which pins this list against the analyzer registry.\n\n`version` is synchronized with `packages/lattice/package.json` — release-please bumps both via `extra-files` in `release-please-config.json`, and `src/conformance/plugin-catalogue.integration.test.mjs` plus `scripts/check-skills.mjs` fail when they drift. An installed plugin is cached per version, so an unbumped edit reaches nobody.",
   "name": "lattice",
   "displayName": "Lattice",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Module-boundary diagnostics at edit time, and architecture agent skills, for Go, Rust, Python and Vue",
   "author": {
     "name": "Mai Ngọc Hóa (John Martin)",
