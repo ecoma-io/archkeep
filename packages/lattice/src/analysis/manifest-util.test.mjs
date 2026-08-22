@@ -20,6 +20,17 @@ describe("parseManifest", () => {
     expect(parseManifest("[package\nbroken")).toBeNull();
   });
 
+  it("tolerates a leading UTF-8 BOM, which smol-toml alone rejects", () => {
+    // Measured against smol-toml directly: a BOM aborts the parse outright,
+    // so a manifest an editor wrote a BOM into came back null here and
+    // everything read from it vanished — a Cargo crate dropping out of the
+    // crate map, a pyproject layout going unmodelled. Manifests contribute
+    // no position to any record (`./contract.md`), so removing the one
+    // character shifts nothing.
+    expect(parseManifest('\uFEFF[package]\nname = "x"').package.name).toBe("x");
+    expect(parseManifest("\uFEFFbroken [")).toBeNull();
+  });
+
   // This runs over every tracked Cargo.toml and pyproject.toml in the
   // workspace, including the half-written one on somebody's branch. A throw
   // here does not fail one project — it fails project-graph computation, so

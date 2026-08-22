@@ -181,15 +181,23 @@
  *   deliberate, not sloppy: it is what catches a function-local import and an
  *   import under `if TYPE_CHECKING:`, both of which cross a boundary. Python's
  *   own statement separators are followed rather than dropped at: a `;` opens
- *   a fresh statement to check on the same line, and a line ending in a bare
- *   `\` is joined with the next one first, the same explicit line-joining
- *   Python itself does — but only starting from a line that already opens
- *   with `from`/`import`, so an unrelated line elsewhere that happens to end
- *   in `\` (a comment noting a Windows path, say) never pulls a statement it
- *   has nothing to do with into this one. A statement that pulled continuation
- *   lines in this way and still could not be read as `from`/`import` is a
- *   failure naming the file rather than a silently dropped record — the same
- *   choice a brace-group `use` gets in the Rust analyzer below.
+ *   a fresh statement to check on the same line, and a line whose last
+ *   non-blank byte is `\` (`CONTINUATION_TAIL`) is joined with the next one
+ *   first, the same explicit line-joining Python itself does — but only
+ *   starting from a line that already opens with `from`/`import`, so an
+ *   unrelated line elsewhere that happens to end in `\` (a comment noting a
+ *   Windows path, say) never pulls a statement it has nothing to do with into
+ *   this one. A statement that pulled continuation lines in this way and
+ *   still could not be read as `from`/`import` is a failure naming the file
+ *   rather than a silently dropped record — the same choice a brace-group
+ *   `use` gets in the Rust analyzer below.
+ * - **A UTF-8 BOM and CRLF line endings are tolerated** (`contract.md`, byte
+ *   tolerance): the BOM failed every `^[ \t]*` statement anchor, dropping a
+ *   first-line import outright, and the `\r` a `\n` split leaves on each line
+ *   hid every joining backslash from an end-of-line check, so a continued
+ *   statement parsed as if its continuation did not exist and every name
+ *   after the break was missed with nothing reported. Both bytes are blanked
+ *   to a space, never stripped — see `parsePythonImportSites`.
  * - **A parenthesised name list** — `import (a, b)` or `from x import (a, b)`,
  *   Black and isort's normalised multi-import spelling — is read the same way
  *   as the single-line comma list: the surrounding parens and any interior
@@ -862,6 +870,20 @@ const IMPORT_STATEMENT = /^[ \t]*import[ \t]+/;
 const FROM_STATEMENT =
   /^([ \t]*from[ \t]+)(\.+[A-Za-z_][\w.]*|\.+|[A-Za-z_][\w.]*)(?:[ \t]+|(?<=\.))import\b/;
 const DOTTED_NAME = /^[ \t]*([A-Za-z_][\w.]*)/;
+/**
+ * A line whose last non-blank byte is the joining `\`.
+ *
+ * Python itself rejects bytes between the backslash and the newline, so for
+ * an LF file this matches exactly what a bare `endsWith("\\")` does. It is a
+ * character class rather than that equality because of the CRLF case: a
+ * split line carries its `\r`, and read verbatim it hid every joining
+ * backslash from this test, so a continued statement parsed as if it were
+ * one line long and every name after the break disappeared — reported by
+ * nobody, visible to no rule. Reading `\` plus trailing blanks as a
+ * continuation is the same spurious-direction trade the parser makes
+ * elsewhere (the file would not run as written), never a missed import.
+ */
+const CONTINUATION_TAIL = /\\[ \t]*$/;
 
 /**
  * `text` with a parenthesised name group's parentheses blanked to spaces —
@@ -966,16 +988,18 @@ function splitStatements(line) {
 
 /**
  * Python's explicit line-joining, starting at physical line `index`: a line
- * ending in a bare `\` continues onto the next one with the backslash and the
- * newline both gone, exactly as Python's own tokenizer joins them, and a
- * `from`/`import` line whose paren group stays open continues too — the
- * `import (a,` + `b,)` spelling Black and isort normalise to. Called only for
- * a line that already opens with `from`/`import` — see the caller — so this
- * never reaches into a line that has nothing to do with the statement, a
- * comment ending in `\` while noting a Windows path, say.
+ * whose last non-blank byte is `\` (`CONTINUATION_TAIL`) continues onto the
+ * next one with the backslash and the newline both gone, exactly as Python's
+ * own tokenizer joins them, and a `from`/`import` line whose paren group
+ * stays open continues too — the `import (a,` + `b,)` spelling Black and
+ * isort normalise to. Called only for a line that already opens with
+ * `from`/`import` — see the caller — so this never reaches into a line that
+ * has nothing to do with the statement, a comment ending in `\` while noting
+ * a Windows path, say.
  *
- * Each continuation swaps exactly one character (the trailing `\`) for one (a
- * joining space) and then appends the next physical line whole, so the joined
+ * Each continuation swaps the matched tail (the joining `\`, plus whatever
+ * blanked bytes follow it) for blanks of the same length and then appends
+ * the next physical line whole, so the joined
  * text's length up to any given physical line's contribution always equals
  * the sum of the real lines before it. That is what lets `toOffset` translate
  * a position in the joined text back into the ORIGINAL source by arithmetic
@@ -997,14 +1021,20 @@ function joinContinuedStatement(physicalLines, lineOffsets, index) {
     // `segments[0].start` is always 0 (the start of `text` itself, not a
     // later line's boundary) — only the ones appended since are boundaries a
     // `#` comment must stop at.
-    (text.endsWith("\\") ||
+    (CONTINUATION_TAIL.test(text) ||
       hasUnclosedParen(
         text,
         segments.slice(1).map((s) => s.start),
       ))
   ) {
     end++;
-    text = text.endsWith("\\") ? `${text.slice(0, -1)} ` : text; // swap `\` for a space
+    if (CONTINUATION_TAIL.test(text)) {
+      // One space in for every byte out: the backslash and the blanked bytes
+      // after it become blanks, so the joined text's length up to this point
+      // still equals the sum of the real lines before it and `toOffset`
+      // stays pure arithmetic.
+      text = text.replace(CONTINUATION_TAIL, (tail) => " ".repeat(tail.length));
+    }
     segments.push({ start: text.length, offset: lineOffsets[end] });
     text += physicalLines[end];
   }
@@ -1029,7 +1059,17 @@ function joinContinuedStatement(physicalLines, lineOffsets, index) {
  */
 export function parsePythonImportSites(pythonText) {
   const sites = [];
-  const physicalLines = pythonText.split("\n");
+  // Byte tolerance (`contract.md`): the lines a CRLF file splits into still
+  // carry their `\r`, and a BOM-prefixed file's first line starts with
+  // `\uFEFF`. The `\r` hid every joining backslash from an end-of-line check;
+  // the BOM failed every `^[ \t]*` statement anchor. Both are blanked to a
+  // space, one character for one, never stripped: this parser's offsets stay
+  // offsets into the file as it sits on disk, which is what lets
+  // `positionAt` report columns a reader would count.
+  const physicalLines = pythonText.split("\n").map((line, index) => {
+    const withoutCarriageReturn = line.endsWith("\r") ? `${line.slice(0, -1)} ` : line;
+    return index === 0 ? withoutCarriageReturn.replace(/^\uFEFF/, " ") : withoutCarriageReturn;
+  });
   const lineOffsets = [];
   for (let offset = 0, i = 0; i < physicalLines.length; i++) {
     lineOffsets.push(offset);
@@ -1040,7 +1080,7 @@ export function parsePythonImportSites(pythonText) {
   while (index < physicalLines.length) {
     const line = physicalLines[index];
     const continues =
-      FROM_OR_IMPORT_HEAD.test(line) && (line.endsWith("\\") || hasUnclosedParen(line));
+      FROM_OR_IMPORT_HEAD.test(line) && (CONTINUATION_TAIL.test(line) || hasUnclosedParen(line));
     const { text, end, toOffset } = continues
       ? joinContinuedStatement(physicalLines, lineOffsets, index)
       : { text: line, end: index, toOffset: (i) => lineOffsets[index] + i };

@@ -4,6 +4,14 @@ import { parse as parseToml } from "smol-toml";
 /**
  * Parses TOML, returning null instead of throwing on malformed input.
  *
+ * A leading UTF-8 BOM is tolerated (`contract.md`, byte tolerance): smol-toml
+ * rejects it outright (measured), so a manifest an editor wrote a BOM into
+ * came back null and everything read from it vanished — a `Cargo.toml` crate
+ * dropped out of the crate map and every import of it resolved as if it were
+ * external, a `pyproject.toml`'s declared layout went unmodelled. Manifests
+ * contribute no position to any record (`contract.md`), so removing the one
+ * character here shifts nothing.
+ *
  * The return type is deliberately loose: a manifest's shape is whatever its
  * author wrote, and every reader here guards each access with optional
  * chaining and typeof checks rather than trusting a declared shape.
@@ -13,7 +21,7 @@ import { parse as parseToml } from "smol-toml";
  */
 export function parseManifest(text) {
   try {
-    return parseToml(text);
+    return parseToml(text.replace(/^\uFEFF/, ""));
   } catch {
     return null;
   }

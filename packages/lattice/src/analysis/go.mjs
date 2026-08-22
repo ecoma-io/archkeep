@@ -88,9 +88,16 @@ import {
  * both directions for a module declared this way. A backquoted module path is
  * NOT stripped here because it is not legal go.mod syntax to begin with — the
  * real toolchain rejects it, so there is nothing gofmt-clean to preserve.
+ *
+ * A UTF-8 BOM before the directive is tolerated (`contract.md`, byte
+ * tolerance): `/^module/m` never matches the file's first line through a
+ * leading `\uFEFF`, so an editor-written BOM used to return null and drop the
+ * whole project from the module map — no nodes, no edges, violations reported
+ * as none. This parse yields a path, never a position, so removing the one
+ * character shifts nothing any record points at.
  */
 export function parseGoModulePath(goModText) {
-  const match = goModText.match(/^module\s+(\S+)/m);
+  const match = goModText.replace(/^\uFEFF/, "").match(/^module\s+(\S+)/m);
   if (!match) return null;
   const token = match[1];
   return token.length >= 2 && token.startsWith('"') && token.endsWith('"')

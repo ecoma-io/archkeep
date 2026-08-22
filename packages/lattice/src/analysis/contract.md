@@ -222,6 +222,17 @@ analyze({ sourceFile, text, workspace }) -> AnalysisResult
 a test can drive an analyzer from an in-memory string — the same injectable
 shape the graph resolvers next door already use.
 
+**Byte tolerance.** `text` arrives exactly as the file decodes — a UTF-8 BOM
+and CRLF line endings included — and no layer normalises it on read: a BOM
+strip shifts every column after it by one and a CRLF collapse shifts every
+line, so a diagnostic traded for a clean parse would point one position off.
+Each parser tolerates those spellings itself instead. A source parser blanks
+a tolerated byte for one of its own length (never deleting), so every offset
+its records carry stays an offset into the bytes on disk and `positionAt`
+reports what a reader counting the file would count. A manifest reader
+(`parseGoModulePath`, `parseManifest`) emits no position at all, so there is
+nothing to shift and it removes the byte outright.
+
 `workspace` is `{ root, projects, filesOf, readFile }`: the absolute workspace
 root, every project as `{ name, root }` with a workspace-relative root, the
 tracked-file list per project name, and a workspace-relative reader returning

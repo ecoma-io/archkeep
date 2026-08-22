@@ -797,6 +797,36 @@ describe("parsePythonImportSites", () => {
     expect(parsePythonImportSites(source).map((site) => site.specifier)).toEqual(["alpha", "beta"]);
   });
 
+  it("joins a backslash-continued statement saved with CRLF line endings (#222)", () => {
+    // Issue #222's repro: split on "\n", each line kept its trailing "\r",
+    // the end-of-line check saw `, \r` and not `, \`, so the continuation
+    // never joined and only `os` survived — `beta` was missed with nothing
+    // reported, byte-for-byte identical to a clean parse.
+    const source = "import os, \\\r\n    beta\r\n";
+    expect(
+      parsePythonImportSites(source).map((site) => [
+        site.specifier,
+        source.slice(site.offset, site.offset + site.specifier.length),
+      ]),
+    ).toEqual([
+      ["os", "os"],
+      ["beta", "beta"],
+    ]);
+  });
+
+  it("reads a first-line import behind a UTF-8 BOM (#221)", () => {
+    const source = "\uFEFFimport os\nimport beta.store\n";
+    expect(
+      parsePythonImportSites(source).map((site) => [
+        site.specifier,
+        source.slice(site.offset, site.offset + site.specifier.length),
+      ]),
+    ).toEqual([
+      ["os", "os"],
+      ["beta.store", "beta.store"],
+    ]);
+  });
+
   it("reads a statement that shares a physical line with another via `;`", () => {
     const source = "import alpha; import beta\n";
     expect(
@@ -938,6 +968,44 @@ describe("analyzePython", () => {
     expect(imports).toHaveLength(2);
     expect(imports[1].specifier).toBe("beta.store");
     expect(imports[1].resolved.target).toBe("beta");
+  });
+
+  it("crosses a boundary named only after a backslash-continued line break in a CRLF file (#222)", () => {
+    // Issue #222: the same statement saved with CRLF endings kept a `\r` on
+    // every split line, the joining backslash hid behind it, only `os` was
+    // recorded and `beta.store` was missed with nothing reported — the output
+    // byte-for-byte identical to a clean parse.
+    const text = "import os, \\\r\n    beta.store\r\n";
+    const { imports, failures } = analyze(text);
+    expect(failures).toEqual([]);
+    expect(imports.map((record) => record.specifier)).toEqual(["os", "beta.store"]);
+    expect(imports[1].resolved.target).toBe("beta");
+  });
+
+  it("crosses a boundary written behind a UTF-8 BOM on the file's first line (#221)", () => {
+    const { imports, failures } = analyze("\uFEFFfrom beta.store import Thing\n");
+    expect(failures).toEqual([]);
+    expect(imports[0].specifier).toBe("beta.store");
+    expect(imports[0].resolved.target).toBe("beta");
+  });
+
+  it("keeps CRLF and BOM positions where a reader counting the file finds them", () => {
+    // The guard against normalisation-on-read (`contract.md`, byte
+    // tolerance): stripping the BOM or collapsing CRLF before parsing would
+    // shift every offset after the edit, and these assertions go red the
+    // moment any layer does it. Each record's column must still point at its
+    // own name in the ORIGINAL text — a collapse moves every line 2 byte and
+    // a strip moves line 1's — counted as an editor counts them: the BOM
+    // occupies column 1 of line 1, a `\r` belongs to the end of its own line.
+    const text = "\uFEFFimport os\r\nfrom beta.store import Thing\r\n";
+    const { imports } = analyze(text);
+    expect(imports.map((record) => record.specifier)).toEqual(["os", "beta.store"]);
+    for (const record of imports) {
+      const lineText = text.split("\n")[record.line - 1];
+      expect(lineText.slice(record.column - 1).startsWith(record.specifier)).toBe(true);
+    }
+    expect(imports[0]).toMatchObject({ line: 1, column: 9 });
+    expect(imports[1]).toMatchObject({ line: 2, column: 6 });
   });
 
   it("crosses a boundary named only after a `;` on the same line as another import", () => {
