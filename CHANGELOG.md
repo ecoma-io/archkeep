@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.1](https://github.com/ecoma-io/lattice/compare/v0.10.0...v0.10.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* **ci:** reach every registry the 0.10.0 release was supposed to ([#208](https://github.com/ecoma-io/lattice/issues/208)) ([b8f657a](https://github.com/ecoma-io/lattice/commit/b8f657a6f544ff7a8ca0731813be13e8fb9edbf5))
+
+
+### Documentation
+
+* **workspace:** reconcile the documentation with what [#202](https://github.com/ecoma-io/lattice/issues/202) and [#204](https://github.com/ecoma-io/lattice/issues/204) shipped ([#205](https://github.com/ecoma-io/lattice/issues/205)) ([9ad3179](https://github.com/ecoma-io/lattice/commit/9ad31797d2329d37095fa7e5c3338c2161a2931c))
+
 ## [0.10.0](https://github.com/ecoma-io/lattice/compare/v0.9.0...v0.10.0) (2026-08-22)
 
 
