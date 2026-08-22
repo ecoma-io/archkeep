@@ -34,6 +34,15 @@
  * resolves no import, so it fails the run the way a violation does. Same
  * workspace-level shape as go.work — a table is judged, not files analyzed.
  *
+ * When the boundary policy declares `customRules`, `check` also judges each
+ * declared rule against the evidence this run already computed
+ * (`src/commands/custom-rules.mjs` owns the mechanics and the failure split).
+ * By presence, never by flag, and folded into the same exit machinery fitness
+ * uses: a `fail` verdict is a finding, an `unknown` one is a
+ * could-not-determine, and a rule whose ARTIFACT could not be loaded refuses
+ * the run the way a malformed config does rather than becoming a verdict about
+ * a law that was never read.
+ *
  * Exit codes are part of the contract; a script calling this has to tell "your
  * tree is dirty" from "you typed it wrong" from "the checker itself broke":
  *   0  no violations, and every selected file was analyzed
@@ -93,6 +102,7 @@ import { adrCommand, readAdrContext } from "./src/commands/adr.mjs";
 import { declaredFitnessNames, unresolvedDecisionRefRows } from "./src/governance/adr-registry.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { declaredEdgeViolationsForCheck } from "./src/commands/edge-constraints.mjs";
+import { customRulesForCheck, declaresCustomRules } from "./src/commands/custom-rules.mjs";
 import { discoverCommand } from "./src/commands/discover.mjs";
 import { driftCommand, driftForCheck } from "./src/commands/drift.mjs";
 import { fitnessCommand, fitnessForCheck } from "./src/commands/fitness.mjs";
@@ -472,7 +482,7 @@ export function parseCheckArgs(argv) {
  * with no findings), which makes a regression in this mapping a loud error
  * rather than a silent one.
  *
- * @param {{violations: number, declaredEdgeFindings: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, intentUnresolvedDecisionRefs?: number, unchecked: number, fitnessFail?: number, fitnessUnknown?: number}} counts
+ * @param {{violations: number, declaredEdgeFindings: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, intentUnresolvedDecisionRefs?: number, unchecked: number, fitnessFail?: number, fitnessUnknown?: number, customRuleFail?: number, customRuleUnknown?: number}} counts
  * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3, decision: object}}
  */
 function verdictFor({
@@ -486,6 +496,8 @@ function verdictFor({
   unchecked,
   fitnessFail = 0,
   fitnessUnknown = 0,
+  customRuleFail = 0,
+  customRuleUnknown = 0,
 }) {
   if (
     violations > 0 ||
@@ -493,7 +505,12 @@ function verdictFor({
     goWorkDrift > 0 ||
     tsconfigPathsDead > 0 ||
     intentFindings > 0 ||
-    fitnessFail > 0
+    fitnessFail > 0 ||
+    // A `fail`-verdict custom rule is a finding by the same argument a failing
+    // fitness function is one (D-09): the workspace declared the law, the law
+    // judged, and the law says no. It rides this lane rather than a new exit
+    // code, so a consumer's CI branches on the same 0/1/3 it already does.
+    customRuleFail > 0
   ) {
     return {
       status: "findings",
@@ -507,7 +524,8 @@ function verdictFor({
           goWorkDrift +
           tsconfigPathsDead +
           intentFindings +
-          fitnessFail,
+          fitnessFail +
+          customRuleFail,
       }),
     };
   }
@@ -515,7 +533,8 @@ function verdictFor({
     unchecked > 0 ||
     intentUnresolved > 0 ||
     intentUnresolvedDecisionRefs > 0 ||
-    fitnessUnknown > 0
+    fitnessUnknown > 0 ||
+    customRuleUnknown > 0
   ) {
     return {
       status: "no-verdict",
@@ -545,6 +564,9 @@ function verdictFor({
             : null,
           fitnessUnknown > 0
             ? `${fitnessUnknown} fitness function${fitnessUnknown === 1 ? "" : "s"} could not be determined`
+            : null,
+          customRuleUnknown > 0
+            ? `${customRuleUnknown} custom rule${customRuleUnknown === 1 ? "" : "s"} could not be judged`
             : null,
         ]
           .filter(Boolean)
@@ -615,7 +637,8 @@ function declaredEdgeManifest({ provider, graph }, sourceProject) {
  * @returns {Promise<{report: string, violations: number, declaredEdgeFindings: number,
  *   goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number,
  *   intentUnresolved: number, intentUnresolvedDecisionRefs: number, fitnessFail: number,
- *   fitnessUnknown: number, analyzed: number, unchecked: number, waived?: number}>}
+ *   fitnessUnknown: number, customRuleFail: number, customRuleUnknown: number,
+ *   analyzed: number, unchecked: number, waived?: number}>}
  */
 export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
   const commandContext = resolveCommandContext(
@@ -939,6 +962,36 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   }
   const fitnessFail = fitness === null ? 0 : fitness.overall.verdict === "fail" ? 1 : 0;
   const fitnessUnknown = fitness === null ? 0 : fitness.overall.verdict === "unknown" ? 1 : 0;
+
+  // The custom-rules fold, keyed by presence exactly as the fitness fold above
+  // is, and judged after it over the same observed facts — the same graph, the
+  // same analysis, the same policy. A workspace that declares no `customRules`
+  // reaches nothing here and hears nothing anywhere: no section, no envelope
+  // key, no SARIF descriptor, byte-for-byte the report it already got
+  // (`../../AGENTS.md`, "a change to what is reported on an unchanged
+  // workspace is a breaking change").
+  //
+  // Every load-class failure THROWS out of here rather than becoming a verdict
+  // — the declared law could not be read, so the run refuses the way it
+  // refuses a malformed boundary config, and `runCheck` below turns that into
+  // the same exit 3 (`./src/commands/custom-rules.mjs` argues the split). The
+  // counts below then carry only what a loaded law decided: a `fail` is a
+  // finding (exit 1) and an `unknown` is a could-not-determine (exit 3), the
+  // identical two lanes fitness rides, per RULE rather than per aggregate
+  // because each declared rule is its own law and a reader acts on the one
+  // that failed.
+  let customRules = null;
+  if (declaresCustomRules(config)) {
+    customRules = await customRulesForCheck(commandContext, {
+      rows: config.customRules,
+      policy: config,
+      scoped: options.paths.length > 0,
+    });
+  }
+  const customRuleDecisions = customRules === null ? [] : customRules.decisions;
+  const customRuleFail = customRuleDecisions.filter((rule) => rule.verdict === "fail").length;
+  const customRuleUnknown = customRuleDecisions.filter((rule) => rule.verdict === "unknown").length;
+
   // Files the run produced no verdict about, counted here rather than
   // recomputed by the caller: the exit code, the text report and the JSON
   // envelope must all agree about which failures mean "not covered", and one
@@ -1020,6 +1073,8 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
               unchecked,
               fitnessFail,
               fitnessUnknown,
+              customRuleFail,
+              customRuleUnknown,
             }),
             coverage: {
               complete: unchecked === 0,
@@ -1118,6 +1173,24 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
                       functions: fitness.decisions,
                     },
                   }),
+              // Custom rules are a policy DECLARATION as well, and take the
+              // same omitted-key-not-null discipline: a workspace that
+              // declares none has no `customRules` key at all, so its envelope
+              // is byte-identical to the one it got before this section
+              // existed — the additive-only half of the stability promise
+              // `docs/reference/json-output.md` publishes. `rules` (not
+              // `functions`) because each entry is a whole declared law rather
+              // than a named gate, and it carries the rule's own `findings`,
+              // which no fitness decision has.
+              ...(customRules === null
+                ? {}
+                : {
+                    customRules: {
+                      checked: true,
+                      verdict: customRules.overall.verdict,
+                      rules: customRules.decisions,
+                    },
+                  }),
             },
           }),
         )
@@ -1134,6 +1207,11 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
           intent,
           fitness: fitness?.decisions,
           fitnessOverall: fitness?.overall,
+          // One object rather than the decisions/overall pair fitness passes:
+          // the SARIF face also needs the finding CATALOGUE (its
+          // reportingDescriptor set), and splitting three fields across the
+          // two formatters would let a face be handed one without the others.
+          customRules,
           // Only the ESLint boundaryConfig dialect ever produces one (see
           // `./src/eslint-config.mjs`'s `extractBoundaryRule`) — which entry it
           // bound when more than one configured the rule, or that the winning
@@ -1161,6 +1239,8 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     intentUnresolvedDecisionRefs: intentUnresolvedDecisionRefRows.length,
     fitnessFail,
     fitnessUnknown,
+    customRuleFail,
+    customRuleUnknown,
     analyzed,
     unchecked,
   };
@@ -1392,6 +1472,16 @@ async function runCheck(options, { cwd, env }) {
         (result.fitnessUnknown > 0
           ? `, ${result.fitnessUnknown} fitness function${result.fitnessUnknown === 1 ? "" : "s"} undetermined`
           : "") +
+        // Custom rules drive the exit code exactly like every count above
+        // them (`verdictFor`), so they are named here for the same reason
+        // fitness is: a custom-rule-only failure would otherwise log
+        // "0 violations …" beside a non-zero exit.
+        (result.customRuleFail > 0
+          ? `, ${result.customRuleFail} custom rule${result.customRuleFail === 1 ? "" : "s"} failed`
+          : "") +
+        (result.customRuleUnknown > 0
+          ? `, ${result.customRuleUnknown} custom rule${result.customRuleUnknown === 1 ? "" : "s"} undetermined`
+          : "") +
         (result.unchecked > 0
           ? `, ${result.unchecked} file${result.unchecked === 1 ? "" : "s"} not analyzed`
           : "") +
@@ -1474,7 +1564,10 @@ function hasProfiles(options) {
  * @param {string} cwd The process's working directory a relative `--config`
  *   resolves against — kept separate from the workspace root for the reason
  *   above.
- * @returns {Promise<{config: {depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[]}|null, profile: string|null, source: string|null}>}
+ * @returns {Promise<{config: {depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], notes?: string[]}|null, profile: string|null, source: string|null}>}
+ *   `fitness` and `customRules` are present only when the resolved policy
+ *   declares them — an absent key is the workspace's decision not to declare
+ *   that law, never an empty one (`./src/config.mjs`'s `policyFrom`).
  * @throws {Error} when a named profile, a `--config` file, or an inline
  *   policy cannot be resolved or is malformed — every arm's existing failure
  *   mode, unchanged by the extraction.

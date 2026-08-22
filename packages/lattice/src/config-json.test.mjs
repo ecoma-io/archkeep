@@ -145,6 +145,62 @@ export const moduleBoundaryOption = [];
     );
   });
 
+  it("loads a customRules export and hands the rows on exactly as written", async () => {
+    write(
+      "custom-rules.mjs",
+      `${moduleText}export const customRules = [
+  {
+    name: "no-interface-outside-domain",
+    artifact: "tools/rules/no_interface_outside_domain.wasm",
+    sha256: ${JSON.stringify("a".repeat(64))},
+    params: { domainTag: "layer:domain" },
+    reason: "interfaces are the domain's ports",
+  },
+];
+`,
+    );
+    const config = await loadBoundaryConfigFile(join(root, "custom-rules.mjs"));
+    // Nothing defaulted in and nothing dropped: the row is the workspace's own
+    // text, so a loader that filled a field would be stating law the policy
+    // does not, and one that dropped `params` would run the rule under
+    // parameters nobody wrote.
+    expect(config.customRules).toEqual([
+      {
+        name: "no-interface-outside-domain",
+        artifact: "tools/rules/no_interface_outside_domain.wasm",
+        sha256: "a".repeat(64),
+        params: { domainTag: "layer:domain" },
+        reason: "interfaces are the domain's ports",
+      },
+    ]);
+  });
+
+  it("carries no customRules key at all when the policy declares none", async () => {
+    // Absent is a decision, not an empty list: a `customRules: []` handed to a
+    // later reader would read as "custom rules are configured, and there are
+    // none" — a different statement from the one the file makes.
+    const config = await loadBoundaryConfigFile(join(root, "policy.mjs"));
+    expect("customRules" in config).toBe(false);
+  });
+
+  // The silent-direction failure this guards, in its newest spelling: a
+  // misspelt `customRule` export is a declared law that never loads, and the
+  // `.mjs` dialect's old tolerance for a helper export would have let it
+  // disappear — a workspace believing its own rule runs, and a report that
+  // looks exactly like a clean tree.
+  it("refuses a misspelled customRule export by name rather than ignoring it", async () => {
+    write(
+      "custom-rule-typo.mjs",
+      `${moduleText}export const customRule = [
+  { name: "no-interface-outside-domain", artifact: "x.wasm", sha256: ${JSON.stringify("a".repeat(64))}, reason: "why" },
+];
+`,
+    );
+    await expect(loadBoundaryConfigFile(join(root, "custom-rule-typo.mjs"))).rejects.toThrow(
+      /customRule: not a recognised top-level key/,
+    );
+  });
+
   it("still reports a malformed .mjs the same way it always has", async () => {
     write("broken.mjs", `export const depConstraints = "not an array";`);
     await expect(loadBoundaryConfigFile(join(root, "broken.mjs"))).rejects.toThrow(
@@ -319,6 +375,53 @@ describe("loadBoundaryConfigFile — the .json dialect", () => {
     });
     await expect(loadBoundaryConfigFile("/repo/policy.json", { readFile })).rejects.toThrow(
       /boundarySuppressions\[0\]\.reason: must be a non-empty string/,
+    );
+  });
+
+  it("loads customRules from the .json dialect exactly as the .mjs dialect does", async () => {
+    const customRules = [
+      {
+        name: "no-interface-outside-domain",
+        artifact: "tools/rules/no_interface_outside_domain.wasm",
+        sha256: "b".repeat(64),
+        reason: "interfaces are the domain's ports",
+      },
+    ];
+    const readFile = fakeReadFile({
+      "/repo/policy.json": JSON.stringify({ ...wellFormedPolicy(), customRules }),
+    });
+    const config = await loadBoundaryConfigFile("/repo/policy.json", { readFile });
+    expect(config.customRules).toEqual(customRules);
+  });
+
+  it("rejects a malformed customRules row here through the same validator the .mjs dialect uses", async () => {
+    // One validator, two dialects: a row whose artifact leaves the tree is
+    // refused with the identical message either way, which is what keeps the
+    // `.json` spelling from being a second, laxer reader of the same law.
+    const readFile = fakeReadFile({
+      "/repo/policy.json": JSON.stringify({
+        ...wellFormedPolicy(),
+        customRules: [
+          {
+            name: "no-interface-outside-domain",
+            artifact: "../outside/rule.wasm",
+            sha256: "b".repeat(64),
+            reason: "why",
+          },
+        ],
+      }),
+    });
+    await expect(loadBoundaryConfigFile("/repo/policy.json", { readFile })).rejects.toThrow(
+      /customRules\[0\]\.artifact: '\.\.\/outside\/rule\.wasm' leaves the workspace/,
+    );
+  });
+
+  it("rejects a customRules key that is present but empty, naming it", async () => {
+    const readFile = fakeReadFile({
+      "/repo/policy.json": JSON.stringify({ ...wellFormedPolicy(), customRules: [] }),
+    });
+    await expect(loadBoundaryConfigFile("/repo/policy.json", { readFile })).rejects.toThrow(
+      /customRules: must not be empty/,
     );
   });
 

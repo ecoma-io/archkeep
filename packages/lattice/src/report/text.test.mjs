@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatConstraint,
   formatCoverageGaps,
+  formatCustomRulesSection,
   formatDeclaredEdges,
   formatFailures,
   formatGoWork,
@@ -758,5 +759,130 @@ describe("formatCoverageGaps", () => {
     ]);
     expect(text).toContain("1 polyglot manifest");
     expect(text).not.toContain("1 polyglot manifests");
+  });
+});
+
+describe("formatCustomRulesSection", () => {
+  const decision = (overrides = {}) => ({
+    verdict: "pass",
+    name: "no-app-to-ring",
+    evidence: { artifact: "tools/rules/no-app-to-ring.wasm", findings: 0 },
+    message: "judged this workspace and reported no finding",
+    reason: "the ring's internals stay inside the ring",
+    findings: [],
+    ...overrides,
+  });
+
+  it("prints nothing when the policy declared no custom rules", () => {
+    // No declaration, no section — the same "no fact, no claim" bargain
+    // go.work and the paths table keep for a feature a workspace never uses.
+    expect(formatCustomRulesSection(null)).toBe("");
+    expect(formatCustomRulesSection(undefined)).toBe("");
+    expect(formatCustomRulesSection({ decisions: [], overall: { verdict: "pass" } })).toBe("");
+  });
+
+  it("gives every declared rule a row with its declared reason", () => {
+    const text = formatCustomRulesSection({
+      decisions: [decision()],
+      overall: { verdict: "pass" },
+    });
+    expect(text).toContain("✔ no-app-to-ring  judged this workspace and reported no finding");
+    expect(text).toContain("  reason      the ring's internals stay inside the ring");
+  });
+
+  it("counts all four verdicts, so a rule that did not look is not read as one that did", () => {
+    // The ambiguity this line exists to end: `not_applicable` means the rule
+    // never looked, and a summary naming only failures cannot say so.
+    const text = formatCustomRulesSection({
+      decisions: [
+        decision(),
+        decision({ verdict: "fail", name: "b", findings: [{ id: "custom/b/x", message: "m" }] }),
+        decision({ verdict: "unknown", name: "c" }),
+        decision({ verdict: "not_applicable", name: "d", notApplicableReason: "scoped" }),
+      ],
+      overall: { verdict: "fail" },
+    });
+    expect(text).toContain("✖ custom rules: 1 passed, 1 failed, 1 unknown, 1 not applicable");
+  });
+
+  it("renders a finding at every level of position it actually carries, and no further", () => {
+    const text = formatCustomRulesSection({
+      decisions: [
+        decision({
+          verdict: "fail",
+          findings: [
+            {
+              id: "custom/no-app-to-ring/a",
+              message: "full position",
+              sourceFile: "libs/app/main.go",
+              line: 5,
+              column: 2,
+            },
+            {
+              id: "custom/no-app-to-ring/b",
+              message: "a line and no column",
+              sourceFile: "libs/app/main.go",
+              line: 9,
+            },
+            // A column with no line has no clickable form at all: the file
+            // alone renders, rather than a `file:2` a reader would take for a
+            // line number.
+            {
+              id: "custom/no-app-to-ring/c",
+              message: "a column and no line",
+              sourceFile: "libs/app/main.go",
+              column: 2,
+            },
+            { id: "custom/no-app-to-ring/d", message: "no place at all" },
+          ],
+        }),
+      ],
+      overall: { verdict: "fail" },
+    });
+    expect(text).toContain("  libs/app/main.go:5:2  custom/no-app-to-ring/a");
+    expect(text).toContain("  libs/app/main.go:9  custom/no-app-to-ring/b");
+    expect(text).toContain("  libs/app/main.go  custom/no-app-to-ring/c");
+    expect(text).toContain("  custom/no-app-to-ring/d");
+    expect(text).not.toContain("libs/app/main.go:2");
+  });
+
+  it("indents every line of a multi-line finding message under its own site", () => {
+    // An unindented continuation would read as a second finding at a file
+    // called whatever the wrapped text started with.
+    const text = formatCustomRulesSection({
+      decisions: [
+        decision({
+          verdict: "fail",
+          findings: [
+            {
+              id: "custom/no-app-to-ring/a",
+              message: "first line\n\nsecond line",
+              sourceFile: "libs/app/main.go",
+              line: 5,
+              column: 2,
+            },
+          ],
+        }),
+      ],
+      overall: { verdict: "fail" },
+    });
+    expect(text).toContain("    first line\n\n    second line");
+  });
+
+  it("reaches the report only when the run carries custom rules", () => {
+    const run = {
+      violations: [],
+      failures: [],
+      analyzed: 1,
+      projects: 1,
+      imports: 0,
+    };
+    expect(formatReport(run)).not.toContain("custom rules:");
+    expect(
+      formatReport({
+        ...run,
+        customRules: { decisions: [decision()], overall: { verdict: "pass" } },
+      }),
+    ).toContain("✔ custom rules: 1 passed, 0 failed, 0 unknown, 0 not applicable");
   });
 });

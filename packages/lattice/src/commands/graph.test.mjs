@@ -457,6 +457,37 @@ describe("computePolicyFingerprint", () => {
     expect(computePolicyFingerprint(minimal)).toBe(computePolicyFingerprint(explicit));
   });
 
+  it("moves when a declared custom rule's artifact hash moves, and not when the key is absent", () => {
+    // The silent direction this covers: a policy's `customRules` row pins an
+    // artifact by `sha256`, so swapping that hash swaps the law the run
+    // executes. A fingerprint blind to the field would let `diff` report the
+    // policy unchanged across exactly that edit. The absent case is the other
+    // half — a policy that declares no custom rules must fingerprint as it did
+    // before the field was covered, so extending the hash moved no existing
+    // snapshot.
+    const base = { depConstraints: [], options: {}, suppressions: [] };
+    const withRule = (sha256) => ({
+      ...base,
+      customRules: [
+        {
+          name: "no-interface-outside-domain",
+          artifact: "tools/rules/x.wasm",
+          sha256,
+          reason: "r",
+        },
+      ],
+    });
+    expect(computePolicyFingerprint(withRule("a".repeat(64)))).not.toBe(
+      computePolicyFingerprint(withRule("b".repeat(64))),
+    );
+    expect(computePolicyFingerprint(base)).toBe(
+      computePolicyFingerprint({ depConstraints: [], options: {}, suppressions: [] }),
+    );
+    expect(computePolicyFingerprint(withRule("a".repeat(64)))).not.toBe(
+      computePolicyFingerprint(base),
+    );
+  });
+
   it("is key-order independent — same policy with different key order produces same fingerprint", () => {
     // Two options objects with the same keys but different insertion order.
     const configA = {

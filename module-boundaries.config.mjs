@@ -122,10 +122,42 @@ export const depConstraints = [
   { sourceTag: "type-extension", onlyDependOnLibsWithTags: ["type-package"] },
 
   // Scope axis. `scope-nx` is the Nx-toolchain scope — plugins, and the
-  // language server and CLI that share their analysis. A second scope arrives
-  // with the first package that is not Nx tooling, and this row is what will
-  // then keep the two from importing each other by accident.
+  // language server and CLI that share their analysis. The second scope has
+  // now arrived, so the two rows are read together: each scope may depend
+  // inside itself and nowhere else.
   { sourceTag: "scope-nx", onlyDependOnLibsWithTags: ["scope-nx"] },
+
+  // `scope-sdk` is the rule-authoring scope, and `packages/lattice-rule-sdk-rust`
+  // is the first package in this repository that is not Nx tooling — the
+  // second scope the row above was written in anticipation of. An SDK is a
+  // BINDING for the custom-rule contract
+  // (`docs/adr/0002-custom-rules-one-contract.md`, "SDKs are bindings"): it is
+  // compiled by a rule author, into an artifact a consumer's workspace
+  // declares, and this repository never loads it. The engine is the other
+  // side of that contract, and the two must not converge.
+  //
+  // What the pair of rows prevents, in the direction each is read:
+  //
+  //   lattice → lattice-rule-sdk-rust  ❌  the engine reaching into an SDK
+  //   lattice-rule-sdk-rust → lattice  ❌  an SDK reaching into the engine
+  //
+  // The first is the one with teeth. An engine that imported an SDK would make
+  // the contract's two sides one program, and "the host validates what the SDK
+  // does not" — the split both this repository's host and that SDK's own
+  // documentation lean on — would stop being checkable: a shared helper is a
+  // shared assumption, and two validators that agree because they are the same
+  // code prove nothing about the contract between them. The second is the same
+  // sentence read backwards, and it also keeps a published crate from
+  // depending on a package no crates.io consumer can resolve.
+  //
+  // **The row judges nothing on this workspace today, and that is measured
+  // rather than assumed.** The crate declares two dependencies, serde and
+  // serde_json, both resolved from crates.io, and nothing in this tree imports
+  // it — `node packages/lattice/cli.mjs check` over the three projects reports
+  // no edge in either direction. It is stated anyway, for the reason the eight
+  // options below are written out at their defaults: a law nobody wrote down
+  // is a law the next package gets to define by accident.
+  { sourceTag: "scope-sdk", onlyDependOnLibsWithTags: ["scope-sdk"] },
 ];
 
 /**
@@ -195,19 +227,32 @@ export const moduleBoundaryOptions = {
  * The violations this workspace has decided to accept, each with the reason it
  * was accepted.
  *
- * Empty, and worth keeping as an empty declaration rather than deleting: the
- * list is where an accepted violation goes, and `reason` is mandatory —
+ * The list is where an accepted violation goes, and `reason` is mandatory —
  * `packages/lattice/src/config.mjs` rejects an entry without one at
  * load. An unexplained suppression is indistinguishable from a boundary that
  * quietly stopped being enforced, and nobody can tell later whether it still
- * applies. An empty list is that rule satisfied; an absent list is the rule
- * having nowhere to live when the first exemption is proposed.
+ * applies. Each entry below carries its own whole argument; both are SDK rows,
+ * and both are about a language whose only spelling for an import is the one
+ * the message objects to.
  *
  * A suppression removes a VERDICT and never a failure: the checker applies these
  * after judging every import, so a file listed here is still fully analyzed and
  * anything it could not resolve is still reported.
  */
-export const boundarySuppressions = [];
+export const boundarySuppressions = [
+  {
+    path: "packages/lattice-rule-sdk-ts/test/golden.test.mjs",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+    reason:
+      "the TS SDK's conformance harness drives the engine's real custom-rule host — the one SDK that can, because both sides are JavaScript in one tree. It is a test-time reach and nothing under assembly/ knows the engine exists, so the scope-sdk separation this table holds is intact in the shipped artifact.",
+  },
+  {
+    path: "packages/lattice-rule-sdk-python/**/*.py",
+    messageId: "noSelfCircularDependencies",
+    reason:
+      "`from lattice_rule_sdk import ...` is the only spelling that resolves inside a Python rule's wasm carrier: the carrier registers the SDK runtime under that name in sys.modules, and there is no filesystem for the relative import this message recommends to walk. So the package's reference rule imports the SDK exactly as an outside author's rule does, and its tests import it exactly as the rule does. The rule being waived is about a language with two spellings for one import, where reaching a sibling file through the barrel is a real cycle — Python names a package one way, and taking the message's advice would produce an artifact that cannot load.",
+  },
+];
 
 /**
  * The fitness functions this workspace holds itself to — every one judged by

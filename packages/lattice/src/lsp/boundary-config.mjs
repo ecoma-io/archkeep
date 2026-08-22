@@ -62,7 +62,7 @@ import { LATTICE_MODEL_FILE } from "../providers/native/model.mjs";
  *
  * @param {string} path Absolute path of the config file.
  * @param {string|number} revision Busts the ESM module cache across edits.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[] }>}
  * @throws {Error} when the file is missing, unloadable, or malformed.
  */
 async function readModulePolicy(path, revision) {
@@ -86,7 +86,7 @@ async function readModulePolicy(path, revision) {
  * @param {(path: string, encoding: "utf8") => Promise<string>} readFile
  *   Injected so a test can drive this without a real file — see
  *   `readBoundaryConfig` below.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[] }>}
  * @throws {Error} when the file is missing, unreadable, not valid JSON, or
  *   malformed — either by `../config.mjs`'s `findBoundaryConfigViolations` or
  *   by carrying a top-level key none of those rules knows about.
@@ -144,8 +144,14 @@ async function readJsonPolicy(path, readFile) {
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Injectable read, used only by the `.json` dialect, defaulting to
  *   `node:fs/promises`'s `readFile`.
- * @returns {Promise<{depConstraints: object[], options: object, suppressions: object[]}>}
- *   `suppressions` is `[]` when the config declares none.
+ * @returns {Promise<{depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[]}>}
+ *   `suppressions` is `[]` when the config declares none; `fitness` and
+ *   `customRules` are present only when the policy declares them, the same
+ *   absent-is-a-decision shape `../config.mjs`'s `policyFrom` returns to
+ *   every other face. This server READS both and evaluates neither — a
+ *   fitness function and a custom rule are per-run workspace judgments, not
+ *   per-file diagnostics — so what it owes them is to load them and to fail
+ *   loudly on a row it cannot read.
  * @throws {Error} when `boundaryConfig` names the ESLint flat-config dialect
  *   or a legacy `.eslintrc*` file (this reader does not read either yet — see
  *   above), or — for a dialect it does read — when the file is missing,

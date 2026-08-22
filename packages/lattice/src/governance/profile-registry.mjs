@@ -82,7 +82,13 @@ function registrySchemaVersion(raw) {
     : /** @type {unknown} */ (raw.version);
 }
 
-/** The four keys a profile's `block` may carry, exactly those `policyFrom` reads. */
+/**
+ * The four keys a profile's `block` may carry — the boundary laws `policyFrom`
+ * reads, minus `customRules`, deliberately: a profile is a shareable law pack,
+ * and a custom-rule row names a wasm artifact by workspace-relative path and
+ * hash, which does not travel with a registry. A block naming it is refused by
+ * name below, loudly, until profile-carried rules are designed on purpose.
+ */
 const BLOCK_KEYS = ["depConstraints", "moduleBoundaryOptions", "boundarySuppressions", "fitness"];
 
 /**

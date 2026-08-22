@@ -1,0 +1,11 @@
+{
+  "options": {
+    "runtime": "stub",
+    "optimizeLevel": 0,
+    "shrinkLevel": 2,
+    "converge": true,
+    "use": ["abort=", "trace=", "seed=", "Date="],
+    "noAssert": false,
+    "noExportMemory": false
+  }
+}

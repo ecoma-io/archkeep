@@ -1,0 +1,68 @@
+# The Python binding for the custom-rule contract
+# (`../../docs/adr/0002-custom-rules-one-contract.md`).
+#
+# The directory carries the language suffix and the DISTRIBUTION DOES NOT: the
+# ADR's "One name on every registry" section settled `lattice-rule-sdk` as the
+# published name, and PyPI already names the language. The tree, which will hold
+# four of these, is where the suffix belongs.
+#
+# The version is the repository's single version
+# (`../../.release-please-manifest.json`), because the releasable unit here is
+# the repository rather than any one package. It is written by release-please's
+# TOML updater at `$.project.version` — the row belongs beside the Rust SDK's in
+# `../../release-please-config.json`, and `../../scripts/check-skills.mjs` holds
+# the chain on every pull request.
+#
+# **No dependencies, and the list is meant to stay empty.** Everything an author
+# imports from this package is in `src/lattice_rule_sdk/runtime.py`, which
+# imports nothing itself — because that same file is embedded verbatim into a
+# rule's `.wasm` carrier and executed by a RustPython that has no filesystem to
+# import from. A dependency here could never reach the artifact, so a rule using
+# one would pass its tests and answer `unknown` in the field. The build tool is
+# the same story from the other side: it drives `cargo`, which is a process, not
+# a package.
+[project]
+name = "lattice-rule-sdk"
+version = "0.9.0"
+description = "Author Lattice custom architecture rules in Python and compile them to core WebAssembly."
+readme = "README.md"
+license = "Apache-2.0"
+keywords = ["architecture", "webassembly", "monorepo", "lattice", "lint"]
+# 3.11 is the floor because `tomllib` and the `Path | None` spelling this
+# package's build tool uses arrived there, and because it is the oldest release
+# still receiving security fixes. Nothing here needs anything newer.
+requires-python = ">=3.11"
+dependencies = []
+# No license classifier beside the SPDX `license` expression above: PEP 639
+# supersedes the classifier, and the setuptools that PyPI's isolated build
+# environment resolves REFUSES the pair — measured against build 1.5.0, the
+# exact command the release lane runs, which is how this comment got here.
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.urls]
+Homepage = "https://github.com/ecoma-io/lattice"
+Repository = "https://github.com/ecoma-io/lattice"
+
+[build-system]
+# setuptools rather than a newer backend, for one reason: nothing in this
+# repository builds this package. There is no `build` target here — the same
+# decision `../../AGENTS.md` argues for every package in this tree — so the
+# backend is a fact stated for whoever publishes, and the one every environment
+# already has is the one least likely to need explaining.
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# The carrier crate's templates ship WITH the package: `python -m
+# lattice_rule_sdk.build` reads them out of the installed distribution to
+# generate a rule's crate, so a wheel without them is a wheel that cannot build
+# anything. `runtime.py` is ordinary module source and needs no entry here.
+lattice_rule_sdk = ["carrier/*.template"]

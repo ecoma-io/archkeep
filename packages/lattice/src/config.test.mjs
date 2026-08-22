@@ -616,6 +616,273 @@ describe("boundarySuppressions", () => {
   });
 });
 
+describe("customRules — the fifth top-level law", () => {
+  /** A row every case below bends exactly one field of. */
+  const wellFormedRule = () => ({
+    name: "no-interface-outside-domain",
+    artifact: "tools/rules/no_interface_outside_domain.wasm",
+    sha256: "a".repeat(64),
+    reason: "interfaces are the domain's ports; declaring one elsewhere inverts the direction",
+  });
+
+  const withCustomRules = (customRules) => ({ ...wellFormed(), customRules });
+
+  it("accepts a well-formed row, with and without the optional params table", () => {
+    expect(findBoundaryConfigViolations(withCustomRules([wellFormedRule()]))).toEqual([]);
+    expect(
+      findBoundaryConfigViolations(
+        withCustomRules([
+          { ...wellFormedRule(), params: { domainTag: "layer:domain", depth: 2, deny: ["x"] } },
+        ]),
+      ),
+    ).toEqual([]);
+  });
+
+  it("treats an absent list as declaring no custom rules, the same as an absent suppression list", () => {
+    expect(findBoundaryConfigViolations(wellFormed())).toEqual([]);
+  });
+
+  // Unlike `boundarySuppressions`, where `[]` exempts nothing and so cannot
+  // hide anything, a `customRules` list is LAW: present but empty reads as a
+  // workspace that judges by its own rules while judging by none.
+  it("rejects a list that is present but empty, and one that is not an array", () => {
+    expect(findBoundaryConfigViolations(withCustomRules([]))).toEqual([
+      "customRules: must not be empty — a list present but empty reads as law while judging nothing",
+    ]);
+    expect(findBoundaryConfigViolations(withCustomRules({}))[0]).toMatch(
+      /customRules: must be an array of custom-rule rows/,
+    );
+  });
+
+  it("names the row index of every malformed row, so a long list points at its offender", () => {
+    const violations = findBoundaryConfigViolations(
+      withCustomRules([wellFormedRule(), "a-rule", { ...wellFormedRule(), name: "second-rule" }]),
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(/^customRules\[1\]: must be an object, got string/);
+  });
+
+  it("rejects a name that is not a usable rule name, naming the field", () => {
+    for (const name of [
+      "No-Interface",
+      "no interface",
+      "-leading",
+      "trailing-",
+      "",
+      42,
+      undefined,
+    ]) {
+      const violations = findBoundaryConfigViolations(
+        withCustomRules([{ ...wellFormedRule(), name }]),
+      );
+      expect(violations[0], JSON.stringify(name)).toMatch(
+        /^customRules\[0\]\.name: must be a non-empty name of lowercase letters and digits/,
+      );
+    }
+  });
+
+  // A name is a selector rather than a label: it is what the row is identified
+  // by — `docs/adr/0002-custom-rules-one-contract.md` keys a custom rule's
+  // findings on it — so two rows sharing one leave every later message about
+  // "that rule" ambiguous, with no way to tell which row it came from.
+  it("rejects two rows declaring the same name, naming the duplicate", () => {
+    const violations = findBoundaryConfigViolations(
+      withCustomRules([wellFormedRule(), { ...wellFormedRule(), artifact: "tools/rules/b.wasm" }]),
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(
+      /^customRules\[1\]\.name: "no-interface-outside-domain" is declared more than once/,
+    );
+  });
+
+  it("rejects a missing or empty artifact, which names no bytes to load at all", () => {
+    expect(
+      findBoundaryConfigViolations(withCustomRules([{ ...wellFormedRule(), artifact: "" }]))[0],
+    ).toMatch(/^customRules\[0\]\.artifact: must be a non-empty workspace-relative path/);
+    const row = wellFormedRule();
+    delete row.artifact;
+    expect(findBoundaryConfigViolations(withCustomRules([row]))[0]).toMatch(
+      /^customRules\[0\]\.artifact: must be a non-empty workspace-relative path/,
+    );
+  });
+
+  // The containment half `./containment.mjs` owns, asked at load: an artifact
+  // that resolves outside the tree is law from somewhere a reviewer of this
+  // repository never reads.
+  it("rejects an artifact that leaves the workspace, in either separator family", () => {
+    for (const artifact of ["../x.wasm", "tools/../../x.wasm", "..\\x.wasm"]) {
+      expect(
+        findBoundaryConfigViolations(withCustomRules([{ ...wellFormedRule(), artifact }]))[0],
+        artifact,
+      ).toMatch(/^customRules\[0\]\.artifact: .* leaves the workspace/);
+    }
+  });
+
+  it("rejects an absolute artifact path, POSIX-rooted or drive-rooted", () => {
+    // The drive-letter spelling is refused on every platform, not only on
+    // Windows: a policy is committed once and read everywhere, so a
+    // `C:`-rooted artifact must not read as a directory named `C:` on the
+    // POSIX runner that enforces it.
+    for (const artifact of ["/etc/rules/x.wasm", "\\rules\\x.wasm", "C:\\rules\\x.wasm"]) {
+      expect(
+        findBoundaryConfigViolations(withCustomRules([{ ...wellFormedRule(), artifact }]))[0],
+        artifact,
+      ).toMatch(/^customRules\[0\]\.artifact: .* is absolute/);
+    }
+  });
+
+  it("accepts an artifact inside the tree, including one reached through a '..' that stays inside", () => {
+    for (const artifact of ["x.wasm", "tools/rules/x.wasm", "tools/../tools/rules/x.wasm"]) {
+      expect(
+        findBoundaryConfigViolations(withCustomRules([{ ...wellFormedRule(), artifact }])),
+        artifact,
+      ).toEqual([]);
+    }
+  });
+
+  it("rejects a sha256 that no digest can equal — wrong length, wrong alphabet, or uppercase", () => {
+    // Uppercase is refused rather than folded: the hash is compared against
+    // `node:crypto`'s own lowercase hex digest, and a loader that lowercased
+    // one side would be a second opinion about which bytes were declared.
+    for (const sha256 of ["abc", "a".repeat(63), "A".repeat(64), "z".repeat(64), 42, undefined]) {
+      expect(
+        findBoundaryConfigViolations(withCustomRules([{ ...wellFormedRule(), sha256 }]))[0],
+        JSON.stringify(sha256),
+      ).toMatch(/^customRules\[0\]\.sha256: must be 64 lowercase hex characters/);
+    }
+  });
+
+  it("rejects a missing or whitespace-only reason, exactly as a suppression's is rejected", () => {
+    const row = wellFormedRule();
+    delete row.reason;
+    expect(findBoundaryConfigViolations(withCustomRules([row]))[0]).toMatch(
+      /^customRules\[0\]\.reason: must be a non-empty string/,
+    );
+    expect(
+      findBoundaryConfigViolations(withCustomRules([{ ...wellFormedRule(), reason: "   " }]))[0],
+    ).toMatch(/^customRules\[0\]\.reason: must be a non-empty string/);
+  });
+
+  // The silent direction for `params`: `JSON.stringify` drops a function, a
+  // symbol and an `undefined` outright and renders NaN as null, so a rule
+  // would be judged under parameters that differ from the ones written — with
+  // nothing anywhere reporting that they differ.
+  it("rejects a params value JSON cannot carry, naming the path to it", () => {
+    expect(
+      findBoundaryConfigViolations(
+        withCustomRules([{ ...wellFormedRule(), params: { deny: () => true } }]),
+      )[0],
+    ).toMatch(/^customRules\[0\]\.params\.deny: must be JSON data, got function/);
+    expect(
+      findBoundaryConfigViolations(
+        withCustomRules([{ ...wellFormedRule(), params: { limits: { depth: Number.NaN } } }]),
+      )[0],
+    ).toMatch(/^customRules\[0\]\.params\.limits\.depth: must be a finite number/);
+    expect(
+      findBoundaryConfigViolations(
+        withCustomRules([{ ...wellFormedRule(), params: { tags: ["ok", new Map()] } }]),
+      )[0],
+    ).toMatch(/^customRules\[0\]\.params\.tags\[1\]: must be JSON data/);
+    expect(
+      findBoundaryConfigViolations(
+        withCustomRules([{ ...wellFormedRule(), params: { deny: undefined } }]),
+      )[0],
+    ).toMatch(/^customRules\[0\]\.params\.deny: must be JSON data, got undefined/);
+  });
+
+  it("rejects a params table that refers back into itself, which has no serialization at all", () => {
+    // A cycle is the one unserializable shape that THROWS rather than
+    // vanishing, and it would throw from wherever the evidence is built —
+    // naming no row. Caught here, by name, like every other row problem.
+    const params = { nested: {} };
+    params.nested.back = params;
+    expect(
+      findBoundaryConfigViolations(withCustomRules([{ ...wellFormedRule(), params }]))[0],
+    ).toMatch(/^customRules\[0\]\.params\.nested\.back: refers back to a value that contains it/);
+  });
+
+  it("rejects params that is not an object at all", () => {
+    for (const params of [[], "domainTag", null]) {
+      expect(
+        findBoundaryConfigViolations(withCustomRules([{ ...wellFormedRule(), params }]))[0],
+        JSON.stringify(params),
+      ).toMatch(/^customRules\[0\]\.params: must be an object of JSON data when present/);
+    }
+  });
+
+  // The misspelt-field class, on this row family: a `artefact`/`sha`/`param`
+  // typo would otherwise load, carry the half this reader understood, and drop
+  // the rest of the declaration.
+  it("rejects an unknown row key by name", () => {
+    const violations = findBoundaryConfigViolations(
+      withCustomRules([{ ...wellFormedRule(), artefact: "tools/rules/x.wasm" }]),
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(/^customRules\[0\]\.artefact: not a custom-rule field/);
+    expect(violations[0]).toMatch(/name, artifact, sha256, params, reason/);
+  });
+
+  it("accepts the governance block, through the same schema a constraint row uses", () => {
+    expect(
+      findBoundaryConfigViolations({
+        ...wellFormed(),
+        fitness: [
+          {
+            name: "hotspot",
+            match: ["*"],
+            condition: { type: "coverage-minimum", statement: 100 },
+            reason: "measured",
+          },
+        ],
+        customRules: [
+          {
+            ...wellFormedRule(),
+            origin: { by: "jane@example.com", tool: "lattice:v1" },
+            rationale: "the domain owns its ports",
+            decisionRef: "adr:0002",
+            fitnessBindings: ["fitness:hotspot"],
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("rejects a fitnessBindings entry naming no declared fitness rule, as a constraint row does", () => {
+    // The resolution half of the governance block, reached through the same
+    // `io.resolve` the constraint rows get — a rule that reads as measured
+    // while nothing measures it is the silent direction.
+    const violations = findBoundaryConfigViolations(
+      withCustomRules([{ ...wellFormedRule(), fitnessBindings: ["fitness:hotspot"] }]),
+    );
+    expect(
+      violations.some(
+        (v) => v.startsWith("customRules[0].fitnessBindings[0]") && v.includes("does not resolve"),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects an invalid origin and an empty rationale, naming the row", () => {
+    const violations = findBoundaryConfigViolations(
+      withCustomRules([{ ...wellFormedRule(), origin: { tool: "l" }, rationale: "" }]),
+    );
+    expect(violations.some((v) => v.startsWith("customRules[0].origin.by"))).toBe(true);
+    expect(violations.some((v) => v.startsWith("customRules[0].rationale"))).toBe(true);
+  });
+
+  // The silent-direction case for the top-level name itself, and the reason
+  // `policyKeyViolations` reads the `.mjs` dialect's exports too: a misspelt
+  // `customRule` export must be refused by name, never ignored as a helper —
+  // an ignored law is a law nobody enforces while the policy says otherwise.
+  it("refuses a misspelled customRule export by name rather than ignoring it", () => {
+    expect(
+      policyKeyViolations({ ...wellFormed(), customRule: [] }, { allowSchema: false })[0],
+    ).toMatch(/^customRule: not a recognised top-level key/);
+    expect(
+      policyKeyViolations(withCustomRules([wellFormedRule()]), { allowSchema: false }),
+    ).toEqual([]);
+  });
+});
+
 describe("suppressionCovers", () => {
   const violation = (sourceFile, messageId = "noRelativeOrAbsoluteImportsAcrossLibraries") => ({
     sourceFile,

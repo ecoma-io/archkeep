@@ -41,6 +41,18 @@ command-injection vulnerability.
 full commit SHAs and the Semgrep image to a digest. If you find a path where an
 unpinned reference exists and could be substituted, report it here.
 
+**A custom-rule artifact is untrusted bytes the policy names.** A declared
+`customRules` row runs a WebAssembly module inside the checker. The contract
+refuses ambient capability — a module declaring any import is rejected at
+load, and the host grants no filesystem, network, or clock — verifies the
+row's declared sha256 against the artifact's actual bytes, and bounds
+execution time, memory, and verdict size
+(`docs/reference/custom-rules.md`). If you find a way for a rule module to
+reach outside that sandbox, to run under a hash that does not match its
+bytes, to exhaust the host past its stated bounds, or to make a declared
+rule silently not run at all, that is a security-relevant defect of the
+same class as the false negative above — report it through this channel.
+
 Everything else — a wrong message, a missed configuration option, a UI defect in
 the VS Code extension — is an ordinary bug and can go in the public issue tracker.
 

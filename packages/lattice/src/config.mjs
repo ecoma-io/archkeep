@@ -46,6 +46,21 @@
  * exists to keep single. Validation is where the mandatory reason is enforced,
  * loudly, at load — see `suppressionRowViolations`.
  *
+ * `customRules` is the second such shape, and the fifth top-level law: each row
+ * DECLARES a rule this engine did not write — the artifact carrying it, the
+ * hash pinning that artifact's bytes, the parameters it is judged under, and
+ * the reason it exists (`../../../docs/adr/0002-custom-rules-one-contract.md`
+ * records the decision, "Declared in the policy, never discovered"). What is
+ * checked here is the DECLARATION and nothing else: this module never reads the
+ * artifact, hashes it, or runs it — it is handed a policy rather than a tree,
+ * and a loader that reached the filesystem for a row's bytes would be asking a
+ * question its callers (the Nx hook, the language server, an inline
+ * `lattice.json` object) are not all in a position to answer. What it does
+ * refuse is a declaration that could never name a real rule: a name two rows
+ * share, a `sha256` no digest can equal, an `artifact` that leaves the
+ * workspace, `params` that cannot survive serialization into a rule's
+ * evidence — see `customRuleRowViolations`.
+ *
  * ## Three dialects, one validator, one dispatch
  *
  * `boundaryConfig` may name a `.mjs`/`.js` module (`import()`ed, as above and
@@ -81,8 +96,8 @@
  *
  * The `.mjs`/`.js` and `.json` dialects share the same top-level key law: a
  * top-level export (or key) beyond `depConstraints`, `moduleBoundaryOptions`,
- * `boundarySuppressions` and `fitness` is rejected by name. The `.mjs`
- * dialect's tolerance for a helper export used to let a misspelled key
+ * `boundarySuppressions`, `fitness` and `customRules` is rejected by name. The
+ * `.mjs` dialect's tolerance for a helper export used to let a misspelled key
  * (`moduleBoundaryOptions` → `moduleBoundaryOption`) disappear into silence —
  * a typo'd law is a law that is not enforced, the exact silent direction this
  * file exists to end — so it now carries the same refusal as the `.json`
@@ -93,15 +108,20 @@
  * has no editor-validation hook to point it at). The ESLint dialect has no
  * `boundarySuppressions` counterpart at all — ESLint has its own
  * `eslint-disable` convention for that, with no equivalent this reader can
- * read back — so it always reports an empty suppression list; see
- * `loadBoundaryConfigFile`'s ESLint branch.
+ * read back — so it always reports an empty suppression list, and it has no
+ * home for a `customRules` declaration either: a flat config's one rule entry
+ * is a constraint table and its options, with nowhere to name a rule artifact,
+ * so a policy read through that dialect carries NO `customRules` key rather
+ * than an empty one — absent is the workspace's own statement, where an empty
+ * list would read as "custom rules are configured here, and there are none".
+ * See `loadBoundaryConfigFile`'s ESLint branch.
  */
-import { basename, extname, resolve } from "node:path";
+import { basename, extname, posix, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { readFile as readFileFromDisk } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
-import { containmentViolation } from "./containment.mjs";
+import { containmentViolation, pathEscapes } from "./containment.mjs";
 
 import { loadEslintBoundaryConfig } from "./eslint-config.mjs";
 import { findFitnessViolations } from "./governance/fitness-registry.mjs";
@@ -537,6 +557,294 @@ function suppressionRowViolations(row, index) {
   return violations;
 }
 
+/**
+ * The grammar a custom rule's `name` is written in: lowercase letters and
+ * digits, single `-` separators, nothing else.
+ *
+ * A name is a SELECTOR rather than a label — it is what a row is identified by,
+ * and what the duplicate check below compares — so two names a human reads as
+ * identical must never be able to exist as two different strings. That is the
+ * same reason `./governance/profile-registry.mjs` gives for restricting a
+ * profile name, one axis narrower: no uppercase either, so a policy cannot
+ * carry both `no-cycles` and `No-Cycles` and leave a reader to work out which
+ * of them a message is about.
+ *
+ * Exported because it is the grammar of a NAME rather than of this file's row
+ * shape: anything that has to spell or check one answers from here rather than
+ * from a second copy of the pattern (`../../../AGENTS.md`, "Never state a rule
+ * twice").
+ */
+export const CUSTOM_RULE_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+/**
+ * A `sha256`, as `node:crypto`'s own `digest("hex")` spells it: 64 lowercase
+ * hex characters. Uppercase is refused rather than folded, because the hash is
+ * compared to a digest string and a comparison that lowercased one side would
+ * be a second opinion about what the declared bytes are; refusing at load names
+ * the spelling, where a mismatch later would only name the bytes.
+ */
+const CUSTOM_RULE_SHA256_PATTERN = /^[0-9a-f]{64}$/u;
+
+/** The keys a custom-rule row may carry, beside the governance block. */
+const CUSTOM_RULE_KEYS = ["name", "artifact", "sha256", "params", "reason"];
+
+/**
+ * An absolute path in either family — a leading separator, or a Windows drive
+ * (`C:\rules\x.wasm`, `C:rules\x.wasm`). Tested against the raw spelling rather
+ * than through `node:path`'s `isAbsolute`, which answers about the platform the
+ * check happens to run on: a policy is committed once and read on every
+ * machine, so a `C:`-rooted artifact has to be refused by a POSIX CI runner
+ * too, not silently read as a relative directory named `C:`.
+ */
+const ABSOLUTE_ARTIFACT_PATH = /^(?:[\\/]|[A-Za-z]:)/u;
+
+/**
+ * The root the containment question is asked against, LEXICALLY. A row names a
+ * workspace-relative path and this validator never sees a workspace root — the
+ * loaders it runs behind are handed a policy, not a tree, and the inline
+ * dialect has no file of its own to be relative to. So the half that can be
+ * answered from the string is answered here: does the path leave the directory
+ * it is relative to? `./containment.mjs`'s `pathEscapes` is asked rather than
+ * reimplemented, so there is one answer to "this path leaves the tree". The
+ * other half — a symlink that resolves out of the workspace — needs a real root
+ * and a real filesystem, and belongs to whatever reads the artifact's bytes;
+ * what this closes is a declared `../../etc/rule.wasm` failing at load instead
+ * of at read.
+ */
+const NOMINAL_WORKSPACE_ROOT = "/lattice-workspace";
+
+/**
+ * Why `artifact` cannot name a file inside the workspace, or `null`.
+ *
+ * @param {string} artifact The declared, workspace-relative path.
+ * @returns {string|null}
+ */
+function artifactPathProblem(artifact) {
+  if (ABSOLUTE_ARTIFACT_PATH.test(artifact)) {
+    return (
+      `is absolute — an artifact is named relative to the workspace root, so the same policy ` +
+      `resolves to the same bytes on every machine that reads it`
+    );
+  }
+  // Separators are normalised to `/` before the question is asked: a `..\`
+  // written on Windows escapes exactly as far as a `../` does, and POSIX's
+  // `normalize` would otherwise read the whole `..\rules` as one filename.
+  const resolved = posix.normalize(
+    `${NOMINAL_WORKSPACE_ROOT}/${artifact.split(/[\\/]/u).join("/")}`,
+  );
+  if (pathEscapes(NOMINAL_WORKSPACE_ROOT, resolved)) {
+    return (
+      `leaves the workspace — a custom rule's artifact is a file inside the tree its policy ` +
+      `governs, so that a reviewer reads the same bytes CI runs`
+    );
+  }
+  return null;
+}
+
+/**
+ * Whether `value` is an object JSON carries as itself: a plain one, or a
+ * null-prototype one (`JSON.parse` builds those for a `__proto__` key). An
+ * array, a `Map`, a `Set`, a `RegExp`, a `Date` and a class instance all answer
+ * `false` — they carry a prototype of their own, and `isPlainObject` above
+ * accepts most of them, which is right for the config shapes it guards and
+ * wrong here, where the question is what survives serialization rather than
+ * what has properties.
+ *
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+function isJsonObject(value) {
+  if (typeof value !== "object" || value === null) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Where `params` holds a value JSON cannot carry, or `null`.
+ *
+ * `params` is handed to the rule as serialized evidence, so a value with no
+ * JSON form does not fail loudly there — it DISAPPEARS. `JSON.stringify` drops
+ * a function, a symbol and an `undefined` from an object outright, renders
+ * `NaN`/`Infinity` as `null`, flattens a `Map` or a `Set` to `{}`, and turns a
+ * `Date` into a string; a rule would then be judged under parameters nobody
+ * wrote, which is this repository's poison direction. A cycle is the one shape
+ * that throws instead, and it throws from wherever the serialization happens
+ * rather than naming the row — so it is caught here too, by name.
+ *
+ * The offending value is named by KIND rather than through `describe`: a `Map`
+ * renders as `object ({})` there — precisely the thing it serializes to, which
+ * is what makes it silent — and a `BigInt` cannot be rendered at all, because
+ * `describe`'s own `JSON.stringify` throws on one.
+ *
+ * @param {unknown} value
+ * @param {string} at Dotted path of the value, for the message.
+ * @param {Set<unknown>} seen Objects on the current path, for the cycle check.
+ * @returns {string|null}
+ */
+function unserializableParam(value, at, seen) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value)
+      ? null
+      : `${at}: must be a finite number — ${String(value)} serializes as null, so the rule ` +
+          `would be judged under a parameter nobody wrote`;
+  }
+  if (Array.isArray(value) || isJsonObject(value)) {
+    if (seen.has(value)) {
+      return `${at}: refers back to a value that contains it — a parameter table with a cycle has no serialization at all`;
+    }
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const [index, item] of value.entries()) {
+        const problem = unserializableParam(item, `${at}[${index}]`, seen);
+        if (problem) return problem;
+      }
+    } else {
+      for (const [key, item] of Object.entries(value)) {
+        const problem = unserializableParam(item, `${at}.${key}`, seen);
+        if (problem) return problem;
+      }
+    }
+    seen.delete(value);
+    return null;
+  }
+  const kind = typeof value === "object" ? (value.constructor?.name ?? "object") : typeof value;
+  return (
+    `${at}: must be JSON data, got ${kind} — a value with no JSON form of its own is dropped or ` +
+    `rewritten on the way into a rule's evidence rather than refused there, so the rule would ` +
+    `run under parameters that differ from the ones written here`
+  );
+}
+
+/**
+ * One custom-rule row's problems, prefixed with its index so a report names the
+ * offender.
+ *
+ * Every field is checked in the loud direction — the row DECLARES law this
+ * engine did not write, so a field that cannot be read is a rule that cannot be
+ * loaded, never a rule quietly skipped. `reason` is mandatory for the reason it
+ * is mandatory on a suppression and a fitness row (`suppressionRowViolations`):
+ * a rule nobody wrote a reason for is indistinguishable from a rule nobody
+ * would defend.
+ *
+ * @param {unknown} row
+ * @param {number} index
+ * @param {Set<string>} names The names earlier rows already claimed — a name is
+ *   a selector, so two rows sharing one make every report about that rule
+ *   ambiguous.
+ * @param {{resolve?: (key: "decisionRef"|"fitnessBindings", id: string) => boolean}} io
+ *   Passed through to the shared governance schema, exactly as a constraint row
+ *   passes it.
+ * @returns {string[]}
+ */
+function customRuleRowViolations(row, index, names, io) {
+  const at = `customRules[${index}]`;
+  if (!isPlainObject(row)) return [`${at}: must be an object, got ${describe(row)}`];
+
+  const violations = [];
+  if (typeof row.name !== "string" || !CUSTOM_RULE_NAME_PATTERN.test(row.name)) {
+    violations.push(
+      `${at}.name: must be a non-empty name of lowercase letters and digits joined by single ` +
+        `"-" separators (like "no-interface-outside-domain"), got ${describe(row.name)}`,
+    );
+  } else if (names.has(row.name)) {
+    violations.push(
+      `${at}.name: "${row.name}" is declared more than once — every custom rule name must be ` +
+        `unique, because a finding names the rule that reported it`,
+    );
+  } else {
+    names.add(row.name);
+  }
+
+  if (typeof row.artifact !== "string" || row.artifact === "") {
+    violations.push(
+      `${at}.artifact: must be a non-empty workspace-relative path to the rule's artifact, got ` +
+        `${describe(row.artifact)}`,
+    );
+  } else {
+    const problem = artifactPathProblem(row.artifact);
+    if (problem) violations.push(`${at}.artifact: '${row.artifact}' ${problem}`);
+  }
+
+  if (typeof row.sha256 !== "string" || !CUSTOM_RULE_SHA256_PATTERN.test(row.sha256)) {
+    violations.push(
+      `${at}.sha256: must be 64 lowercase hex characters — the hash of the artifact's own bytes, ` +
+        `which is what makes the law CI ran and the law a reviewer read the same law, got ` +
+        `${describe(row.sha256)}`,
+    );
+  }
+
+  if ("params" in row) {
+    if (!isPlainObject(row.params)) {
+      violations.push(
+        `${at}.params: must be an object of JSON data when present, got ${describe(row.params)}`,
+      );
+    } else {
+      const problem = unserializableParam(row.params, `${at}.params`, new Set());
+      if (problem) violations.push(problem);
+    }
+  }
+
+  if (typeof row.reason !== "string" || row.reason.trim() === "") {
+    violations.push(
+      `${at}.reason: must be a non-empty string — a custom rule is a policy decision, and one ` +
+        `with no reason written down is indistinguishable from a rule nobody would defend`,
+    );
+  }
+
+  // The governance block (Contract 2), through the ONE shared schema every
+  // other row family asks (`./governance/row-schema.mjs`) — including the
+  // resolution half, so a `fitnessBindings` entry naming no declared fitness
+  // rule fails here exactly as it does on a constraint row.
+  if ("origin" in row || "rationale" in row || "decisionRef" in row || "fitnessBindings" in row) {
+    violations.push(...rowSchemaViolations(row, at, io));
+  }
+
+  // Rejected rather than ignored, for the reason a constraint row's unknown key
+  // is: a misspelt `param`/`sha`/`artefact` would load, carry the half this
+  // reader understood, and drop the rest of the declaration.
+  for (const key of Object.keys(row)) {
+    if (CUSTOM_RULE_KEYS.includes(key) || GOVERNANCE_ROW_KEYS.includes(key)) continue;
+    violations.push(
+      `${at}.${key}: not a custom-rule field — expected one of ${CUSTOM_RULE_KEYS.join(", ")}, ` +
+        `plus the governance block keys ${GOVERNANCE_ROW_KEYS.join(", ")}`,
+    );
+  }
+  return violations;
+}
+
+/**
+ * Everything wrong with a `customRules` list, as messages; empty when it is
+ * well-formed.
+ *
+ * An ABSENT list means "this workspace declares no custom rules", the same
+ * decision an absent `boundarySuppressions` states. A list that is PRESENT and
+ * empty is refused, the same way `findFitnessViolations`
+ * (`./governance/fitness-registry.mjs`) refuses an empty `fitness`: both keys
+ * declare law, and a law list present but empty reads as governed while judging
+ * nothing. The difference from a suppression list — where `[]` is accepted — is
+ * that an empty exemption list exempts nothing, which is the direction that
+ * cannot hide anything.
+ *
+ * @param {unknown} list The parsed `customRules` value.
+ * @param {{resolve?: (key: "decisionRef"|"fitnessBindings", id: string) => boolean}} io
+ * @returns {string[]}
+ */
+function findCustomRuleViolations(list, io) {
+  if (!Array.isArray(list)) {
+    return [`customRules: must be an array of custom-rule rows, got ${describe(list)}`];
+  }
+  if (list.length === 0) {
+    return [
+      "customRules: must not be empty — a list present but empty reads as law while judging nothing",
+    ];
+  }
+  const violations = [];
+  const names = new Set();
+  list.forEach((row, index) => violations.push(...customRuleRowViolations(row, index, names, io)));
+  return violations;
+}
+
 /** A value's type, for an error message that shows what was actually there. */
 function describe(value) {
   if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
@@ -555,7 +863,8 @@ export function findBoundaryConfigViolations(module, io = {}) {
   if (!isPlainObject(module)) return [`config: expected a module object, got ${describe(module)}`];
 
   const violations = [];
-  const { depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness } = module;
+  const { depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness, customRules } =
+    module;
   // F05: the resolution half of the governance block (`row-schema.mjs`'s
   // `io.resolve`) was validator-only until now — no production caller passed
   // one, so a row bound to a fitness rule that does not exist loaded and ran
@@ -589,6 +898,15 @@ export function findBoundaryConfigViolations(module, io = {}) {
   // suppression is.
   if (fitness !== undefined) {
     violations.push(...findFitnessViolations(fitness, io));
+  }
+
+  // The custom-rule list — the fifth top-level law, declared here and executed
+  // nowhere near here (this module's header says why). Absent means "no custom
+  // rules declared"; present and malformed is refused loudly, because a row
+  // this reader could not understand is a rule that would not run while the
+  // policy still says it does.
+  if (customRules !== undefined) {
+    violations.push(...findCustomRuleViolations(customRules, io));
   }
 
   // Absent means "nothing is suppressed", which is the only default that fails
@@ -676,15 +994,22 @@ export function findBoundaryConfigViolations(module, io = {}) {
  * dialect refuses it by name like any other unknown export while the `.json`
  * dialect carves it out by name (accepted and checked, never folded into a
  * general "ignore unknown" rule, which is exactly the leniency this file's
- * header argues a JSON object must not get). `fitness` is the fourth and
- * newest: the boundary dialect's key for the fitness-functions list,
- * validated as an array of fitness rows.
+ * header argues a JSON object must not get). `fitness` is the fourth: the
+ * boundary dialect's key for the fitness-functions list, validated as an array
+ * of fitness rows. `customRules` is the fifth and newest — the declared rules
+ * this engine did not write, validated as an array of custom-rule rows.
+ *
+ * The name says `.json` and the list binds both file dialects: `loadModulePolicy`
+ * runs the same check over an ES module's exports, which is what makes a
+ * misspelt `customRule` export a named refusal in either spelling rather than a
+ * law that silently never loads.
  */
 const JSON_POLICY_KEYS = [
   "depConstraints",
   "moduleBoundaryOptions",
   "boundarySuppressions",
   "fitness",
+  "customRules",
 ];
 
 /**
@@ -761,10 +1086,14 @@ export function policyKeyViolations(parsed, { allowSchema }) {
  *   inline one.
  * @param {string[]} [extraViolations] Violations the caller already found that
  *   `findBoundaryConfigViolations` does not check on its own.
- * @returns {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[] }}
- *   `fitness` is present only when the config declares a `fitness` list — a
- *   workspace without one carries no key, the same "absent is a decision"
- *   posture `cli.mjs`'s `check` uses for a missing architecture-intent file.
+ * @returns {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[] }}
+ *   `fitness` and `customRules` are present only when the config declares
+ *   them — a workspace without one carries no key, the same "absent is a
+ *   decision" posture `cli.mjs`'s `check` uses for a missing
+ *   architecture-intent file. Both ride through exactly as the file declared
+ *   them, with nothing defaulted in: a row here is the workspace's own text,
+ *   and a reader that filled a field in would be stating law the policy does
+ *   not.
  * @throws {Error} `lattice: ${sourceLabel} is malformed:` followed by every
  *   violation found, when `extraViolations` or `findBoundaryConfigViolations`
  *   found any.
@@ -779,6 +1108,7 @@ export function policyFrom(parsed, sourceLabel, extraViolations = []) {
     options: parsed.moduleBoundaryOptions,
     suppressions: parsed.boundarySuppressions ?? [],
     ...(parsed.fitness === undefined ? {} : { fitness: parsed.fitness }),
+    ...(parsed.customRules === undefined ? {} : { customRules: parsed.customRules }),
   };
 }
 
@@ -787,7 +1117,7 @@ export function policyFrom(parsed, sourceLabel, extraViolations = []) {
  * `findBoundaryConfigViolations` above reads by name.
  *
  * The module's own top-level exports get the same unknown-key law the `.json`
- * dialect applies to its top-level keys: an export that is not one of the four
+ * dialect applies to its top-level keys: an export that is not one of the five
  * this loader reads is almost always a misspelling of one of them
  * (`moduleBoundaryOptions` → `moduleBoundaryOptions` silent-ignored), and
  * a misspelled law is a law that is not enforced. A genuine helper export is
@@ -795,7 +1125,7 @@ export function policyFrom(parsed, sourceLabel, extraViolations = []) {
  * legitimate namespace to share a helper in gave a typo the same silence.
  *
  * @param {string} path Absolute path of the config file.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[] }>}
  * @throws {Error} when the file is missing, unloadable, or malformed.
  */
 async function loadModulePolicy(path) {
@@ -821,7 +1151,7 @@ async function loadModulePolicy(path) {
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Injectable read, defaulting to `node:fs/promises`' `readFile` — the only
  *   code in this function that reaches outside the process.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[] }>}
  * @throws {Error} when the file is missing, unreadable, not valid JSON, or
  *   malformed — either by `findBoundaryConfigViolations`' rules or by carrying
  *   a top-level key none of those rules knows about.
@@ -868,7 +1198,7 @@ async function loadJsonPolicy(path, { readFile = readFileFromDisk } = {}) {
  * @param {string} path Absolute path of the config file.
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Injectable read, used only by the `.json` dialect — see `loadJsonPolicy`.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], notes?: string[] }>}
  *   `suppressions` is `[]` when the config declares none. `notes` is present
  *   only under the ESLint dialect, and only when `./eslint-config.mjs` has
  *   something worth telling a reader about which entry it bound — see
@@ -919,7 +1249,9 @@ export async function loadBoundaryConfigFile(path, io = {}) {
       // is this tool's own concept, with nothing for ESLint to read it back
       // from (see this module's header). Never populated under this dialect —
       // `policyFrom` already resolves that to `[]` since the object above
-      // states no `boundarySuppressions` key.
+      // states no `boundarySuppressions` key, and it leaves `customRules`
+      // absent for the same reason, the header's own distinction between an
+      // absent law and an empty one.
       ...(note !== undefined ? { notes: [note] } : {}),
     };
   }
@@ -947,7 +1279,7 @@ export async function loadBoundaryConfigFile(path, io = {}) {
  *   misconfigured tool.
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Forwarded to `loadBoundaryConfigFile` — see there.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], notes?: string[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], notes?: string[] }>}
  * @throws {Error} as `loadBoundaryConfigFile`.
  */
 export async function loadBoundaryConfig(workspaceRoot, boundaryConfig, io = {}) {

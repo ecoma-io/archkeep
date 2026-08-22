@@ -13,13 +13,21 @@ package.json (repository root — what release-please bumps directly)
   = .claude-plugin/marketplace.json (entry version)
   = .codex-plugin/plugin.json
   = packages/lattice-vscode/package.json
+  = packages/lattice-rule-sdk-rust/Cargo.toml ([package] version)
+  = packages/lattice-rule-sdk-ts/package.json
+  = packages/lattice-rule-sdk-python/pyproject.toml ([project] version)
 ```
 
-All six must agree. The root `package.json` is the release-please `"."`
-component — the one file it bumps directly; the other five are copies of it
+All nine must agree. The root `package.json` is the release-please `"."`
+component — the one file it bumps directly; the other eight are copies of it
 written by `extra-files`. The extension is on the list because it pairs with
 the engine it is released with, and one version is what makes the pairing
-visible.
+visible. The rule SDK manifests are on it for the decision
+[adr/0002](../adr/0002-custom-rules-one-contract.md) records: every SDK joins
+this one chain, so "the SDK for engine 0.x" is a fact a reader takes from the
+number rather than a compatibility matrix. The Go SDK carries no manifest
+version at all — a Go module's version is its git tag, which is the one place
+the release lane speaks for it.
 
 The `arch-*` skills carry **no version** by decision. A consumer's skills are
 installed with the plugin that ships them, so the version that matters is the
@@ -38,7 +46,15 @@ version is the pairing.
 3. `.claude-plugin/marketplace.json` entry version matches the package version
 4. `.codex-plugin/plugin.json` version matches the package version
 5. `packages/lattice-vscode/package.json` version matches the package version
-6. No host-specific frontmatter fields have leaked into canonical skills
+6. `packages/lattice-rule-sdk-rust/Cargo.toml`'s `[package]` version matches
+   the package version — read section-scoped, so a dependency's pin can never
+   stand in for the crate's own number
+7. `packages/lattice-rule-sdk-ts/package.json` version matches the package
+   version
+8. `packages/lattice-rule-sdk-python/pyproject.toml`'s `[project]` version
+   matches the package version — the same section-scoped TOML read as the
+   Cargo check
+9. No host-specific frontmatter fields have leaked into canonical skills
 
 A version mismatch fails the build. There is no warning tier.
 
@@ -58,8 +74,15 @@ the `extra-files` configuration in `release-please-config.json` also bumps:
 - `.codex-plugin/plugin.json` (`$.version`)
 - `packages/lattice/package.json` (`$.version`)
 - `packages/lattice-vscode/package.json` (`$.version`)
+- `packages/lattice-rule-sdk-rust/Cargo.toml` (`$.package.version`, the TOML
+  updater)
+- `packages/lattice-rule-sdk-ts/package.json` (`$.version`)
+- `packages/lattice-rule-sdk-python/pyproject.toml` (`$.project.version`, the
+  TOML updater)
 
-These five files are bumped automatically, and `release.yml` reformats the
+These eight files are bumped automatically, and `release.yml` reformats the JSON
 `extra-files` after release-please writes them — release-please re-serializes a
 JSON file it touches, which does not match this repository's Prettier layout, so
-the reformat step keeps `format:check` green on the release pull request.
+the reformat step keeps `format:check` green on the release pull request. The
+Cargo manifest stays off that reformat list: Prettier has no TOML parser, and no
+gate checks TOML layout, so there is nothing there to fix.

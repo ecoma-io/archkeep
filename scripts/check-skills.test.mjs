@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  tomlSectionVersion,
   evaluate,
   EXPECTED_SKILLS,
   parseSkillFrontmatter,
@@ -30,6 +31,32 @@ describe("selectMarketplaceVersion", () => {
 
   it("returns '?' when the catalogue has no plugins list", () => {
     assert.equal(selectMarketplaceVersion({}, "lattice"), "?");
+  });
+});
+
+describe("tomlSectionVersion", () => {
+  it("reads the [package] section's version", () => {
+    const toml = '[package]\nname = "lattice-rule-sdk"\nversion = "0.9.0"\nedition = "2024"\n';
+    assert.equal(tomlSectionVersion(toml, "[package]"), "0.9.0");
+  });
+
+  it("never reads a dependency's pinned version as the crate's own", () => {
+    // The silent direction for this parser: a bare `version = "…"` match
+    // would hit the first pin under [dependencies] when [package] carries
+    // none, and the chain gate would then compare the wrong number and
+    // read "in sync" off a serde pin.
+    const toml = '[dependencies]\nserde = { version = "1.0.219" }\nversion = "9.9.9"\n';
+    assert.equal(tomlSectionVersion(toml, "[package]"), "?");
+  });
+
+  it("reads pyproject's [project] section the same way", () => {
+    const toml =
+      '[project]\nname = "lattice-rule-sdk"\nversion = "0.9.0"\n[tool.x]\nversion = "9.9.9"\n';
+    assert.equal(tomlSectionVersion(toml, "[project]"), "0.9.0");
+  });
+
+  it("returns '?' when [package] carries no version line", () => {
+    assert.equal(tomlSectionVersion('[package]\nname = "x"\n[dependencies]\n', "[package]"), "?");
   });
 });
 
@@ -134,6 +161,9 @@ describe("evaluate", () => {
     marketplaceVersion: "0.4.0",
     codexPluginVersion: "0.4.0",
     vscodeVersion: "0.4.0",
+    cargoVersion: "0.4.0",
+    tsSdkVersion: "0.4.0",
+    pySdkVersion: "0.4.0",
   };
 
   it("passes when all skills are present, named correctly, and versions match", () => {
@@ -261,6 +291,39 @@ describe("evaluate", () => {
       skills: allGood(),
     });
     assert.ok(result.failures.some((f) => f.includes("lattice-vscode") && f.includes("1.0.1")));
+  });
+
+  it("fails when the Rust SDK crate version does not match package version", () => {
+    const result = evaluate({
+      ...baseFacts,
+      cargoVersion: "1.0.1",
+      skills: allGood(),
+    });
+    assert.ok(
+      result.failures.some((f) => f.includes("lattice-rule-sdk-rust") && f.includes("1.0.1")),
+    );
+  });
+
+  it("fails when the Python SDK version does not match package version", () => {
+    const result = evaluate({
+      ...baseFacts,
+      pySdkVersion: "1.0.1",
+      skills: allGood(),
+    });
+    assert.ok(
+      result.failures.some((f) => f.includes("lattice-rule-sdk-python") && f.includes("1.0.1")),
+    );
+  });
+
+  it("fails when the TS SDK package version does not match package version", () => {
+    const result = evaluate({
+      ...baseFacts,
+      tsSdkVersion: "1.0.1",
+      skills: allGood(),
+    });
+    assert.ok(
+      result.failures.some((f) => f.includes("lattice-rule-sdk-ts") && f.includes("1.0.1")),
+    );
   });
 
   // The doc-truth corrections (audit WS1-F01/F02/F03/F10). These pin the

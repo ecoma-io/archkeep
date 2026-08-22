@@ -433,4 +433,30 @@ describe("a verdict that did reach a conclusion", () => {
       ),
     ).toBe(`"${specifier}"`);
   });
+
+  it("ignores a policy's customRules — a per-run workspace judgment is not a per-file diagnostic", () => {
+    // The posture fitness already takes here: the loader accepts the fifth
+    // top-level law (`./boundary-config.mjs` carries it through), and this
+    // document-level pipeline judges none of it. Pinned as an equality against
+    // the same run without the key, because the failure it guards is not a
+    // throw — it is this function quietly growing an opinion about a rule it
+    // was never handed the evidence to judge.
+    const withCustomRules = {
+      ...REQUEST,
+      config: {
+        ...REQUEST.config,
+        customRules: [
+          {
+            name: "no-interface-outside-domain",
+            artifact: "tools/rules/x.wasm",
+            sha256: "f".repeat(64),
+            reason: "interfaces are the domain's ports",
+          },
+        ],
+      },
+    };
+
+    expect(diagnoseDocument(withCustomRules)).toEqual(diagnoseDocument(REQUEST));
+    expect(diagnoseDocument(withCustomRules)).toEqual({ analyzed: true, diagnostics: [] });
+  });
 });

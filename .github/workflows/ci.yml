@@ -123,6 +123,17 @@ jobs:
       # link; this step is where "does the link land" is answered.
       - run: node scripts/check-docs-links.mjs
 
+      # The Rust rule SDK's `lint` target runs `cargo clippy`, and the hosted
+      # runner's Rust toolchain ships without that component — measured against
+      # the ubuntu-24.04 runner image's own software list, which names Cargo,
+      # Rust, Rustdoc and Rustup (and, under packages, a standalone Rustfmt)
+      # and no clippy. rustup is present, so the components are added rather
+      # than a toolchain action pinned; rustfmt is named too because the
+      # toolchain rustup manages resolves its own components, not the
+      # standalone binary the image lists beside it.
+      - name: Add the Rust components the SDK's targets run
+        run: rustup component add clippy rustfmt
+
       # --force skips Moon's VCS affected detection (which needs full git
       # history, unavailable in the shallow checkout) and bypasses the local
       # cache — both correct for CI, where every target must run fresh.

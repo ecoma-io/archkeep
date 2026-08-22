@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "$comment": "What a release means here, and what it deliberately leaves alone.\n\nThe releasable unit is the repository, because what ships together sits together — one version, everywhere. The npm package at `packages/lattice`, the marketplace catalogue and both host plugin manifests at the root, the `arch-*` skills under `skills/`, and the VS Code extension at `packages/lattice-vscode` all carry that same version, written by the `extra-files` list below. release-please bumps the root manifest (this repository's own `package.json`), writes the root `CHANGELOG.md`, and tags `v<version>` — the same bare `v*` tags the plugin's releases already carried, which is why the version history continues rather than restarting.\n\nTwo things this configuration refuses. The alternative — releasing `packages/lattice` alone — cannot ship the catalogue or the plugin manifests, because release-please rejects `extra-files` paths that climb out of the release unit (`..` is refused: measured on the 0.4.0 release lane, `packages/lattice/../../.claude-plugin/marketplace.json` failed with `illegal pathing characters in path`); making the root the unit is the mechanism that lets one release bump everything. And the extension is not a second component — it was once, and the version chain (docs/skills/versioning.md) is what holds the decision: a client that resolves the server out of the workspace pairs with the engine it is released with, and one version makes the pairing visible instead of a matrix to manage.\n\n`pull-request-title-pattern` overrides the default this repository would reject. release-please titles a release pull request `chore${scope}: release${component} ${version}`, where `${scope}` is the target branch — `chore(main): release 0.5.0`. CI runs commitlint on every pull request title, and `main` is not a valid scope, so the release pull request would fail its own required check and could never merge.",
+  "$comment": "What a release means here, and what it deliberately leaves alone.\n\nThe releasable unit is the repository, because what ships together sits together — one version, everywhere. The npm package at `packages/lattice`, the marketplace catalogue and both host plugin manifests at the root, the `arch-*` skills under `skills/`, the VS Code extension at `packages/lattice-vscode`, and the Rust rule SDK's crate manifest at `packages/lattice-rule-sdk-rust/Cargo.toml` (ADR 0002 puts every SDK on this one chain) all carry that same version, written by the `extra-files` list below. release-please bumps the root manifest (this repository's own `package.json`), writes the root `CHANGELOG.md`, and tags `v<version>` — the same bare `v*` tags the plugin's releases already carried, which is why the version history continues rather than restarting.\n\nTwo things this configuration refuses. The alternative — releasing `packages/lattice` alone — cannot ship the catalogue or the plugin manifests, because release-please rejects `extra-files` paths that climb out of the release unit (`..` is refused: measured on the 0.4.0 release lane, `packages/lattice/../../.claude-plugin/marketplace.json` failed with `illegal pathing characters in path`); making the root the unit is the mechanism that lets one release bump everything. And the extension is not a second component — it was once, and the version chain (docs/skills/versioning.md) is what holds the decision: a client that resolves the server out of the workspace pairs with the engine it is released with, and one version makes the pairing visible instead of a matrix to manage.\n\n`pull-request-title-pattern` overrides the default this repository would reject. release-please titles a release pull request `chore${scope}: release${component} ${version}`, where `${scope}` is the target branch — `chore(main): release 0.5.0`. CI runs commitlint on every pull request title, and `main` is not a valid scope, so the release pull request would fail its own required check and could never merge.",
   "last-release-sha": "2f4950e1f87f35c4834b6c42a57f7ea489bda6b6",
   "packages": {
     ".": {
@@ -35,6 +35,21 @@
           "type": "json",
           "path": "packages/lattice-vscode/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "toml",
+          "path": "packages/lattice-rule-sdk-rust/Cargo.toml",
+          "jsonpath": "$.package.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/lattice-rule-sdk-ts/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "toml",
+          "path": "packages/lattice-rule-sdk-python/pyproject.toml",
+          "jsonpath": "$.project.version"
         }
       ],
       "changelog-sections": [

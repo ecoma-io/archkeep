@@ -2,8 +2,16 @@
 #
 # Replaces the former nx.json + project.json files. Projects and targets
 # are declared in per-project `moon.yml` files instead.
+# An explicit map rather than a glob: a `moon.yml` under `packages/` that is
+# not listed here is invisible to `moon projects`, which is one of the three
+# identical exit-0 states `../scripts/check-packages.mjs` exists to tell apart —
+# so a package arrives in this list and in that gate's output together.
 projects:
   lattice: "packages/lattice"
+  lattice-rule-sdk-go: "packages/lattice-rule-sdk-go"
+  lattice-rule-sdk-python: "packages/lattice-rule-sdk-python"
+  lattice-rule-sdk-rust: "packages/lattice-rule-sdk-rust"
+  lattice-rule-sdk-ts: "packages/lattice-rule-sdk-ts"
   lattice-vscode: "packages/lattice-vscode"
 vcs:
   provider: other

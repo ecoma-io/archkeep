@@ -51,16 +51,17 @@ Any other top-level key is rejected by name.
 | `base`  | string | no       | Non-empty. The name of another profile whose effective block this one inherits.                              |
 | `block` | object | yes      | The policy block — `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, `fitness`.             |
 
-Only those four keys are recognized on a profile; any other key is rejected by
-name. A profile with no `block` is rejected — it would otherwise parse as an
+Only those four keys are recognized on a profile; any other key — the
+policy's own `customRules` included, which does not ride a profile — is
+rejected by name. A profile with no `block` is rejected — it would otherwise parse as an
 empty policy, which `policyFrom` refuses for its own reasons, but the registry
 names it as a profile defect so the reader is looking at the right file.
 
 ### The `block`
 
-Exactly the four keys `findBoundaryConfigViolations` reads from a
+Four of the five keys `findBoundaryConfigViolations` reads from a
 boundaryConfig dialect ([policy-schema.md](policy-schema.md) owns the shape of
-each). `depConstraints` rows append after the base's; `moduleBoundaryOptions`
+each; `customRules` is the one a profile refuses). `depConstraints` rows append after the base's; `moduleBoundaryOptions`
 keys overwrite the base's key by key; `boundarySuppressions` and `fitness`
 rows append.
 
@@ -68,7 +69,7 @@ rows append.
 
 `boundaryConfig`/`--config` names a profile. Resolution is depth-first through
 the `base` chain, earlier profiles first. The resolved block is fed to
-`policyFrom`, which validates the four keys with the same function a file
+`policyFrom`, which validates the block with the same function a file
 dialect uses and returns the shared policy shape. A resolved block that is
 malformed throws the same "is malformed" message a malformed file would, naming
 the profile as the source.

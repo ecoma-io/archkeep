@@ -398,6 +398,14 @@ export function formatIntentSection(intent) {
 }
 
 /**
+ * One glyph per verdict state, shared by every verdict table below. Each
+ * section used to declare its own copy; two copies of a four-glyph table
+ * agree only until one gains a state, which is the drift the
+ * never-state-a-rule-twice bullet in `../../../../AGENTS.md` exists to end.
+ */
+const VERDICT_GLYPH = Object.freeze({ pass: "✔", fail: "✖", unknown: "⚠", not_applicable: "◌" });
+
+/**
  * The fitness section — one line per declared fitness function's verdict,
  * rendered only when the run's policy declared any (`fitness === undefined`).
  *
@@ -421,9 +429,8 @@ export function formatIntentSection(intent) {
  */
 export function formatFitnessSection(decisions, overall) {
   if (decisions.length === 0) return "";
-  const verdictGlyph = { pass: "✔", fail: "✖", unknown: "⚠", not_applicable: "◌" };
   const rows = decisions
-    .map((decision) => `${verdictGlyph[decision.verdict]} ${decision.name}  ${decision.message}`)
+    .map((decision) => `${VERDICT_GLYPH[decision.verdict]} ${decision.name}  ${decision.message}`)
     .join("\n");
   const overallLabel = {
     pass: `✔ fitness: ${decisions.length} function${decisions.length === 1 ? "" : "s"} passed`,
@@ -432,6 +439,74 @@ export function formatFitnessSection(decisions, overall) {
     not_applicable: `◌ fitness: every declared function is not applicable to this run — nothing was judged`,
   }[overall.verdict];
   return `${rows}\n\n${overallLabel}`;
+}
+
+/**
+ * Where one custom-rule finding points, or `null` when it points nowhere.
+ *
+ * A rule may report a finding about the workspace as a whole, and it may
+ * report a file with no position inside it — both are legitimate, and both
+ * render without the part they do not have rather than with a fabricated line
+ * 1, the same convention `formatGoWork`'s missing-use findings and
+ * `formatTsconfigPaths` already keep. A `column` with no `line` has no
+ * clickable form at all (the file alone is what renders); the raw fields
+ * survive in the JSON envelope either way.
+ *
+ * @param {{sourceFile?: string, line?: number, column?: number}} finding
+ * @returns {string|null}
+ */
+function customFindingSite(finding) {
+  if (finding.sourceFile === undefined) return null;
+  if (finding.line === undefined) return finding.sourceFile;
+  if (finding.column === undefined) return `${finding.sourceFile}:${finding.line}`;
+  return `${finding.sourceFile}:${finding.line}:${finding.column}`;
+}
+
+/**
+ * The custom-rules section — one entry per rule the policy declared, rendered
+ * only when it declared any.
+ *
+ * A verdict table like `formatFitnessSection`'s, and for the same reason:
+ * every declared rule gets its row, so "no custom rule failed" always reads as
+ * a claim about the specific rules that were judged rather than about silence.
+ * Each entry carries the rule's DECLARED reason — the workspace's answer to
+ * "why does this rule exist", which is the half a reader needs to decide
+ * whether a finding is worth fixing or the rule is worth deleting — and then
+ * its findings, each on a `file:line:column` line a terminal turns into a link
+ * (`formatViolation`'s opening argument, applied to a finding that has a
+ * position; a finding without one renders under its namespaced id alone).
+ *
+ * The summary counts all four verdicts rather than only the failing one: a
+ * rule that answered `not_applicable` did NOT look, and a reader who cannot
+ * tell that from a rule that looked and found nothing has been handed the one
+ * ambiguity this tool exists to end (`../../../../AGENTS.md`).
+ *
+ * @param {{decisions: object[], overall: {verdict: string}}|null|undefined} customRules
+ * @returns {string} Empty exactly when the policy declared no custom rules.
+ */
+export function formatCustomRulesSection(customRules) {
+  if (customRules == null || customRules.decisions.length === 0) return "";
+  const { decisions, overall } = customRules;
+  const entries = decisions.map((decision) => {
+    const lines = [
+      `${VERDICT_GLYPH[decision.verdict]} ${decision.name}  ${decision.message}`,
+      `${DETAIL}reason      ${decision.reason}`,
+    ];
+    for (const finding of decision.findings ?? []) {
+      const site = customFindingSite(finding);
+      lines.push(`${DETAIL}${site === null ? finding.id : `${site}  ${finding.id}`}`);
+      lines.push(
+        ...finding.message.split("\n").map((line) => (line === "" ? "" : `${CONTINUED}${line}`)),
+      );
+    }
+    return lines.join("\n");
+  });
+  const count = (verdict) => decisions.filter((decision) => decision.verdict === verdict).length;
+  const summary =
+    `${VERDICT_GLYPH[overall.verdict]} custom rules: ${count("pass")} passed, ` +
+    `${count("fail")} failed, ${count("unknown")} unknown, ` +
+    `${count("not_applicable")} not applicable`;
+  return `${entries.join("\n\n")}\n\n${summary}`;
 }
 
 /**
@@ -542,7 +617,7 @@ export function formatAcceptedViolations(waived, unresolvedDecisionRefs) {
  * summary line above only says "no boundary violations" when there is nothing
  * a waiver is covering either.
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, declaredEdges?: object|null, intent?: object|null, fitness?: object|null, fitnessOverall?: {verdict: string}|null, coverageGaps?: object[], notes?: string[], policy?: {profile: string|null, source: string, fingerprint: string}|null, unresolvedDecisionRefs?: Set<string>}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, declaredEdges?: object|null, intent?: object|null, fitness?: object|null, fitnessOverall?: {verdict: string}|null, customRules?: {decisions: object[], overall: {verdict: string}}|null, coverageGaps?: object[], notes?: string[], policy?: {profile: string|null, source: string, fingerprint: string}|null, unresolvedDecisionRefs?: Set<string>}} run
  * @returns {string}
  */
 export function formatReport({
@@ -557,6 +632,7 @@ export function formatReport({
   intent,
   fitness,
   fitnessOverall,
+  customRules,
   coverageGaps = [],
   notes = [],
   policy = null,
@@ -618,6 +694,12 @@ export function formatReport({
 
   const fitnessSection = formatFitnessSection(fitness ?? [], fitnessOverall ?? { verdict: "pass" });
   if (fitnessSection !== "") sections.push(fitnessSection);
+
+  // After fitness, the order `../../cli.mjs`'s `check` judges them in: both
+  // are policy-declared verdict tables, and the custom rules are the ones the
+  // workspace wrote itself.
+  const customRulesSection = formatCustomRulesSection(customRules);
+  if (customRulesSection !== "") sections.push(customRulesSection);
 
   const coverageGapsSection = formatCoverageGaps(coverageGaps);
   if (coverageGapsSection !== "") sections.push(coverageGapsSection);

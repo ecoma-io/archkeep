@@ -8,6 +8,30 @@
         "tags": ["type-package", "scope-nx", "layer:library", "stack:backend"]
       },
       {
+        "root": "packages/lattice-rule-sdk-go",
+        "name": "lattice-rule-sdk-go",
+        "type": "lib",
+        "tags": ["type-package", "scope-sdk", "layer:library", "stack:backend"]
+      },
+      {
+        "root": "packages/lattice-rule-sdk-python",
+        "name": "lattice-rule-sdk-python",
+        "type": "lib",
+        "tags": ["type-package", "scope-sdk", "layer:library", "stack:backend"]
+      },
+      {
+        "root": "packages/lattice-rule-sdk-rust",
+        "name": "lattice-rule-sdk-rust",
+        "type": "lib",
+        "tags": ["type-package", "scope-sdk", "layer:library", "stack:backend"]
+      },
+      {
+        "root": "packages/lattice-rule-sdk-ts",
+        "name": "lattice-rule-sdk-ts",
+        "type": "lib",
+        "tags": ["type-package", "scope-sdk", "layer:library", "stack:backend"]
+      },
+      {
         "root": "packages/lattice-vscode",
         "name": "lattice-vscode",
         "type": "app",

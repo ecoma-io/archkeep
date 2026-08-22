@@ -44,13 +44,15 @@
  * - **A5 — the law's home.** An ESLint entry that leaves an option unstated
  *   must equal the module dialect stating that option at its real, live-read
  *   `@nx/eslint-plugin` default — never a value copied into this file, which
- *   would drift the day upstream changed a default — and a suppression the
- *   `.mjs` dialect declares has no ESLint counterpart at all: `./config.mjs`'s
- *   header names that gap on purpose, and this axis is where that documented
- *   asymmetry is pinned against a real load rather than left as prose. This
- *   axis reads the live default off both sides, so it does NOT catch upstream
- *   changing what that default actually IS — a real change would move both
- *   sides together, silently. That coverage is `./rules/upstream.integration.test.mjs`'s,
+ *   would drift the day upstream changed a default — and the two laws the
+ *   `.mjs` dialect can declare that an ESLint entry has no home for, a
+ *   suppression and a custom rule, come out ABSENT there rather than refused
+ *   or emptied: `./config.mjs`'s header names both gaps on purpose, and this
+ *   axis is where that documented asymmetry is pinned against a real load
+ *   rather than left as prose. This axis reads the live default off both
+ *   sides, so it does NOT catch upstream changing what that default actually
+ *   IS — a real change would move both sides together, silently. That
+ *   coverage is `./rules/upstream.integration.test.mjs`'s,
  *   which pins the default VALUES against a literal precisely so a change there
  *   is loud; this axis only ever proves "unstated equals live-read", never
  *   "live-read equals what it used to be".
@@ -979,7 +981,8 @@ describe("A4 — dialect: the same law as .mjs, .json, an ESLint flat config, an
 });
 
 // ---------------------------------------------------------------------------
-// A5 — the law's home: unstated ESLint options, and the suppression gap
+// A5 — the law's home: unstated ESLint options, and the two laws that dialect
+// has no home for (a suppression, a custom rule)
 // ---------------------------------------------------------------------------
 
 describe("A5 — the law's home", () => {
@@ -1082,6 +1085,51 @@ export const boundarySuppressions = [
       ).toThrow(/suppressions/);
     } finally {
       rmSync(suppressingRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("(c) a custom rule the .mjs dialect declares is absent from the ESLint dialect, not refused by it", async () => {
+    // The same structural gap as (b), on the fifth top-level law: an ESLint
+    // flat config states one rule entry, and that entry has no place to put a
+    // `customRules` declaration — so this reader reports none rather than
+    // inventing a mapping for it. What has to be pinned is WHICH kind of
+    // absence: the ESLint dialect must not REFUSE a policy for lacking the
+    // key (that would make an ordinary ESLint workspace unloadable), and it
+    // must not report an empty list either, because a resolved policy carries
+    // `customRules` only when the law declares it — an empty one would read
+    // as "custom rules are configured here, and there are none".
+    const customRoot = mkdtempSync(join(tmpdir(), "config-spelling-a5-custom-"));
+    try {
+      const rule = {
+        name: "no-interface-outside-domain",
+        artifact: "tools/rules/no_interface_outside_domain.wasm",
+        sha256: "a".repeat(64),
+        reason: "interfaces are the domain's ports",
+      };
+      writeIn(customRoot)(
+        "module-boundaries.config.mjs",
+        `${moduleText(law)}export const customRules = ${JSON.stringify([rule])};\n`,
+      );
+      const mjsPolicy = await loadBoundaryConfig(customRoot, "module-boundaries.config.mjs");
+      const eslintPolicy = await loadBoundaryConfigFile(join(eslintRoot, "eslint.config.mjs"));
+
+      expect(mjsPolicy.customRules).toEqual([rule]);
+      expect("customRules" in eslintPolicy).toBe(false);
+
+      // And the comparator does not quietly equate the two — the same red
+      // direction (b) holds for suppressions: if it did, a law genuinely
+      // dropped by one dialect would read as agreement.
+      expect(() =>
+        expectAllEquivalent(
+          [
+            { spelling: "module (.mjs), with a custom rule", policy: mjsPolicy },
+            { spelling: "eslint (no customRules counterpart)", policy: eslintPolicy },
+          ],
+          2,
+        ),
+      ).toThrow(/customRules/);
+    } finally {
+      rmSync(customRoot, { recursive: true, force: true });
     }
   });
 });

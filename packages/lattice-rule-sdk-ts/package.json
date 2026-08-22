@@ -1,0 +1,38 @@
+{
+  "name": "@ecoma-io/lattice-rule-sdk",
+  "version": "0.9.0",
+  "private": false,
+  "description": "Author Lattice custom architecture rules in AssemblyScript (TypeScript syntax) and compile them to core WebAssembly.",
+  "keywords": [
+    "architecture",
+    "webassembly",
+    "assemblyscript",
+    "monorepo",
+    "module-boundaries",
+    "lattice"
+  ],
+  "homepage": "https://github.com/ecoma-io/lattice/tree/main/packages/lattice-rule-sdk-ts#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ecoma-io/lattice.git",
+    "directory": "packages/lattice-rule-sdk-ts"
+  },
+  "bugs": {
+    "url": "https://github.com/ecoma-io/lattice/issues"
+  },
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": [
+    "assembly/",
+    "examples/",
+    "fixtures/",
+    "asconfig.json",
+    "README.md"
+  ],
+  "devDependencies": {
+    "assemblyscript": "0.28.20"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,60 @@
+# The AssemblyScript rule-authoring SDK — the npm half of the custom-rule
+# contract's binding layer.
+#
+# Tags use dash separators (type-package, scope-sdk) because Moon tags cannot
+# contain colons, the same reason every project beside it does
+# (`../../module-boundaries.config.mjs` argues it once, for the whole tree).
+# `scope-sdk` is shared with `../lattice-rule-sdk-rust`: the two are bindings
+# for one contract and neither may reach the engine, which is what that row
+# holds.
+#
+# `language: javascript` rather than `typescript`, and it is the honest of the
+# two. The sources under `assembly/` are AssemblyScript — TypeScript syntax, a
+# different language (`./README.md`'s first section) — and the only thing here
+# that Node runs is the harness under `test/`, which is plain ESM. Declaring
+# `typescript` would tell Moon this project is compiled by `tsc`, which it is
+# not: `tsc` reads only the harness, and `asc` reads everything else.
+id: lattice-rule-sdk-ts
+language: javascript
+layer: library
+stack: backend
+tags:
+  - type-package
+  - scope-sdk
+tasks:
+  # ESLint over the harness — the only JavaScript this package holds. It does
+  # NOT read `assembly/` or `examples/`: the root `eslint.config.mjs` configures
+  # `.mjs`/`.js` and nothing configures `.ts`, so the AssemblyScript sources are
+  # outside this target by construction. What reads them is `typecheck` below,
+  # with the compiler that understands the language. Stated here because a
+  # reader seeing `lint` beside a directory full of `.ts` files would otherwise
+  # assume it covers them.
+  lint:
+    command: eslint . --max-warnings 0
+  # The golden fixtures, the committed artifact, and both driven through the
+  # engine's real host — `node --test`, because this package needs no test
+  # framework and vitest belongs to the engine. Deliberately NOT a wasm rebuild:
+  # the artifact is committed and pinned by its digest, so what the suite proves
+  # is the bytes in the tree rather than bytes the runner just made
+  # (`./rebuild-example.sh` says the rest).
+  test:
+    command: node --test test/*.test.mjs
+  # Two compilers, because this package holds two languages. `asc --noEmit` is
+  # the real AssemblyScript compiler type-checking `assembly/` and the reference
+  # rule under exactly the flags `./asconfig.json` fixes for the build — so a
+  # rule that would fail to build fails here first — and `tsc -p tsconfig.json`
+  # judges the harness's JSDoc, the same way every other package's `typecheck`
+  # target does. `--disableWarning 235` covers the library entry only: compiling
+  # `assembly/index.ts` AS an entry warns that its re-exported classes cannot
+  # become module exports, which is true and irrelevant — no rule ever names it
+  # as one. The reference rule is checked with the warning left on, because
+  # there it would be a real signal.
+  #
+  # `script` rather than `command` because that is three commands, and
+  # `pnpm exec` on all three because neither binary can be taken from PATH:
+  # `asc` is this package's own devDependency (bare `asc` does not resolve from
+  # here), and bare `tsc` resolves to whatever TypeScript a machine happens to
+  # have installed — measured on one, a global 6.0.2 whose defaults report
+  # errors in files the workspace's own 5.9.3 passes.
+  typecheck:
+    script: pnpm exec asc assembly/index.ts --config asconfig.json --noEmit --disableWarning 235 && pnpm exec asc examples/forbidden-tag-dependency.ts --config asconfig.json --noEmit && pnpm exec tsc -p tsconfig.json

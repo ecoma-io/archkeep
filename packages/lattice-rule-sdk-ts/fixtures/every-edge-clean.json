@@ -1,0 +1,107 @@
+{
+  "contract": 1,
+  "graph": {
+    "edges": [
+      {
+        "source": "beta",
+        "sourceFile": "packages/beta/src/service.rs",
+        "target": "alpha",
+        "type": "static"
+      },
+      {
+        "source": "delta",
+        "sourceFile": "packages/delta/src/lib.rs",
+        "target": "gamma",
+        "type": "static"
+      }
+    ]
+  },
+  "imports": [
+    {
+      "column": 5,
+      "kind": "static",
+      "line": 3,
+      "resolved": { "external": false, "file": null, "packageName": null, "target": "alpha" },
+      "sourceFile": "packages/beta/src/service.rs",
+      "sourceProject": "beta",
+      "specifier": "alpha::model::Order",
+      "spelling": { "path": false, "relative": false }
+    },
+    {
+      "column": 1,
+      "kind": "static",
+      "line": 4,
+      "resolved": { "external": false, "file": null, "packageName": null, "target": "gamma" },
+      "sourceFile": "packages/beta/src/store.rs",
+      "sourceProject": "beta",
+      "specifier": "gamma_store::Connection",
+      "spelling": { "path": false, "relative": false }
+    },
+    {
+      "column": 1,
+      "kind": "static",
+      "line": 5,
+      "resolved": { "external": true, "file": null, "packageName": "serde", "target": null },
+      "sourceFile": "packages/beta/src/store.rs",
+      "sourceProject": "beta",
+      "specifier": "serde::Deserialize",
+      "spelling": { "path": false, "relative": false }
+    },
+    {
+      "column": 1,
+      "kind": "static",
+      "line": 7,
+      "resolved": { "external": false, "file": null, "packageName": null, "target": "delta" },
+      "sourceFile": "packages/delta/src/lib.rs",
+      "sourceProject": "delta",
+      "specifier": "crate::config",
+      "spelling": { "path": false, "relative": true }
+    },
+    {
+      "column": 1,
+      "kind": "static",
+      "line": 9,
+      "resolved": null,
+      "sourceFile": "packages/delta/src/lib.rs",
+      "sourceProject": "delta",
+      "specifier": "{gamma_store::Connection, alpha::model::Order}",
+      "spelling": { "path": false, "relative": false }
+    }
+  ],
+  "model": {
+    "projects": [
+      { "name": "alpha", "root": "packages/alpha", "tags": ["layer-domain", "type-library"] },
+      { "name": "beta", "root": "packages/beta", "tags": ["layer-application", "type-library"] },
+      { "name": "delta", "root": "packages/delta", "tags": ["layer-adapter", "type-library"] },
+      {
+        "name": "gamma",
+        "root": "packages/gamma",
+        "tags": ["layer-infrastructure", "type-library"]
+      }
+    ]
+  },
+  "policy": {
+    "depConstraints": [
+      { "onlyDependOnLibsWithTags": ["layer-domain"], "sourceTag": "layer-domain" },
+      {
+        "onlyDependOnLibsWithTags": ["layer-application", "layer-domain"],
+        "sourceTag": "layer-application"
+      },
+      { "onlyDependOnLibsWithTags": ["type-library"], "sourceTag": "type-library" }
+    ],
+    "moduleBoundaryOptions": {
+      "allow": [],
+      "allowCircularSelfDependency": false,
+      "banTransitiveDependencies": false,
+      "buildTargets": ["build"],
+      "checkDynamicDependenciesExceptions": [],
+      "checkNestedExternalImports": false,
+      "enforceBuildableLibDependency": false,
+      "ignoredCircularDependencies": []
+    }
+  },
+  "rule": {
+    "name": "forbidden-tag-dependency",
+    "params": { "exemptTags": ["layer-adapter"], "forbiddenTag": "layer-infrastructure" }
+  }
+}

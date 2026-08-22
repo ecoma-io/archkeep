@@ -99,6 +99,19 @@ A new reader should find these capabilities described as present, not promised.
   partition.
   ([concepts/fitness-functions.md](../concepts/fitness-functions.md),
   [usage/fitness.md](../usage/fitness.md))
+- **Custom rules under one contract.** A workspace declares its own rules as
+  committed WebAssembly artifacts in the policy's `customRules` list — written
+  in any language whose toolchain emits a no-import core-wasm module, judged
+  by the same deterministic engine over the same observed facts, folded into
+  `check` by presence with verdicts in the same four-state vocabulary, and
+  loud on every failure path. Four SDKs ship from this repository on the same
+  version chain — Rust, Go (TinyGo's freestanding target), TypeScript-syntax
+  AssemblyScript, and Python (a RustPython carrier) — each proven by a
+  committed reference artifact whose verdicts are byte-identical across all
+  four, with each build story's measured limits declared in its package
+  ([adr/0002](../adr/0002-custom-rules-one-contract.md) records the staging).
+  ([concepts/custom-rules.md](../concepts/custom-rules.md),
+  [reference/custom-rules.md](../reference/custom-rules.md))
 - **Architecture planning facts for agents.** `context` and `impact` answer the
   questions an agent asks before and during a change, in machine-readable form;
   `explain` explains a finding after it is reported.
