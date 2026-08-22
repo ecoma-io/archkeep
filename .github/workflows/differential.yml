@@ -97,3 +97,42 @@ jobs:
           DIFFERENTIAL_SHA: "${{ github.sha }}"
           GH_TOKEN: "${{ github.token }}"
         run: node scripts/reconcile-differential-issue.mjs
+
+  # The second lane in this workflow, and a different question: not "does this
+  # engine agree with ESLint" but "how much of a real repository does each
+  # analyzer read". `scripts/coverage-real-trees.mjs` holds the tree table, the
+  # measured counts and the exit contract.
+  #
+  # It rides this workflow rather than a new one because it has the same
+  # posture for the same reasons: it depends on third-party repositories being
+  # reachable, so it must not gate a pull request, and a red run is a
+  # regression to be fixed rather than a flake to re-run. It is a separate JOB
+  # rather than a step so a red differential and a red coverage lane are
+  # distinguishable at a glance, and so one being down does not hide the other.
+  #
+  # It shares nothing with the differential job — no cache, no clone — because
+  # the clones are pinned by sha and a fresh one cannot be stale.
+  coverage:
+    name: Analyzer coverage on real trees
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Exit 3 (a tree could not be cloned or read — the run could not look) is
+      # as red as exit 1 (a pinned count moved); the log's last lines say which.
+      - name: Measure the analyzers against real Go, Rust and Python trees
+        run: node scripts/coverage-real-trees.mjs

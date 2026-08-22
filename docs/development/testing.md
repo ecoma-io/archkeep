@@ -99,6 +99,29 @@ to pin the text handed over — the whole file with everything outside the scrip
 block blanked, so no arithmetic can be wrong — and the integration test drives the
 real pair.
 
+### Analyzer coverage on real trees — where there is no oracle at all
+
+`scripts/coverage-real-trees.mjs` asks the question the ESLint differential
+structurally cannot. `.go`, `.rs` and `.py` never reach the upstream rule, so
+upstream's silence about them is inability rather than a verdict, and there is
+nothing to disagree with. This lane needs no oracle: it clones real public
+repositories at pinned shas — one Go, one Rust, one Python — runs the real
+analyzers over every tracked source file, and holds three counts EXACTLY in
+both directions: files read, import records produced, failures reported.
+
+Exactness is legitimate because the sha is pinned: the tree cannot move under
+the harness, so any movement is the harness changing. Fewer records is an
+analyzer that went quiet on a syntax it used to read — the silent direction,
+and the reason the lane exists. **Fewer failures is a breach too**: a failure
+that stopped being reported is a file that now looks read.
+
+It runs weekly beside the differential, in the same workflow and with the same
+posture — not a required check, because it depends on third-party repositories
+being reachable, and a red run is a regression rather than a flake. Its tree
+table records what each count means, including the one real gap the first run
+found: the Rust analyzer cannot read a top-level `use { a::b, c::d };` brace
+group, which ripgrep writes 29 times.
+
 ### Conformance — the differential against ESLint
 
 `src/conformance/`

@@ -149,7 +149,10 @@ and it is evidence rather than code:
 - **Breadth of conformance evidence.** The differential against
   `@nx/enforce-module-boundaries` runs over real public workspaces, weekly and
   on demand, as a non-required check that is still treated as a regression when
-  it goes red; more real trees is the remaining gap, not a missing feature.
+  it goes red; more real trees is the remaining gap, not a missing feature. A
+  second lane beside it measures what the Go, Rust and Python analyzers read on
+  real repositories, where no upstream exists to disagree with — the languages
+  the differential structurally cannot cover.
   ([development/testing.md](../development/testing.md))
 
 The VS Code marketplace listing is deliberately **not** on that list. The
