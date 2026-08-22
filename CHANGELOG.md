@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0](https://github.com/ecoma-io/lattice/compare/v0.10.1...v0.11.0) (2026-08-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **lattice:** refuse --evidence-out where nothing would write, and count three workspace checks ([#211](https://github.com/ecoma-io/lattice/issues/211))
+
+### Bug Fixes
+
+* **lattice:** refuse --evidence-out where nothing would write, and count three workspace checks ([#211](https://github.com/ecoma-io/lattice/issues/211)) ([c9e1ac3](https://github.com/ecoma-io/lattice/commit/c9e1ac3d2f221d2a4d8b19b863d5090f55078b5a))
+* **workspace:** correct three stale skill claims and teach four shipped surfaces ([#209](https://github.com/ecoma-io/lattice/issues/209)) ([c3578fa](https://github.com/ecoma-io/lattice/commit/c3578fa65b358b6a73b55314b5a0025367f5a6fe))
+
 ## [0.10.1](https://github.com/ecoma-io/lattice/compare/v0.10.0...v0.10.1) (2026-08-22)
 
 
