@@ -19,11 +19,21 @@ intact and names it in a vocabulary an evidencing process can compare:
 | `"findings"`   | `fail`    | at least one finding in `result`              |
 | `"no-verdict"` | `unknown` | a `reason` naming what could not be looked at |
 
-A fourth state, `not_applicable`, belongs to the vocabulary but not to engine
-behavior today: it is the verdict for a rule that a capability decides does not
-apply — Fitness functions and Waivers, which ask "does this rule govern this
-tree at all" — and it must always carry `notApplicableReason`, because "did not
-apply" and "did not run" are indistinguishable without it.
+A fourth state, `not_applicable`, does not map onto a run-level `status` —
+a run is never wholly inapplicable — but it is real engine behavior at the
+level it belongs to, the individual declared gate. It is the verdict for a rule
+a capability decides does not govern this tree: fitness functions and waivers,
+which ask "does this rule apply at all", and custom rules, which reach it two
+ways — a rule answering `not_applicable` itself (no project carries the tag it
+constrains), and the engine answering it for every declared rule on a
+path-scoped run, because a rule's evidence is the whole tree and a scoped run
+read part of it ([custom-rules.md](custom-rules.md)).
+
+It must always carry `notApplicableReason`, because "did not apply" and "did
+not run" are indistinguishable without it, and it is **reported rather than
+absorbed into a passing count**: a gate nobody is protected by should be
+visible. It counts toward neither the findings lane nor the no-verdict one, so
+it changes no exit code.
 
 ## The cardinal rule: unknown is never a degraded pass
 

@@ -2,31 +2,59 @@
 
 The workspace that holds Lattice, and how its moving parts relate.
 
-## The two packages
+## The six packages
 
-| package                   | what it ships      | where it goes       | has its own AGENTS.md |
-| ------------------------- | ------------------ | ------------------- | --------------------- |
-| `packages/lattice`        | the engine         | npm                 | yes                   |
-| `packages/lattice-vscode` | the VS Code client | VS Code marketplace | no                    |
+| package                            | what it ships            | where it goes       | has its own AGENTS.md |
+| ---------------------------------- | ------------------------ | ------------------- | --------------------- |
+| `packages/lattice`                 | the engine               | npm                 | yes                   |
+| `packages/lattice-vscode`          | the VS Code client       | VS Code marketplace | no                    |
+| `packages/lattice-rule-sdk-rust`   | the Rust custom-rule SDK | crates.io           | no                    |
+| `packages/lattice-rule-sdk-ts`     | the AssemblyScript SDK   | npm                 | no                    |
+| `packages/lattice-rule-sdk-python` | the Python SDK           | PyPI                | no                    |
+| `packages/lattice-rule-sdk-go`     | the Go SDK               | the Go module proxy | no                    |
 
 `lattice` is the engine — the Nx and Moon integrations, the boundary checker,
 and the language server behind one analysis. `lattice-vscode` is a client of it
 and holds no analysis at all; it ships to a marketplace rather than to npm, and
 it deliberately does not bundle the server.
 
+The four `lattice-rule-sdk-*` packages are **bindings, not engines**. Each is
+one language's typed way to author a custom rule and build it to the wasm the
+engine already runs, so none of them holds analysis either, and none may grow
+its own view of what a verdict means: four SDKs that disagreed would be four
+laws wearing one contract's name. Every directory carries the language suffix
+while the registry name does not, because each registry already names the
+language ([ADR 0002](../adr/0002-custom-rules-one-contract.md) records both
+decisions). Each README owns its own build story and its measured limits, and
+those limits are the reason to read one before choosing an SDK.
+
 Everything else in this repository is the apparatus that keeps them honest.
 
-## Plain ESM, no build
+## Plain ESM, no build — for the two packages that ship JavaScript
 
-Both packages ship as `.mjs` with JSDoc. Nx loads a plugin's entry point
-directly in the process that runs every `nx` invocation, and Moon's integration
-reads the project graph via `moon project-graph --json`, so the shipped artefact
-has to be loadable with no build step in the way. That is why neither package
-declares a `build` target — there is nothing to emit.
+`lattice` and `lattice-vscode` ship as `.mjs` with JSDoc. Nx loads a plugin's
+entry point directly in the process that runs every `nx` invocation, and Moon's
+integration reads the project graph via `moon project-graph --json`, so the
+shipped artefact has to be loadable with no build step in the way. That is why
+neither declares a `build` target — there is nothing to emit.
 
 JSDoc is type-checked all the same: each package's `typecheck` target runs
 `tsc -p tsconfig.json` with `noEmit` and `checkJs`, which reads the JSDoc as the
 program and writes nothing.
+
+The rule SDKs are the exception, and a bounded one. Their artefacts are
+WebAssembly, so building is the point — but the build is **not** a Moon target
+either, and deliberately: a `.wasm` is committed beside its `.sha256`, and each
+package ships a `rebuild-example.sh` that reproduces it. Requiring cargo,
+TinyGo and a RustPython carrier on every CI leg to re-emit bytes already in the
+tree would buy nothing the digest does not already prove — which is exactly
+what `rule-sdks.integration.test.mjs` checks, loading every committed artifact
+through the engine's real host at the digest its own package records. What the
+SDK packages do declare is `lint` and `test` in their own language's tooling,
+and `typecheck` wherever that language has a checker in the toolchain this
+repository already installs — Python has none, so `check-packages` reports
+`lint, test (no typecheck)` for it, which is the truthful line rather than a
+gap. Those targets need the toolchains CONTRIBUTING.md lists.
 
 ## The gate scripts
 
@@ -74,16 +102,22 @@ steps — `verify-package.mjs` in `ci.yml` and again in the release lane,
 
 ## CI
 
-`.github/workflows/ci.yml` is a required check (`ci-gate`, alongside
-`analysis-gate` from `analysis.yml`). It runs
-Prettier, ESLint, `node --test`, `check-packages`, `check-docs-links`, the
-package targets, the tool on this tree, and the packed-artifact verification.
-It fails on any needed job that is `skipped` or `cancelled`, because `needs`
-alone only blocks on `failure`.
+`.github/workflows/ci.yml` runs Prettier, ESLint, `node --test`,
+`check-packages`, `check-skills`, `check-docs-links`, the package targets, the
+tool on this tree, and the packed-artifact verification. Its `ci-gate` job
+fails on any needed job that is `skipped` or `cancelled`, because `needs` alone
+only blocks on `failure`.
 
 `.github/workflows/analysis.yml` runs CodeQL (both `javascript-typescript` and
-`actions`), Semgrep, and Gitleaks, aggregated behind an `analysis-gate` job
-that is a required check alongside `ci-gate`.
+`actions`), Semgrep, and Gitleaks, aggregated behind an `analysis-gate` job.
+
+**Two required checks, and `analysis-gate` is not one of them.** The branch
+ruleset requires `ci-gate` and `Semgrep`, the latter named directly — measured
+against the ruleset on 2026-08-22, not assumed. So CodeQL or Gitleaks going red
+turns `analysis-gate` red and still lets a merge through: that aggregate is a
+signal to read, not a wall. `ci-gate` being a name rather than a job list is
+what lets a job added to `ci.yml` later tighten the gate with no repository
+setting touched.
 
 ## The boundary law
 

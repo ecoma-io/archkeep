@@ -8,6 +8,16 @@ engines' verdicts be compared rather than merely both being red.
 This page is the reader's side of those fifteen ids: what each one means, what
 produced it, and what closes it.
 
+**An id spelled `custom/<rule>/<finding>` is not one of the fifteen and is not
+on this page.** It comes from a rule the workspace declared and this engine did
+not write, so its meaning is the rule author's rather than upstream's — which
+is why it is namespaced, and why no fixed catalogue can describe it. What
+explains one is the rule's own message, the `reason` its policy row is required
+to carry, and the evidence bundle it was judged over
+([custom-rules.md](custom-rules.md)). It is a finding like any other:
+exit 1, on all three report faces, accepted only through the same declared
+suppressions and waivers.
+
 ## How to read a report
 
 ```text

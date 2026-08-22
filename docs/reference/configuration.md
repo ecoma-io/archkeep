@@ -83,14 +83,16 @@ roots.
 
 ### `boundaryConfig`
 
-| type   | default                          | meaning                                                                                              |
-| ------ | -------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| string | `"module-boundaries.config.mjs"` | Filename of the boundary law, workspace-relative.                                                    |
-| object | --                               | The boundary law inline: `{ depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness }`. |
+| type   | default                          | meaning                                                                                                           |
+| ------ | -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| string | `"module-boundaries.config.mjs"` | Filename of the boundary law, workspace-relative.                                                                 |
+| object | --                               | The boundary law inline: `{ depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness, customRules }`. |
 
 When the value is a string, `--config` on the CLI overrides it for one run.
-When the value is an object, the same four keys as the `.json` dialect are
-validated by the identical function. The language server reads the inline form
+When the value is an object, the same five keys as the `.json` dialect are
+validated by the identical function — `customRules` included, so a native
+workspace declares a rule of its own here exactly as a policy file would
+([custom-rules.md](custom-rules.md)). The language server reads the inline form
 too: it watches `lattice.json` itself, so an edit to the policy re-diagnoses
 every open file the same way an edit to a policy file does.
 

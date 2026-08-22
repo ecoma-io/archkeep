@@ -111,6 +111,16 @@ is, what it is not, and the line its neighbours may not cross — and
 | [languages.md](reference/languages.md)                     | What each analyzer reads, the shapes it cannot, and the two workspace checks                                                      |
 | [violations.md](reference/violations.md)                   | Each of the fifteen violations: what it means, and what fixes it                                                                  |
 
+## Decision records
+
+Numbered, immutable once accepted, and cited by the pages whose behaviour they
+decided rather than summarized into them.
+
+| record                                                                     | what it decided                                                            |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [0001-boundary-levels.md](adr/0001-boundary-levels.md)                     | The engine and its extension enforce their boundary levels                 |
+| [0002-custom-rules-one-contract.md](adr/0002-custom-rules-one-contract.md) | Custom rules are one contract, not one system per language — and four SDKs |
+
 ## Doctrine
 
 | page                                                              | what it answers                                                                         |
@@ -129,7 +139,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [architecture.md](development/architecture.md)             | One check, end to end, and why the layers are cut where they are    |
 | [adding-a-language.md](development/adding-a-language.md)   | The full path for a new language, in the order that keeps it honest |
 | [adding-integration.md](development/adding-integration.md) | How a new integration extends the core, and the contract it holds   |
-| [repository.md](development/repository.md)                 | The two packages, plain ESM, gate scripts, CI                       |
+| [repository.md](development/repository.md)                 | The six packages, plain ESM, gate scripts, CI                       |
 | [release.md](development/release.md)                       | How a version reaches the people who use it                         |
 | [testing.md](development/testing.md)                       | Which suite proves what, and which failure each tier is for         |
 
@@ -167,6 +177,8 @@ allowed to say it". That table:
 | `AGENTS.md`                                                                     | The rules a diff is rejected for violating, for humans and agents alike                                                                                                                                                                          |
 | `packages/lattice/README.md`                                                    | The package's own reference — it is the npm landing page and must stand alone                                                                                                                                                                    |
 | `packages/lattice-vscode/README.md`                                             | The VS Code client: what it requires, the two settings it has, and the two it refuses                                                                                                                                                            |
+| `packages/lattice-rule-sdk-*/README.md`                                         | One per SDK: that language's build story for a custom rule, and its own MEASURED limits. The limits are why an SDK is chosen by reading these rather than from the table in [`docs/usage/custom-rules.md`](usage/custom-rules.md)                |
+| `docs/adr/`                                                                     | The numbered decision records: what was decided, against which alternatives, and what it cost. Immutable once accepted — a decision that changed is a NEW record, never an edit to the old one                                                   |
 | `packages/lattice/AGENTS.md`                                                    | Layer mechanics: what each layer may know                                                                                                                                                                                                        |
 | `packages/lattice/src/*/README.md`                                              | Each layer's own semantics — rules, report, conformance, commands, the native provider                                                                                                                                                           |
 | `packages/lattice/src/analysis/contract.md`                                     | The frozen record every analyzer returns                                                                                                                                                                                                         |

@@ -6,7 +6,7 @@ artifact, hands it the facts it already observed, and folds the verdict into
 `check` beside the built-in boundary rules.
 
 The distribution is `lattice-rule-sdk`; the directory carries the `-python`
-suffix because this tree will hold four of these and a registry that already
+suffix because this tree holds four of these and a registry that already
 names the language does not repeat it — the reasoning is in
 [ADR 0002](../../docs/adr/0002-custom-rules-one-contract.md).
 

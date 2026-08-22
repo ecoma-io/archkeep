@@ -178,6 +178,19 @@ cites when it says "the declared architecture no longer matches the code".
   `not_applicable` verdicts. `fitness` is descriptive too, but a declared
   function that `fail`s makes it exit 1 — a failing fitness function is a
   finding, not a print job. `check` stays the gate.
+- **The workspace's own rules** — when the policy declares `customRules`, every
+  declared rule is judged on each unscoped `check`, by presence. These are laws
+  the workspace wrote and this engine did not, so review them as law rather
+  than as output: a finding arrives namespaced `custom/<rule>/<finding>` and its
+  meaning is the rule's message plus the `reason` its policy row is required to
+  carry, never an id in the violation catalogue. Two review consequences.
+  First, **a rule that answered `unknown` is a gate that did not run** — exit 3,
+  the cause named — and reporting it as "no custom findings" is exactly the
+  silent direction. Second, a change to a rule's `.wasm` or its pinned `sha256`
+  is a change to the law itself, reviewed like a constraint row and not like a
+  binary blob: the digest is what makes "the law CI ran is the law review saw"
+  checkable at all, so a bumped hash needs the same argument any policy edit
+  does.
 - **Pre-existing violations ("debt")** — `lattice debt <dir>` ages waivers, gaps
   and drift across a snapshots directory: how long a violation has been
   accepted or unknown. It is a ledger, not a live gate — it never changes a

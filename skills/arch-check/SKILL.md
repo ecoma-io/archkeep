@@ -77,18 +77,22 @@ leave it sound must show the check green.
      with the observed graph. The number of files, projects, and imports
      inspected is stated beside the verdict.
    - **Exit 1** — findings: boundary violations, intent findings (a forbidden
-     relationship appeared, an allowed one went missing), or waiver-entangled
+     relationship appeared, an allowed one went missing), waiver-entangled
      ones (a violation an active waiver accepts is still exit `1`, only moved
-     to an "accepted violations" section). This is the only command that
-     exits 1 on boundary findings — with one companion: `fitness` also exits
-     1 when a declared function `fail`s.
+     to an "accepted violations" section), a declared fitness function that
+     `fail`s, or a declared custom rule that `fail`s. This is the only command
+     that exits 1 on boundary findings — with one companion: `fitness` also
+     exits 1 when a declared function `fail`s.
    - **Exit 3** — no verdict. The run could not complete, or a selected file
-     could not be analyzed, or the intent could not be established, or — in a
-     profile-selected workspace — the selected profile could not be resolved:
-     an unknown profile name, an unknown `base`, a `base` cycle, or an
-     unreadable registry. None of those falls back to another law: a resolved
-     profile is the law the verdict names, so a resolution failure withholds
-     the verdict. This is NOT "clean"; it is the fail-closed direction.
+     could not be analyzed, or the intent could not be established, or a
+     declared fitness function or custom rule answered `unknown`, or a declared
+     custom rule's artifact would not load at all (missing, `sha256` mismatch,
+     not wasm, asking for an import), or — in a profile-selected workspace —
+     the selected profile could not be resolved: an unknown profile name, an
+     unknown `base`, a `base` cycle, or an unreadable registry. None of those
+     falls back to another law: a resolved profile is the law the verdict
+     names, so a resolution failure withholds the verdict. This is NOT "clean";
+     it is the fail-closed direction.
    - **Exit 2** — usage error (wrong flag, missing argument). Fix the invocation.
 
 4. **Read the findings.** Each one tells you:
@@ -122,8 +126,32 @@ leave it sound must show the check green.
    `depConstraints`/`moduleBoundaryOptions`/`boundarySuppressions`/`fitness`,
    so a profile-selected run folds a declared `fitness` block the same way a
    file-selected one does.
-   An _unverifiable_ intent is never a _satisfied_ one, and an unresolved
-   profile is never a satisfied law.
+
+   **`customRules` folds in the identical way, and you must read it the same.**
+   A policy declaring a `customRules` list gets every declared rule judged on
+   every unscoped `check` — by presence, with no flag to pass and none to
+   forget. Each rule is a WebAssembly artifact the workspace committed and
+   pinned by `sha256`; its findings arrive namespaced as
+   `custom/<rule>/<finding>`, and its verdict rides the same two lanes
+   (`1` for any `fail`, `3` for any `unknown`). Three consequences for you:
+
+   - **Do not look up a `custom/…` id in the violation catalogue.** It is not
+     one of the fifteen and has no upstream meaning. What explains it is the
+     finding's own message plus the `reason` its policy row is required to
+     carry — read the row.
+   - **A rule that could not judge is never a rule that found nothing.** An
+     `unknown` — the rule's own, or the engine's for a rule that trapped, ran
+     out of budget, or asked for evidence this engine cannot supply — is exit
+     3, and the message names the cause. Report it as a gate that did not run,
+     never as a clean result.
+   - **A path-scoped `check` answers `not_applicable` for every declared
+     rule**, because a rule's evidence is the whole tree. If custom rules
+     matter to the question you were asked, the unscoped run is the only one
+     that answers it.
+
+   An _unverifiable_ intent is never a _satisfied_ one, an unresolved profile
+   is never a satisfied law, and a custom rule that could not be loaded or run
+   is never a custom rule that passed.
 
 7. **For CI: generate SARIF.**
 

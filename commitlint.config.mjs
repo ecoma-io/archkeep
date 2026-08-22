@@ -12,10 +12,11 @@ export default {
       2,
       "always",
       [
-        // One entry per package under `packages/`, plus the three that name a
-        // change owning no package. `vscode` is listed before its directory
-        // exists so the commit that creates it is not also the commit that
-        // has to edit this file to describe itself.
+        // One entry per package under `packages/`, plus the four that name a
+        // change owning no package (`workspace`, `docs`, `deps`, `ci`).
+        // `vscode` was listed before its directory existed, so the commit that
+        // created it was not also the commit that had to edit this file to
+        // describe itself.
         "lattice",
         "vscode",
         // The rule SDKs — the language, not the directory, because the SDK
