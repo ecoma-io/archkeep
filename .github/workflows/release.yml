@@ -604,19 +604,23 @@ jobs:
 
       # Publishing is guarded, not wired to a publisher that does not exist
       # yet: the `ecoma-io` marketplace publisher account has not been created,
-      # so there is no VSCE_PAT secret to hold. When the secret is absent this
-      # step SKIPS LOUDLY — a log line and a step-summary entry saying so and
-      # why — never silently, because a green release lane that shipped nothing
-      # is the exact defect the prepare job's tripwire exists for. The vsix on
-      # the release above is real either way. The secret reaches vsce through
-      # the environment (vsce documents reading VSCE_PAT), never through `${{}}`
-      # interpolation into this script.
+      # so there is no ECOMA_VSCE_PAT secret to hold. When the secret is absent
+      # this step SKIPS LOUDLY — a log line and a step-summary entry saying so
+      # and why — never silently, because a green release lane that shipped
+      # nothing is the exact defect the prepare job's tripwire exists for. The
+      # vsix on the release above is real either way. The secret is named
+      # `ECOMA_VSCE_PAT` to match this workflow's other organisation secrets
+      # (`ECOMA_NPM_ACCESS_TOKEN`, `ECOMA_PYPI_API_TOKEN`,
+      # `ECOMA_CRATES_API_TOKEN`), and it reaches vsce through the environment
+      # as `VSCE_PAT` — the exact name vsce documents reading, and not
+      # renameable — never through `${{}}` interpolation into this script.
       #
       # To turn publishing on: create the publisher, mint a marketplace PAT,
-      # store it as the VSCE_PAT repository secret. No workflow change needed.
+      # store it as the ECOMA_VSCE_PAT repository secret. No workflow change
+      # needed.
       - name: Publish to the marketplace, or say loudly why not
         env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VSCE_PAT: ${{ secrets.ECOMA_VSCE_PAT }}
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           if [ -z "$VSCE_PAT" ]; then
@@ -625,13 +629,13 @@ jobs:
               echo ""
               echo "\`$TAG\` was released and its .vsix is on the GitHub release,"
               echo "but it was NOT published to the VS Code Marketplace: the"
-              echo "VSCE_PAT secret is absent because the publisher account does"
-              echo "not exist yet. Create the publisher, store its PAT as the"
-              echo "VSCE_PAT repository secret, and the next release publishes."
+              echo "ECOMA_VSCE_PAT secret is absent because the publisher account"
+              echo "does not exist yet. Create the publisher, store its PAT as the"
+              echo "ECOMA_VSCE_PAT repository secret, and the next release publishes."
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "SKIPPED, and here is why: VSCE_PAT is absent (no marketplace publisher account"
-            echo "exists yet), so $TAG was NOT published to the VS Code Marketplace. The .vsix"
-            echo "is on the GitHub release. Store a VSCE_PAT secret to turn publishing on."
+            echo "SKIPPED, and here is why: ECOMA_VSCE_PAT is absent (no marketplace publisher"
+            echo "account exists yet), so $TAG was NOT published to the VS Code Marketplace. The"
+            echo ".vsix is on the GitHub release. Store an ECOMA_VSCE_PAT secret to turn publishing on."
             exit 0
           fi
           pnpm --dir packages/lattice-vscode exec vsce publish --packagePath "$GITHUB_WORKSPACE/dist/lattice-vscode.vsix"

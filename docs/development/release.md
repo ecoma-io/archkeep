@@ -59,8 +59,8 @@ at install time cannot be unpublished away, which is why this check runs before
 Both publish from the same release lane when the tag lands. The `publish-vsix`
 job packs and verifies the `.vsix` and attaches it to the GitHub release on
 every release; its marketplace `vsce publish` step skips — loudly, in the job
-log — until a marketplace publisher account and its `VSCE_PAT` secret exist,
-and runs automatically from the release that follows their arrival.
+log — until a marketplace publisher account and its `ECOMA_VSCE_PAT` secret
+exist, and runs automatically from the release that follows their arrival.
 
 ## The manual step this lane used to need
 
