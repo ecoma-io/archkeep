@@ -194,6 +194,12 @@ over a stretch of time in which it had the chance to.
    `.vsix` agreeing, more than once in a row. The 0.5.0 tag that npm never
    received is the failure this condition exists to have stopped happening.
 
+`scripts/check-readiness.mjs` is what reads these four rather than anyone
+remembering them — `pnpm readiness` prints one row each, and says `unmeasured`
+for the two whose evidence lives outside this repository rather than guessing.
+The fifth condition sitting here for six releases after it was met is the
+failure that script exists to have stopped happening.
+
 None of the four is a feature, and that is the point: what separates 0.x from
 1.0 here is evidence, and evidence is something the project accumulates rather
 than something it implements.

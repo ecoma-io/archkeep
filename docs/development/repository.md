@@ -42,6 +42,15 @@ program and writes nothing.
   restructure once deleted two files and left twenty-five references — two
   inside shipped error messages — pointing at the old paths, and nothing
   caught it: Prettier formats markdown but does not resolve a link.
+- `check-readiness.mjs` — **a report, not a gate.** It prints the four
+  conditions [../doctrine/roadmap.md](../doctrine/roadmap.md) says separate 0.x
+  from 1.0, each read off something rather than remembered, in three states:
+  `met`, `not met`, and `unmeasured` — the last for the conditions whose
+  evidence lives outside this tree (a workflow's run history, another
+  repository's CI), which it names rather than guessing at. `pnpm readiness`.
+  It is not a gate because a gate that fails until 1.0 fails every build for
+  months and gets deleted long before it is satisfied; what keeps it honest is
+  being run and read.
 - `verify-package.mjs` — packs the real tarball, installs it into a throwaway
   workspace, and drives what a consumer actually buys. Also runs against a
   second workspace with no Moon at all, proving the native provider works from a

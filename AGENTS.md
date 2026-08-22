@@ -297,6 +297,7 @@ pnpm typecheck          # tsc --noEmit over scripts/ — each package has its ow
 pnpm check-packages     # every packages/* directory, and which CI targets it runs
 node scripts/check-skills.mjs    # skills gate: shape, cites, and the manifest version chain
 node scripts/check-docs-links.mjs # doc-reference gate: links, #anchors, citations
+pnpm readiness          # the four 1.0 conditions, read off git and a registry — a report
 moon run ...:lint ...:test ...:typecheck   # each package's own suite
 node packages/lattice/cli.mjs check        # this tree's own boundaries
 ```
