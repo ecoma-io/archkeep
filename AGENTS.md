@@ -18,8 +18,15 @@ workspace.
 checker and a language server, one analysis behind three faces.
 `packages/lattice-vscode/` is a client of it and holds no analysis at all; it
 ships to a marketplace rather than to npm, and it deliberately does not bundle
-the server. Everything else here is the apparatus that keeps them honest. If you
-are about to write product code, check that it is actually what was asked for.
+the server. The four `packages/lattice-rule-sdk-*/` are bindings rather than
+engines: each is one language's typed way to author a custom rule and build it
+to the wasm the engine already runs, so none of them holds analysis either and
+none may grow a second opinion about what a verdict means — one contract, four
+spellings, and `packages/lattice/src/conformance/rule-sdks.integration.test.mjs`
+is the gate that keeps it one (`docs/adr/0002-custom-rules-one-contract.md`
+records the decision). Everything else here is the apparatus that keeps them
+honest. If you are about to write product code, check that it is actually what
+was asked for.
 
 The repository also ships the `arch-*` agent architecture skills in `skills/`
 at the root: host-independent behavioral protocols that teach an AI agent when
@@ -85,8 +92,12 @@ scripts/
 packages/
   lattice/                 the plugin, the checker, the language server
   lattice-vscode/          the VS Code client for that server
+  lattice-rule-sdk-rust/   the four custom-rule SDKs — one contract, four
+  lattice-rule-sdk-go/     spellings. Each ships a reference rule, five shared
+  lattice-rule-sdk-ts/     evidence fixtures, and a committed `.wasm` with its
+  lattice-rule-sdk-python/ digest; each README owns its build story and limits
 module-boundaries.config.mjs   this repository's own boundary law
-coverage.config.json           the coverage floor both packages read
+coverage.config.json           the coverage floor the two `.mjs` packages read
 ```
 
 `lattice` carries its own `AGENTS.md` for everything below this level —
@@ -324,11 +335,14 @@ pull request.
 
 ## Commits
 
-Conventional Commits, commitlint-enforced. Scopes: `lattice`, `vscode`,
-`workspace`, `docs`, `deps`, `ci`. `vscode` is listed before its own directory
-existed, so the commit that creates a package is not also the commit that has
-to edit `commitlint.config.mjs` to describe itself. `deps` and `ci` exist
-because Renovate writes them.
+Conventional Commits, commitlint-enforced. `commitlint.config.mjs`'s
+`scope-enum` is the roster and argues each entry beside it — not restated here,
+for the reason the skills roster is not: this paragraph's own copy is what went
+stale when the four rule SDKs arrived. One entry per package, plus the four
+that name a change owning no package — `workspace`, `docs`, `deps`, `ci`;
+`vscode` is listed before its own directory existed, so the commit that creates
+a package is not also the commit that has to edit that file to describe
+itself.
 
 A change to what is reported on an unchanged workspace is a **breaking change**
 even when no API moved — a consumer's CI turns red on code they did not touch.
