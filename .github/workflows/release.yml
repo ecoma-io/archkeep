@@ -719,7 +719,7 @@ jobs:
           if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
             echo "$TAG carries packages/lattice-rule-sdk-rust, but ECOMA_CRATES_API_TOKEN"
             echo "is empty in this repository's context. It is an organisation secret, so"
-            echo "either the name differs (check the exact spelling — CREATES) or it is"
+            echo "either the name differs (check the exact spelling — CRATES) or it is"
             echo "not granted to this repository; grant it under the organisation's"
             echo "Actions secrets, then re-run this job. Failing red rather than"
             echo "skipping: the crate is in the tagged bytes, and a release that does"
