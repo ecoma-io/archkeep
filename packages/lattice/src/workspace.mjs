@@ -34,6 +34,7 @@ import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
 import { containmentViolation } from "./containment.mjs";
 import { analyzeFile, languageOf } from "./analysis/analyze.mjs";
 import { fileFailure, projectOwning } from "./analysis/source-util.mjs";
+import { UsageError } from "./errors.mjs";
 import { parseNxJson } from "./nx-json.mjs";
 import { NX_CONFIG_FILE } from "./options.mjs";
 // `runProcess` and `environmentForTree` moved to `./process.mjs`, which
@@ -466,7 +467,7 @@ export function annotatePackageFacts(nodes, readFile) {
  *   `lattice check` exit 0 clean on a file whose committed twin, byte for
  *   byte, reported a real violation.
  * @returns {string[]} A subset of `files`.
- * @throws {Error} when a path lies outside the workspace, or matches no
+ * @throws {UsageError} when a path lies outside the workspace, or matches no
  *   tracked file at all — silently selecting nothing would report a clean tree
  *   for a run that inspected none of it.
  */
@@ -479,13 +480,13 @@ export function selectFiles(files, paths, { root, cwd, tracked = files }) {
     const rel = relative(root, absolute);
     if (rel === "") return "";
     if (rel.startsWith("..") || isAbsolute(rel)) {
-      throw new Error(
+      throw new UsageError(
         `lattice: '${path}' is outside the workspace at ${root} — ` +
           `there is nothing there this tool could check`,
       );
     }
     if (!tracked.some((file) => withinPrefix(file, rel))) {
-      throw new Error(
+      throw new UsageError(
         `lattice: '${path}' matches no tracked file at ${root} — check the ` +
           `path and the working directory, or 'git add' it first if it is new`,
       );
@@ -548,11 +549,13 @@ const POLYGLOT_MANIFEST_NAMES = ["go.mod", "Cargo.toml", "pyproject.toml"];
  * TypeScript and JavaScript imports natively (`../../../AGENTS.md`, "for the
  * other three both go quiet") — so a tracked manifest with no registered
  * plugin is exactly the silent hole that invariant refuses. This function
- * only names the manifests;
- * it does not decide whether the plugin is registered, and it is not
- * currently consulted by `check`'s own refusal logic — it is exported and
- * tested on its own so a later caller can wire it in without redoing the
- * matching.
+ * only names the manifests; it does not decide whether the plugin is
+ * registered. The pair the gap turns on is wired in twice today:
+ * `resolveCommandContext` reads both into its `pluginGap`, which every
+ * descriptive command refuses on, while `check` renders the same fact as a
+ * `coverageGaps` degraded-coverage note rather than a refusal
+ * (`../cli.mjs`) — the checker's own analysis covers what the graph does
+ * not, so a note is the right level there.
  *
  * Root matching mirrors `projectOwning`'s longest-prefix attribution of a
  * source file: a project rooted at the workspace root (`root: ""` or `"."`)

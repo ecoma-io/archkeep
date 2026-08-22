@@ -57,8 +57,8 @@ describe("context", () => {
   });
 
   it("exits 2 for an unknown project name", () => {
-    // "no project named..." matches the usage-error regex, so the CLI
-    // exits 2 (usage), not 3 (error).
+    // "no project named..." throws UsageError, so the CLI exits 2 (usage),
+    // not 3 (error).
     const result = lattice(nativeConsumer.root, ["context", "nonexistent"]);
     expect(result.exitCode).toBe(2);
   });

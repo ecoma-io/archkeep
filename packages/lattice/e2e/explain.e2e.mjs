@@ -75,8 +75,8 @@ describe("explain", () => {
   it("exits 3 for a site with no import at that position", () => {
     const result = lattice(nativeConsumer.root, ["explain", "libs/app/app.go:1:1"]);
     // Line 1 is `package app` — no import there. The CLI reports "no import
-    // site at..." which does not match the usage-error patterns, so it exits
-    // 3 (error), not 2 (usage).
+    // site at..." as a plain Error, not a UsageError, so it exits 3 (error),
+    // not 2 (usage).
     expect(result.exitCode).toBe(3);
   });
 
