@@ -274,8 +274,12 @@ the dependency direction the scope axis in
 [the workspace's boundary law](../../module-boundaries.config.mjs) exists to
 refuse. They are byte-identical to
 [the Rust binding's](../lattice-rule-sdk-rust/README.md) copies, and the
-verdicts pinned against them are the same verdicts, which is what a cross-SDK
-conformance gate will hold the two to.
+verdicts pinned against them are the same verdicts. What holds the two to that
+is no longer a promise:
+[`rule-sdks.integration.test.mjs`](../lattice/src/conformance/rule-sdks.integration.test.mjs)
+reads every SDK's copy of every fixture and requires them byte-identical, then
+drives all four committed artifacts through the engine's real host and requires
+one verdict document from each.
 
 `examples/forbidden_tag_dependency/golden_test.go` pins the verdict each must
 produce. Two of the five are there for the silent direction: a rule that cannot
