@@ -2001,6 +2001,140 @@ export const boundarySuppressions = [];
     }
   }, 30_000);
 
+  /**
+   * Issue #218's workspace, written to its own tmpdir: one declared project,
+   * a tracked `libs/version.ts` owned by no project, and an import of it.
+   * `exemptVersion: false` writes the SAME tree without that exempt row, which
+   * is the red-in-the-silent-direction companion — nothing else moves.
+   */
+  const writeExemptFixture = (fixtureRoot, { exemptVersion }) => {
+    const writeF = (relativePath, text) => {
+      mkdirSync(join(fixtureRoot, relativePath, ".."), { recursive: true });
+      writeFileSync(join(fixtureRoot, relativePath), text);
+    };
+    writeF(
+      "lattice.json",
+      JSON.stringify({
+        projects: {
+          declared: [{ root: "libs/core", name: "core", type: "lib", tags: ["layer:core"] }],
+        },
+        boundaryConfig: "module-boundaries.config.mjs",
+        tsConfig: "tsconfig.base.json",
+        coverage: {
+          exempt: [
+            { path: "module-boundaries.config.mjs", reason: "boundary law itself" },
+            ...(exemptVersion
+              ? [
+                  {
+                    path: "libs/version.ts",
+                    reason: "a tracked workspace file owned by no project",
+                  },
+                ]
+              : []),
+          ],
+        },
+      }),
+    );
+    writeF(
+      "module-boundaries.config.mjs",
+      `export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const depConstraints = [
+  { sourceTag: "layer:core", onlyDependOnLibsWithTags: ["layer:core"] },
+];
+`,
+    );
+    // Bundler resolution is what maps the `.js` spelling onto the `.ts`
+    // sibling, exactly as the issue's workspace resolved them.
+    writeF(
+      "tsconfig.base.json",
+      JSON.stringify({ compilerOptions: { module: "esnext", moduleResolution: "bundler" } }),
+    );
+    writeF("libs/version.ts", 'export const VERSION = "1.0.0";\n');
+    writeF("libs/core/util.ts", 'export const UTIL = "util";\n');
+    writeF(
+      "libs/core/index.ts",
+      'import { VERSION } from "../version.js";\n' +
+        'import { UTIL } from "./util.js";\n' +
+        "export const core = VERSION + UTIL;\n",
+    );
+    return [
+      "lattice.json",
+      "module-boundaries.config.mjs",
+      "tsconfig.base.json",
+      "libs/version.ts",
+      "libs/core/util.ts",
+      "libs/core/index.ts",
+    ];
+  };
+
+  it("leaves an import of a coverage-exempt file unconstrained, counted in the notes (#218)", async () => {
+    const exemptRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-exempt-"));
+    try {
+      const files = writeExemptFixture(exemptRoot, { exemptVersion: true });
+      const exemptContext = { cwd: exemptRoot, listFiles: () => files };
+
+      // Both imports judged: the exempt-file one unconstrained, the sibling
+      // `./util.js` control inside the project as it always was.
+      const { report, violations } = await check(
+        { format: "text", config: null, paths: [] },
+        exemptContext,
+      );
+      expect(violations).toBe(0);
+      expect(report).not.toContain("noRelativeOrAbsoluteExternals");
+      expect(report).toContain("2 files exempted from coverage");
+      expect(report).toContain(
+        "1 import resolves into those files and is left unconstrained — " +
+          "neither project edges nor external imports",
+      );
+
+      // The JSON envelope states the same fact on the surface that already
+      // exists — coverage.notes — and the verdict stays clean.
+      const { report: jsonReport } = await check(
+        { format: "json", config: null, paths: [] },
+        exemptContext,
+      );
+      const envelope = JSON.parse(jsonReport);
+      expect(envelope.status).toBe("ok");
+      expect(envelope.exitCode).toBe(EXIT.ok);
+      expect(envelope.coverage.complete).toBe(true);
+      expect(envelope.coverage.notes).toContain(
+        "1 import resolves into those files and is left unconstrained — " +
+          "neither project edges nor external imports",
+      );
+    } finally {
+      rmSync(exemptRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("still reports the import when no exempt row covers the target file — the silent direction (#218)", async () => {
+    const unexemptRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-unexempt-"));
+    try {
+      const files = writeExemptFixture(unexemptRoot, { exemptVersion: false });
+      const { report, violations, unchecked } = await check(
+        { format: "text", config: null, paths: [] },
+        { cwd: unexemptRoot, listFiles: () => files },
+      );
+      // Both loud halves at once: the target file itself turns up as an
+      // unclaimed whole-file failure, and the import keeps the verdict it had
+      // before the exemption existed. A fix that silenced unresolved paths
+      // wholesale turns this red.
+      expect(violations).toBe(1);
+      expect(unchecked).toBe(1);
+      expect(report).toContain("noRelativeOrAbsoluteExternals");
+    } finally {
+      rmSync(unexemptRoot, { recursive: true, force: true });
+    }
+  });
+
   it("keeps an unresolved bare-package import a blind spot — a workspace with packages is normal", async () => {
     // The OTHER side of the discriminator, and what keeps the native selfcheck
     // green: a native copy of this repository sees hundreds of bare-package

@@ -65,7 +65,17 @@ row -- a row setting neither is rejected as pointless.
 An array of `{ path, reason }` rows. `path` is a glob over a
 workspace-relative path; `reason` is **mandatory** and non-empty. A waiver with
 no reason is indistinguishable from coverage that quietly stopped being
-enforced.
+enforced. A row matching no unclaimed analyzable tracked file is refused as
+stale when the run starts, and rows are matched over the files no project owns
+-- so even a wide glob (`**`, a whole directory) can never name a file a
+project owns, and no judgment that needs a claimed target can be silenced.
+
+Exemption answers the boundary question too, not only the coverage one: an
+import that resolves into an exempt file is judged unconstrained -- neither a
+project-to-project edge nor an external import -- instead of being reported as
+`noRelativeOrAbsoluteExternals`. Every such import is counted in the run's
+coverage notes directly after the exempted-file count, so "not constrained,
+by this declaration" stays distinguishable from "not analyzed".
 
 ### `workspaceLayout`
 

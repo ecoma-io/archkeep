@@ -128,7 +128,7 @@ import { formatSarif } from "./src/report/sarif.mjs";
 import { formatReport } from "./src/report/text.mjs";
 
 import { LATTICE_MODEL_FILE, loadNativeModel } from "./src/providers/native/model.mjs";
-import { evaluate } from "./src/rules/index.mjs";
+import { evaluate, exemptResolvedFile } from "./src/rules/index.mjs";
 import { judgeTsconfigPaths } from "./src/tsconfig-paths.mjs";
 import { findWorkspaceRoot, listTrackedFiles } from "./src/workspace.mjs";
 
@@ -1021,6 +1021,27 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
         `coverage by ${LATTICE_MODEL_FILE}'s coverage.exempt`
       : null;
 
+  // The other half of the same fact (#218): an import whose record resolved
+  // INTO one of those files is judged unconstrained — neither a project edge
+  // nor an external import (`../src/rules/index.mjs`'s `exemptResolvedFile`,
+  // the same predicate the rule engine decided the site with, not a second
+  // membership test that could drift from it). Without this count, "the run
+  // chose not to constrain these imports" and "these imports never existed"
+  // would render identically — the silent direction again. Stated only when
+  // nonzero, so a workspace with exempt files but no imports of them keeps
+  // byte-identical output; and always directly after `exemptionNote`, which
+  // is what "those files" below points at.
+  const exemptedSet = new Set(exemptedFiles);
+  const unconstrainedExemptImports = imports.filter(
+    (site) => exemptResolvedFile(site, exemptedSet) !== null,
+  ).length;
+  const unconstrainedImportNote =
+    unconstrainedExemptImports > 0
+      ? `${unconstrainedExemptImports} import${unconstrainedExemptImports === 1 ? "" : "s"} ` +
+        `resolve${unconstrainedExemptImports === 1 ? "s" : ""} into those files and ` +
+        `${unconstrainedExemptImports === 1 ? "is" : "are"} left unconstrained — neither project edges nor external imports`
+      : null;
+
   // Ready-to-ship policy facts have always been sourced from `boundaryConfig`
   // via `src/config.mjs`'s `notes`; the intent check's own coverage notes ride
   // the same seam so both surfaces (text and JSON) thread them identically —
@@ -1029,6 +1050,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     ...(config.notes ?? []),
     ...(intent === null ? [] : intent.notes),
     ...(exemptionNote === null ? [] : [exemptionNote]),
+    ...(unconstrainedImportNote === null ? [] : [unconstrainedImportNote]),
   ];
 
   // A polyglot coverage gap: the Nx graph carries no polyglot edges because

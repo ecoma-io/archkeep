@@ -198,7 +198,9 @@ Exempt it in `lattice.json`, with the reason on record:
 `coverage.exempt` is the general answer for any tracked, analyzable file that
 sits outside every project root, not only this one --
 [../reference/configuration.md](../reference/configuration.md) has the full
-field.
+field. Importing an exempt file from a project is legal: the check judges such
+an import neither a cross-project edge nor an external import, and counts it
+in the run's coverage notes rather than reporting it as a violation.
 
 ## 5. Run the check
 

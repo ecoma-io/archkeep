@@ -328,6 +328,102 @@ describe("evaluate", () => {
     });
   });
 
+  describe("coverage-exempt targets (#218)", () => {
+    // A `coverage.exempt` row declares a tracked, analyzable file to belong to
+    // no project. What reaches the engine is the CONCRETE list of those files,
+    // riding the graph (`exemptedFiles`) — expanded once at discovery over
+    // unowned files only (`../providers/native/coverage.mjs`'s
+    // `judgeCoverage`), never the globs the rows are written with. These
+    // fixtures restate that expansion's output by hand.
+    const exemptGraph = (exemptedFiles) =>
+      graphOf([project("alpha", { tags: ["zone:x"] })], { exemptedFiles });
+
+    const exemptSite = () =>
+      site({
+        specifier: "../../../outside/present",
+        resolved: {
+          target: null,
+          file: "outside/present.ts",
+          external: true,
+          packageName: null,
+        },
+      });
+
+    it("leaves an import that resolved to a coverage-exempt file unconstrained", () => {
+      const violations = evaluate(
+        [exemptSite()],
+        exemptGraph(["outside/present.ts"]),
+        config(permissive),
+      );
+      expect(violations).toEqual([]);
+    });
+
+    it("still reports the import when the list names a different file", () => {
+      // The near miss that matters — the red-in-the-silent-direction case:
+      // exemption is exact-path membership against the concrete list, not
+      // "resolved to no project, so shrug". A change that blanketed every
+      // unresolved path turns this test red.
+      const violations = evaluate(
+        [exemptSite()],
+        exemptGraph(["elsewhere/kept.ts"]),
+        config(permissive),
+      );
+      expect(idsOf(violations)).toEqual(["noRelativeOrAbsoluteExternals"]);
+    });
+
+    it("keeps a bare specifier into an exempt file out of the external-import checks", () => {
+      // The exemption branch sits BEFORE external-node synthesis. Without it,
+      // this record becomes `npm:@fixture/version` and the ban below fires
+      // against a package that does not exist — the same false description as
+      // the relative spelling, one branch later.
+      const banning = [{ sourceTag: "zone:x", bannedExternalImports: ["@fixture/version"] }];
+      const violations = evaluate(
+        [
+          site({
+            specifier: "@fixture/version",
+            spelling: { path: false, relative: false },
+            resolved: {
+              target: null,
+              file: "outside/present.ts",
+              external: true,
+              packageName: null,
+            },
+          }),
+        ],
+        exemptGraph(["outside/present.ts"]),
+        config(banning),
+      );
+      expect(violations).toEqual([]);
+    });
+
+    it("judges a claimed target normally even if its file appears in the list", () => {
+      // The boundary-off-switch guard, stated structurally: a project-owned
+      // file can never enter the concrete list (`judgeCoverage` matches rows
+      // against unowned files only), and even if one somehow did, the guard
+      // behind which the exemption sits (`!targetProject`) keeps every
+      // judgment that needs a claimed target running.
+      const graph = graphOf(
+        [project("alpha", { tags: ["zone:x"] }), project("beta", { tags: ["zone:y"] })],
+        { exemptedFiles: ["area/beta/src/index.ts"] },
+      );
+      const violations = evaluate(
+        [site()],
+        graph,
+        config([{ sourceTag: "zone:x", onlyDependOnLibsWithTags: ["zone:x"] }]),
+      );
+      expect(idsOf(violations)).toEqual(["onlyTagsConstraintViolation"]);
+    });
+
+    it("still reports an unresolved relative path when the list is non-empty", () => {
+      const violations = evaluate(
+        [site({ specifier: "../../../gone", resolved: null })],
+        exemptGraph(["outside/present.ts"]),
+        config(permissive),
+      );
+      expect(idsOf(violations)).toEqual(["noRelativeOrAbsoluteExternals"]);
+    });
+  });
+
   describe("noCircularDependencies", () => {
     const cyclicGraph = () =>
       graphOf([project("alpha", { tags: ["zone:x"] }), project("beta", { tags: ["zone:y"] })], {
