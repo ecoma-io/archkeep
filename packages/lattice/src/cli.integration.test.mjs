@@ -6392,19 +6392,37 @@ describe("surfacing an ESLint boundaryConfig dialect's note on the coverage line
     listFiles: () => ["nx.json", "eslint.config.mjs", "libs/store/go.mod", "libs/store/store.go"],
   };
 
-  it("renders the note on the report's coverage line, next to what was inspected", async () => {
-    const { report, violations } = await check(
-      { format: "text", config: join(eslintRoot, "eslint.config.mjs"), paths: [] },
-      eslintContext,
-    );
-    expect(violations).toBe(0);
-    // The claim of no violations must sit beside the coverage sentence, and
-    // the coverage sentence must carry the note — a note computed and never
-    // shown would be the silent direction with extra steps.
-    expect(report).toContain("✔ no boundary violations");
-    expect(report).toContain("scopes @nx/enforce-module-boundaries under files");
-    expect(report).toContain("applied the table tree-wide");
-  });
+  it(
+    "renders the note on the report's coverage line, next to what was inspected",
+    { timeout: 30_000 },
+    async () => {
+      // The budget is explicit for the reason
+      // `./conformance/presets-published.integration.test.mjs`'s pack test states
+      // its own: this case does REAL work whose cost vitest's 5s default was
+      // never sized for, and the red it produces reads like a regression in the
+      // thing under test rather than like a clock.
+      //
+      // The work is loading a real ESLint flat config through the real resolver,
+      // which pulls in `@nx/eslint-plugin` and `eslint` themselves. Measured
+      // three ways on one tree: 600ms when a sibling file in the same vitest
+      // worker had already imported that graph, 2.7s in isolation paying the
+      // cold import, and past 5s on the Node 24 CI lane. Which of the three this
+      // test gets is decided by vitest's file-to-worker assignment, so a commit
+      // that adds a test file ANYWHERE can flip it — one did, which is how this
+      // line came to be written.
+      const { report, violations } = await check(
+        { format: "text", config: join(eslintRoot, "eslint.config.mjs"), paths: [] },
+        eslintContext,
+      );
+      expect(violations).toBe(0);
+      // The claim of no violations must sit beside the coverage sentence, and
+      // the coverage sentence must carry the note — a note computed and never
+      // shown would be the silent direction with extra steps.
+      expect(report).toContain("✔ no boundary violations");
+      expect(report).toContain("scopes @nx/enforce-module-boundaries under files");
+      expect(report).toContain("applied the table tree-wide");
+    },
+  );
 });
 
 describe("the option surface", () => {
