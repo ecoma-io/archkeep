@@ -91,17 +91,34 @@ function context(overrides = {}) {
 const POLICY = { depConstraints: [], options: {} };
 
 /** Drives the fold with an in-memory artifact store. */
-function fold(rules, { scoped = false, reads = [], commandContext = context() } = {}) {
+function fold(
+  rules,
+  { scoped = false, reads = [], commandContext = context(), collectEvidence = false } = {},
+) {
   const bytesFor = new Map(rules.map(({ row, bytes }) => [row.artifact, bytes]));
   return customRulesForCheck(commandContext, {
     rows: rules.map(({ row }) => row),
     policy: POLICY,
     scoped,
+    collectEvidence,
     readArtifact: (artifact) => {
       reads.push(artifact);
       return bytesFor.get(artifact) ?? null;
     },
   });
+}
+
+/**
+ * The one bundle a single-rule fold built, as the document a rule reads.
+ *
+ * Going through the serialized bytes rather than reaching for `observedFacts`
+ * is the point: what a rule is judged over is the wire, and a fact this module
+ * failed to put on it is invisible from any other vantage.
+ */
+async function bundleFrom(commandContext) {
+  const { evidence } = await fold([declared()], { commandContext, collectEvidence: true });
+  expect(evidence).toHaveLength(1);
+  return JSON.parse(new TextDecoder().decode(evidence[0].bytes));
 }
 
 describe("declaresCustomRules", () => {
@@ -346,5 +363,74 @@ describe("a path-scoped run", () => {
       readArtifact: () => null,
     });
     expect(decisions[0].verdict).toBe("not_applicable");
+  });
+});
+
+describe("the facts this module puts on the wire", () => {
+  // `observedFacts` reads a provider's graph, and a provider is free to leave
+  // out what it has nothing to say about. Each fallback below is the branch
+  // that decides what a rule SEES when it does — and a wrong one here is not
+  // an exception anywhere, it is a rule judging a workspace that differs from
+  // the real one in a way no failure names.
+
+  it("files a node that states no name under the key it is filed at", async () => {
+    // A graph whose node object carries no `name` is not a nameless project:
+    // the key IS the name, and `buildEvidenceBundle` refuses a project without
+    // one — so the fallback is what keeps a legitimate provider shape from
+    // reaching the bundle's refusal as though the graph were unreadable.
+    const graph = {
+      nodes: {
+        app: { data: { root: "libs/app", tags: ["layer-app"] } },
+        ring: { name: "ring", data: { root: "libs/ring" } },
+      },
+      dependencies: {},
+    };
+    const bundle = await bundleFrom(context({ graph, owned: [], analysis: { imports: [] } }));
+
+    expect(bundle.model.projects.map((project) => project.name)).toEqual(["app", "ring"]);
+    expect(bundle.model.projects.find((project) => project.name === "app").root).toBe("libs/app");
+  });
+
+  it("carries an empty edge list for a graph that states no dependencies at all", async () => {
+    // The state a provider reports for a workspace whose projects reach
+    // nothing — and the one this fallback must not turn into a throw, because
+    // "no edges" and "the graph could not be read" are the two claims the
+    // whole contract exists to keep apart. The rule is handed an empty list,
+    // which it can judge; there is nothing here to report as unknown.
+    const graph = {
+      nodes: { app: { name: "app", data: { root: "libs/app", tags: ["layer-app"] } } },
+    };
+    const bundle = await bundleFrom(context({ graph, owned: [], analysis: { imports: [] } }));
+
+    expect(bundle.graph.edges).toEqual([]);
+    expect(bundle.model.projects).toHaveLength(1);
+  });
+
+  it("reads a node's tags as the untagged project it is when the key is absent", async () => {
+    // `ring` in the shared context carries no `tags`, and the empty list is a
+    // FACT about it rather than a gap in what was read — the same reading
+    // `../rules/` gives an untagged project.
+    const bundle = await bundleFrom(context());
+    expect(bundle.model.projects.find((project) => project.name === "ring").tags).toEqual([]);
+  });
+});
+
+describe("what a decision says it found", () => {
+  it("counts one finding in the singular", async () => {
+    // Two findings are covered above; one is its own branch, and a message
+    // reading "reported 1 findings" is the kind of thing a reader stops
+    // trusting the rest of the line over.
+    const { decisions } = await fold([
+      declared({
+        verdictJson: verdictJson({
+          verdict: "fail",
+          findings: [{ id: FINDING, message: "the app layer reached a ring internal" }],
+        }),
+      }),
+    ]);
+
+    expect(decisions[0].verdict).toBe("fail");
+    expect(decisions[0].message).toBe("reported 1 finding");
+    expect(decisions[0].evidence.findings).toBe(1);
   });
 });
