@@ -58,6 +58,14 @@
  *   would produce a spurious record.
  * - **`mod` is not an import.** A `mod` declaration names a file inside the
  *   same crate, so it crosses no project boundary and is never recorded.
+ * - **A UTF-8 BOM before a first-line statement is tolerated** (`contract.md`,
+ *   byte tolerance): every anchor here is `^` or a character class the BOM
+ *   fails, so an editor-written `\uFEFF` used to drop a first-line `use` and
+ *   a first-line `extern crate` — records gone with no failure beside them.
+ *   The BOM is blanked to a space, not stripped, so every offset stays an
+ *   offset into the file as it sits on disk; the bare-path and fully-qualified
+ *   forms needed nothing, their `(^|[^…])` prefix already reads the BOM as
+ *   ordinary preceding text.
  *
  * **A renamed dependency IS followed, scoped to the project that renamed
  * it.** `dep = { package = "real", path = "../real" }` in a project's own
@@ -435,6 +443,10 @@ export function useRootSegment(path) {
  * @returns {{ specifier: string, root: string|null, kind: string, offset: number }[]}
  */
 export function parseRustUseSites(rustText, knownCrates = new Set()) {
+  // A UTF-8 BOM is blanked, not stripped (see the header's byte-tolerance
+  // bullet): same length, so every offset below stays an offset into the
+  // original, and `^`-anchored forms see a line that starts like any other.
+  const source = rustText.replace(/^\uFEFF/, " ");
   const sites = [];
   const claimed = [];
 
@@ -457,7 +469,7 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
   // starting the string branch. The terminating `;` is matched as a
   // lookahead rather than consumed, so it is still there — unclaimed — for a
   // second `use` sharing the same line to open its own match against.
-  for (const m of rustText.matchAll(
+  for (const m of source.matchAll(
     /(?:^|[{;}])[ \t]*(?:(?:#\[(?:"(?:[^"\\]|\\.)*"|[^"\]])*\][ \t]*)+)?(pub(?:\s*\([^)]*\))?[ \t]+)?use[ \t\r\n]+([^;]*)(?=;)/gm,
   )) {
     // The match no longer includes the terminating `;`, so the path starts
@@ -497,9 +509,7 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
     claimed.push([m.index, m.index + m[0].length]);
   }
 
-  for (const m of rustText.matchAll(
-    /^[ \t]*(?:pub[ \t]+)?extern[ \t]+crate[ \t]+([A-Za-z_]\w*)/gm,
-  )) {
+  for (const m of source.matchAll(/^[ \t]*(?:pub[ \t]+)?extern[ \t]+crate[ \t]+([A-Za-z_]\w*)/gm)) {
     sites.push({
       specifier: m[1],
       root: m[1],
@@ -511,14 +521,14 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
 
   const unclaimed = (offset) => !claimed.some(([start, end]) => offset >= start && offset < end);
 
-  for (const m of rustText.matchAll(/(^|[^:\w])::([A-Za-z_]\w*)::/gm)) {
+  for (const m of source.matchAll(/(^|[^:\w])::([A-Za-z_]\w*)::/gm)) {
     const offset = m.index + m[1].length;
     if (!unclaimed(offset)) continue;
     sites.push({ specifier: `::${m[2]}::`, root: m[2], kind: "static", offset });
   }
 
   if (knownCrates.size > 0) {
-    for (const m of rustText.matchAll(/(^|[^:\w.])([A-Za-z_]\w*)::/gm)) {
+    for (const m of source.matchAll(/(^|[^:\w.])([A-Za-z_]\w*)::/gm)) {
       const offset = m.index + m[1].length;
       if (!knownCrates.has(crateIdentifier(m[2])) || !unclaimed(offset)) continue;
       sites.push({ specifier: `${m[2]}::`, root: m[2], kind: "static", offset });

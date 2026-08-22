@@ -57,6 +57,18 @@ describe("parseGoModulePath", () => {
     // project silently drops out of the module map in both edge directions.
     expect(parseGoModulePath('module "example.com/beta"\n\ngo 1.24\n')).toBe("example.com/beta");
   });
+
+  it("reads a module directive written behind a UTF-8 BOM (#221)", () => {
+    // Issue #221's root cause: `/^module\s+/m` never matches through a
+    // leading `\uFEFF`, so parseGoModulePath returned null and the whole
+    // project dropped out of the module map — no nodes, no edges, its
+    // violations reported as none while `check` claimed coverage.
+    expect(parseGoModulePath("\uFEFFmodule example.com/acme/tool\ngo 1.24\n")).toBe(
+      "example.com/acme/tool",
+    );
+    // A quoted path behind a BOM reads the same as its clean twin.
+    expect(parseGoModulePath('\uFEFFmodule "example.com/beta"\n')).toBe("example.com/beta");
+  });
 });
 
 describe("maskGoComments", () => {
@@ -635,6 +647,57 @@ describe("parseGoImportSites", () => {
 });
 
 describe("analyzeGo", () => {
+  // Issue #221's fixture: alpha's manifest is the one an editor wrote a BOM
+  // into. Before the fix its module path read as null and alpha was absent
+  // from the module map — so an import reaching INTO alpha resolved as if
+  // alpha were a proxy package, and `resolveGoDependencies` drew no edge in
+  // either direction.
+  const bomWorkspace = {
+    root: "/w",
+    projects: [
+      { name: "alpha", root: "acme/libs/alpha" },
+      { name: "beta", root: "acme/libs/beta" },
+      { name: "gamma", root: "acme/apps/gamma" },
+    ],
+    filesOf: (name) =>
+      ({
+        alpha: ["acme/libs/alpha/go.mod"],
+        beta: ["acme/libs/beta/go.mod"],
+        gamma: ["acme/apps/gamma/go.mod", "acme/apps/gamma/main.go"],
+      })[name] ?? [],
+    readFile: (path) =>
+      ({
+        "acme/libs/alpha/go.mod": "\uFEFFmodule example.com/acme/alpha\n",
+        "acme/libs/beta/go.mod": "module example.com/acme/beta\n",
+        "acme/apps/gamma/go.mod": "module example.com/acme/gamma\n",
+        "acme/apps/gamma/main.go": 'package main\n\nimport "example.com/acme/alpha/feature"\n',
+      })[path] ?? null,
+  };
+
+  it("resolves an import into a project whose go.mod carries a UTF-8 BOM (#221)", () => {
+    const { imports, failures } = analyzeGo({
+      sourceFile: "acme/apps/gamma/main.go",
+      text: 'package main\n\nimport "example.com/acme/alpha/feature"\n',
+      workspace: bomWorkspace,
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].specifier).toBe("example.com/acme/alpha/feature");
+    expect(imports[0].resolved).toMatchObject({ target: "alpha", external: false });
+  });
+
+  it("draws the graph edge a BOM-prefixed go.mod hides (#221)", () => {
+    expect(
+      resolveGoDependencies(bomWorkspace.projects, bomWorkspace.filesOf, bomWorkspace.readFile),
+    ).toEqual([
+      {
+        source: "gamma",
+        target: "alpha",
+        sourceFile: "acme/apps/gamma/main.go",
+        type: "static",
+      },
+    ]);
+  });
+
   const workspace = {
     root: "/w",
     projects: [

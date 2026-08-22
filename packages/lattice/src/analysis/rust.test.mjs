@@ -285,6 +285,27 @@ describe("useRootSegment", () => {
 });
 
 describe("parseRustUseSites", () => {
+  it("reads a first-line use and a first-line extern crate behind a UTF-8 BOM (#221)", () => {
+    // Issue #221's Rust half: every anchor here is `^` or a character class
+    // the BOM fails, so both first-line forms produced no record at all —
+    // gone with no failure beside them. The offset must slice its crate name
+    // out of the ORIGINAL text: the BOM is blanked to one space, never
+    // stripped, so nothing after it moves.
+    const source = "\uFEFFuse engine_core::task::Task;\n";
+    const sites = parseRustUseSites(source);
+    expect(sites.map((site) => [site.root, site.specifier])).toEqual([
+      ["engine_core", "engine_core::task::Task"],
+    ]);
+    expect(source.slice(sites[0].offset, sites[0].offset + "engine_core".length)).toBe(
+      "engine_core",
+    );
+
+    const extern = "\uFEFFextern crate legacy_crate;\n";
+    const externSites = parseRustUseSites(extern);
+    expect(externSites.map((site) => site.root)).toEqual(["legacy_crate"]);
+    expect(extern.slice(externSites[0].offset)).toMatch(/^legacy_crate/);
+  });
+
   it("reads a use, a pub use, an extern crate and an inline ::path", () => {
     const source = [
       "use engine_core::Task;", // 1
@@ -444,6 +465,19 @@ describe("analyzeRust", () => {
     expect(failures).toEqual([]);
     expect(imports[0].resolved.target).toBe("core");
     expect(imports[0].specifier).toBe("engine_core::task::Task");
+  });
+
+  it("crosses a boundary written behind a UTF-8 BOM on the file's first line (#221)", () => {
+    // The silent-miss direction for issue #221: the BOM failed every anchor,
+    // so a first-line `use` of a declared crate recorded nothing and the
+    // crossing reported exactly like a clean file. The column is what an
+    // editor shows for this text: the BOM occupies column 1, `use ` columns
+    // 2–5, and the path starts at column 6.
+    const { imports, failures } = analyze("\uFEFFuse engine_core::task::Task;\n");
+    expect(failures).toEqual([]);
+    expect(imports[0].specifier).toBe("engine_core::task::Task");
+    expect(imports[0].resolved.target).toBe("core");
+    expect(imports[0]).toMatchObject({ line: 1, column: 6 });
   });
 
   it("crosses a boundary written behind a same-line attribute, with the full specifier (D-08)", () => {
