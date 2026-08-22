@@ -43,10 +43,14 @@
  *   and a `;` inside a comment or string can let a `use` written there be
  *   read — both are the accepted spurious-record trade (text the file really
  *   contains), never a missed project.
- * - **A `use` whose path opens with a brace group** — `use {a::b, c::d};` —
- *   names no crate before the group. It is recorded with `resolved: null` and
- *   a failure, because guessing which of the group's arms was meant is exactly
- *   the guessing the contract forbids; the record is never dropped.
+ * - **A `use` whose path opens with a brace group** — `use {a::b, c::d};` — is
+ *   a LIST of paths and is read as one: each arm names its own crate at its
+ *   head, so the statement means exactly `use a::b; use c::d;` and produces one
+ *   record per arm, at the arm's own position. Nothing is guessed, because
+ *   nothing is ambiguous. Only text that is not a well-formed group — braces
+ *   that do not balance, or anything after the group's close — keeps the older
+ *   answer: one record with `resolved: null` and a failure beside it, never a
+ *   dropped record.
  * - **Uniform paths are ambiguous and resolved toward the crate.** Since Rust
  *   2018, `use foo::Bar` can name either an extern crate `foo` or a local
  *   `mod foo`. A first segment matching another project's crate name is read
@@ -330,6 +334,73 @@ function isOwnProjectPath(root, owner, byCrate) {
 }
 
 /**
+ * The arms of a `use` path that opens with a brace group, each with its offset
+ * inside `path`.
+ *
+ * `use {a::b, c::d};` is not ambiguous and never was: the group is a list, and
+ * every arm is a complete path naming its own crate at its head — the
+ * statement means exactly `use a::b; use c::d;`. Reading it as "names no crate"
+ * cost every arm its record, which is what made 29 files of a real Rust
+ * repository report dependencies nothing could see (`scripts/coverage-real-trees.mjs`
+ * pins the count that found it).
+ *
+ * Splitting is done by hand rather than by a regex because commas nest:
+ * `{a::{b, c}, d::e}` has two top-level arms, and a comma-split would produce
+ * three. Depth is counted over `{}` only — a `use` path holds no other
+ * bracket.
+ *
+ * Returns `null` for a group whose braces do not balance, which keeps the
+ * loud path for text that is not a well-formed group: a half-read group is
+ * exactly the guess this analyzer refuses.
+ *
+ * @param {string} path The `use` path, from the first non-space to the `;`.
+ * @returns {{text: string, offset: number}[] | null}
+ */
+export function braceGroupArms(path) {
+  const open = path.indexOf("{");
+  if (open === -1 || path.slice(0, open).trim() !== "") return null;
+  /** @type {{text: string, offset: number}[]} */
+  const arms = [];
+  let depth = 0;
+  let start = -1;
+  for (let index = open; index < path.length; index += 1) {
+    const character = path[index];
+    if (character === "{") {
+      depth += 1;
+      if (depth === 1) start = index + 1;
+      continue;
+    }
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        arms.push({ text: path.slice(start, index), offset: start });
+        // Anything after the group's close is not a path this reader knows how
+        // to split — `use {a}::b;` is not Rust — so it is left to the caller's
+        // loud path rather than half-read.
+        if (path.slice(index + 1).trim() !== "") return null;
+        start = -1;
+      }
+      if (depth < 0) return null;
+      continue;
+    }
+    if (character === "," && depth === 1) {
+      arms.push({ text: path.slice(start, index), offset: start });
+      start = index + 1;
+    }
+  }
+  if (depth !== 0 || start !== -1) return null;
+  return arms
+    .map((arm) => {
+      // Each arm carries its own leading whitespace, so the offset moves with
+      // the trim: a record's column must point at the arm, not at the comma
+      // before it.
+      const lead = arm.text.length - arm.text.trimStart().length;
+      return { text: arm.text.trim().replace(/\s+/gu, " "), offset: arm.offset + lead };
+    })
+    .filter((arm) => arm.text !== "");
+}
+
+/**
  * The crate segment a `use` path starts with, or `null` when the path opens
  * with a brace group and names none.
  */
@@ -398,10 +469,29 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
     // printed in `file:line:column: specifier` reports, so line breaks are
     // collapsed — Rust has no single-token module specifier to keep verbatim.
     const specifier = path.trim().replace(/\s+/g, " ");
+    const kind = m[1] ? "re-export" : "static";
+    // A path opening with a brace group is a LIST of paths, and each arm names
+    // its own crate — see `braceGroupArms`. One site per arm, at the arm's own
+    // position, so a report sends a reader to the import they have to change.
+    // `null` back from the splitter means the text is not a well-formed group,
+    // and the single `root: null` site below keeps that loud.
+    const arms = braceGroupArms(path);
+    if (arms !== null) {
+      for (const arm of arms) {
+        sites.push({
+          specifier: arm.text,
+          root: useRootSegment(arm.text),
+          kind,
+          offset: pathOffset + arm.offset,
+        });
+      }
+      claimed.push([m.index, m.index + m[0].length]);
+      continue;
+    }
     sites.push({
       specifier,
       root: useRootSegment(path),
-      kind: m[1] ? "re-export" : "static",
+      kind,
       offset: pathOffset + lead,
     });
     claimed.push([m.index, m.index + m[0].length]);

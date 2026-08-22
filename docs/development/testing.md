@@ -118,9 +118,10 @@ that stopped being reported is a file that now looks read.
 It runs weekly beside the differential, in the same workflow and with the same
 posture — not a required check, because it depends on third-party repositories
 being reachable, and a red run is a regression rather than a flake. Its tree
-table records what each count means, including the one real gap the first run
-found: the Rust analyzer cannot read a top-level `use { a::b, c::d };` brace
-group, which ripgrep writes 29 times.
+table records what each count means, including the gap its first run found and
+the fix that followed: the Rust analyzer could not read a top-level
+`use { a::b, c::d };` brace group, which ripgrep writes 29 times, and reading it
+as the list of paths it is turned 29 failures into 72 records.
 
 ### Conformance — the differential against ESLint
 

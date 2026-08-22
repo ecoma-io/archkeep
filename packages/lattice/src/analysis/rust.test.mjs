@@ -568,12 +568,57 @@ describe("analyzeRust", () => {
     expect(imports[0].resolved.target).toBe("core");
   });
 
-  it("records a brace-group use as unresolvable rather than guessing an arm of it", () => {
-    const { imports, failures } = analyze("use {engine_core::Task, serde::de};\n");
+  it("reads a brace-group use as the list of paths it is, one record per arm", () => {
+    // `use {a::b, c::d};` means exactly `use a::b; use c::d;` — nothing about
+    // it is ambiguous, and reading it as "names no crate" cost every arm its
+    // record. Each arm resolves on its own, and the columns point at the arms
+    // rather than at the statement, so a report sends a reader to the import
+    // they have to change.
+    const source = "use {engine_core::Task, serde::de};\n";
+    const { imports, failures } = analyze(source);
+    expect(failures).toEqual([]);
+    expect(imports.map((record) => record.specifier)).toEqual(["engine_core::Task", "serde::de"]);
+    expect(imports.map((record) => record.resolved.target)).toEqual(["core", null]);
+    expect(imports.map((record) => record.column)).toEqual([
+      source.indexOf("engine_core::Task") + 1,
+      source.indexOf("serde::de") + 1,
+    ]);
+  });
+
+  it("splits a brace group at its TOP level only, so a nested group stays one arm", () => {
+    // A comma-split would read `{a::{b, c}, d::e}` as three arms and invent a
+    // crate named `c`. Depth is what keeps the record count honest.
+    const { imports, failures } = analyze("use {engine_core::{Task, Job}, serde::de};\n");
+    expect(failures).toEqual([]);
+    expect(imports.map((record) => record.specifier)).toEqual([
+      "engine_core::{Task, Job}",
+      "serde::de",
+    ]);
+  });
+
+  it("collapses a brace group written across lines, at the arm's own position", () => {
+    const source = "use {\n  engine_core::Task,\n  serde::de,\n};\n";
+    const { imports, failures } = analyze(source);
+    expect(failures).toEqual([]);
+    expect(imports.map((record) => [record.line, record.specifier])).toEqual([
+      [2, "engine_core::Task"],
+      [3, "serde::de"],
+    ]);
+  });
+
+  it("keeps the loud answer for text that is not a well-formed group", () => {
+    // The red direction of the split. Braces that do not balance are not a
+    // list this reader can split, and half-reading one would be the guessing
+    // the contract forbids — so the older answer stands: one record with
+    // `resolved: null` and a failure beside it, never a dropped record.
+    const { imports, failures } = analyze("use {engine_core::Task, serde::de\n;\n");
     expect(imports[0].resolved).toBeNull();
-    expect(imports[0].specifier).toBe("{engine_core::Task, serde::de}");
-    expect(failures[0].reason).toMatch(/opens with a brace group/);
-    expect(failures[0].line).toBe(1);
+    expect(failures[0].reason).toMatch(/opens with a brace group/u);
+  });
+
+  it("keeps a pub use's re-export kind on every arm of a group", () => {
+    const { imports } = analyze("pub use {engine_core::Task, serde::de};\n");
+    expect(imports.map((record) => record.kind)).toEqual(["re-export", "re-export"]);
   });
 
   it("reads nested manifests, and keeps one that is not a crate out of the crate map", () => {

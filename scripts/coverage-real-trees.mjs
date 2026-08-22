@@ -64,14 +64,14 @@ import { analyzeFile } from "../packages/lattice/src/analysis/analyze.mjs";
  * - **gin** reads clean: 0 failures over 99 Go files. Every import in the tree
  *   is a plain quoted specifier, which is the shape the Go analyzer's declared
  *   limits are written around.
- * - **ripgrep** hits a declared limit of the Rust analyzer 29 times, always the
- *   same one: `use { a::b, c::d };` — a top-level brace group naming no crate
- *   at its head. The analyzer reports each as a failure rather than dropping
- *   it, which is the loud direction, but those crate dependencies are invisible
- *   to the graph. That is a real gap this lane exists to have found, and it is
- *   recorded here rather than fixed in the same change: changing what is
- *   reported on an unchanged workspace is a breaking change (`../AGENTS.md`)
- *   and belongs in its own reviewed commit.
+ * - **ripgrep** reads clean, and the first measurement is why. Before this lane
+ *   existed the same tree reported 439 records and **29 failures**, every one
+ *   of them the same shape: `use { a::b, c::d };`, a top-level brace group the
+ *   Rust analyzer read as naming no crate. Nothing about that statement is
+ *   ambiguous — it means exactly `use a::b; use c::d;` — so those 29 statements
+ *   became 72 arm records, and the failures went to zero. This is the gap the
+ *   lane was written to find, found on its first run; the counts here are the
+ *   ones after the fix.
  * - **requests** hits the analysis contract's own decision twice: a dynamic
  *   import whose argument is not a literal resolves to nothing and is reported
  *   unresolvable rather than dropped (`packages/lattice/src/analysis/contract.md`).
@@ -94,7 +94,7 @@ export const TREES = Object.freeze([
     license: "MIT",
     language: "rust",
     extensions: Object.freeze([".rs"]),
-    expected: Object.freeze({ sources: 110, records: 439, unreadable: 29 }),
+    expected: Object.freeze({ sources: 110, records: 482, unreadable: 0 }),
   }),
   Object.freeze({
     name: "requests",

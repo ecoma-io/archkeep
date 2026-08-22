@@ -161,10 +161,14 @@ the rename lands on the same project the graph edge already points at.
   optional `pub`/`pub(crate)`, read to the first `;`. A `use` inside a raw string
   that starts its own line would be read; a `use` preceded on the same line by an
   attribute or another statement would not. `rustfmt` produces neither.
-- **A `use` opening with a brace group** — `use {a::b, c::d};` — names no crate
-  before the group. It is recorded with `resolved: null` _and a failure_, because
-  guessing which arm was meant is exactly the guessing the contract forbids. The
-  record is never dropped.
+- **A `use` opening with a brace group** — `use {a::b, c::d};` — is a LIST of
+  paths and is read as one: each arm names its own crate at its head, so the
+  statement means exactly `use a::b; use c::d;` and produces one record per arm,
+  at the arm's own line and column. Nothing is guessed, because nothing is
+  ambiguous. Only text that is not a well-formed group — braces that do not
+  balance, or anything written after the group's close — keeps the older answer:
+  one record with `resolved: null` _and a failure_ beside it. The record is
+  never dropped either way.
 - **Uniform paths are resolved toward the crate.** Since Rust 2018 `use foo::Bar`
   can name an extern crate or a local `mod foo`. A first segment matching another
   project's crate name is read as that crate, so a local module deliberately

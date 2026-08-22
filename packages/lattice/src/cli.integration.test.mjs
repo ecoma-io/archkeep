@@ -6511,7 +6511,7 @@ describe("the bare-path dispatcher", () => {
   });
 });
 
-describe("a Rust brace-group use, one blind spot the JSON envelope must carry too", () => {
+describe("a Rust use whose braces do not balance, one blind spot the envelope must carry", () => {
   // Its own fixture: none of the Go-only fixtures above exercise a second
   // language, and the blind-spot half of `coverage` — a file that WAS
   // analyzed, with one site whose target is not statically knowable — needs a
@@ -6543,11 +6543,16 @@ export const moduleBoundaryOptions = {
 `,
   );
   writeRust("libs/widget/Cargo.toml", '[package]\nname = "widget"\nversion = "0.1.0"\n');
-  // A `use` opening with a brace group names no crate to resolve
-  // (`../src/analysis/rust.mjs`'s `parseRustUseSites`) — the file is
-  // analyzed, this one site is not, and that is a blind spot rather than a
-  // whole-file failure: `coverage.complete` must stay true over it.
-  writeRust("libs/widget/src/lib.rs", "use {a::b, c::d};\n");
+  // A `use` whose braces do not balance is not a list this reader can split,
+  // so it names no crate to resolve (`../src/analysis/rust.mjs`'s
+  // `braceGroupArms` returns null and the caller keeps the loud answer) — the
+  // file is analyzed, this one site is not, and that is a blind spot rather
+  // than a whole-file failure: `coverage.complete` must stay true over it.
+  //
+  // A WELL-FORMED group is deliberately not the fixture any more: it resolves
+  // now, one record per arm, so using it here would leave this case asserting
+  // an empty blind-spot list and proving nothing.
+  writeRust("libs/widget/src/lib.rs", "use {a::b, c::d\n;\n");
 
   const rustContext = {
     cwd: rustRoot,
@@ -6569,7 +6574,7 @@ export const moduleBoundaryOptions = {
     ],
   };
 
-  it("names the brace-group site in coverage.blindSpots, and leaves coverage.complete true", async () => {
+  it("names the unsplittable-group site in coverage.blindSpots, and leaves coverage.complete true", async () => {
     const { report, violations, unchecked } = await check(
       { format: "json", config: null, paths: [] },
       rustContext,
@@ -6585,7 +6590,7 @@ export const moduleBoundaryOptions = {
         file: "libs/widget/src/lib.rs",
         line: 1,
         column: 5,
-        reason: "'use {a::b, c::d}' opens with a brace group, so it names no crate to resolve",
+        reason: "'use {a::b, c::d' opens with a brace group, so it names no crate to resolve",
       },
     ]);
   });
