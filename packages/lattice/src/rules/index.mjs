@@ -23,6 +23,20 @@
  * the npm branch (a transitive-dependency report does not stop the banned-import
  * check) and the nested-banned check (one report per offending package).
  *
+ * The chain has a second reader: the suppression table. A suppression must
+ * behave like a fix
+ * (`../../../../docs/reference/violations.md`, "The order matters") —
+ * suppressing the verdict a site reports has to reveal the next check down the
+ * order at the same line, exactly as editing the specifier would. So
+ * `candidateGroupsFor` yields, in order, every check's verdict the site could
+ * produce if each earlier one were fixed, and the evaluation picks the first
+ * group no suppression removes. With nothing suppressed, the first group is
+ * emitted untouched: one violation per site, byte-for-byte the verdict
+ * upstream's order defines. A group is yielded only where its own preconditions
+ * hold on the site — a tags verdict needs a resolved target project, the
+ * project-to-project block needs a project node — so a suppression can never
+ * surface a verdict the site could not actually produce.
+ *
  * ## Where this engine is stricter than upstream, and why never the other way
  *
  * The dangerous failure for a boundary checker is a false NEGATIVE: reporting
@@ -321,7 +335,7 @@ function createContext(importSites, graph, config) {
  * resolves the path to a file, so a relative specifier never reaches its npm
  * lookup at all. Deriving a name from a path here produced garbage that looked
  * like a package (`".."` from `../../../outside/present`, `""` from
- * `/outside/present`), and any target — however synthetic — makes `evaluateSite`
+ * `/outside/present`), and any target — however synthetic — makes the site
  * skip the one branch that reports `noRelativeOrAbsoluteExternals`. Nothing is
  * lost by refusing: what is refused here is exactly what that branch reports.
  */
@@ -426,19 +440,28 @@ function violationOf(site, sourceProject, targetProject, messageId, data = {}, c
  * The tag block — upstream's last step, and the one with the two inversions
  * that make or break a reimplementation.
  *
- * @returns {Violation[]}
+ * Yielded as groups in the order this block has always reported: the first
+ * firing check across all matching constraints is the first
+ * group, and each later constraint's verdict — reachable only by fixing or
+ * suppressing the one before it — is a later group. TRAP 2's AND semantics are
+ * unchanged: the FIRST group is decided exactly as the early return decided
+ * it, and nothing below it is judged into the verdict unless something removed
+ * the group above.
+ *
+ * @returns {Generator<Violation[]>}
  */
-function evaluateConstraints(site, sourceProject, targetProject, ctx) {
+function* constraintGroupsFor(site, sourceProject, targetProject, ctx) {
   const { depConstraints, options, graph, reach } = ctx;
-  if (depConstraints.length === 0) return [];
+  if (depConstraints.length === 0) return;
 
   const constraints = findConstraintsFor(depConstraints, sourceProject);
   // TRAP 1 — no matching constraint is an ERROR, not a pass. Upstream's own
   // comment: "when no constrains found => error. Force the user to provision
   // them." Read it the natural way and every untagged or mis-tagged project
-  // escapes the boundary while the tool reports green.
+  // escapes the boundary while the tool reports green. Nothing sits below the
+  // tag block, so this ends the chain.
   if (constraints.length === 0) {
-    return [
+    yield [
       violationOf(
         site,
         sourceProject,
@@ -447,6 +470,7 @@ function evaluateConstraints(site, sourceProject, targetProject, ctx) {
         {},
       ),
     ];
+    return;
   }
 
   const transitiveExternalDeps = options.checkNestedExternalImports
@@ -463,7 +487,7 @@ function evaluateConstraints(site, sourceProject, targetProject, ctx) {
       emptyOnlyTagsViolation(constraint, targetProject) ??
       notTagsViolation(constraint, targetProject, graph, reach);
     if (tagVerdict) {
-      return [
+      yield [
         violationOf(
           site,
           sourceProject,
@@ -473,6 +497,7 @@ function evaluateConstraints(site, sourceProject, targetProject, ctx) {
           constraint,
         ),
       ];
+      continue;
     }
 
     if (
@@ -489,7 +514,7 @@ function evaluateConstraints(site, sourceProject, targetProject, ctx) {
       // One violation per offending package — the only check in the engine that
       // reports more than once for a single import site.
       if (matches.length > 0) {
-        return matches.map(([, violatingSource, matchedConstraint]) =>
+        yield matches.map(([, violatingSource, matchedConstraint]) =>
           violationOf(
             site,
             sourceProject,
@@ -506,15 +531,45 @@ function evaluateConstraints(site, sourceProject, targetProject, ctx) {
       }
     }
   }
-  return [];
 }
 
 /**
- * One import site, judged in upstream's order.
+ * One import site's whole candidate chain, in upstream's order.
  *
- * @returns {Violation[]}
+ * Each yielded array is a GROUP of simultaneous violations — what the site
+ * reports at that point of the chain. Most checks yield one violation; two
+ * places yield several at once, unchanged from upstream: the npm branch (a
+ * transitive-dependency report does not stop the banned-import check) and the
+ * nested-banned check (one report per offending package). The evaluation picks
+ * the first group in which something survives the suppression table, so the
+ * chain is only ever walked past a group the table removed entirely — a
+ * suppression behaves like a fix, revealing the next check at the same line
+ * (`../../../../docs/reference/violations.md`, "The order matters"), never
+ * skipping a site or inventing a verdict whose preconditions do not hold.
+ *
+ * The places this generator RETURNS rather than yields-and-continues are the
+ * places nothing below is genuinely reachable:
+ *
+ * - `allow`, a file in no project — outside the boundary system entirely;
+ * - no resolved target — every check below needs one;
+ * - a self-project import (`source === target`) whose self-pair the ignore map
+ *   does not excuse — fixing the barrel round-trip lands back inside the same
+ *   project, where none of those checks judge. A self-pair EXCUSED by
+ *   `ignoredCircularDependencies` falls through exactly as this engine has
+ *   always fallen through, so its chain reaches the project-to-project block;
+ * - an npm target — upstream returns before the tag block, so no external
+ *   import can produce a tags violation;
+ * - a non-project node.
+ *
+ * Everything else CONTINUES: fixing a cycle leaves the same import to be
+ * judged by the apps/e2e/buildable/lazy checks and the constraint table, which
+ * is exactly what a suppression standing in for that fix must reveal.
+ *
+ * @param {object} site Analysis record — see `../analysis/contract.md`.
+ * @param {object} ctx From `createContext`.
+ * @returns {Generator<Violation[]>}
  */
-function evaluateSite(site, ctx) {
+function* candidateGroupsFor(site, ctx) {
   const { graph, options, mappings, reach, fileIndex, ignored, depConstraints } = ctx;
   const imp = site.specifier;
 
@@ -523,11 +578,11 @@ function evaluateSite(site, ctx) {
   // Not the resolved file path, and not minimatch: swap in a glob library and
   // every existing escape hatch quietly stops matching. Checked first, so an
   // allowed specifier is exempt from all fifteen rules.
-  if (options.allow.some((allowed) => matchImportWithWildcard(allowed, imp))) return [];
+  if (options.allow.some((allowed) => matchImportWithWildcard(allowed, imp))) return;
 
   const sourceProject = graph.nodes[findProjectForPath(site.sourceFile, mappings)];
   // A file in no project is outside the boundary system entirely.
-  if (!sourceProject) return [];
+  if (!sourceProject) return;
 
   // Relative and absolute paths are judged on their TEXT, before any resolution:
   // the projects can be correct and the spelling still be the violation.
@@ -537,47 +592,47 @@ function evaluateSite(site, ctx) {
     : graph.nodes[getTargetProjectBasedOnRelativeImport(imp, site.sourceFile, mappings)];
 
   if ((targetProject && sourceProject !== targetProject) || absoluteIntoAnotherProject) {
-    return [
+    yield [
       violationOf(site, sourceProject, targetProject, "noRelativeOrAbsoluteImportsAcrossLibraries"),
     ];
+    // The spelling was the violation, not the edge: with the specifier written
+    // through the project's public name — or with the spelling suppressed — the
+    // SAME target project reaches the checks below. `targetProject` is already
+    // resolved, so resolution is not run again.
+  } else {
+    // A coverage-exempt file is resolvable and unconstrained (#218): the record
+    // resolved to a real tracked workspace file that `coverage.exempt` declared
+    // to belong to no project, so this import is neither a project-to-project
+    // edge nor an external one. It sits BEFORE `resolveTargetNode` because that
+    // is what synthesises the external node: downstream of it a bare or aliased
+    // specifier resolving into an exempt file has already become
+    // `npm:<specifier>`, a package that does not exist, which is the false
+    // description this branch exists to stop. A file a project owns can never
+    // enter the exempt set (`exemptResolvedFile`), so this can only take a site
+    // whose target is outside every project; a relative path resolving outside
+    // every project still reaches `noRelativeOrAbsoluteExternals` below.
+    if (
+      !targetProject &&
+      site.resolved?.target == null &&
+      exemptResolvedFile(site, ctx.exemptedFiles) !== null
+    ) {
+      return;
+    }
+    targetProject = targetProject ?? resolveTargetNode(site, ctx);
   }
-
-  // A coverage-exempt file is resolvable and unconstrained (#218): the record
-  // resolved to a real tracked workspace file that `coverage.exempt` declared
-  // to belong to no project, so this import is neither a project-to-project
-  // edge nor an external one — and it must not be reported as either. Checked
-  // BEFORE any external node is synthesised: without this, a bare or aliased
-  // specifier resolving into an exempt file would become `npm:<specifier>` and
-  // reach the external-import checks as a package that does not exist, which
-  // is exactly the false description this branch exists to stop. The two-part
-  // guard keeps every judgment that needs a claimed target running: no target
-  // by the specifier's own path arithmetic, AND none in the record's
-  // resolution — a file owned by a project can never enter the exempt set
-  // (`exemptResolvedFile`), so this can only ever take a site whose target is
-  // outside every project. What remains reportable here is unchanged: a
-  // relative path resolving outside every project still reaches the
-  // `noRelativeOrAbsoluteExternals` branch below.
-  if (
-    !targetProject &&
-    site.resolved?.target == null &&
-    exemptResolvedFile(site, ctx.exemptedFiles) !== null
-  ) {
-    return [];
-  }
-
-  targetProject = targetProject ?? resolveTargetNode(site, ctx);
 
   if (!targetProject) {
     // A bare `.` or `..` counts as a path at this point though it did not count
     // as one above — see `isPathSpecifier`, which `externalNodeFor` refuses on
     // so that every path reaching here is reported rather than given a target.
     if (isPathSpecifier(site)) {
-      return [violationOf(site, sourceProject, null, "noRelativeOrAbsoluteExternals")];
+      yield [violationOf(site, sourceProject, null, "noRelativeOrAbsoluteExternals")];
+      return;
     }
     if (options.banTransitiveDependencies && !isBuiltinModuleImport(imp)) {
-      return [violationOf(site, sourceProject, null, "noTransitiveDependencies")];
+      yield [violationOf(site, sourceProject, null, "noTransitiveDependencies")];
     }
-    return [];
+    return;
   }
 
   // A file reaching its own project through the project's public alias instead
@@ -592,6 +647,14 @@ function evaluateSite(site, ctx) {
   // relative import form at all, so treating one as evidence of a barrel cycle
   // would demand syntax the language does not have, and its compiler already
   // forbids the cycle this rule looks for.
+  // The early return keeps upstream's shape — with one exception carried over
+  // from the flat-list engine byte for byte: a self-pair the ignore map excuses
+  // (`ignoredCircularDependencies: [["p", "p"]]`) fell through to the
+  // project-to-project block below and still does. Restoring that fall-through
+  // is what keeps a workspace with no suppressions byte-identical: measured
+  // against this engine's previous revision, such an import reached the tag
+  // block and could report `onlyTagsConstraintViolation` or
+  // `noImportsOfApps` on the self-edge.
   if (
     sourceProject === targetProject &&
     !circularPathHasPair([sourceProject, targetProject], ignored)
@@ -601,11 +664,11 @@ function evaluateSite(site, ctx) {
       !spellingOf(site).relative &&
       !belongsToDifferentEntryPoint(site.resolved?.file ?? null, site.sourceFile, sourceProject)
     ) {
-      return [
+      yield [
         violationOf(site, sourceProject, targetProject, "noSelfCircularDependencies", { imp }),
       ];
     }
-    return [];
+    return;
   }
 
   if (targetProject.type === "npm") {
@@ -639,10 +702,11 @@ function evaluateSite(site, ctx) {
     // An npm target NEVER reaches the tag block below — so no external import
     // can produce `projectWithoutTagsCannotHaveDependencies`, however untagged
     // its source project is.
-    return found;
+    if (found.length > 0) yield found;
+    return;
   }
 
-  if (!isProjectGraphProjectNode(targetProject)) return [];
+  if (!isProjectGraphProjectNode(targetProject)) return;
 
   const circular = circularViolation({
     reach,
@@ -654,14 +718,13 @@ function evaluateSite(site, ctx) {
     ignored,
   });
   if (circular) {
-    return [violationOf(site, sourceProject, targetProject, circular.messageId, circular.data)];
+    yield [violationOf(site, sourceProject, targetProject, circular.messageId, circular.data)];
   }
 
   if (targetProject.type === "app" && !appIsMFERemote(targetProject)) {
-    return [violationOf(site, sourceProject, targetProject, "noImportsOfApps")];
-  }
-  if (targetProject.type === "e2e") {
-    return [violationOf(site, sourceProject, targetProject, "noImportsOfE2e")];
+    yield [violationOf(site, sourceProject, targetProject, "noImportsOfApps")];
+  } else if (targetProject.type === "e2e") {
+    yield [violationOf(site, sourceProject, targetProject, "noImportsOfE2e")];
   }
 
   if (
@@ -671,7 +734,7 @@ function evaluateSite(site, ctx) {
     hasBuildExecutor(sourceProject, options.buildTargets) &&
     !hasBuildExecutor(targetProject, options.buildTargets)
   ) {
-    return [violationOf(site, sourceProject, targetProject, "noImportOfNonBuildableLibraries")];
+    yield [violationOf(site, sourceProject, targetProject, "noImportOfNonBuildableLibraries")];
   }
 
   // `kind === "static"` stands in for upstream's "an `import` declaration that
@@ -691,65 +754,124 @@ function evaluateSite(site, ctx) {
       fileIndex,
     });
     if (lazy) {
-      return [violationOf(site, sourceProject, targetProject, lazy.messageId, lazy.data)];
+      yield [violationOf(site, sourceProject, targetProject, lazy.messageId, lazy.data)];
     }
   }
 
-  return evaluateConstraints(site, sourceProject, targetProject, ctx);
+  yield* constraintGroupsFor(site, sourceProject, targetProject, ctx);
 }
 
 /**
- * Applies the suppression/waiver table to a run's violations. `config.mjs`'s
- * `findBoundaryConfigViolations` validated the table; this is where the rows
- * act.
+ * Whether any SUPPRESSING row (fate `"suppress"` — a legacy row, no expiry)
+ * covers this violation. A waiver's fates (`"waive"`, `"reassert"`) never
+ * remove a violation, so they never decide which group a site reports — they
+ * only annotate it (`../governance/waiver.mjs`).
  *
- * A legacy row (no `expiresAt`) suppresses — removes the violation, unchanged
- * from before waivers existed. A row WITH `expiresAt` is a waiver, and the
- * fate is time-dependent (`../governance/waiver.mjs`):
- *
- * - active → the violation is kept and marked `waivedBy` (the row), so the
- *   report can render it under "accepted violations". It is NOT removed: a
- *   run whose only findings are waived is not clean, because accepting a
- *   boundary breach for a fixed term is a tracked decision, not a fix.
- * - expired → the violation is kept, carrying `evidence: "expired waiver"`.
- *   A waiver whose term has lapsed covers nothing, and the boundary it
- *   accepted is live again.
- *
- * Marking rather than removing keeps `evaluate` returning the same shape
- * (a `Violation[]`), which is what every caller — `check`, the language
- * server, the descriptive commands, the conformance differential — already
- * expects, and it is the property that makes waiving unable to hide a
- * violation: the violation is still in the array, still counted, still exit-1.
- *
- * @param {object[]} violations The engine's raw findings.
  * @param {object[]} suppressions The validated `boundarySuppressions` table.
+ * @param {object} violation
  * @param {string} now Reference instant (ISO-8601).
- * @returns {object[]}
+ * @returns {boolean}
  */
-function applySuppressions(violations, suppressions, now) {
-  return violations.filter((violation) => {
-    for (const entry of suppressions) {
-      if (!suppressionCovers(entry, violation)) continue;
-      const fate = suppressionFate(entry, now);
-      if (fate === "suppress") return false;
-      if (fate === "waive") {
-        violation.waivedBy = entry;
-        return true;
-      }
-      violation.evidence = EXPIRED_WAIVER_EVIDENCE;
-      return true;
-    }
-    return true;
-  });
+function removedByTable(suppressions, violation, now) {
+  for (const entry of suppressions) {
+    if (!suppressionCovers(entry, violation)) continue;
+    if (suppressionFate(entry, now) === "suppress") return true;
+  }
+  return false;
 }
 
 /**
- * The raw violations a site set produces BEFORE any suppression is removed, as
- * `evaluate` would see them. `evaluate` itself reports the filtered set — the
- * boundary as it stands after the workspace accepted its waivers — while the
- * waiver surface (how much of the law is currently waived) needs the count that
- * WAS suppressed, which the filtered result cannot express. The two are a
- * superset/subset: `waived = raw − evaluated`, byte-for-byte.
+ * The annotation the table puts on a violation that SURVIVES it: `waivedBy`
+ * for an active waiver's acceptance, `evidence` for one whose term lapsed.
+ * Copied rather than mutated so `evaluateRun`'s two results never share a
+ * marked object — the raw superset states what the law found, unannotated.
+ *
+ * @param {object[]} suppressions The validated `boundarySuppressions` table.
+ * @param {object} violation
+ * @param {string} now Reference instant (ISO-8601).
+ * @returns {object}
+ */
+function annotatedByTable(suppressions, violation, now) {
+  for (const entry of suppressions) {
+    if (!suppressionCovers(entry, violation)) continue;
+    if (suppressionFate(entry, now) === "waive") return { ...violation, waivedBy: entry };
+    return { ...violation, evidence: EXPIRED_WAIVER_EVIDENCE };
+  }
+  return violation;
+}
+
+/**
+ * One run of the engine over every import site: the judged verdict per site
+ * plus the raw superset it was picked from.
+ *
+ * Per site, `candidateGroupsFor` yields the site's candidate groups in
+ * upstream's order; this walk picks the FIRST group in which at least one
+ * violation survives the suppression table. Groups before it — every verdict
+ * the table removed entirely — are exactly what the raw superset carries above
+ * the verdict, which is the arithmetic the waiver surface is built on:
+ * `raw − evaluated = what the table hides`, per site, byte-for-byte. A group
+ * partially covered keeps its surviving members (an npm target reported as
+ * both transitive and banned, with only the transitive half suppressed, still
+ * reports the banned half), unchanged from when the table filtered flat lists.
+ *
+ * @param {object[]} importSites Analysis records — see `../analysis/contract.md`.
+ * @param {ProjectGraph} graph
+ * @param {{depConstraints: object[], options: object, suppressions?: object[], now?: string}} config
+ *   As `loadBoundaryConfig` returns it, plus an optional `now` (ISO-8601
+ *   reference instant) used only to decide waiver expiry; defaults to the
+ *   shared governance clock.
+ * @returns {{violations: object[], rawViolations: object[]}} `violations` is
+ *   the run's verdict — one group per site, waivers/expiry annotated;
+ *   `rawViolations` is every candidate up to and including each site's selected
+ *   group, unannotated. Exported for the one caller that needs both faces of a
+ *   single walk (`cli.mjs`'s `check`, whose dead-suppression-row refusal
+ *   measures each row against `rawViolations`) — everywhere else takes
+ *   `evaluate` or `evaluateWithSuppressions`, which are this function's two
+ *   fields under thinner names.
+ */
+export function evaluateRun(importSites, graph, config) {
+  const ctx = createContext(importSites, graph, config);
+  const now = config?.now ?? referenceTime();
+  /** @type {object[]} */
+  const violations = [];
+  /** @type {object[]} */
+  const rawViolations = [];
+  for (const site of importSites) {
+    /** @type {object[]} */
+    const hidden = [];
+    let selected = false;
+    for (const group of candidateGroupsFor(site, ctx)) {
+      const survivors =
+        ctx.suppressions.length === 0
+          ? group
+          : group.filter((violation) => !removedByTable(ctx.suppressions, violation, now));
+      if (survivors.length === 0) {
+        hidden.push(...group);
+        continue;
+      }
+      // The first group something survived in IS the site's verdict; everything
+      // collected before it is what the table hid to get there.
+      violations.push(
+        ...survivors.map((violation) => annotatedByTable(ctx.suppressions, violation, now)),
+      );
+      rawViolations.push(...hidden, ...group);
+      selected = true;
+      break;
+    }
+    if (!selected) rawViolations.push(...hidden);
+  }
+  return { violations, rawViolations };
+}
+
+/**
+ * The raw violations a site set produces BEFORE any suppression removes one,
+ * as `evaluate` would see them — every candidate up to each site's selected
+ * group, including the verdicts the table hides. `evaluate` itself reports the
+ * filtered verdict — the boundary as it stands after the workspace accepted its
+ * suppressions — while the waiver surface (how much of the law is currently
+ * waived) needs the count that WAS suppressed, which the filtered result cannot
+ * express. The two are a superset/subset: `waived = raw − evaluated`,
+ * byte-for-byte.
  *
  * @param {object[]} importSites Analysis records — see `../analysis/contract.md`.
  * @param {ProjectGraph} graph
@@ -757,10 +879,7 @@ function applySuppressions(violations, suppressions, now) {
  * @returns {Violation[]} in the order the sites were given, nothing removed.
  */
 export function evaluateWithSuppressions(importSites, graph, config) {
-  const ctx = createContext(importSites, graph, config);
-  const violations = [];
-  for (const site of importSites) violations.push(...evaluateSite(site, ctx));
-  return violations;
+  return evaluateRun(importSites, graph, config).rawViolations;
 }
 
 /**
@@ -769,18 +888,31 @@ export function evaluateWithSuppressions(importSites, graph, config) {
  * Pure: the same three arguments always produce the same violations, and none
  * of them is read from disk here.
  *
- * ## Suppressions and waivers are a filter over VERDICTS, never a skip over
- * sites
+ * ## Suppressions act on VERDICTS, never on sites — and a suppressed verdict
+ * must behave like a fix
  *
  * `config.suppressions` decides what happens to violations the workspace
- * accepted, each carrying the reason it was accepted (`../config.mjs`). The
- * filter runs AFTER every site has been judged, and that ordering is the
- * load-bearing part rather than an implementation detail: skipping a
- * suppressed file up front would also skip the checks that make this function
- * throw — a record naming a project the graph does not have, a malformed
- * config — and a suppression must never be able to silence "I could not tell".
- * A violation is a decision someone can accept; a failure is the absence of
- * one, and accepting it would turn a blind spot into a green light.
+ * accepted, each carrying the reason it was accepted (`../config.mjs`). Every
+ * site is judged before the table decides anything — the site's candidate
+ * chain is walked until a verdict survives it — and that ordering is
+ * load-bearing rather than an implementation detail: skipping a suppressed
+ * file up front would also skip the checks that make this function throw — a
+ * record naming a project the graph does not have, a malformed config — and a
+ * suppression must never be able to silence "I could not tell". A violation is
+ * a decision someone can accept; a failure is the absence of one, and
+ * accepting it would turn a blind spot into a green light.
+ *
+ * What the table removes is one VERDICT, never the checks below it. The first
+ * candidate group a suppressing row covers entirely is replaced by the next
+ * group down the documented order — suppressing
+ * `noRelativeOrAbsoluteImportsAcrossLibraries` on a cross-project import
+ * surfaces whatever the constraint table says about the same edge, exactly as
+ * rewriting the specifier would (`../../../../docs/reference/violations.md`,
+ * "The order matters"). With nothing suppressed, the first group is emitted
+ * untouched: one violation per site, byte-for-byte the verdict upstream's
+ * order defines. A later group exists only where its own preconditions hold on
+ * the site — a tags verdict needs a resolved target project — so fall-through
+ * invents nothing.
  *
  * The suppression vocabulary has no field that could name a failure either: an
  * entry carries a path glob, an optional `messageId` out of `MESSAGE_IDS`, its
@@ -789,19 +921,23 @@ export function evaluateWithSuppressions(importSites, graph, config) {
  * (`../analysis/contract.md`). Because the table never touches a failure, a
  * waiver over `unknown` is structurally impossible: a row can only match a
  * verdict this engine reached, and a verdict it could not reach never enters
- * this array.
+ * this array. That same judge-before-suppress ordering is why a waiver cannot
+ * promote `unknown` → `pass`: a logical consequence, not a second mechanism.
  *
- * The same ordering is why a waiver cannot promote `unknown` → `pass` either:
- * a full logical consequence of the filter-after-judgement rule, not a second
- * mechanism. And `applySuppressions` marks rather than removes for rows with
- * `expiresAt`, so an accepted violation stays counted — the empty-result
- * invariant (`../../../../AGENTS.md`) holds in the waiving direction too.
+ * Rows WITH `expiresAt` are waivers and mark rather than remove
+ * (`../governance/waiver.mjs`): an ACTIVE waiver keeps the violation it covers
+ * in the findings, marked `waivedBy` — the run stays non-zero, because
+ * accepting a boundary breach for a fixed term is a tracked decision, not a
+ * fix — and an EXPIRED one re-asserts with `evidence: "expired waiver"`.
+ * Neither fate removes a verdict, so neither moves a site down its chain; the
+ * empty-result invariant (`../../../../AGENTS.md`) holds in the waiving
+ * direction too.
  *
  * `evaluateWithSuppressions` (above) is the raw superset this function folds
- * down: it returns the violations BEFORE `applySuppressions`, so a caller that
- * needs to measure the waiver surface — how much of the law is currently
- * waived — can see the count that was suppressed, which the filtered result
- * cannot express. The two differ by exactly the rows a suppression covers.
+ * down — every candidate up to each site's selected group — so a caller that
+ * needs to measure the waiver surface can see exactly what the table removed,
+ * which the filtered result cannot express: `raw − evaluated` is the set of
+ * verdicts the suppressions hid.
  *
  * @param {object[]} importSites Analysis records — see `../analysis/contract.md`.
  * @param {ProjectGraph} graph
@@ -810,19 +946,17 @@ export function evaluateWithSuppressions(importSites, graph, config) {
  *   reference instant) used only to decide waiver expiry; defaults to the
  *   shared governance clock. An absent `suppressions` suppresses nothing, which
  *   is the direction that cannot hide a violation.
- * @returns {Violation[]} in the order the sites were given, minus the ones a
- *   suppression covers (legacy rows) — with the ones an ACTIVE waiver covers
- *   still present, marked `waivedBy`, and the ones an EXPIRED waiver covered
- *   present with `evidence: "expired waiver"`; a site may contribute zero, one,
- *   or (in two documented cases) several.
+ * @returns {Violation[]} per site, the first candidate group no suppression
+ *   removed — one violation in the common case, several only where upstream
+ *   reports more than once for one site (the npm branch; nested-banned, once
+ *   per offending package). Violations an ACTIVE waiver covers are present,
+ *   marked `waivedBy`; ones an EXPIRED waiver covered are present with
+ *   `evidence: "expired waiver"`.
  * @throws {Error} when the config is malformed, when the graph has no `nodes`,
  *   when a record carries no `spelling`, or when a record names a project the
  *   graph does not contain. Loud on purpose: an enforcer that starts on a
  *   broken input and reports nothing is indistinguishable from a clean tree.
  */
 export function evaluate(importSites, graph, config) {
-  const ctx = createContext(importSites, graph, config);
-  const violations = [];
-  for (const site of importSites) violations.push(...evaluateSite(site, ctx));
-  return applySuppressions(violations, ctx.suppressions, config?.now ?? referenceTime());
+  return evaluateRun(importSites, graph, config).violations;
 }

@@ -103,7 +103,7 @@ describe("boundaryMetrics", () => {
    * `depConstraints` below decides what the engine reports. */
   /** @param {object[]} [suppressions] @param {string} [now] A reference instant
    * for waiver expiration — carried on `config.now`, the same field the rule
-   * engine's `applySuppressions` reads. */
+   * engine reads. */
   const cfg = (suppressions = [], now) => ({
     ...(now === undefined ? {} : { now }),
     depConstraints: [],

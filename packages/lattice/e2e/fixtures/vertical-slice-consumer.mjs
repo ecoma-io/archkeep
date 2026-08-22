@@ -8,16 +8,20 @@
 // that reads the `feature:` axis relative to the source, and it is the only
 // thing in this workspace that can tell one slice from another.
 //
+// The table carries only the rows this tree instantiates — no `layer:host`
+// row, because no project here carries the tag. A constraint row selecting no
+// project refuses the run (#231), which is the law this suite's own config
+// has to live under like any other authored policy.
+//
 // The three Go modules wire their edges through `require` + `replace`, so the
 // graph the fitness function judges is the one the manifests really describe
 // — not a hand-built object. That is what makes this file an end-to-end
 // journey rather than a second unit test.
 
-/** The workspace's law: the vertical-slice rows, plus the isolation function. */
+/** The workspace's law: the vertical-slice rows this tree instantiates, plus the isolation function. */
 export const SLICE_BOUNDARY_CONFIG = `export const depConstraints = [
   { sourceTag: "layer:slice", onlyDependOnLibsWithTags: ["layer:slice", "layer:shared-kernel"] },
   { sourceTag: "layer:shared-kernel", onlyDependOnLibsWithTags: ["layer:shared-kernel"] },
-  { sourceTag: "layer:host", onlyDependOnLibsWithTags: ["layer:host", "layer:slice", "layer:shared-kernel"] },
 ];
 
 export const moduleBoundaryOptions = {

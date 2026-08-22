@@ -45,7 +45,7 @@ import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatWaiversReport } from "../report/waivers-text.mjs";
 import { refuseIncompleteGraph } from "./drift.mjs";
 import { resolveProvenance } from "./provenance.mjs";
-import { evaluate } from "../rules/index.mjs";
+import { evaluateRun } from "../rules/index.mjs";
 
 /**
  * The waivers verdict for a run: every waiver with its term and what it
@@ -53,9 +53,13 @@ import { evaluate } from "../rules/index.mjs";
  * row with no `expiresAt`) and what it is currently hiding. Pure per-row,
  * given the raw violations.
  *
- * `rawViolations` is the tree's violations WITH the suppression table removed —
- * the command evaluates with `suppressions: []` so each row's coverage is
- * judged against every finding, not against the run the table already cleaned.
+ * `rawViolations` is the run's raw superset — every candidate violation up to
+ * each site's surviving group, measured WITH the table in force, so a row
+ * whose hit sits behind another row's removal still counts as alive. Measuring
+ * against the first-candidate set instead (the pre-#216 baseline) read a row
+ * covering only a LATER check as stale while it was doing real work one
+ * suppression down the chain. `raw − evaluated = what the table hides` is the
+ * arithmetic this surface reports per row.
  * A waiver that covers nothing is a stale row, named as such: waivers are
  * recorded and never silently deleted, so the command surfaces a row whose
  * reason has lapsed rather than hiding it. A permanent suppression that
@@ -132,8 +136,8 @@ export function computeWaivers(suppressions, rawViolations, now = referenceTime(
 }
 
 /**
- * Runs the `waivers` command: loads the boundary law, evaluates the tree with
- * the table removed, and reports the waiver surface.
+ * Runs the `waivers` command: loads the boundary law, evaluates the tree over
+ * the raw candidate superset, and reports the waiver surface.
  *
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {object} boundaryConfig The run's boundary law, loaded and validated
@@ -178,10 +182,11 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
   // refuse (`drift.mjs`'s `refuseIncompleteGraph` is the ONE shared guard).
   refuseIncompleteGraph(commandContext, "measure waivers");
 
-  // Evaluate with the suppression table REMOVED, so every row's coverage is
-  // measured against the full finding set rather than the post-waiver run.
-  // `now` is threaded so the expiry judgement is the same one `check` makes.
-  const rawViolations = evaluate(analysis.imports, graph, { ...config, suppressions: [], now });
+  // Evaluate once, table in force: `evaluateRun`'s raw face is the candidate
+  // superset each row's coverage is measured against — see `computeWaivers`'s
+  // doc above. `now` is threaded so the expiry judgement is the same one
+  // `check` makes.
+  const rawViolations = evaluateRun(analysis.imports, graph, { ...config, now }).rawViolations;
 
   const { waivers, covered, expired, stale, suppressions, suppressed } = computeWaivers(
     config.suppressions ?? [],

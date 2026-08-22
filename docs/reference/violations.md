@@ -54,6 +54,14 @@ depends on where the site falls in this sequence. If you fix the reported proble
 and a different id appears at the same line, you have moved down the list rather
 than made things worse.
 
+A suppression behaves the same way, because it must: a `boundarySuppressions`
+row removes one verdict, and whatever check sits below the removed one then
+reports at the same line exactly as fixing the specifier would. A row that
+turned every later check off instead would be an off switch wearing a
+suppression's name -- [policy-schema.md](policy-schema.md#boundarysuppressions)
+owns that contract and the refusal for a row that has stopped covering
+anything.
+
 1. `allow` — a matching specifier is exempt from **all fifteen** and nothing below runs
 2. A file belonging to no project is skipped entirely
 3. Path spelling → **1, 2**

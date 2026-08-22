@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { evaluate, MESSAGE_IDS } from "./index.mjs";
+import { evaluate, evaluateWithSuppressions, MESSAGE_IDS } from "./index.mjs";
 
 /**
  * The engine is driven entirely from fixtures — no analyzer, no workspace, no
@@ -1368,6 +1368,253 @@ describe("evaluate", () => {
           suppressions: [{ path: "area/alpha/**", reason: "covers the whole project" }],
         }),
       ).toThrow(/resolved to project 'beta'/);
+    });
+
+    it("a suppressed verdict falls through to the checks below it, like a fix does", () => {
+      // Issue #216's shape: a relative cross-project import is step 3 of the
+      // documented order, and the SAME edge spelled through the alias violates
+      // the tag row — step 8. Removing the spelling verdict must surface the
+      // tags verdict at the same line, exactly as rewriting the specifier
+      // would. The old engine stopped the site at its first verdict, so this
+      // case reported NOTHING while the edge stayed in the tree — the silent
+      // direction this test exists to keep red.
+      const layering = [{ sourceTag: "zone:x", onlyDependOnLibsWithTags: ["zone:x"] }];
+      const violations = evaluate([crossing()], twoLibs(), {
+        ...config(layering),
+        suppressions: [
+          {
+            path: "**",
+            messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+            reason: "single-package repository: cross-project imports are relative",
+          },
+        ],
+      });
+      expect(idsOf(violations)).toEqual(["onlyTagsConstraintViolation"]);
+      expect(violations[0].line).toBe(3);
+      expect(violations[0].targetProject).toBe("beta");
+    });
+
+    it("falls through several steps at once when earlier ones are all covered", () => {
+      // Fixing the spelling AND retagging the dependency is two edits; the
+      // chain must reveal whatever sits behind both, never stop halfway and
+      // dress the remainder as clean.
+      const layering = [{ sourceTag: "zone:x", onlyDependOnLibsWithTags: ["zone:absent"] }];
+      const lazyGraph = graphOf(
+        [project("alpha", { tags: ["zone:x"] }), project("beta", { tags: ["zone:y"] })],
+        { dependencies: { alpha: [{ source: "alpha", target: "beta", type: "dynamic" }] } },
+      );
+      const violations = evaluate([crossing()], lazyGraph, {
+        ...config(layering),
+        suppressions: [
+          {
+            path: "**",
+            messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+            reason: "spelling accepted",
+          },
+          { path: "**", messageId: "noImportsOfLazyLoadedLibraries", reason: "loader accepted" },
+        ],
+      });
+      expect(idsOf(violations)).toEqual(["onlyTagsConstraintViolation"]);
+    });
+
+    it("never invents a verdict whose preconditions do not hold", () => {
+      // An unresolved path has NO target project, so nothing below the
+      // external-path check can judge it — no tags verdict exists to fall
+      // through to, and suppressing the one verdict must leave the site loud
+      // about nothing rather than reporting a check that cannot run.
+      const violations = evaluate(
+        [site({ specifier: "../../../outside/thing", resolved: null })],
+        twoLibs(),
+        {
+          ...config(permissive),
+          suppressions: [
+            { path: "**", messageId: "noRelativeOrAbsoluteExternals", reason: "vendored path" },
+          ],
+        },
+      );
+      expect(violations).toEqual([]);
+    });
+
+    it("ends a self-project import's chain at the barrel check, as the order requires", () => {
+      // A self-import through the public alias produces exactly one candidate:
+      // fixing it lands back inside the same project, where none of the
+      // project-to-project checks judge anything. Suppressing it must report
+      // nothing further — and must NOT invent a tags verdict for a same-project
+      // import. (The one exception is the next test: a self-pair the ignore
+      // map excuses never had the barrel verdict to remove.)
+      const selfImport = site({
+        specifier: "@fixture/alpha",
+        resolved: {
+          target: "alpha",
+          file: "area/alpha/src/other.ts",
+          external: false,
+          packageName: null,
+        },
+      });
+      const violations = evaluate([selfImport], twoLibs(), {
+        ...config(permissive),
+        suppressions: [
+          { path: "**", messageId: "noSelfCircularDependencies", reason: "barrel accepted" },
+        ],
+      });
+      expect(violations).toEqual([]);
+    });
+
+    it("a self-pair the ignore map excuses still falls through, as it always did", () => {
+      // The byte-identity corner: `ignoredCircularDependencies: [["alpha",
+      // "alpha"]]` excused the barrel verdict BEFORE this engine ever grew a
+      // candidate chain, and the excused import reached the project-to-project
+      // block — measured against the previous revision, such an import reported
+      // `onlyTagsConstraintViolation` on the self-edge. Restructuring the site
+      // into a chain must not change one byte of that.
+      const selfImport = site({
+        specifier: "@fixture/alpha",
+        resolved: {
+          target: "alpha",
+          file: "area/alpha/src/other.ts",
+          external: false,
+          packageName: null,
+        },
+      });
+      const violations = evaluate([selfImport], twoLibs(), {
+        ...config([{ sourceTag: "zone:x", onlyDependOnLibsWithTags: ["zone:y"] }], {
+          ignoredCircularDependencies: [["alpha", "alpha"]],
+        }),
+      });
+      expect(idsOf(violations)).toEqual(["onlyTagsConstraintViolation"]);
+      expect(violations[0].sourceProject).toBe("alpha");
+      expect(violations[0].targetProject).toBe("alpha");
+    });
+
+    it("keeps the surviving half of a partially covered npm pair", () => {
+      // The npm branch is upstream's one place two violations coexist. A row
+      // naming only the transitive id removes that half; the banned half was
+      // never covered and must stay, exactly as the flat filter left it.
+      const banning = [{ sourceTag: "zone:x", bannedExternalImports: ["@vendor/shell*"] }];
+      const violations = evaluate([external("@vendor/shell")], twoLibs(), {
+        ...config(banning, { banTransitiveDependencies: true }),
+        suppressions: [{ path: "**", messageId: "noTransitiveDependencies", reason: "hoisted" }],
+      });
+      expect(idsOf(violations)).toEqual(["bannedExternalImportsViolation"]);
+    });
+
+    it("a WAIVER never moves a site down its chain — accepting a verdict is not fixing it", () => {
+      // An active waiver marks and keeps the verdict it covers; the checks
+      // below stay unreached, the same as before waivers could expire. The
+      // fall-through belongs to rows that REMOVE a verdict, because removal is
+      // what stands in for a fix.
+      const NOW = "2026-08-16T10:00:00.000Z";
+      const layering = [{ sourceTag: "zone:x", onlyDependOnLibsWithTags: ["zone:x"] }];
+      const violations = evaluate([crossing()], twoLibs(), {
+        ...config(layering),
+        suppressions: [
+          {
+            path: "**",
+            messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+            reason: "accepted until the alias lands",
+            expiresAt: "2026-09-01T00:00:00.000Z",
+          },
+        ],
+        now: NOW,
+      });
+      expect(idsOf(violations)).toEqual(["noRelativeOrAbsoluteImportsAcrossLibraries"]);
+      expect(violations[0].waivedBy).toBeDefined();
+      expect(violations[0].evidence).toBeUndefined();
+    });
+
+    it("an EXPIRED waiver re-asserts its own verdict without falling through either", () => {
+      const NOW = "2026-09-02T10:00:00.000Z";
+      const layering = [{ sourceTag: "zone:x", onlyDependOnLibsWithTags: ["zone:x"] }];
+      const violations = evaluate([crossing()], twoLibs(), {
+        ...config(layering),
+        suppressions: [
+          {
+            path: "**",
+            messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+            reason: "accepted until the alias landed",
+            expiresAt: "2026-09-01T00:00:00.000Z",
+          },
+        ],
+        now: NOW,
+      });
+      expect(idsOf(violations)).toEqual(["noRelativeOrAbsoluteImportsAcrossLibraries"]);
+      expect(violations[0].evidence).toBe("expired waiver");
+    });
+
+    it("reports nothing extra when the whole chain is suppressed — but the raw superset still says what was hidden", () => {
+      const layering = [{ sourceTag: "zone:x", onlyDependOnLibsWithTags: ["zone:x"] }];
+      const suppressions = [
+        { path: "**", messageId: "noRelativeOrAbsoluteImportsAcrossLibraries", reason: "one" },
+        { path: "**", messageId: "onlyTagsConstraintViolation", reason: "two" },
+      ];
+      expect(evaluate([crossing()], twoLibs(), { ...config(layering), suppressions })).toEqual([]);
+    });
+
+    it("on a workspace with NO suppressions, the verdict is byte-identical to the raw superset", () => {
+      // The safety property behind #216's fix: the candidate chain is a
+      // restructure of how sites are judged, and on an unchanged workspace it
+      // must not change one byte of what `evaluate` reports. With nothing
+      // suppressed, every site reports its first group, so the run's verdict
+      // and its raw superset are the same bytes — which is also exactly what
+      // the pre-chain engine reported, pinned rule-by-rule by every other test
+      // in this file.
+      const layering = [{ sourceTag: "zone:x", onlyDependOnLibsWithTags: ["zone:x"] }];
+      const graph = graphOf(
+        [
+          project("alpha", { tags: ["zone:x"] }),
+          project("beta", { type: "e2e", tags: ["zone:y"] }),
+          project("gamma", { tags: ["zone:y"] }),
+        ],
+        {
+          dependencies: { alpha: [{ source: "alpha", target: "beta", type: "dynamic" }] },
+        },
+      );
+      const sites = [
+        crossing(),
+        external("@vendor/shell"),
+        site({ line: 9 }),
+        site({ specifier: "../../../outside/thing", resolved: null, line: 11 }),
+      ];
+      const judged = evaluate(sites, graph, config(layering));
+      const raw = evaluateWithSuppressions(sites, graph, config(layering));
+      expect(raw.length).toBeGreaterThan(0);
+      expect(JSON.stringify(judged)).toBe(JSON.stringify(raw));
+    });
+
+    it("raw − evaluated is exactly the set of verdicts the table removed", () => {
+      // The arithmetic the waiver surface is built on. The row removes the
+      // spelling verdict from two of the three sites (the third is a different
+      // file it does not cover), so the raw superset carries those two above
+      // their fall-through successors — and nothing else differs.
+      const layering = [{ sourceTag: "zone:x", onlyDependOnLibsWithTags: ["zone:x"] }];
+      const suppressions = [
+        {
+          path: "area/alpha/**",
+          messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+          reason: "spelling accepted",
+        },
+      ];
+      const sites = [crossing(), crossing(), site({ line: 9 })];
+      const cfg = { ...config(layering), suppressions };
+      const judged = evaluate(sites, twoLibs(), cfg);
+      const raw = evaluateWithSuppressions(sites, twoLibs(), cfg);
+      // The two relative crossings lose their spelling verdict to the row and
+      // reveal the tags verdict behind it; the aliased import never had a
+      // spelling verdict to remove, so its tags verdict is its first group.
+      expect(idsOf(judged)).toEqual([
+        "onlyTagsConstraintViolation",
+        "onlyTagsConstraintViolation",
+        "onlyTagsConstraintViolation",
+      ]);
+      // Removing the suppressed ids from raw leaves evaluated, byte-for-byte.
+      expect(
+        JSON.stringify(
+          raw.filter((v) => v.messageId !== "noRelativeOrAbsoluteImportsAcrossLibraries"),
+        ),
+      ).toBe(JSON.stringify(judged));
+      expect(
+        raw.filter((v) => v.messageId === "noRelativeOrAbsoluteImportsAcrossLibraries"),
+      ).toHaveLength(2);
     });
   });
 

@@ -7860,3 +7860,261 @@ export const moduleBoundaryOptions = {
     );
   });
 });
+
+describe("dead rows of the boundary law", () => {
+  // Issues #217 and #231: a `boundarySuppressions` row that accepts nothing
+  // and a `depConstraints` row that selects nothing were both silent, while
+  // the equivalent stale `coverage.exempt` row refused the whole run. This
+  // suite drives the real engine over the issues' own four-file workspace
+  // shape — native provider, two TS projects, one crossing import — and pins
+  // the refusal, its exit code, its exemptions, and the false-positive guards
+  // around it. Every case is red in the silent direction: delete the refusal
+  // from cli.mjs and each dead-row case below goes green while the row sits
+  // in the table unread.
+  //
+  // Each test writes its OWN law filename: a config module is loaded with
+  // `import()`, Node caches it by URL, and a second test rewriting the same
+  // path in the same process would silently run under the first test's law.
+  const root = mkdtempSync(join(tmpdir(), "polyglot-cli-dead-rows-"));
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  const w = (relativePath, text) => {
+    mkdirSync(join(root, relativePath, ".."), { recursive: true });
+    writeFileSync(join(root, relativePath), text);
+  };
+
+  w(
+    "tsconfig.base.json",
+    JSON.stringify({
+      compilerOptions: { module: "ESNext", moduleResolution: "bundler", target: "ES2022" },
+    }),
+  );
+  w("libs/feature/index.ts", 'export const feature = "feature";\n');
+  w(
+    "libs/core/index.ts",
+    'import { feature } from "../feature/index.js";\nexport const core = feature;\n',
+  );
+
+  /** The eight options every policy must state. */
+  const OPTIONS = [
+    "export const moduleBoundaryOptions = {",
+    "  allow: [],",
+    "  buildTargets: [],",
+    "  enforceBuildableLibDependency: false,",
+    "  allowCircularSelfDependency: false,",
+    "  checkDynamicDependenciesExceptions: [],",
+    "  ignoredCircularDependencies: [],",
+    "  banTransitiveDependencies: false,",
+    "  checkNestedExternalImports: false,",
+    "};",
+  ].join("\n");
+
+  /** Writes the declared projects plus one exempt row per extra tracked file. */
+  const declare = (extraExempt = [], boundaryConfig) => {
+    w(
+      "lattice.json",
+      JSON.stringify({
+        projects: {
+          declared: [
+            { root: "libs/core", name: "core", type: "lib", tags: ["layer:core"] },
+            { root: "libs/feature", name: "feature", type: "lib", tags: ["layer:feature"] },
+          ],
+        },
+        // The law's name is a per-workspace option (`src/options.mjs`), and
+        // each test names ITS OWN module — a fixed default would miss files
+        // that do not exist, and a shared one would collide with Node's
+        // import() cache across tests.
+        ...(boundaryConfig === undefined ? {} : { boundaryConfig }),
+        coverage: {
+          exempt: extraExempt.map((path) => ({ path, reason: "boundary law itself" })),
+        },
+      }),
+    );
+  };
+
+  /** A fresh law module per call — a new URL each time, so no cached law leaks between tests. */
+  let lawCounter = 0;
+  const writeLaw = (body) => {
+    const name = `law-${++lawCounter}.mjs`;
+    w(name, `${body}\n${OPTIONS}\n`);
+    declare([name], name);
+    return name;
+  };
+
+  const streams = (tracked = []) => {
+    const s = {
+      out: (t) => s.lines.out.push(t),
+      err: (t) => s.lines.err.push(t),
+      lines: { out: [], err: [] },
+      cwd: root,
+      listFiles: () => [
+        "lattice.json",
+        "tsconfig.base.json",
+        "libs/core/index.ts",
+        "libs/feature/index.ts",
+        ...tracked,
+      ],
+    };
+    return s;
+  };
+
+  it("#217: a permanent suppression covering nothing refuses the run, naming the row", async () => {
+    const law = writeLaw(
+      [
+        "export const depConstraints = [",
+        '  { sourceTag: "layer:core", onlyDependOnLibsWithTags: ["layer:core"] },',
+        "];",
+        "export const boundarySuppressions = [",
+        '  { path: "libs/nothing/here/**", messageId: "noRelativeOrAbsoluteImportsAcrossLibraries", reason: "the code this covered is gone" },',
+        "];",
+      ].join("\n"),
+    );
+    const s = streams([law]);
+    expect(await runCli(["check"], s)).toBe(EXIT.error);
+    const err = s.lines.err.join("\n");
+    expect(err).toContain("describes a workspace that does not match the tree:");
+    expect(err).toContain("boundarySuppressions[0]: 'libs/nothing/here/**' matches no violation");
+  });
+
+  it("#216 end to end: suppressing the spelling verdict reveals the tag verdict behind it", async () => {
+    // Issue #216's run 2 was exit 0 with an empty findings list while the edge
+    // stayed in the tree. The same workspace now reports the constraint the
+    // row had been hiding along with the spelling — exit 1, never 0 — and the
+    // dead-row machinery stays quiet because this row IS doing work.
+    const law = writeLaw(
+      [
+        "export const depConstraints = [",
+        '  { sourceTag: "layer:core", onlyDependOnLibsWithTags: ["layer:core"] },',
+        "];",
+        "export const boundarySuppressions = [",
+        '  { path: "libs/core/**", messageId: "noRelativeOrAbsoluteImportsAcrossLibraries", reason: "single-package repository" },',
+        "];",
+      ].join("\n"),
+    );
+    const s = streams([law]);
+    expect(await runCli(["check"], s)).toBe(EXIT.violations);
+    expect(s.lines.out.join("\n")).toContain("onlyTagsConstraintViolation");
+    expect(s.lines.err.join("\n")).not.toContain("matches no violation");
+  });
+
+  it("#216 arithmetic end to end: a row covering only a hidden candidate is not stale", async () => {
+    // The waiver surface measures each row against the raw candidate set:
+    // with the spelling verdict removed by the first row, the second row's
+    // hit sits BEHIND it in the chain — under the pre-#216 baseline (first
+    // candidates only) that second row read as covering nothing while doing
+    // real work. Both rows together still hide everything they name, so the
+    // gate stays quiet; the run reports what remains.
+    const law = writeLaw(
+      [
+        "export const depConstraints = [",
+        '  { sourceTag: "layer:core", onlyDependOnLibsWithTags: ["layer:core"] },',
+        "];",
+        "export const boundarySuppressions = [",
+        '  { path: "libs/core/**", messageId: "noRelativeOrAbsoluteImportsAcrossLibraries", reason: "spelling accepted" },',
+        '  { path: "libs/core/**", messageId: "onlyTagsConstraintViolation", reason: "axis accepted" },',
+        "];",
+      ].join("\n"),
+    );
+    const s = streams([law]);
+    expect(await runCli(["check"], s)).toBe(EXIT.ok);
+    expect(s.lines.err.join("\n")).not.toContain("matches no violation");
+  });
+
+  it("an expired waiver covering nothing is refused; an active one resting is not", async () => {
+    const law = (expiresAt) =>
+      [
+        "export const depConstraints = [];",
+        "export const boundarySuppressions = [",
+        expiresAt === null
+          ? '  { path: "libs/nothing/here/**", reason: "idle" },'
+          : `  { path: "libs/nothing/here/**", reason: "idle", expiresAt: "${expiresAt}" },`,
+        "];",
+      ].join("\n");
+    // Expired: the term lapsed, the row can never come back into force, and
+    // it accepts nothing — refused beside the permanent rows, named with its
+    // lapse date.
+    let name = writeLaw(law("2026-01-01T00:00:00.000Z"));
+    const expiredStreams = streams([name]);
+    expect(await runCli(["check"], expiredStreams)).toBe(EXIT.error);
+    expect(expiredStreams.lines.err.join("\n")).toContain("(expired 2026-01-01T00:00:00.000Z)");
+
+    // Active and idle: a fixed violation leaves its waiver waiting until
+    // expiry — the documented lifecycle, informational via `lattice waivers`,
+    // never fatal here. The tree's crossing import still reports (exit 1).
+    name = writeLaw(law("2099-01-01T00:00:00.000Z"));
+    const activeStreams = streams([name]);
+    expect(await runCli(["check"], activeStreams)).toBe(EXIT.violations);
+    expect(activeStreams.lines.err.join("\n")).not.toContain("matches no violation");
+  });
+
+  it("a scoped run does not refuse a dead row it cannot know about", async () => {
+    const law = writeLaw(
+      [
+        "export const depConstraints = [];",
+        "export const boundarySuppressions = [",
+        '  { path: "libs/nothing/here/**", messageId: "noRelativeOrAbsoluteImportsAcrossLibraries", reason: "the code this covered is gone" },',
+        "];",
+      ].join("\n"),
+    );
+    // One file: the run judges part of the tree, and a row covering nothing
+    // in what it saw may cover plenty in what it did not. The in-scope
+    // finding stands (exit 1); the refusal must not fire on top of it.
+    const s = streams([law]);
+    expect(await runCli(["check", "libs/core/index.ts"], s)).toBe(EXIT.violations);
+    expect(s.lines.err.join("\n")).not.toContain("matches no violation");
+  });
+
+  it("#231: a sourceTag no project carries refuses the authored law", async () => {
+    const law = writeLaw(
+      [
+        "export const depConstraints = [",
+        '  { sourceTag: "layer:corre", onlyDependOnLibsWithTags: ["layer:core"] },',
+        "];",
+        "export const boundarySuppressions = [];",
+      ].join("\n"),
+    );
+    const s = streams([law]);
+    expect(await runCli(["check"], s)).toBe(EXIT.error);
+    const err = s.lines.err.join("\n");
+    expect(err).toContain("depConstraints[0]");
+    expect(err).toContain("'layer:corre'");
+    expect(err).toContain("selects no source");
+  });
+
+  it("#231: a notDependOnLibsWithTags entry naming no carried tag refuses the authored law", async () => {
+    const law = writeLaw(
+      [
+        "export const depConstraints = [",
+        '  { sourceTag: "layer:core", notDependOnLibsWithTags: ["grade:gonte"] },',
+        "];",
+        "export const boundarySuppressions = [];",
+      ].join("\n"),
+    );
+    const s = streams([law]);
+    expect(await runCli(["check"], s)).toBe(EXIT.error);
+    expect(s.lines.err.join("\n")).toContain("notDependOnLibsWithTags[0]: 'grade:gonte'");
+  });
+
+  it("law read from node_modules — an adopted pack — is exempt from the dead-constraint refusal", async () => {
+    // A shipped pack is data adopted wholesale (`docs/usage/presets.md`):
+    // written for trees that instantiate its style at their own pace, so its
+    // uninstantiated layers must not refuse the adopter's run. The exemption
+    // is keyed on WHERE THE LAW LIVES — a dependency install — not on which
+    // flag resolved it, which is why the pin goes through `--config`.
+    const packLaw = join("node_modules", "style-pack", "law.mjs");
+    w(
+      packLaw,
+      [
+        "export const depConstraints = [",
+        '  { sourceTag: "layer:someday", onlyDependOnLibsWithTags: ["layer:someday"] },',
+        "];",
+        OPTIONS,
+        "export const boundarySuppressions = [];",
+      ].join("\n"),
+    );
+    declare([packLaw], packLaw);
+    const s = streams([packLaw]);
+    expect(await runCli(["check", "--config", packLaw], s)).toBe(EXIT.violations);
+    expect(s.lines.err.join("\n")).not.toContain("selects no source");
+  });
+});
