@@ -42,6 +42,16 @@ changes type, and no field that means one thing today is repurposed to mean
 another. A capability that does not fit the current shape ships as a new
 field, additive, never as a change to an existing one.
 
+**A gate holds that promise, not discipline.** Every command's envelope is
+reduced to a sorted `path: type` roster and compared against a recorded
+snapshot on every run of the suite
+(`packages/lattice/src/report/envelope-shape.integration.test.mjs`), in both
+directions: a field that left the envelope fails the build, and a field that
+arrived fails it too until the snapshot is regenerated — which is what keeps
+"additive" a claim someone made rather than a diff nobody read. The command
+list the gate is exhaustive over comes from the CLI's own command table, so a
+command added later cannot ship an unmeasured shape.
+
 `schemaVersion` is an integer, and it only moves for a breaking change to this
 document — a field renamed, retyped, or removed. A consumer that reads a
 `schemaVersion` it does not recognise should refuse to parse the rest of the

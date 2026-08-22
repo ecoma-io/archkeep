@@ -3442,6 +3442,23 @@ const COMMANDS = Object.freeze({
 });
 
 /**
+ * Every command name, in declaration order — the roster `COMMANDS` already
+ * holds, exported so a gate can be exhaustive over it rather than over a
+ * second list that agrees with this one only until someone adds a command.
+ * `src/report/envelope-shape.integration.test.mjs` is the caller: it holds
+ * the JSON envelope's field roster for every command, and derives "every
+ * command" from here for the same reason `scripts/check-packages.mjs` parses
+ * `ci.yml` instead of carrying a copy of its target list. A command added
+ * below with no roster entry fails that test on the day it lands, which is
+ * the only moment its shape is cheap to record.
+ *
+ * The table itself stays unexported: `run` holds this module's own functions,
+ * and exporting it would make every command's implementation reachable as
+ * package API.
+ */
+export const COMMAND_NAMES = Object.freeze(Object.keys(COMMANDS));
+
+/**
  * Runs the CLI and returns its exit code.
  *
  * `env` is everything the command touches outside itself: its two streams, the

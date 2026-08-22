@@ -122,6 +122,13 @@ A new reader should find these capabilities described as present, not promised.
   validated against the observed architecture with no AI-generated intent and
   no semantic inference.
   ([concepts/boundaries.md](../concepts/boundaries.md))
+- **A stated and gated `schemaVersion` promise.** The JSON envelope's field
+  names and its version are a public contract said out loud where consumers
+  read it, and held by a gate rather than by discipline: every command's
+  envelope is reduced to a field roster and compared against a recorded
+  snapshot in both directions, over a command list taken from the CLI's own
+  table so a command added later cannot ship an unmeasured shape.
+  ([reference/json-output.md](../reference/json-output.md))
 - **Agentic governance.** The five `arch-*` skills teach agents when to ask the
   authority and how to read its answers; Claude Code, Codex and opencode run
   the same editor gates; the repository dogfoods its own enforcer in CI.
@@ -136,17 +143,14 @@ evolution safety that keeps change honest, and the agent protocol that makes
 agents consumers rather than authorities.
 
 Most of 1.x is already implemented and listed above. What remains before a
-**stable 1.0** is completion of the surfaces and hardening of the proof, not a
-new feature list:
+**stable 1.0** is hardening of the proof, not a new feature list — one item,
+and it is evidence rather than code:
 
 - **Breadth of conformance evidence.** The differential against
   `@nx/enforce-module-boundaries` runs over real public workspaces, weekly and
   on demand, as a non-required check that is still treated as a regression when
   it goes red; more real trees is the remaining gap, not a missing feature.
   ([development/testing.md](../development/testing.md))
-- **A stable `schemaVersion` promise.** The JSON envelope is versioned and
-  documented; 1.0 makes that contract a promise consumers can build on.
-  ([reference/json-output.md](../reference/json-output.md))
 
 The VS Code marketplace listing is deliberately **not** on that list. The
 client exists, the `.vsix` attaches to every release, and the release lane
@@ -157,10 +161,13 @@ and 1.0 does not wait for it.
 
 ### What 1.0 waits for, and how each condition is read
 
-The two items above are the remaining work. These five are how the project
-knows it is done — conditions rather than a date, in keeping with this
-document's refusals, and each read off something that already runs rather than
-off anyone's judgement of readiness.
+The item above is the remaining work. These four are how the project knows it
+is done — conditions rather than a date, in keeping with this document's
+refusals, and each read off something that already runs rather than off
+anyone's judgement of readiness. A fifth stood here until the `schemaVersion`
+promise was both stated and gated; it is listed among the shipped capabilities
+above rather than deleted, because a condition that was met is part of how the
+project got here.
 
 The first three exist because the ways this project can be wrong are not
 symmetric. A feature list can be finished by writing code; a claim that the
@@ -186,11 +193,8 @@ over a stretch of time in which it had the chance to.
 4. **Releases that land without a hand on them.** Tag, npm, and the attached
    `.vsix` agreeing, more than once in a row. The 0.5.0 tag that npm never
    received is the failure this condition exists to have stopped happening.
-5. **The `schemaVersion` promise stated where consumers read it.** Item two
-   above, said out loud in [reference/json-output.md](../reference/json-output.md)
-   rather than implied by the field existing.
 
-None of the five is a feature, and that is the point: what separates 0.x from
+None of the four is a feature, and that is the point: what separates 0.x from
 1.0 here is evidence, and evidence is something the project accumulates rather
 than something it implements.
 
