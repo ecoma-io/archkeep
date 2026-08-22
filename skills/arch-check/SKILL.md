@@ -87,9 +87,12 @@ leave it sound must show the check green.
      could not be analyzed, or the intent could not be established, or a
      declared fitness function or custom rule answered `unknown`, or a declared
      custom rule's artifact would not load at all (missing, `sha256` mismatch,
-     not wasm, asking for an import), or — in a profile-selected workspace —
-     the selected profile could not be resolved: an unknown profile name, an
-     unknown `base`, a `base` cycle, or an unreadable registry. None of those
+     not wasm, asking for an import), or a tracked intent row cites a
+     `decisionRef` the ADR registry does not know (the one citation that
+     withholds a verdict rather than only reporting it — see "Fail-closed
+     semantics"), or — in a profile-selected workspace — the selected profile
+     could not be resolved: an unknown profile name, an unknown `base`, a
+     `base` cycle, or an unreadable registry. None of those
      falls back to another law: a resolved profile is the law the verdict
      names, so a resolution failure withholds the verdict. This is NOT "clean";
      it is the fail-closed direction.
@@ -101,6 +104,17 @@ leave it sound must show the check green.
    - The project that contains the file
    - The target project being imported
    - The specific constraint rule that was broken (`messageId`)
+
+   Those four describe an **import-site** finding, and not every finding is
+   one. An `implicitDependencies` edge is declared in a manifest rather than
+   written as an import, so a **declared-edge** finding names the file that
+   declared it — `<project-root>/project.json` under Nx, `lattice.json`
+   natively — with no line and no column, alongside the edge `source → target`
+   and the constraint row it broke. There is no import to delete: the declared
+   dependency itself has to go, or the two projects' tags be reconciled. Step
+   5 does not apply to it either: `explain` answers about an import site, and
+   this finding has none. Hunting for a line number that does not exist, or
+   reading the finding as malformed, is the mistake to avoid.
 
 5. **Explain individual findings.** For any violation that is unclear:
 
@@ -133,7 +147,7 @@ leave it sound must show the check green.
    forget. Each rule is a WebAssembly artifact the workspace committed and
    pinned by `sha256`; its findings arrive namespaced as
    `custom/<rule>/<finding>`, and its verdict rides the same two lanes
-   (`1` for any `fail`, `3` for any `unknown`). Three consequences for you:
+   (`1` for any `fail`, `3` for any `unknown`). Four consequences for you:
 
    - **Do not look up a `custom/…` id in the violation catalogue.** It is not
      one of the fifteen and has no upstream meaning. What explains it is the
@@ -148,6 +162,19 @@ leave it sound must show the check green.
      rule**, because a rule's evidence is the whole tree. If custom rules
      matter to the question you were asked, the unscoped run is the only one
      that answers it.
+   - **When a rule answers `unknown`, ask what it was handed.**
+     `lattice check --evidence-out <dir>` writes one `<rule>.json` per declared
+     rule into that directory — the exact evidence document the rule was judged
+     over, written even for a rule that trapped or exhausted its budget, which
+     is when it is needed. Create the directory first — the flag writes into
+     an existing one and fails the run rather than creating a missing one. It
+     moves no verdict and no exit code, so the debugged run is the same run,
+     and it never writes nothing silently: a path-scoped run and a policy
+     declaring no `customRules` each say so on stderr rather than leaving an
+     empty directory. Feed the bundle to the replay harness the rule's SDK
+     ships
+     ([docs/usage/custom-rules.md](../../docs/usage/custom-rules.md),
+     [docs/reference/custom-rules.md](../../docs/reference/custom-rules.md)).
 
    An _unverifiable_ intent is never a _satisfied_ one, an unresolved profile
    is never a satisfied law, and a custom rule that could not be loaded or run
@@ -189,12 +216,20 @@ leave it sound must show the check green.
   unreadable file, a no-verdict intent, an unresolved profile — each withholds
   the verdict instead of folding into the green. An unresolved decision is the
   same rule in the agent's hands: `check` resolves each row's `decisionRef`
-  against the ADR registry (report-only — the resolution changes no byte of
-  the verdict) and names an unresolved one inline and under
+  against the ADR registry and names an unresolved one inline and under
   `result.unresolvedDecisionRefs`, so an ADR id that `lattice adr` cannot look
   up stays `unknown` evidence, never a pass — say so rather than citing it.
-  That `unknown` is `check`'s report of the citation, not a verdict from it:
-  no gate turns a row's `decisionRef` into a verdict.
+  **Which row carries the citation decides whether it also moves the verdict.**
+  On a `depConstraints` row it is report-only: the resolution changes no byte
+  of the verdict, because a missing record is a fact about the rule's
+  documentation rather than about whether the boundary held. On an **intent**
+  row, while the intent is applied, it is exit 3 — a workspace that declared an
+  intended architecture whose governing decision does not exist cannot claim
+  `ok` on that axis, and the gate CI runs must not be the one face that stays
+  quiet where `drift` and `provenance` already flag the identical row. So an
+  unresolvable intent citation is a no-verdict run (exit 3) even beside a
+  perfectly clean boundary table, and reporting that run as green is the silent
+  direction.
 - **Empty output from a scoped check does NOT mean the workspace is safe.**
   Cycle rules and lazy-load rules judge the whole file graph. A scoped check is
   a fast filter; a full check is the gate. A fitness function that needs the
@@ -207,13 +242,17 @@ leave it sound must show the check green.
 
 `check` is the deterministic gate, and it is not limited to import edges. On
 this implementation it also performs the workspace checks the boundary law
-names when the workspace carries them: the two drift-bearing workspace checks it
+names when the workspace carries them: the three workspace-level checks it
 runs when the corresponding workspace state exists — a tracked `go.work` whose
-`use` list disagrees with the projects' `go.mod` files, and a tsconfig `paths`
-table with an alias pointing at a directory that does not exist. Each is a
-finding (exit 1); each unreadable source fails the run (exit 3) rather than
-being read as clean. What a future version folds into the same gate is decided
-by the same rule: an additional deterministic check makes the verdict complete,
+`use` list disagrees with the projects' `go.mod` files, a tsconfig `paths`
+table with an alias pointing at a directory that does not exist, and every
+`implicit`-typed edge (`implicitDependencies`) judged against `depConstraints`,
+which is where a boundary crossing with no import site behind it is caught.
+Each is a finding (exit 1); each unreadable source fails the run (exit 3)
+rather than being read as clean. A workspace carrying none of that state hears
+nothing about it: each section is printed only when the state exists, so its
+absence means "no such fact here", never "checked and clean". What a future
+version folds into the same gate is decided by the same rule: an additional deterministic check makes the verdict complete,
 never merely louder.
 
 Sixteen descriptive commands sit **beside** the gate. `graph`, `diff`,

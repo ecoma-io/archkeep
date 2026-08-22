@@ -183,14 +183,20 @@ cites when it says "the declared architecture no longer matches the code".
   the workspace wrote and this engine did not, so review them as law rather
   than as output: a finding arrives namespaced `custom/<rule>/<finding>` and its
   meaning is the rule's message plus the `reason` its policy row is required to
-  carry, never an id in the violation catalogue. Two review consequences.
+  carry, never an id in the violation catalogue. Three review consequences.
   First, **a rule that answered `unknown` is a gate that did not run** — exit 3,
   the cause named — and reporting it as "no custom findings" is exactly the
   silent direction. Second, a change to a rule's `.wasm` or its pinned `sha256`
   is a change to the law itself, reviewed like a constraint row and not like a
   binary blob: the digest is what makes "the law CI ran is the law review saw"
   checkable at all, so a bumped hash needs the same argument any policy edit
-  does.
+  does. Third, an `unknown` is debuggable rather than merely reportable:
+  `lattice check --evidence-out <dir>` writes each declared rule's evidence
+  bundle into an existing directory — the exact document that rule was judged
+  over, written even for a rule that trapped — and it changes no verdict and no
+  exit code, so asking for it costs the review nothing
+  ([docs/usage/custom-rules.md](../../docs/usage/custom-rules.md)). Ask for it
+  before accepting "the rule could not run" as where the review stops.
 - **Pre-existing violations ("debt")** — `lattice debt <dir>` ages waivers, gaps
   and drift across a snapshots directory: how long a violation has been
   accepted or unknown. It is a ledger, not a live gate — it never changes a
@@ -208,9 +214,13 @@ cites when it says "the declared architecture no longer matches the code".
   A waiver never promotes `unknown` → `pass`.
 - **Provenance** — each `graph` snapshot carries its git origin;
   `history` classifies transitions (architecture / policy / provider / code
-  drift) by the evidence snapshots carry; `lattice provenance` reports the
-  governance row schema. Provenance is a property of snapshots — a command
-  reports it, it does not pluralize it.
+  drift) by the evidence snapshots carry; `lattice provenance` reports where
+  this run's own facts came from — the commit and remote behind them — and how
+  many governance rows carry an `origin` against how many do not, naming the
+  unattested ones and resolving the `decisionRef` citations among them. A row
+  with no `origin` is unattested, not invalid: it is the review's evidence that
+  nobody recorded where that rule came from. Provenance is a property of
+  snapshots — a command reports it, it does not pluralize it.
 - **ADR / decision references** — when a reviewed constraint, intent, or
   fitness row carries a `decisionRef` (`decisionRef` is a governance block key
   a fitness row accepts, alongside `name`/`match`/`condition`/`reason`), verify
@@ -234,6 +244,10 @@ adr rule:orphan` names a rule no ADR binds and exits 0 with a sentence —
 If the repository keeps snapshots, `lattice history <dir>` names which of the
 recent transitions were architectural and which were policy or provider — useful
 when the change is the latest move in an evolution the review should connect.
+Snapshots do not appear on their own — they come from `--capture` runs the
+repository decided to make (`arch-context`, step 7). A review reports that no
+history exists rather than capturing one as a side effect of reviewing: the
+capture writes a file, and it would record the law as the change left it.
 
 ### 9. Explain non-obvious findings
 

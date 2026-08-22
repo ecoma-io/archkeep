@@ -172,7 +172,13 @@ answer is to surface it, never to ignore it.
    been there from one that appeared a snapshot ago. An empty or missing
    snapshots directory is a no-verdict run (exit 3), never a clean "no
    evolution" — point it at a populated capture directory, or skip the step and
-   say no history was inspected.
+   say no history was inspected. Snapshots do not appear on their own:
+   `lattice history <dir> --capture` appends one for the current workspace
+   before describing the record, and it records the fingerprint of the law in
+   effect. That writes a file into the directory, so it is the repository's
+   decision (a CI step, a maintenance job), not something to do as a side
+   effect of reading context. It is the same directory `debt` reads, and the
+   one `health` and `report` read their trends from when given one.
 
 8. **Understand the surrounding governance surfaces when the facts need
    context.** These are descriptive, never gates — they do not report boundary
