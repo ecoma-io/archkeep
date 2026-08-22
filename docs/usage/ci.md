@@ -43,12 +43,12 @@ judged is still the consumer's.
 
 ## The exit codes, and the one that matters
 
-| code | meaning                                                                                                                  |
-| ---- | ------------------------------------------------------------------------------------------------------------------------ |
-| `0`  | clean — **and** every selected file was analyzed                                                                         |
-| `1`  | findings — boundary violations, go.work drift, dead tsconfig aliases, or architecture-intent findings                    |
-| `2`  | usage error                                                                                                              |
-| `3`  | no verdict — the run could not start, a selected file could not be read, or architecture intent could not be established |
+| code | meaning                                                                                                                                                                                  |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | clean — **and** every selected file was analyzed                                                                                                                                         |
+| `1`  | findings — boundary violations, go.work drift, dead tsconfig aliases, architecture-intent findings, a failing fitness function, or a failing custom rule                                 |
+| `2`  | usage error                                                                                                                                                                              |
+| `3`  | no verdict — the run could not start, a selected file could not be read, architecture intent could not be established, or a declared fitness function or custom rule could not be judged |
 
 **Do not collapse 3 into 0.** A checker that could not look must never be
 mistaken for one that looked and found nothing — that is the single distinction
@@ -69,6 +69,16 @@ the Nx path does not: a tracked, analyzable file no discovered project owns
 is also exit 3, for the same reason — `../../packages/lattice/src/providers/native/README.md`'s
 "Two failure classes, both loud" owns that distinction.
 
+The workspace's own declared gates ride those same two lanes rather than a new
+code. A declared fitness function or custom rule that `fail`s is a finding
+(exit 1); one that answers `unknown` — a rule that could not tell, or that
+trapped, ran over its budget, or asked for evidence this engine cannot supply
+— withholds the verdict (exit 3); and a declared custom rule whose artifact
+will not load at all refuses the run the way a malformed config does. A gate
+nobody could run must never read as a gate nothing tripped
+([custom-rules.md](custom-rules.md), [fitness.md](fitness.md)); the full table
+is [exit-codes.md](../reference/exit-codes.md)'s.
+
 Shell scripts get this wrong in a specific way. `set -e` treats every non-zero
 code alike, which is fine — the failure is visible. What is not fine is:
 
@@ -83,7 +93,7 @@ If you need to distinguish, distinguish explicitly:
 lattice check
 case $? in
   0) echo "clean" ;;
-  1) echo "boundary violations, go.work drift, or dead tsconfig aliases"; exit 1 ;;
+  1) echo "findings — a boundary, a workspace declaration, or a declared gate"; exit 1 ;;
   3) echo "the checker could not reach a verdict"; exit 1 ;;
   *) echo "usage error"; exit 1 ;;
 esac

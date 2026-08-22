@@ -6,7 +6,7 @@ artifact, hands it the facts it already observed, and folds the verdict into
 `check` beside the built-in boundary rules.
 
 The npm package is `@ecoma-io/lattice-rule-sdk`; the directory carries the `-ts`
-suffix because this tree will hold four of these and a registry that already
+suffix because this tree holds four of these and a registry that already
 names the language does not repeat it — the reasoning is in
 [ADR 0002](../../docs/adr/0002-custom-rules-one-contract.md).
 
@@ -266,10 +266,15 @@ in this package would have to import the engine's modules, which is the
 dependency direction the scope axis in
 [the workspace's boundary law](../../module-boundaries.config.mjs) exists to
 refuse. They are byte-identical to
-[the Rust SDK's copies](../lattice-rule-sdk-rust/fixtures), which is what a
-future cross-SDK conformance gate will hold; today the copy is made in the change
-that lands each SDK. When the evidence contract grows, the fixtures are
-regenerated from the engine side and land in the same change.
+[the Rust SDK's copies](../lattice-rule-sdk-rust/fixtures), and what holds them
+that way is no longer a promise:
+[`rule-sdks.integration.test.mjs`](../lattice/src/conformance/rule-sdks.integration.test.mjs)
+reads every SDK's copy of every fixture and requires them byte-identical, then
+drives all four committed artifacts through the engine's real host and requires
+one verdict document from each. The copy is still made in the change that lands
+each SDK; the gate is what makes an edit to one copy alone go red. When the
+evidence contract grows, the fixtures are regenerated from the engine side and
+land in the same change.
 
 [`test/golden.test.mjs`](test/golden.test.mjs) pins the verdict each must
 produce, and it is the strongest of the three SDK harnesses for one structural

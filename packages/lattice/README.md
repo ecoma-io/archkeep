@@ -153,13 +153,19 @@ a file it cannot edit ([overview.md](https://github.com/ecoma-io/lattice/blob/ma
   [adr.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/adr.md)).
 - **Custom rules** — the policy's `customRules` list declares your own rules
   as committed WebAssembly artifacts, written in any language whose toolchain
-  emits core wasm (a typed Rust SDK, `lattice-rule-sdk`, ships from this
-  repository). Each rule receives the run's observed facts and answers in the
-  same four-verdict vocabulary as everything else: a finding exits 1 under
-  `custom/<rule>/<finding>`, a rule that could not judge exits 3, and an
-  artifact that will not load (missing, hash mismatch, undeclared imports)
-  refuses the run — never a silent skip
-  ([custom-rules.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/custom-rules.md)).
+  emits core wasm. Four typed SDKs ship from this repository on the same
+  version chain as the engine — `lattice-rule-sdk` on crates.io (Rust),
+  `@ecoma-io/lattice-rule-sdk` on npm (AssemblyScript), `lattice-rule-sdk` on
+  PyPI (Python, via a RustPython carrier), and a Go module built with TinyGo —
+  and each one's README carries its build story and its measured limits. The
+  contract, not the SDK, is the interface: any toolchain emitting a core-wasm
+  module with no imports is equally valid. Each rule receives the run's
+  observed facts and answers in the same four-verdict vocabulary as everything
+  else: a finding exits 1 under `custom/<rule>/<finding>`, a rule that could
+  not judge exits 3, and an artifact that will not load (missing, hash
+  mismatch, undeclared imports) refuses the run — never a silent skip
+  ([custom-rules.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/custom-rules.md),
+  [writing one](https://github.com/ecoma-io/lattice/blob/main/docs/usage/custom-rules.md)).
 - **Shipped policy packs** — Clean Architecture, hexagonal, layered modular
   monolith and DDD bounded contexts, as ready-made profile registries under
   this package's `presets/` directory. Copy one into your workspace, or point

@@ -30,7 +30,9 @@ Two consequences, and they shape most reviews:
 ## Setting up
 
 Requirements: **Node ≥ 24** (`.node-version` pins the major) and **pnpm 11**
-(pinned via `packageManager`, so Corepack fetches the right one).
+(pinned via `packageManager`, so Corepack fetches the right one). Everything in
+"The commands" below runs on those two — except `moon run`, which reaches the
+four rule SDKs and therefore their toolchains; see that section.
 
 ```bash
 git clone https://github.com/ecoma-io/lattice.git
@@ -81,6 +83,34 @@ above:
 ```bash
 moon run ...:lint ...:test ...:typecheck
 ```
+
+**This one needs more than Node.** Four of the six packages are custom-rule
+SDKs, and each runs its targets in its own language's tooling: `cargo` with the
+`clippy` and `rustfmt` components (Rust), `go` with `gofmt` (Go), and `python3`
+(Python). CI installs the Rust components explicitly and gets the rest from the
+runner image. Without a toolchain, that language's targets fail — they do not
+skip, which is the whole point of `check-packages` below. If you have not
+touched an SDK, running one project's targets is fine:
+
+```bash
+moon run lattice:lint lattice:test lattice:typecheck
+```
+
+Not every SDK declares all three: `check-packages` reports
+`lattice-rule-sdk-python — lint, test (no typecheck)`, and that partial line is
+the truthful answer rather than a gap. Python has no type checker in the
+toolchain this repository already installs, and a `typecheck` target running
+`compileall` would report a passing type check over a file with no types in it
+— the placeholder green `check-packages` exists to catch. Do not "fix" a
+partial line by adding a target.
+
+None of the four declares a `build` target and none rebuilds its `.wasm`: the
+artifact is committed beside its `.sha256`, and each package's
+`rebuild-example.sh` is what reproduces it when the rule itself changes. What
+proves the committed bytes are the law is
+`packages/lattice/src/conformance/rule-sdks.integration.test.mjs`, which loads
+all four through the engine's real host at their recorded digests and requires
+one verdict document per fixture from all of them.
 
 And the tool on the tree that ships it, which is the last thing CI does:
 

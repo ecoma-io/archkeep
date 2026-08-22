@@ -94,15 +94,32 @@ The report renders and decides nothing. Two formats, two audiences: `text`
 produces the `file:line:column` a terminal turns into a link, and `sarif`
 produces what GitHub code scanning accepts.
 
+### Fold the workspace's own declared gates
+
+Between judging and reporting, two policy keys declare laws the engine did not
+write and both are folded in over the facts the run already holds: `fitness`
+([fitness-functions.md](fitness-functions.md)) and `customRules`
+([custom-rules.md](custom-rules.md)), the second being committed WebAssembly
+artifacts the engine loads at a pinned digest and runs in a sandbox that grants
+no file, clock, network or environment.
+
+Both fold **by presence**, never by flag. An opt-in flag makes a forgotten flag
+byte-identical to "no gates checked", which is the silence this whole tool
+exists to end; and a policy declaring neither hears nothing at all, so the
+report over such a workspace is byte-for-byte what it was before either
+capability existed.
+
 ### Exit
 
 ```js
-if (violations > 0) return 1;
-return unchecked > 0 ? 3 : 0;
+if (findings > 0) return 1; // a boundary, a workspace declaration, or a declared gate that failed
+return couldNotJudge > 0 ? 3 : 0; // a file, an intent, or a declared gate that could not answer
 ```
 
 Exit 0 was the bug. A checker that could not look must never be mistaken for one
-that looked and found nothing.
+that looked and found nothing — and that holds for a declared gate exactly as
+it holds for a file: a rule that trapped, or whose artifact would not load, is
+never a rule that found nothing.
 
 ## The seventeen commands
 

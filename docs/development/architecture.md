@@ -192,7 +192,39 @@ run's findings (marked accepted, exit code stays 1) and the violation re-asserts
 in full once the waiver lapses — the expiry is judged against the injectable
 governance clock, so a run's bytes are reproducible over a fixed injected time.
 
-### 11. Report
+### 11. Fold the workspace's own declared gates
+
+Two policy keys declare laws this engine did not write, and both are folded in
+here — after every import has been judged, over the facts the run already
+holds: `fitness` (`src/governance/`) and `customRules`
+(`src/commands/custom-rules.mjs`, `src/custom-rules/`).
+
+**Both fold by PRESENCE, and that is the whole design.** There is no
+`--fitness` and no `--custom-rules`, because an opt-in flag makes a forgotten
+flag byte-identical to "no gates checked" — the silent direction. A policy
+declaring neither reaches nothing here and hears nothing anywhere: no section,
+no envelope key, no SARIF descriptor, byte-for-byte the report it already got.
+
+A custom rule is a committed wasm artifact, and the fold splits its two failure
+classes rather than blending them. A **load** failure — unreadable artifact,
+`sha256` mismatch, bytes that are not wasm, a module asking for an import, a
+missing export — throws, so the run refuses the way it refuses a malformed
+boundary config: judging a tree against a law that was never read is a verdict
+about nothing. An **evaluate** failure — a trap, an exhausted budget, an
+unreadable verdict, an evidence kind this contract does not carry — makes that
+one rule `unknown` with the host's own reason carried through unedited. Every
+rule is loaded before any is evaluated, so a run either judges the whole
+declared law or refuses it; half a law, half-applied, is a verdict nobody
+declared.
+
+A path-scoped run answers `not_applicable` for every declared rule, decided
+before any artifact is read: a rule's evidence is the whole tree, and a scoped
+run read part of it. `--evidence-out <dir>` writes the exact bundle each rule
+was judged over, including for a rule that trapped. See
+[../concepts/custom-rules.md](../concepts/custom-rules.md) for the model and
+[../reference/custom-rules.md](../reference/custom-rules.md) for the wire.
+
+### 12. Report
 
 `src/report/` renders and decides nothing. A formatter that filtered would be a
 rule wearing a formatter's name, and it would disagree with the engine the first
@@ -201,14 +233,34 @@ time either changed.
 Two formats, two audiences: `text.mjs` produces the `file:line:column` a terminal
 turns into a link, and `sarif.mjs` produces what GitHub code scanning accepts.
 
-### 12. Exit
+### 13. Exit
+
+`verdictFor` is the one function that maps counts to a verdict, and every
+finding-shaped count rides the same lane:
 
 ```js
-if (result.violations > 0 || result.goWorkDrift > 0 || result.tsconfigPathsDead > 0) {
-  return EXIT.violations; // 1
-}
-return result.unchecked > 0 ? EXIT.error : EXIT.ok; // 3 or 0
+// 1 — something was judged and the answer is no
+violations ||
+  declaredEdgeFindings ||
+  goWorkDrift ||
+  tsconfigPathsDead ||
+  intentFindings ||
+  fitnessFail ||
+  customRuleFail;
+
+// 3 — something could not be judged at all
+unchecked ||
+  intentUnresolved ||
+  intentUnresolvedDecisionRefs ||
+  fitnessUnknown ||
+  customRuleUnknown;
+
+// 0 — neither
 ```
+
+A declared gate that `fail`s is a finding (D-09) and one that answers `unknown`
+is a could-not-determine; neither gets an exit code of its own, so a consumer's
+CI keeps branching on the same 0/1/3 it already did.
 
 `unchecked` is counted inside `check()` rather than recomputed by the caller,
 deliberately: the exit code and the report must agree about which failures mean

@@ -12,8 +12,12 @@
  * and they are byte-identical to the Rust SDK's copies
  * (`../../lattice-rule-sdk-rust/fixtures/`) — the same five documents, so a
  * verdict that differed between the two SDKs would be two contracts wearing one
- * name. A future cross-SDK gate is what will hold them identical; today the copy
- * is made by hand in the change that lands each SDK.
+ * name. What holds them identical is no longer a promise:
+ * `../../lattice/src/conformance/rule-sdks.integration.test.mjs` reads every
+ * SDK's copy of every fixture and requires them byte-identical, then drives all
+ * four committed artifacts through the engine's real host and requires one
+ * verdict document from each. The copy is still made by hand in the change that
+ * lands each SDK; the gate is what makes an edit to one copy alone go red.
  *
  * ## Why this suite reaches for the host and the Rust one does not
  *

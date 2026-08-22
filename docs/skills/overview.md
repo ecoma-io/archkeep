@@ -42,7 +42,14 @@ and never requires every command for every change.
 
 `check` is the only command that exits 1 on boundary findings — with one
 companion: `fitness` also exits 1 when a declared function `fail`s, because a
-failing fitness function is a finding. Every other command is descriptive or
+failing fitness function is a finding. `check` also folds in the two laws the
+workspace declares for itself, both by presence and neither behind a flag: a
+`fitness` list, and a `customRules` list of committed WebAssembly rules this
+engine did not write. Their verdicts ride the lanes the skills already teach —
+a `fail` is exit 1, an `unknown` is exit 3 — so a skill needs no new exit code
+for them, only the discipline that a rule which could not be run is never a
+rule that passed ([../concepts/custom-rules.md](../concepts/custom-rules.md)).
+Every other command is descriptive or
 proposal-only: `graph`, `diff`, `drift`, `discover`, `reconcile`, `impact`,
 `explain`, `context`, `history`, `waivers`, `health`, `report`, `debt`,
 `provenance`, and `adr` never exit 1 on their own, and both `--propose` surfaces
