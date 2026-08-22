@@ -4,7 +4,8 @@ The exact contract between the engine and a rule it did not write: what a
 declared artifact must export, what bytes it receives and must return, and
 every way the exchange can fail. [concepts/custom-rules.md](../concepts/custom-rules.md)
 owns the model and the refusals; [policy-schema.md](policy-schema.md) owns the
-`customRules` row a workspace declares; this page owns the wire.
+`customRules` row a workspace declares; [usage/custom-rules.md](../usage/custom-rules.md)
+owns the sequence a first rule goes through; this page owns the wire.
 
 The contract is versioned as a whole: every document below carries
 `"contract": 1`, and an engine that cannot speak a rule's contract refuses to
