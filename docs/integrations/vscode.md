@@ -15,10 +15,17 @@ an import site, the only difference from the CLI is when you find out.
 | Language status item | Shows whether the server is running, not running, or has no workspace |
 | Log output           | Every path the extension searched, and the server's own output        |
 
-What the server deliberately does not publish are the CLI's two workspace-level
-checks — go.work drift and dead tsconfig path aliases — because a finding that
-describes the workspace stays out of whichever file happens to be open.
-[languages.md](../reference/languages.md) owns both and the reasoning.
+What the server deliberately does not publish are the CLI's three
+workspace-level checks — go.work drift, dead tsconfig path aliases, and
+declared-edge (`implicitDependencies`) violations — because a finding that
+describes the workspace stays out of whichever file happens to be open. The
+third is workspace-level for the same reason even though it does name a file:
+the manifest that declared the edge is not a source this server analyzes, and
+underlining a `project.json` for a dependency someone declared elsewhere would
+put the report where its fix is not.
+[languages.md](../reference/languages.md) owns the first two and the reasoning;
+[checking.md](../usage/checking.md) lists all three beside the rest of what
+`check` folds in.
 
 ## How it works
 

@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { EXIT, check, runCli } from "../cli.mjs";
+import { COMMAND_NAMES, EXIT, check, runCli } from "../cli.mjs";
 import { INTENT_MESSAGE_IDS } from "./architecture-intent/judge.mjs";
 import { readArtifactBytes } from "./commands/custom-rules.mjs";
 import { computePolicyFingerprint } from "./commands/graph.mjs";
@@ -645,6 +645,40 @@ describe("--evidence-out, the sandbox's window", () => {
     const stderr = env.lines.err.join("\n");
     expect(stderr).toContain("--evidence-out");
     expect(stderr).not.toContain("--output");
+  });
+
+  it("is `check`'s alone — every other command rejects it as an unknown option", async () => {
+    // A flag a command accepts and then ignores is the silent direction in
+    // argv: the author asks for the evidence, the run exits 0, and the empty
+    // directory reads as "your evidence is fine". Six commands carried a
+    // copy-pasted declaration of this flag with no `evidenceOut` in their
+    // defaults and no code reading it — `docs/usage/configuration.md` said it
+    // was `check`'s alone the whole time.
+    //
+    // Exhaustive over `COMMAND_NAMES` rather than over a list written here,
+    // for the reason `scripts/check-packages.mjs` parses `ci.yml`: a command
+    // added later with the block pasted in again fails this on the day it
+    // lands. A custom rule is judged nowhere but `check`, so `check` is the
+    // one row that may accept it.
+    const fixture = workspace();
+    const dir = evidenceDir();
+
+    for (const command of COMMAND_NAMES) {
+      if (command === "check") continue;
+      const env = fixture.env();
+      const exit = await runCli([command, "--evidence-out", dir], env);
+      const stderr = env.lines.err.join("\n");
+      expect(
+        { command, exit, named: stderr.includes("unknown option '--evidence-out'") },
+        `${command} must refuse --evidence-out`,
+      ).toEqual({ command, exit: EXIT.usage, named: true });
+    }
+
+    // The other half of the claim, so a change that deleted the flag outright
+    // could not pass this test by making every command refuse it.
+    const accepted = fixture.env();
+    expect(await runCli(["check", "--evidence-out", dir], accepted)).toBe(EXIT.ok);
+    expect(accepted.lines.err.join("\n")).not.toContain("unknown option");
   });
 
   it("writes nothing when the declared law could not be loaded at all", async () => {
