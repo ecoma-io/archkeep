@@ -12,8 +12,15 @@
 #
 # It is deliberately NOT what CI runs. The tests below check the COMMITTED
 # bytes, so a green build proves the artifact in the tree rather than one the
-# runner just made — and adding a rustup target to a hosted runner would make
-# every CI leg pay for a rebuild whose only output is a file already in git.
+# runner just made, and a rebuild in CI would be a leg whose only output is a
+# file already in git.
+#
+# CI does install the target, and that is not this script arriving by the back
+# door: `./moon.yml`'s `typecheck` uses it to type-check the
+# `#[cfg(target_arch = "wasm32")]` half of `src/abi.rs`, which no host-target
+# compilation reads. Reading that source and emitting nothing is a different
+# claim from producing bytes, and only the second one is what this paragraph
+# refuses.
 set -euo pipefail
 
 cd "$(dirname "$0")"

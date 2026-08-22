@@ -6,6 +6,14 @@
 # `scope-sdk` arrives with this package: it is the second scope the boundary
 # law's scope axis has ever had, and that row is what keeps the SDK and the
 # engine from importing each other by accident.
+#
+# Every cargo invocation below passes `--locked`, once, for all three tasks.
+# Without it cargo RESOLVES and rewrites `Cargo.lock` in place and exits 0, so
+# a lockfile that disagrees with `Cargo.toml` is a green build and a
+# contributor's dirty tree rather than a failure — measured on this package:
+# the 0.10.0 release bumped the manifest through release-please's
+# `extra-files`, `Cargo.lock` kept saying 0.9.0, and lint, test and typecheck
+# all passed over it. `--locked` makes that state a red build naming the file.
 id: lattice-rule-sdk-rust
 language: rust
 layer: library
@@ -21,15 +29,31 @@ tasks:
   # whose formatting had drifted would still report `ok lattice-rule-sdk-rust —
   # lint, test, typecheck` from `../../scripts/check-packages.mjs`.
   lint:
-    script: cargo fmt --check && cargo clippy --all-targets -- -D warnings
+    script: cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings
   # Runs the unit tests, the golden fixture suite, and the two artifact
   # checks — deliberately NOT a wasm rebuild. The artifact is committed and
   # pinned by its digest, so what the suite proves is the bytes in the tree
   # rather than bytes the runner just made (`./rebuild-example.sh` says the
   # rest).
   test:
-    command: cargo test
+    command: cargo test --locked
   # The Rust half of what `tsc --noEmit` is for the .mjs packages: type
-  # checking with nothing emitted.
+  # checking with nothing emitted — twice, because this crate compiles to two
+  # architectures and the host pass cannot see the other one.
+  #
+  # `src/abi.rs`'s three exports — `alloc`, `pack`, `evidence_slice`, the whole
+  # wire every artifact this SDK produces runs on — sit under
+  # `#[cfg(target_arch = "wasm32")]`, so an x86_64 runner never reads them.
+  # Measured, by putting a type error in `alloc`: `cargo check --all-targets`,
+  # `cargo clippy --all-targets -- -D warnings` and `cargo test` all stayed
+  # green, and only the wasm32 pass went red. Source that no compilation reads
+  # is source a green build says nothing about — the silent direction
+  # (`../../AGENTS.md`), and here it lands on the half an author cannot test
+  # any other way.
+  #
+  # It is a type check and NOT the rebuild `./rebuild-example.sh` argues CI
+  # should not run: nothing is emitted, no `.wasm` is produced, and the
+  # committed artifact stays the bytes `tests/artifact.rs` proves. That script
+  # refuses to make a file already in git; this reads a file nothing else does.
   typecheck:
-    command: cargo check --all-targets
+    script: cargo check --locked --all-targets && cargo check --locked --target wasm32-unknown-unknown

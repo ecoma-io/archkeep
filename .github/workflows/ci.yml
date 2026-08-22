@@ -131,8 +131,20 @@ jobs:
       # than a toolchain action pinned; rustfmt is named too because the
       # toolchain rustup manages resolves its own components, not the
       # standalone binary the image lists beside it.
-      - name: Add the Rust components the SDK's targets run
-        run: rustup component add clippy rustfmt
+      #
+      # The wasm32 target is added for the same reason and buys something no
+      # component does: that SDK's `typecheck` target type-checks the crate a
+      # second time for `wasm32-unknown-unknown`, which is the only pass that
+      # reads the `#[cfg(target_arch = "wasm32")]` ABI exports every artifact
+      # runs on (`../../packages/lattice-rule-sdk-rust/moon.yml` measures what
+      # the host pass misses). It installs a std for the target and compiles
+      # nothing extra of this repository's — the rebuild that
+      # `packages/lattice-rule-sdk-rust/rebuild-example.sh` argues CI should
+      # not do stays out.
+      - name: Add the Rust components and target the SDK's targets run
+        run: |
+          rustup component add clippy rustfmt
+          rustup target add wasm32-unknown-unknown
 
       # --force skips Moon's VCS affected detection (which needs full git
       # history, unavailable in the shallow checkout) and bypasses the local
