@@ -53,6 +53,8 @@ export const MARKETPLACE_PLUGIN_NAME = "lattice";
 export const CODEX_PLUGIN_MANIFEST = ".codex-plugin/plugin.json";
 export const VSCODE_PACKAGE_JSON = "packages/lattice-vscode/package.json";
 export const RUST_SDK_CARGO_TOML = "packages/lattice-rule-sdk-rust/Cargo.toml";
+export const RUST_SDK_CARGO_LOCK = "packages/lattice-rule-sdk-rust/Cargo.lock";
+export const RUST_SDK_CRATE_NAME = "lattice-rule-sdk";
 export const TS_SDK_PACKAGE_JSON = "packages/lattice-rule-sdk-ts/package.json";
 export const PYTHON_SDK_PYPROJECT = "packages/lattice-rule-sdk-python/pyproject.toml";
 
@@ -172,6 +174,53 @@ export function tomlSectionVersion(text, section) {
 }
 
 /**
+ * The version Cargo.lock records for one package, or "?" when the lock does
+ * not name it.
+ *
+ * A separate parser from `tomlSectionVersion` rather than a call into it,
+ * because Cargo.lock is not a section keyed by name: it is a repeated
+ * `[[package]]` array whose every entry carries the same header, so matching
+ * on the header alone returns the FIRST entry's version — which in an
+ * alphabetically sorted lock is a dependency's, not the crate's own. Reading
+ * a dependency's number as the crate's is the silent direction here, the same
+ * one `tomlSectionVersion`'s own scoping guards against.
+ *
+ * The lock is on the chain for a reason the manifests are not: release-please
+ * writes `Cargo.toml` via `extra-files` and NOTHING writes the lock, so the
+ * bump lands in one file and not the other. `cargo test --locked` and
+ * `cargo publish --locked` — the two commands the release lane runs before it
+ * uploads — refuse to proceed when the lock disagrees with the manifest, so
+ * that drift is a release that cannot publish. This gate moves the failure
+ * back to the release pull request, where the fix is a commit, from the
+ * publish job, where the tag is already immutable.
+ *
+ * @param {string} text full contents of Cargo.lock
+ * @param {string} name the package whose recorded version to read
+ * @returns {string} that package's version, or "?" when the lock does not name it
+ */
+export function cargoLockPackageVersion(text, name) {
+  let inPackage = false;
+  let matched = false;
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (/^\[/.test(trimmed)) {
+      inPackage = trimmed === "[[package]]";
+      matched = false;
+      continue;
+    }
+    if (!inPackage) continue;
+    const nameMatch = /^name\s*=\s*"([^"]+)"/.exec(trimmed);
+    if (nameMatch) {
+      matched = nameMatch[1] === name;
+      continue;
+    }
+    const versionMatch = /^version\s*=\s*"([^"]+)"/.exec(trimmed);
+    if (versionMatch && matched) return versionMatch[1];
+  }
+  return "?";
+}
+
+/**
  * The version of a marketplace catalogue's matching plugin entry, selected by
  * name/identity rather than array position. `.claude-plugin/marketplace.json`
  * is a catalogue and `plugins` is a list this repository controls today, but
@@ -202,6 +251,7 @@ export function selectMarketplaceVersion(catalogue, pluginName) {
  * @param {string} input.codexPluginVersion version from the Codex plugin manifest
  * @param {string} input.vscodeVersion version from packages/lattice-vscode/package.json
  * @param {string} input.cargoVersion version from the Rust SDK's Cargo.toml `[package]` section
+ * @param {string} input.cargoLockVersion version Cargo.lock records for the Rust SDK crate
  * @param {string} input.tsSdkVersion version from the TS SDK's package.json
  * @param {string} input.pySdkVersion version from the Python SDK's pyproject.toml `[project]` section
  * @param {{dir: string, name: string|null, description: string|null, compatibility: string|null, hostFields: string[], text?: string}[]} input.skills
@@ -219,6 +269,7 @@ export function evaluate({
   codexPluginVersion,
   vscodeVersion,
   cargoVersion,
+  cargoLockVersion,
   tsSdkVersion,
   pySdkVersion,
   skills,
@@ -572,6 +623,27 @@ export function evaluate({
     lines.push(`FAIL lattice-rule-sdk-python/pyproject.toml — version mismatch`);
   }
 
+  // 15. Cargo.lock must record the version Cargo.toml declares. This is the
+  // one chain link release-please does NOT write: `extra-files` bumps the
+  // manifest and nothing bumps the lock, so the two disagree from the moment
+  // a release pull request opens. The release lane's crates.io job then runs
+  // `cargo test --locked` and `cargo publish --locked`, both of which refuse
+  // a lock that disagrees with its manifest — measured on the 0.10.0 release,
+  // which tagged, published to npm, and left crates.io with no 0.10.0 at all.
+  // A tag cannot be un-cut, so the failure belongs here, on the pull request,
+  // where the fix is still a commit. `cargoLockPackageVersion` says why the
+  // lock needs its own parser.
+  if (cargoLockVersion !== cargoVersion) {
+    failures.push(
+      `packages/lattice-rule-sdk-rust/Cargo.lock records "${cargoLockVersion}" for the ` +
+        `${RUST_SDK_CRATE_NAME} crate but Cargo.toml declares "${cargoVersion}". ` +
+        `release-please writes the manifest via extra-files and writes no lockfile, so ` +
+        `this pair drifts on every version bump — and \`cargo publish --locked\`, which ` +
+        `the release lane runs before it uploads, refuses to publish through the drift.`,
+    );
+    lines.push(`FAIL lattice-rule-sdk-rust/Cargo.lock — version mismatch`);
+  }
+
   return { lines, failures };
 }
 
@@ -579,7 +651,7 @@ export function evaluate({
  * Reads the filesystem and returns the facts `evaluate` needs.
  * This is the only function that touches the outside world.
  *
- * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, tsSdkVersion: string, pySdkVersion: string, skills: object[], authoring: string, overview: string}}
+ * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, cargoLockVersion: string, tsSdkVersion: string, pySdkVersion: string, skills: object[], authoring: string, overview: string}}
  */
 export function readSkillFacts() {
   const pkgPath = join(root, PACKAGE_JSON);
@@ -619,6 +691,11 @@ export function readSkillFacts() {
   const cargoPath = join(root, RUST_SDK_CARGO_TOML);
   const cargoVersion = existsSync(cargoPath)
     ? tomlSectionVersion(readFileSync(cargoPath, "utf8"), "[package]")
+    : "?";
+
+  const cargoLockPath = join(root, RUST_SDK_CARGO_LOCK);
+  const cargoLockVersion = existsSync(cargoLockPath)
+    ? cargoLockPackageVersion(readFileSync(cargoLockPath, "utf8"), RUST_SDK_CRATE_NAME)
     : "?";
 
   const tsSdkPath = join(root, TS_SDK_PACKAGE_JSON);
@@ -678,6 +755,7 @@ export function readSkillFacts() {
     codexPluginVersion,
     vscodeVersion,
     cargoVersion,
+    cargoLockVersion,
     tsSdkVersion,
     pySdkVersion,
     skills,

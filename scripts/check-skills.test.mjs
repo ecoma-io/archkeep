@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  cargoLockPackageVersion,
   tomlSectionVersion,
   evaluate,
   EXPECTED_SKILLS,
@@ -31,6 +32,32 @@ describe("selectMarketplaceVersion", () => {
 
   it("returns '?' when the catalogue has no plugins list", () => {
     assert.equal(selectMarketplaceVersion({}, "lattice"), "?");
+  });
+});
+
+describe("cargoLockPackageVersion", () => {
+  it("reads the named package's version out of the [[package]] array", () => {
+    const lock =
+      '[[package]]\nname = "serde"\nversion = "1.0.229"\n\n' +
+      '[[package]]\nname = "lattice-rule-sdk"\nversion = "0.10.0"\n';
+    assert.equal(cargoLockPackageVersion(lock, "lattice-rule-sdk"), "0.10.0");
+  });
+
+  it("never reads another package's version as the named one's", () => {
+    // The silent direction, and the reason this is not a call into
+    // tomlSectionVersion: every entry in a lock carries the SAME
+    // `[[package]]` header, so a header-only match returns whichever entry
+    // came first — a dependency's number, reported as the crate's, reading
+    // as "in sync" while the lock has not been bumped at all.
+    const lock =
+      '[[package]]\nname = "itoa"\nversion = "1.0.18"\n\n' +
+      '[[package]]\nname = "memchr"\nversion = "2.8.3"\n';
+    assert.equal(cargoLockPackageVersion(lock, "lattice-rule-sdk"), "?");
+  });
+
+  it("returns '?' when the named entry carries no version line", () => {
+    const lock = '[[package]]\nname = "lattice-rule-sdk"\ndependencies = [\n "serde",\n]\n';
+    assert.equal(cargoLockPackageVersion(lock, "lattice-rule-sdk"), "?");
   });
 });
 
@@ -165,6 +192,7 @@ describe("evaluate", () => {
     codexPluginVersion: "0.4.0",
     vscodeVersion: "0.4.0",
     cargoVersion: "0.4.0",
+    cargoLockVersion: "0.4.0",
     tsSdkVersion: "0.4.0",
     pySdkVersion: "0.4.0",
   };
@@ -315,6 +343,22 @@ describe("evaluate", () => {
     });
     assert.ok(
       result.failures.some((f) => f.includes("lattice-rule-sdk-python") && f.includes("1.0.1")),
+    );
+  });
+
+  it("fails when Cargo.lock has not been bumped with Cargo.toml", () => {
+    // The 0.10.0 release, replayed: release-please bumped the manifest via
+    // extra-files, nothing bumped the lock, and the crates.io job died on
+    // `cargo test --locked` after the tag was already cut. Red here is red
+    // while the fix is still a commit.
+    const result = evaluate({
+      ...baseFacts,
+      cargoLockVersion: "0.3.0",
+      skills: allGood(),
+    });
+    assert.ok(
+      result.failures.some((f) => f.includes("Cargo.lock") && f.includes("0.3.0")),
+      "a lock left behind by the bump must fail the chain",
     );
   });
 
