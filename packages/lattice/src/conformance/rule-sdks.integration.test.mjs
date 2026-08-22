@@ -174,4 +174,57 @@ describe("the four rule SDKs, against one contract", () => {
       });
     }
   }, 120_000);
+
+  it("answers the same over a bundle that grew fields no rule declared", async () => {
+    // The additive-growth promise, measured rather than asserted in prose.
+    // `../../../../docs/adr/0002-custom-rules-one-contract.md` says the
+    // evidence contract "grows additively within a version", and every SDK's
+    // binding says in its own words that it accepts members it does not read —
+    // Rust carries no `deny_unknown_fields`, the AssemblyScript parser refuses
+    // no member, Go's `json.Unmarshal` and Python's dicts ignore extras by
+    // construction. Four claims, in four languages, none of them checked.
+    //
+    // They matter on the day the first language-namespaced kind lands: if any
+    // SDK refused the bundle it did not recognise, every rule already written
+    // would turn `unknown` on an engine upgrade that added nothing they read —
+    // a whole workspace's law going quiet because the engine learned a new
+    // fact. So the bundle here gains a kind that does not exist and a member
+    // inside one that does, and the verdict must not move by a byte.
+    const fixture = "edge-into-forbidden-tag";
+    const bundle = JSON.parse(
+      readFileSync(resolve(`${RULE_SDKS[0].fixtures}/${fixture}.json`), "utf8"),
+    );
+    const grown = {
+      ...bundle,
+      "go.decls": [{ project: "ring", file: "libs/ring/port.go", kind: "interface", line: 4 }],
+      model: {
+        ...bundle.model,
+        projects: bundle.model.projects.map((project) => ({ ...project, language: "go" })),
+      },
+    };
+
+    const encoder = new TextEncoder();
+    for (const entry of loaded) {
+      const before = await evaluateCustomRule({
+        module: entry.loaded.module,
+        describe: entry.loaded.describe,
+        evidenceBytes: encoder.encode(JSON.stringify(bundle)),
+        timeoutMs: TIMEOUT_MS,
+      });
+      const after = await evaluateCustomRule({
+        module: entry.loaded.module,
+        describe: entry.loaded.describe,
+        evidenceBytes: encoder.encode(JSON.stringify(grown)),
+        timeoutMs: TIMEOUT_MS,
+      });
+      expect({ sdk: entry.name, failure: after.failure ?? null }).toEqual({
+        sdk: entry.name,
+        failure: null,
+      });
+      expect({ sdk: entry.name, verdict: canonicalizeJson(after.verdict) }).toEqual({
+        sdk: entry.name,
+        verdict: canonicalizeJson(before.verdict),
+      });
+    }
+  }, 120_000);
 });
