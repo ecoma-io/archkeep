@@ -167,7 +167,7 @@ export function judgeEdge(edge, nodes, dependencies, depConstraints, reachabilit
  * edge structurally does not carry.
  *
  * An empty `depConstraints` table returns no violations, matching
- * `evaluate()`'s own early exit in `../rules/index.mjs`'s `evaluateConstraints`
+ * `evaluate()`'s own early exit in `../rules/index.mjs`'s tag block
  * — a workspace declaring no constraint table has opted out of dep-constraint
  * enforcement entirely, on both the import-site and the declared-edge path.
  * `judgeEdge` itself has no such guard (an empty table makes every project's

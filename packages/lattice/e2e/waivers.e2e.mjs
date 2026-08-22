@@ -17,6 +17,10 @@
 // The active and expired variants differ only by which side of the wall clock
 // `expiresAt` falls on. That is the one fact a unit test supplies for itself
 // and a spawned binary cannot, which is what makes these E2E rather than unit.
+//
+// The file closes on the journey those three start: fix the violation and the
+// row that accepted it is dead — the next `check` refuses until the row is
+// removed, and removing it is the green end state.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import { packArtifact } from "./helpers/artifact.mjs";
@@ -24,6 +28,7 @@ import { createNativeMonorepoConsumer, commitFiles } from "./helpers/consumer.mj
 import { lattice } from "./helpers/run.mjs";
 import { CORE_REACHES_APP } from "./fixtures/violations.mjs";
 import { ACTIVE_WAIVER, EXPIRED_WAIVER, PERMANENT_SUPPRESSION } from "./fixtures/waiver-law.mjs";
+import { MONOREPO_BOUNDARY_CONFIG } from "./fixtures/boundary-law.mjs";
 
 let artifact;
 let consumer;
@@ -117,9 +122,13 @@ describe("the suppression table, end to end", () => {
     expect(waivers.json.result.stale).toBe(0);
   });
 
-  it("goes green again when the import is removed rather than accepted", () => {
-    // Violation → fix → pass, with the lapsed row still on the table: the
-    // clean verdict has to come from the tree, not from the suppression.
+  it("a fix leaves its suppression row dead, and the next run demands its removal", () => {
+    // Violation → fix → the row that accepted the violation covers nothing.
+    // That is issue #217's defect turned into a gate: a row accepting nothing
+    // is a boundary that stopped being enforced, so `check` refuses (exit 3)
+    // naming the dead row instead of reading green off a table that no longer
+    // does anything. The clean verdict must come from the tree AND a table
+    // that earns its keep — never from a lapsed acceptance left behind.
     commitFiles(
       consumer.root,
       {
@@ -129,9 +138,26 @@ describe("the suppression table, end to end", () => {
       "core stops reaching up into app",
     );
     const check = lattice(consumer.root, ["check"]);
-    expect(check.exitCode).toBe(0);
-    // The row is now dead weight, and `waivers` is where that is visible.
+    expect(check.exitCode).toBe(3);
+    const err = `${check.stdout}${check.stderr}`;
+    expect(err).toContain("boundarySuppressions[0]");
+    expect(err).toContain("matches no violation");
+    // The row is dead weight, and `waivers` is where that is visible even
+    // though `check` refused: the descriptive surface reads the same table
+    // and counts the row as stale.
     const waivers = lattice(consumer.root, ["waivers", "--format", "json"]);
     expect(waivers.json.result.stale).toBe(1);
+  });
+
+  it("the journey ends green: fix the import AND remove its now-dead row", () => {
+    // The state a user actually ends in after the refusal above: the row is
+    // deleted (waivers are recorded, never silently auto-deleted — removal is
+    // an explicit edit) and the tree is judged clean with no table under it.
+    // Nothing else pins this end state; without it the refusal above could
+    // read as a corner with no exit.
+    useLaw(MONOREPO_BOUNDARY_CONFIG, "remove the dead suppression row");
+    const check = lattice(consumer.root, ["check"]);
+    expect(check.exitCode).toBe(0);
+    expect(check.stdout).toContain("no boundary violations");
   });
 });

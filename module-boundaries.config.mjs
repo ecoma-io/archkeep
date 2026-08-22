@@ -247,6 +247,19 @@ export const boundarySuppressions = [
       "the TS SDK's conformance harness drives the engine's real custom-rule host — the one SDK that can, because both sides are JavaScript in one tree. It is a test-time reach and nothing under assembly/ knows the engine exists, so the scope-sdk separation this table holds is intact in the shipped artifact.",
   },
   {
+    // The companion to the row above, and a demonstration of why a suppression
+    // now behaves like a fix: removing the spelling verdict used to silence
+    // every check below it in silence, so this same edge's tags violation —
+    // the harness reaches into `lattice`'s source across the scope-sdk axis —
+    // was never reported. With the fall-through in place it surfaced here,
+    // and accepting it explicitly (same reach, same argument) keeps each
+    // verdict's acceptance its own written row instead of one row hiding two.
+    path: "packages/lattice-rule-sdk-ts/test/golden.test.mjs",
+    messageId: "onlyTagsConstraintViolation",
+    reason:
+      "the same test-time reach the spelling row above accepts: the conformance harness imports the engine's custom-rule host directly, which crosses the scope-sdk axis by construction. Nothing under assembly/ depends on lattice, so the shipped SDK artifact stays inside its axis; only this one test file reaches across, and it does so because the contract under test IS the engine's host.",
+  },
+  {
     path: "packages/lattice-rule-sdk-python/**/*.py",
     messageId: "noSelfCircularDependencies",
     reason:

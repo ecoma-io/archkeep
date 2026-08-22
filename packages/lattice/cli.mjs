@@ -53,8 +53,9 @@
  *   2  usage error — unknown command, unknown flag, missing argument, path
  *      outside the tree
  *   3  no verdict — no workspace, malformed config, the graph provider or git
- *      failed, a selected file could not be analyzed at all, or an
- *      architecture-intent boundary matched no observed project. Distinct from
+ *      failed, a selected file could not be analyzed, an architecture-intent
+ *      boundary matched no observed project, or a `boundarySuppressions` row
+ *      accepts nothing this run judged. Distinct from
  *      1 on purpose: a checker that could not look must never be mistaken for
  *      one that looked and found nothing.
  *
@@ -88,9 +89,16 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { containmentViolation } from "./src/containment.mjs";
 import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs";
 import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
-import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/config.mjs";
+import {
+  loadBoundaryConfig,
+  loadBoundaryConfigFile,
+  policyFrom,
+  suppressionCovers,
+} from "./src/config.mjs";
 import { UsageError } from "./src/errors.mjs";
+import { referenceTime } from "./src/governance/clock.mjs";
 import { profilePolicy } from "./src/governance/profile-registry.mjs";
+import { suppressionFate } from "./src/governance/waiver.mjs";
 import {
   DEFAULT_OPTIONS,
   WORKSPACE_MARKERS,
@@ -128,7 +136,8 @@ import { formatSarif } from "./src/report/sarif.mjs";
 import { formatReport } from "./src/report/text.mjs";
 
 import { LATTICE_MODEL_FILE, loadNativeModel } from "./src/providers/native/model.mjs";
-import { evaluate, exemptResolvedFile } from "./src/rules/index.mjs";
+import { evaluateRun, exemptResolvedFile } from "./src/rules/index.mjs";
+import { orphanedNotDependOnTags, unmatchedConstraintRows } from "./src/rules/tags.mjs";
 import { judgeTsconfigPaths } from "./src/tsconfig-paths.mjs";
 import { findWorkspaceRoot, listTrackedFiles } from "./src/workspace.mjs";
 
@@ -838,7 +847,17 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     }
   }
 
-  const violations = sortViolations(evaluate(imports, graph, config));
+  // Both faces of one walk: the run's verdict, and the raw superset it was
+  // picked from — every candidate up to each site's surviving group, including
+  // the verdicts the suppression table removed to get there. `evaluate` alone
+  // cannot answer whether a row is dead, because a row that removes everything
+  // leaves no trace in the verdict; the raw side of this walk is the trace.
+  // The reference instant is fixed once here and threaded into the walk, so
+  // the gate's waiver-expiry judgement below and the engine's are the same
+  // judgement, not two reads of the clock a boundary instant could split.
+  const now = referenceTime();
+  const { violations: judged, rawViolations } = evaluateRun(imports, graph, { ...config, now });
+  const violations = sortViolations(judged);
   // An ACTIVE waiver keeps the violation it accepts in the findings list,
   // marked `waivedBy` — the run is still non-zero (waiving does not flip
   // exit 1 → 0), and this count is the additive "accepted violations" number
@@ -1007,6 +1026,100 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   const unchecked = new Set(
     failures.filter(isWholeFileFailure).map((failure) => failure.sourceFile),
   ).size;
+
+  // A row of the boundary law that covers nothing is a boundary that stopped
+  // being enforced, and — unlike a missing `reason`, which only a human can
+  // judge — it is machine-detectable. Two tables can be dead, and both are
+  // refused here with the same exit and the same sentence shape the stale
+  // `coverage.exempt` row has always gotten (`./src/providers/native/index.mjs`):
+  //
+  // - a `boundarySuppressions` row covering no candidate violation, measured
+  //   against `rawViolations` above (the candidates up to each site's
+  //   surviving group, so a row covering a verdict ANOTHER row removed first
+  //   still counts as alive). Waiver rows still in force are excluded: their
+  //   lifecycle is the `waivers` command's informational surface, which has
+  //   always reported a term-bearing row that currently covers nothing as
+  //   stale rather than fatal — a fixed violation leaves its waiver idle until
+  //   expiry, and that resting state is the feature working, not a defect. An
+  //   EXPIRED waiver (`fate === "reassert"`) is the opposite state: its term
+  //   has lapsed, it can never come back into force without an edit, and it
+  //   sits in the table forever — exactly as dead as a permanent row, refused
+  //   here with it, named with its lapse date.
+  // - a `depConstraints` row selecting no project as its source
+  //   (`unmatchedConstraintRows`), which approves everything on its axis while
+  //   reading as enforced. This half applies to law the workspace WROTE — a
+  //   filename at its root, an inline policy, a registry it keeps in the tree.
+  //   A profile resolved from inside a dependency install (`node_modules`) is
+  //   exempt: a shipped policy pack is data adopted wholesale
+  //   (`docs/usage/presets.md` — "a pack saves you the blank page"), written
+  //   for trees that instantiate its style at their own pace, so holding its
+  //   rows to this tree's tag vocabulary would refuse every partial adoption —
+  //   the false-positive direction. A rename under an adopted pack is still
+  //   loud for the reason that feature already ships: the renamed projects
+  //   stop matching any row, and the no-matching-constraint-is-an-error rule
+  //   reports them on their first import (`../src/rules/tags.mjs`'s header).
+  //
+  // Both verdicts fire only where they are KNOWABLE — a whole-workspace run
+  // over a tree this run fully analyzed. A path-scoped run judges part of the
+  // tree, and files whose analysis failed contribute no candidates at all;
+  // either way a row covering nothing in what this run saw may cover plenty in
+  // what it did not (a scoped run over a half-adopted style pack being the
+  // everyday case for the constraint half), and refusing there would be the
+  // false-positive direction. The language server's per-file path never
+  // reaches this function, so it needs no guard of its own. The constraint
+  // verdict needs only the graph, which scoping never narrows, but it rides
+  // the same gate rather than a second one — one dialect, one condition pair,
+  // stated once (`../../AGENTS.md`, "Never state a rule twice").
+  if (
+    config !== null &&
+    options.paths.length === 0 &&
+    failures.length === 0 &&
+    (config.suppressions.length > 0 || config.depConstraints.length > 0)
+  ) {
+    const deadRows = [];
+    config.suppressions.forEach((row, index) => {
+      const fate = suppressionFate(row, now);
+      if (fate === "waive") return;
+      if (rawViolations.some((violation) => suppressionCovers(row, violation))) return;
+      const expired = fate === "reassert" ? ` (expired ${row.expiresAt})` : "";
+      deadRows.push(
+        `boundarySuppressions[${index}]: '${row.path}'${expired} matches no violation this run ` +
+          `judged — either the code it accepted is gone, or the path was never right`,
+      );
+    });
+    const authoredLaw =
+      policySource === null || !policySource.split(/[\\/]/u).includes("node_modules");
+    if (authoredLaw && Object.keys(graph.nodes).length > 0) {
+      for (const { row, index } of unmatchedConstraintRows(config.depConstraints, graph)) {
+        const selector = Array.isArray(row.allSourceTags)
+          ? `allSourceTags (${row.allSourceTags.join(", ")})`
+          : `sourceTag '${row.sourceTag}'`;
+        deadRows.push(
+          `depConstraints[${index}]: ${selector} matches no project in the graph — the row ` +
+            `selects no source, and a constraint matching nothing does not error, it approves. ` +
+            `Either its tags were renamed out from under it or they were never right`,
+        );
+      }
+      for (const { index, position, tag } of orphanedNotDependOnTags(
+        config.depConstraints,
+        graph,
+      )) {
+        deadRows.push(
+          `depConstraints[${index}].notDependOnLibsWithTags[${position}]: '${tag}' is carried by ` +
+            `no project in the graph — the ban names nothing that can exist, so this axis of the ` +
+            `row forbids nothing while reading as enforced. Either the tag was renamed out from ` +
+            `under it or it was never right`,
+        );
+      }
+    }
+    if (deadRows.length > 0) {
+      throw new Error(
+        `lattice: ${policySource ?? "the boundary config"} describes a workspace that does not ` +
+          `match the tree:\n  ${deadRows.join("\n  ")}`,
+      );
+    }
+  }
+
   // A `coverage.exempt` row removes a file from `unclaimed` before this run
   // ever sees it — legitimately, for vendored or generated code — but nothing
   // that removal produces was ever named in any report: an exempted file and

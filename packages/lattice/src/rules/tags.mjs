@@ -77,6 +77,86 @@ export function findConstraintsFor(depConstraints, sourceProject) {
 }
 
 /**
+ * The `depConstraints` rows that match NO project in the graph as their
+ * source — the one direction a constraint can be dead in. A row whose source
+ * selector (`sourceTag`, or every tag of `allSourceTags` on one project)
+ * selects nothing never applies to any import, so everything on its axis
+ * passes while the config reads as enforced: the exact "a constraint matching
+ * nothing does not error, it approves" mode the file loading this table
+ * refuses shapes for but cannot see, because whether a tag is CARRIED is a
+ * fact about the graph, which the loader deliberately never holds.
+ *
+ * Only the SOURCE side is asked, deliberately. A row whose
+ * `onlyDependOnLibsWithTags` names a tag no project carries is not dead — it
+ * is maximally strict, since `onlyTagsViolation` fires when the target carries
+ * none of the permitted list, so an empty carrier set violates every
+ * dependency. Loud, self-correcting, and none of this function's business.
+ * Rows answered here go through `findConstraintsFor` itself — the same
+ * matcher the per-site evaluation runs — so all four tag dialects
+ * (`*`, `/regex/`, glob, exact) are judged by the one opinion, and a row over
+ * a malformed selector (refused at load before any caller reaches here) is
+ * skipped rather than crashed into.
+ *
+ * @param {object[]} depConstraints The validated constraint table.
+ * @param {object} graph The project graph `{nodes}`.
+ * @returns {{index: number, row: object}[]} In table order.
+ */
+export function unmatchedConstraintRows(depConstraints, graph) {
+  const projects = Object.values(graph?.nodes ?? {});
+  return depConstraints
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => {
+      if (!isPlainRow(row)) return false;
+      return !projects.some((project) => findConstraintsFor([row], project).length > 0);
+    });
+}
+
+/** @param {object} row @returns {boolean} */
+function isPlainRow(row) {
+  return (
+    typeof row === "object" &&
+    row !== null &&
+    (typeof row.sourceTag === "string" ||
+      (Array.isArray(row.allSourceTags) && row.allSourceTags.every((t) => typeof t === "string")))
+  );
+}
+
+/**
+ * The `notDependOnLibsWithTags` entries naming a tag no project carries — the
+ * other direction a constraint can die in. A forbidden-target list whose every
+ * value names nothing bans nothing, so the row reads as enforcing an axis it
+ * has stopped guarding: a ban that evaporated is the silent direction itself.
+ * (`onlyDependOnLibsWithTags` is deliberately absent here: a permitted list
+ * naming nothing makes the row maximally STRICT — `onlyTagsViolation` fires
+ * when the target carries none of the permitted list, so an empty carrier set
+ * violates every dependency — which is loud, self-correcting, and none of this
+ * function's business.)
+ *
+ * Each entry is asked through `hasTag` — the same matcher the transitive
+ * verdict judges with — so all four tag dialects (`*`, `/regex/`, glob,
+ * exact) are answered by the one opinion.
+ *
+ * @param {object[]} depConstraints The validated constraint table.
+ * @param {object} graph The project graph `{nodes}`.
+ * @returns {{index: number, position: number, tag: string}[]} In table order.
+ */
+export function orphanedNotDependOnTags(depConstraints, graph) {
+  const projects = Object.values(graph?.nodes ?? {});
+  const carried = (tag) => projects.some((project) => hasTag(project, tag));
+  /** @type {{index: number, position: number, tag: string}[]} */
+  const orphans = [];
+  depConstraints.forEach((row, index) => {
+    if (!isPlainRow(row)) return;
+    const list = row.notDependOnLibsWithTags;
+    if (!Array.isArray(list)) return;
+    list.forEach((tag, position) => {
+      if (typeof tag === "string" && !carried(tag)) orphans.push({ index, position, tag });
+    });
+  });
+  return orphans;
+}
+
+/**
  * Paths from `targetProject` to every project reachable from it that carries
  * one of `tags` — the target itself included, as a one-element path.
  *

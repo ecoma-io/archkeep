@@ -81,6 +81,28 @@ stays valid byte-identical.
 project may not depend on any library carrying tags at all. If you meant "no
 restriction on this axis," omit the field.
 
+### A row that covers nothing
+
+A constraint row can be dead in two ways, and `lattice check` refuses both with
+exit 3, naming the row -- a constraint matching nothing does not error, it
+approves:
+
+- **Its source selector matches no project.** A `sourceTag`, or an
+  `allSourceTags` combination no project carries all of, selects nothing, so
+  the row never applies to any import and everything on its axis passes while
+  the config reads as enforced. Usually a rename outlived the config.
+- **A `notDependOnLibsWithTags` entry names a tag no project carries.** A ban
+  whose every value names nothing forbids nothing, while reading as a ban.
+
+An `onlyDependOnLibsWithTags` entry naming no carried tag is deliberately NOT
+refused: a permitted list naming nothing makes the row maximally strict --
+every dependency violates -- which is loud on its first run and needs no gate.
+The refusal fires only where the answer is knowable: a whole-workspace run over
+a tree the run fully analyzed (a path-scoped run or one with unanalyzed files
+cannot tell a dead row from an unvisited one), and only on law the workspace
+wrote -- [policy packs](../usage/presets.md) are adopted wholesale from
+`node_modules` and are exempt.
+
 ## `moduleBoundaryOptions`
 
 All eight are required. None is defaulted -- a missing option is rejected
@@ -116,16 +138,17 @@ which imports escape.
 
 An array of `{ path, reason, messageId?, expiresAt?, origin? }` rows.
 
-| field       | type   | required | meaning                                                                                                                                                                                                   |
-| ----------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path`      | string | yes      | Glob over the workspace-relative path of the importing file, matched with `path.posix.matchesGlob` and capped at 512 brace-driven alternatives -- see [configuration.md](configuration.md#projectsinfer). |
-| `reason`    | string | yes      | Non-empty. An unexplained suppression is indistinguishable from a boundary that stopped being enforced.                                                                                                   |
-| `messageId` | string | no       | Narrows which check the entry covers. Validated against the engine's violation ids -- a typo suppresses nothing.                                                                                          |
-| `expiresAt` | string | no       | Makes the row a **waiver** instead of a suppression. A parseable ISO-8601 instant. An expired waiver re-asserts the violation it covered. See [waivers.md](../concepts/waivers.md).                       |
-| `origin`    | string | no       | Non-empty. Where the row came from -- a ticket id, a decision record. Never shown in a verdict, only in the waiver's surface and the acceptance report.                                                   |
+| field       | type   | required | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`      | string | yes      | Glob over the workspace-relative path of the importing file, matched with `path.posix.matchesGlob` and capped at 512 brace-driven alternatives -- see [configuration.md](configuration.md#projectsinfer).                                                                                                                                                                                                                               |
+| `reason`    | string | yes      | Non-empty. An unexplained suppression is indistinguishable from a boundary that stopped being enforced. And fixing the violation a row accepts makes the ROW dead: the next whole-workspace run refuses with exit 3 until the row is removed. That is the rule working -- an acceptance nobody can point to a violation for any more must not read as clean -- but it is a cost to go in knowing, not one to discover from a red build. |
+| `messageId` | string | no       | Narrows which check the entry covers. Validated against the engine's violation ids -- a typo suppresses nothing.                                                                                                                                                                                                                                                                                                                        |
+| `expiresAt` | string | no       | Makes the row a **waiver** instead of a suppression. A parseable ISO-8601 instant. An expired waiver re-asserts the violation it covered. See [waivers.md](../concepts/waivers.md).                                                                                                                                                                                                                                                     |
+| `origin`    | string | no       | Non-empty. Where the row came from -- a ticket id, a decision record. Never shown in a verdict, only in the waiver's surface and the acceptance report.                                                                                                                                                                                                                                                                                 |
 
-A row with **no** `expiresAt` is a suppression and removes the violation from
-the run's findings -- the existing behavior. A row **with** `expiresAt` is a
+A row with **no** `expiresAt` is a suppression and removes the verdicts it
+covers from the run's findings -- which is not the same as removing the
+checks, as the next paragraph states. A row **with** `expiresAt` is a
 waiver: the violation stays in the findings (exit code stays 1), marked
 accepted until that instant, and re-asserts in full with the evidence
 `"expired waiver"` once the instant passes. A waiver is judged at epoch-ms
@@ -134,6 +157,24 @@ already expired.
 
 A suppression removes a **verdict**, never a failure. The file is still fully
 analyzed, and anything the analyzer could not read in it is still reported.
+And because a site reports the first check in [the documented
+order](violations.md#the-order-matters) that fires, removing one verdict means
+the checks below it apply at the same line exactly as fixing the specifier
+would: suppressing `noRelativeOrAbsoluteImportsAcrossLibraries` on an edge the
+constraint table forbids surfaces the tag verdict behind it. A suppression
+behaves like a fix, never like an off switch for the file.
+
+A suppression whose verdicts are all gone -- or that never matched one -- is
+refused by `lattice check` with exit 3, naming the row, in the same shape as a
+stale `coverage.exempt` row: a boundary that stopped being enforced must not
+read as clean. An **expired** waiver covering nothing is refused with it -- its
+term has lapsed, and only an edit brings a lapsed term back. A waiver still in
+force that currently covers nothing is deliberately not refused: a fixed
+violation leaves its waiver idle until expiry, which is the feature working,
+and that resting state is reported by `lattice waivers` instead. Both refusals
+fire only on a whole-workspace run over a fully analyzed tree, for the reason
+the [constraint-table refusal](#a-row-that-covers-nothing) states: elsewhere a
+row covering nothing in what this run saw may cover plenty in what it did not.
 
 ## `fitness`
 

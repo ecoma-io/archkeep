@@ -245,8 +245,8 @@ export function boundaryMetrics(importSites, graph, config, coverage) {
   // while `check`/`health` were re-asserting it. The fate decides: a waiver
   // in force (waive) or a permanent suppression (suppress) covers; an
   // expired one (reassert) covers nothing and the violation is live — the
-  // same verdict `applySuppressions` (`../rules/index.mjs`) renders for the
-  // gate. `config.now` is the same reference the rule engine honours.
+  // same verdict the rule engine's table walk (`../rules/index.mjs`) renders
+  // for the gate. `config.now` is the same reference the rule engine honours.
   const now = config.now ?? referenceTime();
   const waived = raws.filter((v) =>
     suppressions.some((entry) => {
