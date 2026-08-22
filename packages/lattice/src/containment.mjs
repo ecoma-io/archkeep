@@ -210,7 +210,7 @@ export function containmentViolation(
       .filter((part) => part !== "");
     // The final name itself is not walked: `renameSync` replaces a symlink at
     // the destination as a directory-entry swap and never dereferences it
-    // (`../../cli.mjs`'s `writeOutputReport` docstring owns that half).
+    // (`../cli.mjs`'s `writeOutputReport` docstring owns that half).
     let current = root;
     for (const part of below.slice(0, -1)) {
       current = `${current}${sep}${part}`;

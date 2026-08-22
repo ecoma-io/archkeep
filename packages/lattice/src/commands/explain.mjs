@@ -23,6 +23,7 @@
  * graph whose edges silently under-represent the real architecture.
  */
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import { UsageError } from "../errors.mjs";
 import { evaluate } from "../rules/index.mjs";
 import { findConstraintsFor } from "../rules/tags.mjs";
 import { findProjectForPath, createProjectRootMappings } from "../rules/specifiers.mjs";
@@ -38,34 +39,38 @@ import { resolveProvenance } from "./provenance.mjs";
  *
  * @param {string} site A `file:line:column` string.
  * @returns {{ sourceFile: string, line: number, column: number }}
- * @throws {Error} when the site string is malformed.
+ * @throws {UsageError} when the site string is malformed.
  */
 export function parseSite(site) {
   const lastColon = site.lastIndexOf(":");
   if (lastColon === -1 || lastColon === 0) {
-    throw new Error(`lattice: '${site}' is not a valid site — expected <file>:<line>:<column>`);
+    throw new UsageError(
+      `lattice: '${site}' is not a valid site — expected <file>:<line>:<column>`,
+    );
   }
   const secondLastColon = site.lastIndexOf(":", lastColon - 1);
   if (secondLastColon === -1) {
-    throw new Error(`lattice: '${site}' is not a valid site — expected <file>:<line>:<column>`);
+    throw new UsageError(
+      `lattice: '${site}' is not a valid site — expected <file>:<line>:<column>`,
+    );
   }
   const sourceFile = site.slice(0, secondLastColon);
   const lineStr = site.slice(secondLastColon + 1, lastColon);
   const columnStr = site.slice(lastColon + 1);
 
   if (!sourceFile) {
-    throw new Error(`lattice: '${site}' is not a valid site — the file part is empty`);
+    throw new UsageError(`lattice: '${site}' is not a valid site — the file part is empty`);
   }
 
   const line = Number(lineStr);
   const column = Number(columnStr);
   if (!Number.isInteger(line) || line < 1) {
-    throw new Error(
+    throw new UsageError(
       `lattice: '${site}' is not a valid site — line must be a positive integer, got '${lineStr}'`,
     );
   }
   if (!Number.isInteger(column) || column < 1) {
-    throw new Error(
+    throw new UsageError(
       `lattice: '${site}' is not a valid site — column must be a positive integer, got '${columnStr}'`,
     );
   }

@@ -33,6 +33,7 @@
  * the real architecture.
  */
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import { UsageError } from "../errors.mjs";
 import { judgeEdge } from "./edge-constraints.mjs";
 import { findConstraintsFor } from "../rules/tags.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
@@ -51,14 +52,14 @@ import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/a
  * @param {object} config The loaded boundary config (from `loadBoundaryConfig`).
  * @returns {{project: string, tags: string[], constraints: object[],
  *   dependencies: {target: string, type: string, violations: object[]}[]}}
- * @throws {Error} when `projectName` is not in the graph.
+ * @throws {UsageError} when `projectName` is not in the graph.
  */
 export function collectProjectContext(projectName, graph, config) {
   const nodes = graph.nodes;
   const dependencies = graph.dependencies;
 
   if (!Object.hasOwn(nodes, projectName)) {
-    throw new Error(
+    throw new UsageError(
       `lattice: no project named '${projectName}' in the graph — ` +
         `available projects: ${Object.keys(nodes)
           .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
