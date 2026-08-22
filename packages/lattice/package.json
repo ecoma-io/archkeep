@@ -47,7 +47,7 @@
     "README.md"
   ],
   "dependencies": {
-    "smol-toml": "1.7.1"
+    "smol-toml": "1.8.0"
   },
   "peerDependencies": {
     "@nx/eslint-plugin": ">=21",
