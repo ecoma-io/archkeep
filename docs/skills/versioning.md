@@ -16,11 +16,20 @@ package.json (repository root — what release-please bumps directly)
   = packages/lattice-rule-sdk-rust/Cargo.toml ([package] version)
   = packages/lattice-rule-sdk-ts/package.json
   = packages/lattice-rule-sdk-python/pyproject.toml ([project] version)
+      └ packages/lattice-rule-sdk-rust/Cargo.lock (the lattice-rule-sdk entry)
 ```
 
 All nine must agree. The root `package.json` is the release-please `"."`
 component — the one file it bumps directly; the other eight are copies of it
-written by `extra-files`. The extension is on the list because it pairs with
+written by `extra-files`.
+
+`Cargo.lock` hangs off the Cargo manifest rather than sitting on the line
+because nothing writes it: release-please has no lockfile updater, so the lock
+keeps the previous number while the manifest moves. It carries the same version
+as everything above it, but the gate compares it against `Cargo.toml`, which is
+where the requirement actually comes from — `cargo publish --locked` refuses a
+lock that disagrees with its own manifest. `scripts/sync-cargo-lock.mjs` is what
+writes it, run by the release lane on release-please's branch. The extension is on the list because it pairs with
 the engine it is released with, and one version is what makes the pairing
 visible. The rule SDK manifests are on it for the decision
 [adr/0002](../adr/0002-custom-rules-one-contract.md) records: every SDK joins
@@ -54,7 +63,11 @@ version is the pairing.
 8. `packages/lattice-rule-sdk-python/pyproject.toml`'s `[project]` version
    matches the package version — the same section-scoped TOML read as the
    Cargo check
-9. No host-specific frontmatter fields have leaked into canonical skills
+9. `packages/lattice-rule-sdk-rust/Cargo.lock` records that version for the
+   `lattice-rule-sdk` entry — read out of the `[[package]]` array by name,
+   because every entry there carries the same header and a header-only match
+   would report the first dependency's version as the crate's
+10. No host-specific frontmatter fields have leaked into canonical skills
 
 A version mismatch fails the build. There is no warning tier.
 
@@ -80,9 +93,33 @@ the `extra-files` configuration in `release-please-config.json` also bumps:
 - `packages/lattice-rule-sdk-python/pyproject.toml` (`$.project.version`, the
   TOML updater)
 
-These eight files are bumped automatically, and `release.yml` reformats the JSON
-`extra-files` after release-please writes them — release-please re-serializes a
-JSON file it touches, which does not match this repository's Prettier layout, so
-the reformat step keeps `format:check` green on the release pull request. The
-Cargo manifest stays off that reformat list: Prettier has no TOML parser, and no
-gate checks TOML layout, so there is nothing there to fix.
+These eight files are bumped automatically, and `release.yml` then repairs two
+things on release-please's own branch, before CI ever sees the pull request.
+
+The first is formatting: release-please re-serializes a JSON file it touches,
+which does not match this repository's Prettier layout, so the repair step runs
+Prettier over the JSON `extra-files` and keeps `format:check` green. The two
+TOML manifests stay off that list — Prettier has no TOML parser, and no gate
+checks TOML layout, so there is nothing there to fix.
+
+One package is bumped by neither mechanism. The Go SDK carries no version
+anywhere in its tree, so there is nothing for `extra-files` to write and nothing
+for the chain gate to compare: its version is a git tag, and Go's rule for a
+module below the repository root is that the tag carries the module's own
+directory — `packages/lattice-rule-sdk-go/v<version>`, beside the bare
+`v<version>` release-please cuts. `release.yml`'s `publish-go-module` job mints
+it from `scripts/tag-go-module.mjs`, which derives the name from `go.mod`'s
+module path rather than restating it and refuses a path that does not resolve to
+this repository and that directory. It is the one release destination with no
+registry: `go get` reads the tag, so the tag is the publish.
+
+The second is the Rust SDK's `Cargo.lock`, which is not a formatting fix and is
+the reason this section was rewritten. Nothing in `extra-files` writes a
+lockfile, so the manifest moves and the lock does not, and
+`cargo publish --locked` — which the release lane runs before it uploads —
+refuses to publish through the disagreement. Measured on the 0.10.0 release:
+the tag was cut, npm published, and crates.io received nothing, because the
+lock still said `0.9.0`. `scripts/sync-cargo-lock.mjs` writes the manifest's
+version into the lock, check 9 above is what fails when it has not run, and the
+lock rides back to the branch on the same repair commit as the reformatted
+JSON.
