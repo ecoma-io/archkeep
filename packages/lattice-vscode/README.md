@@ -103,7 +103,7 @@ the workspace pairs with the engine it is released with, and one version makes
 the pairing visible. Every release uploads the verified `.vsix` to the GitHub
 release — installable today via **Install from VSIX**. The marketplace publish
 step exists in the release lane but skips, loudly, until an `ecoma-io`
-publisher account and its `VSCE_PAT` secret exist. `private: true` is there to
+publisher account and its `ECOMA_VSCE_PAT` secret exist. `private: true` is there to
 make `npm publish` refuse — this is an extension, not a package, and the
 marketplace is its only destination.
 
