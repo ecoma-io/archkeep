@@ -44,9 +44,23 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * The five files release-please bumps and then re-serializes in a layout
- * Prettier will not accept. The reformat step runs Prettier over exactly
- * these, then hands them to this script to push.
+ * The files the release lane repairs on release-please's own branch, and then
+ * pushes as one commit.
+ *
+ * The six JSON manifests are there because release-please bumps them and
+ * re-serializes them in a layout Prettier will not accept; the reformat step
+ * runs Prettier over exactly these. The TS SDK's manifest is named for that
+ * same reason rather than because it has been observed to break — it is one of
+ * the JSON `extra-files` in `../release-please-config.json`, and a list that
+ * covers all but one of them is the drift that only shows up as a red
+ * `format:check` on a release pull request nobody expected to be red.
+ *
+ * The Rust SDK's Cargo.lock is the odd one and is not a formatting fix at all:
+ * release-please writes that package's Cargo.toml and no lockfile, so the two
+ * disagree from the moment the release branch opens, and `cargo publish
+ * --locked` refuses to publish through the disagreement. `sync-cargo-lock.mjs`
+ * is what repairs it and argues the whole case; this list is what carries the
+ * repair back to the branch.
  */
 export const REFORMAT_FILES = [
   ".claude-plugin/plugin.json",
@@ -54,16 +68,21 @@ export const REFORMAT_FILES = [
   ".codex-plugin/plugin.json",
   "packages/lattice/package.json",
   "packages/lattice-vscode/package.json",
+  "packages/lattice-rule-sdk-ts/package.json",
+  "packages/lattice-rule-sdk-rust/Cargo.lock",
 ];
 
 /**
- * The message the reformat commit carries. The title is deliberate: this
- * commit exists so the release pull request passes `format:check`, and the
- * message says what it did. It is `chore:`-scoped (no package) and is the
+ * The message the repair commit carries. The title is deliberate: this commit
+ * exists so the release pull request passes the checks release-please's own
+ * output would fail — `format:check` on the JSON manifests it re-serialized,
+ * and `check-skills` on the lockfile it does not write — and the message says
+ * what it did. "repair" rather than "reformat" because the lockfile half is
+ * not a formatting change. It is `chore:`-scoped (no package) and is the
  * literal subject CI's commitlint would see only on `main`; on the release
  * branch no hook runs.
  */
-export const REFORMAT_MESSAGE = "chore: reformat release-please extra-files";
+export const REFORMAT_MESSAGE = "chore: repair release-please extra-files";
 
 /**
  * One authenticated request to the GitHub REST API.

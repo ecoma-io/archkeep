@@ -138,16 +138,32 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # release-please re-serializes every JSON `extra-file` it bumps, and its
-      # layout is not Prettier's: a one-line array it writes as multiple lines,
-      # where `printWidth: 100` keeps it on one. Without a fix, the release pull
-      # request fails CI's `format:check` on the files this very lane just wrote
-      # — the same defect as `CHANGELOG.md` (which `.prettierignore` already
-      # exempts) but for five files no human wrote. Fix them in place, on the
-      # branch release-please pushed, before CI ever sees the pull request.
-      # The sixth extra-file, the Rust SDK's Cargo.toml, stays OFF the list
-      # below on purpose: Prettier has no TOML parser (naming the file errors
-      # the run), and no gate checks TOML layout, so there is nothing to fix.
+      # release-please's output fails two of this repository's own gates, and
+      # the steps below repair both on release-please's branch before CI ever
+      # sees the pull request.
+      #
+      # FORMAT. release-please re-serializes every JSON `extra-file` it bumps,
+      # and its layout is not Prettier's: a one-line array it writes as
+      # multiple lines, where `printWidth: 100` keeps it on one. Without a fix,
+      # the release pull request fails CI's `format:check` on files this very
+      # lane just wrote — the same defect as `CHANGELOG.md` (which
+      # `.prettierignore` already exempts) but for files no human wrote. The
+      # roster is `REFORMAT_FILES` in `scripts/push-reformatted-files.mjs`,
+      # whose own test derives the JSON half from `release-please-config.json`
+      # so an SDK added later cannot land unlisted. The two TOML extra-files
+      # stay off it: Prettier has no TOML parser (naming one errors the run),
+      # and no gate checks TOML layout.
+      #
+      # LOCKFILE. release-please writes `packages/lattice-rule-sdk-rust/
+      # Cargo.toml` and no lockfile, so the crate's manifest and its Cargo.lock
+      # disagree from the moment the branch opens. `cargo test --locked` and
+      # `cargo publish --locked` — what `publish-crates` below runs before it
+      # uploads — both refuse to proceed through that disagreement. Measured on
+      # the 0.10.0 release rather than reasoned: the tag was cut, npm
+      # published, and crates.io received nothing, because the lock still said
+      # 0.9.0. `scripts/sync-cargo-lock.mjs` writes the manifest's version into
+      # the lock; `scripts/check-skills.mjs` (check 15) is the gate that fails
+      # when it has not run, so the repair cannot silently stop being applied.
       #
       # The branch is read from the `pr` output rather than named: release-please
       # creates `release-please--branches--<base>--components--<component>`, and
@@ -183,7 +199,7 @@ jobs:
       # and the author identity is still effectively `github-actions[bot]`,
       # so the reformat lands as part of the release, not as a contributor
       # edit.
-      - name: Reformat release-please extra-files
+      - name: Check out the release branch to repair it
         if: steps.release.outputs.pr != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -199,7 +215,7 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
 
-      - name: Reformat release-please extra-files and push
+      - name: Repair release-please's output and push
         if: steps.release.outputs.pr != ''
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
@@ -211,10 +227,13 @@ jobs:
             .claude-plugin/marketplace.json \
             .codex-plugin/plugin.json \
             packages/lattice/package.json \
-            packages/lattice-vscode/package.json
+            packages/lattice-vscode/package.json \
+            packages/lattice-rule-sdk-ts/package.json
+
+          node scripts/sync-cargo-lock.mjs
 
           if git diff --quiet; then
-            echo "no reformatting needed; nothing to push"
+            echo "nothing to repair; nothing to push"
           else
             node scripts/push-reformatted-files.mjs \
               --root "$GITHUB_WORKSPACE" \

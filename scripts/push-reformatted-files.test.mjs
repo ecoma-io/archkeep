@@ -19,6 +19,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { readFileSync } from "node:fs";
+
 import { REFORMAT_FILES, treePayload } from "./push-reformatted-files.mjs";
 
 test("treePayload embeds each file's bytes as inline content with a trailing newline", () => {
@@ -92,12 +94,35 @@ test("invoked through a symlinked path, main() still runs and fails loudly on mi
   assert.match(result.stderr, /GITHUB_REPOSITORY is required/u);
 });
 
-test("the reformat list is the five files the lane owns", () => {
+test("the reformat list is every file the lane repairs", () => {
   assert.deepEqual(REFORMAT_FILES, [
     ".claude-plugin/plugin.json",
     ".claude-plugin/marketplace.json",
     ".codex-plugin/plugin.json",
     "packages/lattice/package.json",
     "packages/lattice-vscode/package.json",
+    "packages/lattice-rule-sdk-ts/package.json",
+    "packages/lattice-rule-sdk-rust/Cargo.lock",
   ]);
+});
+
+test("the list carries every JSON extra-file release-please re-serializes", () => {
+  // Derived from the release configuration rather than restated, because a
+  // second copy of that roster agrees with the first only until someone adds
+  // an SDK. A manifest release-please rewrites and Prettier never sees is a
+  // release pull request that fails its own required format check — which is
+  // exactly how `packages/lattice-rule-sdk-ts/package.json` sat unlisted from
+  // the release that introduced it.
+  const config = JSON.parse(
+    readFileSync(new URL("../release-please-config.json", import.meta.url), "utf8"),
+  );
+  const jsonExtraFiles = config.packages["."]["extra-files"]
+    .filter((f) => f.type === "json")
+    .map((f) => f.path);
+  for (const path of jsonExtraFiles) {
+    assert.ok(
+      REFORMAT_FILES.includes(path),
+      `${path} is a JSON extra-file release-please rewrites, but the repair list omits it`,
+    );
+  }
 });
