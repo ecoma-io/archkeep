@@ -1,9 +1,9 @@
 # This repository's own workflows sit in scope for the credential-boundary half
 # of SECURITY.md: a `pull_request_target` run or an unpinned action gives a
 # fork-submitted pull request a path to this repository's secrets and write
-# access. CodeQL's `actions` language already runs these same three checks as
-# part of its own query suite; these rules stay because they run in seconds
-# inside the same job that tests the repository's rules, and because losing
+# access. CodeQL's `actions` language already runs these same checks as part of
+# its own query suite; these rules stay because they run in seconds inside the
+# same job that tests the repository's rules, and because losing
 # renovate.json5's action-pinning preset (say, a workflow hand-edited to add a
 # tag instead of a SHA) should fail loud in the same pull request rather than
 # wait for CodeQL's separate, slower job.
@@ -21,6 +21,18 @@
 # a test target rather than only as a config candidate. Neither requirement is
 # documented; both were confirmed against semgrep 1.172.0 by running it, and both
 # apply only to `languages: [yaml]` fixtures — scripts.mjs needs neither.
+#
+# Structural patterns over workflow steps need the `...` ellipsis on EVERY
+# mapping level that may carry sibling keys: a YAML mapping pattern matches
+# exact keys otherwise, so `- uses: $ACT` alone silently matches only steps
+# whose sole key is `uses:` (measured against 1.172.0 — a checkout carrying
+# `with:` matched nothing until the ellipses were added).
+#
+# The metadata follows the conventions of semgrep's own registry rules for the
+# same defect classes (copied from semgrep-rules' `run-shell-injection.yaml`
+# and `github-actions-mutable-action-tag.yaml`, not invented): CWE-78 for the
+# injection pair, CWE-1357/CWE-353 for the supply-chain pair, plus references
+# a reader can act on. They reach code scanning as SARIF rule tags.
 rules:
   - id: workflow-action-not-pinned-to-sha
     languages: [yaml]
@@ -37,7 +49,21 @@ rules:
     metadata:
       category: security
       confidence: HIGH
-    pattern-regex: 'uses:\s*[^\s''"#]+/[^\s''"#@]+@(?!(?:[0-9a-fA-F]{40})(?:\s|$|#))\S+'
+      cwe:
+        - "CWE-1357: Reliance on Insufficiently Trustworthy Component"
+        - "CWE-353: Missing Support for Integrity Check"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
+        - "A08:2025 - Software and Data Integrity Failures"
+      references:
+        - https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions
+      technology:
+        - github-actions
+      subcategory:
+        - vuln
+      likelihood: MEDIUM
+      impact: HIGH
+    pattern-regex: 'uses:\s*[''""]?[^\s''"#]+/[^\s''"#@]+@(?!(?:[0-9a-fA-F]{40})[''""]?(?:\s|$|#))\S+'
 
   - id: workflow-expression-interpolated-into-run
     languages: [yaml]
@@ -46,36 +72,191 @@ rules:
       include:
         - "/.github/workflows/**"
     message: >-
-      A `${{ github.event.* }}` or `${{ github.head_ref }}` expression is
-      interpolated directly into a `run:` step. GitHub substitutes the raw string
-      before the shell ever sees it, so a pull request title or branch name
-      containing shell metacharacters runs as a command with this workflow's
-      permissions. Pass the value through an `env:` variable and reference `$VAR`
-      in the script instead; the shell then sees it as inert data.
+      An attacker-reachable expression is interpolated directly into a `run:`
+      step. GitHub substitutes the raw string before the shell ever sees it, so
+      shell metacharacters carried by the value run as commands with this
+      workflow's permissions. Reachable sources covered here: `github.event.*`,
+      `github.head_ref`/`base_ref`/`ref`/`ref_name`/`triggering_actor` (branch,
+      tag and actor names are attacker-supplied on fork pulls), `steps.<id>.outputs.*`,
+      `needs.<job>.outputs.*` (second-order — whatever wrote the output may have
+      been reachable from untrusted input), and reusable-workflow/dispatch
+      `inputs.*`, including through a `fromJSON(...)` unwrap. Pass the value
+      through an `env:` variable and reference `$VAR` in the script instead; the
+      shell then sees it as inert data. Deliberately NOT sources:
+      `steps.<id>.outcome`/`conclusion` and `needs.<job>.result` (closed enum
+      values, not strings), statically declared `matrix.*` values
+      (workflow-authored; a matrix generated from event data surfaces its
+      values through outputs or inputs, both covered), and `env.*` reads (the
+      hoisted-variable indirection this rule asks for is how values legitimately
+      arrive in a step).
     metadata:
       category: security
       confidence: HIGH
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp:
+        - "A01:2017 - Injection"
+        - "A03:2021 - Injection"
+        - "A05:2025 - Injection"
+      references:
+        - https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#understanding-the-risk-of-script-injections
+        - https://securitylab.github.com/research/github-actions-untrusted-input/
+      technology:
+        - github-actions
+      subcategory:
+        - vuln
+      likelihood: HIGH
+      impact: HIGH
     patterns:
       - pattern: "run: $RUN"
       - metavariable-pattern:
           metavariable: $RUN
           patterns:
-            - pattern-regex: '\$\{\{\s*(github\.event\.[\w.]+|github\.head_ref)\s*\}\}'
+            - pattern-regex: '\$\{\{\s*(?:(?i:fromjson)\s*\(\s*)?(?:github\.event\.[\w.]+|github\.head_ref|github\.base_ref|github\.ref\b|github\.ref_name|github\.triggering_actor|steps\.[\w-]+\.outputs\.[\w.-]+|needs\.[\w-]+\.outputs\.[\w.-]+|inputs\.[\w-]+)'
 
-  - id: workflow-pull-request-target
+  - id: workflow-secret-interpolated-into-run
+    languages: [yaml]
+    severity: ERROR
+    paths:
+      include:
+        - "/.github/workflows/**"
+    message: >-
+      A `${{ secrets.* }}` value is interpolated directly into a `run:` step.
+      The secret is substituted into the script text verbatim, so anything the
+      command does with its arguments — echo it under `set -x`, pass it to a
+      tool that logs them, embed it in an error message — puts the credential
+      into the run log, which anyone with read access can view. Pass it through
+      an `env:` variable and reference `$VAR` instead; GitHub redacts masked
+      values from logs, and quoting "$VAR" keeps the shell from splitting it.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp:
+        - "A01:2017 - Injection"
+        - "A03:2021 - Injection"
+        - "A05:2025 - Injection"
+      references:
+        - https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-secrets-in-workflows
+      technology:
+        - github-actions
+      subcategory:
+        - vuln
+      likelihood: LOW
+      impact: HIGH
+    patterns:
+      - pattern: "run: $RUN"
+      - metavariable-pattern:
+          metavariable: $RUN
+          patterns:
+            # No closing-brace requirement on purpose: a secret composed into a
+            # larger expression (`${{ secrets.A || github.token }}`) leaks just
+            # as hard as one printed alone.
+            - pattern-regex: '\$\{\{\s*secrets\.[\w-]+'
+
+  - id: workflow-dangerous-trigger
     languages: [yaml]
     severity: WARNING
     paths:
       include:
         - "/.github/workflows/**"
     message: >-
-      `pull_request_target` runs with the base repository's secrets and write
-      access against a fork's code — the trigger CodeQL's `actions` query treats
-      as inherently risky. This repository's workflows trigger on
-      `pull_request` deliberately, which runs read-only against the fork;
-      confirm that tradeoff is intentional before merging a workflow that uses
-      the other trigger.
+      This trigger runs with the base repository's secrets and write access
+      against code the pull request (or the pushed ref) did not carry through
+      this repository's own review gates — the triggers CodeQL's `actions`
+      query treats as inherently risky (`pull_request_target`) and the
+      workflow-chaining one where an attacker-completable first workflow
+      elevates into a privileged second (`workflow_run`). This repository's
+      workflows trigger on `pull_request`, which runs read-only against the
+      fork; confirm that tradeoff is intentional before merging a workflow
+      built on either of these.
     metadata:
       category: security
       confidence: MEDIUM
-    pattern-regex: '^\s*pull_request_target\s*:'
+      references:
+        - https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+      technology:
+        - github-actions
+      subcategory:
+        - vuln
+      likelihood: LOW
+      impact: HIGH
+    pattern-regex: '^\s*(?:pull_request_target|workflow_run)\s*:'
+
+  - id: workflow-checkout-persists-credentials
+    languages: [yaml]
+    severity: ERROR
+    paths:
+      include:
+        - "/.github/workflows/**"
+    message: >-
+      This `actions/checkout` step does not set `with: persist-credentials:
+      false`, so the default applies and the job's token stays configured in
+      the runner's git config for the rest of the job — every later step,
+      including one running pulled-in or generated code, inherits push/pull
+      access to this repository without declaring it. Every checkout in this
+      repository states `persist-credentials: false` explicitly and reaches
+      authenticated APIs through an explicitly passed token instead; keep that
+      invariant. If a step genuinely needs persisted git credentials, say so
+      in a comment beside the checkout rather than relying on the default.
+    metadata:
+      category: security
+      confidence: HIGH
+      references:
+        - https://unit42.paloaltonetworks.com/github-artipacked-github-action/
+      technology:
+        - github-actions
+      subcategory:
+        - vuln
+      likelihood: MEDIUM
+      impact: HIGH
+    patterns:
+      - pattern: |
+          - uses: $ACTION
+            ...
+      - metavariable-regex:
+          metavariable: $ACTION
+          # The optional opening quote is load-bearing: semgrep binds a
+          # double-quoted YAML scalar WITH its quotes, so the bare spelling
+          # silently missed `uses: "actions/checkout@…"` (measured on 1.172.0).
+          regex: '^[''""]?actions/checkout@'
+      - pattern-not: |
+          - uses: $ACTION
+            with:
+              persist-credentials: false
+              ...
+            ...
+
+  - id: workflow-container-image-not-digest-pinned
+    languages: [yaml]
+    severity: ERROR
+    paths:
+      include:
+        - "/.github/workflows/**"
+    message: >-
+      This container image reference is not pinned to a sha256 digest. Job-level
+      and service containers are pulled and run with whatever the tag currently
+      resolves to upstream — a repointed tag executes inside the job with the
+      workflow's access, the same supply-chain exposure an unpinned `uses:`
+      carries. Pin `name:tag@sha256:<64 hex>` and keep the tag readable beside
+      it; Renovate bumps both halves together. (Step-level `docker://` refs are
+      the pinning rule above's jurisdiction.)
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe:
+        - "CWE-1357: Reliance on Insufficiently Trustworthy Component"
+        - "CWE-353: Missing Support for Integrity Check"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
+        - "A08:2025 - Software and Data Integrity Failures"
+      references:
+        - https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions
+      technology:
+        - github-actions
+      subcategory:
+        - vuln
+      likelihood: MEDIUM
+      impact: HIGH
+    pattern-regex: 'image:\s*[''""]?(?![^\s''"#]*@sha256:[0-9a-fA-F]{64})[^\s''"#]+'

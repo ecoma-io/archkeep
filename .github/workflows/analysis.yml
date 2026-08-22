@@ -116,14 +116,22 @@ jobs:
       - name: Test the rules against their fixtures
         run: semgrep --test --config .github/semgrep .github/semgrep
 
-      # Reporting pass. `p/javascript` is the one registry pack carried, and it
-      # is carried for the half of this repository that executes: the gate
-      # scripts walk a tree of directories somebody else contributed and shell
-      # out over what they find.
+      # Reporting pass. Two registry packs, both carried as a wide net rather
+      # than a gate — a pack can gain a rule overnight and must never turn main
+      # red for a change nobody made; the blocking step below stays the
+      # repository's own rules only.
+      #
+      # `p/javascript` is for the half of this repository that executes: the
+      # gate scripts walk a tree of directories somebody else contributed and
+      # shell out over what they find. `p/github-actions` is the same posture
+      # for the half that runs CI: it covers workflow defect classes these own
+      # rules do not hand-write (credential handling, cache and artifact
+      # shapes), measured clean against this tree before it was added.
       - name: Scan
         run: >-
           semgrep scan --config .github/semgrep --config p/javascript
-          --exclude .github/semgrep --sarif --output semgrep.sarif
+          --config p/github-actions --exclude .github/semgrep --sarif
+          --output semgrep.sarif
 
       - name: Upload to code-scanning
         uses: github/codeql-action/upload-sarif@d1ba80a13dd99fba24a470575428917156a28b43 # v4.37.5
@@ -136,10 +144,20 @@ jobs:
       # nobody made, whereas everything under `.github/semgrep/` is reviewed here
       # and pinned by a test. Runs after the upload so findings reach the
       # Security tab even when this step fails the job.
+      #
+      # No `--quiet`: a workflow file this scan cannot parse is reported as an
+      # error in the log while the exit code still comes back clean — the one
+      # silent direction left in this gate, and the reason its output stays
+      # readable. `--timeout 60` because the default 5s per file is not enough
+      # for the largest files here (`packages/lattice/cli.mjs`, ~3700 lines,
+      # measured timing out under the default); `--timeout-threshold 1` is what
+      # turns whatever still overruns into a red job — a rule that gave up on a
+      # file must never be indistinguishable from one that looked and found
+      # nothing.
       - name: Enforce the repository's own rules
         run: >-
           semgrep scan --config .github/semgrep --exclude .github/semgrep
-          --error --quiet
+          --error --timeout 60 --timeout-threshold 1
 
   gitleaks:
     name: Gitleaks
