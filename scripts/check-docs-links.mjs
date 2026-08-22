@@ -16,6 +16,18 @@
 //      begin with `docs/`, from the carrying file when they begin with `../` or
 //      `./`.
 //
+// A markdown link CommonMark would NOT render — a destination containing
+// whitespace (`[x](my file.md)`), a link split across LINES (`]` then `(` on
+// the next), a same-line gap whose parenthesised text names a file
+// (`[docs] (gone.md)`), a broken `<…>` destination — is refused loudly rather
+// than skipped: shapes that resolve are parsed, shapes that do not name
+// themselves as failures. Same-line bracket-plus-parenthetical PROSE ("[0]
+// (the first)") is not a link attempt and passes untouched. Refusals are
+// judged on fence-masked text, so a fenced EXAMPLE of broken syntax teaches
+// without failing the gate; link resolution stays unmasked, keeping the
+// tolerated over-check of links inside fences. Silence on a link-shaped span
+// is how a broken reference reads as a clean run.
+//
 // WHY this script exists. The documentation IA restructure deleted two pages
 // from `docs/usage/` (the `policy-file.md` and `lattice-json.md` references
 // below are the old names, gone from the tree) and moved `json-output.md` and
@@ -83,28 +95,259 @@ export const IGNORED_PREFIXES = [
 export const DOCS_DIR = "docs";
 
 /**
- * Extracts the local targets of every `[text](target)` markdown link in text.
- * External targets and fragment-only anchors are dropped here: external ones
- * are out of this tree's reach, and a bare `#anchor` is the same-file heading
- * check `evaluate` performs, not a path to resolve.
+ * A markdown-link shape this gate recognizes as a link attempt but declines to
+ * resolve. Every shape here renders as LITERAL TEXT on GitHub — there is no
+ * destination a reader could reach — so attributing one to a resolvable path
+ * would bless syntax that does nothing when clicked, and skipping it would be
+ * the silent direction: a broken reference indistinguishable from a clean run.
+ * `evaluate` turns each refusal into a named failure carrying the fix.
+ *
+ * @typedef {"space-destination" | "separated-parens" | "angle-destination"} LinkRefusalShape
+ */
+
+/**
+ * @typedef {object} LinkRefusal
+ * @property {number} line 1-based line where the link's opening bracket sits
+ * @property {LinkRefusalShape} shape which malformed shape was found
+ * @property {string} snippet the offending source text, whitespace-collapsed and capped
+ */
+
+/**
+ * Extracts the local targets of every `[text](target)` markdown link in text,
+ * plus a named refusal for every link-shaped span it cannot honestly turn into
+ * a destination. External targets and fragment-only anchors are dropped from
+ * the links: external ones are out of this tree's reach, and a bare `#anchor`
+ * is the same-file heading check `evaluate` performs, not a path to resolve.
+ * Refusals are never dropped — that is the whole point of them.
+ *
+ * The grammar follows CommonMark's inline link. Whitespace may sit between `(`
+ * and the destination; the destination is either wrapped in `<…>` (spaces
+ * allowed inside, no line endings) or bare (no whitespace, stopped at the
+ * FIRST `)` — so `[x](a(b).md)` still yields the prefix `a(b`, failing loudly
+ * as a false broken link exactly as before; that tolerated misparse is
+ * deliberately not fixed here). An optional `"title"` is dropped in both
+ * forms. Three deviations are refused instead of skipped:
+ *
+ *   - `space-destination` — `[x](my file.md)`; fix: wrap it in angle brackets;
+ *   - `separated-parens` — a line break between `]` and `(` (the split-link
+ *     shape), or a same-line gap whose parenthesised text names a file
+ *     (`[docs] (gone.md)`); fix: put `(` immediately after `]`. Same-line
+ *     bracket-plus-parenthetical PROSE ("[0] (the first)") is not a link
+ *     attempt and passes untouched;
+ *   - `angle-destination` — an unterminated `<…>`, or content between its
+ *     closing `>` and `)` (`[x](<a b>.md>` puts `.md` OUTSIDE the
+ *     destination); fix: make `<…>` span the whole destination,
+ *     `[x](<a b.md>)`.
+ *
+ * The two surfaces are deliberately different. LINKS are parsed on the raw
+ * text, so a well-formed link inside a fenced code block is still resolved —
+ * over-checked loudly, the tolerated direction this gate has always carried.
+ * REFUSALS judge the fence-masked surface (`maskFencedCodeBlocks`, which
+ * preserves length and line breaks): documentation legitimately SHOWS broken
+ * syntax as an example, so refusing it would fail the lesson rather than a
+ * live reference. A parenthesized span with no closing `)` at all is left
+ * unparsed: nothing bounds a snippet to name, and unterminated punctuation is
+ * not recognizably a link attempt.
  *
  * @param {string} text contents of a markdown file
- * @returns {{target: string, line: number}[]} local link targets, 1-based line
+ * @returns {{links: {target: string, line: number}[], refusals: LinkRefusal[]}}
  */
 export function parseMarkdownLinks(text) {
-  const links = [];
-  const re = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
-  let match;
-  while ((match = re.exec(text))) {
-    const target = match[1];
-    if (/^(https?:|mailto:|data:|tel:|\/\/)/i.test(target)) continue;
-    if (/^[a-z][a-z0-9+.-]*:/i.test(target) && !target.startsWith(".")) continue;
-    // A bare `#anchor` stays: it is the same-file heading check `evaluate`
-    // performs, not a path to resolve.
-    links.push({ target, line: text.slice(0, match.index).split("\n").length });
-  }
-  return links;
+  return {
+    links: scanLinkShapes(text).links,
+    refusals: scanLinkShapes(maskFencedCodeBlocks(text)).refusals,
+  };
 }
+
+/**
+ * One left-to-right classification pass over a surface, shared by the raw and
+ * fence-masked scans of {@link parseMarkdownLinks}. Every bracketed span is a
+ * candidate label; what FOLLOWS it decides whether this was a link attempt
+ * and which shape that attempt took.
+ *
+ * @param {string} text the surface to scan (raw text, or its fence-masked twin)
+ * @returns {{links: {target: string, line: number}[], refusals: LinkRefusal[]}}
+ */
+function scanLinkShapes(text) {
+  const links = [];
+  const refusals = [];
+  const opener = /\[([^\]]*)\]/g;
+  let match;
+  while ((match = opener.exec(text))) {
+    const start = match.index;
+    const line = lineOf(text, start);
+    const afterLabel = start + match[0].length;
+
+    const i = skipWhitespace(text, afterLabel);
+    if (text[i] !== "(") continue;
+    if (i > afterLabel) {
+      // Whitespace between ] and (: CommonMark requires them adjacent, so
+      // GitHub renders the span literally. Only two readings deserve a
+      // refusal: the gap crosses a LINE BREAK (a link split across lines),
+      // or the gap stays on one line but the parenthesised text names a file
+      // ([docs] (gone.md)). Plain prose — "[0] (the first)" — is none of
+      // this gate's business and passes untouched.
+      const close = text.indexOf(")", i);
+      if (close !== -1) {
+        const splitAcrossLines = /[\n\r]/.test(text.slice(afterLabel, i));
+        const inner = text.slice(i + 1, close);
+        if (splitAcrossLines || looksLikeDestination(inner)) {
+          refusals.push(refusalRecord(text, start, close + 1, "separated-parens"));
+          opener.lastIndex = close + 1;
+        }
+      }
+      continue;
+    }
+
+    const j = skipWhitespace(text, i + 1);
+    if (text[j] === "<") {
+      // Angle-wrapped destination: spaces allowed INSIDE, first `>` closes
+      // it, and a line ending before that `>` leaves it unterminated.
+      let gt = -1;
+      for (let c = j + 1; c < text.length && text[c] !== "\n" && text[c] !== "\r"; c++) {
+        if (text[c] === ">") {
+          gt = c;
+          break;
+        }
+      }
+      if (gt !== -1) {
+        let tail = skipWhitespace(text, gt + 1);
+        const title = /^"[^"]*"/.exec(text.slice(tail));
+        if (title) tail += title[0].length;
+        tail = skipWhitespace(text, tail);
+        if (text[tail] === ")") {
+          const target = text.slice(j + 1, gt);
+          if (isResolvableTarget(target)) links.push({ target, line });
+          opener.lastIndex = tail + 1;
+          continue;
+        }
+      }
+      const close = text.indexOf(")", j);
+      if (close !== -1) {
+        refusals.push(refusalRecord(text, start, close + 1, "angle-destination"));
+        opener.lastIndex = close + 1;
+      }
+      continue;
+    }
+
+    // Bare destination: everything up to the first `)` or whitespace — the
+    // exact grammar the previous single regex used, first `)` included, so
+    // every link it parsed before parses identically now.
+    const bare = /^[^)\s]+/.exec(text.slice(j));
+    if (!bare) continue; // `[x]()` stays unmatched, as it always was
+    let end = j + bare[0].length;
+    const title = /^\s+"[^"]*"/.exec(text.slice(end));
+    if (title) end += title[0].length;
+    if (text[end] === ")") {
+      if (isResolvableTarget(bare[0])) links.push({ target: bare[0], line });
+      opener.lastIndex = end + 1;
+      continue;
+    }
+    // Whitespace inside the parentheses: a spaced destination. Bounded by the
+    // next `)` so the scan resumes past it instead of re-reading its content.
+    const close = text.indexOf(")", end);
+    if (close === -1) continue;
+    refusals.push(refusalRecord(text, start, close + 1, "space-destination"));
+    opener.lastIndex = close + 1;
+  }
+  return { links, refusals };
+}
+
+/**
+ * Index of the next non-whitespace character at or after `from`.
+ *
+ * @param {string} text
+ * @param {number} from
+ * @returns {number}
+ */
+function skipWhitespace(text, from) {
+  let i = from;
+  while (i < text.length && /\s/.test(text[i])) i++;
+  return i;
+}
+
+/**
+ * Whether parenthesised text plausibly names a FILE — the bar a same-line gap
+ * between `]` and `(` must clear before it counts as a botched link rather
+ * than an English aside like "(the first)". Deliberately shallow: an
+ * angle-wrapped span, a trailing directory slash, or a dot-extension-like
+ * suffix (letter first, so version strings such as "(v2.0)" stay prose) is
+ * the whole signal. Anything containing whitespace never qualifies — a spaced
+ * target behind a same-line gap is indistinguishable from prose and renders
+ * as text either way; the ADJACENT spaced form remains loudly refused as
+ * `space-destination`. Anything smarter than this starts second-guessing
+ * ordinary sentences.
+ *
+ * @param {string} content text between ( and )
+ * @returns {boolean}
+ */
+function looksLikeDestination(content) {
+  const trimmed = content.trim();
+  if (trimmed === "" || /\s/.test(trimmed)) return false;
+  return /^<[^<>]+>$/.test(trimmed) || /\/$/.test(trimmed) || /\.[A-Za-z][\w-]*$/.test(trimmed);
+}
+
+/**
+ * Whether an extracted destination is a path this gate can resolve. External
+ * targets (`http:`, `mailto:`, …) live outside the tree this gate can see, and
+ * a bare `#anchor` is the same-file heading check `evaluate` performs — both
+ * are dropped from the LINKS exactly as the previous regex-driven version
+ * dropped them; a refused shape never reaches here.
+ *
+ * @param {string} target an extracted link destination
+ * @returns {boolean}
+ */
+function isResolvableTarget(target) {
+  if (/^(https?:|mailto:|data:|tel:|\/\/)/i.test(target)) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target) && !target.startsWith(".")) return false;
+  return true;
+}
+
+/**
+ * The 1-based line an index sits on — the same count the parsers report.
+ *
+ * @param {string} text
+ * @param {number} index
+ * @returns {number}
+ */
+function lineOf(text, index) {
+  return text.slice(0, index).split("\n").length;
+}
+
+/**
+ * A bounded source snippet for a refusal message: whitespace collapsed so a
+ * split-across-lines attempt reads on one line, capped so a pathological span
+ * cannot flood the failure list.
+ *
+ * @param {string} raw
+ * @returns {string}
+ */
+function refusalSnippet(raw) {
+  const flat = raw.replace(/\s+/g, " ").trim();
+  return flat.length > 80 ? `${flat.slice(0, 80)}…` : flat;
+}
+
+/**
+ * @param {string} text
+ * @param {number} start index of the link's opening bracket
+ * @param {number} end index one past the span's bounding `)`
+ * @param {LinkRefusalShape} shape
+ * @returns {LinkRefusal}
+ */
+function refusalRecord(text, start, end, shape) {
+  return {
+    line: lineOf(text, start),
+    shape,
+    snippet: refusalSnippet(text.slice(start, end)),
+  };
+}
+
+/** The fix, per {@link LinkRefusalShape}, that `evaluate` reports beside every refusal. */
+const LINK_REFUSAL_FIXES = {
+  "space-destination": "wrap the destination in angle brackets: [text](<destination>)",
+  "separated-parens": "put ( immediately after ]",
+  "angle-destination": "make the <…> span the whole destination: [text](<destination>)",
+};
 
 /**
  * Blanks fenced code blocks (``` or ~~~), replacing every character but the
@@ -338,15 +581,18 @@ function insideDocs(resolved, docsDir) {
  *
  * `files` maps a repository-relative path to what its content references; each
  * reference is checked for the existence of its target file, and a `#anchor`
- * fragment on the same file is checked against the headings. `existingPaths`
+ * fragment on the same file is checked against the headings. A refused
+ * link-shaped span (`parseMarkdownLinks`'s refusals) is a failure on its own —
+ * the span renders as literal text, so there is no target to resolve, and
+ * passing it over would be the silent direction. `existingPaths`
  * is the set of absolute paths that exist, supplied by the caller — the
  * judgment never touches the filesystem itself, so a test drives it with a
  * hand-built set. Anything that cannot resolve is a failure — an empty verdict
  * list must mean "no broken reference", and nothing else.
  *
  * @param {object} input
- * @param {{path: string, links: {target: string, line: number}[], citations: {target: string, line: number}[], headings: Set<string>}[]} input.files
- *   per-file references and same-file heading anchors
+ * @param {{path: string, links: {target: string, line: number}[], refusals: LinkRefusal[], citations: {target: string, line: number}[], headings: Set<string>}[]} input.files
+ *   per-file references, refused link shapes, and same-file heading anchors
  * @param {Set<string>} input.existingPaths absolute paths that exist on disk
  * @param {string} input.root absolute path of the repository root
  * @returns {{lines: string[], failures: string[]}}
@@ -407,6 +653,14 @@ export function evaluate({ files, existingPaths, root }) {
         );
       }
     }
+    for (const { line, shape, snippet } of file.refusals) {
+      const fix = LINK_REFUSAL_FIXES[shape];
+      failures.push(
+        `${file.path}:${line} has a markdown link that renders as literal text, not a link ` +
+          `(${shape}): \`${snippet}\`.` +
+          (fix ? ` ${fix}.` : ""),
+      );
+    }
     for (const { target, line } of file.citations) {
       const [pathPart] = target.split("#", 2);
       const base = /^\.\.?\//.test(pathPart) ? dirname(absolute) : root;
@@ -456,9 +710,11 @@ function readFacts() {
     if (IGNORED_PREFIXES.some((prefix) => path.startsWith(prefix))) continue;
     const text = readFileSync(join(root, path), "utf8");
     const isMarkdown = path.endsWith(".md");
+    const parsed = isMarkdown ? parseMarkdownLinks(text) : { links: [], refusals: [] };
     files.push({
       path,
-      links: isMarkdown ? parseMarkdownLinks(text) : [],
+      links: parsed.links,
+      refusals: parsed.refusals,
       citations: parseDocCitations(text, { isMarkdown }),
       headings: isMarkdown ? headingAnchors(text) : new Set(),
     });

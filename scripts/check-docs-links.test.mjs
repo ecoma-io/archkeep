@@ -11,7 +11,10 @@
 // reference is a file that clicked through lands on nothing, and the gate's
 // job is to make that read as a failure instead of a clean run. The case that
 // removes the check entirely is `evaluate` with no files, which must fail
-// loudly rather than report a clean scan of nothing.
+// loudly rather than report a clean scan of nothing. The link-shape refusals
+// (`parseMarkdownLinks`'s second return value) are held to the same bar from
+// both ends: a parser test fails if a refused shape ever comes back empty,
+// and an `evaluate` test fails if a refusal ever stops becoming a failure.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -30,7 +33,7 @@ test("parseMarkdownLinks keeps local paths with their line numbers", () => {
 
 See [policy](usage/configuration.md) and
 [another](../reference/policy-schema.md#inline-policy) on line 4.`;
-  assert.deepEqual(parseMarkdownLinks(text), [
+  assert.deepEqual(parseMarkdownLinks(text).links, [
     { target: "usage/configuration.md", line: 3 },
     { target: "../reference/policy-schema.md#inline-policy", line: 4 },
   ]);
@@ -39,9 +42,199 @@ See [policy](usage/configuration.md) and
 test("parseMarkdownLinks keeps #anchors (heading checks) but drops external targets", () => {
   const text = `[web](https://example.com) [anchor](#same-file) [mail](mailto:x@y.z)
 [dots](./local.md) [proto](javascript:void(0))`;
-  assert.deepEqual(parseMarkdownLinks(text), [
+  assert.deepEqual(parseMarkdownLinks(text).links, [
     { target: "#same-file", line: 1 },
     { target: "./local.md", line: 2 },
+  ]);
+});
+
+test("parseMarkdownLinks refuses a destination containing spaces — the silent direction", () => {
+  // The issue's repro: `[docs](some file.md)` naming a file that does not
+  // exist used to exit 0 — the old regex never matched a spaced destination,
+  // so the broken reference escaped every check while the gate reported no
+  // broken doc references. Now the shape is a named refusal; empty `refusals`
+  // here would be this test going red in exactly that silent direction.
+  const { links, refusals } = parseMarkdownLinks("see [docs](some file.md) here");
+  assert.deepEqual(links, []);
+  assert.deepEqual(refusals, [
+    { line: 1, shape: "space-destination", snippet: "[docs](some file.md)" },
+  ]);
+});
+
+test("parseMarkdownLinks unwraps an angle-bracketed destination — spaces and all", () => {
+  // CommonMark's spelling for a destination that must contain whitespace.
+  // The old regex matched `<user guide.md>` brackets-and-all as a bare target,
+  // so an EXISTING spaced file failed loudly and a missing one failed for the
+  // wrong name; both now resolve against the real spelling.
+  const { links, refusals } = parseMarkdownLinks("[guide](<user guide.md>)");
+  assert.deepEqual(links, [{ target: "user guide.md", line: 1 }]);
+  assert.deepEqual(refusals, []);
+});
+
+test("parseMarkdownLinks refuses brackets separated from their parentheses, same line or next", () => {
+  // A link split across lines (`]` then newline then `(`) never matched the
+  // old single-line regex at all; the same-line gap whose parenthesised text
+  // names a file is its sibling. Both render as literal text on GitHub, so
+  // there is nothing to resolve — the refusal names the span instead of
+  // letting it pass for clean.
+  const sameLine = parseMarkdownLinks("read [docs] (gone.md) first");
+  assert.deepEqual(sameLine.links, []);
+  assert.equal(sameLine.refusals.length, 1);
+  assert.equal(sameLine.refusals[0].shape, "separated-parens");
+  const nextLine = parseMarkdownLinks("read [docs]\n(gone.md) first");
+  assert.deepEqual(nextLine.links, []);
+  assert.equal(nextLine.refusals.length, 1);
+  assert.equal(nextLine.refusals[0].shape, "separated-parens");
+  // The line is the OPENING BRACKET's — where the construct a reader sees
+  // starts — the same anchor every parsed link reports.
+  assert.equal(nextLine.refusals[0].line, 1);
+  // The snippet collapses the line break, so a split attempt reads on one
+  // line in the failure message.
+  assert.equal(nextLine.refusals[0].snippet, "[docs] (gone.md)");
+});
+
+test("same-line bracket-plus-parenthetical PROSE is neither a link nor a refusal", () => {
+  // Ordinary English does this constantly: a bracketed cross-reference
+  // followed by an aside in parentheses. Neither half renders as a link, so
+  // there is no reference to judge — both sentences must come back empty,
+  // and version strings like "(v1.2)" stay prose too (the dot-extension
+  // signal requires a letter after the dot).
+  const roster = parseMarkdownLinks("The roster [above] (see the table) is the authority.");
+  assert.deepEqual(roster.links, []);
+  assert.deepEqual(roster.refusals, []);
+  const value = parseMarkdownLinks("The value [0] (the first) wins.");
+  assert.deepEqual(value.links, []);
+  assert.deepEqual(value.refusals, []);
+  const release = parseMarkdownLinks("The release [notes] (v1.2) are final.");
+  assert.deepEqual(release.links, []);
+  assert.deepEqual(release.refusals, []);
+});
+
+test("parseMarkdownLinks does not refuse a fenced EXAMPLE of a broken link", () => {
+  // Documentation legitimately SHOWS broken syntax inside fences; the fence
+  // marks it as shown rather than authored, so the refusal path judges the
+  // maskFencedCodeBlocks surface and this shape never hard-fails the gate.
+  const text = ["Example:", "", "```markdown", "Broken: [docs](some file.md)", "```"].join("\n");
+  const { links, refusals } = parseMarkdownLinks(text);
+  assert.deepEqual(links, []);
+  assert.deepEqual(refusals, []);
+});
+
+test("link resolution inside fences stays over-checked — the tolerated asymmetry", () => {
+  // Fence masking applies to the REFUSAL path only: a well-formed link
+  // inside a fence is still extracted and existence-checked, loudly failing
+  // when its target is absent — the tolerated direction issue #243 names.
+  // This fixture pins the asymmetry from both sides at once: the link
+  // survives, no refusal does.
+  const text = ["```markdown", "See [guide](usage/configuration.md) for the options.", "```"].join(
+    "\n",
+  );
+  const { links, refusals } = parseMarkdownLinks(text);
+  assert.deepEqual(links, [{ target: "usage/configuration.md", line: 2 }]);
+  assert.deepEqual(refusals, []);
+});
+
+test("same-line bracket-plus-parenthetical PROSE is neither a link nor a refusal", () => {
+  // Ordinary English does this constantly: a bracketed cross-reference
+  // followed by an aside in parentheses. Neither half renders as a link, so
+  // there is no reference to judge — both sentences must come back empty,
+  // and version strings like "(v1.2)" stay prose too (the dot-extension
+  // signal requires a letter after the dot).
+  const roster = parseMarkdownLinks("The roster [above] (see the table) is the authority.");
+  assert.deepEqual(roster.links, []);
+  assert.deepEqual(roster.refusals, []);
+  const value = parseMarkdownLinks("The value [0] (the first) wins.");
+  assert.deepEqual(value.links, []);
+  assert.deepEqual(value.refusals, []);
+  const release = parseMarkdownLinks("The release [notes] (v1.2) are final.");
+  assert.deepEqual(release.links, []);
+  assert.deepEqual(release.refusals, []);
+});
+
+test("parseMarkdownLinks does not refuse a fenced EXAMPLE of a broken link", () => {
+  // Documentation legitimately SHOWS broken syntax inside fences; the fence
+  // marks it as shown rather than authored, so the refusal path judges the
+  // maskFencedCodeBlocks surface and this shape never hard-fails the gate.
+  const text = ["Example:", "", "```markdown", "Broken: [docs](some file.md)", "```"].join("\n");
+  const { links, refusals } = parseMarkdownLinks(text);
+  assert.deepEqual(links, []);
+  assert.deepEqual(refusals, []);
+});
+
+test("link resolution inside fences stays over-checked — the tolerated asymmetry", () => {
+  // Fence masking applies to the REFUSAL path only: a well-formed link
+  // inside a fence is still extracted and existence-checked, loudly failing
+  // when its target is absent — the tolerated direction issue #243 names.
+  // This pair of assertions pins the asymmetry from both sides at once.
+  const text = ["```markdown", "See [guide](usage/configuration.md) for the options.", "```"].join(
+    "\n",
+  );
+  const { links, refusals } = parseMarkdownLinks(text);
+  assert.deepEqual(links, [{ target: "usage/configuration.md", line: 2 }]);
+  assert.deepEqual(refusals, []);
+});
+
+test("same-line bracket-plus-parenthetical PROSE is neither a link nor a refusal", () => {
+  // Ordinary English does this constantly: a bracketed cross-reference
+  // followed by an aside in parentheses. Neither half renders as a link, so
+  // there is no reference to judge — both sentences must come back empty.
+  const roster = parseMarkdownLinks("The roster [above] (see the table) is the authority.");
+  assert.deepEqual(roster.links, []);
+  assert.deepEqual(roster.refusals, []);
+  const value = parseMarkdownLinks("The value [0] (the first) wins.");
+  assert.deepEqual(value.links, []);
+  assert.deepEqual(value.refusals, []);
+});
+
+test("parseMarkdownLinks does not refuse a fenced EXAMPLE of a broken link", () => {
+  // Documentation legitimately SHOWS broken syntax as an example; the fence
+  // marks it as shown rather than authored, so the refusal path judges the
+  // maskFencedCodeBlocks surface and this shape never hard-fails the gate.
+  const text = ["Example:", "", "```markdown", "Broken: [docs](some file.md)", "```"].join("\n");
+  const { links, refusals } = parseMarkdownLinks(text);
+  assert.deepEqual(links, []);
+  assert.deepEqual(refusals, []);
+});
+
+test("link resolution inside fences stays over-checked — the tolerated asymmetry", () => {
+  // Masking fences applies to the REFUSAL path only: a well-formed link
+  // inside a fence is still extracted and existence-checked, loudly failing
+  // when its target is absent — the tolerated direction issue #243 names.
+  const text = ["```markdown", "See [guide](usage/configuration.md) for the options.", "```"].join(
+    "\n",
+  );
+  const { links, refusals } = parseMarkdownLinks(text);
+  assert.deepEqual(links, [{ target: "usage/configuration.md", line: 2 }]);
+  assert.deepEqual(refusals, []);
+});
+
+test("parseMarkdownLinks refuses a <…> destination crossed by a line break", () => {
+  const { links, refusals } = parseMarkdownLinks("[x](<a\nb>)");
+  assert.deepEqual(links, []);
+  assert.equal(refusals.length, 1);
+  assert.equal(refusals[0].shape, "angle-destination");
+});
+
+test("parseMarkdownLinks still stops a bare destination at its first ')'", () => {
+  // Deliberately NOT fixed alongside #243: the paren-bearing misparse fails
+  // LOUDLY (as a false broken link on the nonexistent prefix), which is the
+  // tolerated direction. This pin keeps the fix from widening into it by
+  // accident — if this assertion ever moves, it is a separate decision.
+  const { links, refusals } = parseMarkdownLinks("[x](a(b).md)");
+  assert.deepEqual(links, [{ target: "a(b", line: 1 }]);
+  assert.deepEqual(refusals, []);
+});
+
+test("parseMarkdownLinks keeps parsing well-formed links beside the ones it refuses", () => {
+  const { links, refusals } = parseMarkdownLinks(
+    '[ok](good.md) then [bad](some file.md) then [titled](other.md "Title")',
+  );
+  assert.deepEqual(links, [
+    { target: "good.md", line: 1 },
+    { target: "other.md", line: 1 },
+  ]);
+  assert.deepEqual(refusals, [
+    { line: 1, shape: "space-destination", snippet: "[bad](some file.md)" },
   ]);
 });
 
@@ -202,8 +395,8 @@ test("withDirectories adds every parent directory of a path", () => {
   assert.ok(withDirectories(paths).has("/repo"));
 });
 
-function file(path, { links = [], citations = [], headings = new Set() } = {}) {
-  return { path, links, citations, headings };
+function file(path, { links = [], refusals = [], citations = [], headings = new Set() } = {}) {
+  return { path, links, refusals, citations, headings };
 }
 
 /** The absolute path a repo-relative `path` resolves to under `/repo`. */
@@ -445,4 +638,82 @@ test("evaluate reports every broken reference, not just the first", () => {
     root: "/repo",
   });
   assert.equal(failures.length, 2);
+});
+
+test("evaluate FAILS a refused space-destination link — the issue repro, end to end", () => {
+  // The red-direction case requirement 2 asks for, driven exactly the way
+  // `readFacts` drives the gate: parse the raw markdown, feed BOTH outputs to
+  // `evaluate`, and require a failure naming the unresolvable reference. If
+  // the parser ever skips the spaced shape silently again (empty refusals) or
+  // evaluate stops honoring refusals, this goes red instead of the gate.
+  const parsed = parseMarkdownLinks("see [docs](some file.md)");
+  const { failures } = evaluate({
+    files: [file("README.md", parsed)],
+    existingPaths: new Set(),
+    root: "/repo",
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /README\.md:1/);
+  assert.match(failures[0], /space-destination/);
+  assert.match(failures[0], /some file\.md/);
+});
+
+test("evaluate FAILS an angle-bracketed link whose spaced target does not exist", () => {
+  const parsed = parseMarkdownLinks("[guide](<user guide.md>)");
+  assert.deepEqual(parsed.refusals, []);
+  const { failures } = evaluate({
+    files: [file("docs/guide.md", parsed)],
+    existingPaths: new Set(),
+    root: "/repo",
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /docs\/guide\.md:1/);
+  assert.match(failures[0], /user guide\.md/);
+});
+
+test("evaluate passes an angle-bracketed link whose spaced target exists", () => {
+  const parsed = parseMarkdownLinks("[guide](<user guide.md>)");
+  const { failures } = evaluate({
+    files: [file("docs/guide.md", parsed)],
+    existingPaths: new Set([abs("docs/user guide.md")]),
+    root: "/repo",
+  });
+  assert.equal(failures.length, 0);
+});
+
+test("evaluate fails a link split across lines even when its target exists", () => {
+  // The separated shape is not resolvable to anything — GitHub renders it as
+  // literal text, so a real file behind it never gets clicked. The refusal
+  // fires regardless of what the destination names; fixing the syntax is the
+  // only way out.
+  const parsed = parseMarkdownLinks("[docs]\n(real.md)");
+  const { failures } = evaluate({
+    files: [file("docs/a.md", parsed)],
+    existingPaths: new Set([abs("docs/real.md")]),
+    root: "/repo",
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /separated-parens/);
+});
+
+test("evaluate reports every refusal, and an unknown shape still fails by name", () => {
+  // A shape added to the parser before wording lands here must fail LOUDLY
+  // (named by its raw shape value), never pass for lack of a message.
+  const { failures } = evaluate({
+    files: [
+      file("docs/a.md", {
+        refusals: [
+          { line: 3, shape: "separated-parens", snippet: "[a] (b.md)" },
+          { line: 4, shape: "some-future-shape", snippet: "[c] (d.md)" },
+        ],
+      }),
+    ],
+    existingPaths: new Set(),
+    root: "/repo",
+  });
+  assert.equal(failures.length, 2);
+  assert.match(failures[0], /docs\/a\.md:3/);
+  assert.match(failures[0], /separated-parens/);
+  assert.match(failures[1], /docs\/a\.md:4/);
+  assert.match(failures[1], /some-future-shape/);
 });
