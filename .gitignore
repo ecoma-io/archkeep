@@ -40,6 +40,11 @@ pnpm-debug.log*
 # Claude Code worktrees — full clones of this repository, one per worktree.
 # Prettier and the boundary checker would otherwise scan every clone.
 .claude/worktrees/
+# Claude Code session scratch — where test runs land their fixtures when the
+# agent harness points TMPDIR here. Same reasoning as the fixture entries
+# below: an untracked residue dir is exactly the shape of accidental
+# `git add -A`, and `prettier --check .` reads it before git does.
+.claude/tmp/
 
 # Test fixtures created inside the package root by `mkdtempSync(join(packageRoot,
 # ".cli-eslint-config-fixture-"))` in cli.integration.test.mjs and

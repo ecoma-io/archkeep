@@ -89,6 +89,7 @@ import { containmentViolation } from "./src/containment.mjs";
 import { fileFailure, isWholeFileFailure } from "./src/analysis/source-util.mjs";
 import { tsconfigPathsFacts } from "./src/analysis/typescript.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "./src/config.mjs";
+import { UsageError } from "./src/errors.mjs";
 import { profilePolicy } from "./src/governance/profile-registry.mjs";
 import {
   DEFAULT_OPTIONS,
@@ -1534,9 +1535,7 @@ async function runCheck(options, { cwd, env }) {
     // user's mistake to retype; everything else is the run failing. The two
     // get different codes because only one is worth retrying with different
     // arguments.
-    const usageError = /is outside the workspace|matches no tracked file/.test(
-      error?.message ?? "",
-    );
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -1767,7 +1766,7 @@ async function runGraph(options, { cwd, env }) {
 
     result = graphCommand(commandContext, { config });
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -1833,7 +1832,7 @@ async function runDiff(options, { cwd, env }) {
 
     result = diffCommand(baselinePath, commandContext, { config });
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -1904,7 +1903,7 @@ async function runDrift(options, { cwd, env }) {
     }
     result = await driftCommand(commandContext, { config, configError });
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -1959,7 +1958,7 @@ async function runProvenance(options, { cwd, env }) {
     );
     result = await provenanceCommand(commandContext);
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -2011,7 +2010,7 @@ async function runReconcile(options, { cwd, env }) {
     );
     result = await reconcileCommand(commandContext, {}, { propose: options.propose ?? false });
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -2073,7 +2072,7 @@ async function runWaivers(options, { cwd, env }) {
 
     result = await waiversCommand(commandContext, config);
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -2151,7 +2150,7 @@ async function runFitness(options, { cwd, env }) {
 
     result = await fitnessCommand(commandContext, { config });
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -2217,9 +2216,7 @@ async function runImpact(options, { cwd, env }) {
 
     result = impactCommand(projectName, commandContext, config);
   } catch (error) {
-    const usageError =
-      /is outside the workspace/.test(error?.message ?? "") ||
-      /no project named/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -2283,9 +2280,7 @@ async function runExplain(options, { cwd, env }) {
 
     result = explainCommand(site, commandContext, config);
   } catch (error) {
-    const usageError =
-      /is outside the workspace/.test(error?.message ?? "") ||
-      /is not a valid site/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -2359,9 +2354,7 @@ async function runContextCommand(options, { cwd, env }) {
       ? await planContextCommand(projectName, scopePaths, commandContext, config)
       : contextCommand(projectName, commandContext, config);
   } catch (error) {
-    const usageError =
-      /is outside the workspace/.test(error?.message ?? "") ||
-      /no project named/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -2520,7 +2513,7 @@ async function runHistory(options, { cwd, env }) {
       policyFingerprint: fingerprint,
     });
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -2579,7 +2572,7 @@ async function runDebt(options, { cwd, env }) {
 
     result = await debtCommand(dir, commandContext, { config });
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -2630,7 +2623,7 @@ async function runDiscover(options, { cwd, env }) {
 
     result = discoverCommand(commandContext, { propose: options.propose });
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -2709,7 +2702,7 @@ async function runHealth(options, { cwd, env }) {
 
     result = healthCommand(commandContext, { config, intent, trendDir });
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
@@ -2785,7 +2778,7 @@ async function runReport(options, { cwd, env }) {
       policySource: source,
     });
   } catch (error) {
-    const usageError = /is outside the workspace/.test(error?.message ?? "");
+    const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }

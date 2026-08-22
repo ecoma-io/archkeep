@@ -36,6 +36,7 @@
  * whose dependents silently under-represent the real architecture.
  */
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import { UsageError } from "../errors.mjs";
 import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatImpactReport } from "../report/impact-text.mjs";
@@ -54,14 +55,14 @@ import { resolveProvenance } from "./provenance.mjs";
  * @param {string} projectName The project whose impact is being queried.
  * @param {object} graph The project graph: `{nodes, dependencies}`.
  * @returns {{project: string, direct: string[], transitive: string[], dependents: string[]}}
- * @throws {Error} when `projectName` is not in the graph.
+ * @throws {UsageError} when `projectName` is not in the graph.
  */
 export function computeImpact(projectName, graph) {
   const nodes = graph.nodes;
   const deps = graph.dependencies;
 
   if (!Object.hasOwn(nodes, projectName)) {
-    throw new Error(
+    throw new UsageError(
       `lattice: no project named '${projectName}' in the graph — ` +
         `available projects: ${Object.keys(nodes)
           .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
