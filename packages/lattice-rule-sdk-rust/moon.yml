@@ -7,13 +7,22 @@
 # law's scope axis has ever had, and that row is what keeps the SDK and the
 # engine from importing each other by accident.
 #
-# Every cargo invocation below passes `--locked`, once, for all three tasks.
-# Without it cargo RESOLVES and rewrites `Cargo.lock` in place and exits 0, so
-# a lockfile that disagrees with `Cargo.toml` is a green build and a
-# contributor's dirty tree rather than a failure — measured on this package:
-# the 0.10.0 release bumped the manifest through release-please's
-# `extra-files`, `Cargo.lock` kept saying 0.9.0, and lint, test and typecheck
-# all passed over it. `--locked` makes that state a red build naming the file.
+# Every cargo invocation below passes `--locked`, once, for all three tasks,
+# and the reason is a measured incident rather than a preference.
+#
+# The release lane has always run `cargo test --locked` and `cargo publish
+# --locked`, so a lock disagreeing with its manifest was always going to
+# refuse. What decided the cost was WHERE. On the 0.10.0 release it refused at
+# publish time — after the tag was cut and npm had shipped, with crates.io
+# receiving nothing — and a tag cannot be un-cut.
+# `../../.github/workflows/release.yml` owns that story, and
+# `../../scripts/sync-cargo-lock.mjs` fixed its cause.
+#
+# This is the other half, and it was missing: without `--locked` these targets
+# RESOLVE and rewrite `Cargo.lock` in place and exit 0, so the same
+# disagreement was invisible on every pull request — the one place it could
+# still be answered by a commit instead of by a release. With it, CI refuses
+# what the publish job would refuse, while refusing is still cheap.
 id: lattice-rule-sdk-rust
 language: rust
 layer: library
