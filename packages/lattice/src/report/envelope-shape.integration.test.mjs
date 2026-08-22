@@ -51,6 +51,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { COMMAND_NAMES, runCli } from "../../cli.mjs";
 import { compareFieldPaths, envelopeFieldPaths } from "./envelope-shape.mjs";
 import { ADR_DIR } from "../governance/adr-registry.mjs";
+import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
 
 const SNAPSHOT = fileURLToPath(new URL("./envelope-shape.json", import.meta.url));
 const UPDATING = process.env.LATTICE_UPDATE_ENVELOPE_SHAPE === "1";
@@ -150,6 +151,11 @@ const git = (...args) =>
   spawnSync("git", args, {
     cwd: root,
     encoding: "utf8",
+    // One spawned child gets the shared single-spawn budget; without any
+    // bound, a wedged spawn blocks this thread indefinitely — a state no
+    // vitest timeout can interrupt. `../../spawn-budget.mjs` owns the pair. cf. #41
+    timeout: SPAWN_BUDGET_MS,
+    killSignal: "SIGKILL",
     env: {
       ...process.env,
       GIT_AUTHOR_NAME: "t",
@@ -160,6 +166,9 @@ const git = (...args) =>
     },
   }).status;
 
+// The fixture build spawns git three times and runs two full commands; the
+// hook-timeout argument (vitest's separate 10 s hook default) is the derived
+// spawn-test ceiling, not a fresh literal — `../../spawn-budget.mjs` owns it.
 beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "lattice-envelope-shape-"));
   historyDir = mkdtempSync(join(tmpdir(), "lattice-envelope-shape-history-"));
@@ -222,7 +231,7 @@ beforeAll(async () => {
   writeFileSync(baseline, `${JSON.stringify(snapshot.envelope, null, 2)}\n`);
   const captured = await run(["history", historyDir, "--capture"]);
   expect(captured.exitCode).toBe(0);
-});
+}, SPAWN_TEST_BUDGET_MS);
 
 afterAll(() => {
   if (root) rmSync(root, { recursive: true, force: true });

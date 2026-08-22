@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { EXIT, runCli } from "../cli.mjs";
+import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../spawn-budget.mjs";
 
 const CLI = fileURLToPath(new URL("../cli.mjs", import.meta.url));
 
@@ -14,7 +15,10 @@ const CLI = fileURLToPath(new URL("../cli.mjs", import.meta.url));
 const run = (args, options = {}) =>
   spawnSync(process.execPath, [CLI, ...args], {
     encoding: "utf8",
-    timeout: 30_000,
+    // One spawned child gets the shared single-spawn budget; without any
+    // bound, a wedged spawn blocks this thread indefinitely — a state no
+    // vitest timeout can interrupt. `../spawn-budget.mjs` owns the pair. cf. #41
+    timeout: SPAWN_BUDGET_MS,
     killSignal: "SIGKILL",
     ...options,
   });
@@ -273,39 +277,52 @@ describe("discover over a tree it cannot fully read — the silent direction", (
   });
 });
 
-describe("discover over a malformed model — exit 3, with no fabricated proposal", () => {
-  it("exits 3 and names the malformed file from the real executable", () => {
-    // The malformed-model class: a lattice.json that will not load. Spawned so
-    // the exit code is the process's own, not a value the test computed. A git
-    // repo and tracked files are required — the native provider resolves the
-    // tree from `git ls-files`, the same way every real run does.
-    const malformedRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-discover-malformed-"));
-    try {
-      const writeMalformed = (relativePath, text) => {
-        mkdirSync(join(malformedRoot, relativePath, ".."), { recursive: true });
-        writeFileSync(join(malformedRoot, relativePath), text);
-      };
-      writeMalformed("lattice.json", "{ this is not JSON");
-      writeMalformed("libs/core/go.mod", "module example.com/core\n\ngo 1.24\n");
-      writeMalformed("libs/core/core.go", "package core\n");
-      spawnSync("git", ["init", "-q", malformedRoot], { encoding: "utf8" });
-      spawnSync(
-        "git",
-        ["-C", malformedRoot, "add", "lattice.json", "libs/core/go.mod", "libs/core/core.go"],
-        {
+// Four sequential spawns (three git, one CLI) fit inside the derived
+// spawn-test ceiling as long as each stays under its own single-spawn budget;
+// past it the test fails loudly instead of idling. `../spawn-budget.mjs`
+// owns both numbers.
+describe(
+  "discover over a malformed model — exit 3, with no fabricated proposal",
+  { timeout: SPAWN_TEST_BUDGET_MS },
+  () => {
+    it("exits 3 and names the malformed file from the real executable", () => {
+      // The malformed-model class: a lattice.json that will not load. Spawned so
+      // the exit code is the process's own, not a value the test computed. A git
+      // repo and tracked files are required — the native provider resolves the
+      // tree from `git ls-files`, the same way every real run does.
+      const malformedRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-discover-malformed-"));
+      try {
+        const writeMalformed = (relativePath, text) => {
+          mkdirSync(join(malformedRoot, relativePath, ".."), { recursive: true });
+          writeFileSync(join(malformedRoot, relativePath), text);
+        };
+        writeMalformed("lattice.json", "{ this is not JSON");
+        writeMalformed("libs/core/go.mod", "module example.com/core\n\ngo 1.24\n");
+        writeMalformed("libs/core/core.go", "package core\n");
+        spawnSync("git", ["init", "-q", malformedRoot], {
           encoding: "utf8",
-        },
-      );
-      spawnSync("git", ["-C", malformedRoot, "commit", "-q", "-m", "fixture"], {
-        encoding: "utf8",
-      });
-      const result = run(["discover", "--propose"], { cwd: malformedRoot });
-      expect(result.status).toBe(EXIT.error);
-      expect(result.stderr).toContain("lattice.json");
-      // No proposal may be printed over a model that never loaded.
-      expect(result.stdout).not.toContain("proposed architecture");
-    } finally {
-      rmSync(malformedRoot, { recursive: true, force: true });
-    }
-  });
-});
+          timeout: SPAWN_BUDGET_MS,
+        });
+        spawnSync(
+          "git",
+          ["-C", malformedRoot, "add", "lattice.json", "libs/core/go.mod", "libs/core/core.go"],
+          {
+            encoding: "utf8",
+            timeout: SPAWN_BUDGET_MS,
+          },
+        );
+        spawnSync("git", ["-C", malformedRoot, "commit", "-q", "-m", "fixture"], {
+          encoding: "utf8",
+          timeout: SPAWN_BUDGET_MS,
+        });
+        const result = run(["discover", "--propose"], { cwd: malformedRoot });
+        expect(result.status).toBe(EXIT.error);
+        expect(result.stderr).toContain("lattice.json");
+        // No proposal may be printed over a model that never loaded.
+        expect(result.stdout).not.toContain("proposed architecture");
+      } finally {
+        rmSync(malformedRoot, { recursive: true, force: true });
+      }
+    });
+  },
+);
