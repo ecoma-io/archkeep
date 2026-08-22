@@ -72,6 +72,19 @@ test that only pins the message text is half a test.
   plugin.json              the plugin manifest that catalogue entry points at
 .codex-plugin/
   plugin.json              the same plugin manifest, for Codex's reader
+.agents/plugins/
+  marketplace.json         the catalogue Codex reads, at the one path it looks
+                           for a repository's own. Publishing is all it does:
+                           registration AND enablement are per user there, in
+                           `~/.codex/config.toml`, with no counterpart to the
+                           `.claude/settings.json` entry that does it for
+                           everyone on the Claude Code side
+.agents/skills/            the checked-in copy of `skills/` that closes that
+                           gap: the Agent Skills shared project directory, read
+                           by every Codex session here with no install. A copy,
+                           not a symlink — Windows checkouts materialize
+                           symlinks as text files — and `check-skills` fails on
+                           any byte of drift between the two trees
 docs/
   README.md                the index, and the map of which file owns what —
                            docs/'s own subtree included, which is why it is

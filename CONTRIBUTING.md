@@ -55,7 +55,10 @@ you run no command in the normal case. Two things it does:
 - **Enables `lattice@lattice`** — this repository's own plugin, the one its
   marketplace catalogue (`.claude-plugin/marketplace.json`) publishes. It is the
   language server reporting module-boundary diagnostics as you edit, plus the
-  `arch-*` skills; it gates nothing, and no merge depends on it.
+  `arch-*` skills; it gates nothing, and no merge depends on it. The same file
+  registers that catalogue, under `extraKnownMarketplaces` — enabling a plugin
+  names a marketplace, and a name nothing registered resolves to nothing, in
+  silence.
 
 Your **first session in this directory prompts you to trust it**. Agreeing is
 what lets that plugin run — a checkout you have not vouched for cannot make your
@@ -65,6 +68,29 @@ arrangement safe.
 
 Nothing else in the repository depends on it. Every gate a pull request must pass
 runs in CI and in the Git hooks.
+
+### If you use Codex
+
+You run no command here either, by a different mechanism than Claude Code's:
+`.agents/skills/` is a checked-in copy of `skills/`, and Codex reads that
+directory in every session in this repository — measured with codex-cli 0.149.0,
+all five `arch-*` skills, no plugin, no trust prompt, no install. A copy rather
+than a symlink so a Windows checkout (where git materializes symlinks as text
+files) loses nothing. If you edit a skill, re-copy it there
+(`cp -r skills/* .agents/skills/`); `check-skills` fails CI on any difference
+between the two trees, so forgetting is loud.
+
+The plugin route (`codex plugin marketplace add .`, then
+`codex plugin add lattice@lattice`) exists for installing the skills by name
+into sessions outside this repository; it registers and enables per user in
+`~/.codex/config.toml` — the tables it writes there never enter scope from a
+repository's own `.codex/config.toml`, measured — and it copies the tree into
+`~/.codex/plugins/cache/` rather than reading it in place, so an edited skill
+needs a re-add. Inside this repository it adds nothing the checked-in copy has not
+already provided, and a session with both lists every skill twice.
+
+As with Claude Code, no gate depends on any of this — the editor-time hooks in
+`.codex/config.toml` are separate and need no plugin.
 
 ## The commands
 

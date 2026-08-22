@@ -14,19 +14,37 @@ as you type; the skills teach the agent what to do before and after changes.
 
 ### Enable the plugin
 
-In `.claude/settings.json`, add the plugin to the enabled list:
+`.claude/settings.json` needs two keys, not one — `lattice@lattice` names a
+plugin AND the marketplace it comes from, and the marketplace has to be
+registered before the name resolves:
 
 ```json
 {
+  "extraKnownMarketplaces": {
+    "lattice": {
+      "source": { "source": "github", "repo": "ecoma-io/lattice" }
+    }
+  },
   "enabledPlugins": {
     "lattice@lattice": true
   }
 }
 ```
 
-The plugin is discovered from the marketplace catalogue this repository
-publishes. Once enabled, the LSP server starts automatically when you open a
+Publishing a catalogue is not registering one: `.claude-plugin/marketplace.json`
+states what a repository offers, and nothing reads it on a session's behalf.
+With `enabledPlugins` alone the session starts with no skills and no language
+server, and no line says so — run `claude plugin marketplace list` to tell that
+state apart from a working one.
+
+Once both keys are in place, the LSP server starts automatically when you open a
 file in a Lattice-governed project.
+
+This repository configures itself the same way, with one difference: its own
+`.claude/settings.json` uses a `directory` source at `.` rather than the
+`github` source above, so a session here runs the plugin from the working tree
+under review instead of from the default branch. See
+[installation.md](installation.md) for the per-user CLI route and for Codex.
 
 ### Verify skills are available
 

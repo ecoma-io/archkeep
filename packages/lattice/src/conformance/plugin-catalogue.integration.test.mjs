@@ -1,6 +1,8 @@
 /**
- * The manifests that have to agree before this package's language server reaches
- * a Claude Code session, held to each other.
+ * The manifests that have to agree before this package's language server and its
+ * arch-* skills reach an agent session, held to each other. Two hosts read two
+ * catalogues — Claude Code `.claude-plugin/marketplace.json`, Codex
+ * `.agents/plugins/marketplace.json` — and both are judged here.
  *
  * A plugin is reached by a string — `<plugin>@<marketplace>` — that names two
  * things declared in different files: the plugin's own `plugin.json` and the
@@ -24,11 +26,19 @@
  * matters is the plugin's, and the skills themselves carry none
  * (`docs/skills/versioning.md`).
  *
+ * Registering the marketplace is the step this file learned late. A catalogue
+ * states what the repository offers and nothing reads it on a session's behalf,
+ * so the name in `enabledPlugins` has to be backed by an
+ * `extraKnownMarketplaces` entry — a settings key, in the same file, that this
+ * test once treated as optional decoration beside the catalogue's own name. It
+ * was not: measured on Claude Code 2.1.239, a session with the catalogue and no
+ * registration loads no skills and starts no server, and says nothing.
+ *
  * `../lsp/editor-config.integration.test.mjs` owns the other half — that the
  * routed extensions match the analyzer registry and that the entry point exists.
  * Neither restates the other.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -129,22 +139,24 @@ describe("the plugin catalogue this repository publishes", () => {
   it("enables only plugins whose marketplace a session can actually reach", () => {
     // `enabledPlugins` is where the two names are joined, and it is a string: a
     // key naming a marketplace nothing registers is not an error, it is a plugin
-    // that never starts. Two sources make a marketplace reachable — this
-    // repository's own catalogue, and the `extraKnownMarketplaces` the same
-    // settings file declares (absent here because this session uses only the
-    // repository's own marketplace) — so the reachable set is derived from both
-    // rather than listed here, which is what makes this fail on a rename instead
-    // of needing one.
+    // that never starts. The reachable set is what `extraKnownMarketplaces`
+    // declares and nothing else — publishing a catalogue does not register it,
+    // which is the correction this test carries.
+    //
+    // It previously counted `marketplace.name` as reachable too, on the reading
+    // that a session in this tree registers the repository's own catalogue by
+    // finding it. Measured on Claude Code 2.1.239, it does not: with no
+    // `extraKnownMarketplaces` entry, `claude plugin marketplace list` answers
+    // `No marketplaces configured` and the enabled plugin starts nothing — no
+    // skills, no language server, no warning. This test stayed green through
+    // all of it, which is what made the hole silent.
     //
     // Deliberately NOT asserted: that every plugin this repository publishes is
     // also enabled here. The catalogue states what the repository OFFERS to
     // consumers; the settings state what a session here USES. A session in this
     // tree does not need the boundary server installed as a plugin, because the
     // conformance suite and the CLI already judge this tree in CI.
-    const reachable = new Set([
-      marketplace.name,
-      ...Object.keys(settings.extraKnownMarketplaces ?? {}),
-    ]);
+    const reachable = new Set(Object.keys(settings.extraKnownMarketplaces ?? {}));
 
     const enabled = Object.keys(settings.enabledPlugins ?? {});
     expect(enabled.length).toBeGreaterThan(0);
@@ -158,13 +170,91 @@ describe("the plugin catalogue this repository publishes", () => {
     }
   });
 
-  it("declares each extra marketplace as a source Claude Code knows how to fetch", () => {
+  it("registers each extra marketplace as a directory inside this repository", () => {
     // A malformed entry here fails the same silent way: the marketplace is never
     // registered, the plugin string points at nothing, and the session starts
-    // without the skills the repository meant every contributor to have.
+    // without the skills and the server this repository means every contributor
+    // to have.
+    //
+    // `directory` rather than `github` is the deliberate half. Both are sources
+    // Claude Code knows how to fetch, but a `github` entry resolves to the
+    // default branch, so a pull request editing the server or a skill would be
+    // judged by sessions running the version before it. A directory inside the
+    // tree runs the working copy under review — the argument the catalogue's own
+    // note makes, and the same containment the test above holds the catalogue's
+    // entries to.
     for (const [name, entry] of Object.entries(settings.extraKnownMarketplaces ?? {})) {
-      expect(entry.source?.source, `${name} names a source type`).toBe("github");
-      expect(entry.source.repo, `${name} names owner/repo`).toMatch(/^[^/\s]+\/[^/\s]+$/u);
+      expect(entry.source?.source, `${name} names a source type`).toBe("directory");
+
+      const resolved = resolve(ROOT, entry.source.path);
+      expect(resolved.startsWith(resolve(ROOT)), `${name} -> ${entry.source.path}`).toBe(true);
+
+      // The registered name is what `enabledPlugins` refers to, and the
+      // catalogue at the other end carries a name of its own. Keeping the two
+      // equal is what makes the join above decidable from these two files.
+      const catalogue = readJson(join(resolved, ".claude-plugin/marketplace.json"));
+      expect(catalogue.name, `${name} -> the catalogue it points at`).toBe(name);
+    }
+  });
+});
+
+describe("the plugin catalogue Codex reads", () => {
+  // Codex looks for a repository's own catalogue at exactly one path,
+  // `$REPO_ROOT/.agents/plugins/marketplace.json`, and reaches the plugin it
+  // names through `.codex-plugin/plugin.json`. Same join as above and the same
+  // silent failure: a renamed directory or a disagreeing name leaves `codex
+  // plugin add` with nothing to install and no reason given. Measured with
+  // codex-cli 0.149.0.
+  //
+  // The Codex catalogue carries no version of its own. Installation reads the
+  // version from the plugin manifest — already on the chain
+  // `docs/skills/versioning.md` owns — so there is nothing here to drift and no
+  // tenth link for that chain to grow.
+  const codexMarketplace = readJson(join(ROOT, ".agents/plugins/marketplace.json"));
+
+  it("names a plugin whose Codex manifest is where the entry says it is", () => {
+    for (const entry of codexMarketplace.plugins) {
+      const pluginRoot = resolve(ROOT, entry.source.path);
+      expect(pluginRoot.startsWith(resolve(ROOT)), `${entry.name} -> ${entry.source.path}`).toBe(
+        true,
+      );
+
+      const manifestPath = join(pluginRoot, ".codex-plugin/plugin.json");
+      expect(existsSync(manifestPath), `${entry.name} -> ${entry.source.path}`).toBe(true);
+
+      const manifest = readJson(manifestPath);
+      expect(manifest.name, `${entry.name}: the manifest's own name`).toBe(entry.name);
+      expect(manifest.skills, `${entry.name}: the skills the plugin ships`).toBeTypeOf("string");
+      expect(
+        existsSync(resolve(pluginRoot, manifest.skills)),
+        `${entry.name}: skills directory ${manifest.skills}`,
+      ).toBe(true);
+    }
+  });
+
+  it("reaches the same skills both hosts ship, so neither can drift into a shorter list", () => {
+    // The two catalogues point at one `skills/` directory by different routes.
+    // Comparing what each route reaches is what keeps "the same skills on every
+    // host" a measured fact rather than a claim about two files nobody compares.
+    const claudeSkills = readJson(join(ROOT, ".claude-plugin/plugin.json")).skills.flatMap((dir) =>
+      readdirSync(resolve(ROOT, dir), { withFileTypes: true })
+        .filter((it) => it.isDirectory())
+        .map((it) => it.name),
+    );
+    expect(claudeSkills.length, "the Claude Code plugin ships skills").toBeGreaterThan(0);
+
+    for (const entry of codexMarketplace.plugins) {
+      const pluginRoot = resolve(ROOT, entry.source.path);
+      const manifest = readJson(join(pluginRoot, ".codex-plugin/plugin.json"));
+      const codexSkills = readdirSync(resolve(pluginRoot, manifest.skills), {
+        withFileTypes: true,
+      })
+        .filter((it) => it.isDirectory())
+        .map((it) => it.name);
+
+      expect(codexSkills.sort(), `${entry.name}: skills reached through Codex`).toEqual(
+        [...claudeSkills].sort(),
+      );
     }
   });
 });
