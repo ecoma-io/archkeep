@@ -27,6 +27,7 @@
     "examples/",
     "fixtures/",
     "asconfig.json",
+    "LICENSE",
     "README.md"
   ],
   "devDependencies": {

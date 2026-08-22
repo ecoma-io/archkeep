@@ -7,16 +7,19 @@ name: Release
 # last tag. That pull request *is* the release proposal: merging it is what
 # tags, and the tag is what publishes.
 #
-# One component releases from here, to the two destinations that can serve it.
-# The npm package ships to the registry and nothing else: an Nx plugin reaches
-# a workspace through its `node_modules` or it does not reach it at all, so its
-# release carries no assets. litmus, the sibling this workflow is modelled on,
-# also builds a reproducible tarball and has SLSA sign it — because a skills
-# package is consumed by `curl` as often as by `npm i`; that does not apply
-# here. The VS Code extension is the reverse case: npm can never serve it (its
-# manifest is `private: true` on purpose), so the SAME release carries an
-# asset — the .vsix, the one file a person can install by hand — and the
-# marketplace publish is guarded below until a publisher account exists.
+# One component releases from here, to four registries and one release page.
+# npm serves TWO of this repository's packages — the engine and the
+# AssemblyScript rule SDK — from one token, in two jobs, because they fail
+# independently and a shared job would hide one behind the other. Neither ships
+# an asset: an Nx plugin reaches a workspace through its `node_modules` or it
+# does not reach it at all, and the SDK is source a consumer's own `asc`
+# compiles, so neither release carries one. litmus, the sibling this workflow
+# is modelled on, also builds a reproducible tarball and has SLSA sign it —
+# because a skills package is consumed by `curl` as often as by `npm i`; that
+# does not apply here. The VS Code extension is the reverse case: npm can never
+# serve it (its manifest is `private: true` on purpose), so the SAME release
+# carries an asset — the .vsix, the one file a person can install by hand —
+# and the marketplace publish is guarded below until a publisher account exists.
 # Extension and engine share one version by decision, not by accident: a client
 # that resolves the server out of the workspace pairs with the engine it is
 # released with, and one version makes the pairing visible.
@@ -467,6 +470,82 @@ jobs:
       # the `id-token: write` above is already what that mode needs.
       - name: Publish
         working-directory: packages/lattice
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
+        run: npm publish --provenance --access public
+
+  publish-ts-sdk:
+    name: Publish the TypeScript rule SDK to npm
+    # The second package this repository publishes to npm, on the same token as
+    # the engine above. It is a SEPARATE job rather than a second step there,
+    # for the reason every destination here is its own job: the two packages
+    # fail independently, and a step appended to the engine's job would either
+    # block the engine on the SDK or bury the SDK's failure behind an engine
+    # that already shipped.
+    #
+    # The gate expression is the npm job's, verbatim — see the comment there;
+    # a divergence between the publish jobs is a release that ships to one
+    # destination and not another.
+    #
+    # This job publishes on every release with no token guard, matching the
+    # engine's job rather than the crates.io and PyPI jobs below: those guard
+    # because their organisation secrets may not be granted to this repository,
+    # while `ECOMA_NPM_ACCESS_TOKEN` is the same secret the engine just
+    # published with in this same run — a guard here would be testing something
+    # already proven a job earlier.
+    #
+    # The SDK ships the version the engine ships (ADR 0002 puts every SDK on the
+    # one version chain), which is what makes "the SDK for engine 0.x" readable
+    # off the number instead of a compatibility matrix.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Same provenance attestation the engine's publish mints, for the same
+      # reason: the registry records which workflow, at which commit, built it.
+      id-token: write
+    steps:
+      # The tag, not the branch, for the same reason every publish job states:
+      # `main` may have moved, and the tarball must hold the tagged bytes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      # `registry-url` is what writes the .npmrc that reads NODE_AUTH_TOKEN
+      # below. Without it the token is set and silently unused, and the publish
+      # fails as unauthenticated.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+
+      # The SDK's analogue of `verify-package.mjs`, and it asks a different
+      # question because this package ships SOURCE rather than a runnable tool:
+      # it packs the tarball, installs it into a throwaway workspace beside the
+      # compiler, and builds the rule the SDK's own documentation prints —
+      # through the `@ecoma-io/lattice-rule-sdk/assembly` specifier that
+      # documentation promises, which nothing in this repository compiled
+      # before. The script's header argues each check. It runs before publish,
+      # not after, because an npm version cannot be unpublished away.
+      - name: Prove the packed SDK compiles a rule outside this workspace
+        run: node scripts/verify-rule-sdk-ts-package.mjs
+
+      # `npm publish`, not `pnpm publish`, and `--access public` because the
+      # package is scoped: the engine's own Publish step argues both, and the
+      # licence consequence it names is why this package carries its own
+      # LICENSE — measured here rather than assumed, by the verifier above,
+      # which goes red when the file is absent because npm and pnpm then select
+      # different files from the same tree.
+      - name: Publish
+        working-directory: packages/lattice-rule-sdk-ts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
         run: npm publish --provenance --access public
