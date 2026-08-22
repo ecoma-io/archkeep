@@ -395,7 +395,11 @@ below — one SDK, one kind, one real workspace blocking on a custom rule.
   an evidence kind reports can change a custom rule's verdict on an
   unchanged workspace — from the first shipped kind onward, the evidence
   contract carries the same breaking-change discipline `AGENTS.md` already
-  applies to what is reported.
+  applies to what is reported. What holds that discipline is a golden:
+  `packages/lattice/src/custom-rules/evidence-golden.integration.test.mjs`
+  drives a fixture workspace through the real pipeline and pins the bundle's
+  bytes, so a change to what any kind reports arrives as a diff to argue
+  rather than as a silently different document.
 - **A workspace's rule changing that workspace's verdicts is the
   workspace's own change** — the law moved, reviewed like code. The
   engine's compatibility promise covers what it feeds a rule, never what
