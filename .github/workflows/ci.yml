@@ -371,6 +371,9 @@ jobs:
     # while the job list is not: add a job to `needs` and the gate tightens
     # without anyone editing repository settings — and forgetting to add it is
     # the only way to widen what green means, which is visible in this file.
+    # Visible, and enforced: scripts/ci-drift-pins.test.mjs reads this file and
+    # fails when a job sits outside `needs`, or when `needs` names a job that
+    # does not exist.
     needs: [verify-core, verify-e2e]
     if: always()
     runs-on: ubuntu-latest

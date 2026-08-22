@@ -55,7 +55,17 @@ if (!realPath(file).startsWith(realPath(process.cwd()) + sep)) process.exit(0);
 if (!/\.(vue|js|ts|mts|cts|mjs|cjs)$/.test(file)) process.exit(0);
 
 const eslint = "node_modules/eslint/bin/eslint.js";
-if (!existsSync(eslint)) process.exit(0); // dependencies not installed yet
+if (!existsSync(eslint)) {
+  // Linting is a finding, not a fix — the inverse of this file's format twin,
+  // whose header owns why IT may exit 0 quietly. A missing dependency tree
+  // must not read as a file with no violations: exit 2 with the reason, the
+  // same convention a real violation takes below.
+  process.stderr.write(
+    `lint-edited-file.mjs: ${eslint} was not found from ${process.cwd()} — dependencies are ` +
+      `not installed, so the edit was NOT linted. Run \`pnpm install\`, then re-edit the file.\n`,
+  );
+  process.exit(2);
+}
 
 const r = spawnSync(process.execPath, [eslint, "--no-warn-ignored", "--max-warnings", "0", file], {
   encoding: "utf8",
