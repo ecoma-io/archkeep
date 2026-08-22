@@ -1,5 +1,14 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -7,6 +16,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { EXIT, check, runCli } from "../cli.mjs";
 import { INTENT_MESSAGE_IDS } from "./architecture-intent/judge.mjs";
+import { readArtifactBytes } from "./commands/custom-rules.mjs";
 import { computePolicyFingerprint } from "./commands/graph.mjs";
 import { loadBoundaryConfigFile } from "./config.mjs";
 import { buildRuleModule } from "./custom-rules/wasm-fixture.mjs";
@@ -386,6 +396,77 @@ describe("a declared law that could not be loaded refuses the run", () => {
     const env = w.env();
     expect(await runCli(["check"], env)).toBe(EXIT.error);
     expect(env.lines.err.join("\n")).toContain("the contract grants no imports");
+  });
+});
+
+describe("readArtifactBytes, the reader an unscoped run uses when nothing is injected", () => {
+  // Every other custom-rule test hands `customRulesForCheck` a `readArtifact`
+  // of its own, so the reader `check` actually runs was the one statement in
+  // `./commands/custom-rules.mjs` that no test executed — and the statement it
+  // was is the containment check. That check is the ONLY thing standing
+  // between a declared law and bytes the workspace never committed:
+  // `./config.mjs`'s `artifactPathProblem` reads the declared STRING, and a
+  // symlink is not spelled in a string (`./containment.mjs`, the read-side
+  // escape). Deleting the line leaves every other case in this file green.
+
+  /** A directory outside any workspace, holding bytes a policy might pin. */
+  function outside(bytes) {
+    const dir = mkdtempSync(join(tmpdir(), "custom-rules-outside-"));
+    roots.push(dir);
+    const path = join(dir, "planted.wasm");
+    writeFileSync(path, bytes);
+    return path;
+  }
+
+  it("hands back exactly the bytes at a path inside the workspace", () => {
+    const w = workspace();
+    const read = readArtifactBytes(w.root);
+    expect(Uint8Array.from(read(w.artifact))).toEqual(
+      Uint8Array.from(readFileSync(join(w.root, w.artifact))),
+    );
+  });
+
+  it("answers null for an artifact that is not there, rather than throwing", () => {
+    // `null` is the whole vocabulary this reader has for "no bytes": the
+    // caller turns all three ways of not arriving into one refusal, and a
+    // throw here would escape as something no failure class owns.
+    const w = workspace({ rule: null });
+    expect(readArtifactBytes(w.root)(w.artifact)).toBeNull();
+  });
+
+  it("answers null for a symlink whose target is outside the workspace", () => {
+    // The bytes at the other end are a REAL module that hashes to exactly what
+    // the row pins, so nothing downstream would have refused them: the digest
+    // check passes, the module compiles, the ABI is satisfied. The only reason
+    // this is not the law is where the bytes live, and this is the only line
+    // that asks.
+    const w = workspace();
+    const planted = outside(readFileSync(join(w.root, w.artifact)));
+    unlinkSync(join(w.root, w.artifact));
+    symlinkSync(planted, join(w.root, w.artifact));
+
+    expect(readArtifactBytes(w.root)(w.artifact)).toBeNull();
+  });
+
+  it("refuses the whole run over such a symlink, naming the rule", async () => {
+    // The same escape through the real command, because a reader that answers
+    // `null` and a run that refuses are two claims, and only the second one is
+    // what a consumer sees. Exit 3 and not a word on stdout: a law that
+    // resolves outside the tree is refused the way a malformed config is,
+    // never judged and reported clean.
+    const w = workspace();
+    const planted = outside(readFileSync(join(w.root, w.artifact)));
+    unlinkSync(join(w.root, w.artifact));
+    symlinkSync(planted, join(w.root, w.artifact));
+
+    const env = w.env();
+    const exitCode = await runCli(["check"], env);
+    expect(exitCode).toBe(EXIT.error);
+    expect(exitCode).not.toBe(EXIT.ok);
+    expect(env.lines.out).toEqual([]);
+    expect(env.lines.err.join("\n")).toContain(
+      `lattice: custom rule "${RULE}": the artifact "${w.artifact}" could not be read`,
+    );
   });
 });
 
