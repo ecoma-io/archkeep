@@ -102,6 +102,17 @@ Prettier over the JSON `extra-files` and keeps `format:check` green. The two
 TOML manifests stay off that list — Prettier has no TOML parser, and no gate
 checks TOML layout, so there is nothing there to fix.
 
+One package is bumped by neither mechanism. The Go SDK carries no version
+anywhere in its tree, so there is nothing for `extra-files` to write and nothing
+for the chain gate to compare: its version is a git tag, and Go's rule for a
+module below the repository root is that the tag carries the module's own
+directory — `packages/lattice-rule-sdk-go/v<version>`, beside the bare
+`v<version>` release-please cuts. `release.yml`'s `publish-go-module` job mints
+it from `scripts/tag-go-module.mjs`, which derives the name from `go.mod`'s
+module path rather than restating it and refuses a path that does not resolve to
+this repository and that directory. It is the one release destination with no
+registry: `go get` reads the tag, so the tag is the publish.
+
 The second is the Rust SDK's `Cargo.lock`, which is not a formatting fix and is
 the reason this section was rewritten. Nothing in `extra-files` writes a
 lockfile, so the manifest moves and the lock does not, and

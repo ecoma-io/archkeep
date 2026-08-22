@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 
 import { readFileSync } from "node:fs";
 
-import { REFORMAT_FILES, treePayload } from "./push-reformatted-files.mjs";
+import { REFORMAT_FILES, requestGit, treePayload } from "./push-reformatted-files.mjs";
 
 test("treePayload embeds each file's bytes as inline content with a trailing newline", () => {
   const root = mkdtempSync(join(tmpdir(), "r0b-tree-"));
@@ -124,5 +124,23 @@ test("the list carries every JSON extra-file release-please re-serializes", () =
       REFORMAT_FILES.includes(path),
       `${path} is a JSON extra-file release-please rewrites, but the repair list omits it`,
     );
+  }
+});
+
+test("requestGit names a missing gh instead of throwing from inside itself", () => {
+  // `spawnSync` reports a process that never started as `status: null` with no
+  // streams. Reading `stderr.trim()` on that path turned "gh is not installed"
+  // into a TypeError raised inside this helper — a failure that pointed at the
+  // reporter rather than at the thing that failed, which is the least
+  // diagnosable shape an error can take.
+  const path = process.env.PATH;
+  process.env.PATH = "";
+  try {
+    assert.throws(
+      () => requestGit("owner", "repo", "GET", "/git/ref/tags/v1.0.0", "token"),
+      /could not run `gh`/u,
+    );
+  } finally {
+    process.env.PATH = path;
   }
 });

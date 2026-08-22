@@ -105,7 +105,7 @@ export const REFORMAT_MESSAGE = "chore: repair release-please extra-files";
  *   non-2xx so a failed push is loud, never a silent success.
  */
 export function requestGit(owner, repo, method, path, token, body) {
-  const { status, stdout, stderr } = spawnSync(
+  const { error, status, stdout, stderr } = spawnSync(
     "gh",
     ["api", `repos/${owner}/${repo}${path}`, "-X", method, "--input", "-"],
     {
@@ -118,8 +118,20 @@ export function requestGit(owner, repo, method, path, token, body) {
       maxBuffer: 1024 * 1024,
     },
   );
+  // The process never started — `gh` is not on PATH, or the spawn itself
+  // failed. Handled before the status check because `spawnSync` then reports
+  // `status: null` and NO streams, and reaching for `stderr.trim()` turns a
+  // one-line "gh is not installed" into a TypeError from inside this helper:
+  // the caller's failure, reported as a bug in the reporter.
+  if (error || status === null) {
+    throw new Error(
+      `GitHub API ${method} ${path} could not run \`gh\`: ${error?.message ?? "the process did not start"}. ` +
+        `This helper shells out to the GitHub CLI, which every runner in this lane has and a ` +
+        `local checkout may not.`,
+    );
+  }
   if (status !== 0) {
-    const detail = stderr.trim() || stdout.trim();
+    const detail = (stderr ?? "").trim() || (stdout ?? "").trim();
     throw new Error(`GitHub API ${method} ${path} failed (exit ${status}): ${detail}`);
   }
   return JSON.parse(stdout);

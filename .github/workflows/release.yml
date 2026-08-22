@@ -641,6 +641,72 @@ jobs:
             echo "\`$TAG\` was published to the VS Code Marketplace from the vsix on its GitHub release."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  publish-go-module:
+    name: Tag the Go rule SDK for the module proxy
+    # For Go, the tag IS the publish. A Go module carries no manifest version
+    # and there is no registry to upload to: `go get` reads the module path,
+    # fetches the repository, and looks for a tag — and for a module below the
+    # repository root that tag is prefixed with the module's own directory,
+    # `packages/lattice-rule-sdk-go/v<version>` rather than the bare
+    # `v<version>` release-please already cuts.
+    #
+    # Nothing minted it, while `packages/lattice-rule-sdk-go/go.mod` and
+    # docs/adr/0002-custom-rules-one-contract.md both said this lane did. That
+    # is the failure with no observable: `go get` falls back to a pseudo-version
+    # off the default branch, which installs and builds, so nobody could tell a
+    # released version from one that was never cut.
+    #
+    # The gate expression is the npm job's, verbatim — see the comment there;
+    # a divergence between the publish jobs is a release that ships to one
+    # destination and not another.
+    #
+    # `contents: write` is the narrowest permission that can create a ref, and
+    # it is the only job below `prepare` that writes anything to this
+    # repository. The tag it creates cannot start a workflow run: this file
+    # triggers on `push` to `main` branches, and a tag ref is neither.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      # The tag, not the branch, for the same reason every publish job states —
+      # and here it is also what the new tag must POINT AT, so the checked-out
+      # commit is read back below rather than assumed to be `main`'s head.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      # Re-proving the module from the tagged bytes, the way the crates.io job
+      # re-proves the crate: the runner's preinstalled Go is the toolchain, and
+      # `go.mod`'s own floor is what decides whether it is new enough — a
+      # `setup-go` pin here would be a second copy of that number.
+      - name: Prove the tagged module builds and passes its own suite
+        working-directory: packages/lattice-rule-sdk-go
+        run: |
+          go build ./...
+          go test ./...
+
+      # The tag is created through the API rather than `git tag && git push`,
+      # for the reason `scripts/push-reformatted-files.mjs` states about
+      # commits: a ref created by the API carries the workflow identity, and
+      # the checkout above deliberately kept no credentials to push with.
+      # `scripts/tag-go-module.mjs` derives the tag name from go.mod rather
+      # than restating it here, refuses a module path that does not resolve to
+      # this repository and this directory, and reads the ref back after
+      # writing it.
+      - name: Mint the module's version tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          node scripts/tag-go-module.mjs \
+            --version "$TAG" \
+            --sha "$(git rev-parse HEAD)"
+
   publish-pypi:
     name: Publish the Python rule SDK to PyPI
     # The gate expression is the npm job's, verbatim — see the comment there;
