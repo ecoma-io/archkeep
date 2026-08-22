@@ -578,3 +578,27 @@ describe("--evidence-out, the sandbox's window", () => {
     expect(readdirSync(dir)).toEqual([]);
   });
 });
+
+describe("a run that declares a custom rule stays deterministic", () => {
+  it("produces byte-identical JSON over two runs of an unchanged tree", async () => {
+    // Determinism is a property of the whole chain, and the custom-rules fold
+    // is the one link whose code this repository did not write. A rule that
+    // iterated a hash map, or a host that serialized its evidence differently
+    // on a second pass, would make the envelope a moving target for every
+    // consumer diffing two runs — the property `docs/reference/json-output.md`
+    // promises and the E2E sweep proves for every other command. It is asked
+    // here rather than there because the fixture needs a real `.wasm`, and the
+    // sweep's consumers are built from text files.
+    const fixture = workspace({ rule: { verdictJson: FAILING_VERDICT } });
+
+    const first = fixture.env();
+    const second = fixture.env();
+    expect(await runCli(["check", "--format", "json"], first)).toBe(EXIT.violations);
+    expect(await runCli(["check", "--format", "json"], second)).toBe(EXIT.violations);
+
+    expect(first.lines.out.join("\n")).toBe(second.lines.out.join("\n"));
+    // And the custom-rule section is really in there — an identical pair of
+    // envelopes that both forgot the rule would pass a bare equality check.
+    expect(JSON.parse(first.lines.out.join("\n")).result.customRules.rules).toHaveLength(1);
+  });
+});
