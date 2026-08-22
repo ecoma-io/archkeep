@@ -190,6 +190,9 @@ jobs:
     # required-check name stays stable while the job list is not — add a job to
     # `needs` and the gate tightens without editing repository settings, and
     # forgetting to add it is the only way to widen what green means.
+    # scripts/ci-drift-pins.test.mjs holds this file's roster against `needs`
+    # the same way it holds ci.yml's, so forgetting fails the suite rather than
+    # waiting for review to notice.
     # `needs` names the job IDs, so the matrix job `codeql` is one entry even
     # though it reports two check contexts (one per language).
     needs: [codeql, semgrep, gitleaks]

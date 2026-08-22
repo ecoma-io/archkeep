@@ -335,7 +335,10 @@ jobs:
   # `result != 'failure'` — a skipped or cancelled job must read as BLOCKED,
   # because GitHub reports a skipped job as Success on the checks UI. Keep
   # every publish job's condition identical; a divergence between them is
-  # a release that ships to one destination and not another.
+  # a release that ships to one destination and not another. The equality
+  # is not left to this comment: scripts/ci-drift-pins.test.mjs extracts
+  # every conformance-gated publish job's if: and fails when any two
+  # differ.
   verify-conformance:
     name: Differential against real trees (gate)
     needs: prepare
