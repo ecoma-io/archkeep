@@ -72,7 +72,7 @@ function layerEdges(nodes, dependencies, names, fromTag, toTag) {
   );
 }
 
-/** Every matched project carrying `tag`. */
+/** Whichever of `names` carry `tag` — the matched set, or every node. */
 function taggedMembers(nodes, names, tag) {
   return names.filter((name) => tagsOf(nodes, name).includes(tag));
 }
@@ -196,9 +196,26 @@ export function layerDependency(nodes, dependencies, names, { from, to, directio
 }
 
 /**
- * `tag-conformance` — matched-project edges carrying `from` may only target
- * (`toDependents: "only"`) or never target (`toDependents: "never"`) projects
- * carrying `to`.
+ * `tag-conformance` — every direct edge LEAVING a matched project that carries
+ * `from` may only target (`toDependents: "only"`) or never target
+ * (`toDependents: "never"`) a project carrying `to`.
+ *
+ * ## `match` selects the SOURCES, and only the sources
+ *
+ * The edges are built with `edgesFrom` below, which constrains the source and
+ * nothing else — the same reading `tagAxisIsolation` gives `match`, through the
+ * same function. Requiring the TARGET to be matched too is what this used to
+ * do, and under `"only"` it deleted exactly the violations: an edge leaving the
+ * matched set is precisely the crossing the condition forbids, so a row scoped
+ * to the layer it governs (`match: ["tag:layer:app"]` — the natural way to
+ * write one) could never fail. That is the silent direction, and it is why the
+ * target side is not scoped by `match` here — only by being a project at all.
+ *
+ * `to` membership is therefore a fact about the whole graph rather than about
+ * the matched set, and so is the guard below: a `to` tag NO project carries
+ * anywhere makes the condition undeterminable under BOTH readings — a renamed
+ * layer or a typo answering `pass` is the same silent direction one step
+ * earlier. One rule, not one per `toDependents`.
  */
 export function tagConformance(nodes, dependencies, names, { from, to, toDependents }) {
   const fromMembers = taggedMembers(nodes, names, from);
@@ -211,23 +228,38 @@ export function tagConformance(nodes, dependencies, names, { from, to, toDepende
       rows: [],
     });
   }
-  const toMembers = taggedMembers(nodes, names, to);
-  const edges = edgesAmong(nodes, dependencies, names).filter((edge) =>
-    fromMembers.includes(edge.source),
-  );
-  const nonConforming = edges.filter((edge) =>
-    toDependents === "only" ? !toMembers.includes(edge.target) : toMembers.includes(edge.target),
-  );
-
-  if (toDependents === "never" && toMembers.length === 0) {
+  const toMembers = taggedMembers(nodes, Object.keys(nodes), to);
+  if (toMembers.length === 0) {
     return fitnessVerdict({
       verdict: "unknown",
       name: `tag-conformance:${from}`,
       evidence: { projects: names.length, fromMembers: fromMembers.length, toMembers: 0 },
-      message: `cannot judge tag-conformance "${from}" — no matched project carries tag "${to}", so the never-condition could not be determined`,
+      message:
+        `cannot judge tag-conformance "${from}" — no project in the workspace carries tag "${to}", ` +
+        `so the ${toDependents}-condition could not be determined`,
       rows: [],
     });
   }
+  // A target that is not a project node is not this condition's business: an
+  // Nx graph's `dependencies` carry `npm:`-prefixed external targets verbatim
+  // (`../providers/nx.mjs` returns what `nx graph` emitted), and an external
+  // package's boundary is `bannedExternalImports`', judged by
+  // `../rules/index.mjs` against the specifier. Without this the `"only"`
+  // reading would report every npm import as a tag violation and the rule
+  // would be unusable on an Nx workspace. `tagAxisIsolation` below drops the
+  // same targets by construction, through its `targetValues.length > 0` test.
+  //
+  // `Object.hasOwn`, never `nodes[edge.target]`: `nodes` is a caller-supplied
+  // map and a project named `__proto__` or `toString` must not answer the
+  // membership question by inheritance — the same guard
+  // `../rules/reachability.mjs`'s `buildReachability` uses on this exact
+  // lookup.
+  const edges = edgesFrom(dependencies, fromMembers).filter((edge) =>
+    Object.hasOwn(nodes, edge.target),
+  );
+  const nonConforming = edges.filter((edge) =>
+    toDependents === "only" ? !toMembers.includes(edge.target) : toMembers.includes(edge.target),
+  );
 
   if (nonConforming.length === 0) {
     return fitnessVerdict({
@@ -298,8 +330,8 @@ function axisValues(nodes, name, axis) {
  *
  * A provider deduplicates on `[source, target, type]`, so one `a → b`
  * dependency can appear twice when it is both a manifest edge and an implicit
- * one. This condition judges the pair and never reads `type`, so keeping both
- * would report the same crossing twice and put a `crossings: 2` on an evidence
+ * one. Both callers judge the pair and never read `type`, so keeping both
+ * would report the same dependency twice and put a count of 2 on an evidence
  * record describing one edge. That is the loud direction rather than the
  * silent one, which is why it is a count bug and not a verdict bug — but a
  * count in evidence is a claim about the graph, and this one would be wrong.
