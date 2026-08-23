@@ -1441,8 +1441,11 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
           notes,
           coverageGaps,
           // `formatReport` (text) reads this to annotate an unresolved
-          // decisionRef inline; `formatSarif` does not destructure it, so a
-          // SARIF upload stays exactly as it renders today.
+          // decisionRef inline; `formatSarif` files each one as a warning
+          // notification. Both faces of one run name the same citations, in
+          // the same order — the SARIF face sorts with the comparator this
+          // envelope already uses, so a reader comparing them cannot find
+          // them disagreeing.
           unresolvedDecisionRefs,
         });
 

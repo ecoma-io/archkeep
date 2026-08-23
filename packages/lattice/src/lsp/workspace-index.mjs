@@ -273,7 +273,7 @@ export function buildNodes(projects) {
  *   filesystem existence (the marker is a directory, which `readFileAt`
  *   cannot answer) and the provider's one-call graph reader, both injectable
  *   for the same reason `listFiles` is.
- * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], nativeMarker: boolean, nativeModelFailure: string|null, moonModelFailure: string|null, workspaceLayoutFailure: string|null}}
+ * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], nativeMarker: boolean, nativeModelFailure: string|null, moonModelFailure: string|null, nxModelFailure: string|null, workspaceLayoutFailure: string|null}}
  * @throws {Error} when the file list cannot be obtained. Loud on purpose: an
  *   index built from no files would put every file in no project, and a file in
  *   no project has no boundary to cross — a clean report, produced by not
@@ -309,7 +309,7 @@ export function buildWorkspaceIndex({
   // directory cannot be read the way `lattice.json` is below, and the
   // tracked-list gate is exactly the native-branch defect that check records
   // in its own comment.
-  const { moonMarker } = requireSingleProjectModel(root, { exists: pathExists });
+  const { hasNx, moonMarker } = requireSingleProjectModel(root, { exists: pathExists });
   // A root carrying LATTICE_MODEL_FILE has a project model this module does
   // not read from `project.json` at all — see this file's header — so it is
   // handed to the native branch below rather than to `discoverProjects`.
@@ -396,6 +396,41 @@ export function buildWorkspaceIndex({
     workspaceLayoutFailure = cause?.message ?? String(cause);
   }
 
+  // An Nx-marked root that yielded no project at all is a tree this branch
+  // could not see the shape of, not a tree with nothing in it.
+  // `discoverProjects` above finds a project only by its `project.json`, and a
+  // PACKAGE-BASED Nx workspace has none: its projects are declared in
+  // `package.json` files, which this module reads only to resolve the NAME of a
+  // project a `project.json` already found. `../providers/nx.mjs`'s
+  // `readProjectGraph` asks Nx itself (`nx graph --file=`) and DOES see them,
+  // so `../../cli.mjs`'s `check` reports violations on exactly the tree this
+  // index would otherwise publish clean — zero nodes, every file in no project,
+  // no boundary to cross, an empty diagnostic list byte-for-byte identical to a
+  // clean workspace (`../../../../AGENTS.md`).
+  //
+  // Recorded, not thrown, and not resolved: this branch does not learn to read
+  // package-based projects — that is the second project-model reader this
+  // package must not grow (`../../AGENTS.md`) — it says it could not see the shape
+  // of the tree. The field is the same shape `nativeModelFailure` and
+  // `moonModelFailure` already use, a string on an index that is otherwise a
+  // valid, empty shape, so `indexGaps` turns it into one diagnostic and
+  // `./diagnose.mjs` refuses to call any document analyzed while it stands. It
+  // clears itself like the rest of that family: `nx.json` and `project.json`
+  // are both watched (`./server.mjs`), so the first `project.json` the tree
+  // gains republishes every open document.
+  //
+  // Gated on the `nx.json` marker `requireSingleProjectModel` already read,
+  // never on "zero nodes" alone: a root carrying NO project-model marker
+  // reaches this same branch, and what to say about a directory that is not a
+  // workspace at all is a different question, decided by the marker walk in
+  // `../commands/context.mjs` rather than here.
+  const nxModelFailure =
+    hasNx && Object.keys(nodes).length === 0
+      ? `no ${PROJECT_CONFIG_FILE} is among this tree's tracked files, and this server ` +
+        `discovers an Nx workspace's projects from those files only — a package-based ` +
+        `workspace, whose projects are declared in package.json, yields none`
+      : null;
+
   return {
     root,
     files,
@@ -410,6 +445,7 @@ export function buildWorkspaceIndex({
     nativeMarker: false,
     nativeModelFailure: null,
     moonModelFailure: null,
+    nxModelFailure,
     workspaceLayoutFailure,
   };
 }
@@ -506,6 +542,7 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
       nativeMarker: true,
       nativeModelFailure: cause?.message ?? String(cause),
       moonModelFailure: null,
+      nxModelFailure: null,
       workspaceLayoutFailure: null,
     };
   }
@@ -557,6 +594,7 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
     nativeMarker: true,
     nativeModelFailure: null,
     moonModelFailure: null,
+    nxModelFailure: null,
     workspaceLayoutFailure: null,
   };
 }
@@ -598,6 +636,7 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
       nativeMarker: false,
       nativeModelFailure: null,
       moonModelFailure: cause?.message ?? String(cause),
+      nxModelFailure: null,
       workspaceLayoutFailure: null,
     };
   }
@@ -635,6 +674,7 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
     nativeMarker: false,
     nativeModelFailure: null,
     moonModelFailure: null,
+    nxModelFailure: null,
     workspaceLayoutFailure: null,
   };
 }
@@ -686,6 +726,18 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
  *   which nothing watches the `moon` binary to trigger: it arrives through
  *   any watched-file change or an editor restart, and the gap names the
  *   command whose failure a developer has to resolve.
+ * - **An `nxModelFailure` gap is that same family again, for the Nx-shaped
+ *   branch's own project discovery.** Present only while `nx.json` marks the
+ *   root AND `discoverProjects` found no project in it at all — never merely
+ *   because the root carries `nx.json`. A package-based Nx workspace (projects
+ *   declared in `package.json`, no `project.json` anywhere) is the shape that
+ *   reaches it, and reading that shape is NOT what this server does about it:
+ *   `../providers/nx.mjs`'s `readProjectGraph` asks Nx for that graph and
+ *   `../../cli.mjs`'s `check` reports violations on the same tree, so silence
+ *   here is the editor painting clean a workspace the CLI is failing. It
+ *   **clears itself** like the rest: `nx.json` and `project.json` are both
+ *   watched (`./server.mjs`), so the first `project.json` the tree gains
+ *   republishes every open document.
  * - **A `workspaceLayoutFailure` gap is the Nx-shaped branch's own
  *   equivalent of `nativeModelFailure`, not a second copy of it.** It is
  *   present only while `NX_CONFIG_FILE`'s own `workspaceLayout` is malformed
@@ -703,7 +755,7 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
  *
  * Each sentence names a path, so the diagnostic says which file to open.
  *
- * @param {{skippedProjects?: {file: string, reason: string}[], fileFailures?: {sourceFile: string, reason: string}[], nativeModelFailure?: string|null, moonModelFailure?: string|null, workspaceLayoutFailure?: string|null}} index
+ * @param {{skippedProjects?: {file: string, reason: string}[], fileFailures?: {sourceFile: string, reason: string}[], nativeModelFailure?: string|null, moonModelFailure?: string|null, nxModelFailure?: string|null, workspaceLayoutFailure?: string|null}} index
  * @returns {string[]}
  */
 export function indexGaps({
@@ -711,6 +763,7 @@ export function indexGaps({
   fileFailures = [],
   nativeModelFailure = null,
   moonModelFailure = null,
+  nxModelFailure = null,
   workspaceLayoutFailure = null,
 } = {}) {
   return [
@@ -727,6 +780,14 @@ export function indexGaps({
           "`moon project-graph --json` could not be turned into a project model " +
             `(${firstLine(moonModelFailure)}), so every project it resolves is missing from ` +
             `the graph entirely`,
+        ]),
+    ...(nxModelFailure === null
+      ? []
+      : [
+          `${NX_CONFIG_FILE} at the workspace root marks an Nx workspace whose projects could ` +
+            `not be found (${firstLine(nxModelFailure)}), so every project it has is ` +
+            `missing from the graph entirely — \`lattice check\`, which asks Nx itself for the ` +
+            `graph, still judges this tree`,
         ]),
     ...(workspaceLayoutFailure === null
       ? []

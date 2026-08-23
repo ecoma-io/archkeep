@@ -128,15 +128,32 @@ export function formatDriftReport({
     byId.get(finding.rule).push(finding);
   }
 
-  let total = 0;
+  // `total` is taken from `findings.length` itself, never accumulated only
+  // over the rules this walk visits: a finding whose `rule` the taxonomy does
+  // not know must still be counted and rendered, under its own heading,
+  // rather than silently dropped from both the report and the "no drift"
+  // claim below (the invariant this module is judged against,
+  // `../../../../AGENTS.md`).
+  const total = findings.length;
   for (const rule of TAXONOMY) {
     const group = byId.get(rule) ?? [];
     if (group.length === 0) continue;
-    total += group.length;
     const word = group.length === 1 ? "finding" : "findings";
     sections.push(`⚠ ${group.length} ${word}: ${LEAVE_LABEL.get(rule)}`);
     for (const finding of group) {
       sections.push(formatFinding(finding));
+    }
+  }
+
+  const knownRules = new Set(TAXONOMY);
+  const unclassified = findings.filter((finding) => !knownRules.has(finding.rule));
+  if (unclassified.length > 0) {
+    const word = unclassified.length === 1 ? "finding" : "findings";
+    sections.push(
+      `⚠ ${unclassified.length} unclassified ${word}: rule id not in this report's taxonomy`,
+    );
+    for (const finding of unclassified) {
+      sections.push(`  [${finding.rule}] ${formatFinding(finding).trimStart()}`);
     }
   }
 

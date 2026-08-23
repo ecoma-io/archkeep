@@ -148,12 +148,12 @@ TypeScript server a developer needs.
 The server is a plain stdio LSP executable. Any LSP client can connect to it
 without going through this extension.
 
-|                         |                                                                                              |
-| ----------------------- | -------------------------------------------------------------------------------------------- |
-| command                 | `node <workspace>/node_modules/@ecoma-io/lattice/lsp.mjs`                                    |
-| transport               | stdio                                                                                        |
-| `initializationOptions` | `{ "workspaceRoot": "<workspace>" }` — only when the editor's root is not the workspace root |
-| watched files           | the boundary config, the tsConfig, `**/project.json`, `**/nx.json`, and `**/lattice.json`    |
+|                         |                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| command                 | `node <workspace>/node_modules/@ecoma-io/lattice/lsp.mjs`                                                                                                                                                                                                                                                                                                                                                        |
+| transport               | stdio                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `initializationOptions` | `{ "workspaceRoot": "<workspace>" }` — only when the editor's root is not the workspace root                                                                                                                                                                                                                                                                                                                     |
+| watched files           | the boundary config, the tsConfig, `**/project.json`, `**/nx.json`, `**/lattice.json`, and the three that WAIVE a verdict rather than produce one -- `**/package.json` (`declaredPackages`, `entryPoints`) and `**/module-federation.config.{js,ts}` (`mfeRemote`). Unwatched, a deleted Module Federation config or a dropped dependency left the running session holding the waiver until the editor restarted |
 
 The workspace root is taken from `initializationOptions`, then
 `workspaceFolders`, then `rootUri`, then `rootPath`, then the working directory

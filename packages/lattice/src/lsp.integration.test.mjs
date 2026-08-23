@@ -570,7 +570,7 @@ describe("a real editor session against a real workspace", () => {
   }, 30_000);
 
   it("registers a file watcher for every file a verdict depends on", async () => {
-    // Five, and the ones worth naming go beyond the boundary table and every
+    // Eight, and the ones worth naming go beyond the boundary table and every
     // `project.json`, which are the inputs to a verdict. `nx.json` is where the
     // options live for an Nx-shaped root, and `lattice.json` is both the marker
     // AND the options for a native one — this fixture is Nx-shaped, so it
@@ -585,6 +585,19 @@ describe("a real editor session against a real workspace", () => {
     // options currently name would keep watching a filename the workspace had
     // renamed — the editor would go on painting verdicts from a config it no
     // longer reads, which looks exactly like a clean tree.
+    //
+    // The last three are watched because they WAIVE a verdict rather than
+    // produce one, which is the same argument one step further out: a
+    // project's `package.json` supplies `data.declaredPackages` (which waives
+    // `noTransitiveDependencies`) and `data.entryPoints`, and its
+    // `module-federation.config.{js,ts}` supplies `data.mfeRemote` (which
+    // exempts `noImportsOfApps`) — see `./src/lsp/server.mjs`'s
+    // `watchedFilesFor`. Unwatched, deleting the Module Federation config or
+    // dropping a dependency from the manifest left the session holding the
+    // waiver for the rest of its life, publishing an empty diagnostic list for
+    // a violation that had become real. `package.json` is also where
+    // `discoverProjects` reads a project's NAME when its `project.json` states
+    // none, so watching it keeps a rename from going stale too.
     const { client } = await connected();
 
     const registration = await client.waitFor(
@@ -600,7 +613,10 @@ describe("a real editor session against a real workspace", () => {
     ).toEqual([
       "**/lattice.json",
       "**/module-boundaries.config.mjs",
+      "**/module-federation.config.js",
+      "**/module-federation.config.ts",
       "**/nx.json",
+      "**/package.json",
       "**/project.json",
       "**/tsconfig.base.json",
     ]);

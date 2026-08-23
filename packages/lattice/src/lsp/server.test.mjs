@@ -583,6 +583,70 @@ describe("keeping up with the buffer and with the tree", () => {
     expect(build).toBe(2);
   });
 
+  it("re-diagnoses when a project's package.json changes, which is where a waiver lives", async () => {
+    // The silent-stale direction this entry was added for. A project's
+    // `package.json` is read for `data.declaredPackages` (what waives
+    // `noTransitiveDependencies`) and `data.entryPoints` (the secondary
+    // entry-point exemption) — `../workspace.mjs`'s `annotatePackageFacts` —
+    // and the index reads them once per revision. Drop a dependency from it and
+    // the violation those facts were waiving is real now, while only a watched
+    // file bumps the revision: a server that did not watch this file would go
+    // on publishing `[]` for that violation for the rest of the session. The
+    // red direction: with `package.json` out of `watchedFilesFor`, `build`
+    // stays 1 here and this test fails.
+    //
+    // The path is nested on purpose — a `package.json` is a per-project file,
+    // not a workspace-root singleton, so the `**\/package.json` glob and
+    // `touchesWatchedFile`'s path-aware match have to reach it at depth.
+    let build = 0;
+    const { server, sent } = session({
+      buildIndex: () => {
+        build += 1;
+        return { workspace: {}, graph: { nodes: {} } };
+      },
+    });
+    await server.handle(initialize());
+    await server.handle(didOpen());
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "workspace/didChangeWatchedFiles",
+      params: { changes: [{ uri: `file://${ROOT}/libs/inner/package.json`, type: 2 }] },
+    });
+
+    expect(build).toBe(2);
+    expect(published(sent)).toHaveLength(2);
+  });
+
+  it.each(["module-federation.config.js", "module-federation.config.ts"])(
+    "re-diagnoses when a project's %s changes, which is where an exemption lives",
+    async (name) => {
+      // `data.mfeRemote` is the `noImportsOfApps` EXEMPTION (`../rules/index.mjs`),
+      // read from `module-federation.config.js` with the `.ts` spelling as the
+      // fallback (`../workspace.mjs`'s `projectIsMFERemote`). Delete the file
+      // and every import of that app is a violation again — one this server
+      // would keep waiving until the editor restarted. Both spellings are
+      // driven because watching only one leaves the other silent, and which
+      // spelling a workspace uses is its own choice.
+      let build = 0;
+      const { server, sent } = session({
+        buildIndex: () => {
+          build += 1;
+          return { workspace: {}, graph: { nodes: {} } };
+        },
+      });
+      await server.handle(initialize());
+      await server.handle(didOpen());
+      await server.handle({
+        jsonrpc: "2.0",
+        method: "workspace/didChangeWatchedFiles",
+        params: { changes: [{ uri: `file://${ROOT}/apps/widgets/${name}`, type: 3 }] },
+      });
+
+      expect(build).toBe(2);
+      expect(published(sent)).toHaveLength(2);
+    },
+  );
+
   it("re-diagnoses everything when the boundary config is saved from the editor itself", async () => {
     // The reload a client with no file watching would otherwise never get. It
     // only covers a change made in the editor — a `git checkout` beside it
@@ -717,6 +781,15 @@ describe("asking the client to watch the files a verdict depends on", () => {
         "project.json",
         "nx.json",
         "lattice.json",
+        // The three per-project files that carry a WAIVER — `declaredPackages`
+        // and `entryPoints` from a `package.json`, `mfeRemote` from either
+        // Module Federation spelling (`../workspace.mjs`). Written literally
+        // for the same reason the tsConfig entry above is: a `watchedFilesFor`
+        // edit that drops one has to turn this assertion red, and an assertion
+        // derived from that function could not.
+        "package.json",
+        "module-federation.config.js",
+        "module-federation.config.ts",
       ].map((file) => ({ globPattern: `**/${file}` })),
     );
   });

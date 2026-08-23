@@ -580,6 +580,100 @@ export function sarifNotification(failure) {
 }
 
 /**
+ * One unresolved architecture-intent boundary as a tool-execution notification.
+ *
+ * Not a result, for the reason `sarifFitnessNotification` states: a boundary
+ * that matched no observed project is one this run could not verify (`check`
+ * exits 3 on it, never 1 — `verdictFor`'s `intentUnresolved` in
+ * `../../cli.mjs`), which is trouble the tool hit rather than a verdict it
+ * reached. Filing it as an error-level result would put a boundary alert on an
+ * edge nothing judged.
+ *
+ * Before this it reached no SARIF field at all: `buildSarifLog` read
+ * `intent.findings` alone, so a run that exited 3 because the intent could not
+ * be established uploaded a log byte-identical to a clean run's, while the text
+ * face printed the warning (`./text.mjs`'s `formatIntentSection`). That is the
+ * empty-result invariant (`../../../../AGENTS.md`) failing on the one surface a
+ * CI gate reads.
+ *
+ * @param {{boundary: string, issue: string}} entry One `unresolved` record —
+ *   the boundary that could not be verified, and why.
+ * @returns {object}
+ */
+export function sarifIntentNotification(entry) {
+  return {
+    level: "warning",
+    message: {
+      text: `architecture-intent.json reached no verdict on boundary "${entry.boundary}": ${entry.issue}`,
+    },
+  };
+}
+
+/**
+ * One degraded-coverage note as a tool-execution notification.
+ *
+ * A `warning` and never a result: the run reached its verdict on everything it
+ * could see, and a gap says an entire CLASS of edge sits outside what the
+ * workspace's other tools cover — no rule was crossed, so an error-level
+ * annotation would claim a judgment nothing made. Dropping it is still the
+ * silent direction: an Nx workspace whose polyglot manifests `nx affected` and
+ * `@nx/enforce-module-boundaries` cannot see looks exactly like one that has
+ * none, which is why the text face already says so (`./text.mjs`'s
+ * `formatCoverageGaps`) and why this face must not be the one that stays quiet.
+ *
+ * A gap of any other kind speaks in the words its own `kind` gives rather than
+ * borrowing the unregistered-plugin sentence: a note naming the wrong cause is
+ * worse than one that names only the kind, because a reader cannot tell it is
+ * wrong.
+ *
+ * @param {{kind: string, manifests?: string[]}} gap One record from the run's
+ *   `coverageGaps` (`../../cli.mjs`'s `check`).
+ * @returns {object}
+ */
+export function sarifCoverageGapNotification(gap) {
+  const manifests = gap.manifests ?? [];
+  const found = manifests.length > 0 ? `: ${manifests.join(", ")}` : "";
+  const text =
+    gap.kind === "unregistered-plugin"
+      ? `nx.json does not register this plugin but ${manifests.length} polyglot ` +
+        `manifest${manifests.length === 1 ? "" : "s"} found under project roots — ` +
+        `nx affected and @nx/enforce-module-boundaries will not cover these edges${found}`
+      : `Coverage gap "${gap.kind}" — part of this workspace is outside what the ` +
+        `run's other tools cover${found}`;
+  return { level: "warning", message: { text } };
+}
+
+/**
+ * One unresolved `decisionRef` — a row citing an ADR, rule, or fitness record
+ * that does not exist — as a tool-execution notification.
+ *
+ * The parenthetical is the text face's own, verbatim (`./text.mjs`'s
+ * `formatConstraint`), so a reader grepping either face for a citation finds
+ * the same string. A `warning` and not a result either way: the row claims an
+ * authority this run could not establish, which is not a boundary anyone
+ * crossed.
+ *
+ * The set carries both kinds of row, and the exit code separates them: an
+ * intent row's unresolved citation folds into the no-verdict lane
+ * (`verdictFor`'s `intentUnresolvedDecisionRefs` in `../../cli.mjs`), while a
+ * `depConstraints` row's changes no exit code at all. That second kind is the
+ * one this notification is load-bearing for — nothing else on this surface
+ * says the authority a row cites does not exist, so without it the fact
+ * reaches every face but the machine-readable one.
+ *
+ * @param {string} decisionRef The cited value, exactly as the row spelled it.
+ * @returns {object}
+ */
+export function sarifDecisionRefNotification(decisionRef) {
+  return {
+    level: "warning",
+    message: {
+      text: `decisionRef [${decisionRef}] (UNRESOLVED — no matching ADR, rule, or fitness record)`,
+    },
+  };
+}
+
+/**
  * The whole SARIF log.
  *
  * `policy` — which law this run enforced — rides `runs[0].properties`, SARIF's
@@ -615,15 +709,48 @@ export function sarifNotification(failure) {
  * rule reached no failing verdict, so an error-level annotation would claim a
  * judgment it did not make, and the notification names the rule either way.
  *
+ * Three facts the text face already prints reach this one as notifications,
+ * each of them a way a red run used to upload a log a clean run could have
+ * produced:
+ *
+ * - `intent.unresolved` — one per boundary the declared intent could not be
+ *   verified against (`sarifIntentNotification`). `intent.verdict` is read
+ *   only as the backstop below it: a `no-verdict` naming no boundary at all
+ *   still speaks, because the exit code it produces has to be legible here
+ *   too. This function read `intent.findings` and nothing else before, so a
+ *   `check` exiting 3 on an intent it could not establish uploaded SARIF
+ *   byte-identical to a clean run's.
+ * - `coverageGaps` — the polyglot edges nothing in the workspace covers
+ *   (`sarifCoverageGapNotification`).
+ * - `unresolvedDecisionRefs` — every citation no ADR, rule, or fitness record
+ *   answers (`sarifDecisionRefNotification`), sorted, which is the order
+ *   `../../cli.mjs`'s JSON envelope lists the same set in: two faces of one
+ *   run must not disagree about which citations failed to resolve.
+ *
+ * `notes` is deliberately not read. It is a mixed bag — which `boundaryConfig`
+ * entry bound the table (`../eslint-config.mjs`'s `extractBoundaryRule`), an
+ * allowed intent row with no statement, and the counts of imports left
+ * unconstrained — and none of it is a verdict or a subject that has one
+ * pending. Its coverage half belongs beside the run's other "what was
+ * inspected" numbers (`analyzed`, `imports`, `projects`), which this face
+ * carries none of either; filing it as a `warning` notification instead would
+ * report trouble on a run that hit none. Carrying them all in
+ * `runs[0].properties` is the shape that would fit, and it changes what an
+ * unchanged workspace reports, so it is its own decision rather than a side
+ * effect of this one.
+ *
  * @param {{violations: object[], failures: object[],
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
  *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
  *   declaredEdges?: {findings: object[], judged?: number}|null,
- *   intent?: {findings: object[]}|null,
+ *   intent?: {verdict?: string, findings: object[],
+ *     unresolved?: {boundary: string, issue: string}[]}|null,
  *   fitness?: {name: string, message: string, verdict: string}[],
  *   fitnessOverall?: {verdict: string},
  *   customRules?: {decisions: object[], catalogue: {ruleId: string, rule: string,
  *     findingId: string, message: string}[]}|null,
+ *   coverageGaps?: {kind: string, manifests?: string[]}[],
+ *   unresolvedDecisionRefs?: Iterable<string>|null,
  *   policy?: {profile: string|null, source: string, fingerprint: string}|null}} run
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
@@ -636,6 +763,11 @@ export function buildSarifLog({
   intent,
   fitness,
   customRules,
+  coverageGaps = [],
+  // The `Set` `../../cli.mjs`'s `check` builds, taken as any iterable of
+  // strings so a caller holding the JSON envelope's array is not a caller this
+  // face silently ignores.
+  unresolvedDecisionRefs = null,
   policy = null,
 }) {
   const fitnessDecisions = fitness ?? [];
@@ -664,6 +796,33 @@ export function buildSarifLog({
   const customNotifications = customDecisions.filter(
     (decision) => decision.verdict === "unknown" || decision.verdict === "not_applicable",
   );
+  const intentUnresolved = intent?.unresolved ?? [];
+  // `verdict` is read only as the fallback below: every no-verdict
+  // `../../cli.mjs` builds carries the boundaries in `unresolved`, so the
+  // second clause fires only for an intent that lost that detail on the way
+  // here — and an exit-3 intent naming no boundary must still not upload the
+  // log a clean run would have.
+  const intentNotifications =
+    intentUnresolved.length > 0
+      ? intentUnresolved.map(sarifIntentNotification)
+      : intent?.verdict === "no-verdict"
+        ? [
+            {
+              level: "warning",
+              message: {
+                text:
+                  `architecture-intent.json reached no verdict and named no boundary — ` +
+                  `the intent could not be verified, and the run fails.`,
+              },
+            },
+          ]
+        : [];
+  // Sorted, matching the JSON envelope's list of the same set
+  // (`../../cli.mjs`'s `check`), so the two faces of one run cannot be read as
+  // disagreeing about which citations resolved.
+  const decisionRefNotifications = [...(unresolvedDecisionRefs ?? [])]
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(sarifDecisionRefNotification);
   const waived = violations.filter((violation) => violation.waivedBy);
   // A waived count rides as a notification so a consumer scanning for "did
   // this run accept anything" finds it without reading every result's
@@ -710,8 +869,11 @@ export function buildSarifLog({
             executionSuccessful: true,
             toolExecutionNotifications: [
               ...failures.map(sarifNotification),
+              ...decisionRefNotifications,
+              ...intentNotifications,
               ...fitnessUnresolved.map(sarifFitnessNotification),
               ...customNotifications.map(sarifCustomRuleNotification),
+              ...coverageGaps.map(sarifCoverageGapNotification),
               ...waiverNote,
             ],
           },
@@ -728,10 +890,13 @@ export function buildSarifLog({
  * @param {{violations: object[], failures: object[],
  *   goWork?: {findings: object[], moduleProjects?: number}|null,
  *   tsconfigPaths?: {findings: object[], aliases?: number, unjudged?: number}|null,
- *   intent?: {findings: object[]}|null,
+ *   intent?: {verdict?: string, findings: object[],
+ *     unresolved?: {boundary: string, issue: string}[]}|null,
  *   fitness?: {name: string, message: string, verdict: string}[],
  *   fitnessOverall?: {verdict: string},
  *   customRules?: {decisions: object[], catalogue: object[]}|null,
+ *   coverageGaps?: {kind: string, manifests?: string[]}[],
+ *   unresolvedDecisionRefs?: Iterable<string>|null,
  *   policy?: {profile: string|null, source: string, fingerprint: string}|null}} run
  * @returns {string}
  */

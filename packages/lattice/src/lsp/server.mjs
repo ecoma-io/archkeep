@@ -51,6 +51,25 @@ import {
 import { buildWorkspaceIndex, PROJECT_CONFIG_FILE, readWorkspaceFile } from "./workspace-index.mjs";
 
 /**
+ * A project's own `package.json`, and the two spellings of its Module
+ * Federation config — the per-project files `../workspace.mjs` reads for the
+ * three graph fields that WAIVE a violation.
+ *
+ * The names are that module's, not new ones: `annotatePackageFacts` reads the
+ * first, and `projectIsMFERemote` reads `module-federation.config.js` with the
+ * `.ts` spelling as its fallback, in that order and with upstream's own
+ * precedence. They are written out here because `watchedFilesFor` below needs
+ * the NAMES rather than the readings, and `../workspace.mjs` exports no
+ * constant for either — a reader changing one of those filenames has to change
+ * this list too, or the file stops being watched while it keeps being read.
+ */
+const PACKAGE_MANIFEST_FILE = "package.json";
+const MFE_CONFIG_FILES = Object.freeze([
+  "module-federation.config.js",
+  "module-federation.config.ts",
+]);
+
+/**
  * The files whose content changes the verdict for files that did not change,
  * given the options this session resolved.
  *
@@ -79,6 +98,39 @@ import { buildWorkspaceIndex, PROJECT_CONFIG_FILE, readWorkspaceFile } from "./w
  * the name is an option, so the watched set is derived from the resolved
  * options rather than fixed at module load.
  *
+ * `package.json` and the two `module-federation.config` spellings are here for
+ * that same argument one step further in again, and in the direction that
+ * matters most: each of them decides a verdict for files that did not change,
+ * and each decides it by WAIVING. `../workspace.mjs`'s `annotatePackageFacts`
+ * reads a project's `package.json` for `data.entryPoints` (the secondary
+ * entry-point exemption) and `data.declaredPackages` (what waives
+ * `noTransitiveDependencies`), and its `projectIsMFERemote` reads the Module
+ * Federation config for `data.mfeRemote` (the `noImportsOfApps` exemption —
+ * `../rules/index.mjs`). Delete that config, or drop a dependency from a
+ * `package.json`, and the violation those facts were waiving is real now —
+ * while a server not watching either file has no way to learn it: only a
+ * watched-file change bumps the revision, and every publish until then reads
+ * the annotations cached against the old one. The stale waiver then publishes
+ * `[]` for a real violation for the rest of the session, which is the silent
+ * direction exactly (`../../../../AGENTS.md`). `package.json` earns the entry a
+ * second way as well: it is where `./workspace-index.mjs`'s `discoverProjects`
+ * takes a project's NAME when its `project.json` states none, so an edit to it
+ * can move a project in the graph and not only waive something in it.
+ *
+ * Those three are PER-PROJECT paths rather than workspace-root singletons, and
+ * they need no new mechanism for it: `registerFileWatchers` gives every entry
+ * the glob `**\/<entry>` and `touchesWatchedFile` matches the same reach — an
+ * exact workspace-relative match, or a path ending in `/<entry>` — which is
+ * what already lets a `project.json` at any depth invalidate. That reach is
+ * also the cost, and it is not free: `**\/package.json` matches every manifest
+ * under `node_modules` too, so on a large workspace an install can fire a burst
+ * of notifications, each one dropping the index and re-analyzing the tree.
+ * That cost is LOUD — a slow editor, for as long as the install runs — and the
+ * failure it buys out is silent, which is the trade the two unequal error
+ * directions settle. Narrowing the glob to the project roots the index happens
+ * to know would trade it straight back: the project added after that
+ * registration is then the one nothing watches.
+ *
  * An INLINE policy contributes no entry of its own, and needs none: the law is
  * then a field on `lattice.json`, which the list already carries
  * unconditionally, so an edit to it invalidates through that entry. Spreading
@@ -98,6 +150,8 @@ export function watchedFilesFor(options) {
     PROJECT_CONFIG_FILE,
     NX_CONFIG_FILE,
     LATTICE_MODEL_FILE,
+    PACKAGE_MANIFEST_FILE,
+    ...MFE_CONFIG_FILES,
   ]);
 }
 
