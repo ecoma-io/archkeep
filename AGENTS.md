@@ -224,11 +224,16 @@ another.
   `ci-gate` is a check name the branch ruleset requires, so a job added later
   tightens the gate without touching repository settings. It fails on any
   needed job that is `skipped` or `cancelled`, because `needs` alone only
-  blocks on `failure`. The ruleset's other required context is **`Semgrep`**,
-  named directly — measured on 2026-08-22, not assumed. `analysis-gate` is
-  NOT required, which this sentence claimed for months: CodeQL or Gitleaks
-  going red turns that gate red and still lets a merge through, so the
-  aggregate is a signal to read rather than a wall.
+  blocks on `failure`. The ruleset's other required context is
+  **`analysis-gate`** — measured against the ruleset API on 2026-08-23, not
+  assumed. It became required when the ruleset was last edited
+  (2026-08-22T22:01+07:00), and this sentence named `Semgrep` directly until
+  then, because that was true when it was last measured: read the API rather
+  than this paragraph when the answer has to be current. Both aggregates are
+  walls now, so CodeQL or Gitleaks going red blocks a merge rather than only
+  colouring one. The ruleset separately enables **code scanning** alerts as a
+  merge condition for CodeQL and Semgrep OSS at the `errors` threshold, which
+  is a second, finding-level door the two `*-gate` job names do not cover.
 - **The repository's own module boundaries** — the final CI step runs
   `packages/lattice/cli.mjs check` against `module-boundaries.config.mjs`
   at this root. Every step before it proves the code correct against fixtures it

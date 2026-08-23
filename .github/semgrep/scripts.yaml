@@ -17,6 +17,16 @@
 # exclude list, covers by default but goes silent the day code lands somewhere
 # nobody remembered to exclude.
 #
+# Both rules are written against Node's real signatures rather than against the
+# spelling this repository happens to use, because the gap between those two is
+# where a rule passes by finding nothing. Measured, against 1.172.0, by adding
+# the case before the pattern: `spawn(command[, args][, options])` makes the
+# TWO-argument call valid, so ten dangerous spellings — `spawnSync(cmd, {shell:
+# true})`, `execFile(cmd, {shell: true}, cb)`, `shell: "/bin/bash"`, a command
+# assembled into a variable a line above the call — scanned clean against rules
+# whose own messages describe them. Every one of them is a `ruleid:` case in
+# scripts.mjs now.
+#
 # Fixtures live in scripts.mjs, exercised by `semgrep --test --config
 # .github/semgrep .github/semgrep`. `.mjs` is valid input for
 # `languages: [javascript]` — semgrep's target selection maps it to the same
@@ -32,28 +42,46 @@ rules:
         - "/packages/**"
         - "/.opencode/plugins/**"
     message: >-
-      This child_process call sets `shell: true`. The command then runs through
-      `/bin/sh -c`, so a value assembled from a package directory name or a
+      This child_process call passes a `shell` option. The command then runs
+      through a shell, so a value assembled from a package directory name or a
       manifest field is interpreted as shell syntax rather than passed as a
       literal argument — a directory named `a;rm -rf .` stops being a name and
-      becomes two commands. Drop `shell: true` and pass the command and its
-      arguments as a separate array; the same result with no shell in between to
-      inject into.
+      becomes two commands. Node documents `shell` as `<boolean> | <string>`
+      and a string names the shell to use, so `shell: "/bin/bash"` is the same
+      exposure as `shell: true`. Drop the option and pass the command and its
+      arguments as a separate array; the same result with no shell in between
+      to inject into.
     metadata:
       category: security
       confidence: HIGH
-    pattern-either:
-      - pattern: "$X.exec($CMD, { ..., shell: true, ... })"
-      - pattern: "$X.exec($CMD, $ARGS, { ..., shell: true, ... })"
-      - pattern: "$X.execFile($CMD, $ARGS, { ..., shell: true, ... })"
-      - pattern: "$X.execFileSync($CMD, $ARGS, { ..., shell: true, ... })"
-      - pattern: "$X.spawn($CMD, $ARGS, { ..., shell: true, ... })"
-      - pattern: "$X.spawnSync($CMD, $ARGS, { ..., shell: true, ... })"
-      - pattern: "exec($CMD, { ..., shell: true, ... })"
-      - pattern: "execFile($CMD, $ARGS, { ..., shell: true, ... })"
-      - pattern: "execFileSync($CMD, $ARGS, { ..., shell: true, ... })"
-      - pattern: "spawn($CMD, $ARGS, { ..., shell: true, ... })"
-      - pattern: "spawnSync($CMD, $ARGS, { ..., shell: true, ... })"
+    patterns:
+      # The options object is matched WHEREVER it sits in the argument list,
+      # never at a fixed index. `spawn(command[, args][, options])` and
+      # `execFile(file[, args][, options][, callback])` put it second, third,
+      # or second-of-three-with-a-trailing-callback depending on how the call
+      # was written, and a pattern demanding one of those arities is a rule
+      # that reports nothing on the other two.
+      - pattern-either:
+          - pattern: "exec(..., { ..., shell: $SHELL, ... }, ...)"
+          - pattern: "execFile(..., { ..., shell: $SHELL, ... }, ...)"
+          - pattern: "execFileSync(..., { ..., shell: $SHELL, ... }, ...)"
+          - pattern: "spawn(..., { ..., shell: $SHELL, ... }, ...)"
+          - pattern: "spawnSync(..., { ..., shell: $SHELL, ... }, ...)"
+          - pattern: "$X.exec(..., { ..., shell: $SHELL, ... }, ...)"
+          - pattern: "$X.execFile(..., { ..., shell: $SHELL, ... }, ...)"
+          - pattern: "$X.execFileSync(..., { ..., shell: $SHELL, ... }, ...)"
+          - pattern: "$X.spawn(..., { ..., shell: $SHELL, ... }, ...)"
+          - pattern: "$X.spawnSync(..., { ..., shell: $SHELL, ... }, ...)"
+      # The option's VALUE decides, and exactly one value is safe. Enumerating
+      # the dangerous spellings instead (`true`, then `"/bin/sh"`, then
+      # `"/bin/bash"`, …) is a list that the next spelling walks past in
+      # silence; excluding the one safe spelling cannot be walked past, only
+      # widened, and widening it is visible in this diff. `shell: false` is the
+      # fix the message asks for, spelled out rather than omitted, so reporting
+      # it would send a reader to a change they have already made.
+      - metavariable-regex:
+          metavariable: $SHELL
+          regex: ^(?!false$)
 
   - id: script-exec-command-built-from-a-value
     languages: [javascript, typescript]
@@ -68,18 +96,52 @@ rules:
       shell — there is no `shell: false` for them, so the rule above does not
       reach this case and the absence of `shell: true` here means nothing. A
       command built by template literal or concatenation therefore embeds
-      whatever it interpolated as shell source. Use `execFileSync`/`spawnSync`
-      with the command and an argument array instead, which spawns the binary
+      whatever it interpolated as shell source, whether it is built at the call
+      or bound to a name one line earlier. Use `execFileSync`/`spawnSync` with
+      the command and an argument array instead, which spawns the binary
       directly.
     metadata:
       category: security
       confidence: HIGH
     pattern-either:
-      - pattern: "$X.exec(`...`, ...)"
-      - pattern: "$X.execSync(`...`, ...)"
-      - pattern: "exec(`...`, ...)"
-      - pattern: "execSync(`...`, ...)"
-      - pattern: "$X.exec($A + $B, ...)"
-      - pattern: "$X.execSync($A + $B, ...)"
-      - pattern: "exec($A + $B, ...)"
-      - pattern: "execSync($A + $B, ...)"
+      # The command built AT the call, and the same command bound to a name
+      # first. They reach the shell with identical bytes, and a rule that reads
+      # only the argument sees a bare identifier in the second case and reports
+      # nothing — which is what a refactor produces the first time a command
+      # gets long enough to deserve a name.
+      - patterns:
+          - pattern-either: &shellCommandArgument
+              - pattern: "exec($CMD, ...)"
+              - pattern: "execSync($CMD, ...)"
+              - pattern: "$MOD.execSync($CMD, ...)"
+              # `exec` is the one name in this list JavaScript already uses for
+              # something else: `RegExp.prototype.exec`. A regex LITERAL
+              # receiver is always that other function, never child_process, so
+              # excluding it is what keeps this rule from reporting 13 findings
+              # on this repository's own `/^name\s*=/.exec(line)` calls —
+              # measured, and the reason the receiver is constrained at all. A
+              # regex bound to a NAME is still indistinguishable from a module
+              # here and is still reported; over-reporting one line is the
+              # direction that gets read and disputed rather than the one that
+              # goes quiet.
+              - patterns:
+                  - pattern: "$MOD.exec($CMD, ...)"
+                  - metavariable-regex:
+                      metavariable: $MOD
+                      regex: ^[^/]
+          - metavariable-pattern:
+              metavariable: $CMD
+              pattern-either:
+                - pattern: "`...`"
+                - pattern: "$A + $B"
+      # The same sinks, spelled once. YAML's own alias, because two copies of a
+      # call-shape list agree only until someone adds a shape to one of them.
+      - patterns:
+          - pattern-either: *shellCommandArgument
+          - pattern-either:
+              - pattern-inside: |
+                  $CMD = `...`;
+                  ...
+              - pattern-inside: |
+                  $CMD = $A + $B;
+                  ...
