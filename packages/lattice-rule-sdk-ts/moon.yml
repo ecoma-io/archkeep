@@ -33,8 +33,11 @@ tasks:
     command: eslint . --max-warnings 0
   # The golden fixtures, the committed artifact, and both driven through the
   # engine's real host — `node --test`, because this package needs no test
-  # framework and vitest belongs to the engine. Deliberately NOT a wasm rebuild:
-  # the artifact is committed and pinned by its digest, so what the suite proves
+  # framework and vitest belongs to the engine. The suite also compiles the
+  # reference rule's SOURCE to a temp directory and requires the bytes to be
+  # the committed artifact's (`test/provenance.test.mjs`) — a comparison, and
+  # deliberately NOT a rebuild: nothing is written into the tree, the artifact
+  # stays committed and pinned by its digest, so what every test here proves
   # is the bytes in the tree rather than bytes the runner just made
   # (`./rebuild-example.sh` says the rest).
   test:

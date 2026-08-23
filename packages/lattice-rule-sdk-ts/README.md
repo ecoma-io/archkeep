@@ -245,17 +245,28 @@ every finding is namespaced under.
 ## The committed artifact, and why a binary is in this tree
 
 `examples/forbidden-tag-dependency.wasm` is committed, and
-`examples/forbidden-tag-dependency.wasm.sha256` beside it holds its digest — the
-same string a policy row pins. `test/artifact.test.mjs` recomputes the digest
+`examples/forbidden-tag-dependency.wasm.sha256` beside it holds its digest —
+the same string a policy row pins. `test/artifact.test.mjs` recomputes the digest
 over the committed bytes and fails when the two have drifted, so a rebuilt
 artifact cannot land beside the digest of the one before it. Rebuild both
 together with `./rebuild-example.sh`, which writes both files or neither.
+
+The digest pairs the two committed files; what pairs them with the SOURCE is
+[`test/provenance.test.mjs`](test/provenance.test.mjs), which compiles the
+example with the pinned `asc` — the devDependency the `typecheck` target
+already installs, so no new toolchain anywhere — into a temp directory and
+requires the result to be the committed artifact byte for byte. An edit to the
+rule without a rebuild goes red there instead of passing every gate, and so
+does an `asc` version bump that changes what the same source compiles to.
+Nothing it produces is ever written over the committed file: the rebuild is
+still made by hand, by the script, digest and all.
 
 CI does not run that script. The tests check the bytes in the tree, which is the
 point — a green run proves the artifact a reviewer can hash, not one the runner
 just produced. The digest pins those bytes; it does not claim a reproducible
 build. Two runs of the same compiler on the same source do produce the same
-digest (measured), and a different `asc` version will not.
+digest (measured), and a different `asc` version will not — which is exactly
+the drift the provenance test turns red.
 
 ## The fixtures
 

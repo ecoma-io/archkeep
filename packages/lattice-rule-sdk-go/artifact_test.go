@@ -19,6 +19,8 @@ package latticerule
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -94,29 +96,115 @@ func TestTheCommittedArtifactCarriesNoImportSection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%s could not be read: %v", artifactPath, err)
 	}
+	if err := checkNoImportSection(artifact); err != nil {
+		t.Fatal(err)
+	}
+}
 
-	// Sections follow the 8-byte preamble, each a one-byte id then a LEB128
-	// length then that many bytes. Walking them needs no wasm knowledge beyond
-	// that, and stopping at the first malformed length keeps a corrupt file from
-	// being read as one that simply has no imports.
+// checkNoImportSection walks a module's sections and answers why the contract
+// would refuse it, or nil when every section clears.
+//
+// The walk split from the committed file for the same reason the SHA-256 above
+// is held against FIPS 180-4's vectors: the committed artifact carries NO import
+// section, so a walk tested only against it can drift — an id comparison that
+// stops comparing, a length read that miscounts — and stay green forever by not
+// looking. The synthetic modules in
+// TestTheSectionWalkRefusalsAreProvenAgainstSyntheticModules are what make this
+// function's refusals real rather than unreachable branches.
+//
+// Sections follow the 8-byte preamble, each a one-byte id then a LEB128 length
+// then that many bytes. Walking them needs no wasm knowledge beyond that, and
+// stopping at the first malformed length keeps a corrupt file from being read
+// as one that simply has no imports; the tail check keeps one whose declared
+// lengths run past its end from passing either.
+func checkNoImportSection(module []byte) error {
 	offset := 8
-	for offset < len(artifact) {
-		id := artifact[offset]
+	for offset < len(module) {
+		id := module[offset]
 		offset++
-		size, read := uvarint(artifact[offset:])
+		size, read := uvarint(module[offset:])
 		if read <= 0 {
-			t.Fatalf("the section at byte %d has no readable length, so this file is not a module "+
-				"this test can clear", offset)
+			return fmt.Errorf("the section at byte %d has no readable length, so this module "+
+				"is not one this test can clear", offset)
 		}
 		if id == 2 {
-			t.Fatal("the artifact declares an import section, and the contract grants no imports — " +
-				"the host would refuse it at load")
+			return errors.New("the module declares an import section, and the contract grants " +
+				"no imports — the host would refuse it at load")
 		}
 		offset += read + int(size)
 	}
-	if offset != len(artifact) {
-		t.Fatalf("the sections do not add up to the file's %d bytes, ending at %d",
-			len(artifact), offset)
+	if offset != len(module) {
+		return fmt.Errorf("the sections do not add up to the module's %d bytes, ending at %d",
+			len(module), offset)
+	}
+	return nil
+}
+
+// sectionWalkPreamble is the eight bytes every core WebAssembly module starts
+// with, the start of every synthetic module below.
+var sectionWalkPreamble = []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+
+// TestTheSectionWalkRefusalsAreProvenAgainstSyntheticModules drives
+// checkNoImportSection over modules built here, because the committed artifact
+// can only ever show the clearing half of the walk. A refusal that stopped
+// firing — on an id compare that regressed, a uvarint that miscounted — would
+// leave that artifact green while every module the host actually refuses
+// sailed through, which is the silent direction this suite exists to refuse.
+func TestTheSectionWalkRefusalsAreProvenAgainstSyntheticModules(t *testing.T) {
+	cases := []struct {
+		name    string
+		module  []byte
+		refusal string
+	}{
+		{
+			name: "an import section is refused",
+			// One memory import on behalf of the (empty-named) module "a":
+			// count=1, name len=0, kind=2, limits flags/min/max.
+			module:  append(append([]byte{}, sectionWalkPreamble...), 2, 6, 1, 0, 2, 1, 1, 1),
+			refusal: "declares an import section",
+		},
+		{
+			name: "a length that never terminates is refused, not cleared",
+			// A continuation byte with nothing after it: reading it as zero
+			// sections would be a clean answer over a corrupt file.
+			module:  append(append([]byte{}, sectionWalkPreamble...), 1, 0x80),
+			refusal: "no readable length",
+		},
+		{
+			name: "a payload truncated after its declared length is refused",
+			// Ten of the two hundred bytes the length claims: the framing
+			// arithmetic must notice, not wrap around into a clean pass.
+			module: append(append(append([]byte{}, sectionWalkPreamble...), 1, 0xc8, 0x01),
+				make([]byte, 10)...),
+			refusal: "do not add up",
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := checkNoImportSection(testCase.module)
+			if err == nil {
+				t.Fatal("the walk cleared a module it must refuse")
+			}
+			if !strings.Contains(err.Error(), testCase.refusal) {
+				t.Fatalf("refused, but not for the reason under test: %v", err)
+			}
+		})
+	}
+}
+
+// TestTheSectionWalkClearsAModuleWithoutAnImportSection is the positive half:
+// the walk must clear what should clear, including a section whose length
+// needs two LEB128 bytes — a uvarint that stopped after the first byte would
+// misread it as a tiny section and either fail the framing or skip wrong, and
+// only a module that exercises both bytes can tell.
+func TestTheSectionWalkClearsAModuleWithoutAnImportSection(t *testing.T) {
+	module := append([]byte{}, sectionWalkPreamble...)
+	module = append(module, 0, 4, 1, 'a', 'b', 'c') // a custom section
+	long := append([]byte{1, 0xc8, 0x01}, make([]byte, 200)...)
+	module = append(module, long...) // type section, 200-byte payload, two LEB128 bytes
+
+	if err := checkNoImportSection(module); err != nil {
+		t.Fatalf("the walk refused a module with no import section: %v", err)
 	}
 }
 

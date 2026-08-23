@@ -172,3 +172,131 @@ fn the_committed_artifact_is_a_webassembly_module() {
         "the artifact does not open with the wasm magic and version 1"
     );
 }
+
+#[test]
+fn the_committed_artifact_carries_no_import_section() {
+    // The contract's own refusal, checked here on the bytes rather than only by
+    // the host. A module that imports anything is refused at load — "a rule
+    // holds no ambient capability" — but every other test in this file would
+    // stay green on an artifact that grew an import section: the digest moves
+    // WITH the bytes it hashes, and the magic sits in front of whatever
+    // follows. This crate cannot instantiate the module to let the host speak
+    // for itself (the same runtime this crate refuses to depend on that
+    // `golden.rs`'s header explains), so what it can check is the binary — and
+    // section id 2 is the import section. The Go binding reaches the same
+    // refusal with the same walk
+    // (../../lattice-rule-sdk-go/artifact_test.go), and ./rebuild-example.sh
+    // drives the real instantiation before it records a digest.
+    let artifact = std::fs::read(package_path("examples/forbidden_tag_dependency.wasm"))
+        .expect("the committed artifact");
+    refuse_unless_import_free(&artifact);
+}
+
+/// Walks a module's sections, panicking with the contract's refusal if any of
+/// them is an import section or the framing is corrupt.
+///
+/// Split from the committed file for the same reason the SHA-256 above is held
+/// against FIPS 180-4's vectors: the committed artifact carries NO import
+/// section, so a walk tested only against it could drift — an id compare that
+/// stops comparing, a length read that miscounts — and stay green forever by
+/// not looking. The `the_walk_…` tests below are the synthetic modules that
+/// make these refusals real rather than unreachable branches.
+///
+/// Sections follow the 8-byte preamble, each a one-byte id then a LEB128
+/// length then that many bytes; stopping at the first malformed length keeps a
+/// corrupt file from being read as one that simply has no imports, and the
+/// tail check keeps one whose declared lengths run past its end from passing
+/// either.
+fn refuse_unless_import_free(module: &[u8]) {
+    let mut offset = 8;
+    while offset < module.len() {
+        let id = module[offset];
+        offset += 1;
+        let (size, read) = uvarint(&module[offset..]);
+        if read == 0 {
+            panic!(
+                "the section at byte {offset} has no readable length, so this module is not \
+                 one this test can clear"
+            );
+        }
+        assert_ne!(
+            id, 2,
+            "the module declares an import section, and the contract grants no imports — the \
+             host would refuse it at load"
+        );
+        offset += read + size as usize;
+    }
+    assert_eq!(
+        offset,
+        module.len(),
+        "the sections do not add up to the module's {} bytes, ending at {offset}",
+        module.len()
+    );
+}
+
+/// The eight bytes every core WebAssembly module starts with — the head of
+/// every synthetic module below.
+const PREAMBLE: [u8; 8] = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+
+#[test]
+#[should_panic(expected = "declares an import section")]
+fn the_walk_refuses_a_module_carrying_an_import_section() {
+    // One memory import on behalf of the (empty-named) module "a": count=1,
+    // name len=0, kind=2, limits flags/min/max.
+    let module = [PREAMBLE.as_slice(), &[2, 6, 1, 0, 2, 1, 1, 1]].concat();
+    refuse_unless_import_free(&module);
+}
+
+#[test]
+#[should_panic(expected = "no readable length")]
+fn the_walk_refuses_a_length_that_never_terminates() {
+    // A continuation byte with nothing after it: reading it as zero sections
+    // would be a clean answer over a corrupt file.
+    let module = [PREAMBLE.as_slice(), &[1, 0x80]].concat();
+    refuse_unless_import_free(&module);
+}
+
+#[test]
+#[should_panic(expected = "do not add up")]
+fn the_walk_refuses_a_payload_truncated_after_its_length() {
+    // Ten of the two hundred bytes the length claims: the framing arithmetic
+    // must notice, not wrap around into a clean pass.
+    let mut module = PREAMBLE.to_vec();
+    module.extend_from_slice(&[1, 0xc8, 0x01]);
+    module.extend_from_slice(&[0_u8; 10]);
+    refuse_unless_import_free(&module);
+}
+
+#[test]
+fn the_walk_clears_a_module_without_an_import_section() {
+    // The positive half: the walk must clear what should clear, including a
+    // section whose length needs two LEB128 bytes — a uvarint that stopped
+    // after the first byte would misread it as a tiny section and only a
+    // module exercising both bytes can tell.
+    let mut module = PREAMBLE.to_vec();
+    module.extend_from_slice(&[0, 4, 1, b'a', b'b', b'c']); // a custom section
+    let mut long = vec![1_u8, 0xc8, 0x01];
+    long.extend(vec![0_u8; 200]); // type section, 200-byte payload, two LEB128 bytes
+    module.extend_from_slice(&long);
+    refuse_unless_import_free(&module);
+}
+
+/// Reads one LEB128-encoded unsigned integer, answering its value and how many
+/// bytes it took. `read` is 0 when the encoding runs off the end.
+///
+/// Written out rather than taken from a crate for the reason the SHA-256 above
+/// is: this crate means to stay at serde and serde_json, and the answer this
+/// test turns on — "how many bytes" — is exactly the part a helper would hide.
+fn uvarint(data: &[u8]) -> (u64, usize) {
+    let mut value: u64 = 0;
+    for (index, byte) in data.iter().enumerate() {
+        value |= u64::from(*byte & 0x7f) << (index * 7);
+        if *byte & 0x80 == 0 {
+            return (value, index + 1);
+        }
+        if (index + 1) * 7 >= 64 {
+            return (0, 0);
+        }
+    }
+    (0, 0)
+}

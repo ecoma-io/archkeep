@@ -32,6 +32,71 @@ RUST_FIXTURES = _PACKAGE.parent / "lattice-rule-sdk-rust" / "fixtures"
 WASM_PREAMBLE = b"\x00asm\x01\x00\x00\x00"
 
 
+def _uvarint(data: bytes, offset: int):
+    """Read one LEB128 unsigned integer at ``offset``.
+
+    Answers ``(value, next_offset)``, or ``None`` when the encoding runs off
+    the end of ``data`` — which the caller must treat as a corrupt file rather
+    than as "no imports found". The standard library has no LEB128 reader and
+    this package takes no dependencies, so the algorithm is here: the same
+    choice the Rust SDK makes for SHA-256 in
+    ``../../lattice-rule-sdk-rust/tests/artifact.rs``, and for the same reason.
+    """
+    value = 0
+    shift = 0
+    while True:
+        if offset >= len(data):
+            return None
+        byte = data[offset]
+        offset += 1
+        value |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return value, offset
+        shift += 7
+        if shift >= 64:
+            return None
+
+
+def _refuse_unless_import_free(module: bytes) -> None:
+    """Walk a module's sections, raising AssertionError at the contract's refusal.
+
+    Split from the committed artifact's test for the same reason the Rust
+    suite's SHA-256 is held against FIPS 180-4's published vectors: the
+    committed artifact carries NO import section, so a walk tested only against
+    it could drift — an id comparison that stops comparing, a length read that
+    miscounts — and stay green forever by not looking.
+    ``TheImportSectionWalk`` below is the synthetic modules that make these
+    refusals real rather than unreachable branches.
+
+    Sections follow the 8-byte preamble, each a one-byte id then a LEB128
+    length then that many bytes. Stopping at the first malformed length keeps a
+    corrupt file from being read as one that simply has no imports — the silent
+    direction — and the tail check keeps one whose declared lengths run past
+    its end from passing either.
+    """
+    offset = 8
+    while offset < len(module):
+        section_id = module[offset]
+        offset += 1
+        read = _uvarint(module, offset)
+        if read is None:
+            raise AssertionError(
+                f"the section at byte {offset} has no readable length, so this module is "
+                f"not one this test can clear"
+            )
+        value, offset = read
+        if section_id == 2:
+            raise AssertionError(
+                "the module declares an import section, and the contract grants no imports "
+                "— the host would refuse it at load"
+            )
+        offset += value
+    if offset != len(module):
+        raise AssertionError(
+            f"the sections do not add up to the module's {len(module)} bytes, ending at {offset}"
+        )
+
+
 class TheCommittedArtifact(unittest.TestCase):
     def test_is_present_and_is_a_core_wasm_module(self):
         self.assertTrue(ARTIFACT.is_file(), f"{ARTIFACT} is not committed")
@@ -52,6 +117,73 @@ class TheCommittedArtifact(unittest.TestCase):
         self.assertEqual(len(declared), 64, "a sha256 is 64 hex characters and nothing else")
         self.assertEqual(declared, declared.lower(), "a policy row pins lowercase hex")
         self.assertEqual(hashlib.sha256(ARTIFACT.read_bytes()).hexdigest(), declared)
+
+    def test_declares_no_import_section(self):
+        """The contract's own refusal, checked on the bytes rather than by the host.
+
+        A module that imports anything is refused at load — "a rule holds no
+        ambient capability" — but neither of the two tests above would notice an
+        artifact that grew an import section: the digest moves WITH the bytes it
+        hashes, and the preamble sits in front of whatever follows. CPython
+        cannot instantiate the module to let the host speak for itself, so what
+        this test can check is the binary — and section id 2 is the import
+        section. The Go binding reaches the same refusal with the same walk
+        (``../../lattice-rule-sdk-go/artifact_test.go``), and
+        ``../rebuild-example.sh`` drives the real instantiation before it
+        records a digest.
+        """
+        _refuse_unless_import_free(ARTIFACT.read_bytes())
+
+
+class TheImportSectionWalk(unittest.TestCase):
+    """The walk's refusals, proven against modules built here.
+
+    The committed artifact can only ever show the clearing half: it has no
+    import section, so a walk whose refusal regressed would keep this suite
+    green while every module the host actually refuses sailed through. These
+    are the positive cases — a walker is shown FINDING what it exists to find,
+    the way the Rust suite's SHA-256 is shown against FIPS 180-4's vectors
+    before it is trusted with the artifact.
+    """
+
+    @staticmethod
+    def _module(*sections):
+        return WASM_PREAMBLE + b"".join(sections)
+
+    def test_refuses_a_module_carrying_an_import_section(self):
+        # One memory import on behalf of the (empty-named) module "a": count=1,
+        # name len=0, kind=2, limits flags/min/max.
+        with self.assertRaises(AssertionError) as refused:
+            _refuse_unless_import_free(
+                self._module(bytes([2, 6, 1, 0, 2, 1, 1, 1])),
+            )
+        self.assertIn("declares an import section", str(refused.exception))
+
+    def test_refuses_a_length_that_never_terminates(self):
+        # A continuation byte with nothing after it: reading it as zero
+        # sections would be a clean answer over a corrupt file.
+        with self.assertRaises(AssertionError) as refused:
+            _refuse_unless_import_free(self._module(bytes([1, 0x80])))
+        self.assertIn("no readable length", str(refused.exception))
+
+    def test_refuses_a_payload_truncated_after_its_declared_length(self):
+        # Ten of the two hundred bytes the length claims: the framing
+        # arithmetic must notice, not wrap around into a clean pass.
+        with self.assertRaises(AssertionError) as refused:
+            _refuse_unless_import_free(self._module(bytes([1, 0xC8, 0x01]), bytes(10)))
+        self.assertIn("do not add up", str(refused.exception))
+
+    def test_clears_a_module_without_an_import_section(self):
+        # The positive half: the walk must clear what should clear, including a
+        # section whose length needs two LEB128 bytes — a uvarint that stopped
+        # after the first byte would misread it as a tiny section, and only a
+        # module exercising both bytes can tell.
+        clean = bytes([0, 4, 1, ord("a"), ord("b"), ord("c")])  # a custom section
+        long = bytes([1, 0xC8, 0x01]) + bytes(200)  # type section, two-byte LEB128 length
+        try:
+            _refuse_unless_import_free(self._module(clean, long))
+        except AssertionError as assertion:
+            self.fail(f"the walk refused a module with no import section: {assertion}")
 
 
 class TheSharedConformanceFixtures(unittest.TestCase):

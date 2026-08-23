@@ -36,10 +36,11 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { documentSelector, ROUTED_EXTENSIONS } from "./src/languages.mjs";
+import { failedStartBelongsTo, serverDiedAfterStarting } from "./src/lifecycle.mjs";
 import { findNxRoot } from "./src/workspace-root.mjs";
 import { locateServer, SERVER_PACKAGE } from "./src/server-module.mjs";
 import { planSession } from "./src/session.mjs";
-import { describeStatus } from "./src/status.mjs";
+import { describeStatus, renderStatusItem } from "./src/status.mjs";
 import { traceOptions } from "./src/trace.mjs";
 
 const { LanguageClient, RevealOutputChannelOn, State, TransportKind } = languageClient;
@@ -52,10 +53,11 @@ const SEVERITY = {
 
 /** Write one description onto a status item, mapping the severity string last. */
 function applyStatus(item, description) {
-  item.text = description.text;
-  item.detail = description.detail;
-  item.severity = SEVERITY[description.severity];
+  Object.assign(item, renderStatusItem(description, SEVERITY));
 }
+
+/** The client library's state constants, as data for `src/lifecycle.mjs`. */
+const STATE = { running: State.Running, stopped: State.Stopped };
 
 /** One entry per open workspace folder, keyed by folder URI. */
 const sessions = new Map();
@@ -173,14 +175,10 @@ async function openSession(folder) {
 
   // A server can die after `start()` resolves, and a client that noticed would
   // otherwise keep the healthy label while publishing nothing — the exact
-  // window this status item exists to close. Only the Running → Stopped
-  // transition is a death (a failed start is Starting → Stopped, and the catch
-  // below already owns it), and a deliberate stop never gets here because
-  // `closeSession` removes the session from the map before stopping, so the
-  // identity check fails.
+  // window this status item exists to close. What counts as a death, and which
+  // listener owns the report, is `src/lifecycle.mjs`'s predicate.
   session.stateListener = client.onDidChangeState((event) => {
-    if (event.oldState !== State.Running || event.newState !== State.Stopped) return;
-    if (sessions.get(key) !== session) return;
+    if (!serverDiedAfterStarting(event, STATE, sessions.get(key), session)) return;
     applyStatus(
       item,
       describeStatus({
@@ -195,9 +193,11 @@ async function openSession(folder) {
     await client.start();
   } catch (error) {
     // Re-read rather than close over `session`: the folder may have been
-    // removed while `start()` was pending, and its session replaced.
+    // removed while `start()` was pending, and its session replaced. Only a
+    // rejection that still belongs to the mapped session clears its slot —
+    // the second `src/lifecycle.mjs` predicate.
     const current = sessions.get(key);
-    if (current?.client === client) current.client = null;
+    if (failedStartBelongsTo(current, client)) current.client = null;
     const reason = error instanceof Error ? error.message : String(error);
     applyStatus(
       item,
