@@ -163,26 +163,95 @@ jobs:
     name: Gitleaks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      # Scans the whole history, not just the diff, because a secret removed in
-      # a later commit is still a leak while it sits in the tree. The action
-      # exits 1 when a secret is found, which is what makes this job the
-      # blocking gate: `GITLEAKS_ENABLE_COMMENTS` stays at its default (true)
-      # so a PR finding lands a comment next to the line.
+      # The OSS binary is driven directly rather than through
+      # gitleaks/gitleaks-action: the wrapper demands a license key for any
+      # repository owned by an organization (ECOMA_GITLEAKS_LICENSE), and
+      # secrets other than GITHUB_TOKEN are not injected on `pull_request`
+      # events raised from forks — so every external contribution died at the
+      # wrapper's validation, red, before a single commit was scanned. The
+      # engine behind the wrapper is this same binary and needs no secret at
+      # all. The version is pinned and verified against the checksum the
+      # release publishes; Renovate does not manage a raw URL, so a bump edits
+      # URL and digest together.
+      #
+      # Scans the whole history on EVERY trigger, not just the diff or the
+      # pushed range, because a secret removed in a later commit is still a
+      # leak while it sits in the tree. (The wrapper scanned ranges on push and
+      # pull_request and reserved the full history for cron; uniform here.)
+      #
+      # Exit contract, matching the binary's own: 0 clean · 2 leaks · anything
+      # else a scan that did not complete, which fails loudly — never dressed up
+      # as green.
+      - name: Install gitleaks 8.24.3
+        run: |
+          curl --fail --silent --show-error --location \
+            "https://github.com/zricethezav/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz" \
+            --output "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c  $RUNNER_TEMP/gitleaks.tar.gz" \
+            | sha256sum --check --strict -
+          tar --extract --gzip --file "$RUNNER_TEMP/gitleaks.tar.gz" --directory "$RUNNER_TEMP" gitleaks
+
       - name: Scan for secrets
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Secret named for this organization (ECOMA_GITLEAKS_LICENSE) because
-          # it lives under `ecoma-io`; required for scanning a repo that belongs
-          # to an organization account. Without it the action exits 1 at
-          # validation.
-          GITLEAKS_LICENSE: ${{ secrets.ECOMA_GITLEAKS_LICENSE }}
+          GITLEAKS_BIN: ${{ runner.temp }}/gitleaks
+          REPORT_PATH: ${{ runner.temp }}/results.sarif
+        run: |
+          rc=0
+          "$GITLEAKS_BIN" detect \
+            --source="$GITHUB_WORKSPACE" \
+            --redact --verbose \
+            --exit-code=2 \
+            --report-format=sarif \
+            --report-path="$REPORT_PATH" || rc=$?
+          case "$rc" in
+            0)
+              echo "No leaks detected"
+              ;;
+            2)
+              {
+                echo "## Gitleaks detected secrets"
+                echo ""
+                echo "| Rule | File | Line | Commit |"
+                echo "| ---- | ---- | ---- | ------ |"
+              } >> "$GITHUB_STEP_SUMMARY"
+              jq -r '
+                .runs[0].results[]
+                | [
+                    .ruleId,
+                    .locations[0].physicalLocation.artifactLocation.uri,
+                    (.locations[0].physicalLocation.region.startLine | tostring),
+                    .partialFingerprints.commitSha
+                  ]
+                | @tsv' "$REPORT_PATH" \
+                | awk -F "\t" \
+                  '{ printf "| `%s` | `%s` | %s | %s |\n", $1, $2, $3, substr($4, 1, 12) }' \
+                >> "$GITHUB_STEP_SUMMARY"
+              echo "::error::Leaks detected — every finding is printed above and in the job summary."
+              exit 2
+              ;;
+            *)
+              echo "::error::gitleaks exited with code $rc — the scan did not complete, and an incomplete scan is not a clean pass."
+              exit "$rc"
+              ;;
+          esac
+
+      # The wrapper uploaded its SARIF unconditionally; kept, since a finding's
+      # machine-readable report is useful long after its log lines scroll away.
+      - name: Upload the findings report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gitleaks-results.sarif
+          path: ${{ runner.temp }}/results.sarif
+          if-no-files-found: ignore
 
   analysis-gate:
     name: analysis-gate
