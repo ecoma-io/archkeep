@@ -32,17 +32,81 @@ Exactly one marker may be present.
 ## Configuration
 
 A Moon workspace cannot create a `lattice.json` — the `.moon`/`lattice.json`
-pair is refused. The provider therefore reads the two options from defaults by
-convention: `boundaryConfig` names `module-boundaries.config.mjs` and
-`tsConfig` names `tsconfig.base.json`. Moon's own configuration does not carry
-a plugin-options table the way `nx.json`'s `plugins[].options` does, and a
-second config file would need its own filename option to find itself.
+pair is refused. The provider therefore reads the two options by convention
+rather than from a declaration: `boundaryConfig` names
+`module-boundaries.config.mjs`, and `tsConfig` is the first of
+`tsconfig.base.json`, then `tsconfig.json` that the workspace root actually
+carries. Moon's own configuration does not carry a plugin-options table the way
+`nx.json`'s `plugins[].options` does, and a second config file would need its
+own filename option to find itself.
 
-Those two values are the defaults. There are no other options. An unknown key
-in a workspace that does carry a `lattice.json` under another provider
-**throws** rather than falling back — a `tsconfigBase` typed for `tsConfig`
-that quietly used the default would give you a full green run against a rule
-nobody wrote.
+The `tsConfig` chain is **ordered, not "whichever is there"**. A workspace
+carrying both files is read against `tsconfig.base.json`, because a root
+`tsconfig.json` beside it is normally the editor's own config extending the
+base one. Every run names the file it chose, so a `paths` table found in the
+second candidate is visible in the report rather than inferred from a clean
+exit — and the language server watches **both** candidates, so a
+`tsconfig.base.json` added later takes the resolution over in the editor
+without a restart.
+
+**What the chain does not solve.** Two cases, and neither is refused, because
+in both the tool finds a config and has no way to know it is the wrong one:
+
+- **A shared config that is neither candidate.** A workspace whose `paths`
+  table lives in `config/tsconfig.shared.json` — or in any name outside those
+  two — has nowhere to say so, because Moon has no plugin-options table and no
+  `lattice.json` to carry a `tsConfig` field.
+- **Both candidates present, with the table in the second one.** The chain
+  picks by existence, not by content: a `tsconfig.base.json` holding only
+  `compilerOptions.target`, beside a `tsconfig.json` holding the real `paths`
+  table, is chosen and read, and every alias resolves to nothing. This is the
+  same wall of false crossings the chain was added to end, reached from the
+  other side.
+
+The fix for both is the same: point one of the two candidate names at the file
+that has the table (a `tsconfig.base.json` at the root whose only content is
+`{"extends": "./config/tsconfig.shared.json"}` is enough), or rename it. Every
+run names the file it chose in its `policy`/`tsConfig` reporting, so the check
+is to read that name back and confirm it is the one holding your aliases.
+
+**A Moon workspace carrying `.ts`, `.tsx`, `.mts`, `.cts` or `.vue` files and
+neither candidate is refused, loudly.** The refusal is resolved with the
+workspace itself, before any command asks its own question, so it is **every**
+command that refuses — not only `check`. `graph`, `context`, `impact`, `drift`
+and `history` exit 3 on such a tree too, and deliberately: they all read the
+same analysis, so an unresolved `paths` table makes `graph` draw edges that are
+not there and `impact` select fewer projects than a change really touches. An
+under-selecting `impact` is the silent direction, and it is worse than a
+refusal that names its cause. The language server publishes the reason on
+every open document, instead of judging the tree. With no config to read, TypeScript falls back to compiler defaults,
+every path alias resolves to nothing, and each internal import is reported as a
+boundary crossing: a wall of findings on a workspace that may have no violation
+in it at all.
+
+Two kinds of workspace are deliberately **not** refused, because in both a
+missing tsconfig means "there is no paths table" rather than "the paths table
+was not found":
+
+- Go, Rust and Python resolve through their own manifests and never read a
+  tsconfig at all.
+- A plain-JavaScript tree — `.js`, `.jsx`, `.mjs`, `.cjs` — needs no tsconfig
+  either. JavaScript runs without one, most such workspaces have never had one,
+  and their relative and package specifiers resolve correctly against the
+  compiler defaults. Refusing them would turn a run that is currently right
+  into exit 3.
+
+  The residual case, named rather than claimed away: a JavaScript tree that
+  DOES resolve through aliases — declared in a `jsconfig.json`, or in any name
+  outside the two candidates — is not refused either, and is judged against the
+  compiler defaults, so it gets the wall of false crossings described above.
+  The tool cannot tell that tree from one with no aliases at all without
+  reading a config it has not been given. Point one of the two candidate names
+  at the file holding the aliases.
+
+Those are the only options. There are no others. An unknown key in a workspace
+that does carry a `lattice.json` under another provider **throws** rather than
+falling back — a `tsconfigBase` typed for `tsConfig` that quietly used the
+default would give you a full green run against a rule nobody wrote.
 
 ## How the provider reads the graph
 

@@ -389,6 +389,38 @@ function splitPolicyLine(report) {
   return { source: match[1], fingerprint: match[2], rest: rest.join("\n\n") };
 }
 
+/**
+ * The second legitimately-diverging block, split off for the same reason
+ * `splitPolicyLine` above splits the first and on the same terms.
+ *
+ * The unowned-files gap names the tracked analyzable files no project owns,
+ * MINUS the one this run read as its law (`../commands/context.mjs`'s
+ * `unownedGapWithoutRunConfiguration`). On every axis in this file but A1 that
+ * subtraction is invisible, because each fixture carries one config file and
+ * every member of the group reads it. A1 is the exception by construction: one
+ * tree holding three config files, read two different ways, so each run
+ * excludes a different one and lists the others — which is not a divergence in
+ * the LAW but a true fact about which files that run left without a verdict.
+ * Asserted by name at the call site, never folded into `expectReportsEqual`.
+ *
+ * @param {string} report A report with the policy line already removed.
+ * @returns {{files: string[], rest: string}} `files` is the listed paths in
+ *   report order, `[]` when the report carries no such section. `rest` is
+ *   everything else, joined back exactly as it was.
+ */
+function splitUnownedSection(report) {
+  const blocks = report.split("\n\n");
+  const index = blocks.findIndex(
+    (block) => block.startsWith("⚠ ") && block.includes("owned by no project"),
+  );
+  if (index === -1) return { files: [], rest: report };
+  const files = blocks[index]
+    .split("\n")
+    .filter((line) => line.startsWith("    "))
+    .map((line) => line.trim());
+  return { files, rest: blocks.filter((_, at) => at !== index).join("\n\n") };
+}
+
 describe("expectAllEquivalent — the comparator, proved before it is trusted", () => {
   it("throws when expectedCount itself is below two: an equivalence claim needs at least two spellings", () => {
     expect(() => expectAllEquivalent([], 0)).toThrow(/at least two/);
@@ -561,10 +593,25 @@ describe("A1 — path source: the default location and --config pointing at a re
     expect(defaultPolicy.fingerprint).toBe(configFlagPolicy.fingerprint);
     expect(defaultPolicy.source).toBe("module-boundaries.config.mjs");
     expect(configFlagPolicy.source).toBe("elsewhere/law.mjs");
+    // The second expected divergence, asserted by name. Each run excludes the
+    // law it actually read and lists the config files it did not — so the
+    // `--config` run names the default file and the default run names the
+    // relocated copy. This is the red twin for the defect that the exclusion
+    // used to read `options.boundaryConfig`, the DECLARED name, which
+    // `--config` never touches: under that code both runs excluded
+    // `module-boundaries.config.mjs`, so the run that enforced
+    // `elsewhere/law.mjs` listed its own law here and hid a file it never read.
+    const defaultUnowned = splitUnownedSection(defaultPolicy.rest);
+    const configFlagUnowned = splitUnownedSection(configFlagPolicy.rest);
+    expect(defaultUnowned.files).toEqual(["elsewhere/law.mjs", "elsewhere/permissive.mjs"]);
+    expect(configFlagUnowned.files).toEqual([
+      "module-boundaries.config.mjs",
+      "elsewhere/permissive.mjs",
+    ]);
     expectReportsEqual(
       [
-        { spelling: "default location", report: defaultPolicy.rest },
-        { spelling: "--config, relocated copy", report: configFlagPolicy.rest },
+        { spelling: "default location", report: defaultUnowned.rest },
+        { spelling: "--config, relocated copy", report: configFlagUnowned.rest },
       ],
       2,
     );

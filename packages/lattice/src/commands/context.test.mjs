@@ -708,6 +708,146 @@ describe("resolveCommandContext — the unclaimed-file coverage hole, on the Nx 
   });
 });
 
+describe("resolveCommandContext — unownedGap, the tolerated half of the same question", () => {
+  // #263: the languages `UNCLAIMED_CHECK_LANGUAGES` deliberately leaves out
+  // were not merely tolerated, they were invisible. `createWorkspace` drops a
+  // file no project owns, so a tracked `.mjs` outside every project left no
+  // trace anywhere: not in `analyzedFiles`, not in `failures`, not in any
+  // note. A run over a tree with fifty of them printed the same bytes as a
+  // run over a tree with none — the silent direction, reached by tolerating
+  // rather than by mis-judging. `unownedGap` is the count that closes it;
+  // nothing about the verdict moves.
+  it("names a tracked .mjs outside every declared Nx project, with its language", () => {
+    const { root, write } = fixture("context-nx-unowned-gap-");
+    write("nx.json", "{}\n");
+    write("libs/a/a.go", "package a\n");
+    write("tooling.config.mjs", "export const x = 1;\n");
+
+    const graph = {
+      nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+      dependencies: { a: [] },
+    };
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      {
+        readGraph: () => graph,
+        listFiles: () => ["nx.json", "libs/a/a.go", "tooling.config.mjs"],
+      },
+    );
+
+    expect(context.unownedGap.files).toEqual(["tooling.config.mjs"]);
+    expect(context.unownedGap.languages).toEqual(["typescript"]);
+    // And the decision the gap must not move: still no failure, so nothing
+    // downstream turns `coverage.complete` false or the exit code to 3.
+    expect(context.analysis.failures).toEqual([]);
+  });
+
+  it("names the same file on a Moon workspace", () => {
+    const { root, write } = fixture("context-moon-unowned-gap-");
+    write(".moon/tool.yml", " ");
+    write("libs/a/a.go", "package a\n");
+    write("tooling.config.mjs", "export const x = 1;\n");
+
+    const graph = {
+      nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+      dependencies: { a: [] },
+    };
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      {
+        readGraph: () => graph,
+        listFiles: () => [".moon/tool.yml", "libs/a/a.go", "tooling.config.mjs"],
+      },
+    );
+
+    expect(context.provider).toBe("moon");
+    expect(context.unownedGap.files).toEqual(["tooling.config.mjs"]);
+    expect(context.analysis.failures).toEqual([]);
+  });
+
+  it("is empty when every analyzable file is owned — a gap that always fires is noise", () => {
+    // The guard every positive case above needs. Without it, a gap computed
+    // as "every tracked file" would pass all of them and fire on every
+    // workspace in existence, which teaches a reader to skip the line.
+    const { root, write } = fixture("context-nx-unowned-gap-none-");
+    write("nx.json", "{}\n");
+    write("libs/a/a.go", "package a\n");
+    write("libs/a/tool.mjs", "export const x = 1;\n");
+
+    const graph = {
+      nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+      dependencies: { a: [] },
+    };
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      {
+        readGraph: () => graph,
+        listFiles: () => ["nx.json", "libs/a/a.go", "libs/a/tool.mjs"],
+      },
+    );
+
+    expect(context.unownedGap).toEqual({ files: [], languages: [] });
+  });
+
+  it("leaves an unclaimed Go file to the failure list rather than counting it twice", () => {
+    // The two halves partition the same question: Go, Rust and Python are
+    // whole-file failures (exit 3), everything else analyzable is this gap.
+    // A file appearing in both would be reported twice for one cause, and a
+    // reader reconciling the counts would find them disagreeing.
+    const { root, write } = fixture("context-nx-unowned-gap-partition-");
+    write("nx.json", "{}\n");
+    write("libs/a/a.go", "package a\n");
+    write("libs/orphan/orphan.go", "package orphan\n");
+
+    const graph = {
+      nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+      dependencies: { a: [] },
+    };
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      {
+        readGraph: () => graph,
+        listFiles: () => ["nx.json", "libs/a/a.go", "libs/orphan/orphan.go"],
+      },
+    );
+
+    expect(context.unownedGap.files).toEqual([]);
+    expect(
+      context.analysis.failures.some((failure) => failure.sourceFile === "libs/orphan/orphan.go"),
+    ).toBe(true);
+  });
+
+  it("stays empty on a native workspace, which refuses the same state loudly instead", () => {
+    // The providers differ here on purpose: native's own coverage judgment
+    // makes an unclaimed analyzable file a whole-file failure in EVERY
+    // language, so the run exits 3 rather than tolerating it. A gap beside
+    // that failure would be a second, quieter voice for a state already
+    // answered.
+    const { root, write } = fixture("context-native-unowned-gap-");
+    write(
+      "lattice.json",
+      JSON.stringify({ projects: { declared: [{ root: "libs/a", name: "a", tags: [] }] } }),
+    );
+    write("libs/a/a.go", "package a\n");
+    write("tooling.config.mjs", "export const x = 1;\n");
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      { listFiles: () => ["lattice.json", "libs/a/a.go", "tooling.config.mjs"] },
+    );
+
+    expect(context.provider).toBe("native");
+    expect(context.unownedGap).toEqual({ files: [], languages: [] });
+    expect(
+      context.analysis.failures.some((failure) => failure.sourceFile === "tooling.config.mjs"),
+    ).toBe(true);
+  });
+});
+
 describe("resolveCommandContext — options.boundaryConfigDeclared, on all three providers", () => {
   // The provenance of `options.boundaryConfig`, which the merge onto
   // `../options.mjs`'s `DEFAULT_OPTIONS` used to destroy before any command

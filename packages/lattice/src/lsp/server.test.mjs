@@ -1,8 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { DEFAULT_OPTIONS } from "../options.mjs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createServer, SERVER_CAPABILITIES, watchedFilesFor } from "./server.mjs";
+import { DEFAULT_OPTIONS, MOON_TSCONFIG_CHAIN, MOON_TSCONFIG_SOURCE } from "../options.mjs";
+import { MOON_DIR } from "../providers/moon.mjs";
+
+import {
+  createServer,
+  readWorkspaceOptions,
+  SERVER_CAPABILITIES,
+  watchedFilesFor,
+} from "./server.mjs";
 
 // The diagnosis is mocked, and that is the point of this tier: what is under
 // test here is the lifecycle and the publish rule, and the one case that
@@ -313,6 +324,33 @@ describe("publishing, where silence has to mean clean", () => {
     expect(watched.some((file) => String(file).includes("object Object"))).toBe(false);
     expect(watched).toContain("lattice.json");
     expect(watched).toContain("tsconfig.base.json");
+  });
+
+  it("keeps the whole Moon chain watched while the options themselves could not be read", () => {
+    // The trap this closes, and it is the server answering its own remedy
+    // with silence. `readMoonOptions` (`../options.mjs`) refuses a Moon root
+    // that carries TypeScript and neither chain entry, and its message offers
+    // two fixes: add `tsconfig.base.json`, or rename the config that already
+    // holds the paths table to `tsconfig.json`. `refreshOptions` falls back to
+    // `DEFAULT_OPTIONS` on a throw, and DEFAULT_OPTIONS carries no
+    // `tsConfigSource` — so before `unresolved`, the watched set held
+    // `tsconfig.base.json` alone. A developer taking the SECOND branch created
+    // a file nothing watched: no notification, no re-read, and the same
+    // refusal republished on every open document until the editor restarted.
+    const failed = watchedFilesFor(DEFAULT_OPTIONS, { unresolved: true });
+    for (const entry of MOON_TSCONFIG_CHAIN) expect(failed).toContain(entry);
+
+    // The red twin, and the reason this test names the flag rather than the
+    // count: without `unresolved` the same options watch only the one name,
+    // which is what made the trap invisible.
+    const resolved = watchedFilesFor(DEFAULT_OPTIONS);
+    expect(resolved).toContain(MOON_TSCONFIG_CHAIN[0]);
+    expect(resolved).not.toContain(MOON_TSCONFIG_CHAIN[1]);
+
+    // No entry is duplicated: `DEFAULT_OPTIONS.tsConfig` IS the chain's first
+    // name, and a repeated entry would register the same glob twice and log a
+    // doubled name in the invalidation line a reader is meant to trust.
+    expect(failed.length).toBe(new Set(failed).size);
   });
 
   it("publishes a failure, not an empty list, when an Nx workspace's options name a profiles registry", async () => {
@@ -1159,5 +1197,92 @@ describe("message shapes the protocol allows and the server must survive", () =>
 
     expect(logs.join("\n")).toContain("the client's pipe went away");
     expect(sent).toEqual([{ jsonrpc: "2.0", id: 2, result: null }]);
+  });
+});
+describe("the tsconfig a Moon root is read against, and the files that decide it", () => {
+  // A real directory, because this is the one dispatch that cannot be driven
+  // over an in-memory tree: the Moon marker is a DIRECTORY, and every face
+  // that resolves it — `../providers/moon.mjs`'s `moonMarkerAt`, the CLI's own
+  // gate, this server — asks plain filesystem existence rather than git's
+  // tracked list, for the reason `./workspace-index.mjs` states.
+  /** @type {string[]} */
+  const roots = [];
+  const moonRootWith = (...names) => {
+    const root = mkdtempSync(join(tmpdir(), "lattice-moon-"));
+    roots.push(root);
+    mkdirSync(join(root, MOON_DIR));
+    for (const name of names) writeFileSync(join(root, name), "{}\n");
+    return root;
+  };
+  afterEach(() => {
+    while (roots.length > 0) rmSync(roots.pop(), { recursive: true, force: true });
+  });
+
+  it("resolves tsconfig.json on a Moon root that has no tsconfig.base.json", () => {
+    // Before this branch existed the server read `readPluginOptions` here,
+    // which only ever reads `nx.json` — so a Moon workspace got the DEFAULTS,
+    // and the editor resolved every TypeScript import against a
+    // `tsconfig.base.json` the tree does not have. Every aliased specifier
+    // then resolved to nothing and the editor drew a crossing on each one, in
+    // a workspace whose paths table was sitting in the file next to it.
+    const options = readWorkspaceOptions(moonRootWith("tsconfig.json"));
+    expect(options.tsConfig).toBe("tsconfig.json");
+    expect(options.tsConfigSource).toBe(MOON_TSCONFIG_SOURCE);
+    expect(options.boundaryConfig).toBe(DEFAULT_OPTIONS.boundaryConfig);
+  });
+
+  it("keeps tsconfig.base.json ahead of tsconfig.json for the editor too", () => {
+    // The CLI and the editor may not disagree about which paths table governs
+    // one workspace, so the ordering is read from the same chain rather than
+    // decided again here.
+    const options = readWorkspaceOptions(moonRootWith("tsconfig.base.json", "tsconfig.json"));
+    expect(options.tsConfig).toBe("tsconfig.base.json");
+  });
+
+  it("watches every candidate the chain could pick, not only the one it did", () => {
+    // The silent-stale direction, and the same defect #276 closed for
+    // `package.json` and the Module Federation configs: with `tsconfig.json`
+    // chosen, a `tsconfig.base.json` appearing beside it takes the resolution
+    // over WITHOUT the chosen file being touched. A server watching only the
+    // winner gets no notification, never bumps its revision, and keeps
+    // publishing verdicts resolved through a table it no longer reads for the
+    // rest of the session.
+    const options = readWorkspaceOptions(moonRootWith("tsconfig.json"));
+    const watched = watchedFilesFor(options);
+    for (const candidate of MOON_TSCONFIG_CHAIN) expect(watched).toContain(candidate);
+    // Written literally rather than derived from `MOON_TSCONFIG_CHAIN`, so a
+    // chain entry silently dropped from the watched set turns this red.
+    expect(watched).toContain("tsconfig.json");
+    expect(watched).toContain("tsconfig.base.json");
+  });
+
+  it("watches one tsconfig, not a chain, where the name was declared", () => {
+    // The chain is Moon's convention alone. An Nx or native root STATED its
+    // name, so watching a second file there would register a glob for a
+    // filename the workspace never named — and an edit to it would drop the
+    // index and re-analyze the tree for nothing.
+    expect(watchedFilesFor(DEFAULT_OPTIONS)).not.toContain("tsconfig.json");
+    expect(watchedFilesFor({ ...DEFAULT_OPTIONS, tsConfig: "tsconfig.json" })).not.toContain(
+      "tsconfig.base.json",
+    );
+  });
+
+  it("refuses a Moon root whose TypeScript has no tsconfig the chain can find", () => {
+    // Requirement's third half, and the state that produced the measured
+    // several-hundred-finding run. It arrives as a THROW so `refreshOptions`
+    // catches it into `optionsFailure`, which publishes a diagnostic on every
+    // open document — the loud alternative to diagnosing a whole workspace
+    // against compiler defaults and calling the result a verdict.
+    const root = moonRootWith();
+    writeFileSync(join(root, "main.ts"), "export const a = 1;\n");
+    // A real git tree, because "which files does this workspace have" is
+    // git's answer here as everywhere else (`./workspace-index.mjs`'s
+    // `listWorkspaceFiles`). Without one the refusal below would be the
+    // "cannot list the files" throw wearing the same prefix — loud too, but
+    // not the one under test, and the assertion could not tell them apart.
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    execFileSync("git", ["add", "main.ts"], { cwd: root });
+    expect(() => readWorkspaceOptions(root)).toThrow(/tsconfig\.base\.json or tsconfig\.json/u);
+    expect(() => readWorkspaceOptions(root)).toThrow(/main\.ts/u);
   });
 });

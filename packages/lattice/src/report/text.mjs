@@ -526,8 +526,10 @@ export function formatCustomRulesSection(customRules) {
 }
 
 /**
- * The polyglot coverage gap section — rendered only when the Nx graph is known
- * to be missing polyglot edges that the checker's own analysis did cover.
+ * The coverage-gap section — rendered only when this run knows of coverage it
+ * did not itself provide: polyglot edges the Nx graph is missing that the
+ * checker's own analysis did cover, or tracked analyzable files no project
+ * owns (`formatCoverageGap` below dispatches, one arm per kind).
  *
  * `coverageGaps` is `[]` (or absent) when there is no gap, and then this
  * prints nothing — the same bargain `formatGoWork` and `formatTsconfigPaths`
@@ -547,7 +549,9 @@ export function formatCustomRulesSection(customRules) {
  * judged against (`../../../../AGENTS.md`) applies to a report section as much
  * as to a verdict.
  *
- * @param {object[]} coverageGaps Each entry has `kind` and `manifests`.
+ * @param {object[]} coverageGaps Each entry has a `kind` and the fields that
+ *   kind carries — `manifests` for `"unregistered-plugin"`, `files`/
+ *   `languages`/`provider` for `"unowned-files"`.
  * @returns {string} Empty exactly when there is no coverage gap to render.
  */
 export function formatCoverageGaps(coverageGaps) {
@@ -556,12 +560,45 @@ export function formatCoverageGaps(coverageGaps) {
 }
 
 /**
- * One coverage gap entry.
+ * How many unowned-file paths this face prints before it stops listing and
+ * says how many are left. The count is the headline and is always exact; the
+ * paths are the sample that makes it actionable. A real Nx or Moon workspace
+ * carries tens of them (this repository's own tree: 50), and a report whose
+ * every other section is a handful of lines does not survive one section
+ * fifty lines long — the reader stops reading the report, which is the same
+ * outcome as not printing it. Nothing is dropped silently: the total is
+ * stated first and the remainder is named, with the surface that holds the
+ * complete list.
+ */
+const UNOWNED_SAMPLE_LIMIT = 10;
+
+/**
+ * One coverage gap entry, dispatched on `kind`.
  *
- * @param {object} gap Has `kind` and `manifests`.
+ * The unknown-kind arm is not decoration: a kind added on the producing side
+ * without an arm here would otherwise read a field it does not carry and
+ * throw mid-report, losing every section after it — a whole report lost to
+ * the newest, least-important line in it. Naming the kind is the loud
+ * version, and it mirrors what `./sarif.mjs`'s
+ * `sarifCoverageGapNotification` already does for the same input.
+ *
+ * @param {object} gap Has `kind`, and the fields that kind carries.
  * @returns {string}
  */
 function formatCoverageGap(gap) {
+  if (gap.kind === "unregistered-plugin") return formatUnregisteredPluginGap(gap);
+  if (gap.kind === "unowned-files") return formatUnownedFilesGap(gap);
+  return `⚠ coverage gap "${gap.kind}" — part of this workspace is outside what this run covered`;
+}
+
+/**
+ * The unregistered-plugin gap: every manifest listed, because there are as
+ * many of them as there are polyglot projects and a reader acts on each one.
+ *
+ * @param {{manifests: string[]}} gap
+ * @returns {string}
+ */
+function formatUnregisteredPluginGap(gap) {
   const count = gap.manifests.length;
   const label = `${count} polyglot manifest${count === 1 ? "" : "s"}`;
   const paths = gap.manifests.map((manifest) => `${CONTINUED}${manifest}`).join("\n");
@@ -570,6 +607,51 @@ function formatCoverageGap(gap) {
     `found under project roots — nx affected and ` +
     `@nx/enforce-module-boundaries will not cover these edges\n${paths}\n` +
     `${DETAIL}register the plugin: "plugins": [{ "plugin": "@ecoma-io/lattice/nx" }]`
+  );
+}
+
+/**
+ * The unowned-analyzable-files gap: tracked TypeScript, JavaScript or Vue
+ * files no project claims. They are skipped on purpose — Nx's own graph and
+ * `@nx/enforce-module-boundaries` already cover that language, which is why
+ * they are not failures and change no exit code
+ * (`../commands/context.mjs`'s `UNCLAIMED_CHECK_LANGUAGES`) — but "skipped"
+ * and "never mentioned" are different claims, and only the first one is
+ * true of this run.
+ *
+ * The count and the languages lead, because they are what a reader checks
+ * the clean line's own file count against; the paths follow, bounded.
+ *
+ * @param {{provider?: string, languages?: string[], files: string[]}} gap
+ * @returns {string}
+ */
+function formatUnownedFilesGap(gap) {
+  // `files` is read as defensively as the SARIF face reads it. `./check.mjs`
+  // contributes this entry only when the list is non-empty, but
+  // `formatCoverageGaps` is exported and a caller holding an entry with no
+  // `files` would otherwise render a section announcing zero files — a
+  // heading with nothing under it reads as a truncation, not as "none".
+  const files = gap.files ?? [];
+  const count = files.length;
+  const languages = gap.languages ?? [];
+  const spans = languages.length > 0 ? ` (${languages.join(", ")})` : "";
+  const shown = files.slice(0, UNOWNED_SAMPLE_LIMIT);
+  const remaining = count - shown.length;
+  const lines = shown.map((file) => `${CONTINUED}${file}`);
+  if (remaining > 0) {
+    lines.push(`${CONTINUED}… and ${remaining} more — the full list is in --format json`);
+  }
+  // The one place this face needs to know which project model it is
+  // describing: a reader is being told to declare a project, and the file
+  // that declares one is not the same file on the two providers.
+  const them = count === 1 ? "it" : "them";
+  const manifest = gap.provider === "moon" ? "moon.yml" : "project.json";
+  return (
+    `⚠ ${count} tracked analyzable file${count === 1 ? "" : "s"}${spans} ` +
+    `owned by no project — skipped, so no boundary verdict here covers ${them}\n` +
+    `${lines.join("\n")}\n` +
+    `${DETAIL}declare a project that owns ${them} (a ${manifest} under a directory that ` +
+    `contains ${them}), or leave ${them} outside the boundary system knowingly`
   );
 }
 

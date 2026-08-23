@@ -10,6 +10,10 @@ import { delimiter, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { tsconfigPathsFacts } from "../analysis/typescript.mjs";
+import { MOON_TSCONFIG_CHAIN, readMoonOptions } from "../options.mjs";
+import { createWorkspace } from "../workspace.mjs";
+
 import {
   moonProvider,
   moonMarkerAt,
@@ -1116,5 +1120,60 @@ describe("readProjectGraph — the real resolver, the real spawn", () => {
     } finally {
       cleanup();
     }
+  });
+});
+// ── the tsconfig a Moon workspace is read against ────────────────────────────
+
+describe("the tsconfig convention a Moon workspace is judged through", () => {
+  // `../options.mjs`'s `readMoonOptions` decides the NAME; this drives that
+  // name through the real `ts.resolveModuleName` context the analyzer uses
+  // (`../analysis/typescript.mjs`'s `tsconfigPathsFacts` reads the same
+  // memoised parse the resolver does), so what is pinned here is the paths
+  // table a verdict is actually computed from — not a string comparison that
+  // would still pass if nothing downstream read the name.
+  const PATHS = { "@ws/core": ["libs/core/index.ts"] };
+  const FILES = ["tsconfig.json", "libs/core/index.ts", "apps/web/main.ts"];
+  const TREE = {
+    "tsconfig.json": JSON.stringify({ compilerOptions: { baseUrl: ".", paths: PATHS } }),
+    "libs/core/index.ts": "export const core = 1;\n",
+    "apps/web/main.ts": 'import { core } from "@ws/core";\n',
+  };
+  const workspaceFor = (tsConfig) =>
+    createWorkspace({
+      root: "/ws",
+      graph: {
+        nodes: {
+          core: { name: "core", data: { root: "libs/core" } },
+          web: { name: "web", data: { root: "apps/web" } },
+        },
+      },
+      files: FILES,
+      tsConfig,
+      read: (path) => TREE[path] ?? null,
+    }).workspace;
+
+  it("reads the paths table out of tsconfig.json when there is no tsconfig.base.json", () => {
+    // The silent direction. This is the shape of the workspace that produced
+    // the measured failure: a Vue tree whose paths table lives in
+    // `tsconfig.json`, judged by a provider fixed at `tsconfig.base.json`.
+    const options = readMoonOptions("/ws", {
+      exists: (path) => path === join("/ws", "tsconfig.json"),
+      listFiles: () => FILES,
+    });
+    const facts = tsconfigPathsFacts(workspaceFor(options.tsConfig));
+    expect(facts.tsConfig).toBe("tsconfig.json");
+    expect(facts.paths).toEqual(PATHS);
+    expect(facts.configFailure).toBeNull();
+  });
+
+  it("resolves nothing at all when the name is fixed at the first chain entry", () => {
+    // The half that makes the test above mean something: the same tree, read
+    // under the name the provider used before the chain, has NO paths table
+    // and reports no failure either — `ts.resolveModuleName` falls back to the
+    // compiler defaults and every `@ws/…` specifier resolves to nothing, with
+    // nothing anywhere in the run saying the table was never found.
+    const facts = tsconfigPathsFacts(workspaceFor(MOON_TSCONFIG_CHAIN[0]));
+    expect(facts.paths).toBeUndefined();
+    expect(facts.configFailure).toBeNull();
   });
 });

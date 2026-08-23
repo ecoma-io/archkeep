@@ -63,7 +63,12 @@ owns that contract and the refusal for a row that has stopped covering
 anything.
 
 1. `allow` — a matching specifier is exempt from **all fifteen** and nothing below runs
-2. A file belonging to no project is skipped entirely
+2. A file belonging to no project is skipped entirely — never silently: on the
+   Nx and Moon paths a skipped TypeScript, JavaScript or Vue file is counted in
+   the run's `unowned-files` coverage gap ([json-output.md](json-output.md)),
+   which names how many and in which languages and changes no exit code, while a
+   skipped Go, Rust or Python file is a whole-file failure that withholds the
+   verdict (exit 3) — and on the native provider every language does
 3. Path spelling → **1, 2**
 4. Unresolvable target → **2, 10**
 5. Reaching your own project through its public alias → **3**

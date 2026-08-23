@@ -1,8 +1,15 @@
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
+
+import { LANGUAGE_BY_EXTENSION } from "./analysis/registry.mjs";
 
 import {
   DEFAULT_OPTIONS,
+  MOON_TSCONFIG_CHAIN,
+  MOON_TSCONFIG_SOURCE,
   pluginIsRegistered,
+  readMoonOptions,
   readPluginOptions,
   readWorkspaceLayout,
   requireCompleteWorkspaceLayout,
@@ -20,6 +27,168 @@ const treeWith = (files) => ({ readFile: (path) => files[path] ?? null });
  * self-deriving `boundaryConfigDeclared` would pin nothing.
  */
 const NOTHING_DECLARED = { ...DEFAULT_OPTIONS, boundaryConfigDeclared: false };
+
+describe("readMoonOptions — the tsconfig chain a Moon workspace has instead of a declaration", () => {
+  // The paths `readMoonOptions` tests are the ones IT builds
+  // (`join(root, name)`), so the injected predicate matches on exactly those —
+  // the same convention `./providers/moon.test.mjs` uses for `moonMarkerAt`.
+  const rootHolding = (...names) => {
+    const present = new Set(names.map((name) => join("/ws", name)));
+    return (path) => present.has(path);
+  };
+  /** A file list that fails the test if it is ever asked for. */
+  const unaskedFileList = () => {
+    throw new Error("the file list was spent on a workspace that already has a tsconfig");
+  };
+
+  it("resolves tsconfig.json in a workspace that has no tsconfig.base.json", () => {
+    // The silent direction, and the whole reason the chain exists: fixed at
+    // the first name alone, this workspace reads a file that is not there,
+    // falls through to the compiler defaults, and every aliased import in it
+    // resolves to nothing — a report full of crossings on a tree that may have
+    // none. `./providers/moon.test.mjs` drives the same fixture through the
+    // real resolver and pins the paths table that comes back.
+    const options = readMoonOptions("/ws", {
+      exists: rootHolding("tsconfig.json"),
+      listFiles: unaskedFileList,
+    });
+    expect(options).toEqual({
+      boundaryConfig: DEFAULT_OPTIONS.boundaryConfig,
+      tsConfig: "tsconfig.json",
+      tsConfigSource: MOON_TSCONFIG_SOURCE,
+      boundaryConfigDeclared: false,
+    });
+  });
+
+  it("keeps tsconfig.base.json ahead of tsconfig.json when the workspace carries both", () => {
+    // The chain is ORDERED, not "whichever we find". A Vue or Angular Moon
+    // workspace usually carries both — the root `tsconfig.json` extending the
+    // base one — and picking by discovery order would make the verdict depend
+    // on the order two names happen to be written in this file.
+    const options = readMoonOptions("/ws", {
+      exists: rootHolding("tsconfig.base.json", "tsconfig.json"),
+      listFiles: unaskedFileList,
+    });
+    expect(options.tsConfig).toBe("tsconfig.base.json");
+    expect(MOON_TSCONFIG_CHAIN.indexOf("tsconfig.base.json")).toBeLessThan(
+      MOON_TSCONFIG_CHAIN.indexOf("tsconfig.json"),
+    );
+  });
+
+  it("names the file it chose, and says the name was convention rather than a declaration", () => {
+    // Requirement's first half: a fallback that picks silently is a fact the
+    // reader cannot see. The same checkout on two machines — one of them with
+    // an untracked `tsconfig.json` — resolves two different paths tables, and
+    // with only a name carried, nothing downstream can tell a stated name from
+    // a picked one. `tsConfigSource` is that fact, the same shape
+    // `./commands/graph.mjs`'s `workspaceLayoutSource` is to `workspaceLayout`
+    // — and its absence on the Nx and native options is what makes it mean
+    // something here.
+    const chosen = readMoonOptions("/ws", {
+      exists: rootHolding("tsconfig.json"),
+      listFiles: unaskedFileList,
+    });
+    expect(chosen.tsConfig).toBe("tsconfig.json");
+    expect(chosen.tsConfigSource).toBe(MOON_TSCONFIG_SOURCE);
+    expect(resolveOptions(undefined)).not.toHaveProperty("tsConfigSource");
+  });
+
+  it("refuses, naming both candidates, when neither is there and the tree needs one", () => {
+    // Requirement 3, and a deliberate change: before this, such a tree was
+    // judged against TypeScript's compiler defaults and reported a crossing
+    // for every internal import — measured at several hundred findings on a
+    // 94-project workspace with no architecture violation in it. Silence in
+    // the loud direction is still silence about the cause: nothing in that
+    // report said the paths table had never been found.
+    expect(() =>
+      readMoonOptions("/ws", {
+        exists: rootHolding(".moon"),
+        listFiles: () => ["libs/core/index.ts", "apps/web/App.vue", "README.md"],
+      }),
+    ).toThrow(/tsconfig\.base\.json or tsconfig\.json/u);
+  });
+
+  it("does not refuse a Go, Rust and Python workspace for a config nothing in it reads", () => {
+    // The other error direction, and it is a real one: those three resolve
+    // through their own manifests and never read a tsconfig, so refusing here
+    // would break every polyglot Moon workspace that has no TypeScript in it
+    // at all. The name carried is the chain's FIRST entry, so the watcher list
+    // derived from it still covers the file whose arrival would change the
+    // answer.
+    const options = readMoonOptions("/ws", {
+      exists: rootHolding(".moon"),
+      listFiles: () => ["libs/core/main.go", "libs/api/lib.rs", "svc/app/__init__.py"],
+    });
+    expect(options.tsConfig).toBe(MOON_TSCONFIG_CHAIN[0]);
+    expect(options.tsConfigSource).toBe(MOON_TSCONFIG_SOURCE);
+  });
+
+  it("does not refuse a plain-JavaScript workspace, which needs no tsconfig at all", () => {
+    // The narrowing, and the reason the trigger is a list of EXTENSIONS
+    // rather than the obvious list of languages: `LANGUAGE_BY_EXTENSION`
+    // maps `.js`, `.jsx`, `.mjs` and `.cjs` to `typescript`, so a
+    // language-keyed test refuses this tree — and refusing it is a
+    // REGRESSION, not a hardening. JavaScript needs no tsconfig, most such
+    // trees have never had one, and every specifier below resolves correctly
+    // against the compiler defaults today. Turning a run that is currently
+    // right into exit 3 is the one thing this guard must not do.
+    const options = readMoonOptions("/ws", {
+      exists: rootHolding(".moon"),
+      listFiles: () => ["libs/core/index.js", "apps/web/main.mjs", "tools/build.cjs"],
+    });
+    expect(options.tsConfig).toBe(MOON_TSCONFIG_CHAIN[0]);
+    expect(options.tsConfigSource).toBe(MOON_TSCONFIG_SOURCE);
+  });
+
+  it("triggers on no extension the analyzer registry does not claim", () => {
+    // `TSCONFIG_RESOLVED_EXTENSIONS` is a second copy of extension knowledge
+    // `./analysis/registry.mjs` owns. The refusal filter runs `languageOf`
+    // first, so the copy can only ever NARROW what the registry claimed —
+    // this is what pins that, and it is why the probe set reaches OUTSIDE the
+    // registry. An earlier version of this test built its probe set from
+    // `Object.keys(LANGUAGE_BY_EXTENSION)` alone and was vacuous in exactly
+    // the direction it names: adding `.svelte` to the copy left it green,
+    // because `.svelte` was never probed.
+    //
+    // Derived by probing the exported behaviour rather than by importing the
+    // constant: a test that imported it would pin the copy against itself.
+    const probes = [...Object.keys(LANGUAGE_BY_EXTENSION), ".svelte", ".json", ".md", ".txt", ""];
+    const triggering = probes.filter((extension) => {
+      try {
+        readMoonOptions("/ws", {
+          exists: rootHolding(".moon"),
+          listFiles: () => [`libs/core/file${extension}`],
+        });
+        return false;
+      } catch {
+        return true;
+      }
+    });
+
+    // Non-empty is the half that goes red if the refusal stops firing at all.
+    expect(triggering.length).toBeGreaterThan(0);
+    // And every extension that DOES trigger is one the registry claims for a
+    // language that resolves through the paths table.
+    for (const extension of triggering) {
+      expect(["typescript", "vue"]).toContain(LANGUAGE_BY_EXTENSION[extension]);
+    }
+    // Named outright, so the narrowing is pinned as a list and not only as a
+    // property: these are TypeScript-proper plus Vue, and no JavaScript.
+    expect(triggering.sort()).toEqual([".cts", ".mts", ".ts", ".tsx", ".vue"]);
+  });
+
+  it("never spends the file list on a workspace that already carries a tsconfig", () => {
+    // `listFiles` is a thunk for this: on the language server it is a git
+    // spawn, and an ordinary Moon session must not pay a second one per
+    // invalidation to answer a question the first `exists` already settled.
+    expect(() =>
+      readMoonOptions("/ws", {
+        exists: rootHolding("tsconfig.base.json"),
+        listFiles: unaskedFileList,
+      }),
+    ).not.toThrow();
+  });
+});
 
 describe("resolveOptions", () => {
   it("defaults both filenames to the Nx conventions", () => {

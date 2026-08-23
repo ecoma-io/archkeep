@@ -17,7 +17,7 @@ import { tsconfigPathsFacts } from "../analysis/typescript.mjs";
 import { suppressionCovers } from "../config.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import { suppressionFate } from "../governance/waiver.mjs";
-import { resolveCommandContext } from "./context.mjs";
+import { resolveCommandContext, unownedGapWithoutRunConfiguration } from "./context.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 import { declaredEdgeViolationsForCheck } from "./edge-constraints.mjs";
@@ -725,12 +725,53 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // because a descriptive command's output is the graph itself — here the
   // checker's own analysis covers what the graph does not, so a note is the
   // right level. cf. #38
-  const coverageGaps =
-    commandContext.provider === "nx" &&
+  //
+  // The second kind rides the same channel for the same reason: tracked
+  // analyzable files no project owns, in the languages `./context.mjs`'s
+  // `UNCLAIMED_CHECK_LANGUAGES` deliberately does NOT fail on. Skipping them
+  // is the documented, unchanged decision (`../../../../docs/reference/violations.md`,
+  // "The order matters" step 2); leaving no trace of the skip anywhere in the
+  // report was not — the run printed byte-identical output whether fifty
+  // files sat outside every project or none did (#263). Appended AFTER the
+  // plugin gap, and contributed only when the list is non-empty, so a
+  // workspace with no unowned analyzable file reports exactly the bytes it
+  // reported before. Like the gap above it: no exit code, no verdict, and
+  // `coverage.complete` untouched — those belong to `unchecked`, and moving
+  // this state into them would turn `check` red on trees whose only sin is a
+  // root-level tooling script.
+  // The law that actually governed THIS run, not the one the workspace
+  // declared: `policySource` already carries the `--config` override and the
+  // resolved profile, workspace-relative. Subtracting it here rather than
+  // inside `resolveCommandContext` is forced — `resolvePolicy` takes the
+  // context as an argument, so it cannot run before it. `tsConfig` joins it
+  // because it is configuration by the same test, though every spelling of it
+  // is `.json` today and so never reaches the list.
+  const unownedGap = unownedGapWithoutRunConfiguration(commandContext.unownedGap, [
+    policySource,
+    commandContext.options.tsConfig,
+  ]);
+
+  const coverageGaps = [
+    ...(commandContext.provider === "nx" &&
     !commandContext.pluginGap.registered &&
     commandContext.pluginGap.manifests.length > 0
       ? [{ kind: "unregistered-plugin", manifests: commandContext.pluginGap.manifests }]
-      : [];
+      : []),
+    ...(unownedGap.files.length > 0
+      ? [
+          {
+            kind: "unowned-files",
+            // Which project model a reader has to declare the files in — the
+            // remediation differs by provider (`project.json` against
+            // `moon.yml`), and the faces that render this carry no other way
+            // to know which tree they are describing.
+            provider: commandContext.provider,
+            languages: unownedGap.languages,
+            files: unownedGap.files,
+          },
+        ]
+      : []),
+  ];
 
   const report =
     options.format === "json"

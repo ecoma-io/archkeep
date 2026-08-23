@@ -454,6 +454,13 @@ describe("checking a real tree", () => {
         "  constraint  sourceTag layer:domain → onlyDependOnLibsWithTags [layer:domain]",
         "",
         "✖ 1 boundary violation in 1 file (1 import in 2 files across 2 projects)",
+        // No unowned-files section, and that is an assertion rather than an
+        // omission. This fixture's one tracked analyzable file outside a
+        // project root IS its boundary law, which `./commands/context.mjs`'s
+        // `unownedAnalyzableFiles` excludes: the law is not source judged by
+        // the law, and counting it would make this golden — and every real
+        // report — change with the config's filename. The differential in
+        // `./config-spelling.integration.test.mjs` is what proved that.
       ].join("\n"),
     );
   });
@@ -6979,9 +6986,16 @@ export const moduleBoundaryOptions = {
       { cwd: gapRoot, readGraph: () => gapGraph, listFiles: () => gapFiles },
     );
     const envelope = JSON.parse(report);
-    expect(envelope.coverage.coverageGaps).toHaveLength(1);
-    expect(envelope.coverage.coverageGaps[0].kind).toBe("unregistered-plugin");
-    expect(envelope.coverage.coverageGaps[0].manifests).toContain("libs/domain/go.mod");
+    // Selected by kind rather than by position: this fixture's own
+    // `module-boundaries.config.mjs` sits under no project root, so it also
+    // earns the `unowned-files` gap (#263, the describe below). Two gaps of
+    // different kinds are the point of the list — an assertion on
+    // `coverageGaps[0]` would pin an ordering neither producer promises.
+    const gap = envelope.coverage.coverageGaps.find(
+      (entry) => entry.kind === "unregistered-plugin",
+    );
+    expect(gap).toBeDefined();
+    expect(gap.manifests).toContain("libs/domain/go.mod");
   });
 
   it("does not mention the coverage gap when the plugin is registered", async () => {
@@ -6990,6 +7004,159 @@ export const moduleBoundaryOptions = {
     const { report } = await check({ format: "text", config: null, paths: [] }, context);
     expect(report).not.toContain("coverage gap");
     expect(report).not.toContain("does not register this plugin");
+  });
+});
+
+describe("`check` counts the tracked analyzable files no project owns", () => {
+  // #263, the silent direction: a tracked `.mjs`/`.ts`/`.vue` file outside
+  // every declared project is skipped — documented and unchanged — but it was
+  // also absent from every coverage surface. `analyzedFiles` counted only
+  // owned files, `notAnalyzed`/`coverageGaps`/`notes` were empty, `complete`
+  // was `true`, and a declared `coverage-minimum: 100` passed at 100%. The
+  // report a consumer read was byte-identical to one over a tree where every
+  // file really was owned. Measured on this repository at the time: 50 of 425
+  // tracked analyzable files, 11.8% of the tree, outside the verdict with
+  // nothing saying so.
+  //
+  // What must NOT move is everything else. Counting them as uncovered would
+  // make `coverage.complete` false, which is `status: "no-verdict"` and exit 3
+  // (`../../../docs/reference/exit-codes.md`) — turning `check` red for nearly
+  // every real Nx or Moon consumer on code they did not touch, this
+  // repository's own final CI step included. So: a counted gap, and no verdict
+  // moves. The third test below is the one that holds that line.
+  const unownedRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-unowned-files-"));
+  afterAll(() => rmSync(unownedRoot, { recursive: true, force: true }));
+
+  const writeUnowned = (relativePath, text) => {
+    mkdirSync(join(unownedRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(unownedRoot, relativePath), text);
+  };
+
+  // The plugin IS registered here, so the only gap this fixture can produce is
+  // the unowned-files one — nothing borrows the unregistered-plugin gap's
+  // green.
+  writeUnowned(
+    "nx.json",
+    JSON.stringify({ plugins: [{ plugin: "@ecoma-io/lattice/nx", options: {} }] }),
+  );
+  writeUnowned(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeUnowned("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeUnowned("libs/domain/doc.go", "package domain\n");
+  writeUnowned("tools/release.mjs", "export const release = 1;\n");
+  writeUnowned("tools/publish.mjs", "export const publish = 1;\n");
+  // Owned — inside the project's own root. It is what makes the guard below
+  // able to fail: a file list holding no analyzable file at all would keep
+  // that test green even against a gap that fires on everything.
+  writeUnowned("libs/domain/tool.mjs", "export const tool = 1;\n");
+
+  const unownedGraph = {
+    nodes: {
+      domain: { name: "domain", type: "lib", data: { root: "libs/domain", tags: [] } },
+    },
+    dependencies: { domain: [] },
+  };
+  // `tools/release.mjs` and `tools/publish.mjs` are tracked, analyzable, and
+  // under no project root — the everyday shape this gap exists to count
+  // rather than to fail on. `module-boundaries.config.mjs` is tracked and
+  // analyzable too, and is deliberately NOT counted: it is the boundary law,
+  // not source judged by it, and counting it would make the report vary with
+  // the law's own filename (`./commands/context.mjs`'s
+  // `unownedAnalyzableFiles`). It stays in this list so that exclusion is
+  // exercised rather than assumed.
+  const unownedFiles = [
+    "nx.json",
+    "module-boundaries.config.mjs",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "tools/release.mjs",
+    "tools/publish.mjs",
+  ];
+
+  it("names them in the text report and in the JSON envelope's coverageGaps", async () => {
+    const { report: text } = await check(
+      { format: "text", config: null, paths: [] },
+      { cwd: unownedRoot, readGraph: () => unownedGraph, listFiles: () => unownedFiles },
+    );
+    expect(text).toContain("2 tracked analyzable files (typescript) owned by no project");
+    expect(text).toContain("tools/release.mjs");
+    // The exclusion, pinned on the surface a reader actually reads. Without
+    // it this count is 3 and the law's filename is one of the listed entries.
+    // Matched with its leading indent, because the policy header one line
+    // above names the same file and a bare substring test would pass on that.
+    expect(text).not.toContain("\n    module-boundaries.config.mjs\n");
+
+    const { report: json } = await check(
+      { format: "json", config: null, paths: [] },
+      { cwd: unownedRoot, readGraph: () => unownedGraph, listFiles: () => unownedFiles },
+    );
+    const gaps = JSON.parse(json).coverage.coverageGaps;
+    // Non-empty at all is the assertion that goes red in the silent
+    // direction: before this, an unowned analyzable file produced `[]`.
+    expect(gaps.length).toBeGreaterThan(0);
+    const gap = gaps.find((entry) => entry.kind === "unowned-files");
+    expect(gap).toBeDefined();
+    expect(gap.files).not.toContain("module-boundaries.config.mjs");
+    // Tracked order, which on a real run is `git ls-files`' own sort.
+    expect(gap.files).toEqual(["tools/release.mjs", "tools/publish.mjs"]);
+    expect(gap.languages).toEqual(["typescript"]);
+    expect(gap.provider).toBe("nx");
+  });
+
+  it("says nothing when every analyzable file is owned", async () => {
+    // The guard: a gap that fires on every workspace is a line readers learn
+    // to skip, and then it is worth nothing on the workspace that needed it.
+    // Same fixture, minus the two unowned files.
+    const ownedOnly = [
+      "nx.json",
+      "libs/domain/go.mod",
+      "libs/domain/doc.go",
+      "libs/domain/tool.mjs",
+    ];
+    const { report: text } = await check(
+      { format: "text", config: "module-boundaries.config.mjs", paths: [] },
+      { cwd: unownedRoot, readGraph: () => unownedGraph, listFiles: () => ownedOnly },
+    );
+    expect(text).not.toContain("owned by no project");
+
+    const { report: json } = await check(
+      { format: "json", config: "module-boundaries.config.mjs", paths: [] },
+      { cwd: unownedRoot, readGraph: () => unownedGraph, listFiles: () => ownedOnly },
+    );
+    expect(
+      JSON.parse(json).coverage.coverageGaps.filter((entry) => entry.kind === "unowned-files"),
+    ).toEqual([]);
+  });
+
+  it("moves no verdict: exit 0, status ok, coverage.complete still true", async () => {
+    // The decision this change was allowed to make, and the three it was not.
+    // If this test ever needs relaxing, the change under it has become the
+    // rejected option — "count them as uncovered" — wearing this one's name.
+    const { report } = await check(
+      { format: "json", config: null, paths: [] },
+      { cwd: unownedRoot, readGraph: () => unownedGraph, listFiles: () => unownedFiles },
+    );
+    const envelope = JSON.parse(report);
+    expect(envelope.coverage.coverageGaps.some((entry) => entry.kind === "unowned-files")).toBe(
+      true,
+    );
+    expect(envelope.status).toBe("ok");
+    expect(envelope.exitCode).toBe(EXIT.ok);
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.coverage.notAnalyzed).toEqual([]);
   });
 });
 
