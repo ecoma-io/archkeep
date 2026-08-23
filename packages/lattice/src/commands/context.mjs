@@ -36,9 +36,14 @@ import {
   readPluginOptions,
 } from "../options.mjs";
 import { readProjectGraph } from "../providers/nx.mjs";
-import { buildDependencies } from "../providers/native/graph.mjs";
 import { LATTICE_MODEL_FILE } from "../providers/native/model.mjs";
-import { MOON_DIR, MOON_ALT_DIR, moonProvider } from "../providers/moon.mjs";
+import {
+  MOON_DIR,
+  MOON_ALT_DIR,
+  mergeImportEdges,
+  moonMarkerAt,
+  moonProvider,
+} from "../providers/moon.mjs";
 import { nativeProvider } from "../providers/native/index.mjs";
 import {
   analyzeWorkspace,
@@ -100,12 +105,8 @@ function readFileAbsolute(path) {
 }
 
 /**
- * The three facts that decide which project-model provider judges a workspace:
- * does `root` carry `nx.json`, `lattice.json`, `.moon/`, `.config/moon/`,
- * or — a state every command refuses — more than one.
- *
- * Moonrepo v2.0+ supports `.config/moon/` as an alternative to `.moon/`.
- * Both are checked: `hasMoon` is true when either exists.
+ * Which Moon directory marks `root` — or none. Presence facts only; see
+ * `requireSingleProjectModel` below for the one-decision gate.
  *
  * @param {string} root
  * @returns {{hasNx: boolean, hasNative: boolean, hasMoon: boolean}}
@@ -114,8 +115,50 @@ export function markersAt(root) {
   return {
     hasNx: existsSync(join(root, NX_CONFIG_FILE)),
     hasNative: existsSync(join(root, LATTICE_MODEL_FILE)),
-    hasMoon: existsSync(join(root, MOON_DIR)) || existsSync(join(root, MOON_ALT_DIR)),
+    hasMoon: moonMarkerAt(root) !== null,
   };
+}
+
+/**
+ * The one gate deciding whether `root` may be judged at all: more than ONE
+ * project-model marker present is refused, naming what conflicts.
+ *
+ * Every entry point that picks a provider must answer this identically —
+ * `resolveCommandContext` below reads it before any command runs, and
+ * `../lsp/workspace-index.mjs`'s index build reads it before choosing a
+ * branch. A second copy of the condition was exactly how the faces drifted
+ * apart once: the CLI refused a tree carrying a Moon directory beside
+ * `nx.json`/`lattice.json` while the editor indexed it anyway — a clean
+ * diagnostic list over a tree nobody agreed could be judged (#223's silent
+ * shape, one level up). Moon-versus-Moon coexistence (`.moon/` AND
+ * `.config/moon/`) is refused inside `../providers/moon.mjs`'s
+ * `moonMarkerAt`, which this gate calls first; the cross-family pairs are
+ * refused here, all in the same terms: which model to judge against is a
+ * decision nobody made, not one this tool can make for them.
+ *
+ * @param {string} root
+ * @param {{exists?: (path: string) => boolean}} [io] Injectable existence
+ *   test (absolute paths), so a test drives this without a filesystem.
+ * @returns {{hasNx: boolean, hasNative: boolean, moonMarker: string|null}}
+ *   The facts a provider choice needs; `moonMarker` names whichever Moon
+ *   directory is present, `null` when neither spelling is.
+ * @throws {Error} when more than one marker is present.
+ */
+export function requireSingleProjectModel(root, { exists = existsSync } = {}) {
+  const moonMarker = moonMarkerAt(root, { exists });
+  const hasNx = exists(join(root, NX_CONFIG_FILE));
+  const hasNative = exists(join(root, LATTICE_MODEL_FILE));
+  const refusal = (a, b) =>
+    new Error(
+      `lattice: ${root} declares both ${a} and ${b} — this tool judges a workspace ` +
+        `against exactly one project model, and a tree carrying both is a decision nobody made ` +
+        `rather than one this tool can make for them. Remove whichever one is not the ` +
+        `workspace's real source of truth for projects and tags.`,
+    );
+  if (moonMarker !== null && hasNx) throw refusal(moonMarker, NX_CONFIG_FILE);
+  if (moonMarker !== null && hasNative) throw refusal(moonMarker, LATTICE_MODEL_FILE);
+  if (hasNx && hasNative) throw refusal(NX_CONFIG_FILE, LATTICE_MODEL_FILE);
+  return { hasNx, hasNative, moonMarker };
 }
 
 /**
@@ -300,31 +343,11 @@ export function resolveCommandContext(
         `the consumer's node_modules and the two are always different trees.`,
     );
   }
-  const { hasNx, hasNative, hasMoon } = markersAt(root);
-  if (hasMoon && hasNx) {
-    throw new Error(
-      `lattice: ${root} declares both .moon and nx.json — this tool judges a workspace ` +
-        `against exactly one project model, and a tree carrying both is a decision nobody made ` +
-        `rather than one this tool can make for them. Remove whichever one is not the ` +
-        `workspace's real source of truth for projects and tags.`,
-    );
-  }
-  if (hasMoon && hasNative) {
-    throw new Error(
-      `lattice: ${root} declares both .moon and lattice.json — this tool judges a workspace ` +
-        `against exactly one project model, and a tree carrying both is a decision nobody made ` +
-        `rather than one this tool can make for them. Remove whichever one is not the ` +
-        `workspace's real source of truth for projects and tags.`,
-    );
-  }
-  if (hasNx && hasNative) {
-    throw new Error(
-      `lattice: ${root} declares both nx.json and lattice.json — this tool judges a workspace ` +
-        `against exactly one project model, and a tree carrying both is a decision nobody made ` +
-        `rather than one this tool can make for them. Remove whichever one is not the ` +
-        `workspace's real source of truth for projects and tags.`,
-    );
-  }
+  // Which provider may judge at all — the one gate
+  // (`requireSingleProjectModel` above) every entry point shares, CLI and
+  // language server alike. Moon-versus-Moon rides it through `moonMarkerAt`.
+  const { hasNative, moonMarker } = requireSingleProjectModel(root);
+  const hasMoon = moonMarker !== null;
 
   // Resolve the default graph reader based on provider: Moon workspaces read
   // their graph from `moon project-graph --json`, Nx workspaces from
@@ -478,24 +501,15 @@ export function resolveCommandContext(
       owned.map(({ file }) => file),
     );
     const projectOfFile = new Map(owned.map(({ file, project }) => [file, project]));
-    const importEdges = buildDependencies({
+    // Moon's own graph carries only edges Moon itself resolved (`dependsOn`);
+    // the imports this tree writes are folded in here by the same merge the
+    // language server's index runs — one implementation
+    // (`../providers/moon.mjs`'s `mergeImportEdges`), so the two faces cannot
+    // disagree about which edges exist.
+    mergeImportEdges(graph, {
       importSites: wholeTreeAnalysis.imports,
-      nodes: graph.nodes,
       projectOf: (file) => projectOfFile.get(file),
     });
-    const seenEdges = new Set(
-      Object.values(graph.dependencies)
-        .flat()
-        .map((edge) => JSON.stringify([edge.source, edge.target, edge.type])),
-    );
-    for (const [source, edges] of Object.entries(importEdges)) {
-      for (const edge of edges) {
-        const key = JSON.stringify([edge.source, edge.target, edge.type]);
-        if (seenEdges.has(key)) continue;
-        seenEdges.add(key);
-        (graph.dependencies[source] ??= []).push(edge);
-      }
-    }
 
     const selected = selectFiles(
       owned.map(({ file }) => file),
@@ -575,11 +589,9 @@ export function resolveCommandContext(
     };
   }
 
-  // Which Moon directory was actually found — `.config/moon/` is an alternative
-  // to `.moon/` that Moonrepo v2.0+ supports. The marker records whichever one
-  // the workspace carries, so diagnostics can name it correctly.
-  const moonMarker = existsSync(join(root, MOON_ALT_DIR)) ? MOON_ALT_DIR : MOON_DIR;
-
+  // `moonMarker` — resolved once at the top, where coexistence was refused —
+  // names whichever Moon directory this root actually carries, so diagnostics
+  // can name it correctly.
   return {
     root,
     provider: hasMoon ? "moon" : hasNative ? "native" : "nx",

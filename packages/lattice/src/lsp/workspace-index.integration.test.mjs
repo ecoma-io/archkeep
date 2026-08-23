@@ -16,7 +16,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { environmentForTree } from "../workspace.mjs";
 import { diagnoseDocument } from "./diagnose.mjs";
-import { buildWorkspaceIndex, listWorkspaceFiles, readWorkspaceFile } from "./workspace-index.mjs";
+import {
+  buildWorkspaceIndex,
+  indexGaps,
+  listWorkspaceFiles,
+  readWorkspaceFile,
+} from "./workspace-index.mjs";
 
 let root;
 
@@ -661,6 +666,148 @@ describe("a native lattice.json workspace, driven through the real provider", ()
       expect(diagnostics[0].message).toContain("lattice.json");
     } finally {
       rmSync(brokenRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+// #223: a `.moon`-rooted workspace fell through to `discoverProjects` — which
+// finds a project only by its `project.json`, a file a Moon workspace never
+// has — and built a zero-node index that published `analyzed: true` with an
+// empty diagnostic list on a tree `lattice check` exits 1 on. The branch below
+// drives the same provider object `check` resolves
+// (`../providers/moon.mjs`'s `readProjectGraph`), injected here because the
+// fixture has no Moon binary — everything else, git and the Go analyzer
+// included, is real. A separate root from the two above: the branch is picked
+// by which marker the root carries, so the three shapes cannot share a tree.
+describe("a .moon workspace, populated through the same provider seam check holds", () => {
+  let moonRoot;
+
+  const INNER_GO = 'package inner\n\nimport "moon.test/outer"\n';
+
+  const writeM = (relativePath, text) => {
+    const absolute = join(moonRoot, relativePath);
+    mkdirSync(dirname(absolute), { recursive: true });
+    writeFileSync(absolute, text, "utf8");
+  };
+
+  const config = {
+    depConstraints: [{ sourceTag: "zone:inner", onlyDependOnLibsWithTags: ["zone:inner"] }],
+    options: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies: false,
+      checkNestedExternalImports: false,
+    },
+  };
+
+  /** The graph shape `transformMoonGraph` emits for this fixture's two projects. */
+  const moonGraph = () => ({
+    nodes: {
+      inner: {
+        name: "inner",
+        type: "lib",
+        data: { root: "apps/inner", tags: ["zone:inner"], implicitDependencies: [] },
+      },
+      outer: {
+        name: "outer",
+        type: "lib",
+        data: { root: "apps/outer", tags: ["zone:outer"], implicitDependencies: [] },
+      },
+    },
+    dependencies: {},
+  });
+
+  beforeAll(() => {
+    moonRoot = mkdtempSync(join(tmpdir(), "lattice-moon-index-"));
+    writeM(".moon/workspace.yml", "projects:\n  inner: apps/inner\n  outer: apps/outer\n");
+    writeM("apps/inner/go.mod", "module moon.test/inner\n\ngo 1.23\n");
+    writeM("apps/inner/main.go", INNER_GO);
+    writeM("apps/outer/go.mod", "module moon.test/outer\n\ngo 1.23\n");
+    writeM("apps/outer/outer.go", "package outer\n");
+    execFileSync("git", ["init", "-q"], { cwd: moonRoot, env: environmentForTree() });
+    execFileSync("git", ["add", "-A"], { cwd: moonRoot, env: environmentForTree() });
+  });
+
+  afterAll(() => {
+    if (moonRoot) rmSync(moonRoot, { recursive: true, force: true });
+  });
+
+  it("judges a violating import the way check does, instead of publishing clean", () => {
+    // The red-direction proof (#223): before the Moon branch, `graph.nodes`
+    // here was `{}`, the import resolved as an external package, and the
+    // diagnose call below returned `analyzed: true, diagnostics: []` — an
+    // editor painting clean the file `lattice check` exits 1 on.
+    const index = buildWorkspaceIndex({ root: moonRoot, readGraph: moonGraph });
+
+    expect(index.nativeMarker).toBe(false);
+    expect(Object.keys(index.graph.nodes).sort()).toEqual(["inner", "outer"]);
+    // The import-derived edge, folded onto Moon's declared-only graph by the
+    // merge `check` runs (`../providers/moon.mjs`'s `mergeImportEdges`):
+    expect(index.graph.dependencies.inner).toEqual([
+      { source: "inner", target: "outer", type: "static" },
+    ]);
+    expect(indexGaps(index)).toEqual([]);
+
+    const lines = INNER_GO.split("\n");
+    const importLine = lines.findIndex((line) => line.includes("moon.test/outer"));
+    const importCharacter = lines[importLine].indexOf('"');
+
+    const { analyzed, diagnostics } = diagnoseDocument({
+      sourceFile: "apps/inner/main.go",
+      text: INNER_GO,
+      index,
+      config,
+    });
+
+    expect(analyzed).toBe(true);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].code).toBe("onlyTagsConstraintViolation");
+    expect(diagnostics[0].range.start).toEqual({ line: importLine, character: importCharacter });
+  });
+
+  it("reports a failing provider invocation as a gap, never as a clean empty index", () => {
+    // The other half of the same invariant: `moon project-graph --json`
+    // failing (binary missing, nonzero exit) leaves zero nodes, and a
+    // zero-node graph judges every file clean — so the failure must reach the
+    // document as a named gap, not as silence.
+    const index = buildWorkspaceIndex({
+      root: moonRoot,
+      readGraph: () => {
+        throw new Error(
+          `lattice: \`moon project-graph --json\` failed in ${moonRoot}: spawn moon ENOENT`,
+        );
+      },
+    });
+    expect(index.moonModelFailure).toContain("spawn moon ENOENT");
+
+    const { analyzed, diagnostics } = diagnoseDocument({
+      sourceFile: "apps/inner/main.go",
+      text: INNER_GO,
+      index,
+      config,
+    });
+
+    expect(analyzed).toBe(false);
+    expect(diagnostics.length).toBeGreaterThan(0);
+    expect(diagnostics[0].message).toContain("`moon project-graph --json`");
+  });
+
+  it("refuses a root carrying both .moon and .config/moon, naming both directories", () => {
+    // #224 through the LSP's own dispatch: the same refusal `resolveCommandContext`
+    // makes, from the same one dispatcher (`../providers/moon.mjs`'s
+    // `moonMarkerAt`). Red direction: against the old silent preference, the
+    // index builds against `.config/moon` without a word about `.moon`.
+    writeM(".config/moon/workspace.yml", "projects:\n");
+    try {
+      expect(() => buildWorkspaceIndex({ root: moonRoot, readGraph: moonGraph })).toThrow(
+        /declares both \.moon and \.config\/moon/u,
+      );
+    } finally {
+      rmSync(join(moonRoot, ".config"), { recursive: true, force: true });
     }
   });
 });

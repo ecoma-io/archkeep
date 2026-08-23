@@ -439,6 +439,18 @@ describe("markersAt — detects all three workspace markers", () => {
     expect(markers.hasNative).toBe(false);
     expect(markers.hasMoon).toBe(false);
   });
+
+  it("refuses both Moon directories instead of reporting a fact about one of them", () => {
+    // #224: `.moon/` and `.config/moon/` together used to answer `hasMoon:
+    // true` while the marker that won was decided later, in silence. The
+    // decision now lives in `../providers/moon.mjs`'s `moonMarkerAt`, which
+    // this wrapper delegates to — so presence here and choice elsewhere can
+    // never disagree.
+    const { root, write } = fixture("context-markers-moon-coexist-");
+    write(".moon/tool.yml", " ");
+    write(".config/moon/tool.yml", " ");
+    expect(() => markersAt(root)).toThrow(/declares both \.moon and \.config\/moon/u);
+  });
 });
 
 describe("resolveCommandContext — Moon ambiguity refusals", () => {
@@ -462,7 +474,24 @@ describe("resolveCommandContext — Moon ambiguity refusals", () => {
 
     expect(() =>
       resolveCommandContext({ cwd: root }, { listFiles: () => [".moon/tool.yml", "lattice.json"] }),
-    ).toThrow(/declares both .moon and lattice\.json/);
+    ).toThrow(/declares both \.moon and lattice\.json/);
+  });
+
+  it("throws when the root carries both .moon and .config/moon, naming both directories", () => {
+    // #224. The code silently preferred `.config/moon` here — resolved the
+    // Moon provider against it and said nothing about `.moon` — while
+    // `../providers/moon.mjs`'s own header documented the two as mutually
+    // exclusive. The refusal is now the law, stated where the constants live
+    // and enforced before any provider work starts. Red direction: against
+    // the old preference, this resolves successfully with
+    // `marker === ".config/moon"` and no word about the second directory.
+    const { root, write } = fixture("context-moon-coexistence-");
+    write(".moon/tool.yml", " ");
+    write(".config/moon/tool.yml", " ");
+
+    expect(() =>
+      resolveCommandContext({ cwd: root }, { listFiles: () => [".moon/tool.yml"] }),
+    ).toThrow(/declares both \.moon and \.config\/moon/u);
   });
 });
 

@@ -4,10 +4,13 @@
  * `moon project-graph --json` is never invoked; its output is injected via
  * the `run` seam, the same way `./nx.test.mjs` drives the Nx provider.
  */
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
   moonProvider,
+  moonMarkerAt,
   readProjectGraph,
   transformMoonGraph,
   MOON_DIR,
@@ -25,6 +28,36 @@ describe("MOON_DIR", () => {
 describe("MOON_ALT_DIR", () => {
   it('is ".config/moon"', () => {
     expect(MOON_ALT_DIR).toBe(".config/moon");
+  });
+});
+
+describe("moonMarkerAt — the one dispatcher for which Moon directory resolves a root", () => {
+  // The paths `moonMarkerAt` tests are the ones IT builds (`join(root, dir)`),
+  // so the injected predicate matches on exactly those.
+  const existsFor = (...dirs) => {
+    const present = new Set(dirs.map((dir) => join("/ws", dir)));
+    return (path) => present.has(path);
+  };
+
+  it("returns .moon when only the primary directory is present", () => {
+    expect(moonMarkerAt("/ws", { exists: existsFor(MOON_DIR) })).toBe(MOON_DIR);
+  });
+
+  it("returns .config/moon when only the alternative directory is present", () => {
+    expect(moonMarkerAt("/ws", { exists: existsFor(MOON_ALT_DIR) })).toBe(MOON_ALT_DIR);
+  });
+
+  it("returns null when neither directory is present", () => {
+    expect(moonMarkerAt("/ws", { exists: existsFor() })).toBeNull();
+  });
+
+  it("refuses a root carrying both, naming both directories", () => {
+    // The red direction of #224's silent preference: before this refusal, a
+    // both-directories root resolved silently against `.config/moon` while
+    // nothing anywhere said so. Now the winner is nobody to choose.
+    expect(() => moonMarkerAt("/ws", { exists: existsFor(MOON_DIR, MOON_ALT_DIR) })).toThrow(
+      /declares both \.moon and \.config\/moon/u,
+    );
   });
 });
 
@@ -730,5 +763,59 @@ describe("readProjectGraph — injectable IO", () => {
       // The first character after the bin dir must be the platform delimiter.
       expect(afterBin[0]).toBe(require("node:path").delimiter);
     }
+  });
+});
+
+// Failure-naming parity with `./nx.test.mjs` (#226). There, the same three
+// classes are pinned for the Nx provider — the named not-installed error, the
+// non-MODULE_NOT_FOUND resolver passthrough, and the layout-read propagation —
+// because a provider that cannot answer must throw a named error, never
+// resolve to an empty graph. Here the binary is found on PATH rather than
+// through `require.resolve`, so "missing binary" surfaces at spawn time and
+// every class reduces to one contract: the failure propagates out of
+// `readProjectGraph` untouched (`../process.mjs`'s `runProcess` does the
+// naming), and nothing on the path catches it into `{nodes: {}, dependencies:
+// {}}`. Downstream, `../../cli.mjs`'s exit classification turns that throw
+// into exit 3, and the language server turns it into a named index gap
+// (`../lsp/workspace-index.test.mjs`) — both pinned against the silent
+// direction this describe exists to keep impossible.
+describe("readProjectGraph — failure paths propagate named, never as an empty graph", () => {
+  it("propagates a spawn failure untouched", () => {
+    const run = () => {
+      throw new Error("spawn moon ENOENT");
+    };
+    expect(() => readProjectGraph("/workspace", { run, resolveMoon: () => "moon" })).toThrow(
+      /spawn moon ENOENT/u,
+    );
+  });
+
+  it("propagates a nonzero exit with the command and working directory named", () => {
+    // The exact shape `../process.mjs`'s `runProcess` emits for a failing
+    // child — pinned here so a future catch inside `readProjectGraph` cannot
+    // quietly flatten it into an empty-but-valid-looking result.
+    const run = () => {
+      throw new Error("lattice: `moon project-graph --json` failed in /workspace: exit status 2");
+    };
+    expect(() => readProjectGraph("/workspace", { run, resolveMoon: () => "moon" })).toThrow(
+      /`moon project-graph --json` failed in \/workspace: exit status 2/u,
+    );
+  });
+
+  it("surfaces an unresolvable binary before anything is spawned", () => {
+    // The missing-binary case: resolution fails before there is anything to
+    // spawn, so a `run` that throws proves it was never reached — the same
+    // shape `./nx.test.mjs` pins for its not-installed peer.
+    const resolveMoon = () => {
+      throw new Error("lattice: moon was not found on PATH");
+    };
+    let spawned = false;
+    const run = () => {
+      spawned = true;
+      return JSON.stringify(twoProjectGraph());
+    };
+    expect(() => readProjectGraph("/workspace", { run, resolveMoon })).toThrow(
+      /moon was not found on PATH/u,
+    );
+    expect(spawned).toBe(false);
   });
 });

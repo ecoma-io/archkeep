@@ -1,3 +1,5 @@
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -602,6 +604,215 @@ describe("the two package.json facts the entry-point and transitive rules turn o
     // violations nobody checked — never reaches the rule engine.
     expect(index.graph.nodes.stale.data).not.toHaveProperty("entryPoints");
     expect(index.graph.nodes.stale.data.declaredPackages).toEqual(["root-dep"]);
+  });
+});
+
+describe("the Moon branch buildWorkspaceIndex takes for a .moon root", () => {
+  // The unit tier: the marker test and the graph reader are injected, so what
+  // is pinned is this module's own decision — WHICH dispatch a `.moon` root
+  // takes, and what its failure looks like. The real-tree tier next door
+  // (`./workspace-index.integration.test.mjs`) drives git and the Go analyzer
+  // for real over the same branch.
+  const moonFiles = {
+    ".moon/workspace.yml": "projects:\n",
+    "libs/x/x.go": "package x\n",
+    "libs/y/y.go": "package y\n",
+  };
+  const moonNodes = {
+    x: {
+      name: "x",
+      type: "lib",
+      data: { root: "libs/x", tags: ["zone:x"], implicitDependencies: [] },
+    },
+    y: {
+      name: "y",
+      type: "lib",
+      data: { root: "libs/y", tags: ["zone:y"], implicitDependencies: [] },
+    },
+  };
+  const base = (over = {}) => ({
+    root: "/fixture",
+    listFiles: () => Object.keys(moonFiles),
+    readFileAt: (_root, path) => moonFiles[path] ?? null,
+    pathExists: (path) => path === join("/fixture", ".moon"),
+    readGraph: () => ({ nodes: structuredClone(moonNodes), dependencies: {} }),
+    ...over,
+  });
+  /**
+   * An import site in `x` resolving into `y`, in the analysis contract's
+   * shape (`../analysis/analyze.mjs`'s `ImportSite` — annotated so the
+   * literal's `kind` stays a `kind`, not an anonymous string).
+   *
+   * @returns {import("../analysis/analyze.mjs").ImportSite}
+   */
+  const importFromX = () => ({
+    sourceFile: "libs/x/x.go",
+    line: 1,
+    column: 1,
+    specifier: "example.test/y",
+    spelling: { path: false, relative: false },
+    kind: "static",
+    resolved: { target: "y", file: null, external: false, packageName: null },
+  });
+
+  it("populates the index through the provider seam instead of falling through to zero nodes", () => {
+    // The red direction (#223): before the Moon branch, this root reached
+    // `discoverProjects`, which finds a project only by its `project.json` —
+    // a file no Moon workspace has — so `graph.nodes` was `{}`, every import
+    // resolved as external, and the editor published clean while
+    // `../../cli.mjs check` exited 1 on the same tree.
+    analyzeFile.mockImplementation(({ sourceFile }) =>
+      sourceFile === "libs/x/x.go"
+        ? { imports: [importFromX()], failures: [] }
+        : { imports: [], failures: [] },
+    );
+    let askedRoot = null;
+    const index = buildWorkspaceIndex(
+      base({
+        readGraph: (root) => {
+          askedRoot = root;
+          return { nodes: structuredClone(moonNodes), dependencies: {} };
+        },
+      }),
+    );
+    analyzeFile.mockImplementation(() => ({ imports: [], failures: [] }));
+
+    expect(askedRoot).toBe("/fixture");
+    expect(Object.keys(index.graph.nodes).sort()).toEqual(["x", "y"]);
+    // The import-derived edge — Moon's own declared-only graph carries none:
+    expect(index.graph.dependencies.x).toContainEqual({
+      source: "x",
+      target: "y",
+      type: "static",
+    });
+    expect(index.nativeMarker).toBe(false);
+    expect(index.moonModelFailure).toBeNull();
+    expect(indexGaps(index)).toEqual([]);
+  });
+
+  it("merges import edges onto the declared ones by the same rule the CLI's Moon branch uses", () => {
+    // A declared static edge plus an import-derived dynamic one are two
+    // records for one pair that differ in kind — exactly what
+    // `../providers/moon.mjs`'s `mergeImportEdges` keeps both of. A second
+    // copy of the SAME record adds nothing.
+    analyzeFile.mockImplementation(({ sourceFile }) =>
+      sourceFile === "libs/x/x.go"
+        ? {
+            imports: [importFromX(), { ...importFromX(), kind: "dynamic" }],
+            failures: [],
+          }
+        : { imports: [], failures: [] },
+    );
+    const index = buildWorkspaceIndex(
+      base({
+        readGraph: () => ({
+          nodes: structuredClone(moonNodes),
+          dependencies: { x: [{ source: "x", target: "y", type: "static" }] },
+        }),
+      }),
+    );
+    analyzeFile.mockImplementation(() => ({ imports: [], failures: [] }));
+
+    expect(index.graph.dependencies.x).toEqual([
+      { source: "x", target: "y", type: "static" },
+      { source: "x", target: "y", type: "dynamic" },
+    ]);
+  });
+
+  it("turns a failing provider invocation into a named gap, never a clean empty index", () => {
+    // The other half of #223, and #226's LSP half: `moon project-graph`
+    // failing leaves ZERO nodes, and a zero-node graph judges every file
+    // clean — so the failure is recorded where `indexGaps` can say which
+    // command failed, on an index that is otherwise a valid empty shape.
+    const index = buildWorkspaceIndex(
+      base({
+        readGraph: () => {
+          throw new Error(
+            "lattice: `moon project-graph --json` failed in /fixture: spawn moon ENOENT",
+          );
+        },
+      }),
+    );
+
+    expect(index.moonModelFailure).toContain("spawn moon ENOENT");
+    expect(Object.keys(index.graph.nodes)).toEqual([]);
+    const gaps = indexGaps(index);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]).toContain("`moon project-graph --json`");
+    expect(gaps[0]).toContain("missing from the graph");
+  });
+
+  it("stays silent about a Moon root whose invocation succeeded", () => {
+    // The normal case must produce NO gap entry, or the gap list means
+    // nothing anywhere else.
+    const index = buildWorkspaceIndex(base());
+    expect(index.moonModelFailure).toBeNull();
+    expect(indexGaps(index)).toEqual([]);
+  });
+
+  it("refuses a root carrying both .moon and .config/moon instead of picking one", () => {
+    // #224 surfaced through the LSP shape: the same refusal the CLI makes,
+    // from the same dispatcher (`../providers/moon.mjs`'s `moonMarkerAt`).
+    // Thrown, not recorded — which config governs at all is refused the same
+    // way an unreadable `nx.json` is, through this function's caller in
+    // `./server.mjs`.
+    expect(() =>
+      buildWorkspaceIndex(base({ pathExists: (path) => path.startsWith("/fixture/") })),
+    ).toThrow(/declares both \.moon and \.config\/moon/u);
+  });
+});
+
+describe("marker conflicts buildWorkspaceIndex refuses exactly like check does", () => {
+  // One gate (`../commands/context.mjs`'s `requireSingleProjectModel`) serves
+  // both faces; these drive it through the index build over a root whose
+  // markers disagree, with every existence answer injected.
+  const withMarkers = (...names) => {
+    const present = new Set(names.map((name) => join("/fixture", name)));
+    return (path) => present.has(path);
+  };
+
+  it("refuses .moon beside lattice.json instead of indexing nothing, silently", () => {
+    // Red direction: before the shared gate, `readFile(lattice.json) !== null`
+    // won the dispatch and the native branch ran — over a tree whose projects
+    // (if any) it could not see, here a zero-node index with no gap entry,
+    // published as analyzed-and-clean on a tree `lattice check` REFUSES with
+    // exit 3. The CLI refused; the editor said nothing at all.
+    expect(() =>
+      buildWorkspaceIndex({
+        root: "/fixture",
+        listFiles: () => [],
+        readFileAt: () => null,
+        pathExists: withMarkers(".moon", "lattice.json"),
+      }),
+    ).toThrow(/declares both \.moon and lattice\.json/u);
+  });
+
+  it("refuses .moon beside nx.json instead of building the Moon index beside it", () => {
+    // Red direction: before the shared gate, the Moon arm took the tree and
+    // built its graph from `moon project-graph`, never reading the `nx.json`
+    // it sat beside — an editor judging boundaries on a tree the CLI refuses
+    // to judge at all.
+    expect(() =>
+      buildWorkspaceIndex({
+        root: "/fixture",
+        listFiles: () => [],
+        readFileAt: () => null,
+        pathExists: withMarkers(".moon", "nx.json"),
+      }),
+    ).toThrow(/declares both \.moon and nx\.json/u);
+  });
+
+  it("refuses .config/moon beside nx.json, naming the alternative spelling", () => {
+    // Same conflict through the v2 marker spelling — the message names the
+    // directory that is actually there, not a hardcoded `.moon`.
+    expect(() =>
+      buildWorkspaceIndex({
+        root: "/fixture",
+        listFiles: () => [],
+        readFileAt: () => null,
+        pathExists: withMarkers(".config/moon", "nx.json"),
+      }),
+    ).toThrow(/declares both \.config\/moon and nx\.json/u);
   });
 });
 
