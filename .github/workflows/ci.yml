@@ -91,6 +91,17 @@ jobs:
       # The tests for the gate below. They run first because a broken gate
       # reports nothing rather than reporting a failure, and this is the step
       # that would say so.
+      #
+      # It can only say so while it runs something, and it used not to have to.
+      # `node --test` prints `tests 0` and exits 0 when its glob resolves no
+      # file — measured on node 24.16.0, where a file that DOES resolve counts
+      # as one test even with no `test()` call in it, so an empty glob is the
+      # only shape in which this lane runs nothing. The `test` script in
+      # `package.json` now refuses that itself, so a local run and the hook
+      # refuse it too, for the same reason the e2e shards below refuse theirs.
+      # The two Moon SDK `test` targets carry the same refusal in their own
+      # `moon.yml`, next to the toolchain each one argues against: `go test`
+      # and `cargo test` are both green over a tree that ran nothing.
       - run: pnpm test
 
       # The gate scripts' JSDoc, type-checked. `scripts/` is not a Moon project,

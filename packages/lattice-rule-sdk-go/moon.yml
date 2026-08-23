@@ -45,8 +45,29 @@ tasks:
   # digest, so what the suite proves is the bytes in the tree rather than bytes
   # the runner just made (`./rebuild-example.sh` says the rest, and needs a
   # second toolchain no CI leg here installs).
+  #
+  # `script` rather than `command`, because a bare `go test ./...` exits 0 over
+  # a tree that ran nothing. Measured against go1.26.4, both shapes: a package
+  # with no `_test.go` prints `?  pkg [no test files]`, and a package whose test
+  # file declares no `Test…` function prints `ok pkg [no tests to run]`. Both
+  # are exit 0, which makes a target that ran nothing byte-for-byte identical to
+  # one that ran everything — the silent direction (`../../AGENTS.md`), and the
+  # same one `../../.github/workflows/ci.yml` already refuses for the Vitest
+  # lane. `-v` is what makes the count visible: it prints one `=== RUN` line per
+  # test, cached replays included, and neither zero-test shape above prints a
+  # single one. The output is captured rather than streamed so it can be both
+  # printed and counted; `|| status=$?` keeps a failing run's output on screen
+  # instead of aborting before the `printf`.
   test:
-    command: go test ./...
+    script: |
+      status=0
+      output="$(go test -v ./... 2>&1)" || status=$?
+      printf '%s\n' "$output"
+      [ "$status" -eq 0 ] || exit "$status"
+      if ! printf '%s\n' "$output" | grep -q '^=== RUN'; then
+        echo "go test ./... executed no tests — a green target here would mean nothing ran"
+        exit 1
+      fi
   # The Go half of what `tsc --noEmit` is for the .mjs packages. `go build` over
   # more than one package compiles and discards, writing no binary — measured,
   # because a typecheck target that dropped an executable into the package root

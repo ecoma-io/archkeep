@@ -44,8 +44,29 @@ tasks:
   # rebuild. The artifact is committed and pinned by its digest, so what the
   # suite proves is the bytes in the tree rather than bytes the runner just
   # made (`./rebuild-example.sh` says the rest).
+  #
+  # `script` rather than `command`, because a bare `cargo test` exits 0 over a
+  # crate that ran nothing: every test binary prints its own `running N tests`
+  # header, and `running 0 tests` is a pass. A target that ran nothing then
+  # reads exactly like one that ran everything — the silent direction
+  # (`../../AGENTS.md`), and the same one
+  # `../../.github/workflows/ci.yml` already refuses for the Vitest lane. One
+  # `running` header with a non-zero count is the whole condition: this crate
+  # produces four of them (lib, two integration binaries, doc-tests), and a
+  # zero on any single one is normal, while a zero on all of them is the
+  # failure. The output is captured rather than streamed so it can be both
+  # printed and counted; `|| status=$?` keeps a failing run's output on screen
+  # instead of aborting before the `printf`.
   test:
-    command: cargo test --locked
+    script: |
+      status=0
+      output="$(cargo test --locked 2>&1)" || status=$?
+      printf '%s\n' "$output"
+      [ "$status" -eq 0 ] || exit "$status"
+      if ! printf '%s\n' "$output" | grep -qE '^running [1-9]'; then
+        echo "cargo test --locked executed no tests — a green target here would mean nothing ran"
+        exit 1
+      fi
   # The Rust half of what `tsc --noEmit` is for the .mjs packages: type
   # checking with nothing emitted — twice, because this crate compiles to two
   # architectures and the host pass cannot see the other one.
