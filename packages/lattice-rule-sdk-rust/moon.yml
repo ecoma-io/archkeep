@@ -39,11 +39,11 @@ tasks:
   # lint, test, typecheck` from `../../scripts/check-packages.mjs`.
   lint:
     script: cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings
-  # Runs the unit tests, the golden fixture suite, and the two artifact
-  # checks — deliberately NOT a wasm rebuild. The artifact is committed and
-  # pinned by its digest, so what the suite proves is the bytes in the tree
-  # rather than bytes the runner just made (`./rebuild-example.sh` says the
-  # rest).
+  # Runs the unit tests, the golden fixture suite, and the three artifact
+  # checks — digest, magic bytes, no-import-section — deliberately NOT a wasm
+  # rebuild. The artifact is committed and pinned by its digest, so what the
+  # suite proves is the bytes in the tree rather than bytes the runner just
+  # made (`./rebuild-example.sh` says the rest).
   test:
     command: cargo test --locked
   # The Rust half of what `tsc --noEmit` is for the .mjs packages: type

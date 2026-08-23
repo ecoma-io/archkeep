@@ -216,8 +216,11 @@ finding is namespaced under.
 `examples/forbidden_tag_dependency.wasm` is committed, and
 `examples/forbidden_tag_dependency.wasm.sha256` beside it holds its digest.
 `python3 -m unittest` recomputes the digest over the committed bytes and fails
-when the two have drifted, so a rebuilt artifact cannot land beside the digest of
-the one before it. Rebuild both together:
+when the two have drifted, so a rebuilt artifact cannot land beside the digest
+of the one before it; the same suite also walks the binary's sections and
+refuses one that grew an import section — the host's own no-import refusal,
+checked on bytes CPython cannot instantiate (`tests/test_artifact.py`). Rebuild
+both together:
 
 ```bash
 ./rebuild-example.sh

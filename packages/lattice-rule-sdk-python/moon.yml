@@ -39,9 +39,10 @@ tasks:
     env:
       PYTHONPYCACHEPREFIX: target/pycache
   # The golden suite, the runtime's red-direction tests, and the committed
-  # artifact's digest check. `unittest` rather than pytest because pytest is a
-  # dependency and this package has none: an SDK whose test run needs a wheel
-  # installed is an SDK a contributor cannot check out and verify.
+  # artifact's digest and no-import-section checks. `unittest` rather than
+  # pytest because pytest is a dependency and this package has none: an SDK
+  # whose test run needs a wheel installed is an SDK a contributor cannot check
+  # out and verify.
   #
   # `-t tests` makes the tests directory the discovery root, so it needs no
   # `__init__.py` — the suite is a set of scripts, not a package, and adding one
