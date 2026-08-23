@@ -89,6 +89,26 @@ protocol ("run `lattice check` and interpret the exit code"); the CLI provides
 the verdict. If the skill says "check if an import crosses a boundary," it has
 taken a decision away from the engine.
 
+### Links are absolute
+
+Every markdown link in a `SKILL.md` is an absolute `https://` URL, with one
+exemption: a `#anchor` into the skill's own body, which travels with the file
+and so cannot be the defect below. A skill is
+vendored — copied into a consumer's own skills directory, installed by
+`npx skills add`, read from `.agents/skills/` one directory deeper than the
+canonical tree — and a repo-relative target survives every one of those moves
+as valid markdown. It does not 404 there; it resolves against a tree this
+repository does not control and lands on some other page, or on nothing. A link
+that points at the wrong page reads as authoritative while being wrong.
+
+Links into this repository take the form
+`https://github.com/ecoma-io/lattice/blob/main/<path>`. `scripts/check-skills.mjs`
+refuses any other shape and resolves `<path>` against the tracked tree, so a doc
+renamed on `main` turns the gate red instead of leaving a dead URL in a shipped
+skill. Note the exemption is a PREFIX test: `../../elsewhere/page.md#status` is
+repo-relative first and anchored second, and is refused like any other relative
+target.
+
 ### Name all exit codes
 
 The CLI has four exit codes. A skill that only mentions exit 0 and exit 1 has

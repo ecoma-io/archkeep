@@ -62,7 +62,7 @@ leave it sound must show the check green.
    profile, not a verification of the change — never substitute one law for
    another to get a green run, and when you report a run like this, name the
    profile and say it is not the law in effect. See
-   [docs/concepts/profiles.md](../../docs/concepts/profiles.md).
+   [docs/concepts/profiles.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/profiles.md).
 
 2. **Choose the output format.**
 
@@ -173,8 +173,8 @@ leave it sound must show the check green.
      declaring no `customRules` each say so on stderr rather than leaving an
      empty directory. Feed the bundle to the replay harness the rule's SDK
      ships
-     ([docs/usage/custom-rules.md](../../docs/usage/custom-rules.md),
-     [docs/reference/custom-rules.md](../../docs/reference/custom-rules.md)).
+     ([docs/usage/custom-rules.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/custom-rules.md),
+     [docs/reference/custom-rules.md](https://github.com/ecoma-io/lattice/blob/main/docs/reference/custom-rules.md)).
 
    An _unverifiable_ intent is never a _satisfied_ one, an unresolved profile
    is never a satisfied law, and a custom rule that could not be loaded or run

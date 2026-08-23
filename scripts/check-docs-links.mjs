@@ -80,11 +80,16 @@ export const SCANNED_EXTENSIONS = [".md", ".mjs", ".js"];
 // `.agents/skills/` is on the list for a different reason than the fixtures:
 // it is the byte-for-byte copy of `skills/` that check 16 in
 // `check-skills.mjs` pins, so every reference it carries is already judged at
-// the canonical location — and judged CORRECTLY only there, because the
-// skills' relative links (`../../docs/…`) resolve from `skills/<name>/` and
-// land one directory short from the copy's extra depth. Scanning the copy
-// would fail links the canonical legitimately carries; the copy's own honesty
-// is check-skills' job, not this gate's.
+// the canonical location, and a second report here would name the one path a
+// contributor must never hand-edit. The copy's honesty follows from that pin,
+// not from being skipped — and the links inside a SKILL.md are check 17's in
+// the same script, which requires every one of them to be an absolute
+// `https://` URL and resolves the ones into this repository against the
+// tracked tree. That rule exists because a skill is VENDORED out of here: a
+// repo-relative target survives the copy as valid markdown and resolves
+// against a stranger's tree rather than 404ing, which is why this gate cannot
+// own it — resolved from `skills/<name>/`, where this gate reads it, such a
+// target is correct.
 export const IGNORED_PREFIXES = [
   ".github/semgrep/",
   ".claude/worktrees/",

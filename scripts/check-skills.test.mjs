@@ -10,6 +10,8 @@ import {
   findHostSpecificFields,
   parseSkillFrontmatter,
   selectMarketplaceVersion,
+  skillLinkTargets,
+  REPO_BLOB_PREFIX,
   VERSION_CHAIN_PATHS,
 } from "./check-skills.mjs";
 
@@ -242,6 +244,36 @@ describe("findHostSpecificFields", () => {
   });
 });
 
+describe("skillLinkTargets", () => {
+  it("names every link destination with the line it sits on", () => {
+    const text = "intro\n\nsee [a](https://x/a.md) and [b](../../docs/b.md)\n";
+    assert.deepEqual(skillLinkTargets(text), [
+      { line: 3, target: "https://x/a.md" },
+      { line: 3, target: "../../docs/b.md" },
+    ]);
+  });
+
+  it("unwraps an angle-bracketed destination and drops a trailing title", () => {
+    assert.deepEqual(skillLinkTargets('[a](<https://x/a.md>) [b](https://x/b.md "t")'), [
+      { line: 1, target: "https://x/a.md" },
+      { line: 1, target: "https://x/b.md" },
+    ]);
+  });
+
+  it("finds nothing in prose that only looks bracketed", () => {
+    // The over-report direction: `[0] (the first)` is not a link attempt, and
+    // reporting it as a non-absolute target would fail a skill for its prose.
+    assert.deepEqual(skillLinkTargets("step [0] (the first) is a no-op"), []);
+  });
+
+  it("returns empty for text carrying no link at all", () => {
+    // The silent direction lives here: if the extractor returned nothing for
+    // text that DOES carry a link, check 17 would pass every skill by finding
+    // nothing to judge. The case above is what makes this one meaningful.
+    assert.deepEqual(skillLinkTargets("no links here"), []);
+  });
+});
+
 describe("evaluate", () => {
   const goodSkill = (dir, name) => ({
     dir,
@@ -300,7 +332,19 @@ describe("evaluate", () => {
     pySdkVersion: "0.4.0",
     agentsSkillsFiles: { "arch-context/SKILL.md": "canonical" },
     skillsFiles: { "arch-context/SKILL.md": "canonical" },
+    trackedFiles: ["docs/concepts/adr.md", "skills/arch-check/SKILL.md"],
   };
+
+  // One skill carrying one link, everything else already correct — the shape
+  // every check-17 case below varies by its target alone.
+  const withLink = (target) => {
+    const skills = allGood();
+    const i = skills.findIndex((s) => s.dir === "arch-check");
+    skills[i] = { ...skills[i], text: `${skills[i].text}\n\nSee [the page](${target}).` };
+    return skills;
+  };
+  const linkFailures = (result) =>
+    result.failures.filter((f) => f.includes("SKILL.md:") && f.includes("links to"));
 
   it("passes when all skills are present, named correctly, and versions match", () => {
     const result = evaluate({
@@ -837,6 +881,91 @@ describe("evaluate", () => {
         `verifies it. Put the file on the chain (VERSION_CHAIN_PATHS in check-skills.mjs, ` +
         `docs/skills/versioning.md) or take it off extra-files.`,
     );
+  });
+
+  it("fails on a repo-relative link, the shape a vendored skill resolves elsewhere", () => {
+    // The direction the bug was, and the silent one: `../../docs/…` resolves
+    // correctly from `skills/<name>/`, so check-docs-links passes it — and in
+    // a consumer's tree the same target lands on some other file or nothing
+    // while still rendering as a link. The failure must name file, line and
+    // target, because "a link is wrong somewhere" is not actionable.
+    const result = evaluate({ ...baseFacts, skills: withLink("../../docs/concepts/adr.md") });
+    assert.equal(linkFailures(result).length, 1);
+    assert.ok(
+      linkFailures(result)[0].includes("skills/arch-check/SKILL.md:") &&
+        linkFailures(result)[0].includes("../../docs/concepts/adr.md") &&
+        linkFailures(result)[0].includes("not an absolute https:// URL"),
+    );
+  });
+
+  it("fails on the other two repo-relative spellings, `./` and a bare docs/ path", () => {
+    for (const target of ["./reference.md", "docs/concepts/adr.md"]) {
+      const result = evaluate({ ...baseFacts, skills: withLink(target) });
+      assert.equal(linkFailures(result).length, 1, `${target} was not reported`);
+    }
+  });
+
+  it("passes an absolute https:// link that points outside this repository", () => {
+    // The over-report direction: a skill legitimately cites the Agent Skills
+    // standard and other external pages, and a gate that failed those would be
+    // reworded away rather than obeyed.
+    const result = evaluate({ ...baseFacts, skills: withLink("https://agentskills.dev/spec") });
+    assert.deepEqual(linkFailures(result), []);
+  });
+
+  it("passes an in-file #anchor, which travels with the skill wherever it is vendored", () => {
+    // The rule is vendoring-safety, not absoluteness for its own sake. An
+    // anchor into the skill's own body cannot resolve somewhere else once the
+    // file moves, so refusing it would push an author to write an absolute URL
+    // that sends a reader out to GitHub to reach a heading two lines down —
+    // the worse spelling, produced by a gate obeyed rather than understood.
+    const result = evaluate({ ...baseFacts, skills: withLink("#when-to-use-this") });
+    assert.deepEqual(linkFailures(result), []);
+  });
+
+  it("still fails a relative target that merely CONTAINS a #, rather than starting with one", () => {
+    // The red twin for the exemption above: `#` is a prefix test, not a
+    // substring one. A `../../elsewhere/page.md#status` is repo-relative first and
+    // anchored second, and an exemption keyed on "has a fragment" would let
+    // exactly the reported defect back through wearing a fragment.
+    const result = evaluate({ ...baseFacts, skills: withLink("../../elsewhere/page.md#status") });
+    assert.equal(linkFailures(result).length, 1);
+  });
+
+  it("fails a repo link whose path is not in the tracked tree", () => {
+    // What going absolute costs: a doc renamed on main leaves a URL nothing in
+    // the tree disagrees with. Resolving the path after the blob prefix buys
+    // the rename detection back.
+    const result = evaluate({ ...baseFacts, skills: withLink(`${REPO_BLOB_PREFIX}docs/gone.md`) });
+    assert.equal(linkFailures(result).length, 1);
+    assert.ok(linkFailures(result)[0].includes("docs/gone.md"));
+  });
+
+  it("passes a repo link whose path is in the tracked tree, fragment and all", () => {
+    const plain = evaluate({
+      ...baseFacts,
+      skills: withLink(`${REPO_BLOB_PREFIX}docs/concepts/adr.md`),
+    });
+    assert.deepEqual(linkFailures(plain), []);
+
+    const fragment = evaluate({
+      ...baseFacts,
+      skills: withLink(`${REPO_BLOB_PREFIX}docs/concepts/adr.md#registry`),
+    });
+    assert.deepEqual(linkFailures(fragment), []);
+  });
+
+  it("fails a repo link when the tracked list could not be read, rather than skipping it", () => {
+    // An unverifiable link is the silent direction: with no tracked list the
+    // path after the blob prefix is never resolved, and a run that judged
+    // nothing would be byte-identical to a run that found nothing wrong.
+    const result = evaluate({
+      ...baseFacts,
+      skills: withLink(`${REPO_BLOB_PREFIX}docs/concepts/adr.md`),
+      trackedFiles: null,
+    });
+    assert.equal(linkFailures(result).length, 1);
+    assert.ok(linkFailures(result)[0].includes("could not be read"));
   });
 
   it("holds every extra-files entry against a non-empty chain roster", () => {
