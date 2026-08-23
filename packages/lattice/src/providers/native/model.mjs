@@ -618,6 +618,15 @@ export function findNativeModelViolations(raw) {
  * (`loadNativeModel` validates before normalizing), so nothing here re-checks
  * its shape.
  *
+ * `boundaryConfigDeclared` is the one field on the model that `lattice.json`
+ * cannot write and this function computes: whether the file named a boundary
+ * law at all, as against taking `../../options.mjs`'s `DEFAULT_OPTIONS`
+ * filename by convention. Both string and inline-object spellings count as
+ * declared — the workspace named its law either way, and the fact a reader
+ * downstream needs is exactly "did somebody name one", never "in which of the
+ * four spellings". That module's header owns the argument for why the bit has
+ * to survive the merge at all.
+ *
  * @param {Record<string, unknown>} raw Already validated by `findNativeModelViolations`.
  * @returns {object} `NativeModel` — see `./index.mjs`.
  */
@@ -629,11 +638,19 @@ export function normalizeNativeModel(raw) {
   const declared = /** @type {unknown[]} */ (projects.declared) ?? [];
   const rawInfer = /** @type {Record<string, unknown>|undefined} */ (projects.infer);
 
+  // The provenance of `boundaryConfig`, computed once and used three ways:
+  // twice to decide what `resolveOptions` is even asked, and once as the
+  // model's own `boundaryConfigDeclared`. It is deliberately NOT read back
+  // off `resolvedOptions`, which would be wrong for the inline spelling —
+  // an inline policy object never reaches `resolveOptions` at all, so that
+  // object's own bit says `false` for the one shape where the workspace was
+  // most explicit about naming its law.
+  const declaresBoundaryConfig = "boundaryConfig" in raw;
   const inlineBoundaryConfig = isPlainObject(raw.boundaryConfig) ? raw.boundaryConfig : undefined;
   const resolvedOptions = resolveOptions(
-    ("boundaryConfig" in raw && inlineBoundaryConfig === undefined) || "tsConfig" in raw
+    (declaresBoundaryConfig && inlineBoundaryConfig === undefined) || "tsConfig" in raw
       ? {
-          ...("boundaryConfig" in raw && inlineBoundaryConfig === undefined
+          ...(declaresBoundaryConfig && inlineBoundaryConfig === undefined
             ? { boundaryConfig: raw.boundaryConfig }
             : {}),
           ...("tsConfig" in raw ? { tsConfig: raw.tsConfig } : {}),
@@ -688,6 +705,7 @@ export function normalizeNativeModel(raw) {
       raw.workspaceLayout
     ),
     boundaryConfig: inlineBoundaryConfig ?? resolvedOptions.boundaryConfig,
+    boundaryConfigDeclared: declaresBoundaryConfig,
     tsConfig: resolvedOptions.tsConfig,
   };
 }

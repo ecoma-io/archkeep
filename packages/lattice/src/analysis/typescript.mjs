@@ -148,6 +148,7 @@ const REQUIRED_TS_API = Object.freeze([
   "createModuleResolutionCache",
   "parseJsonConfigFileContent",
   "forEachChild",
+  "Extension",
   "ScriptKind",
   "ScriptTarget",
   "SyntaxKind",
@@ -163,6 +164,103 @@ if (missingTsApi.length > 0) {
       `this plugin runs in.`,
   );
 }
+
+/**
+ * Every extension TypeScript's own module resolver may load a module from,
+ * read off `ts.Extension` rather than kept by hand here. `.tsbuildinfo` is
+ * dropped because it is an output artefact and never a resolution target.
+ *
+ * The list is a fact about the installed compiler, so deriving it is what keeps
+ * `declinedSiblingOf` below honest across TypeScript versions — a hand-kept
+ * copy would be wrong the release a new extension lands, and wrong silently.
+ *
+ * MAY, not will: membership here is necessary and not sufficient, because one
+ * member is switched by a compiler option — see `ordinaryPassLoadsJson`.
+ */
+const TS_RESOLVABLE_EXTENSIONS = Object.freeze(
+  Object.values(ts.Extension).filter((extension) => extension !== ts.Extension.TsBuildInfo),
+);
+
+/**
+ * Whether the ORDINARY resolution pass would itself load a `.json` target under
+ * these compiler options — asked of TypeScript rather than modelled here.
+ *
+ * `.json` is the one member of `TS_RESOLVABLE_EXTENSIONS` that an option turns
+ * off, and it is also the only member a probe remainder can carry in practice:
+ * for an extension it does not recognise TypeScript APPENDS (`data.json` is
+ * probed as `data.json.ts`), while for one it does it SUBSTITUTES (`legacy.js`
+ * is probed as `legacy.ts`), and a substitution leaves a remainder with no
+ * extension at all. So this predicate decides the whole of the guard below.
+ *
+ * Measured on typescript 5.9.3, where the `.json` is supplied by the SPECIFIER
+ * — a wildcard alias `@ui/*` → `pkg/src/*` reached by `@ui/data.json`, or a
+ * bare `baseUrl` mapping — with `module` written beside `moduleResolution` the
+ * way a real `tsconfig` writes them:
+ *
+ * | `resolveJsonModule` | Classic | Node10 | Node16 | NodeNext | Bundler |
+ * | ------------------- | ------- | ------ | ------ | -------- | ------- |
+ * | `true`              | loads   | loads  | loads  | loads    | loads   |
+ * | `false`             | null    | null   | null   | null     | null    |
+ * | unset               | null    | null   | null   | loads    | loads   |
+ *
+ * The prose this replaces claimed the ordinary pass loads `.json` "even with
+ * `resolveJsonModule` off", which is true in NONE of those five cells. In every
+ * "null" cell a project's `.json` source reached by an alias resolved to
+ * nothing, and the guard built on that claim then refused the
+ * declined-extension pass its answer too — a boundary crossing invisible from
+ * both passes, in exactly the workspaces that pass exists to serve.
+ *
+ * The SHAPE matters, and is why the probe below is a relative specifier. A
+ * `paths` TARGET that itself names the `.json` — `{"@ui/data":
+ * ["pkg/src/data.json"]}`, or a `*.json` target template — loads in all fifteen
+ * cells, because TypeScript takes a mapped target carrying an extension as the
+ * file to load. That case never reaches the widened pass at all, the ordinary
+ * one having already resolved it, so this returning `false` there costs
+ * nothing. The relationship that must hold does hold, in every one of the sixty
+ * combinations measured: wherever this returns `true` the ordinary pass really
+ * does load, so the guard can never refuse the widened pass a question the
+ * ordinary pass had abandoned.
+ *
+ * The answer is measured rather than derived because every derivation tried was
+ * wrong. `resolveJsonModule ?? moduleResolution === Bundler` reads like the
+ * table and contradicts the compiler in three measured places: `module:
+ * "preserve"` and `module: "nodenext"` with `moduleResolution` UNSET both load
+ * while naming no Bundler, and the unset row above moves under NodeNext
+ * depending on whether `module` was written beside `moduleResolution` — one
+ * `moduleResolution`, two answers. A `ts.resolveModuleName` against a two-entry
+ * host cannot drift from the resolver the rest of this module drives, and costs
+ * one call per workspace: `contextFor` is memoised per workspace and asks once.
+ *
+ * @param {import("typescript").CompilerOptions} options
+ * @returns {boolean}
+ */
+function ordinaryPassLoadsJson(options) {
+  // A directory the workspace host never sees, so the probe cannot be answered
+  // by a real file and cannot answer for one: this asks about the OPTIONS.
+  const directory = "/__lattice_json_probe__";
+  const probe = `${directory}/probe.json`;
+  const host = {
+    fileExists: (path) => path === probe,
+    readFile: (path) => (path === probe ? "{}" : undefined),
+  };
+  const resolution = ts.resolveModuleName("./probe.json", `${directory}/index.ts`, options, host);
+  return resolution.resolvedModule?.resolvedFileName === probe;
+}
+
+/**
+ * Whether `path` ends in an extension the ordinary pass would load it from.
+ *
+ * `jsonIsResolvable` is `ordinaryPassLoadsJson`'s answer for the workspace's
+ * own compiler options; every other member of the list is unconditional.
+ */
+const ordinaryPassLoads = (path, jsonIsResolvable) =>
+  TS_RESOLVABLE_EXTENSIONS.some(
+    (extension) =>
+      (jsonIsResolvable || extension !== ts.Extension.Json) && path.endsWith(extension),
+  );
+
+/** Whether `path`'s own basename names an extension at all. */
+const namesAnExtension = (path) => path.slice(path.lastIndexOf("/") + 1).includes(".");
 
 /** Which TypeScript dialect a file extension is written in. */
 const SCRIPT_KIND_BY_EXTENSION = Object.freeze({
@@ -299,6 +397,93 @@ function resolutionHostFor(workspace) {
 }
 
 /**
+ * The real file a probe path is the TypeScript sibling of, or `null`.
+ *
+ * TypeScript resolves a module by forming candidate paths and asking the host
+ * whether each exists — for the candidate `…/PageHeader.vue` it probes
+ * `…/PageHeader.vue.ts`, `…/PageHeader.vue.tsx`, `…/PageHeader.vue.d.ts` and so
+ * on (measured on typescript 5.9.3, in every `moduleResolution` mode). This
+ * reverses one of those probes: strip a TypeScript extension off the end and
+ * see whether what remains is a file the workspace really has.
+ *
+ * Two guards keep it to the case it exists for, and both are scope statements
+ * rather than repairs of an observed failure — they are what says in code, not
+ * in prose, that this pass answers exactly one question. The remainder must
+ * itself name an extension (`namesAnExtension`), so an `index` or
+ * extension-substitution probe for a specifier that named no file at all can
+ * never be answered here: `./widgets` reaching `./widgets/index.vue`, and
+ * `../Button` reaching `../Button.vue`, both stay refused, which is the
+ * narrowness the relative branch in `resolveSpecifier` states outright. And
+ * the remainder must not be one the ordinary pass would itself have loaded
+ * (`ordinaryPassLoads`) — a remainder that pass can load is one it already had
+ * its chance at, so answering for it would let a widened `fileExists` decide a
+ * question that pass owns. Measured on typescript 5.9.3: a `.js` alias target
+ * resolves in the ordinary pass with `allowJs` on AND off, a `.d.ts` one always
+ * does, and a `.json` one does only under the options `ordinaryPassLoadsJson`
+ * measures — which is why that half of the guard is an argument rather than a
+ * constant.
+ *
+ * The extensions are tested in `ts.Extension` order and the first one whose
+ * remainder EXISTS wins, not the first one that merely matches: `…/x.vue.d.ts`
+ * ends in both `.ts` and `.d.ts`, and stopping at `.ts` would test `…/x.vue.d`
+ * and answer no.
+ *
+ * @param {string} probe An absolute path TypeScript asked about.
+ * @param {(path: string) => boolean} exists
+ * @param {boolean} jsonIsResolvable `ordinaryPassLoadsJson` for these options.
+ * @returns {string|null}
+ */
+function declinedSiblingOf(probe, exists, jsonIsResolvable) {
+  for (const extension of TS_RESOLVABLE_EXTENSIONS) {
+    if (!probe.endsWith(extension)) continue;
+    const candidate = probe.slice(0, -extension.length);
+    if (!namesAnExtension(candidate) || ordinaryPassLoads(candidate, jsonIsResolvable)) continue;
+    if (exists(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * The same `ts.ModuleResolutionHost`, plus one answer: a file whose extension
+ * TypeScript declines is reported to exist under the name TypeScript is looking
+ * for it by.
+ *
+ * This is what lets a `paths` alias pointing at `packages/blocks/page-header/src/PageHeader.vue`
+ * be resolved by `ts.resolveModuleName` itself instead of by a table read here
+ * — the fix for a `.vue` (or `.css`, or `.svg`) alias target resolving to
+ * NOTHING, which skipped every `depConstraints` row for the edge. The mechanism
+ * is traced at `resolveSpecifier`'s declined-extension branch, which is where
+ * the record that carries it is built; the one-line version is that no target
+ * was named at all, not that a wrong one was.
+ *
+ * **It is not the second resolver `AGENTS.md` forbids, and the distinction is
+ * mechanical rather than a matter of degree.** Nothing here matches a `paths`
+ * pattern, substitutes a `*`, applies `baseUrl`, or walks `node_modules`;
+ * `ts.resolveModuleName` still does all of it, from the same parsed
+ * `compilerOptions`. The only thing added is an answer to a `fileExists`
+ * question TypeScript was already asking, and the answer is read off the
+ * workspace rather than computed. A specifier TypeScript would decline for any
+ * other reason — no matching alias, a target that is not there — is declined
+ * here too, which is what the resolver's own negative answers below are pinned
+ * on.
+ *
+ * The widened host gets its own resolution cache in `contextFor`, never the
+ * ordinary one: a cache shared between the two would let a directory-level
+ * entry recorded under the widened answers decide an ordinary resolution.
+ *
+ * @param {{ root: string, fileExists: (path: string) => boolean, readFile: (path: string) => string|undefined }} host
+ * @param {boolean} jsonIsResolvable `ordinaryPassLoadsJson` for these options.
+ */
+function declinedExtensionHostFor(host, jsonIsResolvable) {
+  return {
+    root: host.root,
+    fileExists: (path) =>
+      host.fileExists(path) || declinedSiblingOf(path, host.fileExists, jsonIsResolvable) !== null,
+    readFile: host.readFile,
+  };
+}
+
+/**
  * Everything TypeScript needs that is per-workspace rather than per-file:
  * parsed compiler options, the resolution host, and TypeScript's own
  * directory-level resolution cache.
@@ -315,26 +500,40 @@ const contextFor = perWorkspace((workspace) => {
   const flatten = (message) => ts.flattenDiagnosticMessageText(message, " ");
   const tsConfig = tsConfigOf(workspace);
 
-  const text = workspace.readFile(tsConfig);
-  if (text === null) {
-    const options = /** @type {import("typescript").CompilerOptions} */ ({});
+  // One shape for all three exits below, so the widened host and its OWN cache
+  // (`declinedExtensionHostFor` says why they may not be shared with the
+  // ordinary ones) cannot come to exist on some paths and not others — a
+  // workspace with no tsconfig still resolves relative and `node_modules`
+  // specifiers, and a `.vue` sibling of one of those is the same question.
+  const context = (options, configFailure) => {
+    // Asked once per workspace, and carried on the context so the widened
+    // host's `fileExists` and the sibling lookup that reads its answer back
+    // (`resolveSpecifier`) cannot come to hold different opinions of it: a host
+    // that reported `…/data.json.ts` to exist while the lookup refused to map
+    // it back would resolve the specifier and then discard the answer.
+    const jsonIsResolvable = ordinaryPassLoadsJson(options);
     return {
       host,
       options,
       cache: ts.createModuleResolutionCache(host.root, (x) => x, options),
-      configFailure: null,
+      declinedHost: declinedExtensionHostFor(host, jsonIsResolvable),
+      declinedCache: ts.createModuleResolutionCache(host.root, (x) => x, options),
+      jsonIsResolvable,
+      configFailure,
     };
+  };
+
+  const text = workspace.readFile(tsConfig);
+  if (text === null) {
+    return context(/** @type {import("typescript").CompilerOptions} */ ({}), null);
   }
 
   const json = ts.parseConfigFileTextToJson(tsConfig, text);
   if (json.error) {
-    const options = /** @type {import("typescript").CompilerOptions} */ ({});
-    return {
-      host,
-      options,
-      cache: ts.createModuleResolutionCache(host.root, (x) => x, options),
-      configFailure: `${tsConfig} is not valid JSON, so no path alias resolves: ${flatten(json.error.messageText)}`,
-    };
+    return context(
+      /** @type {import("typescript").CompilerOptions} */ ({}),
+      `${tsConfig} is not valid JSON, so no path alias resolves: ${flatten(json.error.messageText)}`,
+    );
   }
   const configHost = {
     useCaseSensitiveFileNames: true,
@@ -350,15 +549,12 @@ const contextFor = perWorkspace((workspace) => {
     `${host.root}/${tsConfig}`,
   );
   const errors = parsed.errors.filter((error) => error.code !== NO_INPUTS_FOUND);
-  return {
-    host,
-    options: parsed.options,
-    cache: ts.createModuleResolutionCache(host.root, (x) => x, parsed.options),
-    configFailure:
-      errors.length === 0
-        ? null
-        : `${tsConfig} is malformed, so path aliases may not resolve: ${errors.map((e) => flatten(e.messageText)).join("; ")}`,
-  };
+  return context(
+    parsed.options,
+    errors.length === 0
+      ? null
+      : `${tsConfig} is malformed, so path aliases may not resolve: ${errors.map((e) => flatten(e.messageText)).join("; ")}`,
+  );
 });
 
 /**
@@ -592,8 +788,9 @@ function resolveSpecifier(specifier, sourceFile, workspace) {
     context.host,
     context.cache,
   );
-  const resolved = resolution.resolvedModule;
-  if (!resolved) {
+  let resolvedFileName = resolution.resolvedModule?.resolvedFileName ?? null;
+  let isExternalLibraryImport = resolution.resolvedModule?.isExternalLibraryImport ?? false;
+  if (resolvedFileName === null) {
     // A Node built-in resolves for real at runtime, and TypeScript's resolver
     // structurally cannot say so: `node:fs` and `fs` have no package to find,
     // they are wired into the runtime, and a Program reaches them through
@@ -647,15 +844,67 @@ function resolveSpecifier(specifier, sourceFile, workspace) {
         };
       }
     }
-    return {
-      resolved: null,
-      reason: `TypeScript cannot resolve '${specifier}' from '${sourceFile}'`,
-    };
+    // The NON-relative half of the same hole, and the one that was silent.
+    // A `paths` alias — or a `baseUrl` mapping, or a deep path into an
+    // installed package — can land on a file whose extension TypeScript
+    // declines just as a relative specifier can, and in a Vue workspace it
+    // routinely does: `@acme/blocks/page-header` mapped to
+    // `…/src/PageHeader.vue` is a project's SOURCE, not an asset.
+    //
+    // Declined, the site named NO target at all: this branch fell through to
+    // the `resolved: null` return below, `../rules/index.mjs`'s
+    // `resolveTargetNode` answers `undefined` for a record that did not
+    // resolve, and the site landed in the `!targetProject` branch — which is
+    // `../../../../docs/reference/violations.md`, "The order matters", step 4
+    // (unresolvable target), not step 6. It never reached the external
+    // classification at all, because `externalNodeFor` sits past a resolution
+    // that never happened. The consequence is the same either way, since steps
+    // 4 and 6 share rule 10: every `depConstraints` row was skipped, an
+    // aliased specifier is no path so `noRelativeOrAbsoluteExternals` did not
+    // apply, and under `banTransitiveDependencies: false` — the option's own
+    // default — nothing was reported at all, so a primitive reaching into a
+    // block's `.vue` source scored a clean run and exit 0.
+    //
+    // The answer still comes from `ts.resolveModuleName`. `declinedExtensionHostFor`
+    // argues at length why widening one `fileExists` answer is not the second
+    // resolver this package must not grow; the short version is that every
+    // mapping rule stays TypeScript's, including the `*` substitution and the
+    // `node_modules` walk, and a specifier TypeScript declines for any reason
+    // other than the target's extension is still declined here.
+    //
+    // The relative branch above keeps its narrower rules and runs FIRST: it
+    // strips bundler query suffixes and refuses extension probing outright,
+    // which this pass has no way to offer, so a relative specifier it settles
+    // never reaches here.
+    const declined = ts.resolveModuleName(
+      specifier,
+      containingFile,
+      context.options,
+      context.declinedHost,
+      context.declinedCache,
+    );
+    const sibling = declined.resolvedModule
+      ? declinedSiblingOf(
+          declined.resolvedModule.resolvedFileName,
+          context.host.fileExists,
+          context.jsonIsResolvable,
+        )
+      : null;
+    // `sibling === null` when the widened pass resolved to a real file rather
+    // than to a widened answer. That file was reachable by the ordinary pass
+    // too, which declined it, so the widened pass has learned nothing and its
+    // result is dropped rather than preferred.
+    if (sibling === null) {
+      return {
+        resolved: null,
+        reason: `TypeScript cannot resolve '${specifier}' from '${sourceFile}'`,
+      };
+    }
+    resolvedFileName = sibling;
+    isExternalLibraryImport = declined.resolvedModule.isExternalLibraryImport ?? false;
   }
   const prefix = `${context.host.root}/`;
-  const file = resolved.resolvedFileName.startsWith(prefix)
-    ? resolved.resolvedFileName.slice(prefix.length)
-    : null;
+  const file = resolvedFileName.startsWith(prefix) ? resolvedFileName.slice(prefix.length) : null;
   // An installed package resolving INSIDE a project's own directory is still an
   // installed package. `isExternalLibraryImport` is checked before ownership
   // because the two disagree in exactly one shape, and it is the shape every
@@ -676,7 +925,13 @@ function resolveSpecifier(specifier, sourceFile, workspace) {
   // pre-empt rather than a replacement: an alias pointed at a loose root-level
   // file has no `isExternalLibraryImport` flag and must still read as external,
   // and a resolution into a sibling project must still name that project.
-  if (resolved.isExternalLibraryImport) {
+  //
+  // The declined-extension pass above reaches here with the same two facts and
+  // is judged by the same two branches, deliberately: `pkg/styles.css` inside
+  // `node_modules` carries `isExternalLibraryImport` and stays an external
+  // import of `pkg`, while an alias landing on a project's `.vue` source
+  // carries neither and names the project that owns it.
+  if (isExternalLibraryImport) {
     return {
       resolved: { target: null, file, external: true, packageName: packageNameOf(specifier) },
       reason: null,

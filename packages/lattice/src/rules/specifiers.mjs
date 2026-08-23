@@ -33,7 +33,7 @@
 import { posix } from "node:path";
 import { isBuiltin } from "node:module";
 
-import { mapGlobToRegExp } from "./match.mjs";
+import { assertMatchableSpecifier, mapGlobToRegExp } from "./match.mjs";
 import { findConstraintsFor } from "./tags.mjs";
 import { pathExists } from "./reachability.mjs";
 
@@ -177,9 +177,21 @@ export function getTargetProjectBasedOnRelativeImport(imp, sourceFile, projectRo
  *    EMPTY list `[]` bans every import of the package, because `[].every()` is
  *    `true`. The empty case reads like "no restrictions" and means the opposite.
  *
+ * This is the door where a specifier meets a pattern the consumer wrote, and
+ * so where the specifier's LENGTH is bounded — `./match.mjs`'s
+ * `MAX_SPECIFIER_LENGTH` carries the measurement and
+ * `assertMatchableSpecifier` the reason it throws instead of returning
+ * `false`. The bound is checked before the package test rather than after,
+ * because the question it answers is not "does this row speak about this
+ * import" but "can this import be judged at all": a specifier this engine
+ * declines to match is unjudged wherever it appears, and an unjudged site
+ * reported as clean is the one outcome `../../../../AGENTS.md` ranks below a
+ * wrong answer.
+ *
  * @returns {boolean}
  */
 export function isConstraintBanningProject(externalProject, constraint, imp) {
+  assertMatchableSpecifier(imp, "import specifier judged against the constraint table");
   const { allowedExternalImports, bannedExternalImports } = constraint;
   const { packageName } = externalProject.data;
   if (imp !== packageName && !imp.startsWith(`${packageName}/`)) return false;
@@ -217,10 +229,28 @@ export function hasBannedImport(sourceProject, targetProject, depConstraints, im
 export function findTransitiveExternalDependencies(graph, reach, source) {
   if (!graph.externalNodes) return [];
   const externalDependencies = [];
+  // Both maps are keyed by NAME — project names in `dependencies`, package
+  // names in `externalNodes` — and both arrive as plain objects from
+  // `JSON.parse` of `nx graph --file=`, so every lookup below is an
+  // `Object.hasOwn` membership test rather than an index-and-hope. A project
+  // literally named `constructor`, `toString`, `valueOf`, `hasOwnProperty` or
+  // `__proto__` is otherwise answered by `Object.prototype`, and both reads
+  // break loudly and uselessly: `dependencies["constructor"]` yields the
+  // `Object` constructor FUNCTION, which `?? []` does not replace (a function
+  // is not nullish) and `for…of` then rejects — measured, `TypeError: function
+  // is not iterable` — while `externalNodes["toString"]` classifies a real
+  // internal project as an external package and hands it to
+  // `isConstraintBanningProject`, which destructures `.data` off
+  // `Function.prototype.toString` and throws. An enforcer that throws reports
+  // nothing at all, which `../../AGENTS.md` ranks below a wrong answer.
+  const dependencies = graph.dependencies ?? {};
   for (const projectName of Object.keys(graph.nodes)) {
     if (!pathExists(reach, source.name, projectName)) continue;
-    for (const dependency of graph.dependencies?.[projectName] ?? []) {
-      if (graph.externalNodes[dependency.target]) externalDependencies.push(dependency);
+    if (!Object.hasOwn(dependencies, projectName)) continue;
+    for (const dependency of dependencies[projectName] ?? []) {
+      if (Object.hasOwn(graph.externalNodes, dependency.target)) {
+        externalDependencies.push(dependency);
+      }
     }
   }
   return externalDependencies;
@@ -242,9 +272,29 @@ export function findTransitiveExternalDependencies(graph, reach, source) {
  * comparable. It is recorded as a finding instead.
  */
 export function hasBannedDependencies(externalDependencies, graph, constraint, imp) {
+  // Exported, so it is reachable with a list this module did not build — the
+  // membership guard belongs here too, not only in
+  // `findTransitiveExternalDependencies` above. Same failure either way: an
+  // inherited `Object.prototype` member reaching `isConstraintBanningProject`
+  // is destructured for `.data` and throws, and a checker that throws reports
+  // nothing.
+  //
+  // BOTH maps, for the same reason and by the same test. `nodes` is read by
+  // `dependency.source` and its value becomes the violation's
+  // `childProjectName` (`./index.mjs`), so a source named `constructor` or
+  // `toString` yields a `Function` where a project node belongs and the report
+  // names `Object` — a project no workspace has — while an absent `nodes`
+  // throws on the index. A project genuinely named `constructor` is an OWN key
+  // and still answers here; only the inherited phantoms are dropped, and a
+  // phantom source names no project to report against.
+  const externalNodes = graph.externalNodes ?? {};
+  const nodes = graph.nodes ?? {};
   return externalDependencies
-    .filter((dependency) =>
-      isConstraintBanningProject(graph.externalNodes[dependency.target], constraint, imp),
+    .filter(
+      (dependency) =>
+        Object.hasOwn(externalNodes, dependency.target) &&
+        Object.hasOwn(nodes, dependency.source) &&
+        isConstraintBanningProject(externalNodes[dependency.target], constraint, imp),
     )
-    .map((dep) => [graph.externalNodes[dep.target], graph.nodes[dep.source], constraint]);
+    .map((dep) => [externalNodes[dep.target], nodes[dep.source], constraint]);
 }

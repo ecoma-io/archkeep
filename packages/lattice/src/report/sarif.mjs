@@ -81,6 +81,27 @@ export const FITNESS_FAILED_RULE_ID = "fitnessFunctionFailed";
  * fragment. Unreserved characters — letters, digits, `-`, `_`, `.`, `~` — pass
  * through untouched, so an ordinary path is byte-identical to its input.
  *
+ * **This function encodes; it does not vet.** A path that is absolute or
+ * carries a `..` segment is one GitHub's code scanning drops without saying
+ * so, and the producer that could hand one over unbidden — a custom rule's
+ * finding, the only `uri` here whose value comes from wasm this engine did not
+ * write — is refused where its verdict is JUDGED rather than where it is
+ * rendered: `../custom-rules/host.mjs`'s `isWorkspaceRelative`, whose comment
+ * argues the layering. Every other caller's path is the tool's own fact:
+ * `git ls-files` output for a violation or an analysis failure, a graph node's
+ * project root for a declared edge, a literal for `go.work` and
+ * `architecture-intent.json`.
+ *
+ * There is deliberately no guard THROWING here, and the reason is the two
+ * remaining callers rather than a preference: the `tsConfig` option and a
+ * `--config` policy file are names the WORKSPACE chose, and either may
+ * legitimately point outside the tree — `../../cli.mjs`'s `resolvePolicy`
+ * reports the second as `relative(root, configPath)`, an escaping path a
+ * fitness result then locates against. A throw would turn those supported runs
+ * into a crash, and a silent rewrite would be worse than either, because it
+ * would point the reader at a different file with full confidence
+ * (`../../AGENTS.md`).
+ *
  * @param {string} path Workspace-relative, `/`-separated.
  * @returns {string}
  */
@@ -393,8 +414,9 @@ export function sarifTsconfigPathsResult(finding) {
 
 /**
  * One declared-edge violation as a SARIF result — an `implicit`-typed graph
- * edge (`implicitDependencies`) that crosses a `depConstraints` boundary with
- * no import site behind it.
+ * edge (Nx's and `lattice.json`'s `implicitDependencies`, a `moon.yml`'s
+ * `dependsOn`) that crosses a `depConstraints` boundary with no import site
+ * behind it.
  *
  * `messageId` is one of the same three `depConstraints` ids `sarifResult`
  * already catalogues (`onlyTagsConstraintViolation`,
@@ -409,8 +431,17 @@ export function sarifTsconfigPathsResult(finding) {
  * the same convention `sarifIntentResult` uses for a graph-edge finding with
  * no source site of its own.
  *
+ * `finding.file` is that manifest, chosen per provider by `../../cli.mjs`'s
+ * `declaredEdgeManifest`, and it has to be a path the reader's checkout
+ * really contains: GitHub's code scanning drops a result whose `uri` names no
+ * such file, without saying so — the identical failure
+ * `../custom-rules/host.mjs`'s `isWorkspaceRelative` refuses for a wasm
+ * rule's own findings. A Moon workspace got `lattice.json` here until that
+ * function learned the provider, which is a file a Moon tree is refused for
+ * carrying at all.
+ *
  * @param {object} finding A finding from `../commands/edge-constraints.mjs`'s
- *   `declaredEdgeViolationsForCheck`, extended with `file`.
+ *   `declaredEdgeViolationsForCheck`, extended with `file` — workspace-relative.
  * @returns {object}
  */
 export function sarifDeclaredEdgeResult(finding) {

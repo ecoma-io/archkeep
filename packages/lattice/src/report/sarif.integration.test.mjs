@@ -1,6 +1,11 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import { INTENT_MESSAGE_IDS, INTENT_MESSAGES } from "../architecture-intent/judge.mjs";
+import { buildEvidenceBundle, serializeEvidenceBundle } from "../custom-rules/evidence.mjs";
+import { evaluateCustomRule, loadCustomRule } from "../custom-rules/host.mjs";
+import { buildRuleModule } from "../custom-rules/wasm-fixture.mjs";
 import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
 import { MESSAGE_IDS, renderMessage } from "../rules/messages.mjs";
 import { TSCONFIG_PATHS_MESSAGE_IDS, TSCONFIG_PATHS_MESSAGES } from "../tsconfig-paths.mjs";
@@ -175,6 +180,21 @@ const log = buildSarifLog({
   policy: { profile: null, source: "module-boundaries.config.mjs", fingerprint: "deadbeef" },
 });
 
+/**
+ * An absolute path, a `file:` URI, or a `..` escape are the three shapes GitHub
+ * cannot map onto a file in the checkout — the result is then dropped silently,
+ * which is worse than a red upload. Stated once and asked of both fixtures
+ * below: the hand-written log above, and the host-driven one at the end of this
+ * file, where the path a rule actually named is what is being judged.
+ *
+ * @param {string} uri
+ */
+const expectRepositoryRelative = (uri) => {
+  expect(uri.startsWith("/")).toBe(false);
+  expect(uri).not.toMatch(/^[a-z][a-z0-9+.-]*:/i);
+  expect(uri.split("/")).not.toContain("..");
+};
+
 describe("the SARIF log against what GitHub requires of an upload", () => {
   it("declares version 2.1.0 and a named driver, the two fields an upload is rejected without", () => {
     expect(log.version).toBe("2.1.0");
@@ -248,12 +268,7 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
         continue;
       }
       const { artifactLocation, region } = result.locations[0].physicalLocation;
-      // An absolute path, a `file:` URI, or a `..` escape are the three shapes
-      // GitHub cannot map onto a file in the checkout — the annotation is then
-      // dropped silently, which is worse than a red upload.
-      expect(artifactLocation.uri.startsWith("/")).toBe(false);
-      expect(artifactLocation.uri).not.toMatch(/^[a-z][a-z0-9+.-]*:/i);
-      expect(artifactLocation.uri.split("/")).not.toContain("..");
+      expectRepositoryRelative(artifactLocation.uri);
       if (
         result.ruleId === "goWorkMissingUse" ||
         result.ruleId === "tsconfigDeadPathAlias" ||
@@ -302,4 +317,182 @@ describe("the SARIF log against what GitHub requires of an upload", () => {
   it("survives a JSON round trip unchanged, which is the only form GitHub ever sees", () => {
     expect(JSON.parse(JSON.stringify(log))).toEqual(log);
   });
+});
+
+/**
+ * The custom-rule half of the same question, driven end to end rather than
+ * from a fixture.
+ *
+ * Everything above judges a hand-written log, which can only ever confirm that
+ * paths already spelled workspace-relative stay that way. A custom rule is the
+ * one producer of a SARIF `uri` this engine did not write: it is wasm the
+ * workspace declared, and it names its own `sourceFile`. So this block hands a
+ * REAL rule a path, lets the REAL host judge it, and renders whatever survived
+ * with the REAL `buildSarifLog` — the only arrangement in which an off-workspace
+ * path can actually reach the formatter and be caught doing it.
+ *
+ * The mapping from verdict to decision mirrors `../commands/custom-rules.mjs`,
+ * which is the module that does it in a run: an accepted verdict becomes a
+ * `fail` decision whose findings carry the namespaced id, and a refused one
+ * becomes an `unknown` decision carrying the host's own words.
+ */
+const CUSTOM_RULE = "no-app-to-ring";
+const CUSTOM_FINDING = "reached-ring";
+const CUSTOM_RULE_ID = `custom/${CUSTOM_RULE}/${CUSTOM_FINDING}`;
+const CUSTOM_MESSAGE = "the app layer reached a ring internal";
+
+const CUSTOM_DESCRIBE = {
+  contract: 1,
+  name: CUSTOM_RULE,
+  needs: ["model", "graph", "imports", "policy"],
+  findings: [{ id: CUSTOM_FINDING, message: CUSTOM_MESSAGE }],
+};
+
+/** The bytes a real run would hand a rule. */
+const CUSTOM_EVIDENCE = serializeEvidenceBundle(
+  buildEvidenceBundle({
+    rule: { name: CUSTOM_RULE },
+    projects: [{ name: "app", root: "libs/app", tags: ["layer-app"] }],
+    edges: [{ source: "app", target: "ring", type: "static" }],
+    imports: [
+      {
+        site: {
+          sourceFile: "libs/app/main.go",
+          line: 7,
+          column: 2,
+          specifier: "example.test/ring/internal",
+          kind: "static",
+          spelling: { path: false, relative: false },
+          resolved: { target: "ring", file: "libs/ring/x.go", external: false, packageName: null },
+        },
+        sourceProject: "app",
+      },
+    ],
+    policy: { depConstraints: [], options: {} },
+  }),
+);
+
+const HOST_DRIVEN_CATALOGUE = [
+  { ruleId: CUSTOM_RULE_ID, rule: CUSTOM_RULE, findingId: CUSTOM_FINDING, message: CUSTOM_MESSAGE },
+];
+
+/**
+ * One rule, reporting one finding, judged and then rendered.
+ *
+ * @param {{sourceFile?: string, line?: number, column?: number}} finding The
+ *   position half of the finding the rule returns; the id and message are the
+ *   catalogue's.
+ * @returns {Promise<{outcome: object, log: object}>}
+ */
+async function judgeAndRender(finding) {
+  const artifactBytes = buildRuleModule({
+    describeJson: JSON.stringify(CUSTOM_DESCRIBE),
+    verdictJson: JSON.stringify({
+      contract: 1,
+      verdict: "fail",
+      findings: [{ id: CUSTOM_FINDING, message: CUSTOM_MESSAGE, ...finding }],
+    }),
+  });
+  const loaded = await loadCustomRule({
+    name: CUSTOM_RULE,
+    artifactBytes,
+    declaredSha256: createHash("sha256").update(artifactBytes).digest("hex"),
+  });
+  expect(loaded.failure?.reason ?? null).toBe(null);
+  const outcome = await evaluateCustomRule({
+    module: loaded.module,
+    describe: loaded.describe,
+    evidenceBytes: CUSTOM_EVIDENCE,
+  });
+  const decision = outcome.ok
+    ? {
+        name: CUSTOM_RULE,
+        verdict: "fail",
+        message: "reported 1 finding",
+        findings: outcome.verdict.findings.map((reported) => ({
+          ...reported,
+          id: `custom/${CUSTOM_RULE}/${reported.id}`,
+        })),
+      }
+    : { name: CUSTOM_RULE, verdict: "unknown", message: outcome.failure.reason, findings: [] };
+  return {
+    outcome,
+    log: buildSarifLog({
+      violations: [],
+      failures: [],
+      customRules: { catalogue: HOST_DRIVEN_CATALOGUE, decisions: [decision] },
+    }),
+  };
+}
+
+/**
+ * Every `uri` the log locates a result at. A result GitHub cannot resolve is
+ * dropped without a word, so "which paths did we claim" is the list a silent
+ * upload turns on.
+ *
+ * @param {object} log
+ * @returns {string[]}
+ */
+const locatedUris = (log) =>
+  log.runs[0].results.flatMap((result) =>
+    (result.locations ?? []).map((location) => location.physicalLocation.artifactLocation.uri),
+  );
+
+describe("a custom rule's own path, from the rule's verdict to the uploaded log", () => {
+  it("renders a workspace-relative finding as a result GitHub can resolve", async () => {
+    // The load-bearing half (`../../../../AGENTS.md`): a refusal that swallowed
+    // every path would satisfy the two cases below by reporting nothing at all,
+    // which is the failure direction this repository rates worst.
+    const { outcome, log } = await judgeAndRender({
+      sourceFile: "libs/app/main.go",
+      line: 7,
+      column: 2,
+    });
+    expect(outcome.ok).toBe(true);
+
+    const { rules } = log.runs[0].tool.driver;
+    expect(log.runs[0].results).toHaveLength(1);
+    const [result] = log.runs[0].results;
+    // Every field a GitHub rejection turns on, on the one result that exists.
+    expect(rules[result.ruleIndex].id).toBe(result.ruleId);
+    expect(result.ruleId).toBe(CUSTOM_RULE_ID);
+    expect(result.message.text.length).toBeGreaterThan(0);
+    const { artifactLocation, region } = result.locations[0].physicalLocation;
+    expectRepositoryRelative(artifactLocation.uri);
+    expect(artifactLocation.uri).toBe("libs/app/main.go");
+    expect(region.startLine).toBeGreaterThanOrEqual(1);
+    expect(region.startColumn).toBeGreaterThanOrEqual(1);
+    // A judged rule is not trouble the tool hit, so nothing rides that lane.
+    expect(log.runs[0].invocations[0].toolExecutionNotifications).toHaveLength(0);
+  });
+
+  for (const [what, sourceFile] of [
+    ["absolute", "/etc/passwd"],
+    ["climbing out of the workspace", "../../outside.go"],
+  ]) {
+    it(`refuses a finding whose sourceFile is ${what}, and uploads no result for it`, async () => {
+      // Without the host's refusal this produces a perfectly well-formed SARIF
+      // result carrying that exact uri: the build fails on the finding, GitHub
+      // drops the result without a word because it maps onto no file in the
+      // checkout, and the developer sees no annotation at all. That is the
+      // silent direction, and it is what these assertions go red on.
+      const { outcome, log } = await judgeAndRender({ sourceFile, line: 7, column: 2 });
+      expect(outcome.ok).toBe(false);
+      expect(outcome.verdict).toBeUndefined();
+      // Both facts a reader needs: which rule, and which path.
+      expect(outcome.failure.reason).toContain(`custom rule "${CUSTOM_RULE}"`);
+      expect(outcome.failure.reason).toContain(JSON.stringify(sourceFile));
+
+      // The list this file exists to keep honest: every `uri` the log locates a
+      // result at. Before the host refused, it held the very path the rule
+      // named — one well-formed result pointing at a file no checkout has.
+      expect(locatedUris(log)).toEqual([]);
+      // Silence is not the answer either: the run could not judge the rule, and
+      // the log says so in SARIF's own slot for it, naming the path.
+      const [notification] = log.runs[0].invocations[0].toolExecutionNotifications;
+      expect(notification.level).toBe("warning");
+      expect(notification.message.text).toContain(`Custom rule "${CUSTOM_RULE}"`);
+      expect(notification.message.text).toContain(sourceFile);
+    });
+  }
 });

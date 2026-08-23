@@ -132,6 +132,48 @@ describe("buildReachability", () => {
     expect(reach.matrix.child.__proto__).toBe(true);
     expect(Object.keys(reach.matrix.child)).toContain("__proto__");
   });
+
+  // The three cases above hardened `__proto__` and stopped there, and the four
+  // SIBLING prototype members slipped straight through: `graph.nodes` is the
+  // CALLER's map — a plain object, `JSON.parse` of `nx graph --file=` or an
+  // `Object.fromEntries` fixture like `graphOf` above — so the admission test
+  // `if (graph.nodes[dependency.target])` answered every one of them from
+  // `Object.prototype`. The phantom name was pushed into a null-prototype
+  // `adjList` as a neighbour, and the very next hop read `adjList["constructor"]`
+  // back as `undefined`: measured, `TypeError: adjList[current] is not
+  // iterable`, thrown out of a function every boundary rule and the language
+  // server sit on top of. A crashed enforcer reports nothing at all, which
+  // `../../../AGENTS.md` ranks below a wrong answer.
+  it.each(["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"])(
+    "does not admit an edge to %s as a node the graph contains",
+    (name) => {
+      const graph = graphOf(["a"], { a: [edge("a", name)] });
+      expect(() => buildReachability(graph)).not.toThrow();
+      const reach = buildReachability(graph);
+      // Dropped exactly like the `npm:` target above — not a neighbour, not
+      // reachable, and no row invented for it.
+      expect(reach.adjList.a).toEqual([]);
+      expect(pathExists(reach, "a", name)).toBe(false);
+      expect(Object.keys(reach.matrix)).toEqual(["a"]);
+    },
+  );
+
+  it("still admits an edge to a project genuinely NAMED like a prototype member", () => {
+    // The over-rejection half: an own-property test must not start dropping
+    // real projects. A workspace may really declare one called `constructor`,
+    // and an edge into it is a real edge — losing it would silence every rule
+    // that judges the closure through that project.
+    const nodes = Object.create(null);
+    nodes.a = node("a");
+    nodes.constructor = node("constructor");
+    const dependencies = Object.create(null);
+    dependencies.a = [edge("a", "constructor")];
+
+    const reach = buildReachability({ nodes, dependencies });
+
+    expect(reach.adjList.a).toEqual(["constructor"]);
+    expect(pathExists(reach, "a", "constructor")).toBe(true);
+  });
 });
 
 describe("getPath", () => {
@@ -169,6 +211,17 @@ describe("checkCircularPath", () => {
     expect(
       checkCircularPath(buildReachability(graph), graph, graph.nodes.a, node("absent")),
     ).toEqual([]);
+    // The same guard, asked with the names a plain node map answers from its
+    // prototype: `!graph.nodes["constructor"]` was false on a graph with no
+    // such project, so the check this line performs was decided downstream by
+    // `getPath` running out of adjacency rather than here. Same answer, but the
+    // guard was reading `Object.prototype` to reach it.
+    for (const name of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
+      expect(
+        checkCircularPath(buildReachability(graph), graph, graph.nodes.a, node(name)),
+        name,
+      ).toEqual([]);
+    }
   });
 });
 

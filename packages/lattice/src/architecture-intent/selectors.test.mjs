@@ -100,6 +100,82 @@ describe("selectProjects", () => {
   it("ignores a tag a project does not carry", () => {
     expect(selectProjects("tag:scope-nx", NODES)).toEqual([]);
   });
+
+  // Every name below is a member of `Object.prototype`, and `NODES` is a plain
+  // object literal, so `nodes[value]` answered all five from the prototype:
+  // measured before the fix, `selectProjects("constructor", NODES)` returned
+  // `["constructor"]` on a graph containing no such project — as did
+  // `"toString"`, `"valueOf"`, `"hasOwnProperty"` and `"__proto__"` — while
+  // `"nosuch"` correctly returned `[]`. The consequence is the silent one: a
+  // boundary `{"match": ["constructor"]}` resolved to one phantom member, so
+  // `./judge.mjs`'s zero-member no-verdict never fired, `intentUnresolved`
+  // stayed 0, and `check` exited 0 where its contract owes 3. A selector that
+  // names nothing must be indistinguishable from `"nosuch"`.
+  const PROTOTYPE_MEMBERS = ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"];
+
+  it("treats a prototype member name as an absent project, exactly like any other miss", () => {
+    for (const name of PROTOTYPE_MEMBERS) {
+      expect(selectProjects(name, NODES), name).toEqual([]);
+      expect(selectProjects(`name:${name}`, NODES), `name:${name}`).toEqual([]);
+      expect(selectProjects(`!${name}`, NODES), `!${name}`).toEqual([]);
+    }
+    // The control: the same call shape on a name that really is absent.
+    expect(selectProjects("nosuch", NODES)).toEqual([]);
+  });
+
+  it("still selects a project genuinely NAMED like a prototype member", () => {
+    // The near miss on the other side: an own-property test must not
+    // over-reject. A workspace may really declare a project called
+    // `constructor` or `__proto__` — the name comes from `lattice.json` or a
+    // tracked manifest — and refusing it would be the same silent boundary
+    // hole from the opposite direction. The fixture has to be null-prototype:
+    // `{ __proto__: node }` in an object literal sets the prototype instead of
+    // adding a key, so the name would never reach `selectProjects` at all.
+    const nodes = Object.create(null);
+    nodes.constructor = { data: { root: "libs/ctor", tags: ["odd"] } };
+    nodes.__proto__ = { data: { root: "libs/proto", tags: ["odd"] } };
+    nodes.normal = { data: { root: "libs/normal", tags: [] } };
+
+    expect(selectProjects("constructor", nodes)).toEqual(["constructor"]);
+    expect(selectProjects("name:__proto__", nodes)).toEqual(["__proto__"]);
+    expect(selectProjects("tag:odd", nodes)).toEqual(["__proto__", "constructor"]);
+    expect(selectProjects("directory:libs/proto", nodes)).toEqual(["__proto__"]);
+    expect(selectProjects("*", nodes)).toEqual(["__proto__", "constructor", "normal"]);
+  });
+
+  // `docs/reference/architecture-intent.md`'s selector table gives `*` its own
+  // row ("every project") and defines each labeled row as an exact match, so
+  // `*` is a token of the grammar rather than a wildcard character inside a
+  // value. Testing `value === "*"` before the label branches discarded the
+  // label: on this fixture — where no project carries a tag `*`, is rooted at
+  // `*`, or is named `*` — `name:*`, `tag:*` and `directory:*` each returned
+  // every project in the graph. A labeled `*` now selects by exact equality
+  // and so selects nothing here, which is the fail-loud reading: the boundary
+  // reaches `./judge.mjs`'s zero-member no-verdict instead of silently
+  // standing for "all of them".
+  it("does not let a LABELLED wildcard mean every project", () => {
+    expect(selectProjects("name:*", NODES)).toEqual([]);
+    expect(selectProjects("tag:*", NODES)).toEqual([]);
+    expect(selectProjects("directory:*", NODES)).toEqual([]);
+  });
+
+  it("keeps the bare '*' meaning every project", () => {
+    expect(selectProjects("*", NODES)).toEqual(["core", "ui", "web"]);
+  });
+
+  it("reads a labelled '*' as the literal value it is — exact match, not a wildcard", () => {
+    // The half that proves the previous case is exactness rather than a blanket
+    // refusal: a project really named `*`, tagged `*`, or rooted at `*` is
+    // selected by the labeled form that names it, and by nothing else.
+    const nodes = {
+      "*": { data: { root: "*", tags: ["*"] } },
+      other: { data: { root: "libs/other", tags: ["real"] } },
+    };
+    expect(selectProjects("name:*", nodes)).toEqual(["*"]);
+    expect(selectProjects("tag:*", nodes)).toEqual(["*"]);
+    expect(selectProjects("directory:*", nodes)).toEqual(["*"]);
+    expect(selectProjects("*", nodes)).toEqual(["*", "other"]);
+  });
 });
 
 describe("resolveMembers", () => {
@@ -117,6 +193,26 @@ describe("resolveMembers", () => {
 
   it("is empty when selectors match nothing", () => {
     expect(resolveMembers(["name:missing"], NODES)).toEqual([]);
+  });
+
+  it("is empty for a boundary whose only selector is a prototype member name or a labelled '*'", () => {
+    // The two fixes seen from the caller `./judge.mjs` actually uses: both
+    // lists used to resolve to a non-empty member set — `["constructor"]` to
+    // one phantom project, `["name:*"]` to every project in the graph — and
+    // either way the boundary's zero-member no-verdict never fired. Empty here
+    // is what makes the run exit 3 instead of 0.
+    expect(resolveMembers(["constructor"], NODES)).toEqual([]);
+    expect(resolveMembers(["toString", "name:__proto__"], NODES)).toEqual([]);
+    expect(resolveMembers(["name:*"], NODES)).toEqual([]);
+    expect(resolveMembers(["tag:*"], NODES)).toEqual([]);
+  });
+
+  it("still seeds the implicit '*' from the BARE wildcard, and excludes with it", () => {
+    // The seed `resolveMembers` prepends for an all-exclusion list is a bare
+    // `*`, so narrowing the wildcard to its unlabeled form must not have
+    // narrowed the seed with it.
+    expect(resolveMembers(["!name:web"], NODES)).toEqual(["core", "ui"]);
+    expect(resolveMembers(["*", "!tag:type-package"], NODES)).toEqual(["web"]);
   });
 
   it("is deterministic across calls for the same inputs", () => {

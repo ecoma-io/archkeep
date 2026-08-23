@@ -56,7 +56,12 @@ moon project-graph --json
 The package resolves the `moon` binary from the workspace's own installation
 (`node_modules/.bin/moon`), so `@moonrepo/cli` must be a dev dependency of the
 workspace. The provider prepends `node_modules/.bin` to PATH to find the binary,
-matching the resolution `pnpm exec moon` performs.
+matching the resolution `pnpm exec moon` performs. It reads and writes that
+variable under whatever case the platform spells it (`Path` on Windows), and no
+entry of the PATH it builds is ever empty — an empty entry resolves as the
+current directory, which for this spawn is the workspace being judged, so a
+`moon` file committed into a repository would otherwise run in place of the real
+CLI.
 
 The command emits a JSON object with an integer-indexed graph:
 
@@ -81,7 +86,10 @@ judges exactly the graph `lattice check` judges. When the invocation fails —
 `moon` missing from `node_modules/.bin`, a nonzero exit, output that will not
 parse — neither face answers with an empty graph: the CLI refuses with exit 3,
 and the server publishes an index-gap diagnostic naming the failed command on
-every open document until the next successful rebuild.
+every open document until the next successful rebuild. A binary that is in
+neither place names the install command that fixes it; every other failure keeps
+Moon's own stderr, because a Moon that ran and failed is a different problem
+from a Moon that is not there.
 
 ## Tag format
 
@@ -120,6 +128,37 @@ Moon's project-graph edges carry a scope that Lattice maps to dependency types:
 `root` dependencies are internal to Moon's runtime and carry no
 source-code-level meaning, so Lattice does not surface them.
 
+## Declared dependencies, and Moon's `source`
+
+Moon marks each dependency with a `source` as well as a scope, and **Moon's
+`implicit` is the opposite of Lattice's**. Moon's own schema defines the field
+as "either explicitly defined in configuration, or implicitly derived from
+source files":
+
+| Moon `source` | what it means                                             | Lattice type       |
+| ------------- | --------------------------------------------------------- | ------------------ |
+| `explicit`    | written by hand in `moon.yml`'s `dependsOn`               | `implicit`         |
+| `implicit`    | Moon derived it from source files (e.g. a `package.json`) | from `scope` above |
+
+Lattice's `implicit` type means what Nx's `implicitDependencies` means: a
+dependency a human declared, with no import behind it. That is the one kind the
+boundary checker cannot judge at an import site — there is no import site — so
+`lattice check` judges it as a graph edge instead and reports it separately, as
+a **declared-edge violation**. A dependency Moon derived from a manifest does
+have code behind it, so it is typed from its scope and judged the ordinary way,
+at the import.
+
+The practical consequence: a `moon.yml` that names a forbidden `dependsOn` is a
+finding even when no source file imports anything.
+
+```yaml
+# libs/core/moon.yml — core is a lib, cli is an app, and the table forbids it
+tags:
+  - type-lib
+dependsOn:
+  - cli # reported, with no import anywhere in the tree
+```
+
 ## What Moon already does
 
 Moon infers TypeScript and JavaScript edges from import statements (when
@@ -144,7 +183,13 @@ integration.
   provider infers one from the common directory prefix shared by each layer's
   project roots (`application`-layer sources → `appsDir`, `library`-layer
   sources → `libsDir`), falling back to the default
-  `{libsDir: "libs", appsDir: "apps"}` when no consistent prefix exists.
+  `{libsDir: "libs", appsDir: "apps"}` when no consistent prefix exists. A
+  project at the workspace root contributes to neither prefix: whatever its
+  `source` is spelled as, its top path segment names no directory below the
+  root — which is the test the provider applies, rather than a list of the
+  spellings that land there — and inferring `appsDir: "."` from one would make
+  every ordinary relative import in the workspace an absolute-import
+  violation.
   `workspaceLayout` is carried on the graph output exactly as the Nx and
   native providers carry theirs.
 

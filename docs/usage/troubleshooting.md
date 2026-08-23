@@ -103,7 +103,7 @@ reporting because the alternative is silence. The ones that change a verdict:
 - **An external record with no external node in the graph is still checked**, so
   `bannedExternalImports` reaches Go, Rust and Python — where upstream would bail.
 
-If your case is not one of those, it is a divergence worth filing.
+If your case is not one of those, it is a divergence worth filing. A _config_ this engine refuses to load where ESLint compiles it is a different axis and a deliberate one -- see [policy-schema.md](../reference/policy-schema.md#refused-pattern-shapes).
 
 **A specifier that does not exist in the file.** Each analyzer has pinned parse
 limits, and every one of them errs toward a _spurious record naming text the file
@@ -180,12 +180,13 @@ a distinct outcome from both 0 and 1, and it should fail your build.
 
 **Total failures** — the run never started:
 
-| symptom                       | cause                                                                                                             |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| no workspace found            | not run from inside a repository with a workspace marker (`nx.json`, `lattice.json`, `.moon/` or `.config/moon/`) |
-| config errors, naming the row | the boundary config is malformed — every problem is listed rather than the first                                  |
-| `nx graph` failed             | a plugin threw during graph computation; run `nx graph --file=graph.json` directly for the real message           |
-| `git` failed                  | not a git repository, or `git ls-files` is unavailable                                                            |
+| symptom                                 | cause                                                                                                                                                                                                                                                                                             |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| no workspace found                      | not run from inside a repository with a workspace marker (`nx.json`, `lattice.json`, `.moon/` or `.config/moon/`)                                                                                                                                                                                 |
+| config errors, naming the row           | the boundary config is malformed — every problem is listed rather than the first                                                                                                                                                                                                                  |
+| a config that loaded before now exits 3 | a pattern this engine refuses by shape, or one it now bounds -- the message names the row and what to write instead. ESLint compiles these; this engine will not run them against specifiers a pull request chooses. See [policy-schema.md](../reference/policy-schema.md#refused-pattern-shapes) |
+| `nx graph` failed                       | a plugin threw during graph computation; run `nx graph --file=graph.json` directly for the real message                                                                                                                                                                                           |
+| `git` failed                            | not a git repository, or `git ls-files` is unavailable                                                                                                                                                                                                                                            |
 
 **Partial failures** — the run completed but some file has no verdict. These
 appear under their own heading in the report, and they are the reason exit 3

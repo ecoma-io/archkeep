@@ -253,6 +253,28 @@ describe("formatDeclaredEdges — decisionRef resolution (P1-02)", () => {
     const text = formatDeclaredEdges({ findings: [declaredEdgeFinding()], judged: 1 });
     expect(text).not.toContain("UNRESOLVED");
   });
+
+  // The summary sentence names the field the edge was DECLARED with, and the
+  // three providers do not share one: Moon has no `implicitDependencies` key
+  // at all, so naming it there sends a reader looking for something
+  // `moon.yml` would reject. `../../cli.mjs`'s `declaredEdgeField` decides
+  // which noun this run gets; these two pin both spellings, article included
+  // — a frozen "an" reads as "an dependsOn" on every Moon run.
+  it("names the provider's own declaration field, with the article that fits it", () => {
+    const text = formatDeclaredEdges({
+      findings: [declaredEdgeFinding({ file: "libs/core/moon.yml" })],
+      judged: 1,
+      declaration: "dependsOn",
+    });
+    expect(text).toContain("a dependsOn edge crosses a boundary");
+    expect(text).not.toContain("implicitDependencies");
+    expect(text).toContain("libs/core/moon.yml  onlyTagsConstraintViolation");
+  });
+
+  it("keeps the Nx and native wording byte-identical when no declaration is handed in", () => {
+    const text = formatDeclaredEdges({ findings: [declaredEdgeFinding()], judged: 1 });
+    expect(text).toContain("an implicitDependencies edge crosses a boundary");
+  });
 });
 
 describe("analysis failures", () => {
