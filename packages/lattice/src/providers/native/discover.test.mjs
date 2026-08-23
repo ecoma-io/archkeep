@@ -263,6 +263,49 @@ describe("discoverNativeProjects", () => {
       );
     });
 
+    // A tag is workspace TEXT — `projects.declared[].tags`, a `projectRules`
+    // row, a tracked `project.json` — so a pull request can name one after any
+    // member of `Object.prototype`. The origin map was a plain `{}`, and
+    // `(tagOrigins[tag] ??= new Set()).add(origin)` then found the inherited
+    // member instead of `undefined`, kept it, and called `.add` on it:
+    // measured, `TypeError: tagOrigins[tag].add is not a function`, printed
+    // verbatim with no `lattice:` prefix, no file and no row, on the exit-3
+    // path.
+    //
+    // The assertion that matters is the one on `tags`, not the one on
+    // "does not throw". The near miss is worse than the bug: writing the key
+    // onto a plain object repoints that object's prototype, so
+    // `Object.keys(tagOrigins)` returns `[]` for it and the tag VANISHES from
+    // the project's tag list — a project silently carrying one fewer tag than
+    // it declared, which is every tag-keyed rule (`../../rules/tags.mjs`)
+    // quietly not applying to it. A test that only checked for the absence of a
+    // throw would pass that "fix".
+    it.each(["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"])(
+      "keeps a tag literally named %s, with its origin, instead of crashing or losing it",
+      (tag) => {
+        const model = modelOf({
+          projects: { declared: [{ root: "apps/a", tags: [tag, "real"] }] },
+          projectRules: [{ match: "apps/**", tags: [tag] }],
+        });
+        const { projects } = discoverNativeProjects({
+          root: "/repo",
+          files: ["apps/a/x.go"],
+          readFile: filesOf({}),
+          model,
+        });
+        // In the sorted tag list, exactly like any other spelling — this is the
+        // assertion a plain-assignment "fix" fails.
+        expect(projects[0].tags).toEqual([tag, "real"].sort());
+        // And a real own entry in the provenance map, carrying BOTH origins:
+        // `Object.prototype.hasOwnProperty` is the direct proof of an own
+        // property as distinct from an inherited one.
+        expect(Object.prototype.hasOwnProperty.call(projects[0].tagOrigins, tag)).toBe(true);
+        expect(Object.keys(projects[0].tagOrigins).sort()).toEqual([tag, "real"].sort());
+        expect(projects[0].tagOrigins[tag].sort()).toEqual(["declared", "projectRules[0]"]);
+        expect(projects[0].tagOrigins.real).toEqual(["declared"]);
+      },
+    );
+
     // "tags / rules": two different rows matching the same project, each
     // contributing a different tag — both must land, not just the last row
     // evaluated.

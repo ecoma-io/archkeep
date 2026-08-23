@@ -99,6 +99,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { posix, win32 } from "node:path";
 import { Worker } from "node:worker_threads";
 
 // A finding id is spelled the way a rule name is, by the contract's decision
@@ -859,6 +860,15 @@ function findingViolation(finding, index, catalogue) {
   if (finding.sourceFile !== undefined && !isNonEmptyString(finding.sourceFile)) {
     return `findings[${index}].sourceFile is ${describeValue(finding.sourceFile)}`;
   }
+  if (finding.sourceFile !== undefined && !isWorkspaceRelative(finding.sourceFile)) {
+    return (
+      `findings[${index}].sourceFile is ${describeValue(finding.sourceFile)}, which does not name ` +
+      `a file inside the workspace — every path this tool reports is workspace-relative ` +
+      `(../analysis/contract.md), and an absolute or ".."-carrying one is a location no reader's ` +
+      `checkout resolves: GitHub's code scanning drops such a result without saying so, so the ` +
+      `run would fail on a finding whose annotation never appears`
+    );
+  }
   if (finding.project !== undefined && !isNonEmptyString(finding.project)) {
     return `findings[${index}].project is ${describeValue(finding.project)}`;
   }
@@ -880,6 +890,46 @@ function findingViolation(finding, index, catalogue) {
   }
 
   return null;
+}
+
+/**
+ * Whether a path a rule named is one this workspace can resolve: relative, and
+ * spelled without a `..` segment.
+ *
+ * **The refusal lives in `findingViolation` above, beside its refusal of a
+ * sub-1 `line`, because that is where a rule's verdict is judged.** The
+ * position was already held to the contract there and the path was not, which
+ * is the whole of the defect. A rule that names a file outside the workspace
+ * has not produced a verdict about this workspace, and that is true of every
+ * face the verdict reaches — the text report, the JSON envelope and SARIF
+ * alike — not only of the one whose consumer happens to notice.
+ * `../report/` renders and decides nothing (`../../AGENTS.md`), so a formatter
+ * that dropped such a location would be a rule wearing a formatter's name —
+ * and dropping it is the silent direction anyway: the run still fails while
+ * the annotation a developer would act on never appears.
+ *
+ * The shapes refused are the ones `../report/sarif.integration.test.mjs`
+ * already states a SARIF `uri` must never have, rather than a second opinion
+ * about paths: absolute, and carrying a `..` segment. That test names a third,
+ * a `file:` URI, which needs no refusal here — `toUriReference` encodes each
+ * segment, so a scheme's `:` leaves as `%3A` and no path can arrive at GitHub
+ * still spelled as one. A `..` is refused even where it collapses back inside
+ * the tree (`a/../b.go`): the URI reference is emitted as written, and
+ * normalizing it here would answer about a file the rule did not name.
+ *
+ * Absoluteness is asked of BOTH rooting rules, because the string arrives from
+ * an artifact this engine did not write and is judged on whichever platform CI
+ * happens to run: `win32.isAbsolute` is what makes `C:\x` and `\\server\share`
+ * absolute on a POSIX runner, where `posix.isAbsolute` reads them as ordinary
+ * relative names. Both separator families are split for the `..` test for the
+ * same reason, the way `../containment.mjs` splits one.
+ *
+ * @param {string} path
+ * @returns {boolean}
+ */
+function isWorkspaceRelative(path) {
+  if (posix.isAbsolute(path) || win32.isAbsolute(path)) return false;
+  return !path.split(/[\\/]/u).includes("..");
 }
 
 /**

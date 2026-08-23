@@ -96,6 +96,52 @@ export function moonMarkerAt(root, { exists = existsSync } = {}) {
 }
 
 /**
+ * The key `env` spells PATH under, decided by the PLATFORM rather than by
+ * which spellings the object happens to carry.
+ *
+ * The two platforms disagree about what `Path` and `PATH` even ARE, and
+ * nothing about the keys present can settle it:
+ *
+ * - **Windows** — variable names are case-INSENSITIVE. `Path`, `PATH` and
+ *   `path` are three spellings of ONE variable, and `Path` is the spelling
+ *   the system itself writes. `process.env` mirrors that case-insensitivity,
+ *   but the copy `../process.mjs`'s `environmentForTree` hands back is a plain
+ *   spread, and a plain object is not: reading `clean.PATH` there answers
+ *   `undefined` on a machine whose PATH is perfectly present, and writing
+ *   `PATH` back onto it would leave the child holding two spellings of one
+ *   variable with only the synthesized one populated — the system PATH
+ *   dropped, silently. So on Windows the key is found case-insensitively and
+ *   written back under the spelling it was read from, and `resolveMoonEnv`
+ *   collapses the remaining case-variants.
+ * - **POSIX** — variable names are case-SENSITIVE. `Path` and `PATH` are two
+ *   ordinary, unrelated variables; both may exist, and the loader resolves the
+ *   child's binary from `PATH` alone. So `PATH` is the only key this function
+ *   may answer with there, and the only one `resolveMoonEnv` may write or
+ *   remove.
+ *
+ * Guessing the key from `Object.keys` order instead is what made this
+ * function delete a real POSIX PATH: measured, env `{Path: "/opt/foo", PATH:
+ * "/usr/bin:/bin"}` reached the child as `{Path:
+ * "<root>/node_modules/.bin:/opt/foo"}` and nothing else — `PATH` gone, `moon`
+ * therefore ENOENT, and `isMoonBinaryMissing` below telling a consumer with
+ * Moon installed to install Moon. Loudly, confidently wrong.
+ *
+ * On Windows a populated spelling wins over an empty one; with no spelling
+ * present at all the answer is `"PATH"` on both platforms, the name the
+ * variable is then created under.
+ *
+ * @param {Record<string, string|undefined>} env
+ * @param {boolean} windows Whether the platform this env is built for treats
+ *   variable names case-insensitively.
+ * @returns {string}
+ */
+function pathVariableKey(env, windows) {
+  if (!windows) return "PATH";
+  const spellings = Object.keys(env).filter((key) => key.toUpperCase() === "PATH");
+  return spellings.find((key) => env[key]) ?? spellings[0] ?? "PATH";
+}
+
+/**
  * Resolves the Moon CLI binary by adding the workspace root's
  * `node_modules/.bin` to PATH, the same directory pnpm installs platform
  * shims into. This is the convention `npx` uses and the one
@@ -106,45 +152,113 @@ export function moonMarkerAt(root, { exists = existsSync } = {}) {
  * `./nx.mjs` resolves `nx`. Instead, the binary is found on PATH after the
  * workspace's `node_modules/.bin` is prepended.
  *
+ * **No entry of the PATH this builds is ever empty.** POSIX resolves an empty
+ * entry — a leading, trailing, or doubled delimiter — as the CURRENT
+ * DIRECTORY, and the current directory of the spawn this env is built for is
+ * the untrusted workspace being judged: a `moon` file committed into that tree
+ * would be executed in place of the real CLI. Joining the bin dir to an absent
+ * PATH produced exactly that trailing empty entry, and the Windows spelling
+ * `pathVariableKey` exists for is what made "absent" reachable on an ordinary
+ * machine. Empty entries inherited from the caller are dropped for the same
+ * reason: this env is built for one spawn into one untrusted tree, and no
+ * entry of it may mean "here".
+ *
+ * **Exactly one variable is touched, and which one is the platform's answer.**
+ * `pathVariableKey` above owns that decision; what follows from it here is the
+ * removal, which happens on Windows ONLY. There, the leftover case-variants
+ * are the same variable under other spellings and handing the child two views
+ * of it — one populated, one not — is ambiguous. On POSIX they are unrelated
+ * variables that merely look alike, so nothing is removed: deleting a POSIX
+ * `Path` because `PATH` was written is destroying a variable this tool was
+ * never asked about, and deleting the `PATH` a child is resolved through is
+ * how `moon` became ENOENT on a machine that had it.
+ *
+ * This function cannot fail. It reports where Moon will be looked for, not
+ * whether it is there — that is answered by the spawn itself, in
+ * `readProjectGraph`, which is the only place that can tell.
+ *
  * @param {string} workspaceRoot
- * @param {{ env?: Record<string, string|undefined> }} [io]
+ * @param {{ env?: Record<string, string|undefined>, platform?: string }} [io]
+ *   The environment to build from, and the platform whose variable-name case
+ *   rules apply. `platform` is injectable for one reason: the two branches
+ *   below are opposite behaviours and a machine can only run one of them, so a
+ *   Windows-only rule tested nowhere is a rule that ships unproven. It governs
+ *   the case rule alone — the separator stays `node:path`'s `delimiter`,
+ *   because the child really does run on this host.
  * @returns {{ moon: string, env: Record<string, string|undefined> }}
  *   The Moon binary name and an env with the adjusted PATH.
- * @throws {Error} when Moon cannot be found on the augmented PATH.
  */
-function resolveMoonEnv(workspaceRoot, { env = process.env } = {}) {
+function resolveMoonEnv(workspaceRoot, { env = process.env, platform = process.platform } = {}) {
+  const windows = platform === "win32";
   // Strip ambient git redirects first — the same protection every other
   // provider gets — then add the workspace's node_modules/.bin to PATH.
   const clean = environmentForTree(env);
-  const binDir = `${workspaceRoot}/node_modules/.bin`;
-  const pathEnv = clean.PATH ?? "";
-  const pathWithBin = pathEnv.includes(binDir) ? pathEnv : `${binDir}${delimiter}${pathEnv}`;
-  return { moon: "moon", env: { ...clean, PATH: pathWithBin } };
+  const binDir = join(workspaceRoot, "node_modules", ".bin");
+  const key = pathVariableKey(clean, windows);
+  const entries = String(clean[key] ?? "")
+    .split(delimiter)
+    .filter((entry) => entry !== "");
+  // Segment equality, never substring containment: a directory named
+  // `<root>/node_modules/.bin-old` CONTAINS the bin dir as a substring, and a
+  // containment test reads that as "already on PATH" and never prepends the
+  // real one — leaving `moon` to resolve to whatever else on the machine
+  // answers to the name.
+  if (!entries.includes(binDir)) entries.unshift(binDir);
+  /** @type {Record<string, string|undefined>} */
+  const next = { ...clean, [key]: entries.join(delimiter) };
+  if (windows) {
+    // One variable, one spelling, on the platform where they are one variable.
+    for (const spelling of Object.keys(next)) {
+      if (spelling !== key && spelling.toUpperCase() === "PATH") delete next[spelling];
+    }
+  }
+  return { moon: "moon", env: next };
 }
 
 /**
  * Moon dependency scope (plus, where known, its `source`) → Lattice edge type.
  *
- * `source` is checked first and wins: Moon's own `"implicit"`/`"explicit"`
- * marks whether a dependency was declared (`moon.yml`'s `dependsOn`) or
- * inferred by Moon itself with no author-written declaration behind it — the
- * same "no code-level backing" fact Nx's `implicitDependencies` and the
- * native provider's own `implicitDependencies` row both carry, and the exact
- * criterion `check`'s `declaredEdgeViolationsForCheck`
- * (`../commands/edge-constraints.mjs`) and `drift.mjs`'s/`discover.mjs`'s own
- * exclusions already key off: `edge.type === "implicit"`. Before this
- * function read `source` at all, EVERY Moon-sourced edge — implicit or not —
- * fell through to a `scope`-derived type (`"static"`/`"dynamic"`), so an
- * implicit Moon dependency was structurally indistinguishable from a real,
- * code-derived one to every one of those callers.
+ * **Moon's `"implicit"` is the INVERSE of Lattice's, and this is the one place
+ * that has to know it.** The two vocabularies use the same word for opposite
+ * facts:
+ *
+ * - **Lattice** (from Nx's `implicitDependencies`, and `lattice.json`'s own
+ *   row of that name): `type: "implicit"` means *a human declared this edge
+ *   and there is no import behind it*. That is precisely why
+ *   `../commands/edge-constraints.mjs`'s `declaredEdgeViolationsForCheck`
+ *   exists — such an edge never becomes an `importSites` record, so
+ *   `evaluate()` structurally cannot reach it and `check` judges it as an edge
+ *   instead. `../commands/drift.mjs` and `../commands/discover.mjs` exclude
+ *   the same set for the mirror reason: a declaration is not evidence of code.
+ * - **Moon**: `source` is `"explicit"` when a human wrote the dependency in
+ *   `moon.yml`'s `dependsOn`, and `"implicit"` when **Moon derived it from
+ *   source files** — a `package.json` entry under
+ *   `javascript.syncProjectWorkspaceDependencies`, say. Moon's own shipped
+ *   schema says so in as many words (`.moon/cache/schemas/project.json`,
+ *   `DependencySource`, moon 2.4.6): *"The source where the dependency comes
+ *   from. Either explicitly defined in configuration, or implicitly derived
+ *   from source files."*
+ *
+ * So Moon's `"explicit"` carries Lattice's `"implicit"` fact, and Moon's
+ * `"implicit"` is a code-backed edge that gets a `scope`-derived type. Mapping
+ * the two words onto each other by their spelling — which is what this
+ * function did — made `declaredEdgeViolationsForCheck` judge exactly the set it
+ * was written NOT to judge: every manifest-derived edge judged as though it had
+ * no import site, and every hand-declared edge, the only kind that really has
+ * none, skipped. A workspace with a forbidden dependency written into a
+ * `moon.yml` and no import to hide behind reported `no declared-edge
+ * violations` and exited 0 (#262).
  *
  * `source` is only available on a project node's own `dependencies[]` array
  * (`transformMoonGraph`'s second edge-building loop) — `raw.graph.edges`'
  * `[source, target, scope]` tuples carry no such field, so that loop's call
- * always passes `source: undefined` and this function's behavior there is
- * unchanged.
+ * always passes `source: undefined`, which cannot equal `"explicit"` and so
+ * always falls through to `scope`. The node loop is the only place a
+ * dependency can be typed `"implicit"` at all, which is what makes the
+ * "implicit wins per pair" rule in `transformMoonGraph`'s `add` correct: the
+ * loop that can see `source` overrules the loop that cannot.
  *
- * Once `source` is not `"implicit"` (or is unknown), Moon's `scope` decides:
+ * Once `source` is not `"explicit"` (or is unknown), Moon's `scope` decides:
  * - `"production"` — a runtime dependency. Maps to `"static"`.
  * - `"development"` — a build-time-only dependency. Maps to `"dynamic"`,
  *   because `noImportsOfLazyLoadedLibraries` is decided on exactly that
@@ -159,17 +273,18 @@ function resolveMoonEnv(workspaceRoot, { env = process.env } = {}) {
  *   way.
  *
  * @param {string} scope
- * @param {string} [source] Moon's own `"implicit"`/`"explicit"` marker for
+ * @param {string} [source] Moon's own `"explicit"`/`"implicit"` marker for
  *   this specific dependency, when the caller has one.
  * @returns {string|undefined} Lattice edge type, or `undefined` to skip.
  */
 function edgeTypeFromScope(scope, source) {
   if (scope === "root") {
-    // Root-to-project edges are not project-to-project boundaries, implicit
+    // Root-to-project edges are not project-to-project boundaries, declared
     // or not.
     return undefined;
   }
-  if (source === "implicit") return "implicit";
+  // Moon "explicit" — written by hand in `moon.yml` — IS Lattice "implicit".
+  if (source === "explicit") return "implicit";
   switch (scope) {
     case "production":
       return "static";
@@ -248,6 +363,11 @@ function deriveTags(projectNode) {
  * - `application`-layer projects whose sources all share a prefix → `appsDir`
  * - `library`-layer projects whose sources all share a prefix → `libsDir`
  *
+ * A project at the workspace ROOT contributes to neither. Its `source` is
+ * `"."` (or, on some Moon versions, `""`), whose top segment names no
+ * directory the workspace keeps apps or libs in — see the guard in the loop
+ * below for what inferring one from it would do.
+ *
  * A prefix is "shared" when every project of that layer starts with the same
  * top-level directory. If no consistent prefix exists, that key is omitted
  * from the result. If either prefix is found but the other is not, `null` is
@@ -269,6 +389,19 @@ function inferWorkspaceLayout(projectNodes) {
   for (const node of projectNodes) {
     if (!node.source) continue;
     const topDir = node.source.split("/")[0];
+    // A source that names no directory BELOW the workspace root contributes no
+    // prefix. Moon spells the root project's source `"."`, and
+    // `".".split("/")[0]` is `"."` — which infers `appsDir: "."` and makes
+    // `../rules/specifiers.mjs`'s `isAbsoluteImportIntoAnotherProject` test
+    // `imp.startsWith("./")`: EVERY ordinary relative import in the workspace
+    // reported as an absolute import into another project, from one
+    // root-level `moon.yml`. The guard is on the resolved top SEGMENT rather
+    // than on `source` itself, so every spelling that lands there — `"."`,
+    // `"./"`, `"./apps/web"`, a leading `/` — is covered by one test instead
+    // of a list the next spelling escapes. Excluding a root project can only
+    // leave a prefix set empty, which returns the incomplete layout `null`
+    // above and falls back to the complete default: the loud direction.
+    if (topDir === "" || topDir === "." || topDir === "..") continue;
     if (node.layer === "application") appDirs.add(topDir);
     else if (node.layer === "library") libDirs.add(topDir);
   }
@@ -335,10 +468,10 @@ export function transformMoonGraph(raw) {
   // exclusion callers (`../commands/drift.mjs`, `../commands/discover.mjs`)
   // ever look at `type`, so the phantom slipped past every `edge.type ===
   // "implicit"` check as a fake code-derived edge. One pair now always
-  // resolves to exactly one entry, and `"implicit"` — Moon's own "no
-  // author-written declaration behind this" fact — always wins over a
-  // scope-derived type for that same pair, in whichever order the two loops
-  // below discover it.
+  // resolves to exactly one entry, and `"implicit"` — the hand-declared fact,
+  // which only the node loop can see (`edgeTypeFromScope`'s header) — always
+  // wins over a scope-derived type for that same pair, in whichever order the
+  // two loops below discover it.
   /** @type {Map<string, {source: string, target: string, type: string}>} */
   const edgesByPair = new Map();
   const add = (source, target, type) => {
@@ -361,8 +494,11 @@ export function transformMoonGraph(raw) {
   for (const node of projectNodes) {
     if (!node.id || !node.source) continue;
     const tags = deriveTags(node);
+    // Nx's `implicitDependencies` is the hand-declared list — so it is Moon's
+    // `"explicit"` dependencies that belong here, not its `"implicit"` ones.
+    // Same inversion as `edgeTypeFromScope` above, same reason.
     const implicitDeps = Array.isArray(node.dependencies)
-      ? node.dependencies.filter((d) => d.source === "implicit").map((d) => d.id)
+      ? node.dependencies.filter((d) => d.source === "explicit").map((d) => d.id)
       : [];
     const taskTargets = Array.isArray(node.taskTargets) ? node.taskTargets : [];
     nodes[node.id] = {
@@ -469,22 +605,54 @@ export function mergeImportEdges(graph, { importSites, projectOf }) {
 }
 
 /**
- * Resolves the Moon CLI entry point, or throws if Moon is not installed.
+ * The name or path this provider will spawn as the Moon CLI.
  *
- * Unlike `./nx.mjs`'s `nxCli()`, this does not resolve through
- * `require.resolve` — `moon` is not a peer dependency of this package, so
- * there is no `node_modules/moon` to resolve from. The CLI is found on the
- * system PATH after the workspace's `node_modules/.bin` is prepended (see
- * `resolveMoonEnv`). Tests inject `resolveMoon` to provide a known binary
- * path without depending on a system-wide Moon installation.
+ * Unlike `./nx.mjs`'s `nxCli()`, this resolves nothing and verifies nothing.
+ * `moon` is not a peer dependency of this package, so there is no
+ * `node_modules/moon` to `require.resolve`, and the binary may legitimately
+ * sit either in the workspace's own `node_modules/.bin` (the usual case, which
+ * `resolveMoonEnv` puts on PATH) or anywhere else on the consumer's PATH. The
+ * default therefore returns the bare name `"moon"` and lets the spawn be the
+ * existence check — the only test that covers both places without this file
+ * reimplementing `which`, and one that cannot refuse a globally installed Moon
+ * the way a `node_modules/.bin` stat would.
+ *
+ * It used to document a "Moon cannot be found" error it had no way to throw:
+ * the default resolver is a constant. The error a consumer actually meets is
+ * built in `readProjectGraph` below, from the spawn's own `ENOENT` — the only
+ * place the fact is available to name.
+ *
+ * `resolveMoon` stays injectable so a test can point the spawn at a known
+ * binary path without a system-wide Moon installation.
  *
  * @param {string} workspaceRoot
  * @param {{ resolveMoon?: (workspaceRoot: string) => string }} [io]
  * @returns {string} Path or name of the Moon CLI binary.
- * @throws {Error} when Moon cannot be found.
  */
 function resolveMoonCli(workspaceRoot, { resolveMoon = () => "moon" } = {}) {
   return resolveMoon(workspaceRoot);
+}
+
+/**
+ * Is this spawn failure "the binary is not there", as opposed to "it ran and
+ * failed"?
+ *
+ * Those are different facts and only the first has an install action behind
+ * it. Telling a consumer whose Moon ran and exited 2 to install Moon sends
+ * them to fix something that is not broken — the same mistake `./nx.mjs`'s
+ * `nxCli` guards against from the other direction, where only a
+ * `MODULE_NOT_FOUND` earns the "not installed" story.
+ *
+ * `../process.mjs`'s `runProcess` wraps the child's failure and carries the
+ * original on `cause`, so the code is read from there; the direct `code` is
+ * read too, for a `run` seam that surfaces a spawn error unwrapped.
+ *
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isMoonBinaryMissing(error) {
+  const thrown = /** @type {{code?: unknown, cause?: {code?: unknown}}|null|undefined} */ (error);
+  return thrown?.code === "ENOENT" || thrown?.cause?.code === "ENOENT";
 }
 
 /**
@@ -496,15 +664,45 @@ function resolveMoonCli(workspaceRoot, { resolveMoon = () => "moon" } = {}) {
  * expects, and returns it.
  *
  * @param {string} workspaceRoot
- * @param {{ run?: typeof runProcess, resolveMoon?: (workspaceRoot: string) => string, env?: Record<string, string|undefined> }} [io]
- *   Injectable spawn, injectable Moon resolution, and injectable env.
+ * @param {{ run?: typeof runProcess, resolveMoon?: (workspaceRoot: string) => string, env?: Record<string, string|undefined>, platform?: string }} [io]
+ *   Injectable spawn, injectable Moon resolution, injectable env, and the
+ *   platform whose environment-variable case rules `resolveMoonEnv` applies —
+ *   see its own header for why that one is a seam.
  * @returns {object} `{ nodes, dependencies }`, plus `workspaceLayout` when
  *   the project paths imply one.
+ * @throws {Error} naming the install action when the Moon binary is in neither
+ *   place it is looked for. Every other spawn failure, and a JSON parse
+ *   failure, propagates untouched — already named by `../process.mjs`'s
+ *   `runProcess`. No path here answers with an empty graph.
  */
-export function readProjectGraph(workspaceRoot, { run = runProcess, resolveMoon, env } = {}) {
-  const moonEnv = resolveMoonEnv(workspaceRoot, { env: env ?? process.env });
+export function readProjectGraph(
+  workspaceRoot,
+  { run = runProcess, resolveMoon, env, platform } = {},
+) {
+  const moonEnv = resolveMoonEnv(workspaceRoot, {
+    env: env ?? process.env,
+    platform: platform ?? process.platform,
+  });
   const moon = resolveMoonCli(workspaceRoot, { resolveMoon });
-  const output = run(moon, ["project-graph", "--json"], workspaceRoot, moonEnv.env);
+  let output;
+  try {
+    output = run(moon, ["project-graph", "--json"], workspaceRoot, moonEnv.env);
+  } catch (cause) {
+    // Everything except an absent binary propagates untouched: `runProcess`
+    // already names the command, the working directory and the child's own
+    // stderr, and rewriting a real Moon error here would bury it. The absent
+    // binary is re-thrown because it is the failure a consumer meets FIRST and
+    // its raw text — `spawnSync moon ENOENT` — names no action they can take.
+    if (!isMoonBinaryMissing(cause)) throw cause;
+    throw new Error(
+      `lattice: the Moon CLI (\`${moon}\`) could not be run in ${workspaceRoot} — the Moon ` +
+        "provider reads the project graph with `moon project-graph --json`, looking for the " +
+        `binary in ${join(workspaceRoot, "node_modules", ".bin")} and then on PATH, and neither ` +
+        "answered. Install Moon in this workspace (`pnpm add -D @moonrepo/cli`), or put `moon` " +
+        "on PATH.",
+      { cause },
+    );
+  }
   const raw = JSON.parse(output);
   return transformMoonGraph(raw);
 }

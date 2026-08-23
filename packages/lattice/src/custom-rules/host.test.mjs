@@ -780,6 +780,22 @@ describe("what evaluateCustomRule refuses, by name", () => {
       /findings\[0\]\.sourceFile is string ""/u,
     ],
     [
+      "a finding's sourceFile is absolute",
+      verdictOf({
+        verdict: "fail",
+        findings: [{ id: FINDING, message: "m", sourceFile: "/etc/passwd" }],
+      }),
+      /findings\[0\]\.sourceFile is string "\/etc\/passwd", which does not name a file inside the workspace/u,
+    ],
+    [
+      "a finding's sourceFile climbs out of the workspace",
+      verdictOf({
+        verdict: "fail",
+        findings: [{ id: FINDING, message: "m", sourceFile: "../../outside.go" }],
+      }),
+      /findings\[0\]\.sourceFile is string "\.\.\/\.\.\/outside\.go", which does not name a file inside the workspace/u,
+    ],
+    [
       "a finding's project is empty",
       verdictOf({ verdict: "fail", findings: [{ id: FINDING, message: "m", project: "" }] }),
       /findings\[0\]\.project is string ""/u,
@@ -806,6 +822,57 @@ describe("what evaluateCustomRule refuses, by name", () => {
       expect(result.failure.reason).toContain("hollow verdict");
     });
   }
+
+  it("refuses every off-workspace sourceFile spelling, naming the rule and the path", async () => {
+    // The silent direction, and the reason this case is spelled out rather
+    // than left to the table above. A `uri` that is absolute or carries a
+    // `..` is one GitHub's code scanning cannot map onto a file in the
+    // checkout, and it drops the result WITHOUT saying so: the build still
+    // fails on the finding, and the annotation a developer would act on never
+    // appears. The position was already held to 1-based; the path was not.
+    for (const sourceFile of [
+      "/etc/passwd",
+      "../../outside.go",
+      // Refused although it collapses back inside the tree: the URI reference
+      // is emitted as written, and normalizing it here would answer about a
+      // file the rule did not name.
+      "libs/app/../../etc/passwd",
+      // Absolute only under Windows' rooting rules, and judged on whichever
+      // platform CI runs — a POSIX-only test would pass while the host let
+      // them through.
+      "C:\\Windows\\hosts",
+      "C:/Windows/hosts",
+      "\\\\server\\share\\x.go",
+      "\\rooted.go",
+    ]) {
+      const result = await evaluateVerdict(
+        verdictOf({
+          verdict: "fail",
+          findings: [{ id: FINDING, message: "m", sourceFile, line: 7, column: 2 }],
+        }),
+      );
+      assertRefused(result, /does not name a file inside the workspace/u);
+      // The two facts a reader has to have to act on the refusal: which rule
+      // said it — `assertRefused` holds that — and which path it refused.
+      expect(result.failure.reason).toContain(JSON.stringify(sourceFile));
+    }
+  });
+
+  it("accepts an ordinary workspace-relative sourceFile, so a real finding still reports", async () => {
+    // The load-bearing half (`../../../../AGENTS.md`): a guard that refused
+    // every path would pass every refusal above by reporting nothing at all,
+    // which is the failure this repository rates worst.
+    const finding = {
+      id: FINDING,
+      message: "libs/app reached libs/ring's internals",
+      sourceFile: "libs/app/main.go",
+      line: 7,
+      column: 2,
+    };
+    const result = await evaluateVerdict(verdictOf({ verdict: "fail", findings: [finding] }));
+    expect(result.ok).toBe(true);
+    expect(result.verdict.findings).toEqual([finding]);
+  });
 
   it("can never surface a pass that carries findings", async () => {
     // The silent direction, stated as its own case rather than left inside the

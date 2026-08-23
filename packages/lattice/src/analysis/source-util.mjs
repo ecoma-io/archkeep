@@ -10,6 +10,63 @@
  */
 
 /**
+ * The one text `lineStartsOf` last built an index for, and that index. One
+ * entry, because one entry is the shape of the work: every caller walks ONE
+ * file's import sites in a loop, so the file being asked about only changes
+ * when the loop ends.
+ *
+ * Keyed by the string itself. Strings are immutable, so an index built from
+ * one text is correct for any text equal to it — there is no stale answer to
+ * guard against, only a hit or a miss. What proving that equality costs is
+ * the subject of the hit path's own comment below.
+ */
+let indexedText = null;
+/** @type {number[]|null} */
+let indexedStarts = null;
+
+/**
+ * Where every line of `text` begins, as offsets into it: entry `i` is the
+ * offset of line `i + 1`, so a 1-based line number reads straight off it and
+ * the array is never empty (line 1 starts at 0, in an empty file too).
+ *
+ * Built by one scan of the text and memoized on the text it was built from,
+ * which is what makes `positionAt` below cost a binary search per call
+ * instead of a scan. **Treat the result as read-only** — it is shared with
+ * every other caller asking about the same text.
+ *
+ * Measured, before this index existed: a Go file with 8000 import sites cost
+ * 1668ms to position (2000 sites cost 108ms, 4000 cost 417ms — four times the
+ * time for twice the sites, the signature of the quadratic every one of the
+ * three source analyzers was paying), because each `positionAt` rescanned the
+ * file from offset 0. Analyzed files are attacker-supplied
+ * (`../../../../SECURITY.md`), so that was a denial of service reachable by
+ * committing one large generated file.
+ *
+ * @param {string} text
+ * @returns {number[]}
+ */
+export function lineStartsOf(text) {
+  if (indexedStarts !== null && indexedText === text) {
+    // Adopt the caller's string on the way out. `===` on two strings is
+    // equality of CONTENT: the memoized index is right for any text equal to
+    // the one it was built from, but proving that equality costs a compare of
+    // the whole text unless the two are the same reference. Keeping the
+    // reference the caller passed makes every later call from that caller a
+    // pointer comparison — without it, two equal 116KB texts turned this memo
+    // into a 116KB memcmp per lookup, which is the quadratic wearing a hat.
+    indexedText = text;
+    return indexedStarts;
+  }
+  const starts = [0];
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10) starts.push(i + 1);
+  }
+  indexedText = text;
+  indexedStarts = starts;
+  return starts;
+}
+
+/**
  * Where `offset` lands in `text`, in the contract's coordinates: line and
  * column both 1-based, because that is what an editor diagnostic and a
  * `file:line:column` terminal report want (`contract.md`).
@@ -20,20 +77,33 @@
  * a CRLF file therefore reports the same columns, because the `\r` belongs to
  * the end of the preceding line and never to the start of the next one.
  *
+ * The answer is read off `lineStartsOf`'s index by binary search — the
+ * greatest line start at or before the offset — rather than by scanning the
+ * text, so a file's whole import list costs one scan plus a logarithmic
+ * search per site. Every coordinate it can return is one the scanning version
+ * returned: the index holds exactly the offsets `lastIndexOf("\n", …) + 1`
+ * used to produce, and the line number is that entry's position in it.
+ *
  * @param {string} text
  * @param {number} offset Byte offset into `text`; clamped into range rather
  *   than trusted, so a caller's arithmetic slip yields a wrong position and
  *   not a crash mid-run.
+ * @param {number[]} [lineStarts] `text`'s line-start index, for a caller that
+ *   already holds one. Defaults to the memoized `lineStartsOf(text)`, so a
+ *   caller that passes nothing pays for the scan once per file rather than
+ *   once per call — every existing caller is that caller.
  * @returns {{ line: number, column: number }}
  */
-export function positionAt(text, offset) {
+export function positionAt(text, offset, lineStarts = lineStartsOf(text)) {
   const clamped = Math.max(0, Math.min(offset, text.length));
-  const lineStart = text.lastIndexOf("\n", clamped - 1) + 1;
-  let line = 1;
-  for (let i = 0; i < lineStart; i++) {
-    if (text.charCodeAt(i) === 10) line++;
+  let low = 0;
+  let high = lineStarts.length - 1;
+  while (low < high) {
+    const mid = (low + high + 1) >> 1;
+    if (lineStarts[mid] <= clamped) low = mid;
+    else high = mid - 1;
   }
-  return { line, column: clamped - lineStart + 1 };
+  return { line: low + 1, column: clamped - lineStarts[low] + 1 };
 }
 
 /**

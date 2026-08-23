@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
+import { evaluate } from "../rules/index.mjs";
 import { analyzeTypeScript, packageNameOf, specifierSpelling } from "./typescript.mjs";
 
 /**
@@ -34,13 +35,21 @@ const PROJECTS = [
   { name: "web", root: "apps/web" },
 ];
 
-const tsconfig = (paths) =>
+/**
+ * A `tsconfig.base.json` with these `paths`. `compilerOptions` overrides the
+ * module/resolution defaults, because whether TypeScript's ordinary pass will
+ * load a given target is a function of those options and not of the extension
+ * alone — the `.json` block below is what measures that rather than asserting
+ * it.
+ */
+const tsconfig = (paths, compilerOptions = {}) =>
   JSON.stringify({
     compilerOptions: {
       module: "ESNext",
       moduleResolution: "Bundler",
       baseUrl: ".",
       paths,
+      ...compilerOptions,
     },
   });
 
@@ -690,5 +699,457 @@ describe("analyzeTypeScript — import-type queries (typeof import, import().Typ
       external: true,
       packageName: "left-pad",
     });
+  });
+});
+
+describe("analyzeTypeScript — a non-relative specifier landing on a declined extension", () => {
+  // The hole #264 reports, and it is not about `.vue`. TypeScript declines a
+  // module whose extension it does not compile; a RELATIVE specifier of that
+  // shape was already normalised and attributed, and a NON-RELATIVE one — a
+  // `paths` alias, a `baseUrl` mapping — was dropped. Dropped, the record named
+  // no target at all, which is `violations.md`'s "The order matters" step 4 and
+  // not step 6 — the mechanism `./typescript.mjs`'s declined-extension branch
+  // traces. The consequence is the one that matters here and is the same
+  // either way, because steps 4 and 6 share rule 10: every `depConstraints` row
+  // was skipped for the edge, and under `banTransitiveDependencies: false` —
+  // the option's own default — that is a clean run and exit 0 over a real
+  // boundary crossing.
+  const aliasedTo = (target) => ({ "tsconfig.base.json": tsconfig({ "@acme/block": [target] }) });
+
+  it("resolves an alias pointing at a .vue file to the project that owns it", () => {
+    const { imports, failures } = analyze('import Block from "@acme/block";', {
+      files: aliasedTo("libs/ui/src/Button.vue"),
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toEqual({
+      target: "ui",
+      file: "libs/ui/src/Button.vue",
+      external: false,
+      packageName: null,
+    });
+  });
+
+  it("answers a .vue alias target exactly as it answers a .ts one", () => {
+    // The whole bug in one assertion: the two runs differ only in the alias
+    // TARGET, and before the fix the `.vue` one came back `external: true`
+    // with `packageName: "@acme/block"` — a package the workspace does not
+    // have — while the `.ts` one named the project. `external` is the field
+    // the rule engine short-circuits on, so the two answers had to converge or
+    // the `.vue` edge would keep skipping the constraint table.
+    const viaVue = analyze('import Block from "@acme/block";', {
+      files: aliasedTo("libs/ui/src/Button.vue"),
+    });
+    const viaTs = analyze('import Block from "@acme/block";', {
+      files: aliasedTo("libs/ui/src/index.ts"),
+    });
+    expect(viaVue.imports[0].resolved.target).toBe(viaTs.imports[0].resolved.target);
+    expect(viaVue.imports[0].resolved.external).toBe(viaTs.imports[0].resolved.external);
+    expect(viaVue.imports[0].resolved.packageName).toBe(viaTs.imports[0].resolved.packageName);
+  });
+
+  it("follows the alias table rather than the extension — repoint it and the answer moves", () => {
+    // The anti-hard-coding assertion the `.ts` case already carries, for the
+    // declined-extension pass: `@acme/block` is unchanged and only the
+    // tsconfig entry moves, across a project boundary. An implementation that
+    // matched `.vue` against a table of its own would still answer `ui`.
+    const repointed = analyze('import Block from "@acme/block";', {
+      files: {
+        ...aliasedTo("libs/ui/icons/src/Icon.vue"),
+        "libs/ui/icons/src/Icon.vue": "<template><svg /></template>",
+      },
+    });
+    expect(repointed.imports[0].resolved).toEqual({
+      target: "ui-icons",
+      file: "libs/ui/icons/src/Icon.vue",
+      external: false,
+      packageName: null,
+    });
+  });
+
+  it("is general to every extension TypeScript declines, not special-cased to .vue", () => {
+    // `.vue` is where it was reported because a component library is where a
+    // boundary target IS a `.vue` file, but nothing about the mechanism is
+    // Vue's: the resolver declines on the extension, and every extension it
+    // declines took the same silent path.
+    for (const [file, text] of [
+      ["libs/ui/src/theme.css", ".a { color: red }"],
+      ["libs/ui/src/logo.svg", "<svg />"],
+      ["libs/ui/src/schema.graphql", "type Q { a: Int }"],
+    ]) {
+      const { imports } = analyze('import x from "@acme/block";', {
+        files: { ...aliasedTo(file), [file]: text },
+      });
+      expect(imports[0].resolved).toEqual({
+        target: "ui",
+        file,
+        external: false,
+        packageName: null,
+      });
+    }
+  });
+
+  it("resolves a wildcard alias, because TypeScript still does the substitution", () => {
+    // Nothing here matches a pattern or substitutes a `*` — that is the whole
+    // argument for why this is not a second resolver. If the `*` arm broke,
+    // this is the test that would say so.
+    const { imports } = analyze('import Block from "@acme/blocks/Button";', {
+      files: { "tsconfig.base.json": tsconfig({ "@acme/blocks/*": ["libs/ui/src/*.vue"] }) },
+    });
+    expect(imports[0].resolved).toMatchObject({ target: "ui", file: "libs/ui/src/Button.vue" });
+  });
+
+  it("does not invent a target for an alias whose file is not there", () => {
+    // The load-bearing negative control for the pass itself. A dead alias must
+    // stay unresolved — an alias that resolved because the resolver was
+    // widened, rather than because a file exists, would be a fabricated edge.
+    const { imports, failures } = analyze('import Block from "@acme/block";', {
+      files: aliasedTo("libs/ui/src/Missing.vue"),
+    });
+    expect(imports[0].resolved).toBeNull();
+    expect(failures).toEqual([
+      {
+        sourceFile: "apps/web/src/main.ts",
+        line: 1,
+        column: 19,
+        reason: "TypeScript cannot resolve '@acme/block' from 'apps/web/src/main.ts'",
+      },
+    ]);
+  });
+
+  it("still calls a genuine external npm import external", () => {
+    // The positive control the fix is judged against: widening one `fileExists`
+    // answer must not turn an installed package into a workspace project.
+    const { imports, failures } = analyze('import api from "@acme-vendor/api/window";');
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toEqual({
+      target: null,
+      file: "node_modules/@acme-vendor/api/window.js",
+      external: true,
+      packageName: "@acme-vendor/api",
+    });
+  });
+
+  it("leaves an extension TypeScript does load to the ordinary pass, untouched", () => {
+    // The other half of the scope statement, under the fixture's own options
+    // (`moduleResolution: "Bundler"`, `resolveJsonModule` unset) — the ONE
+    // combination in which a `.json` alias target resolves in the ORDINARY
+    // pass without the option being asked for. The declined-extension pass
+    // must add nothing here. Every other combination is the block below, and
+    // it is where this used to be wrong: the claim was that `.json` resolves
+    // "even with `resolveJsonModule` off", and it does not.
+    const { imports, failures } = analyze('import data from "@acme/block";', {
+      files: {
+        ...aliasedTo("libs/ui/src/data.json"),
+        "libs/ui/src/data.json": JSON.stringify({ a: 1 }),
+      },
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toEqual({
+      target: "ui",
+      file: "libs/ui/src/data.json",
+      external: false,
+      packageName: null,
+    });
+  });
+
+  it("keeps a declined-extension file inside node_modules an external import", () => {
+    // `isExternalLibraryImport` still decides before ownership, exactly as it
+    // does for a resolution the ordinary pass made: an asset shipped by an
+    // installed package is that package's, not a project's.
+    const { imports, failures } = analyze('import "@acme-vendor/api/theme.css";', {
+      files: { "node_modules/@acme-vendor/api/theme.css": ".a { color: red }" },
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toEqual({
+      target: null,
+      file: "node_modules/@acme-vendor/api/theme.css",
+      external: true,
+      packageName: "@acme-vendor/api",
+    });
+  });
+
+  it("leaves the relative branch's narrower rules in charge of relative specifiers", () => {
+    // The relative branch runs first and refuses extension probing outright.
+    // `./Button` naming `Button.vue` must stay unresolved, or the declined pass
+    // has quietly widened a rule that was narrow on purpose.
+    const { imports } = analyze('import Button from "../../../libs/ui/src/Button";');
+    expect(imports[0].resolved).toBeNull();
+  });
+});
+
+describe("a non-relative specifier landing on a .json project source", () => {
+  // The guard that decides whether the declined-extension pass may answer for a
+  // `.json` remainder used to be a constant, on the claim that the ordinary
+  // pass loads `.json` "even with `resolveJsonModule` off". Measured on
+  // typescript 5.9.3, with `module` written beside `moduleResolution` exactly
+  // as `MODES` below writes them, that is true in none of the five "off" cells:
+  //
+  //   resolveJsonModule | Classic | Node10 | Node16 | NodeNext | Bundler
+  //   true              | loads   | loads  | loads  | loads    | loads
+  //   false             | null    | null   | null   | null     | null
+  //   unset             | null    | null   | null   | loads    | loads
+  //
+  // In every "null" cell the ordinary pass resolved nothing AND the guard
+  // refused the widened pass its answer, so a project's `.json` source reached
+  // by an alias was a boundary crossing neither pass could see — the silent
+  // direction, in the workspaces this pass exists to serve.
+  //
+  // The table holds where the `.json` is supplied by the SPECIFIER. Measured
+  // beside it: a `paths` TARGET that itself names the file — `{"@acme/data":
+  // ["libs/ui/src/data.json"]}` or a `*.json` target template — loads in all
+  // fifteen, which is why the two spellings are separated below rather than
+  // driven from one fixture. The first is the hole; the second never had one.
+  /** @type {[string, Record<string, unknown>][]} */
+  const MODES = [
+    ["Classic", { module: "ESNext", moduleResolution: "Classic" }],
+    ["Node10", { module: "CommonJS", moduleResolution: "Node10" }],
+    ["Node16", { module: "Node16", moduleResolution: "Node16" }],
+    ["NodeNext", { module: "NodeNext", moduleResolution: "NodeNext" }],
+    ["Bundler", { module: "ESNext", moduleResolution: "Bundler" }],
+  ];
+  /** @type {[string, Record<string, unknown>][]} */
+  const RESOLVE_JSON_MODULE = [
+    ["off", { resolveJsonModule: false }],
+    ["on", { resolveJsonModule: true }],
+    ["unset", {}],
+  ];
+  /** @param {[string, Record<string, unknown>][]} modes */
+  const casesIn = (modes) =>
+    modes.flatMap(([mode, moduleOptions]) =>
+      RESOLVE_JSON_MODULE.map(([label, jsonOption]) => [
+        mode,
+        label,
+        { ...moduleOptions, ...jsonOption },
+      ]),
+    );
+  const cases = casesIn(MODES);
+  // `Classic` walks parent directories, never `node_modules` — measured on
+  // typescript 5.9.3, where it resolves neither `left-pad` nor a deep `.json`
+  // inside a package, with the ordinary host and the widened one alike. So the
+  // external control below runs in the four modes that HAVE a `node_modules`
+  // walk to be judged by, and Classic gets its own case saying what it does.
+  const nodeModulesCases = casesIn(MODES.filter(([mode]) => mode !== "Classic"));
+
+  // The `.json` is written in the SPECIFIER and substituted through the `*`,
+  // so the mapping supplies a directory and TypeScript decides the extension —
+  // the shape the table above measures. Two projects carry the same file name
+  // so that repointing the alias has somewhere to land.
+  const wildcardAlias = (compilerOptions, target = "libs/ui/src/*") => ({
+    "tsconfig.base.json": tsconfig({ "@acme/*": [target] }, compilerOptions),
+    "libs/ui/src/data.json": JSON.stringify({ a: 1 }),
+    "libs/ui/icons/src/data.json": JSON.stringify({ a: 2 }),
+  });
+
+  it.each(cases)(
+    "names the owning project under moduleResolution %s with resolveJsonModule %s",
+    (mode, label, compilerOptions) => {
+      const { imports, failures } = analyze('import data from "@acme/data.json";', {
+        files: wildcardAlias(compilerOptions),
+      });
+      expect(failures).toEqual([]);
+      expect(imports[0].resolved).toEqual({
+        target: "ui",
+        file: "libs/ui/src/data.json",
+        external: false,
+        packageName: null,
+      });
+    },
+  );
+
+  it.each(cases)(
+    "resolves a bare baseUrl mapping onto a .json source under %s / resolveJsonModule %s",
+    (mode, label, compilerOptions) => {
+      // The same hole without a `paths` table at all: `baseUrl` alone makes a
+      // workspace-rooted specifier non-relative, so the relative branch never
+      // sees it and the ordinary pass is the only thing that had a chance.
+      const { imports, failures } = analyze('import data from "libs/ui/src/data.json";', {
+        files: {
+          "tsconfig.base.json": tsconfig({}, compilerOptions),
+          "libs/ui/src/data.json": JSON.stringify({ a: 1 }),
+        },
+      });
+      expect(failures).toEqual([]);
+      expect(imports[0].resolved).toMatchObject({
+        target: "ui",
+        file: "libs/ui/src/data.json",
+        external: false,
+      });
+    },
+  );
+
+  it.each(cases)(
+    "follows the alias table rather than the extension under %s / resolveJsonModule %s",
+    (mode, label, compilerOptions) => {
+      // The anti-hard-coding half, in every mode: the specifier is unchanged
+      // and only the tsconfig entry moves, across a project boundary. An
+      // implementation matching `.json` against a table of its own would still
+      // answer `ui`.
+      const { imports } = analyze('import data from "@acme/data.json";', {
+        files: wildcardAlias(compilerOptions, "libs/ui/icons/src/*"),
+      });
+      expect(imports[0].resolved).toMatchObject({
+        target: "ui-icons",
+        file: "libs/ui/icons/src/data.json",
+      });
+    },
+  );
+
+  it.each(cases)(
+    "invents no target for a dead .json alias under %s / resolveJsonModule %s",
+    (mode, label, compilerOptions) => {
+      // The negative control the widening is judged against. Answering a
+      // `fileExists` question TypeScript asked must not answer one it did not:
+      // a target that is not there stays unresolved in every mode.
+      const { imports } = analyze('import data from "@acme/missing.json";', {
+        files: wildcardAlias(compilerOptions),
+      });
+      expect(imports[0].resolved).toBeNull();
+    },
+  );
+
+  it.each(cases)(
+    "leaves a paths target that names the .json itself to the ordinary pass under %s / resolveJsonModule %s",
+    (mode, label, compilerOptions) => {
+      // The other measured spelling, and the scope statement for the guard: a
+      // mapped target carrying its own extension is loaded by the ordinary
+      // pass in all fifteen cells, so the widened pass must add nothing. Same
+      // answer either way — which is the point, since a difference here would
+      // mean the two passes had formed opinions about one question.
+      const { imports, failures } = analyze('import data from "@acme/data";', {
+        files: {
+          "tsconfig.base.json": tsconfig(
+            { "@acme/data": ["libs/ui/src/data.json"] },
+            compilerOptions,
+          ),
+          "libs/ui/src/data.json": JSON.stringify({ a: 1 }),
+        },
+      });
+      expect(failures).toEqual([]);
+      expect(imports[0].resolved).toMatchObject({
+        target: "ui",
+        file: "libs/ui/src/data.json",
+        external: false,
+      });
+    },
+  );
+
+  it.each(nodeModulesCases)(
+    "keeps a genuine external .json import external under %s / resolveJsonModule %s",
+    (mode, label, compilerOptions) => {
+      // The control the guard turns on: a `.json` shipped by an installed
+      // package is that package's, never a project's, whichever pass resolved
+      // it. `isExternalLibraryImport` decides before ownership.
+      const { imports, failures } = analyze('import data from "@acme-vendor/api/data.json";', {
+        files: {
+          "tsconfig.base.json": tsconfig({}, compilerOptions),
+          "node_modules/@acme-vendor/api/data.json": JSON.stringify({ a: 1 }),
+        },
+      });
+      expect(failures).toEqual([]);
+      expect(imports[0].resolved).toEqual({
+        target: null,
+        file: "node_modules/@acme-vendor/api/data.json",
+        external: true,
+        packageName: "@acme-vendor/api",
+      });
+    },
+  );
+
+  it("does not teach Classic a node_modules walk it never had", () => {
+    // Why the control above skips Classic, measured rather than assumed:
+    // Classic resolves NOTHING out of `node_modules` — not a plain package and
+    // not a `.json` inside one — and the widened host must not change that. It
+    // answers a `fileExists` question TypeScript asked; it does not add a
+    // lookup rule, so a mode with no `node_modules` walk still has none.
+    const classic = { module: "ESNext", moduleResolution: "Classic" };
+    for (const specifier of ["left-pad", "@acme-vendor/api/data.json"]) {
+      const { imports } = analyze(`import x from "${specifier}";`, {
+        files: {
+          "tsconfig.base.json": tsconfig({}, classic),
+          "node_modules/@acme-vendor/api/data.json": JSON.stringify({ a: 1 }),
+        },
+      });
+      expect(imports[0].resolved).toBeNull();
+    }
+  });
+});
+
+describe("a declined-extension alias target reaches the constraint table", () => {
+  // #264's reportable run, end to end: analyzer → rule engine. Pinning the
+  // analysis record alone would be half a test, because the record is not what
+  // a consumer sees — the verdict is, and the whole failure was that the
+  // verdict never got as far as `depConstraints`. A record that resolved to
+  // nothing returns at step 4 of `violations.md`'s order, before the constraint
+  // table is read.
+  const NODES = {
+    web: { name: "web", type: "app", data: { root: "apps/web", tags: ["layer:app"] } },
+    ui: { name: "ui", type: "lib", data: { root: "libs/ui", tags: ["layer:ui"] } },
+  };
+  const CONFIG = {
+    depConstraints: [{ sourceTag: "layer:app", onlyDependOnLibsWithTags: ["layer:app"] }],
+    options: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      // The value `@nx/enforce-module-boundaries` defaults to, this
+      // repository's own config runs on, and #264 was reported against. With
+      // it TRUE the misattributed edge at least produced a (wrong) violation;
+      // with it FALSE — here — the crossing was a clean run and exit 0.
+      banTransitiveDependencies: false,
+      checkNestedExternalImports: false,
+    },
+    suppressions: [],
+  };
+
+  const verdictFor = (target) => {
+    const { imports } = analyze('import Block from "@acme/block";', {
+      files: { "tsconfig.base.json": tsconfig({ "@acme/block": [target] }) },
+    });
+    return evaluate(imports, { nodes: NODES, dependencies: { web: [], ui: [] } }, CONFIG);
+  };
+
+  it("reports the crossing instead of exiting clean, on the option's own default", () => {
+    // The silent-direction assertion. Before the fix this array was EMPTY: the
+    // alias resolved to nothing, the site fell to the engine's no-target branch
+    // where an aliased specifier is neither a path nor a builtin, the
+    // constraint table was never consulted, and `check` printed "no boundary
+    // violations" and exited 0 over a primitive reaching straight into a
+    // block's `.vue` source.
+    const violations = verdictFor("libs/ui/src/Button.vue");
+    expect(violations.map((violation) => violation.messageId)).toEqual([
+      "onlyTagsConstraintViolation",
+    ]);
+    expect(violations[0]).toMatchObject({ sourceFile: "apps/web/src/main.ts", line: 1 });
+  });
+
+  it("gives the .vue target the same verdict as the .ts target one file over", () => {
+    // The isolation the reporter used: two runs differing only in the alias
+    // target. Same constraint table, same specifier, same source line — so any
+    // difference in the verdict is the extension deciding a boundary question,
+    // which is the bug.
+    const viaVue = verdictFor("libs/ui/src/Button.vue");
+    const viaTs = verdictFor("libs/ui/src/index.ts");
+    expect(viaVue.map((violation) => violation.messageId)).toEqual(
+      viaTs.map((violation) => violation.messageId),
+    );
+  });
+
+  it("still reports nothing when the constraint table permits the edge", () => {
+    // The positive control for the assertion above: an empty list has to be
+    // reachable for the right reason, or "reports the crossing" would pass
+    // against an engine that reported everything.
+    const { imports } = analyze('import Block from "@acme/block";', {
+      files: { "tsconfig.base.json": tsconfig({ "@acme/block": ["libs/ui/src/Button.vue"] }) },
+    });
+    const permissive = {
+      ...CONFIG,
+      depConstraints: [{ sourceTag: "layer:app", onlyDependOnLibsWithTags: ["layer:ui"] }],
+    };
+    expect(
+      evaluate(imports, { nodes: NODES, dependencies: { web: [], ui: [] } }, permissive),
+    ).toEqual([]);
   });
 });

@@ -538,4 +538,101 @@ describe("judgeIntent — dependencies (drift edges)", () => {
     expect(result.verdict).toBe("no-verdict");
     expect(result.findings).toEqual([]);
   });
+
+  it("emits the same no-verdict when a boundary matches only a prototype member name", () => {
+    // The composite defect, from the surface a consumer sees. `./selectors.mjs`
+    // answered `nodes["constructor"]` from `Object.prototype`, so this boundary
+    // resolved to one phantom member, the zero-member branch above never ran,
+    // `unresolved` stayed empty and the verdict came back `ok` — `check` exits
+    // 0 on that, where a boundary naming nothing observable owes 3. All five
+    // prototype members behaved this way; a name the prototype does not carry
+    // (`tag:none` above, `ghost` here) was correctly loud the whole time.
+    for (const name of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
+      const result = judgeIntent(
+        intent({ boundaries: [{ name: "ghost", match: [name] }] }),
+        graph(pkgs),
+      );
+      expect(result.verdict, name).toBe("no-verdict");
+      expect(result.boundaries[0].projects, name).toEqual([]);
+      expect(result.unresolved, name).toHaveLength(1);
+    }
+    const control = judgeIntent(
+      intent({ boundaries: [{ name: "ghost", match: ["ghost"] }] }),
+      graph(pkgs),
+    );
+    expect(control.verdict).toBe("no-verdict");
+  });
+
+  it("judges the edges leaving a project literally named __proto__ instead of dropping them", () => {
+    // `codeDependencies` keyed its filtered edge map on a plain `{}`, and the
+    // native provider's own dependency map is null-prototype — so a project
+    // named `__proto__` arrived as a real entry and the write
+    // `filtered["__proto__"] = […]` repointed the filtered map's PROTOTYPE
+    // instead of adding a key. Every edge leaving that project then vanished
+    // from `directEdges`, `observedEdgePairs` and `buildReachability` at once,
+    // and this exact fixture returned verdict "ok" with zero findings for a
+    // forbidden row the graph plainly violates: byte-identical to a clean
+    // workspace, which is the silent direction the invariant refuses. Both maps
+    // must be null-prototype for the name to survive `Object.entries` at all.
+    const nodes = Object.create(null);
+    nodes.__proto__ = node(["type-package"]);
+    nodes.site = node(["type-extension"]);
+    const dependencies = Object.create(null);
+    dependencies.__proto__ = [{ source: "__proto__", target: "site", type: "static" }];
+
+    const result = judgeIntent(
+      intent({
+        boundaries: [
+          { name: "packages", match: ["tag:type-package"] },
+          { name: "extensions", match: ["tag:type-extension"] },
+        ],
+        forbidden: [
+          { from: "packages", to: "extensions", reason: "the engine must not reach out" },
+        ],
+      }),
+      { nodes, dependencies },
+    );
+
+    expect(result.verdict).toBe("findings");
+    expect(result.findings.map((f) => [f.rule, f.source, f.target])).toEqual([
+      ["intentForbiddenEdge", "__proto__", "site"],
+    ]);
+  });
+
+  it("does not count an edge pointing at a prototype member name as an observed dependency", () => {
+    // `nodes[target] !== undefined` answered `constructor` from
+    // `Object.prototype`, so an edge whose target is not a project at all was
+    // counted as observed — and the `dependencies.allowed` drift section then
+    // reported `dependencyNotAllowed` for `a → constructor`, a finding naming a
+    // project the workspace does not contain. Wrong in the loud direction here;
+    // the same read backs the `allowed` rows, where a phantom edge reads as an
+    // intent statement satisfied.
+    const nodes = { a: node([]), b: node([]) };
+    const result = judgeIntent(
+      intent({
+        boundaries: [],
+        dependencies: { allowed: [{ source: "a", target: "b" }] },
+      }),
+      graph(nodes, { a: [{ target: "constructor" }, { target: "b" }] }),
+    );
+    expect(result.findings.map((f) => f.rule)).toEqual([]);
+    expect(result.verdict).toBe("ok");
+  });
+
+  it("still counts an edge into a project genuinely named like a prototype member", () => {
+    // The over-rejection half: an own-property test must keep a real project
+    // called `constructor` as a real edge endpoint, or the drift sections stop
+    // seeing every dependency that lands on it.
+    const nodes = { a: node([]), b: node([]), constructor: node([]) };
+    const result = judgeIntent(
+      intent({
+        boundaries: [],
+        dependencies: { allowed: [{ source: "a", target: "b" }] },
+      }),
+      graph(nodes, { a: [{ target: "constructor" }, { target: "b" }] }),
+    );
+    expect(result.findings.map((f) => [f.rule, f.source, f.target])).toEqual([
+      ["dependencyNotAllowed", "a", "constructor"],
+    ]);
+  });
 });

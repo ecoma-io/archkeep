@@ -235,14 +235,30 @@ export function formatGoWork(goWork) {
  * declared it alone, never a fabricated line 1, the same convention
  * `formatGoWork`'s missing-use findings use.
  *
- * @param {{findings: object[], judged: number}|null|undefined} declaredEdges
+ * `declaration` is what the RUN's provider calls that field, handed in by
+ * `../../cli.mjs`'s `declaredEdgeField` rather than assumed here: `check`
+ * knows which provider answered and this renderer does not, and the summary
+ * sentence named `implicitDependencies` on every provider — a field a Moon
+ * workspace has no counterpart for, on a finding whose file is that
+ * workspace's `moon.yml`. Absent, it falls back to the Nx/native spelling,
+ * which is the only wording this function ever produced before the field
+ * existed; a wrong noun in one sentence is prose, not a verdict, and the
+ * finding list it summarises is identical either way.
+ *
+ * @param {{findings: object[], judged: number, declaration?: string}|null|undefined} declaredEdges
  * @param {Set<string>} [unresolvedDecisionRefs] Forwarded to `formatConstraint`.
  * @returns {string} Empty exactly when there is no declared-edge verdict to render.
  */
 export function formatDeclaredEdges(declaredEdges, unresolvedDecisionRefs) {
   if (declaredEdges == null) return "";
-  const { findings, judged } = declaredEdges;
+  const { findings, judged, declaration = "implicitDependencies" } = declaredEdges;
   const label = `${judged} implicit edge${judged === 1 ? "" : "s"} judged`;
+  // The article follows the field name rather than being frozen into the
+  // sentence: "an implicitDependencies edge" is the wording every Nx and
+  // native run has always printed and must keep printing byte for byte, and
+  // "a dependsOn edge" is the one Moon needs. Spelling one of the two into
+  // the template makes the other ungrammatical on every run of that provider.
+  const article = /^[aeiou]/iu.test(declaration) ? "an" : "a";
   if (findings.length === 0) {
     return `✔ no declared-edge violations (${label})`;
   }
@@ -261,7 +277,7 @@ export function formatDeclaredEdges(declaredEdges, unresolvedDecisionRefs) {
   return [
     entries.join("\n\n"),
     `✖ declared-edge violations: ${findings.length} ` +
-      `finding${findings.length === 1 ? "" : "s"} (${label}) — an implicitDependencies edge ` +
+      `finding${findings.length === 1 ? "" : "s"} (${label}) — ${article} ${declaration} edge ` +
       `crosses a boundary depConstraints forbids, with no import site to remove; the ` +
       `dependency itself needs removing or its tags reconciled, and the run fails`,
   ].join("\n\n");

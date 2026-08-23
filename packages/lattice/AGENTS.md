@@ -227,10 +227,22 @@ checked after TypeScript, never before, and never against a hand-kept list.
 A **relative specifier TypeScript declines** because the extension is not one
 it compiles (`.vue`, `.css`, `.svg`) is already a path: it is normalised and
 tested for existence, with no extension probing, no `index` lookup and no
-`paths` mapping. Anything beyond those two is the second resolver this package
-must not grow — including an aliased asset (`@scope/ui/styles/global.css`),
-which stays unresolved on purpose because resolving it would mean applying
-`paths` here.
+`paths` mapping.
+
+A specifier of any OTHER spelling landing on such a file — a `paths` alias
+pointing at `…/PageHeader.vue` — is resolved by asking `ts.resolveModuleName` a
+SECOND time, against a host that reports that file to exist under the name
+TypeScript is already probing for it by (`…/PageHeader.vue.ts`). Read the
+argument at `src/analysis/typescript.mjs`'s `declinedExtensionHostFor` before
+touching it: every mapping rule stays TypeScript's, so this is not the second
+resolver, and the guards that keep it to one question are the whole of its
+narrowness. It is not an asset question — in a component library a `.vue` file
+IS the boundary target, and declined it resolved to nothing at all: a blind
+spot, which reaches `../../docs/reference/violations.md`'s "The order matters"
+step 4 rather than the constraint table. Step 4 and step 6 share rule 10, so
+the site read as `noTransitiveDependencies` where that option was on, and as
+NOTHING at the option's own default — a boundary crossing on a green run.
+Anything beyond these three is the second resolver this package must not grow.
 
 ## Standing constraints
 

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   emptyResult,
   fileFailure,
+  lineStartsOf,
   perWorkspace,
   positionAt,
   projectOwning,
@@ -55,6 +56,90 @@ describe("positionAt", () => {
   it("clamps an out-of-range offset instead of reporting a negative column", () => {
     expect(positionAt("ab", 99)).toEqual({ line: 1, column: 3 });
     expect(positionAt("ab", -5)).toEqual({ line: 1, column: 1 });
+  });
+});
+
+describe("lineStartsOf", () => {
+  it("holds the offset of every line, so a 1-based line number reads straight off it", () => {
+    expect(lineStartsOf("a\nbb\n\nc")).toEqual([0, 2, 5, 6]);
+    // Never empty: line 1 starts at 0, in an empty file as much as any other.
+    expect(lineStartsOf("")).toEqual([0]);
+  });
+
+  test.prop([sourceText])("agrees with an index counted independently of it", (text) => {
+    expect(lineStartsOf(text)).toEqual(lineStarts(text));
+  });
+
+  it("builds one index per text, however many positions are read off it", () => {
+    // An operation count, not a stopwatch: the only observable difference
+    // between an index built once per FILE and one rebuilt per CALL is
+    // whether the same array comes back afterwards, and rebuilding per call
+    // is exactly the quadratic this index replaced — a Go file with 8000
+    // import sites cost 1668ms to position before it existed, against 10ms
+    // now. A rebuild would leave a different array memoized here.
+    const text = "use engine_core::task::Task;\n".repeat(4000);
+    const index = lineStartsOf(text);
+    for (let i = 0; i < 4000; i++) positionAt(text, i * 29 + 4);
+    expect(lineStartsOf(text)).toBe(index);
+  });
+});
+
+describe("positionAt costs a lookup, not a scan", () => {
+  it("reads its answer off the index it is handed", () => {
+    // This is what pins the MECHANISM rather than the result: hand it an
+    // index claiming line 2 starts one character later than it does, and the
+    // answer has to move with it. An implementation that rescanned the text
+    // would return the same position for both, which is the quadratic coming
+    // back with every existing assertion still green.
+    const text = "ab\ncd";
+    expect(positionAt(text, 3, [0, 3])).toEqual({ line: 2, column: 1 });
+    expect(positionAt(text, 3, [0, 4])).toEqual({ line: 1, column: 4 });
+  });
+
+  it("builds the index once for a whole file's worth of lookups, however many there are", () => {
+    // A count, not a clock. The measurement this memo exists for was a
+    // stopwatch — a Go file with 8000 import sites cost 1668ms to position
+    // before it existed, 10ms after — but a stopwatch is not what should hold
+    // it: this suite runs on machines under arbitrary load, and a gate that
+    // flakes gets ignored, which is the same outcome as not having one.
+    //
+    // What a rebuild would change is observable exactly: the memo holds one
+    // array per text, so a `positionAt` that rescanned per call would leave a
+    // DIFFERENT array behind each time round the loop.
+    const text = "use engine_core::task::Task;\n".repeat(4000);
+    let index = lineStartsOf(text);
+    let rebuilds = 0;
+    for (let i = 0; i < 4000; i++) {
+      positionAt(text, i * 29 + 4);
+      const current = lineStartsOf(text);
+      if (current !== index) {
+        rebuilds++;
+        index = current;
+      }
+    }
+    expect(rebuilds).toBe(0);
+  });
+
+  it("reads the memoized index when it is handed none, rather than the text", () => {
+    // The half a rebuild count cannot see: a `positionAt` that rescanned the
+    // text INSTEAD of consulting the memo would leave the memo untouched and
+    // pass the count above while being exactly the quadratic it replaced.
+    // The index is documented as shared and read-only, which is what makes
+    // that observable — write a wrong line start into it and the answer has
+    // to move with it, because there is nowhere else for the answer to come
+    // from. A rescan would return the true position and turn this red.
+    const text = "ab\ncd\nef";
+    const doctored = lineStartsOf(text);
+    expect(doctored).toEqual([0, 3, 6]);
+    doctored[1] = 4;
+    try {
+      expect(positionAt(text, 3)).toEqual({ line: 1, column: 4 });
+      expect(positionAt(text, 6)).toEqual({ line: 3, column: 1 });
+    } finally {
+      // The memo holds one entry, so asking about any other text drops the
+      // doctored index rather than leaving it for whatever runs next.
+      lineStartsOf("");
+    }
   });
 });
 

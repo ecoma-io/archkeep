@@ -707,3 +707,173 @@ describe("resolveCommandContext — the unclaimed-file coverage hole, on the Nx 
     expect(context.analysis.failures).toEqual([]);
   });
 });
+
+describe("resolveCommandContext — options.boundaryConfigDeclared, on all three providers", () => {
+  // The provenance of `options.boundaryConfig`, which the merge onto
+  // `../options.mjs`'s `DEFAULT_OPTIONS` used to destroy before any command
+  // could read it. Every case below fixes the RESOLVED filename to the
+  // convention default and varies only whether the workspace named it, so
+  // nothing here can pass by reading the value: the two halves of each pair
+  // are byte-identical in `options.boundaryConfig` and opposite in the bit.
+  //
+  // The silent direction this closes: a workspace that named
+  // `policy-we-declared.mjs` and then renamed or deleted it is
+  // indistinguishable, from the resolved options alone, from one that never
+  // wrote a law — so `graph` answered exit 0 on both.
+
+  /** A one-project Nx graph, enough for `createWorkspace` to have a node. */
+  const NX_GRAPH = {
+    nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+    dependencies: { a: [] },
+  };
+
+  /** The native branch, driven over a `lattice.json` carrying `model`. */
+  const nativeContextFor = (model, label) => {
+    const { root, write } = fixture(`context-declared-native-${label}-`);
+    write(
+      "lattice.json",
+      JSON.stringify({ projects: { declared: [{ root: "libs/a" }] }, ...model }),
+    );
+    write("libs/a/go.mod", "module example.com/a\n\ngo 1.24\n");
+    write("libs/a/a.go", "package a\n");
+    return resolveCommandContext(
+      { cwd: root },
+      { listFiles: () => ["lattice.json", "libs/a/go.mod", "libs/a/a.go"] },
+    );
+  };
+
+  /** The Nx branch, driven over an `nx.json` whose text is given verbatim. */
+  const nxContextFor = (nxJson, label) => {
+    const { root, write } = fixture(`context-declared-nx-${label}-`);
+    write("nx.json", nxJson);
+    write("libs/a/a.go", "package a\n");
+    return resolveCommandContext(
+      { cwd: root },
+      { readGraph: () => NX_GRAPH, listFiles: () => ["nx.json", "libs/a/a.go"] },
+    );
+  };
+
+  it("native: false when lattice.json names no law", () => {
+    const context = nativeContextFor({}, "undeclared");
+    expect(context.provider).toBe("native");
+    expect(context.options.boundaryConfig).toBe("module-boundaries.config.mjs");
+    expect(context.options.boundaryConfigDeclared).toBe(false);
+  });
+
+  it("native: true when lattice.json names a law, even the convention filename itself", () => {
+    // The pair that makes the bit necessary. `boundaryConfig` here resolves
+    // to exactly the string the case above resolved to by default, and the
+    // two workspaces mean opposite things.
+    const context = nativeContextFor(
+      { boundaryConfig: "module-boundaries.config.mjs" },
+      "declared-default",
+    );
+    expect(context.options.boundaryConfig).toBe("module-boundaries.config.mjs");
+    expect(context.options.boundaryConfigDeclared).toBe(true);
+  });
+
+  it("native: true for a law named under another filename", () => {
+    const context = nativeContextFor(
+      { boundaryConfig: "policy-we-declared.mjs" },
+      "declared-other",
+    );
+    expect(context.options.boundaryConfig).toBe("policy-we-declared.mjs");
+    expect(context.options.boundaryConfigDeclared).toBe(true);
+  });
+
+  it("native: true for the inline-policy spelling, which names no file at all", () => {
+    // The fourth spelling. There is no file to be missing — the law is a
+    // field on `lattice.json`, which is present by construction — so this
+    // bit changes no verdict today; it is `true` because the workspace did
+    // name its law, and a reader that saw `false` here would be told the
+    // opposite of what the document says.
+    const context = nativeContextFor(
+      {
+        boundaryConfig: {
+          depConstraints: [],
+          moduleBoundaryOptions: {
+            allow: [],
+            buildTargets: ["build"],
+            enforceBuildableLibDependency: false,
+            allowCircularSelfDependency: false,
+            checkDynamicDependenciesExceptions: [],
+            ignoredCircularDependencies: [],
+            banTransitiveDependencies: false,
+            checkNestedExternalImports: false,
+          },
+        },
+      },
+      "declared-inline",
+    );
+    expect(context.options.inline).toBe(true);
+    expect(context.options.boundaryConfigDeclared).toBe(true);
+  });
+
+  it("nx: false when nx.json registers the plugin without naming a law", () => {
+    const bare = nxContextFor('{"plugins":["@ecoma-io/lattice/nx"]}\n', "bare");
+    expect(bare.provider).toBe("nx");
+    expect(bare.options.boundaryConfig).toBe("module-boundaries.config.mjs");
+    expect(bare.options.boundaryConfigDeclared).toBe(false);
+
+    const noPlugins = nxContextFor("{}\n", "no-plugins");
+    expect(noPlugins.options.boundaryConfigDeclared).toBe(false);
+
+    const otherOptionOnly = nxContextFor(
+      `${JSON.stringify({
+        plugins: [
+          {
+            plugin: "@ecoma-io/lattice/nx",
+            options: { tsConfig: "tsconfig.base.json" },
+          },
+        ],
+      })}\n`,
+      "tsconfig-only",
+    );
+    expect(otherOptionOnly.options.boundaryConfigDeclared).toBe(false);
+  });
+
+  it("nx: true when the plugin entry names a law, even the convention filename itself", () => {
+    const context = nxContextFor(
+      `${JSON.stringify({
+        plugins: [
+          {
+            plugin: "@ecoma-io/lattice/nx",
+            options: { boundaryConfig: "module-boundaries.config.mjs" },
+          },
+        ],
+      })}\n`,
+      "declared-default",
+    );
+    expect(context.options.boundaryConfig).toBe("module-boundaries.config.mjs");
+    expect(context.options.boundaryConfigDeclared).toBe(true);
+  });
+
+  it("moon: always false, because a Moon workspace has nowhere to name a law", () => {
+    // Asserted rather than assumed. Moon carries no `plugins[].options`
+    // table and a `lattice.json` beside `.moon/` is refused outright
+    // (`../providers/moon.mjs`), so both filenames are taken by convention on
+    // every Moon run — there is no declared-but-missing case to answer here,
+    // and this test is what would notice if one appeared.
+    const { root, write } = fixture("context-declared-moon-");
+    write(".moon/tool.yml", " ");
+    write("libs/x/x.go", "package x\n");
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      {
+        readGraph: () => ({
+          nodes: { x: { name: "x", type: "lib", data: { root: "libs/x" } } },
+          dependencies: { x: [] },
+        }),
+        listFiles: () => [".moon/tool.yml", "libs/x/x.go"],
+      },
+    );
+
+    expect(context.provider).toBe("moon");
+    expect(context.options.boundaryConfig).toBe("module-boundaries.config.mjs");
+    expect(context.options.boundaryConfigDeclared).toBe(false);
+    // Present, not merely falsy: a missing key would read as "this branch
+    // forgot", which is the provenance guess the bit exists to end.
+    expect("boundaryConfigDeclared" in context.options).toBe(true);
+  });
+});

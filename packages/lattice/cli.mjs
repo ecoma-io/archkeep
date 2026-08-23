@@ -596,29 +596,93 @@ function verdictFor({
 }
 
 /**
- * Where a declared-edge finding's `implicitDependencies` entry lives, so the
- * finding can point somewhere real despite having no import site.
+ * The per-project file each provider declares an edge in, and the field it
+ * spells the declaration with — the two facts a declared-edge finding needs to
+ * point somewhere real despite having no import site.
  *
- * Nx declares it per-project, in that project's own `project.json`. The
- * native provider validates it off `lattice.json` regardless of whether the
- * row itself sits in `lattice.json`'s `projects.declared` or a tracked
- * `project.json` (`src/providers/native/discover.mjs`'s union of the two) —
- * `lattice.json` is still the workspace's single source of truth that opted
- * either one in, the same reasoning `coverage.exempt`'s attribution above
- * uses. Moon cannot reach this function today: its edges never carry
- * `type: "implicit"` (a separate, tracked gap in the Moon provider), so
- * `declaredEdgeViolationsForCheck`'s filter never matches on a Moon graph.
+ * One table rather than two lookups, because the file and the field are the
+ * same provider's vocabulary and a run that got one from Moon and the other
+ * from Nx would render a `moon.yml` blamed for an `implicitDependencies` it
+ * has no field for.
+ *
+ * - **Nx** declares it per-project, in that project's own `project.json`,
+ *   under `implicitDependencies`.
+ * - **Moon** declares it per-project too, in that project's own `moon.yml`,
+ *   under `dependsOn`. Moon calls such a dependency `explicit` — its own
+ *   inverse of this package's word — and `./src/providers/moon.mjs`'s
+ *   `edgeTypeFromScope` is where the two vocabularies are mapped onto each
+ *   other; `docs/integrations/moon.md`'s "explicit → implicit" row and
+ *   `./e2e/moon.e2e.mjs` both drive the same `moon.yml`.
+ * - **native** carries no per-project file of its own: `lattice.json`
+ *   validates the row regardless of whether it sits in that file's
+ *   `projects.declared` or in a tracked `project.json`
+ *   (`./src/providers/native/discover.mjs`'s union of the two), so
+ *   `lattice.json` is the workspace's single source of truth that opted
+ *   either one in — the same reasoning `coverage.exempt`'s attribution above
+ *   uses. `perProject: false` is what says so.
+ */
+const DECLARED_EDGE_SITE = Object.freeze({
+  nx: { file: "project.json", field: "implicitDependencies", perProject: true },
+  moon: { file: "moon.yml", field: "dependsOn", perProject: true },
+  native: { file: LATTICE_MODEL_FILE, field: "implicitDependencies", perProject: false },
+});
+
+/**
+ * Which field name the run's provider calls a declared edge, for the one
+ * sentence the report writes about it (`./src/report/text.mjs`'s
+ * `formatDeclaredEdges`).
+ *
+ * A provider this table does not know falls back to the native row rather
+ * than to `undefined`: every provider that exists resolves here, and a name
+ * is only ever read as prose, so an unknown one is a wrong noun rather than a
+ * missing verdict. The verdict itself — the finding list — is unaffected.
+ *
+ * @param {string} provider
+ * @returns {string}
+ */
+function declaredEdgeField(provider) {
+  return (DECLARED_EDGE_SITE[provider] ?? DECLARED_EDGE_SITE.native).field;
+}
+
+/**
+ * Where a declared-edge finding's declaration lives, so the finding can point
+ * somewhere real despite having no import site.
+ *
+ * **The path has to be one the reader's checkout actually contains.** A
+ * non-Nx provider used to get `lattice.json` unconditionally, which on a Moon
+ * workspace names a file that provably cannot be there: a Moon tree carrying
+ * `lattice.json` is refused outright, exit 3, before any rule runs
+ * (`./src/commands/context.mjs`'s `refusal(moonMarker, LATTICE_MODEL_FILE)`).
+ * That is not only a confusing text line — GitHub's code scanning silently
+ * DROPS a SARIF result whose `uri` is not a real repository-relative path,
+ * which is exactly the failure `./src/custom-rules/host.mjs`'s
+ * `isWorkspaceRelative` refuses for a wasm rule's own findings, so a
+ * declared-edge violation reported through `--format sarif` disappeared with
+ * no error anywhere. Moon reaches this function on every hand-written
+ * `dependsOn` since #262 inverted the Moon `explicit`/`implicit` mapping (the
+ * comment here previously claimed it could not reach it at all), so that path
+ * is now the common one rather than a corner.
+ *
+ * The per-project half is built from the graph node's own `root` — the
+ * finding carries a project NAME, and the node is the only place its
+ * directory is known — the same derivation the Nx arm has always used.
  *
  * @param {{provider: string, graph: {nodes: object}}} commandContext
  * @param {string} sourceProject
- * @returns {string}
+ * @returns {string} A workspace-relative path.
  */
 function declaredEdgeManifest({ provider, graph }, sourceProject) {
-  if (provider === "nx") {
-    const root = graph.nodes[sourceProject]?.data?.root;
-    return root ? `${root}/project.json` : "project.json";
-  }
-  return LATTICE_MODEL_FILE;
+  const site = DECLARED_EDGE_SITE[provider] ?? DECLARED_EDGE_SITE.native;
+  if (!site.perProject) return site.file;
+  const root = graph.nodes[sourceProject]?.data?.root;
+  // A root of `.` (or `""`, or a trailing slash) is the workspace root
+  // itself — Moon spells a root-level project's `source` exactly that way
+  // (`./src/providers/moon.mjs`'s `inferWorkspaceLayout` names the same
+  // spelling) — and `./project.json` is a different string from
+  // `project.json` to every consumer that compares paths, this file's own
+  // SARIF `uri` included.
+  const scoped = typeof root === "string" ? root.replace(/\/+$/u, "") : "";
+  return scoped === "" || scoped === "." ? site.file : `${scoped}/${site.file}`;
 }
 
 /**
@@ -888,8 +952,20 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // tsconfig-paths state for a workspace that never uses the feature either,
   // so a workspace with no `implicitDependencies` anywhere pays nothing and
   // hears nothing, rather than a near-universal "0 implicit edges" line.
+  // `declaration` names the field the RUN's provider spells a declared edge
+  // with, so the report's own sentence about it can too — a Moon workspace has
+  // no `implicitDependencies` field for the text to blame, and naming one sends
+  // a reader looking for a key `moon.yml` does not accept. Report-only: it
+  // rides beside the verdict, never into it, and the JSON envelope below still
+  // publishes exactly `judged` and `findings`.
   const declaredEdges =
-    implicitEdges === 0 ? null : { findings: declaredEdgeViolations, judged: implicitEdges };
+    implicitEdges === 0
+      ? null
+      : {
+          findings: declaredEdgeViolations,
+          judged: implicitEdges,
+          declaration: declaredEdgeField(commandContext.provider),
+        };
 
   // A `depConstraints` row's `decisionRef` names the ADR (or rule/fitness id)
   // that supposedly authorizes it — but nothing verified that citation before
@@ -1889,15 +1965,65 @@ async function runGraph(options, { cwd, env }) {
       { readGraph: env.readGraph, listFiles: env.listFiles },
     );
 
-    // Load the boundary config when --config is given or when the workspace
-    // declares one, so the snapshot carries a policy fingerprint that `diff`
-    // can use to warn when the policy changed between runs. Without a config,
-    // the snapshot carries no policy identity — the consumer did not provide
-    // one. A profile-selected workspace's `boundaryConfig` names a profile
-    // rather than a file, resolved the same way `check` resolves it
-    // (`resolvePolicy`), so the fingerprint moves with a profile edit the same
-    // way it already does with a file or inline-object edit.
-    const { config } = await resolvePolicy(options, commandContext, cwd);
+    // Load the boundary config so the snapshot carries a policy fingerprint
+    // that `diff` can use to warn when the policy changed between runs. Without
+    // a config, the snapshot carries no policy identity — the consumer did not
+    // provide one (`./src/commands/graph.mjs` makes that field conditional). A
+    // profile-selected workspace's `boundaryConfig` names a profile rather than
+    // a file, resolved the same way `check` resolves it (`resolvePolicy`), so
+    // the fingerprint moves with a profile edit the same way it already does
+    // with a file or inline-object edit.
+    //
+    // `graph` describes the project graph, not the boundary law — it reads no
+    // constraint row and judges nothing against one — so a workspace that has
+    // not written a law yet must not be refused here. It was, with exit 3: the
+    // workspace-default `boundaryConfig` is never absent on the Nx and Moon
+    // paths (`readPluginOptions` falls back to `DEFAULT_OPTIONS`, and Moon
+    // takes the same default by convention), so that arm of `resolvePolicy`
+    // fired unconditionally and a missing file became the command's exit code.
+    // `discover`, the other descriptive verb over the same graph, answered
+    // fine on the identical tree — and `graph` is what a workspace runs to see
+    // what Lattice found, which is what it needs in order to WRITE a first
+    // policy.
+    //
+    // What is skipped is the load of a file that is NOT THERE. A boundary
+    // config that exists and will not load still fails the run, because an
+    // absent law and a broken one must not report alike; a `--config`, a
+    // profile, and an inline `lattice.json` policy are explicit declarations
+    // and stay loud. Every command that JUDGES against the law keeps loading
+    // it unconditionally — making it optional for those would turn a missing
+    // file into a silent no-law run.
+    //
+    // `boundaryConfigDeclared` is what keeps this guard to the un-overridden
+    // default, and it is load-bearing rather than belt-and-braces. The name
+    // alone cannot answer it: `commandContext.options.boundaryConfig` is a
+    // string BOTH when it came from `./src/options.mjs`'s `DEFAULT_OPTIONS`
+    // and when the consumer WROTE it into `nx.json`'s plugin options or
+    // `lattice.json`, and a workspace is free to declare the convention
+    // filename itself, so comparing against the default would still read a
+    // deliberate declaration as an assumption. Without the bit, measured on a
+    // committed native tree whose `lattice.json` declares `boundaryConfig:
+    // "policy-we-declared.mjs"` and does not contain that file: `graph` exited
+    // 0 with a snapshot carrying no `policy` field — byte-identical to a
+    // workspace that never had a law — where the same tree with that file
+    // present but unparseable exited 3. A law someone named and then renamed
+    // or deleted is exactly the case that must stay loud, so the provenance
+    // survives the options layer instead (`./src/options.mjs`'s
+    // `resolveOptions`, `./src/providers/native/model.mjs`'s
+    // `normalizeNativeModel`, and `./src/commands/context.mjs`'s three
+    // branches carry it; Moon answers `false` because it has no table to
+    // declare one in).
+    const workspaceDefault =
+      !options.config &&
+      !hasProfiles(commandContext.options) &&
+      commandContext.options.boundaryConfigDeclared === false &&
+      typeof commandContext.options.boundaryConfig === "string"
+        ? resolve(commandContext.root, commandContext.options.boundaryConfig)
+        : null;
+    const { config } =
+      workspaceDefault !== null && !existsSync(workspaceDefault)
+        ? { config: null }
+        : await resolvePolicy(options, commandContext, cwd);
 
     result = graphCommand(commandContext, { config });
   } catch (error) {

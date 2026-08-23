@@ -297,7 +297,28 @@ export function discoverNativeProjects({ root, files, readFile, model }) {
       continue;
     }
 
-    const tagOrigins = /** @type {Record<string, Set<string>>} */ ({});
+    // Null-prototype: every key here is a TAG, and tags are workspace text —
+    // `lattice.json`'s `projects.declared[].tags`, a `projectRules` row, a
+    // tracked `project.json` — so a pull request can name one `toString`,
+    // `constructor`, `valueOf`, `hasOwnProperty` or `__proto__`. On a plain
+    // `{}` the `??=` below finds an inherited member instead of `undefined`,
+    // keeps it, and calls `.add` on it: measured, `TypeError:
+    // tagOrigins[tag].add is not a function`, printed verbatim with no
+    // `lattice:` prefix, no file and no row, on the exit-3 path.
+    //
+    // The near miss is worse than the bug, which is why this is
+    // `Object.create(null)` and not a plain assignment: `Object.keys({__proto__:
+    // new Set()})` is `[]`, so "fixing" the crash by writing the key onto a
+    // plain object would repoint that object's prototype and the tag would
+    // VANISH from `Object.keys(tagOrigins).sort()` below — a project silently
+    // carrying one fewer tag than it declared, which is every tag-keyed rule
+    // (`../../rules/tags.mjs`) quietly not applying to it. With a null
+    // prototype the `??=` sees a real `undefined`, the `Set` is stored as an
+    // own enumerable entry, and the tag reaches both `tags` and `tagOrigins`
+    // exactly like any other spelling. (`Object.fromEntries` at the bottom of
+    // this loop defines own properties, so it carries such a key through
+    // unchanged.)
+    const tagOrigins = /** @type {Record<string, Set<string>>} */ (Object.create(null));
     const addTags = (tags, origin) => {
       for (const tag of tags ?? []) {
         (tagOrigins[tag] ??= new Set()).add(origin);
