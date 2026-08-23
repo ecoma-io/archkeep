@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.12.0](https://github.com/ecoma-io/lattice/compare/v0.11.1...v0.12.0) (2026-08-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **lattice:** `check` reports an `unowned-files` coverage gap on workspaces that previously showed nothing, and a Moon workspace with TypeScript sources and no tsconfig at either chain name now exits 3 instead of reporting crossings. A Moon workspace whose paths table lives in `tsconfig.json` changes verdict because it is now read correctly.
+* **lattice:** `check --format sarif` gains notifications for an unresolved intent, a coverage gap, and an unresolved `decisionRef`, so a consumer's SARIF upload changes on code they did not touch. The language server reports a gap on an Nx-marked root that yields no projects, including a legitimately empty one, and now watches `**/package.json` and `**/module-federation.config.{js,ts}`.
+* **lattice:** an `architecture-intent.json` carrying `projects: {}`, an empty `projects.required`/`projects.forbidden`, `dependencies: {}`, or a self-referencing `dependencies.forbidden` row no longer loads. A tracked `docs/adr/` entry that is not `NNN-slug.md` now fails the run rather than being skipped, which includes a tracked asset kept in that directory — the same verdict a misnamed `.md` record already got. `debt` over an empty snapshot directory exits 3, and a tracked-but-unreadable intent file exits 3 where both previously reported clean.
+* **lattice:** a `tag-conformance` row scoped by `match` now judges edges that leave the matched set, so a workspace whose rows passed only because their violations were being discarded will report them. A `to` tag no project carries becomes `unknown` (exit 3) where `only` previously answered `pass`. Nothing in this repository declares such a row, so no fixture or preset moved.
+* **lattice:** several checks now report on workspaces that were green, and one refuses at load.
+* **lattice:** on a .moon-rooted workspace the language server now reports boundary violations and provider-failure gaps where it published an empty diagnostic list before; a workspace carrying both .moon and .config/moon, a Moon directory beside nx.json or lattice.json, or nx.json beside lattice.json is refused wherever it would previously have been silently judged by one provider of several.
+* **lattice:** workspaces whose manifests or sources carry a UTF-8 BOM, or whose backslash-continued Python imports are saved with CRLF line endings, now report boundary violations those bytes previously hid.
+* **lattice:** workspaces whose boundarySuppressions or depConstraints rows covered nothing reportable may see new findings below a suppressed verdict (exit 1 where the run read 0) or a new exit-3 refusal naming the dead row on their next run, with no edit to their code.
+* **lattice:** an import whose target resolves to a file named in lattice.json's coverage.exempt is no longer reported as noRelativeOrAbsoluteExternals; runs over such workspaces can go from exit 1 to exit 0 on unchanged source.
+
+### Bug Fixes
+
+* **lattice:** a .moon-rooted workspace is judged by the editor like by check ([#256](https://github.com/ecoma-io/lattice/issues/256)) ([b2d7fc2](https://github.com/ecoma-io/lattice/commit/b2d7fc2a90d78c2c62fa994462b7d06679aaa31f))
+* **lattice:** a suppression behaves like a fix, and a dead row refuses the run ([#253](https://github.com/ecoma-io/lattice/issues/253)) ([71e2f25](https://github.com/ecoma-io/lattice/commit/71e2f252601db1d1c4630d9c356bc6e3207491bd))
+* **lattice:** classify CLI exits by error type instead of message regex ([#215](https://github.com/ecoma-io/lattice/issues/215)) ([7cbc853](https://github.com/ecoma-io/lattice/commit/7cbc8536ac8b7deac20929632ed2005176e15009))
+* **lattice:** close the silent paths where a verdict was never reached ([#272](https://github.com/ecoma-io/lattice/issues/272)) ([0ecb6d1](https://github.com/ecoma-io/lattice/commit/0ecb6d1392736d8c0b9117e0212d3b84e979ece8))
+* **lattice:** derive the spawn budgets from one pinned constant ([#254](https://github.com/ecoma-io/lattice/issues/254)) ([441f5e4](https://github.com/ecoma-io/lattice/commit/441f5e4b422bfbc93b2de81a1a710d005ca9ef9d)), closes [#249](https://github.com/ecoma-io/lattice/issues/249)
+* **lattice:** judge an import of a coverage-exempt file unconstrained ([#218](https://github.com/ecoma-io/lattice/issues/218)) ([#251](https://github.com/ecoma-io/lattice/issues/251)) ([3534b70](https://github.com/ecoma-io/lattice/commit/3534b708d2c5f2e0dcf003ec61e9ae2f955f4a3e))
+* **lattice:** judge tag-conformance on the edges that leave a matched project ([#273](https://github.com/ecoma-io/lattice/issues/273)) ([0c40ba3](https://github.com/ecoma-io/lattice/commit/0c40ba343ce000ee35d34fb6eff5746197f8a242))
+* **lattice:** make the governance verbs refuse instead of reporting clean ([#275](https://github.com/ecoma-io/lattice/issues/275)) ([ae61bd5](https://github.com/ecoma-io/lattice/commit/ae61bd569ea9e0f9930d913f50400ee154c6d2cd))
+* **lattice:** name the files no project owns, and read Moon's real tsconfig ([#278](https://github.com/ecoma-io/lattice/issues/278)) ([0664207](https://github.com/ecoma-io/lattice/commit/0664207938e7a4c64189b97fc38c8ad768d400a1)), closes [#263](https://github.com/ecoma-io/lattice/issues/263) [#266](https://github.com/ecoma-io/lattice/issues/266)
+* **lattice:** speak on the surfaces that were reporting clean by saying nothing ([#276](https://github.com/ecoma-io/lattice/issues/276)) ([c79528b](https://github.com/ecoma-io/lattice/commit/c79528b0792a1663c16630d192ddfb5f71ce6669))
+* **lattice:** tolerate a UTF-8 BOM and CRLF endings in the analyzers ([#255](https://github.com/ecoma-io/lattice/issues/255)) ([3a12fd1](https://github.com/ecoma-io/lattice/commit/3a12fd13e53d4f6c83ebb9b48e7d774eb59322b0))
+* **workspace:** close the skills gate's silent branches ([#257](https://github.com/ecoma-io/lattice/issues/257)) ([9c634bf](https://github.com/ecoma-io/lattice/commit/9c634bfade99d02c6048955d6df6a2394daaf5bf)), closes [#232](https://github.com/ecoma-io/lattice/issues/232) [#233](https://github.com/ecoma-io/lattice/issues/233) [#241](https://github.com/ecoma-io/lattice/issues/241)
+* **workspace:** hold doc-restated facts to their single sources ([#260](https://github.com/ecoma-io/lattice/issues/260)) ([d0b9911](https://github.com/ecoma-io/lattice/commit/d0b9911f50f69c78184c3672ecdd4043e6da94c0)), closes [#238](https://github.com/ecoma-io/lattice/issues/238) [#239](https://github.com/ecoma-io/lattice/issues/239) [#240](https://github.com/ecoma-io/lattice/issues/240)
+* **workspace:** make the skills' own links survive being vendored ([#279](https://github.com/ecoma-io/lattice/issues/279)) ([3f14859](https://github.com/ecoma-io/lattice/commit/3f14859f3463750a627358b37ad07d2c7ae3d5e1)), closes [#268](https://github.com/ecoma-io/lattice/issues/268)
+* **workspace:** pin what CI depends on instead of stating it by comment ([#252](https://github.com/ecoma-io/lattice/issues/252)) ([b6e5e70](https://github.com/ecoma-io/lattice/commit/b6e5e70f8343d472507a683d3bf0ed4b86f3f2b1)), closes [#230](https://github.com/ecoma-io/lattice/issues/230) [#234](https://github.com/ecoma-io/lattice/issues/234) [#235](https://github.com/ecoma-io/lattice/issues/235) [#236](https://github.com/ecoma-io/lattice/issues/236) [#237](https://github.com/ecoma-io/lattice/issues/237) [#245](https://github.com/ecoma-io/lattice/issues/245)
+* **workspace:** stop silently skipping spaced, angled, and split markdown links ([#250](https://github.com/ecoma-io/lattice/issues/250)) ([18958d5](https://github.com/ecoma-io/lattice/commit/18958d586c6adba386a809b5e5edf170b70e08d4)), closes [#243](https://github.com/ecoma-io/lattice/issues/243)
+
+
+### Documentation
+
+* add monthly npm downloads badge to README ([#269](https://github.com/ecoma-io/lattice/issues/269)) ([8b60f88](https://github.com/ecoma-io/lattice/commit/8b60f8833c48bf574f8dbd7f2946b601327df6a3))
+
 ## [0.11.1](https://github.com/ecoma-io/lattice/compare/v0.11.0...v0.11.1) (2026-08-22)
 
 
