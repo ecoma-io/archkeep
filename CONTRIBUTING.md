@@ -94,14 +94,20 @@ As with Claude Code, no gate depends on any of this — the editor-time hooks in
 
 ## The commands
 
-| Command               | What it does                                                                    |
-| --------------------- | ------------------------------------------------------------------------------- |
-| `pnpm format`         | Prettier, in place                                                              |
-| `pnpm format:check`   | Prettier, read-only — what CI runs                                              |
-| `pnpm lint`           | ESLint, zero warnings tolerated                                                 |
-| `pnpm test`           | `node --test` over `scripts/*.test.mjs` — the gate scripts, nothing else        |
-| `pnpm typecheck`      | `tsc --noEmit` over the gate scripts' JSDoc — each package has its own target   |
-| `pnpm check-packages` | Asserts every `packages/*` directory is a project Moon can see, with CI targets |
+| Command                                       | What it does                                                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `pnpm format`                                 | Prettier, in place                                                                                     |
+| `pnpm format:check`                           | Prettier, read-only — what CI runs                                                                     |
+| `pnpm lint`                                   | ESLint, zero warnings tolerated                                                                        |
+| `pnpm test`                                   | `node --test` over `scripts/*.test.mjs` — the gate scripts, nothing else                               |
+| `pnpm typecheck`                              | `tsc --noEmit` over the gate scripts' JSDoc — each package has its own target                          |
+| `pnpm check-packages`                         | Asserts every `packages/*` directory is a project Moon can see, with CI targets                        |
+| `node scripts/check-skills.mjs`               | The skills gate: shape, citations, and the plugin-manifest version chain                               |
+| `node scripts/check-docs-links.mjs`           | Fails on any doc reference that cannot resolve — a gone target, a dead anchor                          |
+| `node scripts/check-cli-docs-roster.mjs`      | Holds every documented command count and roster to `COMMAND_NAMES` in cli.mjs                          |
+| `node scripts/check-installation-prereqs.mjs` | Holds installation.md's prerequisites to `packages/lattice/package.json`                               |
+| `node scripts/check-contributing-parity.mjs`  | Holds this document's roster and hooks to ci.yml and lefthook.yml — this row is part of what it checks |
+| `pnpm e2e`                                    | Packs the artifact and drives it as an installed CLI, end to end — CI runs it in two shards            |
 
 Plus every project's own targets — a different suite, not a superset of the one
 above:
@@ -164,6 +170,21 @@ the artifact must still work inside Nx workspaces), that the checker exits 0 on 
 **and 1 on a violating one**, and that the language server answers when launched
 through a symlinked path. A gate only proves it runs when it can go red.
 
+The VS Code extension has its own packaging pair, and CI runs both on every
+pull request so a change that breaks packaging turns this build red instead of
+the release lane weeks later:
+
+```bash
+node scripts/package-vsix.mjs packages/lattice-vscode dist/lattice-vscode.vsix
+node scripts/verify-vsix.mjs dist/lattice-vscode.vsix
+```
+
+`package-vsix` stages the tracked files and packs them where npm can resolve
+the runtime dependencies, and `verify-vsix` proves the resulting `.vsix` holds
+what an install needs — `vsce package` exiting 0 proves none of that. Run them
+when you touch `packages/lattice-vscode`; skip them otherwise, as with
+`verify-package` above.
+
 Run all of them before you push. A shorter local run just moves the red to the
 pull request.
 
@@ -209,12 +230,15 @@ telling you Moon cannot see what you just added.
 
 ## What the hooks do
 
-- **pre-commit** — Prettier formats the staged files and re-stages what it
-  rewrote, then ESLint runs over them, then `check-packages`.
-- **commit-msg** — commitlint checks the message shape.
-- **pre-push** — `pnpm test`, and `moon projects` to prove the graph still
-  computes. A provider that throws while the graph is being built breaks every
-  `moon` command at once, including the ones that would report the error.
+| hook         | commands it runs, in order                                                                         |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| `pre-commit` | `prettier` over the staged files, re-staging what it rewrote; `eslint` over them; `check-packages` |
+| `commit-msg` | `commitlint`, checking the message shape                                                           |
+| `pre-push`   | `pnpm test`; `moon projects` to prove the graph still computes                                     |
+
+A provider that throws while the graph is being built breaks every Moon command
+at once, including the ones that would report the error — which is why
+proving the graph computes is worth its one second in pre-push.
 
 If you are working with an AI coding agent, the same three gates — format,
 lint, and the doc-reference check — run the moment a file is written, in
