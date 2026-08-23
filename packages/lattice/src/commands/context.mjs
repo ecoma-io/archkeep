@@ -33,6 +33,7 @@ import {
   DEFAULT_OPTIONS,
   NX_CONFIG_FILE,
   pluginIsRegistered,
+  readMoonOptions,
   readPluginOptions,
 } from "../options.mjs";
 import { readProjectGraph } from "../providers/nx.mjs";
@@ -218,6 +219,15 @@ export const WORKSPACE_MARKERS = [NX_CONFIG_FILE, LATTICE_MODEL_FILE, MOON_DIR, 
  *   Computed and returned, but not consulted by `check`'s refusal logic —
  *   `../../../../docs/usage/` names the gap this fills and the issue tracking it
  *   wiring it in.
+ * @property {{files: string[], languages: string[]}} unownedGap The tracked
+ *   analyzable files no project owns that this run deliberately does NOT fail
+ *   on — `unownedAnalyzableFiles` below owns the argument, and
+ *   `./check.mjs` turns a non-empty `files` into the `"unowned-files"`
+ *   `coverageGaps` entry. Always `{files: [], languages: []}` on a native
+ *   workspace: there, every unclaimed analyzable file is already a whole-file
+ *   failure (`../providers/native/coverage.mjs`'s `judgeCoverage`) and so
+ *   already refuses the run with exit 3 — a gap beside it would be a second,
+ *   quieter voice for a state that is answered loudly.
  * @property {{file: string, project: string}[]} owned Every tracked file that
  *   belongs to a project, paired with its owning project — the ownership map
  *   `createWorkspace` already built. A command that needs to know WHICH project
@@ -312,6 +322,116 @@ function unclaimedFileFailures({ tracked, owned, providerLabel }) {
 }
 
 /**
+ * The OTHER half of the same question: tracked analyzable files no project
+ * owns whose language `UNCLAIMED_CHECK_LANGUAGES` above deliberately leaves
+ * out — TypeScript, JavaScript and Vue. That set's own argument stands
+ * unchanged and is not widened here: those three keep producing no failure,
+ * no `notAnalyzed` entry, no `coverage.complete: false` and no exit 3.
+ *
+ * What they were also producing was nothing at all. `createWorkspace`
+ * (`../workspace.mjs`) drops a file no project owns, so such a file left no
+ * trace on any surface: `coverage.analyzedFiles` counted only owned files,
+ * `notAnalyzed`/`coverageGaps`/`notes` stayed empty, and a run over a tree
+ * with fifty of them printed the same bytes as a run over a tree with none —
+ * measured on this repository, where 50 of 425 tracked analyzable files sit
+ * outside both Moon projects — 49 of them reported, once the run's own
+ * boundary config is subtracted by `unownedGapWithoutRunConfiguration` below. Tolerated is a decision; invisible is the
+ * silent direction `../../../../AGENTS.md`'s invariant refuses, and the two
+ * are not the same thing.
+ *
+ * So this reports rather than judges: `./check.mjs` shapes what this returns
+ * into a `coverageGaps` entry — the same degraded-coverage channel
+ * `../workspace.mjs`'s `polyglotManifests` already feeds through
+ * `pluginGap`, which likewise changes no exit code and no verdict. `files` is
+ * the whole list rather than a count, so the JSON envelope carries something
+ * a reader can act on and the text face can bound its own rendering
+ * (`../report/text.mjs`) without either surface having to trust a number it
+ * cannot check.
+ *
+ * Empty `files` is the answer for a workspace where every analyzable file is
+ * owned, and `./check.mjs` contributes no gap entry at all then: a gap that
+ * always fires teaches a reader to skip the line it is written on.
+ *
+ * Workspace-scoped like `unclaimedFileFailures` above, and for the same
+ * reason — a `check <path>` must not be able to hide an orphan elsewhere in
+ * the tree by naming a path that excludes it.
+ *
+ * **This list still holds the files the run reads as its own configuration**,
+ * and `unownedGapWithoutRunConfiguration` below is what removes them. The
+ * split is forced rather than stylistic: `resolvePolicy` needs a resolved
+ * `CommandContext` to run, so it runs AFTER this does, and until it has run
+ * nothing here knows which law actually governed the run. A `--config`
+ * override, a profile name, or an inline policy object all decide that later.
+ * Subtracting the DECLARED name here would exclude a file the run never read
+ * while listing the one it did — worse than not filtering at all.
+ *
+ * @param {{tracked: string[], owned: {file: string, project: string}[]}} args
+ * @returns {{files: string[], languages: string[]}} `languages` is the sorted
+ *   distinct set of languages `files` spans — derived here, beside the filter
+ *   that decided the list, so no face can name a language the list does not
+ *   contain.
+ */
+function unownedAnalyzableFiles({ tracked, owned }) {
+  const ownedFiles = new Set(owned.map(({ file }) => file));
+  const files = tracked.filter((file) => {
+    const language = languageOf(file);
+    return language !== null && !UNCLAIMED_CHECK_LANGUAGES.has(language) && !ownedFiles.has(file);
+  });
+  return {
+    files,
+    languages: [...new Set(files.map((file) => languageOf(file)))].sort(),
+  };
+}
+
+/**
+ * The same gap with the files this run read as its own configuration removed,
+ * and the languages recounted over what is left.
+ *
+ * A file the run read as configuration is not a file the run failed to cover:
+ * it is not source judged by the boundary law, it IS the boundary law, and
+ * "no verdict covers this file" is vacuous when said of it. The concrete
+ * failure without this is worse than vacuous, and
+ * `../config-spelling.integration.test.mjs` is what proved it: a law spelled
+ * `module-boundaries.config.mjs` and one spelled `law/custom.mjs` produced
+ * different reports, so RENAMING THE LAW CHANGED THE VERDICT.
+ *
+ * It takes the names as arguments rather than reading `CommandContext.options`
+ * because the caller is the only layer that knows them. `options.boundaryConfig`
+ * is what the workspace DECLARED; the law that actually ran may be a `--config`
+ * override or a profile, which `./policy.mjs`'s `resolvePolicy` reports as its
+ * workspace-relative `source` — and that resolution cannot happen before
+ * `resolveCommandContext`, because it takes the context as an argument.
+ *
+ * Names are normalised toward the spelling `git ls-files` uses, because that
+ * is what `tracked` holds: an `nx.json` may legitimately declare
+ * `"./module-boundaries.config.mjs"` or a backslash-separated path, and an
+ * unnormalised compare would silently fail to exclude it. An absolute path
+ * matches nothing and is left alone — no tracked entry is absolute, so it
+ * cannot collide with one.
+ *
+ * @param {{files: string[], languages: string[]}} gap
+ * @param {(string|object|null|undefined)[]} configNames Every name this run
+ *   read as configuration. Non-strings are ignored, which is how an inline
+ *   policy object (`lattice.json`'s object form) and an absent profile both
+ *   pass through without naming a file.
+ * @returns {{files: string[], languages: string[]}}
+ */
+export function unownedGapWithoutRunConfiguration(gap, configNames) {
+  const excluded = new Set(
+    configNames
+      .filter((name) => typeof name === "string")
+      .map((name) => name.replace(/\\/gu, "/").replace(/^\.\//u, "")),
+  );
+  if (excluded.size === 0) return gap;
+  const files = gap.files.filter((file) => !excluded.has(file));
+  if (files.length === gap.files.length) return gap;
+  return {
+    files,
+    languages: [...new Set(files.map((file) => languageOf(file)))].sort(),
+  };
+}
+
+/**
  * Resolves everything a command needs before it can ask its own question:
  * which workspace, which provider, which files, and what analyzing them
  * found.
@@ -377,6 +497,7 @@ export function resolveCommandContext(
   let analyzed;
   let analyzedFiles;
   let pluginGap;
+  let unownedGap;
   let exemptedFiles;
 
   if (hasNative) {
@@ -477,25 +598,39 @@ export function resolveCommandContext(
     // There is no Nx plugin registration to be missing on a workspace that
     // has no `nx.json` at all.
     pluginGap = { registered: true, manifests: [] };
+    // Nothing to report as a tolerated gap either: native's own coverage
+    // judgment already fails on EVERY unclaimed analyzable file, in every
+    // language, and those failures are in `discovered.failures` above — the
+    // run refuses with exit 3 rather than tolerating them, which is the
+    // deliberate difference between this provider and the two below
+    // (`../providers/native/coverage.mjs`). Stated rather than left off, for
+    // the reason `pluginGap` is: a reader must not have to tell "false" from
+    // "this branch forgot".
+    unownedGap = { files: [], languages: [] };
   } else if (hasMoon) {
     // Moon provider — reads graph from `moon project-graph --json`, the same
     // one-call contract as the Nx path: Moon already resolved projects, tags
-    // and edges before this package ever asked. Options from defaults (no
-    // `nx.json` to carry a plugins table, no `lattice.json` for inline
-    // options); a Moon workspace names the same two files by convention.
-    // `boundaryConfigDeclared: false` is a fact about Moon rather than a
-    // fallback: there is no `plugins[].options` table and no `lattice.json`
-    // on this path (a `lattice.json` beside `.moon/` is refused outright,
-    // `../providers/moon.mjs`), so a Moon workspace has nowhere to name its
-    // boundary law and both names above are taken by convention every time.
-    // It is written out rather than left off so the key is present on all
-    // three providers — a reader that had to tell "false" from "this branch
-    // forgot" would be back to guessing provenance, which is the defect.
-    options = {
-      boundaryConfig: DEFAULT_OPTIONS.boundaryConfig,
-      tsConfig: DEFAULT_OPTIONS.tsConfig,
-      boundaryConfigDeclared: false,
-    };
+    // and edges before this package ever asked. Both option names are
+    // convention here, because Moon carries no `plugins[].options` table and
+    // a `lattice.json` beside `.moon/` is refused outright
+    // (`../providers/moon.mjs`) — so there is nowhere in a Moon workspace to
+    // name either file, and `readMoonOptions` is where they are decided
+    // rather than read. `boundaryConfigDeclared: false` therefore states a
+    // fact about Moon rather than a fallback, and it is written out rather
+    // than left off so the key is present on all three providers: a reader
+    // that had to tell "false" from "this branch forgot" would be back to
+    // guessing provenance, which is the defect.
+    //
+    // The two names are NOT symmetrical, which is why this is a call and not
+    // a literal. `boundaryConfig` is the default outright. `tsConfig` walks
+    // the short ordered chain `MOON_TSCONFIG_CHAIN` — a workspace whose paths
+    // table lives in `tsconfig.json` rather than `tsconfig.base.json` was
+    // previously judged against a file it does not have, where every aliased
+    // import resolves to nothing and the report is a wall of crossings with
+    // no line saying the table was never found. `listFiles` is a thunk the
+    // chain only calls on the branch that needs it (neither candidate
+    // present), so a workspace carrying one pays nothing for the question.
+    options = readMoonOptions(root, { listFiles: () => tracked });
 
     graph = effectiveReadGraph(root);
     ({ workspace, owned } = createWorkspace({
@@ -562,6 +697,10 @@ export function resolveCommandContext(
     // There is no Nx plugin registration to be missing on a workspace that
     // has no `nx.json` at all.
     pluginGap = { registered: true, manifests: [] };
+    // The tolerated half of the same unclaimed-file question the failures
+    // above answer for Go, Rust and Python — counted and reported rather than
+    // judged (`unownedAnalyzableFiles`).
+    unownedGap = unownedAnalyzableFiles({ tracked, owned });
   } else {
     // What this workspace calls the two files whose names are conventions
     // rather than contracts. Read before the graph, because it decides which
@@ -616,6 +755,9 @@ export function resolveCommandContext(
       registered: pluginIsRegistered(root, { readFile }),
       manifests: polyglotManifests(tracked, workspace.projects),
     };
+    // Same as the Moon branch above, and computed from `tracked` rather than
+    // `selected` for the same reason `unclaimedFileFailures` is.
+    unownedGap = unownedAnalyzableFiles({ tracked, owned });
   }
 
   // `moonMarker` — resolved once at the top, where coexistence was refused —
@@ -631,6 +773,7 @@ export function resolveCommandContext(
     analysis: { imports, failures, analyzed, analyzedFiles, exemptedFiles },
     options,
     pluginGap,
+    unownedGap,
     // Every tracked file that belongs to a project, paired with its project —
     // the ownership map `createWorkspace` already built (`own ./workspace.mjs`).
     // A command that needs to know WHICH project owns a file (the planning

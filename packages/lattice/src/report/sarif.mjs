@@ -610,6 +610,15 @@ export function sarifIntentNotification(entry) {
 }
 
 /**
+ * How many unowned-file paths a coverage-gap notification names before it
+ * says how many are left — the same bound, and the same argument, as
+ * `./text.mjs`'s `UNOWNED_SAMPLE_LIMIT`. Held separately rather than imported
+ * because the two faces choose their own presentation and a shared constant
+ * would make one face's readability decision binding on the other's.
+ */
+const UNOWNED_SAMPLE_LIMIT = 10;
+
+/**
  * One degraded-coverage note as a tool-execution notification.
  *
  * A `warning` and never a result: the run reached its verdict on everything it
@@ -626,21 +635,59 @@ export function sarifIntentNotification(entry) {
  * worse than one that names only the kind, because a reader cannot tell it is
  * wrong.
  *
- * @param {{kind: string, manifests?: string[]}} gap One record from the run's
- *   `coverageGaps` (`../../cli.mjs`'s `check`).
+ * @param {{kind: string, manifests?: string[], files?: string[],
+ *   languages?: string[]}} gap One record from the run's `coverageGaps`
+ *   (`../commands/check.mjs`).
  * @returns {object}
  */
 export function sarifCoverageGapNotification(gap) {
   const manifests = gap.manifests ?? [];
   const found = manifests.length > 0 ? `: ${manifests.join(", ")}` : "";
-  const text =
-    gap.kind === "unregistered-plugin"
-      ? `nx.json does not register this plugin but ${manifests.length} polyglot ` +
-        `manifest${manifests.length === 1 ? "" : "s"} found under project roots — ` +
-        `nx affected and @nx/enforce-module-boundaries will not cover these edges${found}`
-      : `Coverage gap "${gap.kind}" — part of this workspace is outside what the ` +
-        `run's other tools cover${found}`;
-  return { level: "warning", message: { text } };
+  if (gap.kind === "unregistered-plugin") {
+    return {
+      level: "warning",
+      message: {
+        text:
+          `nx.json does not register this plugin but ${manifests.length} polyglot ` +
+          `manifest${manifests.length === 1 ? "" : "s"} found under project roots — ` +
+          `nx affected and @nx/enforce-module-boundaries will not cover these edges${found}`,
+      },
+    };
+  }
+  // Tracked analyzable files no project owns. The count and the languages are
+  // the whole message: the paths live in the JSON envelope, and a SARIF
+  // notification listing hundreds of them would be a log nobody can read
+  // rather than a fact an uploader can act on. Bounded the same way the text
+  // face bounds its own sample (`./text.mjs`'s `formatUnownedFilesGap`), and
+  // for the same reason, with the remainder named rather than dropped.
+  if (gap.kind === "unowned-files") {
+    const files = gap.files ?? [];
+    const languages = gap.languages ?? [];
+    const spans = languages.length > 0 ? ` (${languages.join(", ")})` : "";
+    const shown = files.slice(0, UNOWNED_SAMPLE_LIMIT);
+    const remaining = files.length - shown.length;
+    const listed =
+      shown.length > 0
+        ? `: ${shown.join(", ")}${remaining > 0 ? `, and ${remaining} more` : ""}`
+        : "";
+    return {
+      level: "warning",
+      message: {
+        text:
+          `${files.length} tracked analyzable file${files.length === 1 ? "" : "s"}${spans} ` +
+          `owned by no project — skipped, so no boundary verdict in this run covers ` +
+          `${files.length === 1 ? "it" : "them"}${listed}`,
+      },
+    };
+  }
+  return {
+    level: "warning",
+    message: {
+      text:
+        `Coverage gap "${gap.kind}" — part of this workspace is outside what the ` +
+        `run's other tools cover${found}`,
+    },
+  };
 }
 
 /**
@@ -720,8 +767,9 @@ export function sarifDecisionRefNotification(decisionRef) {
  *   too. This function read `intent.findings` and nothing else before, so a
  *   `check` exiting 3 on an intent it could not establish uploaded SARIF
  *   byte-identical to a clean run's.
- * - `coverageGaps` — the polyglot edges nothing in the workspace covers
- *   (`sarifCoverageGapNotification`).
+ * - `coverageGaps` — coverage this run knows it did not provide: the polyglot
+ *   edges nothing in the workspace covers, and the tracked analyzable files no
+ *   project owns (`sarifCoverageGapNotification`).
  * - `unresolvedDecisionRefs` — every citation no ADR, rule, or fitness record
  *   answers (`sarifDecisionRefNotification`), sorted, which is the order
  *   `../../cli.mjs`'s JSON envelope lists the same set in: two faces of one

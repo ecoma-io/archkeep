@@ -146,9 +146,11 @@ same two keys directly on that file's own `boundaryConfig`/`tsConfig` fields
 (`src/providers/native/model.mjs`), because there is no `plugins[].options`
 table to nest them under; a Moon workspace (`.moon/` directory present — a
 `lattice.json` beside it is refused loudly, one project model per tree) takes
-the two names from the defaults by convention, `--config` overriding for one
-run, because Moon's own configuration does not carry a plugin-options table
-(`../../docs/integrations/moon.md` owns that story). `cli.mjs`'s
+the two names by convention — `boundaryConfig` from the default and `tsConfig`
+from a short ordered chain (`src/options.mjs`'s `readMoonOptions`), `--config`
+overriding the first for one run — because Moon's own configuration does not
+carry a plugin-options table (`../../docs/integrations/moon.md` owns that
+story). `cli.mjs`'s
 `optionsForUsage` and `src/commands/check.mjs`'s `check` are the two places that
 read either shape, chosen by which marker file the workspace root carries.
 

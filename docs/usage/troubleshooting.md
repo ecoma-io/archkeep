@@ -22,7 +22,18 @@ run at all. `git status --porcelain` and `git check-ignore -v <file>` settle it.
 
 **The file belongs to no project.** Files are attributed to the project whose
 directory contains them. A file above every project root is outside the boundary
-system entirely and is skipped without a verdict.
+system entirely and is skipped without a verdict — the run says so rather than
+staying quiet about it, in a line naming how many such files there are and in
+which languages:
+
+```text
+⚠ 49 tracked analyzable files (typescript) owned by no project — skipped, so no boundary verdict here covers them
+```
+
+That is a coverage note, not a finding: the exit code does not change, and
+`--format json` carries the complete list in `coverage.coverageGaps`. On the
+native provider (a `lattice.json` workspace) the same state is a refusal
+instead — exit 3, no verdict.
 
 **The project is invisible to the workspace tool.** On an Nx workspace, a
 directory with sources but no `project.json` or `package.json` does not appear
@@ -103,7 +114,7 @@ reporting because the alternative is silence. The ones that change a verdict:
 - **An external record with no external node in the graph is still checked**, so
   `bannedExternalImports` reaches Go, Rust and Python — where upstream would bail.
 
-If your case is not one of those, it is a divergence worth filing. A _config_ this engine refuses to load where ESLint compiles it is a different axis and a deliberate one -- see [policy-schema.md](../reference/policy-schema.md#refused-pattern-shapes).
+If your case is not one of those, it is a divergence worth filing. A _config_ this engine refuses to load where ESLint compiles it is a different axis and a deliberate one — see [policy-schema.md](../reference/policy-schema.md#refused-pattern-shapes).
 
 **A specifier that does not exist in the file.** Each analyzer has pinned parse
 limits, and every one of them errs toward a _spurious record naming text the file
@@ -180,13 +191,14 @@ a distinct outcome from both 0 and 1, and it should fail your build.
 
 **Total failures** — the run never started:
 
-| symptom                                 | cause                                                                                                                                                                                                                                                                                             |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| no workspace found                      | not run from inside a repository with a workspace marker (`nx.json`, `lattice.json`, `.moon/` or `.config/moon/`)                                                                                                                                                                                 |
-| config errors, naming the row           | the boundary config is malformed — every problem is listed rather than the first                                                                                                                                                                                                                  |
-| a config that loaded before now exits 3 | a pattern this engine refuses by shape, or one it now bounds -- the message names the row and what to write instead. ESLint compiles these; this engine will not run them against specifiers a pull request chooses. See [policy-schema.md](../reference/policy-schema.md#refused-pattern-shapes) |
-| `nx graph` failed                       | a plugin threw during graph computation; run `nx graph --file=graph.json` directly for the real message                                                                                                                                                                                           |
-| `git` failed                            | not a git repository, or `git ls-files` is unavailable                                                                                                                                                                                                                                            |
+| symptom                                  | cause                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| no workspace found                       | not run from inside a repository with a workspace marker (`nx.json`, `lattice.json`, `.moon/` or `.config/moon/`)                                                                                                                                                                                                                                                                           |
+| config errors, naming the row            | the boundary config is malformed — every problem is listed rather than the first                                                                                                                                                                                                                                                                                                            |
+| a config that loaded before now exits 3  | a pattern this engine refuses by shape, or one it now bounds — the message names the row and what to write instead. ESLint compiles these; this engine will not run them against specifiers a pull request chooses. See [policy-schema.md](../reference/policy-schema.md#refused-pattern-shapes)                                                                                            |
+| a Moon workspace with TypeScript exits 3 | the tree carries `.ts`, `.tsx`, `.mts`, `.cts` or `.vue` files and neither `tsconfig.base.json` nor `tsconfig.json` at its root, so there is no `paths` table to resolve against. Refused rather than judged against the compiler defaults, which would report every aliased import as a boundary crossing. Every command refuses, not only `check`. See [moon.md](../integrations/moon.md) |
+| `nx graph` failed                        | a plugin threw during graph computation; run `nx graph --file=graph.json` directly for the real message                                                                                                                                                                                                                                                                                     |
+| `git` failed                             | not a git repository, or `git ls-files` is unavailable                                                                                                                                                                                                                                                                                                                                      |
 
 **Partial failures** — the run completed but some file has no verdict. These
 appear under their own heading in the report, and they are the reason exit 3

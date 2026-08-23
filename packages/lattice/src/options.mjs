@@ -34,6 +34,12 @@
  * ]
  * ```
  *
+ * A Moon workspace can write neither key: Moon's own configuration carries no
+ * plugin-options table, and the `lattice.json` that would state them is
+ * refused beside `.moon/`. What it gets instead is convention — and the one
+ * name whose convention is an ordered CHAIN rather than a single default is
+ * argued at `MOON_TSCONFIG_CHAIN` below, with `readMoonOptions` as the reader.
+ *
  * ## What is deliberately NOT an option: the language list
  *
  * The obvious next key is `languages: ["go", "rust"]`, and it must not exist.
@@ -83,6 +89,9 @@
  * argued where it is written, not restated here.
  */
 import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { languageOf } from "./analysis/registry.mjs";
 
 import { containmentViolation } from "./containment.mjs";
 import { parseNxJson } from "./nx-json.mjs";
@@ -280,6 +289,184 @@ export function readPluginOptions(workspaceRoot, { readFile = readFileOrNull } =
   const entry = plugins.find(namesThisPlugin);
   if (entry === undefined) return resolveOptions(undefined);
   return resolveOptions(typeof entry === "string" ? undefined : entry.options);
+}
+
+/**
+ * The tsconfig filenames a Moon workspace is read against, in the order they
+ * are tried — first one that exists wins.
+ *
+ * Moon is the one provider with nowhere to state the name. Nx states it in
+ * `nx.json` → `plugins[].options.tsConfig` and a native root states it on
+ * `lattice.json`'s own `tsConfig` field; Moon's own configuration carries no
+ * plugin-options table, and a `lattice.json` beside `.moon/` is refused
+ * outright (`./commands/context.mjs`'s `requireSingleProjectModel`), so every
+ * door to a stated name is shut. What is left is convention, and one name is
+ * not enough of it: measured on a 94-project Vue Moon workspace whose `paths`
+ * table lives in `tsconfig.json` with no `tsconfig.base.json` beside it, a
+ * provider fixed at the first name alone read the absent file, fell back to
+ * `ts.resolveModuleName`'s compiler defaults, resolved every internal
+ * specifier to nothing, and reported several hundred findings on a tree with
+ * no architecture violation in it.
+ *
+ * The order is the point, not the membership: `tsconfig.base.json` is the Nx
+ * convention this tool's default already names, and a workspace carrying both
+ * files means the base one — `tsconfig.json` there is the editor's own
+ * per-root config, which typically `extends` it. "Whichever we find" would
+ * make the answer depend on the order two names happen to be written in.
+ *
+ * Extending the chain is a compatibility decision, not a lookup detail: a
+ * third name added here changes the verdict of an unchanged workspace that
+ * carries it. `../../../docs/integrations/moon.md`'s Configuration section
+ * owns the consumer-facing statement of both the chain and what it does not
+ * solve.
+ *
+ * The first entry is `DEFAULT_OPTIONS.tsConfig` itself rather than a second
+ * spelling of the same string: the two must never disagree about which name
+ * the convention starts at.
+ */
+export const MOON_TSCONFIG_CHAIN = Object.freeze([DEFAULT_OPTIONS.tsConfig, "tsconfig.json"]);
+
+/**
+ * The `tsConfigSource` a Moon workspace's options carry — the provenance
+ * field beside `tsConfig`, the same shape `./commands/graph.mjs`'s
+ * `workspaceLayoutSource` is to `workspaceLayout`.
+ *
+ * It exists because the name alone is not the whole fact. Two machines
+ * checking out the same Moon workspace, one of them with an untracked
+ * `tsconfig.json` in it, resolve different `paths` tables and report
+ * different verdicts; with only the resolved name carried, a reader cannot
+ * tell a name the workspace stated from a name this tool picked off a chain.
+ * Nx and native options carry no such field — there the name IS stated — so
+ * its presence is itself the "this was convention, not a declaration" fact.
+ *
+ * `./lsp/server.mjs`'s `watchedFilesFor` reads it for a second reason argued
+ * there: the chain is ordered, so the file that would WIN can change without
+ * the file that is currently chosen ever being touched.
+ */
+export const MOON_TSCONFIG_SOURCE = "moon-convention";
+
+/**
+ * The extensions whose absence of a tsconfig is genuinely ambiguous — the
+ * only files that make `readMoonOptions` refuse.
+ *
+ * Two exclusions, both deliberate, and the second is the reason this is a
+ * list of EXTENSIONS rather than the obvious list of languages:
+ *
+ * - Go, Rust and Python resolve through their own manifests and never read a
+ *   tsconfig at all, so a Moon workspace of those three alone must not be
+ *   refused for lacking a file nothing in it would have read.
+ * - **`.js`, `.jsx`, `.mjs` and `.cjs` are absent even though
+ *   `LANGUAGE_BY_EXTENSION` calls all four `typescript`**, because that table
+ *   answers "which analyzer reads this" and the question here is a different
+ *   one: "does a missing tsconfig mean we failed to find the paths table, or
+ *   that there is no paths table?" For a `.ts` file the answer is ambiguous —
+ *   `tsc` cannot run without a config, so one almost certainly exists
+ *   somewhere and not finding it is evidence of a miss. For a plain-JS
+ *   workspace it is not ambiguous at all: JavaScript needs no tsconfig, most
+ *   such trees have never had one, and every relative and package specifier
+ *   in them resolves correctly against the compiler defaults today. Refusing
+ *   those would turn a run that is currently CORRECT into exit 3 — a
+ *   regression wearing a hardening's clothes, which is the one thing this
+ *   guard must not be.
+ *
+ * `.vue` is included because the Vue analyzer hands its `<script>` block to
+ * the TypeScript one (`./analysis/vue.mjs`), which resolves it against the
+ * same table.
+ *
+ * This is a second copy of extension knowledge that `./analysis/registry.mjs`
+ * otherwise owns, so the filter below runs `languageOf` FIRST and this list
+ * only ever narrows what the registry already claimed. An entry naming an
+ * extension the registry does not claim therefore cannot widen the refusal —
+ * it simply never matches — and `./options.test.mjs` pins that, probing
+ * extensions from outside the registry as well as inside it, because a probe
+ * set drawn only from the registry's own keys could not tell the two cases
+ * apart.
+ */
+const TSCONFIG_RESOLVED_EXTENSIONS = Object.freeze([".ts", ".tsx", ".mts", ".cts", ".vue"]);
+
+/**
+ * The resolved options for a Moon workspace root.
+ *
+ * Every field is convention: Moon has no place to state either name, so this
+ * function is where both are decided rather than read. `boundaryConfig` is
+ * the default outright and `boundaryConfigDeclared` is therefore `false` — a
+ * fact about Moon, not a fallback — while `tsConfig` walks
+ * `MOON_TSCONFIG_CHAIN` and reports which entry answered through
+ * `tsConfigSource`.
+ *
+ * **Neither candidate present, in a workspace with files that resolve
+ * through a `paths` table, THROWS.** That is a change of behaviour and the
+ * point of this function: before it, such a tree was judged against
+ * TypeScript's compiler defaults, where an aliased specifier resolves to
+ * nothing, every internal import reads as a boundary crossing, and the report
+ * is a wall of findings with no line anywhere saying the paths table was
+ * never found. A tool that could not resolve the workspace's own imports must
+ * not answer as though it had (`../../../AGENTS.md`, "The invariant everything
+ * is judged against") — so the run stops, naming both candidate names and the
+ * files that needed one.
+ *
+ * A Moon workspace with no such file is NOT refused: it would be refused for
+ * lacking a config nothing in it reads. That covers Go, Rust and Python — and
+ * also a plain-JavaScript tree, because `TSCONFIG_RESOLVED_EXTENSIONS` is
+ * narrower than the language table on purpose; its own comment argues why.
+ * There the chain's first entry is carried as the name, so the watcher list
+ * `./lsp/server.mjs` derives still covers the file that would change the
+ * answer if it arrived.
+ *
+ * @param {string} workspaceRoot Absolute path of the tree being judged.
+ * @param {{exists?: (path: string) => boolean, listFiles: () => string[]}} io
+ *   `exists` is plain filesystem existence, the same test every other marker
+ *   is read by, injectable so a test drives the chain with no tree on disk.
+ *   `listFiles` is REQUIRED and a thunk rather than an array: it is called
+ *   only on the one branch that needs it — neither candidate present — so a
+ *   workspace that carries one pays nothing for the question, and this module
+ *   never grows an import of `./workspace.mjs`, which imports it back.
+ * @returns {{boundaryConfig: string, tsConfig: string, tsConfigSource: string,
+ *   boundaryConfigDeclared: boolean}}
+ * @throws {Error} when no chain entry exists and the tracked files include a
+ *   language that resolves through the `paths` table.
+ */
+export function readMoonOptions(workspaceRoot, { exists = existsSync, listFiles }) {
+  const found = MOON_TSCONFIG_CHAIN.find((name) => exists(join(workspaceRoot, name)));
+  if (found === undefined) {
+    // Two conditions, and the first is what keeps this list strictly NARROWER
+    // than the analyzer registry rather than merely different from it.
+    // `languageOf` owns the matching rule — last dot of the basename — so a
+    // path whose whole basename is `.ts` resolves to `null` there and is
+    // skipped here too, instead of triggering a refusal for a file no
+    // analyzer would ever read.
+    const needing = listFiles().filter(
+      (file) =>
+        languageOf(file) !== null &&
+        TSCONFIG_RESOLVED_EXTENSIONS.some((extension) => file.endsWith(extension)),
+    );
+    if (needing.length > 0) {
+      throw new Error(
+        `lattice: ${workspaceRoot} is a Moon workspace carrying ${needing.length} file` +
+          `${needing.length === 1 ? "" : "s"} that resolve` +
+          `${needing.length === 1 ? "s" : ""} through a TypeScript paths table ` +
+          `(${needing.slice(0, 3).join(", ")}${needing.length > 3 ? ", …" : ""}), and none of ` +
+          `${MOON_TSCONFIG_CHAIN.join(" or ")} is there to read it from. Moon carries no ` +
+          `plugin-options table to name one under and a lattice.json beside .moon is refused, ` +
+          `so those names are the whole convention. Refused rather than judged: read against ` +
+          `the compiler defaults instead, every aliased import resolves to nothing and the run ` +
+          `reports a boundary crossing for each one — a wall of findings on a workspace that ` +
+          `may have no violation in it at all. Add ${MOON_TSCONFIG_CHAIN[0]} at the workspace ` +
+          `root, or rename the config that already holds the paths table to one of those two ` +
+          `names. The Moon integration guide in this tool's documentation ` +
+          `covers both routes.`,
+      );
+    }
+  }
+  return {
+    boundaryConfig: DEFAULT_OPTIONS.boundaryConfig,
+    // No candidate and nothing that would have read one: the chain's first
+    // entry is the name carried, so the file whose ARRIVAL would change the
+    // answer is the file the watcher list already covers.
+    tsConfig: found ?? MOON_TSCONFIG_CHAIN[0],
+    tsConfigSource: MOON_TSCONFIG_SOURCE,
+    boundaryConfigDeclared: false,
+  };
 }
 
 /**

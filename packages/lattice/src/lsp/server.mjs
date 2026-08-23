@@ -35,7 +35,15 @@
 import { existsSync } from "node:fs";
 import { isAbsolute, join, posix, relative, sep } from "node:path";
 
-import { DEFAULT_OPTIONS, NX_CONFIG_FILE, readPluginOptions } from "../options.mjs";
+import {
+  DEFAULT_OPTIONS,
+  MOON_TSCONFIG_CHAIN,
+  MOON_TSCONFIG_SOURCE,
+  NX_CONFIG_FILE,
+  readMoonOptions,
+  readPluginOptions,
+} from "../options.mjs";
+import { moonMarkerAt } from "../providers/moon.mjs";
 import { LATTICE_MODEL_FILE, loadNativeModel } from "../providers/native/model.mjs";
 
 import { readBoundaryConfig } from "./boundary-config.mjs";
@@ -48,7 +56,12 @@ import {
   TEXT_DOCUMENT_SYNC_KIND,
   uriToPath,
 } from "./protocol.mjs";
-import { buildWorkspaceIndex, PROJECT_CONFIG_FILE, readWorkspaceFile } from "./workspace-index.mjs";
+import {
+  buildWorkspaceIndex,
+  listWorkspaceFiles,
+  PROJECT_CONFIG_FILE,
+  readWorkspaceFile,
+} from "./workspace-index.mjs";
 
 /**
  * A project's own `package.json`, and the two spellings of its Module
@@ -98,6 +111,26 @@ const MFE_CONFIG_FILES = Object.freeze([
  * the name is an option, so the watched set is derived from the resolved
  * options rather than fixed at module load.
  *
+ * On a MOON root that name was not stated anywhere — it came off an ordered
+ * chain (`../options.mjs`'s `MOON_TSCONFIG_CHAIN`, flagged by
+ * `tsConfigSource`) — and there the whole chain is watched rather than the one
+ * entry that answered. Watching only the winner would hold the ordering half
+ * of the same staleness this list already refuses: with `tsconfig.json`
+ * chosen, a `tsconfig.base.json` appearing beside it takes the resolution over
+ * WITHOUT the chosen file being touched, so no notification would arrive and
+ * every verdict for the rest of the session would keep resolving through a
+ * table the tool no longer reads. The reverse arrival — the winner deleted —
+ * is the same event seen from the other side, and equally unwatched.
+ *
+ * Only the ROOT copy of either name can change the chain's answer, but the
+ * glob `registerFileWatchers` builds is `**\/<entry>`, so `tsconfig.json`
+ * also matches every per-project `apps/*\/tsconfig.json` — ubiquitous in the
+ * Vue and Angular Moon workspaces this chain exists for. Each such edit bumps
+ * the revision and re-diagnoses the open documents for a file that could not
+ * have moved the resolution. That is the same trade `package.json` below
+ * makes and settles the same way: the cost is LOUD (a slow editor while
+ * someone edits tsconfigs) and the failure it buys out is silent.
+ *
  * `package.json` and the two `module-federation.config` spellings are here for
  * that same argument one step further in again, and in the direction that
  * matters most: each of them decides a verdict for files that did not change,
@@ -140,13 +173,37 @@ const MFE_CONFIG_FILES = Object.freeze([
  * arrive: the silent direction, in the one list whose whole job is noticing
  * that the law moved.
  *
- * @param {{boundaryConfig: string|object, tsConfig: string}} options The session's resolved options.
+ * `unresolved` is the state where the options THEMSELVES could not be read,
+ * and there the tsconfig half widens to the whole Moon chain regardless of
+ * provenance. The reason is the refusal that can put a session into this
+ * state: `../options.mjs`'s `readMoonOptions` throws when a Moon root carries
+ * TypeScript and neither chain entry, and its message tells the developer to
+ * add `tsconfig.base.json` OR rename their config to `tsconfig.json`. Take the
+ * second branch under a watch list built from `DEFAULT_OPTIONS` — which
+ * carries no `tsConfigSource` — and only `tsconfig.base.json` is watched: the
+ * file that ends the failure arrives unwatched, no notification fires, and the
+ * session republishes the same refusal on every open document until the editor
+ * restarts. That is the staleness the paragraph above refuses, reached through
+ * the one door that had no provenance to steer by, and it would make this
+ * server answer its own remedy with silence.
+ *
+ * @param {{boundaryConfig: string|object, tsConfig: string, tsConfigSource?: string}} options
+ *   The session's resolved options. `tsConfigSource` is present only on a Moon
+ *   root, where the name came off a chain rather than from a declaration.
+ * @param {{unresolved?: boolean}} [state] `unresolved: true` while
+ *   `optionsFailure` is set — the session does not know which provider it has,
+ *   because working that out is part of what failed, so it watches every name
+ *   that could end the failure.
  * @returns {readonly string[]}
  */
-export function watchedFilesFor(options) {
+export function watchedFilesFor(options, { unresolved = false } = {}) {
   return Object.freeze([
     ...(typeof options.boundaryConfig === "string" ? [options.boundaryConfig] : []),
-    options.tsConfig,
+    ...(unresolved
+      ? [...new Set([...MOON_TSCONFIG_CHAIN, options.tsConfig])]
+      : options.tsConfigSource === MOON_TSCONFIG_SOURCE
+        ? MOON_TSCONFIG_CHAIN
+        : [options.tsConfig]),
     PROJECT_CONFIG_FILE,
     NX_CONFIG_FILE,
     LATTICE_MODEL_FILE,
@@ -203,11 +260,24 @@ function markersAt(root) {
  * whatever `lattice.json` says NOW, so an edit to an inline law re-diagnoses
  * exactly like an edit to a law in its own file.
  *
+ * A MOON root has neither marker file and no plugin-options table of its own,
+ * so both names are convention there and `../options.mjs`'s `readMoonOptions`
+ * decides them — including the refusal when the tree carries files that
+ * resolve through a `paths` table and no config the chain names to read it
+ * from. That refusal reaches the developer the same way an unreadable
+ * `nx.json` does: `refreshOptions` catches it into `optionsFailure`, and every
+ * open document is published a diagnostic saying so rather than a verdict
+ * computed from a table that was never found.
+ *
  * @param {string} root
- * @returns {{boundaryConfig: string|object, tsConfig: string}}
- * @throws {Error} when both markers are present, the marker present is
- *   unreadable or malformed, or an Nx root's options name a `profiles`
- *   registry — a profile NAME is not a file this server could watch or parse.
+ * @returns {{boundaryConfig: string|object, tsConfig: string, tsConfigSource?: string}}
+ *   `tsConfigSource` is present only on a Moon root — see `watchedFilesFor`,
+ *   which is the one reader that acts on it.
+ * @throws {Error} when both markers are present, a Moon root carries both Moon
+ *   directories, the marker present is unreadable or malformed, an Nx root's
+ *   options name a `profiles` registry — a profile NAME is not a file this
+ *   server could watch or parse — or a Moon root names no tsconfig the
+ *   convention chain can find while carrying files that need one.
  */
 export function readWorkspaceOptions(root) {
   const { hasNx, hasNative } = markersAt(root);
@@ -223,6 +293,30 @@ export function readWorkspaceOptions(root) {
   if (hasNative) {
     const model = loadNativeModel(root, { readFile: (path) => readWorkspaceFile(root, path) });
     return { boundaryConfig: model.boundaryConfig, tsConfig: model.tsConfig };
+  }
+  // A Moon root, checked only once neither marker file is there: a `.moon`
+  // beside `nx.json` keeps falling to `readPluginOptions` below exactly as it
+  // did, and `./workspace-index.mjs`'s `buildWorkspaceIndex` refuses the pair
+  // loudly through the one shared gate (`../commands/context.mjs`'s
+  // `requireSingleProjectModel`) rather than this function growing a second
+  // copy of that refusal. `moonMarkerAt` is the same dispatcher the index and
+  // the CLI read, so all three agree about which directory marks the tree —
+  // and its own refusal of a root carrying BOTH Moon spellings arrives here as
+  // an options failure, which `refreshOptions` publishes to every open
+  // document instead of diagnosing against a config nobody chose.
+  //
+  // Before this branch the server read `readPluginOptions` on a Moon tree,
+  // which only ever reads `nx.json`: it answered the DEFAULTS, so the editor
+  // resolved every TypeScript import against `tsconfig.base.json` whether or
+  // not the workspace had one. `readMoonOptions` is where that name becomes a
+  // chain, and it is the same function the CLI resolves from, so the two faces
+  // cannot come to hold different paths tables for one workspace.
+  const moonMarker = moonMarkerAt(root);
+  if (moonMarker !== null) {
+    // `listFiles` is a thunk and only spent on the branch that needs it —
+    // neither chain entry present — so an ordinary Moon session pays no git
+    // spawn here on top of the one the index already runs.
+    return readMoonOptions(root, { listFiles: () => listWorkspaceFiles(root) });
   }
   const options = readPluginOptions(root);
   if (typeof options.profiles === "string") {
@@ -456,7 +550,9 @@ export function createServer({
     // diagnosing first would answer one more time from the config the old
     // options named.
     refreshOptions();
-    log(`lattice: ${watchedFilesFor(options).join("/")} changed; re-diagnosing open documents`);
+    log(
+      `lattice: ${watchedFilesFor(options, { unresolved: optionsFailure !== null }).join("/")} changed; re-diagnosing open documents`,
+    );
     // The watched set is derived from the options that may just have changed, so
     // the client's registration is re-checked before anything is re-diagnosed.
     // Cheap when nothing moved: `registerFileWatchers` compares the globs and
@@ -546,11 +642,13 @@ export function createServer({
    * nowhere at all.
    */
   function registerFileWatchers() {
-    const globs = watchedFilesFor(options).map((file) => `**/${file}`);
+    const globs = watchedFilesFor(options, { unresolved: optionsFailure !== null }).map(
+      (file) => `**/${file}`,
+    );
     if (!clientSupportsFileWatching) {
       log(
         "lattice: the client does not support dynamic file watching, so a change to " +
-          `${watchedFilesFor(options).join(" or ")} will not re-diagnose open files on its own`,
+          `${watchedFilesFor(options, { unresolved: optionsFailure !== null }).join(" or ")} will not re-diagnose open files on its own`,
       );
       return;
     }
@@ -611,7 +709,7 @@ export function createServer({
    * those legitimately live at any depth in the tree.
    */
   function touchesWatchedFile(changes) {
-    const watched = watchedFilesFor(options);
+    const watched = watchedFilesFor(options, { unresolved: optionsFailure !== null });
     return (changes ?? []).some((change) => {
       const path = uriToPath(change?.uri);
       if (path === null) return false;
