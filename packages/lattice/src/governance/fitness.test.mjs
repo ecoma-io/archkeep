@@ -403,6 +403,157 @@ describe("judgeFitnessRow — tag-conformance", () => {
     );
     expect(d.verdict).toBe("unknown");
   });
+
+  // `match` selects the sources. A row scoped to the layer it governs is the
+  // natural way to write one, and while the target side was scoped by `match`
+  // too the edge below — the only violation there is — was discarded, so this
+  // row could never fail. Scoping the sources is what the next case pins;
+  // this one pins that the target is judged wherever it lands.
+  it("fails on an edge leaving the matched set, so a scoped match can still fail", () => {
+    const g = graph(
+      [
+        ["app", "apps/app", ["scope-app"]],
+        ["domain", "libs/domain", ["scope-domain"]],
+        ["util", "libs/util", ["scope-infra"]],
+      ],
+      { app: [{ source: "app", target: "util", type: "static" }] },
+    );
+    const d = judgeFitnessRow({ ...onlyRow, match: ["tag:scope-app"] }, g, {}, null, []);
+    expect(d.verdict).toBe("fail");
+    expect(d.evidence.violations).toBe(1);
+    expect(d.rows).toEqual([{ source: "app", target: "util" }]);
+  });
+
+  it("does not judge a violating project the match does not select", () => {
+    const g = graph(
+      [
+        ["app", "apps/app", ["scope-app"]],
+        ["worker", "apps/worker", ["scope-app"]],
+        ["domain", "libs/domain", ["scope-domain"]],
+        ["util", "libs/util", ["scope-infra"]],
+      ],
+      {
+        app: [{ source: "app", target: "domain", type: "static" }],
+        worker: [{ source: "worker", target: "util", type: "static" }],
+      },
+    );
+    const d = judgeFitnessRow({ ...onlyRow, match: ["name:app"] }, g, {}, null, []);
+    expect(d.verdict).toBe("pass");
+    expect(d.evidence.fromMembers).toBe(1);
+    expect(d.evidence.edges).toBe(1);
+  });
+
+  it("counts one dependency once when it is both a manifest and an implicit edge", () => {
+    const g = graph(
+      [
+        ["app", "apps/app", ["scope-app"]],
+        ["domain", "libs/domain", ["scope-domain"]],
+        ["util", "libs/util", ["scope-infra"]],
+      ],
+      {
+        app: [
+          { source: "app", target: "util", type: "static" },
+          { source: "app", target: "util", type: "implicit" },
+        ],
+      },
+    );
+    const d = judgeFitnessRow({ ...onlyRow, match: ["tag:scope-app"] }, g, {}, null, []);
+    expect(d.verdict).toBe("fail");
+    expect(d.evidence.edges).toBe(1);
+    expect(d.evidence.violations).toBe(1);
+    expect(d.rows).toEqual([{ source: "app", target: "util" }]);
+  });
+
+  // An Nx graph's `dependencies` carry `npm:` targets that are absent from
+  // `nodes` (`../commands/drift.test.mjs` and `../rules/reachability.test.mjs`
+  // model the same shape). The native provider drops them, so a hand-built
+  // native-shaped graph cannot see this: judged as a target "outside" the `to`
+  // tag, every npm import from a from-tagged project would be a violation.
+  it("does not judge a target that is not a project node", () => {
+    const g = graph(
+      [
+        ["app", "apps/app", ["scope-app"]],
+        ["domain", "libs/domain", ["scope-domain"]],
+      ],
+      {
+        app: [
+          { source: "app", target: "domain", type: "static" },
+          { source: "app", target: "npm:lodash", type: "static" },
+        ],
+      },
+    );
+    const d = judgeFitnessRow({ ...onlyRow, match: ["tag:scope-app"] }, g, {}, null, []);
+    expect(d.verdict).toBe("pass");
+    // The in-graph edge is still judged, so this cannot pass by dropping
+    // everything: one edge counted, and it is the project-to-project one.
+    expect(d.evidence.edges).toBe(1);
+    expect(d.rows).toEqual([]);
+  });
+
+  it("still fails on a project target while an npm target rides alongside it", () => {
+    const g = graph(
+      [
+        ["app", "apps/app", ["scope-app"]],
+        ["domain", "libs/domain", ["scope-domain"]],
+        ["util", "libs/util", ["scope-infra"]],
+      ],
+      {
+        app: [
+          { source: "app", target: "npm:lodash", type: "static" },
+          { source: "app", target: "util", type: "static" },
+        ],
+      },
+    );
+    const d = judgeFitnessRow({ ...onlyRow, match: ["tag:scope-app"] }, g, {}, null, []);
+    expect(d.verdict).toBe("fail");
+    expect(d.evidence.edges).toBe(1);
+    expect(d.rows).toEqual([{ source: "app", target: "util" }]);
+  });
+
+  it("yields unknown, never pass, when no project anywhere carries the to tag (only)", () => {
+    const g = graph(
+      [
+        ["app", "apps/app", ["scope-app"]],
+        ["other", "libs/other", []],
+      ],
+      { app: [{ source: "app", target: "other", type: "static" }] },
+    );
+    const d = judgeFitnessRow(onlyRow, g, {}, null, []);
+    expect(d.verdict).toBe("unknown");
+    expect(d.evidence.toMembers).toBe(0);
+    expect(d.message).toMatch(/only-condition could not be determined/);
+  });
+
+  it("yields unknown, never pass, when no project anywhere carries the to tag (never)", () => {
+    const g = graph(
+      [
+        ["app", "apps/app", ["scope-app"]],
+        ["other", "libs/other", []],
+      ],
+      { app: [{ source: "app", target: "other", type: "static" }] },
+    );
+    const d = judgeFitnessRow(neverRow, g, {}, null, []);
+    expect(d.verdict).toBe("unknown");
+    expect(d.evidence.toMembers).toBe(0);
+    expect(d.message).toMatch(/never-condition could not be determined/);
+  });
+
+  // The `to` tag is read across the whole graph, not the matched set: a target
+  // outside `match` still counts as a `to` project, so this edge conforms.
+  // Reading membership off the matched set alone would report it as a
+  // violation — loud, but a violation that is not real.
+  it("reads the to tag off an unmatched target", () => {
+    const g = graph(
+      [
+        ["app", "apps/app", ["scope-app"]],
+        ["domain", "libs/domain", ["scope-domain"]],
+      ],
+      { app: [{ source: "app", target: "domain", type: "static" }] },
+    );
+    const d = judgeFitnessRow({ ...onlyRow, match: ["tag:scope-app"] }, g, {}, null, []);
+    expect(d.verdict).toBe("pass");
+    expect(d.evidence.edges).toBe(1);
+  });
 });
 
 describe("judgeFitnessRow — coverage-minimum", () => {
