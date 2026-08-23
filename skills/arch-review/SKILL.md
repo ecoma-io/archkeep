@@ -195,7 +195,7 @@ cites when it says "the declared architecture no longer matches the code".
   bundle into an existing directory — the exact document that rule was judged
   over, written even for a rule that trapped — and it changes no verdict and no
   exit code, so asking for it costs the review nothing
-  ([docs/usage/custom-rules.md](../../docs/usage/custom-rules.md)). Ask for it
+  ([docs/usage/custom-rules.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/custom-rules.md)). Ask for it
   before accepting "the rule could not run" as where the review stops.
 - **Pre-existing violations ("debt")** — `lattice debt <dir>` ages waivers, gaps
   and drift across a snapshots directory: how long a violation has been

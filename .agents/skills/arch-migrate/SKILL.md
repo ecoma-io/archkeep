@@ -104,9 +104,9 @@ act easy to perform and easy to refuse — never to perform it silently.
 
    The two files are law and are reviewed like code:
    `architecture-intent.json` states what the architecture IS
-   ([docs/reference/architecture-intent.md](../../docs/reference/architecture-intent.md)),
+   ([docs/reference/architecture-intent.md](https://github.com/ecoma-io/lattice/blob/main/docs/reference/architecture-intent.md)),
    and the boundary config states which imports are permitted
-   ([docs/concepts/policies.md](../../docs/concepts/policies.md)).
+   ([docs/concepts/policies.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/policies.md)).
 
    **A shipped policy pack is a starting point for the second file.** Six ship
    with the package under `presets/` — clean architecture, hexagonal, layered,
@@ -123,7 +123,7 @@ act easy to perform and easy to refuse — never to perform it silently.
    it, the step-4 candidates are what say whether this tree actually matches
    the style, and a pack whose tag vocabulary the repository does not carry
    enforces nothing while looking enforced
-   ([docs/usage/presets.md](../../docs/usage/presets.md)).
+   ([docs/usage/presets.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/presets.md)).
 
    **A rule the migration writes is a rule somebody has to defend later.**
    Where the decision behind a row is not evident from the row, record it as
@@ -133,7 +133,7 @@ act easy to perform and easy to refuse — never to perform it silently.
    same change as the citation: an **intent** row citing an id the registry
    does not know makes `check` a no-verdict run (exit 3), which is worse than a
    row that cites nothing. No command writes an ADR — `lattice adr` only reads
-   ([docs/concepts/adr.md](../../docs/concepts/adr.md)).
+   ([docs/concepts/adr.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/adr.md)).
 
    Write the boundary config before running `drift`: `drift` resolves the
    boundary law and exits 3 when the file `boundaryConfig` names is absent,
@@ -169,7 +169,7 @@ act easy to perform and easy to refuse — never to perform it silently.
    `drift` describes the disagreement and exits 0 even when it finds one;
    `check` is the gate and exits 1 on findings, folding the intent comparison
    in by presence. Only `check` belongs in CI as the blocking step
-   ([docs/usage/ci.md](../../docs/usage/ci.md)).
+   ([docs/usage/ci.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/ci.md)).
 
 8. **Report the migration.** State: which marker the workspace carries, what
    coverage gaps were cleared and how, which candidates were adopted, which
@@ -179,7 +179,7 @@ act easy to perform and easy to refuse — never to perform it silently.
    the tool decided.
 
 The whole path, with the detail each step needs, is
-[docs/usage/migration.md](../../docs/usage/migration.md).
+[docs/usage/migration.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/migration.md).
 
 ## The authority boundary
 
@@ -196,7 +196,7 @@ cross while being helpful:
   is allowed and useful. Writing it without presenting it as a diff the human
   can refuse is not — that converts a derivation into an adoption, which is a
   decision the agent does not hold
-  ([docs/doctrine/architecture-authority.md](../../docs/doctrine/architecture-authority.md)).
+  ([docs/doctrine/architecture-authority.md](https://github.com/ecoma-io/lattice/blob/main/docs/doctrine/architecture-authority.md)).
 - **Never derive the model from a tree that was not fully read.** An incomplete
   coverage read is exit 3 at every step above. Clear it; do not route around it.
 - **Never weaken a rule to reach green.** During a migration the model and the

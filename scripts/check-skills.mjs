@@ -31,6 +31,7 @@
 // skills pair with the engine they ship beside, so the version that matters
 // is the plugin's, not a per-skill one (docs/skills/versioning.md).
 
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -81,6 +82,46 @@ export const VERSION_CHAIN_PATHS = [
 // Host-specific frontmatter fields that must NOT appear in canonical skills.
 // These are Claude Code extensions to the Agent Skills spec.
 export const HOST_SPECIFIC_FIELDS = ["context", "model", "effort", "agent", "paths"];
+
+// The one prefix under which a skill's link is a link into THIS repository.
+// Everything a skill cites about Lattice is reached through it, and check 17
+// resolves the path that follows against the tracked tree.
+export const REPO_BLOB_PREFIX = "https://github.com/ecoma-io/lattice/blob/main/";
+
+/**
+ * The destination of every `[text](target)` markdown link in a SKILL.md, with
+ * the 1-based line it sits on.
+ *
+ * Deliberately NOT a call into `check-docs-links.mjs`'s `parseMarkdownLinks`:
+ * that one drops external targets before it returns, because a link out of the
+ * tree is nothing it can resolve. External targets are exactly what check 17
+ * has to inspect, so the two functions want opposite halves of the same scan
+ * and neither can be expressed as the other. The malformed link SHAPES that
+ * gate refuses (a split-across-lines destination, a spaced one) stay its job:
+ * `skills/` is not on its ignore list, so both gates read the canonical tree
+ * and only the copy under `.agents/skills/` is judged here alone.
+ *
+ * Scanned line-wise on the raw text, fences included — the same tolerated
+ * over-check `parseMarkdownLinks` documents for link resolution. A fenced
+ * EXAMPLE of a repo-relative link would fail this gate; being loud about a
+ * link that is not really there is the recoverable direction, and no skill
+ * carries one.
+ *
+ * @param {string} text full contents of a SKILL.md file
+ * @returns {{line: number, target: string}[]}
+ */
+export function skillLinkTargets(text) {
+  const found = [];
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const re = /\]\(\s*<?([^)>\s]*)/g;
+    let match;
+    while ((match = re.exec(lines[i]))) {
+      found.push({ line: i + 1, target: match[1] });
+    }
+  }
+  return found;
+}
 
 /**
  * Parses YAML frontmatter from a SKILL.md file. Returns the parsed key-value
@@ -314,6 +355,9 @@ export function selectMarketplaceVersion(catalogue, pluginName) {
  *   fact FAILS check 16, it does not skip it
  * @param {Record<string, string>|null} [input.skillsFiles] the same map for `skills/`,
  *   the canonical tree the copy must equal byte for byte, with the same loud default
+ * @param {string[]|null} [input.trackedFiles] every path `git ls-files` reports, the set a
+ *   skill's repo link may name. null when it could not be read — which FAILS every repo
+ *   link rather than passing it, since an unverifiable link is the silent direction
  * @param {string} [input.authoring] text of docs/skills/authoring.md
  * @param {string} [input.overview] text of docs/skills/overview.md
  * @returns {{lines: string[], failures: string[]}}
@@ -333,6 +377,7 @@ export function evaluate({
   skills,
   agentsSkillsFiles = null,
   skillsFiles = null,
+  trackedFiles = null,
   authoring = "",
   overview = "",
 }) {
@@ -753,6 +798,69 @@ export function evaluate({
     }
   }
 
+  // 17. Every markdown link in a SKILL.md must be an absolute `https://` URL,
+  // and one into this repository must name a path the tracked tree actually
+  // has. A skill is a host-independent protocol MEANT to be vendored — copied
+  // into a consumer's own skills directory, installed by `npx skills add`,
+  // read from `.agents/skills/` one directory deeper than the canonical tree.
+  // A repo-relative target survives every one of those moves as valid markdown
+  // and resolves against a stranger's tree: it does not 404, it lands on some
+  // other file or on nothing, and a link that points at the wrong page reads as
+  // authoritative while being wrong. That is worse than a broken one, and no
+  // gate saw it — `check-docs-links.mjs` resolves such a target from
+  // `skills/<name>/`, where it is correct, and so passes it.
+  //
+  // The existence half is what keeps the absolute form honest. Going absolute
+  // normally trades vendoring-correctness for rename detection: a doc renamed
+  // on main leaves a dead URL in a shipped skill, and nothing in the tree
+  // disagrees with it. Resolving the path after the blob prefix buys that back
+  // — the rename turns this gate red on the pull request that performs it.
+  const tracked = trackedFiles === null ? null : new Set(trackedFiles);
+  for (const skill of skills) {
+    for (const { line, target } of skillLinkTargets(skill.text ?? "")) {
+      // An in-file `#anchor` is exempt, and the exemption is the rule stated
+      // accurately rather than a hole in it. What this check refuses is a
+      // target that RESOLVES SOMEWHERE ELSE once the skill is vendored; an
+      // anchor into the skill's own body travels with it and cannot. Writing
+      // such a link as an absolute URL would be the worse spelling — it would
+      // send a reader out of the file they are already in, to GitHub, to reach
+      // a heading two lines down. `check-docs-links.mjs` scans `skills/` and
+      // already refuses an anchor naming no heading in its own file, so this
+      // arm gives up no coverage either.
+      if (target.startsWith("#")) continue;
+      if (!target.startsWith("https://")) {
+        failures.push(
+          `${SKILLS_DIR}/${skill.dir}/SKILL.md:${line} links to "${target}", which is not an ` +
+            `absolute https:// URL. The skills are vendored into trees this repository does ` +
+            `not control, where a repo-relative target still renders as a link and resolves ` +
+            `against whatever happens to sit there. Write it as ${REPO_BLOB_PREFIX}<path>.`,
+        );
+        lines.push(`FAIL ${skill.dir} — non-absolute link at line ${line}: ${target}`);
+        continue;
+      }
+      if (!target.startsWith(REPO_BLOB_PREFIX)) continue;
+      const path = target.slice(REPO_BLOB_PREFIX.length).split("#")[0].split("?")[0];
+      if (tracked === null) {
+        failures.push(
+          `${SKILLS_DIR}/${skill.dir}/SKILL.md:${line} links to "${target}", but the tracked ` +
+            `file list could not be read, so the path it names was never resolved. An ` +
+            `unverified link into this repository is the shape this check exists to refuse.`,
+        );
+        lines.push(`FAIL ${skill.dir} — link unverifiable at line ${line}: ${target}`);
+        continue;
+      }
+      if (!tracked.has(path)) {
+        failures.push(
+          `${SKILLS_DIR}/${skill.dir}/SKILL.md:${line} links to "${target}", but "${path}" is ` +
+            `not a tracked file. An absolute URL cannot be caught by a rename the way a ` +
+            `relative one is, so it is resolved here instead — fix the link, or restore the ` +
+            `page it names.`,
+        );
+        lines.push(`FAIL ${skill.dir} — link target missing at line ${line}: ${path}`);
+      }
+    }
+  }
+
   return { lines, failures };
 }
 
@@ -760,7 +868,7 @@ export function evaluate({
  * Reads the filesystem and returns the facts `evaluate` needs.
  * This is the only function that touches the outside world.
  *
- * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, cargoLockVersion: string, tsSdkVersion: string, pySdkVersion: string, skills: object[], agentsSkillsFiles: Record<string, string>|null, skillsFiles: Record<string, string>|null, authoring: string, overview: string}}
+ * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, cargoLockVersion: string, tsSdkVersion: string, pySdkVersion: string, skills: object[], agentsSkillsFiles: Record<string, string>|null, skillsFiles: Record<string, string>|null, trackedFiles: string[]|null, authoring: string, overview: string}}
  */
 export function readSkillFacts() {
   const pkgPath = join(root, PACKAGE_JSON);
@@ -876,6 +984,15 @@ export function readSkillFacts() {
   const agentsSkillsFiles = readTree(join(root, AGENTS_SKILLS_DIR));
   const skillsFiles = readTree(skillsDir);
 
+  // The tracked paths check 17 resolves a skill's repo links against. `git
+  // ls-files` is where "tracked" is defined, the same source `check-docs-links.mjs`
+  // reads it from. A failed call yields null, not an empty list: null fails every
+  // repo link loudly, while an empty list would too but by claiming the tree has
+  // no files at all — the argument is worth stating once, so the failure names
+  // the unreadable list rather than thirteen missing pages.
+  const ls = spawnSync("git", ["ls-files"], { cwd: root, encoding: "utf8" });
+  const trackedFiles = ls.status === 0 ? ls.stdout.split("\n").filter((path) => path !== "") : null;
+
   const readDoc = (relPath) =>
     existsSync(join(root, relPath)) ? readFileSync(join(root, relPath), "utf8") : "";
 
@@ -894,6 +1011,7 @@ export function readSkillFacts() {
     skills,
     agentsSkillsFiles,
     skillsFiles,
+    trackedFiles,
     authoring: readDoc("docs/skills/authoring.md"),
     overview: readDoc("docs/skills/overview.md"),
   };

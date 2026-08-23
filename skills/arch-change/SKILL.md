@@ -108,7 +108,7 @@ confirm it.
    Nothing is discovered by convention — a rule that is not declared judges
    nothing. Before writing one at all, check whether a declared `fitness` row
    already says it: a fitness function needs no toolchain, no artifact and no
-   hash ([docs/usage/custom-rules.md](../../docs/usage/custom-rules.md)).
+   hash ([docs/usage/custom-rules.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/custom-rules.md)).
 
 4. **Inspect the architectural diff when the change is architectural.** If a
    baseline graph snapshot exists (from a prior

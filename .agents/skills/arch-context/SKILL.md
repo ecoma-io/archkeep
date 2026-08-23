@@ -38,7 +38,7 @@ answer is to surface it, never to ignore it.
    - **`.moon/`** (Moon) — no options table exists: `boundaryConfig` is
      `module-boundaries.config.mjs` by convention, `--config` overrides it for
      one run, and there is no `profiles` surface
-     ([docs/integrations/moon.md](../../docs/integrations/moon.md)).
+     ([docs/integrations/moon.md](https://github.com/ecoma-io/lattice/blob/main/docs/integrations/moon.md)).
 
    A workspace enforces either by **file** or by **named profile**. In an Nx
    workspace, check whether the plugin options carry a `profiles` option
@@ -55,8 +55,8 @@ answer is to surface it, never to ignore it.
      the one `boundaryConfig` selects; that is the law the context below
      describes. Do not substitute another profile "that seems likely" — an
      ambiguous selection is a governance question, not a guess. Profiles are
-     documented in [docs/concepts/profiles.md](../../docs/concepts/profiles.md)
-     and [docs/reference/profiles.md](../../docs/reference/profiles.md).
+     documented in [docs/concepts/profiles.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/profiles.md)
+     and [docs/reference/profiles.md](https://github.com/ecoma-io/lattice/blob/main/docs/reference/profiles.md).
 
    Every command below that reads a boundary law resolves the active profile
    by name, exactly as `check` does — `context`, `graph`, `diff`, `impact`,
@@ -70,7 +70,7 @@ answer is to surface it, never to ignore it.
    look at `profiles` at all. A profile's `block` may carry a `fitness` key
    like any other policy key, so `fitness` on a profile-selected workspace
    folds the declared functions the same way a file-selected one does —
-   [docs/usage/profiles.md](../../docs/usage/profiles.md), "Every command
+   [docs/usage/profiles.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/profiles.md), "Every command
    resolves it, not only `check`".
 
 3. **Determine what exists and what governs it.** Run:
@@ -162,7 +162,7 @@ answer is to surface it, never to ignore it.
    exact spelling, never a clean verdict. A record whose status is `superseded`
    still binds its rows until a replacement is authored — flag it to the team
    rather than treating the rule as unbound or unbinding it yourself. See
-   [docs/concepts/adr.md](../../docs/concepts/adr.md).
+   [docs/concepts/adr.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/adr.md).
 
 7. **Assess downstream and historical context when relevant.** If the project is
    imported by others, `lattice impact <project> --format json` lists its
