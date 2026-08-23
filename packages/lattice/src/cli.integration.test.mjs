@@ -8142,3 +8142,204 @@ describe("dead rows of the boundary law", () => {
     expect(s.lines.err.join("\n")).not.toContain("selects no source");
   });
 });
+
+// ---------------------------------------------------------------------------
+// A declared-edge violation points at the file that really declares it
+// ---------------------------------------------------------------------------
+
+describe("a declared-edge finding names the declaring file of the provider that answered", () => {
+  // A finding with no import site borrows its location from whatever declared
+  // the edge, and every non-Nx provider used to borrow `lattice.json` — which
+  // a Moon workspace is REFUSED for carrying (`./commands/context.mjs`'s
+  // `refusal(moonMarker, LATTICE_MODEL_FILE)` exits 3 on a Moon tree that has
+  // one). So the reported path provably could not exist on the tree it was
+  // reported for, and the SARIF `uri` built from it is the shape GitHub's code
+  // scanning drops in silence — an annotation that never appears on a run that
+  // exits 1. #262 made this the common case rather than a corner: once Moon's
+  // `explicit` was mapped to this package's `implicit`, every hand-written
+  // `dependsOn` reaches the declared-edge path.
+  //
+  // Pinned as the exact rendered path and the exact SARIF `uri`, and both are
+  // then resolved against the fixture on disk. A substring assertion over the
+  // combined output is satisfied by the constraint message alone, which names
+  // the two projects too — it goes green on the defect.
+  const fixtures = [];
+  afterAll(() => {
+    for (const dir of fixtures) rmSync(dir, { recursive: true, force: true });
+  });
+
+  const LAW = `export const depConstraints = [
+  { sourceTag: "type-lib", onlyDependOnLibsWithTags: ["type-lib"] },
+  { sourceTag: "type-app", onlyDependOnLibsWithTags: ["type-lib", "type-app"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const boundarySuppressions = [];
+`;
+
+  /** Writes `files` into a fresh temp root and returns it. */
+  const workspace = (prefix, files) => {
+    const dir = mkdtempSync(join(tmpdir(), prefix));
+    fixtures.push(dir);
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(join(dir, path, ".."), { recursive: true });
+      writeFileSync(join(dir, path), text);
+    }
+    return dir;
+  };
+
+  const streamsOver = (cwd, tracked, graph) => {
+    const streams = {
+      out: (text) => streams.lines.out.push(text),
+      err: (text) => streams.lines.err.push(text),
+      lines: { out: [], err: [] },
+      cwd,
+      listFiles: () => tracked,
+      ...(graph === undefined ? {} : { readGraph: () => graph }),
+    };
+    return streams;
+  };
+
+  /** The one SARIF result a declared-edge run produces. */
+  const declaredEdgeResult = (sarifText) => {
+    const results = JSON.parse(sarifText).runs[0].results;
+    expect(results).toHaveLength(1);
+    return results[0];
+  };
+
+  // A Moon tree: `core` is a lib, `cli` is an app, and `libs/core/moon.yml`
+  // names `dependsOn: [cli]` with no import behind it — the shape
+  // `docs/integrations/moon.md` documents as a declared-edge violation.
+  const MOON_FILES = {
+    ".moon/workspace.yml": "projects:\n  core: libs/core\n  cli: apps/cli\n",
+    "module-boundaries.config.mjs": LAW,
+    "libs/core/moon.yml":
+      "id: core\nlanguage: typescript\nlayer: library\ntags:\n  - type-lib\ndependsOn:\n  - cli\n",
+    "apps/cli/moon.yml": "id: cli\nlanguage: typescript\nlayer: application\ntags:\n  - type-app\n",
+  };
+  const MOON_TRACKED = Object.keys(MOON_FILES);
+  const moonGraph = () => ({
+    nodes: {
+      core: { name: "core", type: "lib", data: { root: "libs/core", tags: ["type-lib"] } },
+      cli: { name: "cli", type: "app", data: { root: "apps/cli", tags: ["type-app"] } },
+    },
+    // Lattice's `implicit`, which is what `../src/providers/moon.mjs` maps
+    // Moon's own `explicit` (hand-written `dependsOn`) onto.
+    dependencies: { core: [{ source: "core", target: "cli", type: "implicit" }], cli: [] },
+  });
+
+  it("renders the owning moon.yml — a path that exists in the tree — never lattice.json", async () => {
+    const root = workspace("lattice-declared-edge-moon-", MOON_FILES);
+    const streams = streamsOver(root, MOON_TRACKED, moonGraph());
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("libs/core/moon.yml  onlyTagsConstraintViolation");
+    // The defect's own output, byte for byte: a Moon tree cannot carry this
+    // file, so a finding naming it points at nothing.
+    expect(out).not.toContain("lattice.json");
+    // And the path is real. `toContain` above pins the spelling; this pins
+    // that the spelling names something a reader can open.
+    expect(existsSync(join(root, "libs/core/moon.yml"))).toBe(true);
+  });
+
+  it("says dependsOn, not implicitDependencies, on a provider that has no such field", async () => {
+    const root = workspace("lattice-declared-edge-moon-noun-", MOON_FILES);
+    const streams = streamsOver(root, MOON_TRACKED, moonGraph());
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("a dependsOn edge crosses a boundary");
+    expect(out).not.toContain("implicitDependencies");
+  });
+
+  it("emits a SARIF uri that is repository-relative and resolves in the tree", async () => {
+    const root = workspace("lattice-declared-edge-moon-sarif-", MOON_FILES);
+    const streams = streamsOver(root, MOON_TRACKED, moonGraph());
+    expect(await runCli(["check", "--format", "sarif"], streams)).toBe(EXIT.violations);
+    const result = declaredEdgeResult(streams.lines.out.join("\n"));
+    const uri = result.locations[0].physicalLocation.artifactLocation.uri;
+    expect(uri).toBe("libs/core/moon.yml");
+    // The three properties GitHub's code scanning silently drops a result for
+    // failing — the same contract `./custom-rules/host.mjs`'s
+    // `isWorkspaceRelative` holds a wasm rule's own findings to.
+    expect(uri.startsWith("/")).toBe(false);
+    expect(uri.split("/")).not.toContain("..");
+    expect(existsSync(join(root, uri))).toBe(true);
+  });
+
+  it("still names lattice.json on the native provider, whose declaration really lives there", async () => {
+    // The other direction: the fix must not move a path that was already
+    // right. A native row's `implicitDependencies` is validated off
+    // `lattice.json` wherever the row itself sits, so that file IS the
+    // declaration site — and it exists on this tree.
+    const root = workspace("lattice-declared-edge-native-", {
+      "lattice.json": `${JSON.stringify({
+        projects: {
+          declared: [
+            {
+              name: "core",
+              root: "libs/core",
+              type: "lib",
+              tags: ["type-lib"],
+              implicitDependencies: ["cli"],
+            },
+            { name: "cli", root: "apps/cli", type: "app", tags: ["type-app"] },
+          ],
+        },
+      })}\n`,
+      "module-boundaries.config.mjs": LAW,
+      "libs/core/README.md": "core\n",
+      "apps/cli/README.md": "cli\n",
+    });
+    // The law is read off disk, not off the tracked list, and a native
+    // workspace judges coverage over EVERY analyzable language — a tracked,
+    // unowned `.mjs` at the root is an unclaimed-file failure that has
+    // nothing to do with this test.
+    const tracked = ["lattice.json", "libs/core/README.md", "apps/cli/README.md"];
+    const streams = streamsOver(root, tracked);
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("lattice.json  onlyTagsConstraintViolation");
+    expect(out).toContain("an implicitDependencies edge crosses a boundary");
+    expect(existsSync(join(root, "lattice.json"))).toBe(true);
+  });
+
+  it("still names the source project's own project.json on the Nx provider", async () => {
+    // The Nx arm was the only one that ever derived a per-project path, and
+    // it is the shape the Moon arm now copies — pinned so a later
+    // simplification of the shared helper cannot quietly collapse it back to
+    // a bare `project.json` at the root.
+    const root = workspace("lattice-declared-edge-nx-", {
+      "nx.json": `${JSON.stringify({
+        plugins: [
+          {
+            plugin: "@ecoma-io/lattice/nx",
+            options: { boundaryConfig: "module-boundaries.config.mjs" },
+          },
+        ],
+      })}\n`,
+      "module-boundaries.config.mjs": LAW,
+      "libs/core/project.json": `${JSON.stringify({ name: "core", implicitDependencies: ["cli"] })}\n`,
+      "apps/cli/project.json": `${JSON.stringify({ name: "cli" })}\n`,
+    });
+    const tracked = [
+      "nx.json",
+      "module-boundaries.config.mjs",
+      "libs/core/project.json",
+      "apps/cli/project.json",
+    ];
+    const streams = streamsOver(root, tracked, moonGraph());
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    const out = streams.lines.out.join("\n");
+    expect(out).toContain("libs/core/project.json  onlyTagsConstraintViolation");
+    expect(out).toContain("an implicitDependencies edge crosses a boundary");
+    expect(existsSync(join(root, "libs/core/project.json"))).toBe(true);
+  });
+});

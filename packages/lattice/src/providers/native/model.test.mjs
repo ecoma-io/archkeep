@@ -630,6 +630,37 @@ describe("normalizeNativeModel", () => {
     expect("workspaceLayout" in model).toBe(true);
   });
 
+  it("records whether lattice.json named a boundary law, in all four spellings", () => {
+    // The provenance `../../options.mjs`'s header argues for, computed here
+    // because this is the last function that still sees the raw document. The
+    // first two rows are the pair that makes it necessary rather than
+    // derivable: identical `boundaryConfig` strings, opposite meanings — one
+    // workspace never wrote a law, the other named this exact file, and a
+    // caller that finds it missing is looking at a rename or a deletion.
+    const declaredIn = (raw) => normalizeNativeModel({ ...wellFormed(), ...raw });
+
+    const defaulted = declaredIn({});
+    expect(defaulted.boundaryConfig).toBe("module-boundaries.config.mjs");
+    expect(defaulted.boundaryConfigDeclared).toBe(false);
+
+    const namedTheDefault = declaredIn({ boundaryConfig: "module-boundaries.config.mjs" });
+    expect(namedTheDefault.boundaryConfig).toBe(defaulted.boundaryConfig);
+    expect(namedTheDefault.boundaryConfigDeclared).toBe(true);
+
+    expect(declaredIn({ boundaryConfig: "policy-we-declared.mjs" }).boundaryConfigDeclared).toBe(
+      true,
+    );
+
+    // The inline spelling. It bypasses `resolveOptions` entirely (the test
+    // below), so reading the bit back off that function's result would answer
+    // `false` for the one shape where the workspace was most explicit.
+    const inline = declaredIn({ boundaryConfig: { depConstraints: [] } });
+    expect(inline.boundaryConfigDeclared).toBe(true);
+
+    // And the near miss: naming only the OTHER filename is not naming a law.
+    expect(declaredIn({ tsConfig: "tsconfig.custom.json" }).boundaryConfigDeclared).toBe(false);
+  });
+
   it("fills only the omitted keys of a present projects.infer, key by key", () => {
     const model = normalizeNativeModel({
       ...wellFormed(),

@@ -30,7 +30,11 @@
  * @returns {{ adjList: Record<string, string[]>, matrix: Record<string, Record<string, boolean>> }}
  */
 export function buildReachability(graph) {
-  const nodes = Object.keys(graph.nodes ?? {});
+  // Bound once so the membership test below asks the SAME map `nodes` was
+  // derived from, and so a graph that is only a shape (`buildReachability({})`)
+  // still answers instead of throwing.
+  const nodeMap = graph.nodes ?? {};
+  const nodes = Object.keys(nodeMap);
   // Null-prototype for the same reason `../providers/native/graph.mjs` uses
   // them: every key here is a project NAME, and project names come from the
   // graph the caller built from attacker-controlled manifests — a plain `{}`
@@ -66,7 +70,20 @@ export function buildReachability(graph) {
     // into reporting nothing at all.
     if (!adjList[source]) continue;
     for (const dependency of dependencies ?? []) {
-      if (graph.nodes[dependency.target]) adjList[source].push(dependency.target);
+      // `Object.hasOwn`, never `nodeMap[target]`: the caller's node map is
+      // usually a plain object (`JSON.parse` of `nx graph --file=`), so a
+      // truthiness test on it answers `constructor`, `toString`, `valueOf`,
+      // `hasOwnProperty` and `__proto__` from `Object.prototype` and admits an
+      // edge to a project that does not exist. That is not a quiet
+      // over-approximation here, it is a crash: `adjList` is null-prototype (by
+      // design, just above), so the phantom name gets pushed as a neighbour and
+      // then `adjList["constructor"]` reads back `undefined` on the very next
+      // hop — measured, `TypeError: adjList[current] is not iterable`, which
+      // takes down every rule that needs the closure and publishes a stack
+      // trace where a boundary verdict belonged. The `__proto__` sibling was
+      // already pinned; these four were not, because the prototype answers for
+      // them through inheritance rather than through the `__proto__` accessor.
+      if (Object.hasOwn(nodeMap, dependency.target)) adjList[source].push(dependency.target);
     }
   }
   // Upstream's `traverse` is recursive; this is the same depth-first closure
@@ -142,7 +159,12 @@ export function getPath(reach, graph, sourceProjectName, targetProjectName) {
  * for the reverse path and never adds the new edge to the graph first.
  */
 export function checkCircularPath(reach, graph, sourceProject, targetProject) {
-  if (!graph.nodes[targetProject.name]) return [];
+  // `Object.hasOwn` for the same reason `buildReachability` above uses it: this
+  // guard exists to refuse a target the graph does not contain, and a
+  // truthiness test on a plain node map answers `constructor`/`toString` and
+  // friends from `Object.prototype` — so the guard let exactly the names it was
+  // written to stop walk straight past it.
+  if (!Object.hasOwn(graph.nodes ?? {}, targetProject.name)) return [];
   return getPath(reach, graph, targetProject.name, sourceProject.name);
 }
 

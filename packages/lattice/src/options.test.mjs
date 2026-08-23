@@ -12,6 +12,15 @@ import {
 /** An `nx.json` reader over an in-memory tree, in `readPluginOptions`'s shape. */
 const treeWith = (files) => ({ readFile: (path) => files[path] ?? null });
 
+/**
+ * What a workspace that declared nothing resolves to: the two convention
+ * filenames, plus the provenance saying so. The names are derived from
+ * `DEFAULT_OPTIONS` so a convention change moves both sides at once; the
+ * provenance is written out, because it is the half under test and a
+ * self-deriving `boundaryConfigDeclared` would pin nothing.
+ */
+const NOTHING_DECLARED = { ...DEFAULT_OPTIONS, boundaryConfigDeclared: false };
+
 describe("resolveOptions", () => {
   it("defaults both filenames to the Nx conventions", () => {
     // The point of the defaults: a workspace that follows Nx's conventions
@@ -19,9 +28,10 @@ describe("resolveOptions", () => {
     expect(resolveOptions(undefined)).toEqual({
       boundaryConfig: "module-boundaries.config.mjs",
       tsConfig: "tsconfig.base.json",
+      boundaryConfigDeclared: false,
     });
-    expect(resolveOptions(null)).toEqual(DEFAULT_OPTIONS);
-    expect(resolveOptions({})).toEqual(DEFAULT_OPTIONS);
+    expect(resolveOptions(null)).toEqual(NOTHING_DECLARED);
+    expect(resolveOptions({})).toEqual(NOTHING_DECLARED);
   });
 
   it("returns a fresh object, so one caller cannot move another's defaults", () => {
@@ -35,11 +45,50 @@ describe("resolveOptions", () => {
     expect(resolveOptions({ tsConfig: "tsconfig.json" })).toEqual({
       boundaryConfig: "module-boundaries.config.mjs",
       tsConfig: "tsconfig.json",
+      boundaryConfigDeclared: false,
     });
     expect(resolveOptions({ boundaryConfig: "boundaries.mjs" })).toEqual({
       boundaryConfig: "boundaries.mjs",
       tsConfig: "tsconfig.base.json",
+      boundaryConfigDeclared: true,
     });
+  });
+
+  it("reports whether boundaryConfig was declared, independently of the value it resolved to", () => {
+    // The whole point of the bit, and the case that makes it necessary rather
+    // than derivable: these two resolve to the SAME `boundaryConfig` string
+    // and mean opposite things. The first workspace never wrote a law and is
+    // entitled to be answered on; the second named one, and a `graph` run that
+    // cannot find that file is looking at a law somebody renamed or deleted.
+    // Nothing downstream of this function can tell them apart from the value.
+    const defaulted = resolveOptions({});
+    const declaredTheDefaultName = resolveOptions({
+      boundaryConfig: DEFAULT_OPTIONS.boundaryConfig,
+    });
+    expect(declaredTheDefaultName.boundaryConfig).toBe(defaulted.boundaryConfig);
+    expect(defaulted.boundaryConfigDeclared).toBe(false);
+    expect(declaredTheDefaultName.boundaryConfigDeclared).toBe(true);
+  });
+
+  it("does not treat a declared tsConfig — or a declared profiles registry — as a declared law", () => {
+    // The narrow reading is the load-bearing one. `boundaryConfigDeclared`
+    // answers for exactly one key; a workspace that renamed its tsconfig, or
+    // one that enforces by profile name, has still not named a boundary-law
+    // FILE, and reading either as "declared" would refuse `graph` on a tree
+    // that never had a law — the #265 direction, back again by a side door.
+    expect(resolveOptions({ tsConfig: "tsconfig.json" }).boundaryConfigDeclared).toBe(false);
+    expect(resolveOptions({ profiles: "profiles.json" }).boundaryConfigDeclared).toBe(false);
+  });
+
+  it("refuses boundaryConfigDeclared as an input — provenance is computed, never asserted", () => {
+    // It is not in `DEFAULT_OPTIONS`, which is also the known-key roster, so
+    // it lands on the unknown-key throw like any other misspelling. A
+    // workspace able to write its own provenance could declare a law it never
+    // named and re-open the silent path from the other end.
+    expect(() => resolveOptions({ boundaryConfigDeclared: true })).toThrow(
+      /unknown plugin option 'boundaryConfigDeclared'/,
+    );
+    expect(Object.keys(DEFAULT_OPTIONS)).not.toContain("boundaryConfigDeclared");
   });
 
   it("throws on a misspelled key rather than falling back to the default", () => {
@@ -73,17 +122,17 @@ describe("readPluginOptions", () => {
     // The CLI and the language server both run in trees that never registered
     // the plugin. That is not the silent fallback the unknown-key check
     // refuses — nothing was declared, so nothing can be misspelled.
-    expect(readPluginOptions("/w", treeWith({}))).toEqual(DEFAULT_OPTIONS);
+    expect(readPluginOptions("/w", treeWith({}))).toEqual(NOTHING_DECLARED);
   });
 
   it("defaults when nx.json declares no plugins, or none of them is this one", () => {
-    expect(readPluginOptions("/w", treeWith({ "/w/nx.json": "{}" }))).toEqual(DEFAULT_OPTIONS);
+    expect(readPluginOptions("/w", treeWith({ "/w/nx.json": "{}" }))).toEqual(NOTHING_DECLARED);
     expect(
       readPluginOptions(
         "/w",
         treeWith({ "/w/nx.json": '{"plugins":["@nx/eslint/plugin","./tools/other.mjs"]}' }),
       ),
-    ).toEqual(DEFAULT_OPTIONS);
+    ).toEqual(NOTHING_DECLARED);
   });
 
   it("reads the options off this plugin's entry, however the entry names it", () => {
@@ -104,6 +153,7 @@ describe("readPluginOptions", () => {
       expect(readPluginOptions("/w", treeWith({ "/w/nx.json": nxJson })), specifier).toEqual({
         boundaryConfig: "module-boundaries.config.mjs",
         tsConfig: "tsconfig.root.json",
+        boundaryConfigDeclared: false,
       });
     }
   });
@@ -113,7 +163,7 @@ describe("readPluginOptions", () => {
     // from carrying bad ones.
     expect(
       readPluginOptions("/w", treeWith({ "/w/nx.json": '{"plugins":["@ecoma-io/lattice/nx"]}' })),
-    ).toEqual(DEFAULT_OPTIONS);
+    ).toEqual(NOTHING_DECLARED);
   });
 
   it("defaults on the bare engine specifier, since that entry never loaded a plugin", () => {
@@ -132,7 +182,38 @@ describe("readPluginOptions", () => {
           }),
         }),
       ),
-    ).toEqual(DEFAULT_OPTIONS);
+    ).toEqual(NOTHING_DECLARED);
+  });
+
+  it("carries the declared/defaulted provenance out of nx.json, not just the filename", () => {
+    // The four ways an Nx tree reaches `boundaryConfig`, and which of them is
+    // the workspace naming its own law. Only the last one is: the other three
+    // resolve to the identical string by convention, and a `graph` run that
+    // cannot find that file on any of them is looking at a workspace that has
+    // not written a law yet (#265) rather than one whose law went missing.
+    const declaredBy = (nxJson) =>
+      readPluginOptions("/w", treeWith(nxJson === null ? {} : { "/w/nx.json": nxJson }))
+        .boundaryConfigDeclared;
+    expect(declaredBy(null)).toBe(false);
+    expect(declaredBy('{"plugins":["lattice/nx"]}')).toBe(false);
+    expect(
+      declaredBy(
+        JSON.stringify({
+          plugins: [{ plugin: "lattice/nx", options: { tsConfig: "tsconfig.root.json" } }],
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      declaredBy(
+        JSON.stringify({
+          plugins: [
+            // Deliberately the convention filename: the value is identical to
+            // the default, and the provenance still has to differ.
+            { plugin: "lattice/nx", options: { boundaryConfig: DEFAULT_OPTIONS.boundaryConfig } },
+          ],
+        }),
+      ),
+    ).toBe(true);
   });
 
   it("tolerates a trailing slash on the workspace root", () => {

@@ -125,14 +125,53 @@ the file already states.
 The three pattern-matching dialects are not interchangeable. Using the wrong one
 matches more than intended, and the tests pass anyway.
 
-| where                                                               | dialect                        | what it actually does                                                                                                                                              |
-| ------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `allow`, `checkDynamicDependenciesExceptions`                       | Nx's `matchImportWithWildcard` | Understands exactly three shapes -- trailing `/**`, trailing `/*`, and `prefix/**/suffix`. **Anything else falls through to an unanchored `new RegExp(pattern)`.** |
-| `bannedExternalImports`, `allowedExternalImports`, glob-shaped tags | Nx's `mapGlobToRegExp`         | Every run of `*` becomes `.*`, and the result is anchored. Every other regex metacharacter survives.                                                               |
-| `ignoredCircularDependencies`                                       | Nx's `findMatchingProjects`    | Neither names nor globs: a case-insensitive word-boundary regex over project names.                                                                                |
+| where                                                               | dialect                        | what it actually does                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `allow`, `checkDynamicDependenciesExceptions`                       | Nx's `matchImportWithWildcard` | Understands exactly three shapes -- trailing `/**`, trailing `/*`, and `prefix/**/suffix`. **Anything else falls through to an unanchored `new RegExp(pattern)`** -- which this engine refuses at config load if its shape backtracks; see below. |
+| `bannedExternalImports`, `allowedExternalImports`, glob-shaped tags | Nx's `mapGlobToRegExp`         | Every run of `*` becomes `.*`, and the result is anchored. Every other regex metacharacter survives.                                                                                                                                              |
+| `ignoredCircularDependencies`                                       | Nx's `findMatchingProjects`    | Neither names nor globs: a case-insensitive word-boundary regex over project names.                                                                                                                                                               |
 
 These are ported literally so that this tool and ESLint keep agreeing about
 which imports escape.
+
+### Refused pattern shapes
+
+The port is the matcher, not the door in front of it. Where a pattern falls
+through to `new RegExp`, this engine refuses two shapes at config load that
+ESLint compiles and runs -- so on those two, and only those two, the tools do
+not agree.
+
+The divergence is deliberate, and the asymmetry is the reason. ESLint runs the
+pattern against specifiers from the repository the developer is editing, in that
+developer's editor. This engine runs it in CI against every specifier in the
+tree, and the subject that costs the most is the one that does _not_ match --
+which a pull request chooses. A pattern that takes minutes to fail reports no
+violation while it runs, and a check that never returns is byte-for-byte a clean
+workspace: the silent direction. Refusing at load is the loud one.
+
+| shape                                                                    | example        | why                                                                                                                                                                            |
+| ------------------------------------------------------------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A repeated group that can match the same text more than one way          | `(a+)+$`       | Exponential. Measured on Node v24.16.0: 12ms against a 20-character specifier, 775ms at 26, **12.4 seconds at 30** -- four times the work for every two characters after that. |
+| More than two repetitions re-split against a requirement that _can_ fail | `^a.*a.*a.*z$` | Polynomial. 190ms against a 1000-character specifier, 1.5s against 2000.                                                                                                       |
+| Groups nested more than 32 deep                                          | --             | Past that depth the shape is not read further, and a pattern it cannot tell apart from one that never returns is refused rather than guessed at.                               |
+
+The discriminator in the second row is the **failing requirement**, not the
+count. `^.*-.*-.*-.*$` ends in a wildcard nothing can fail after, costs 0.0ms at
+every length, and is accepted at any number of repetitions. So is a uniform
+delimited pattern up to eight segments (`^\w+(\.\w+)*$`), and so is every
+pattern whose repeated group is pinned -- each iteration the same length
+(`(ab)+`, `(a|b)+`), or opening on a character that appears nowhere else inside
+it (`(\.\w+)*`). The ordinary globs are unaffected: `@acme/*/*/*` is not a
+regex at all.
+
+A refused pattern is a config error naming the row, and the message names the
+sub-pattern that earned the refusal and what to write instead. It exits 3, not
+1 -- the law could not be established, so there is no verdict to report.
+
+Patterns that survive load are still quadratic in the length of a specifier that
+does not match, and nothing upstream bounds that length, so the **subject** is
+bounded too: a specifier past 1024 characters is not matched, and not matching
+is reported (exit 3) rather than passed.
 
 ## `boundarySuppressions`
 

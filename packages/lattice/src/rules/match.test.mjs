@@ -1,5 +1,10 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
+import { findBoundaryConfigViolations, loadBoundaryConfig } from "../config.mjs";
 import {
   braceExpansionCount,
   findMatchingProjects,
@@ -8,12 +13,38 @@ import {
   importPatternError,
   mapGlobToRegExp,
   matchImportWithWildcard,
+  MAX_DELIMITED_SEGMENTS,
   MAX_GLOB_EXPANSIONS,
+  MAX_SPECIFIER_LENGTH,
   projectPatternError,
+  regexComplexityError,
   safeMatchesGlob,
   tagMatches,
   tagPatternError,
 } from "./match.mjs";
+
+/**
+ * Every policy this repository ships or governs itself by: the six presets
+ * under `presets/`, and the boundary law at the workspace root that
+ * `cli.mjs check` runs against this tree in CI.
+ *
+ * Loaded from the files rather than restated, for the reason
+ * `../config.integration.test.mjs` gives about the same root: the corpus that
+ * matters is the one a consumer really hands the guard, and a restated copy
+ * keeps passing on the day a preset gains a pattern the guard refuses.
+ */
+const presetsDir = fileURLToPath(new URL("../../presets/", import.meta.url));
+const workspaceRoot = fileURLToPath(new URL("../../../../", import.meta.url));
+const shippedPolicies = [
+  ...readdirSync(presetsDir)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => JSON.parse(readFileSync(join(presetsDir, name), "utf8"))),
+  // Through the real loader rather than a dynamic `import()` of its own: the
+  // loader is what a consumer's run uses, and reaching for it here keeps this
+  // file free of a second non-literal import for `cli.mjs check` to report as
+  // a blind spot in its own tree.
+  await loadBoundaryConfig(workspaceRoot, "module-boundaries.config.mjs"),
+];
 
 /**
  * A pattern shaped exactly like the one this file's own measurement used:
@@ -417,6 +448,427 @@ describe("globComplexityError", () => {
     expect(globComplexityError("{1..5}")).toBeNull();
     expect(globComplexityError("v{1..3}/README.md")).toBeNull();
     expect(globComplexityError("{apps,libs,packages}/*/README.md")).toBeNull();
+  });
+});
+
+/**
+ * Every pattern the six shipped presets and this repository's own boundary law
+ * carry, paired with the validator its field actually reaches. Read out of the
+ * real files rather than copied here: a copy proves the copy loads, and the
+ * failure this guards against is a workspace whose config stops loading —
+ * which reports no violations at all, indistinguishable from a boundary law
+ * that was switched off.
+ *
+ * @returns {{ field: string, value: string, validate: (pattern: string) => string|null }[]}
+ */
+function shippedPatterns(policies) {
+  /** @type {Record<string, (pattern: string) => string|null>} */
+  const validators = {
+    sourceTag: tagPatternError,
+    onlyDependOnLibsWithTags: tagPatternError,
+    notDependOnLibsWithTags: tagPatternError,
+    bannedExternalImports: globPatternError,
+    allowedExternalImports: globPatternError,
+    allow: importPatternError,
+    checkDynamicDependenciesExceptions: importPatternError,
+  };
+  /** @type {{ field: string, value: string, validate: (pattern: string) => string|null }[]} */
+  const found = [];
+  /**
+   * @param {unknown} value
+   * @param {string} key
+   */
+  const walk = (value, key) => {
+    if (Array.isArray(value)) {
+      for (const entry of value) walk(entry, key);
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const [childKey, child] of Object.entries(value)) walk(child, childKey);
+      return;
+    }
+    if (typeof value === "string" && validators[key]) {
+      found.push({ field: key, value, validate: validators[key] });
+    }
+  };
+  for (const policy of policies) walk(policy, "");
+  return found;
+}
+
+describe("regexComplexityError", () => {
+  it("accepts the ordinary policy shapes, however many wildcards they carry", () => {
+    // Every entry here is a pattern a real `allow`, `bannedExternalImports` or
+    // tag glob is written in, and every one of them carries MORE unbounded
+    // repetitions than this engine will re-split. That is the point: what
+    // costs time is not how many wildcards a pattern has, it is whether
+    // anything after them can fail. `mapGlobToRegExp` anchors what it builds,
+    // so a glob's last wildcard runs to the end of the specifier and nothing
+    // is ever retried — measured, `^.*-.*-.*$` costs 0.0ms against a
+    // 2000-character subject of only dashes where `^.*-.*-.*x$` costs 1483ms.
+    for (const [dialect, pattern] of [
+      ["glob", "@acme/*/*/*"],
+      ["glob", "libs/*/*/*"],
+      ["glob", "**/*/*/*"],
+      ["glob", "@scope/**/testing/**"],
+      ["import", "a*b*c*d"],
+      ["import", "^@myorg/.*$"],
+      ["tag", "/^scope:.*:.*:.*$/"],
+      ["tag", "/^\\w+(\\.\\w+)*$/"],
+      ["tag", "/^(ui|core)+\\//"],
+      ["tag", "/(a|b)+/"],
+      ["tag", "/^.*-.*-.*$/"],
+    ]) {
+      const validate =
+        dialect === "glob"
+          ? globPatternError
+          : dialect === "import"
+            ? importPatternError
+            : tagPatternError;
+      expect(validate(pattern), `${dialect} ${pattern}`).toBeNull();
+    }
+  });
+
+  it("refuses every catastrophic family, by shape rather than by name", () => {
+    // The exponential ones first — each reachable from a boundary config with
+    // no code execution at all, since a `.json` policy is read by `JSON.parse`
+    // and every value in it arrives in a pull request — then the polynomial
+    // ones, which are slower to bite and just as fatal: measured on Node
+    // v24.16.0, `a+a+a+a+$` costs 694ms against a 140-character subject that
+    // does not match, and `^a.*a.*a.*z$` costs 1.5 seconds against a
+    // 2000-character one.
+    for (const source of [
+      "(a+)+$",
+      "(a|aa)+",
+      "(a*)*",
+      "([a-z]+)*",
+      "((a+))+",
+      "(?:a+)+",
+      "(a{2,}){2,}",
+      "^(a|a?)+$",
+      "\\b(x+x+)+y",
+      "([^;]*)*$",
+      "^(\\s*a)+$",
+      "^(?:a|b|ab)*$",
+      "(a+)*b",
+      "([a-z]+)+@",
+      "(x{1,100}){1,100}",
+      "(a+?)+",
+      "a+a+a+a+$",
+      "[a-z]+[a-z]+[a-z]+[a-z]+$",
+      "^a.*a.*a.*z$",
+      "^.*-.*-.*x$",
+    ]) {
+      expect(regexComplexityError(source), source).not.toBeNull();
+    }
+  });
+
+  it("turns on what follows the last wildcard, not on how many there are", () => {
+    // The pair the calibration is built from, one character apart. Reversing
+    // this test is what the old cap did: it counted the wildcards, refused
+    // both, and took `@acme/*/*/*` down with them.
+    expect(regexComplexityError("^.*-.*-.*$")).toBeNull();
+    expect(regexComplexityError("^.*-.*-.*x$")).not.toBeNull();
+    expect(regexComplexityError("^scope:.*:.*:.*$")).toBeNull();
+    expect(regexComplexityError("^scope:.*:.*:.*x$")).not.toBeNull();
+    // And the same distinction one level down: a chain of the SAME delimiter
+    // ending in a wildcard is free at any length this engine allows, because
+    // a subject with enough delimiters to make the search wide is a subject
+    // that matches. One requirement of a different character is all it takes
+    // to make the search both wide and doomed.
+    expect(regexComplexityError(".*/.*/.*/.*")).toBeNull();
+    expect(regexComplexityError(".*/.*/.*/.*/x")).not.toBeNull();
+    expect(regexComplexityError("^.*c.*c.*c.*$")).toBeNull();
+    expect(regexComplexityError("^.*c.*c.*c$")).not.toBeNull();
+  });
+
+  it("refuses past the delimited-segment cap even when every delimiter agrees", () => {
+    // The exemption above is a cap, not a licence: the small search that
+    // survives still grows with the segment count. Measured against a
+    // 2000-character subject one delimiter short of matching, eight segments
+    // cost 0.0ms, sixteen cost 3.6ms and twenty cost 69.1ms.
+    // Anchored, because that is the shape `mapGlobToRegExp` compiles and the
+    // shape the measurement was taken on.
+    const chain = (count) => `^${Array.from({ length: count }, () => ".*").join("/")}$`;
+    expect(regexComplexityError(chain(MAX_DELIMITED_SEGMENTS + 1))).toBeNull();
+    expect(regexComplexityError(chain(MAX_DELIMITED_SEGMENTS + 2))).not.toBeNull();
+  });
+
+  it("decides a repeated group on ambiguity, not on there being a quantifier in it", () => {
+    // `^\w+(\.\w+)*$` is the idiom the old rule refused and the reason this
+    // one asks a different question: `\.` and `\w` cannot match the same
+    // character, so every iteration of the group is pinned by its leading dot
+    // and there is nothing to backtrack through. Measured, it is 0.0ms against
+    // a 2000-character subject built to defeat it.
+    expect(regexComplexityError("^\\w+(\\.\\w+)*$")).toBeNull();
+    expect(regexComplexityError("(a|b)+")).toBeNull();
+    expect(regexComplexityError("^(ui|core)+/")).toBeNull();
+    expect(regexComplexityError("(ab)+")).toBeNull();
+    expect(regexComplexityError("(a{2})+")).toBeNull();
+    expect(regexComplexityError("(a+)?")).toBeNull(); // `?` runs a body once
+    // The neighbouring spellings that are ambiguous, each differing from one
+    // of the above by which characters the group's parts share.
+    expect(regexComplexityError("^\\w+(\\w\\w+)*$")).not.toBeNull();
+    expect(regexComplexityError("(a|ab)+")).not.toBeNull();
+    expect(regexComplexityError("(\\.\\w+\\.)+")).not.toBeNull();
+  });
+
+  it("judges an alternation by its worst branch, not by whichever came first", () => {
+    // The engine tries every branch, so one costly branch is a costly
+    // pattern. A comparison that ranked branches by degree alone would let a
+    // safe branch standing in front of a dangerous one decide the verdict,
+    // and the two spellings below differ by nothing but that order.
+    expect(regexComplexityError("^.*/.*/.*/.*$|^a.*a.*a.*z$")).not.toBeNull();
+    expect(regexComplexityError("^a.*a.*a.*z$|^.*/.*/.*/.*$")).not.toBeNull();
+    // And neither order refuses a pattern whose branches are all ordinary.
+    expect(regexComplexityError("^.*/.*/.*/.*$|^@a/.*$")).toBeNull();
+    expect(regexComplexityError("^@a/.*$|^.*/.*/.*/.*$")).toBeNull();
+  });
+
+  it("counts the retry an unanchored pattern pays at every position in the subject", () => {
+    // A whole factor of the subject's length, and invisible in the pattern's
+    // wildcard count: measured on Node v24.16.0 against a 1024-character
+    // subject, `a.*b.*c` costs 61ms where `^a.*b.*c` costs 0.29ms, because
+    // without the anchor the engine starts the same search again at every
+    // position. `mapGlobToRegExp` anchors what it compiles, so no glob pays
+    // it — which is why the same two wildcards are fine in a glob and are not
+    // fine written by hand into an `allow` entry with a literal after them.
+    expect(regexComplexityError("^a.*b.*c")).toBeNull();
+    expect(regexComplexityError("a.*b.*c")).not.toBeNull();
+    expect(globPatternError("@scope/*/*")).toBeNull();
+  });
+
+  it("finds the repetitions a group hides, wherever the group hides them", () => {
+    // Three hiding places, each one measured at a factor of the subject's
+    // length against a 1024-character subject: a group that runs at most once
+    // (`[^/]{2,}.?:{1,4}(?:.*)?x$`, 7.6 seconds), a branch of an alternation
+    // (`.*b?([a-z]([^/]{1,4}|[^/]*))xb?$`, 458ms), and a chain of neighbours
+    // that can trade the same text between them (`^[a-z]+b+[a-z]{2,}\d{2,}`,
+    // 188ms). A count that looked only at the top-level chain read all three
+    // as ordinary.
+    expect(regexComplexityError("[^/]{2,}.?:{1,4}(?:.*)?x$")).not.toBeNull();
+    expect(regexComplexityError(".*b?([a-z]([^/]{1,4}|[^/]*))xb?$")).not.toBeNull();
+    expect(regexComplexityError("^[a-z]+b+[a-z]{2,}\\d{2,}")).not.toBeNull();
+    // And the same shapes where the parts cannot trade text stay accepted:
+    // `\.` separates `\d+` from `\d+` and is in neither of them, which is
+    // what makes a version pattern cheap and `[a-z]+b+` expensive.
+    expect(regexComplexityError("^v\\d+\\.\\d+\\.\\d+$")).toBeNull();
+    expect(regexComplexityError("a*b*c*d")).toBeNull();
+    expect(regexComplexityError("(?:@scope/)?internal")).toBeNull();
+  });
+
+  it("reads a regex the way the engine does, not the way a naive scan would", () => {
+    // Each `null` here would be a false refusal of a legitimate pattern; each
+    // refusal a catastrophic pattern let through.
+    expect(regexComplexityError("[*+*+*+]+")).toBeNull(); // metacharacters in a class are literal
+    expect(regexComplexityError("\\*\\+\\*\\+\\*")).toBeNull(); // escaped, so not quantifiers
+    expect(regexComplexityError("(?:ab)+")).toBeNull(); // `(?:` is an opener, not a `?` quantifier
+    expect(regexComplexityError("a+?b+?c")).toBeNull(); // `+?` is one lazy quantifier, not two
+    expect(regexComplexityError("a{b}c")).toBeNull(); // a `{` that is not a quantifier
+    expect(regexComplexityError("(a+?)+")).not.toBeNull(); // lazy inside is still ambiguous
+    expect(regexComplexityError("(?=(a+)+)x")).not.toBeNull(); // inside a lookahead still runs
+  });
+
+  it("treats what it cannot resolve as matching anything, which refuses rather than excuses", () => {
+    // The direction of every fallback in the model, asserted rather than
+    // assumed. A construct it does not resolve exactly — a complement class,
+    // a backreference, a property escape, a negated class — reads as "matches
+    // any character", so it overlaps whatever sits beside it and the
+    // repetition around it is refused. Read the other way, as some narrow set,
+    // each of these would be EXCUSED, and an excused repetition is a run that
+    // does not come back.
+    expect(regexComplexityError("(\\W\\w+)+")).not.toBeNull();
+    expect(regexComplexityError("(\\1a)+")).not.toBeNull();
+    expect(regexComplexityError("(\\p{L}a)+")).not.toBeNull();
+    expect(regexComplexityError("(\\k<n>a)+")).not.toBeNull();
+    expect(regexComplexityError("([^x]+a)+")).not.toBeNull();
+    // And the escapes it does resolve keep their narrow answer, so a group
+    // whose parts really are disjoint is still pinned by its leading atom.
+    expect(regexComplexityError("(\\n\\w+)+")).toBeNull();
+    expect(regexComplexityError("([a-c]\\d+)+")).toBeNull();
+    expect(regexComplexityError("(\\x2ea\\u0062)+")).toBeNull();
+    expect(regexComplexityError("(-[a-z]+)+")).toBeNull();
+  });
+
+  it("names the sub-pattern a reader has to find in their own config", () => {
+    // Not the wording — the SPAN. A refusal quoting `a+)+` names nothing a
+    // reader can search their policy for, which is how a correct diagnosis
+    // becomes an unactionable one.
+    expect(regexComplexityError("x(a|aa)+y")).toContain("(a|aa)+");
+    expect(regexComplexityError("\\b(x+x+)+y")).toContain("(x+x+)+");
+  });
+
+  it("refuses rather than models a pattern nested past what it reads", () => {
+    // The safe direction for a guard that cannot decide: a deep pattern is
+    // refused loudly at config load, where the alternative is a walk that
+    // recurses as deep as a pull request tells it to.
+    expect(regexComplexityError(`${"(".repeat(64)}a${")".repeat(64)}`)).not.toBeNull();
+    expect(regexComplexityError("((((((a))))))")).toBeNull();
+  });
+
+  it("accepts every pattern this repository actually ships", () => {
+    // Read out of the six presets and this workspace's own boundary law, not
+    // copied: the corpus that matters is the one a consumer will really hand
+    // this guard, and a copy here would keep passing on the day a preset
+    // gained a pattern the guard refuses.
+    const patterns = shippedPatterns(shippedPolicies);
+    expect(patterns.length).toBeGreaterThan(40);
+    for (const { field, value, validate } of patterns) {
+      expect(validate(value), `${field}: ${value}`).toBeNull();
+    }
+  });
+});
+
+describe("the three Nx dialects refuse a catastrophic pattern at config load", () => {
+  /**
+   * The pattern the audit measured, and the reason this guard exists:
+   * `importPatternError("(a+)+$")` returned `null` — accepted, written into
+   * the policy, and then run per import site. Against a subject of `a`s that
+   * never matches, one call cost 12ms at 20 characters, 201ms at 24, 775ms at
+   * 26 and 12.4 seconds at 30 on Node v24.16.0 — four times the work for
+   * every two characters, so an import specifier of ordinary length is hours
+   * of CPU and a slightly longer one never returns.
+   */
+  const catastrophic = "(a+)+$";
+
+  /**
+   * A policy carrying the whole option table, because `../config.mjs`
+   * requires every one of the eight to be stated — so what the assertions
+   * below report on is the patterns and nothing else.
+   *
+   * @param {object} extra
+   */
+  const policy = (extra) => ({
+    moduleBoundaryOptions: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies: false,
+      checkNestedExternalImports: false,
+      ...extra.moduleBoundaryOptions,
+    },
+    depConstraints: extra.depConstraints,
+  });
+
+  it("names the row and the reason, so a config load fails on the offender", () => {
+    // The end of the path this fix closes: `../config.mjs` is where a policy
+    // is validated, and a violation there is what makes `cli.mjs check` exit
+    // 3 instead of running the pattern. Asserted from here because this is
+    // the file that decides the reason; `../config.mjs` only prefixes the row.
+    const violations = findBoundaryConfigViolations(
+      policy({
+        depConstraints: [
+          { sourceTag: "type-package", bannedExternalImports: ["@vendor/*", catastrophic] },
+        ],
+      }),
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(/^depConstraints\[0\]\.bannedExternalImports\[1\]: /);
+    expect(violations[0]).toContain(catastrophic);
+  });
+
+  it("still loads a policy whose patterns are ordinary", () => {
+    // The silent direction of this guard is refusing a workspace's real
+    // config: a policy that no longer loads reports no violations at all, and
+    // an over-eager complexity check would be indistinguishable from a
+    // boundary law that had been switched off.
+    expect(
+      findBoundaryConfigViolations(
+        policy({
+          depConstraints: [
+            {
+              sourceTag: "layer:app",
+              onlyDependOnLibsWithTags: ["layer:*", "/^layer:(domain|ports)$/", "*"],
+              bannedExternalImports: ["@vendor/*", "*/testing/*", "@scope/*/src/*"],
+            },
+          ],
+          moduleBoundaryOptions: { allow: ["@scope/**", "^@myorg/.*$"] },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("reports the same refusal through each of the three validators", () => {
+    expect(importPatternError(catastrophic)).not.toBeNull();
+    expect(globPatternError(catastrophic)).not.toBeNull();
+    expect(tagPatternError(`/${catastrophic}/`)).not.toBeNull();
+    // And the benign spellings of the same three still validate.
+    expect(importPatternError("@scope/**")).toBeNull();
+    expect(globPatternError("@vendor/shell*")).toBeNull();
+    expect(tagPatternError("/^zone:/")).toBeNull();
+  });
+
+  it("throws rather than running the pattern, in each matcher that compiles one", () => {
+    // Defence in depth, the same arrangement `safeMatchesGlob` has below: a
+    // caller that skipped config-load validation still cannot reach the
+    // compiled pattern. The subject is 40 characters, where the measurements
+    // above put a single unguarded call in the region of hours — so the
+    // margin under this bound is not a factor of ten, it is a factor of
+    // roughly ten million, and no amount of load on a shared machine makes
+    // this assertion a close call.
+    const subject = `${"a".repeat(40)}!`;
+    const start = performance.now();
+    expect(() => matchImportWithWildcard(catastrophic, subject)).toThrow(/repeats a group/);
+    expect(() => mapGlobToRegExp(catastrophic)).toThrow(/repeats a group/);
+    expect(() => tagMatches([subject], `/${catastrophic}/`)).toThrow(/repeats a group/);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
+  it("counts a glob's wildcards after mapping, not before", () => {
+    // `mapGlobToRegExp` collapses a RUN of stars into one `.*` before
+    // anything is compiled, so the cap is counted on what actually runs.
+    // Counting the raw spelling instead would refuse `@scope/**` for
+    // carrying two stars — a pattern from this repository's own fixtures.
+    expect(globPatternError("@scope/**")).toBeNull();
+    expect(globPatternError("**/*.css")).toBeNull();
+    expect(mapGlobToRegExp("@scope/**").test("@scope/a/b")).toBe(true);
+  });
+
+  it("refuses a glob and its regex spelling alike, because they compile to one thing", () => {
+    // `a*b*c*d` is two different patterns depending on which field it lands
+    // in, and only one of them is cheap. As an `allow` entry it is handed to
+    // `RegExp` as written, where `a*` and `b*` cannot match the same
+    // character and the cost is quadratic — 12ms against a 2000-character
+    // subject. As a GLOB every star becomes `.*`, which gives three wildcards
+    // that CAN re-split the same text in front of a `d` that never comes:
+    // measured, 529ms against a 2000-character subject on Node v24.16.0, and
+    // 4.5 seconds against 4000. The guard follows the compiled form, so the
+    // two spellings get different answers on purpose.
+    expect(importPatternError("a*b*c*d")).toBeNull();
+    expect(globPatternError("a*b*c*d")).not.toBeNull();
+    expect(regexComplexityError("^a.*b.*c.*d$")).not.toBeNull();
+  });
+});
+
+describe("MAX_SPECIFIER_LENGTH", () => {
+  it("refuses to match a specifier longer than a specifier can be", () => {
+    // The other multiplicand. Every pattern that survives config load is
+    // still quadratic in the length of a subject that does not match, and
+    // nothing upstream bounds that length — a specifier is text read out of
+    // a source file. Measured on Node v24.16.0, the worst pattern the cap
+    // still allows costs 0.58ms against a 1024-character subject and 9.16ms
+    // against 4096.
+    const specifier = "@scope/".concat("a".repeat(MAX_SPECIFIER_LENGTH));
+    expect(() => matchImportWithWildcard("^@scope/.*$", specifier)).toThrow(
+      new RegExp(String(MAX_SPECIFIER_LENGTH)),
+    );
+    // The cheap branches are behind the same door, deliberately: one rule
+    // about what may come through is easier to hold than four rules about
+    // what each branch does with it.
+    expect(() => matchImportWithWildcard("@scope/**", specifier)).toThrow();
+  });
+
+  it("leaves a specifier of any plausible length alone", () => {
+    // The silent direction: a bound low enough to fire on a real specifier
+    // would turn every run on a real workspace into exit 3. This is the
+    // longest thing the four analyzers can emit — a deep path — and it is an
+    // order of magnitude under the bound.
+    const realistic = `../${"some-nested-directory/".repeat(8)}module-under-test`;
+    expect(realistic.length).toBeLessThan(MAX_SPECIFIER_LENGTH);
+    expect(matchImportWithWildcard("^\\.\\./.*$", realistic)).toBe(true);
+    expect(matchImportWithWildcard("@scope/**", realistic)).toBe(false);
   });
 });
 

@@ -32,11 +32,12 @@
  *
  * - **`use` is matched at a line start, after a `;`/`{`/`}`, or after a
  *   same-line attribute block**, read up to but NOT consuming the `;` that
- *   closes it — a lookahead, so that same `;` is still there to open the next
- *   match's `(?:^|[{;}])` when a second `use` shares the line. Every position
- *   Rust allows a `use` statement starts one of those ways, and the closing
- *   `;` is never swallowed, so two or more `use` statements sharing one line
- *   are each read, not just the first. A same-line attribute's bracketed
+ *   closes it — the path ends AT that `;` and the scan resumes there, so the
+ *   same `;` is still available to open the next match's `(?:^|[{;}])` when a
+ *   second `use` shares the line. Every position Rust allows a `use` statement
+ *   starts one of those ways, and the closing `;` is never swallowed, so two
+ *   or more `use` statements sharing one line are each read, not just the
+ *   first. A same-line attribute's bracketed
  *   content is read past a balanced quoted string rather than stopping at the
  *   first `]`, so `#[doc = "see [x]"] use a::b;` still reaches its `use`. A
  *   `use` inside a raw string literal that starts its own line would be read,
@@ -83,6 +84,7 @@ import { normalizePath, parseManifest } from "./manifest-util.mjs";
 import {
   emptyResult,
   fileFailure,
+  lineStartsOf,
   perWorkspace,
   positionAt,
   projectOwning,
@@ -466,16 +468,38 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
   // is attacker-supplied per SECURITY.md). Excluding `"` from the fallback
   // makes the split unambiguous — linear in input length — while still
   // reading the same attribute text: `"` can now only ever be consumed by
-  // starting the string branch. The terminating `;` is matched as a
-  // lookahead rather than consumed, so it is still there — unclaimed — for a
-  // second `use` sharing the same line to open its own match against.
-  for (const m of source.matchAll(
-    /(?:^|[{;}])[ \t]*(?:(?:#\[(?:"(?:[^"\\]|\\.)*"|[^"\]])*\][ \t]*)+)?(pub(?:\s*\([^)]*\))?[ \t]+)?use[ \t\r\n]+([^;]*)(?=;)/gm,
-  )) {
-    // The match no longer includes the terminating `;`, so the path starts
-    // exactly its own length back from the end.
-    const path = m[2];
-    const pathOffset = m.index + m[0].length - path.length;
+  // starting the string branch.
+  //
+  // The pattern stops at the `use`'s whitespace; the path and its terminating
+  // `;` are taken by `indexOf` below rather than by a `([^;]*)(?=;)` tail,
+  // and that is the SAME defect class as the one above rather than a
+  // different one. `[^;]*` cannot cross a `;`, so it is cheap while one is
+  // coming — but a `.rs` file with no `;` after a `use` makes it run to
+  // end-of-file and then backtrack one character at a time testing the
+  // lookahead, once per `use` start, which is quadratic in file size
+  // (measured on the pre-fix pattern: 22KB→16ms, 44KB→65ms, 89KB→256ms,
+  // 179KB→1141ms — four times the time for twice the bytes; one crafted 1MB
+  // file cost 17.9 SECONDS). `indexOf` finds the same terminator with no
+  // backtracking, and the scan windows of successive matches do not overlap,
+  // so the whole pass stays linear.
+  const usePattern =
+    /(?:^|[{;}])[ \t]*(?:(?:#\[(?:"(?:[^"\\]|\\.)*"|[^"\]])*\][ \t]*)+)?(pub(?:\s*\([^)]*\))?[ \t]+)?use[ \t\r\n]+/gm;
+  for (let m = usePattern.exec(source); m !== null; m = usePattern.exec(source)) {
+    const pathOffset = m.index + m[0].length;
+    const terminator = source.indexOf(";", pathOffset);
+    // No `;` anywhere after this `use` means no later `use` can be terminated
+    // either — every later candidate starts further along the same text — so
+    // the old pattern's remaining attempts were all going to fail too. It is
+    // the same verdict (no site), reached without re-scanning the tail once
+    // per candidate.
+    if (terminator === -1) break;
+    // Everything between the `use`'s whitespace and that `;`, which is what
+    // `[^;]*` matched: the terminator is the first `;`, so no `;` is inside.
+    const path = source.slice(pathOffset, terminator);
+    // Resume exactly where the lookahead used to leave `matchAll`: AT the
+    // `;`, never past it, so it is still there — unclaimed — for a second
+    // `use` sharing the same line to open its own match against.
+    usePattern.lastIndex = terminator;
     const lead = path.length - path.trimStart().length;
     // A use path may wrap across lines inside a brace group. The record is
     // printed in `file:line:column: specifier` reports, so line breaks are
@@ -497,7 +521,7 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
           offset: pathOffset + arm.offset,
         });
       }
-      claimed.push([m.index, m.index + m[0].length]);
+      claimed.push([m.index, terminator]);
       continue;
     }
     sites.push({
@@ -506,7 +530,7 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
       kind,
       offset: pathOffset + lead,
     });
-    claimed.push([m.index, m.index + m[0].length]);
+    claimed.push([m.index, terminator]);
   }
 
   for (const m of source.matchAll(/^[ \t]*(?:pub[ \t]+)?extern[ \t]+crate[ \t]+([A-Za-z_]\w*)/gm)) {
@@ -519,7 +543,41 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
     claimed.push([m.index, m.index + m[0].length]);
   }
 
-  const unclaimed = (offset) => !claimed.some(([start, end]) => offset >= start && offset < end);
+  // Is `offset` outside every range a `use` or an `extern crate` already
+  // claimed? Answered by binary search over the ranges sorted by start, not by
+  // testing all of them: a `.rs` file pairing N `use` statements with N
+  // fully-qualified `::crate::` calls — ordinary Rust, not a crafted file —
+  // otherwise pays N*N range tests, measured at 11.4ms for 55KB, 32ms for
+  // 110KB and 123ms for 220KB, the same four-times-for-twice-the-bytes shape
+  // the `use` scan above was fixed for.
+  //
+  // The two passes' ranges are each ascending and disjoint, but a range from
+  // one CAN contain a range from the other (an `extern crate` line sitting
+  // inside a `use` group that wraps across lines), so containment is decided
+  // against a running maximum of the ends rather than against the end of the
+  // last range that starts early enough. That is exactly what the `some()`
+  // asked: some range starts at or before the offset AND reaches past it.
+  claimed.sort((a, b) => a[0] - b[0]);
+  /** `reach[i]` — the furthest end among `claimed[0..i]`. */
+  const reach = [];
+  for (let i = 0; i < claimed.length; i++) {
+    reach.push(i === 0 ? claimed[i][1] : Math.max(reach[i - 1], claimed[i][1]));
+  }
+  const unclaimed = (offset) => {
+    let low = 0;
+    let high = claimed.length - 1;
+    let last = -1; // the last range starting at or before `offset`
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (claimed[mid][0] <= offset) {
+        last = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    return last === -1 || reach[last] <= offset;
+  };
 
   for (const m of source.matchAll(/(^|[^:\w])::([A-Za-z_]\w*)::/gm)) {
     const offset = m.index + m[1].length;
@@ -563,8 +621,12 @@ export function analyzeRust({ sourceFile, text, workspace }) {
       ? new Set([...byCrate.keys(), ...ownAliases.keys()])
       : new Set(byCrate.keys());
 
+    // One line-start index for the whole file, built here and handed to every
+    // site: a `.rs` file with thousands of `use` statements otherwise pays a
+    // rescan of the file per site (`source-util.mjs`'s `lineStartsOf`).
+    const lineStarts = lineStartsOf(text);
     for (const site of parseRustUseSites(text, knownCrates)) {
-      const { line, column } = positionAt(text, site.offset);
+      const { line, column } = positionAt(text, site.offset, lineStarts);
       let resolved = null;
       if (site.root === null) {
         result.failures.push({

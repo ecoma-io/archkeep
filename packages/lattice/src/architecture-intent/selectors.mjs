@@ -74,7 +74,31 @@ export function selectProjects(selector, nodes) {
   const { label, value } = splitSelector(selector);
 
   let found;
-  if (value === "*") {
+  // `*` is a TOKEN of this grammar, not a wildcard character in it, so only the
+  // BARE `*` means "every project" — `label === null` is what says "bare".
+  // `docs/reference/architecture-intent.md`'s selector table gives `*` its own
+  // row ("every project") separate from the three labeled rows, each of which
+  // reads as an exact-equality test: `name:<name>` is "the project with that
+  // exact name", `tag:<tag>` is "every project carrying that tag",
+  // `directory:<d>` is "every project whose root directory is exactly `<d>`".
+  // Testing `value === "*"` FIRST discarded the label, so `name:*`, `tag:*` and
+  // `directory:*` each silently returned every project in the graph — a
+  // boundary that reads as "the project literally named `*`" quietly became
+  // "all of them", and, worse, it could never reach the zero-member no-verdict
+  // in `./judge.mjs` that a selector matching nothing is supposed to raise.
+  //
+  // So a label puts `*` back in the value's own alphabet: `name:*` selects the
+  // project actually named `*` (none, in every real workspace, so the boundary
+  // is loudly unresolvable); `tag:*` selects the projects carrying a tag
+  // literally spelled `*`, NOT "any project carrying any tag"; `directory:*`
+  // the projects rooted at a directory literally named `*`. That reading is
+  // forced twice over — this module's header admits no glob, no `?`, no
+  // character class and no regex, and the doc's table defines each labeled form
+  // as an exact match — and it is also the fail-loud one: every labeled `*`
+  // that an author meant as a wildcard now resolves to nothing and surfaces as
+  // a no-verdict, where the old behaviour answered a question nobody asked with
+  // a set nobody wrote.
+  if (label === null && value === "*") {
     found = Object.keys(nodes);
   } else if (label === "tag") {
     found = Object.keys(nodes).filter((name) => (nodes[name].data?.tags ?? []).includes(value));
@@ -84,7 +108,23 @@ export function selectProjects(selector, nodes) {
     // name: and unlabeled both mean an exact project name. Exact equality —
     // no substring, no case folding — so `domain` selects nothing when only
     // `platform-domain` exists, and the boundary is accurately empty.
-    found = nodes[value] ? [value] : [];
+    //
+    // `Object.hasOwn`, never `nodes[value]`: `nodes` is a caller-supplied map
+    // whose keys are project NAMES, and most providers hand over a plain object
+    // (`JSON.parse` of `nx graph --file=`, `Object.fromEntries` in a test) that
+    // still inherits from `Object.prototype`. A truthiness test on it answered
+    // `constructor`, `toString`, `valueOf`, `hasOwnProperty` and `__proto__`
+    // with an inherited member and reported the selector as matching a project
+    // of that name — measured: `selectProjects("constructor", nodes)` returned
+    // `["constructor"]` on a graph with no such project, while `"nosuch"`
+    // correctly returned `[]`. That is the silent direction twice: the phantom
+    // member kept the boundary's zero-member check in `./judge.mjs` from ever
+    // firing, so `intentUnresolved` stayed 0 and `check` exited 0 where its
+    // contract owes 3, and every row anchored on that boundary was judged
+    // against a project the workspace does not contain. The same names reach
+    // `dependencies.forbidden` through a `Map` and are loud there; this branch
+    // was the one that answered from the prototype.
+    found = Object.hasOwn(nodes, value) ? [value] : [];
   }
 
   return found.sort();

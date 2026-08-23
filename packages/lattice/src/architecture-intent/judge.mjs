@@ -94,7 +94,18 @@ function directEdges(graph) {
   const edges = new Set();
   for (const [source, dependencies] of Object.entries(graph.dependencies ?? {})) {
     for (const dependency of dependencies ?? []) {
-      if (graph.nodes[dependency.target] !== undefined) {
+      // `Object.hasOwn`, never `graph.nodes[target] !== undefined`: the node map
+      // arrives from a provider and is usually a plain object (`JSON.parse` of
+      // `nx graph --file=`), so a truthiness/`!== undefined` test on it answers
+      // `constructor`, `toString`, `valueOf`, `hasOwnProperty` and `__proto__`
+      // from `Object.prototype` — an edge pointing at a project of that name
+      // would be counted as OBSERVED on a workspace that has no such project.
+      // Both directions are wrong and both are quiet: an `allowed` row anchored
+      // on the phantom reads as satisfied (drift that is never reported), and a
+      // `forbidden` one reads as violated by an edge that does not exist.
+      // `./selectors.mjs`'s own name lookup carries the same guard for the same
+      // reason.
+      if (Object.hasOwn(graph.nodes, dependency.target)) {
         edges.add(edgeKey(source, dependency.target));
       }
     }
@@ -131,7 +142,20 @@ function directEdges(graph) {
  * @returns {object}
  */
 function codeDependencies(graph) {
-  const filtered = {};
+  // Null-prototype, for the reason `../../src/providers/native/graph.mjs`'s
+  // `buildDependencies` uses one: every key here is a source project NAME, and
+  // that provider's own dependency map is already null-prototype, so a project
+  // literally named `__proto__` reaches this loop as a real entry. Writing it
+  // onto a plain `{}` invokes `Object.prototype`'s inherited `__proto__` setter
+  // and REPOINTS this object instead of adding a key — measured: the whole
+  // filtered map's prototype became the edge array, `Object.entries(filtered)`
+  // no longer listed the project, and `judgeIntent` returned verdict `ok` with
+  // zero findings for a `forbidden` row that the observed graph plainly
+  // violated. Every edge leaving that project vanished from `directEdges`,
+  // `observedEdgePairs` and `buildReachability` at once, which is the silent
+  // direction `../../AGENTS.md` refuses: byte-identical to a clean workspace.
+  /** @type {Record<string, object[]>} */
+  const filtered = Object.create(null);
   for (const [source, dependencies] of Object.entries(graph.dependencies ?? {})) {
     filtered[source] = (dependencies ?? []).filter((dependency) => dependency.type !== "implicit");
   }
@@ -338,7 +362,10 @@ export function judgeIntent(intent, graph) {
   const observedEdgePairs = [];
   for (const [source, sourceDependencies] of Object.entries(dependencies)) {
     for (const dependency of sourceDependencies) {
-      if (nodes[dependency.target] !== undefined) {
+      // `Object.hasOwn` for the same reason `directEdges` above uses it — an
+      // inherited `Object.prototype` member is not a project, and counting one
+      // as an observed edge feeds a phantom pair to every drift section below.
+      if (Object.hasOwn(nodes, dependency.target)) {
         observedEdgePairs.push([source, dependency.target]);
       }
     }

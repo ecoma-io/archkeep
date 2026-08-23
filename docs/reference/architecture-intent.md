@@ -63,13 +63,13 @@ which builds a `RegExp` from workspace-supplied text; intent's grammar is
 matched by string equality only, so neither the over-approximation nor that
 surface exists.
 
-| selector        | matches                                                        |
-| --------------- | -------------------------------------------------------------- |
-| `name:<name>`   | the project with that exact name (a bare `<name>` is the same) |
-| `tag:<tag>`     | every project carrying that tag (in `data.tags`)               |
-| `directory:<d>` | every project whose root directory is exactly `<d>`            |
-| `*`             | every project                                                  |
-| `!<selector>`   | set difference from whatever the rest of `match[]` selected    |
+| selector        | matches                                                                                                                                                                                                                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name:<name>`   | the project with that exact name (a bare `<name>` is the same)                                                                                                                                                                                                                            |
+| `tag:<tag>`     | every project carrying that tag (in `data.tags`)                                                                                                                                                                                                                                          |
+| `directory:<d>` | every project whose root directory is exactly `<d>`                                                                                                                                                                                                                                       |
+| `*` (bare)      | every project. A **label** puts `*` back in the value's own alphabet -- `tag:*` selects the projects carrying a tag literally spelled `*`, not "any tag" -- so a labeled `*` an author meant as a wildcard matches nothing observed, and surfaces loudly rather than selecting everything |
+| `!<selector>`   | set difference from whatever the rest of `match[]` selected                                                                                                                                                                                                                               |
 
 A boundary's members are the union of its positive selectors minus its `!`
 selectors. A list that opens with an exclusion, like

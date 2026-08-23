@@ -1,4 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterAll, describe, expect, it } from "vitest";
+
+import { EXIT, runCli } from "../../cli.mjs";
 
 import { DEFAULT_WORKSPACE_LAYOUT } from "../rules/specifiers.mjs";
 import {
@@ -7,6 +13,12 @@ import {
   computePolicyFingerprint,
   graphCommand,
 } from "./graph.mjs";
+
+/** Temp workspaces built below; removed together so a failure leaves no tree. */
+const fixtures = [];
+afterAll(() => {
+  for (const root of fixtures) rmSync(root, { recursive: true, force: true });
+});
 
 /**
  * What `graph` guarantees: determinism, completeness, and that nothing the
@@ -552,5 +564,334 @@ describe("graphCommand — policy fingerprint", () => {
     expect(result.policy.fingerprint).toMatch(/^[0-9a-f]{64}$/);
     const envelope = JSON.parse(result.report.json);
     expect(envelope.result.policy.fingerprint).toBe(result.policy.fingerprint);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// graph over a workspace that has not written a boundary law yet — and over
+// one that named a law which is no longer there
+// ---------------------------------------------------------------------------
+
+describe("the graph command's boundary-config load", () => {
+  // #265. `graph` describes the project graph, not the boundary law: it takes
+  // no `--config`, reads no constraint row, and uses the loaded policy for one
+  // optional field. It refused with exit 3 when `module-boundaries.config.mjs`
+  // was absent, which sits exactly on the adoption path — the first thing a
+  // workspace wants is "what does Lattice see", and that is the answer it needs
+  // in order to write a first policy at all.
+  //
+  // The fix for that opened a second, silent hole, and both directions are
+  // pinned below. Tolerating a missing law is right for a workspace that never
+  // named one and wrong for a workspace that named
+  // `policy-we-declared.mjs` and then renamed or deleted it: the second is a
+  // law somebody wrote going quiet, byte-identical in every report to a
+  // workspace that never had one. The two are separated only by
+  // `options.boundaryConfigDeclared` (`../options.mjs`'s header owns the
+  // argument; `./context.mjs` carries it onto `CommandContext.options`), which
+  // is why every pair below fixes the resolved FILENAME and varies only
+  // whether the workspace named it.
+  //
+  // Driven through `runCli` rather than `graphCommand` on purpose: the defect
+  // was never in this module (`graphCommand` already treats `config` as
+  // optional), it was in the caller loading it unconditionally, so a test
+  // calling `graphCommand(context, { config: null })` would have been green
+  // throughout the bug.
+
+  /**
+   * An `nx.json` that registers the plugin and names NO boundary law — the
+   * bare-string plugin form Nx accepts. This is what "a workspace with no
+   * boundary config at all" has to be written as: the suite used to write a
+   * `plugins[].options.boundaryConfig` here, which is a workspace DECLARING
+   * the convention filename, so the case it claimed to model was never the
+   * case it ran.
+   */
+  const NX_NAMES_NO_LAW = `${JSON.stringify({ plugins: ["@ecoma-io/lattice/nx"] })}\n`;
+
+  /** An `nx.json` whose plugin entry names `boundaryConfig` — a declaration. */
+  const nxNaming = (boundaryConfig) =>
+    `${JSON.stringify({
+      plugins: [{ plugin: "@ecoma-io/lattice/nx", options: { boundaryConfig } }],
+    })}\n`;
+
+  /** A `lattice.json` for the same two projects, with `extra` merged on top. */
+  const nativeModel = (extra) =>
+    `${JSON.stringify({
+      projects: {
+        declared: [
+          { root: "libs/core", name: "core", tags: ["layer:core"] },
+          { root: "apps/app", name: "app", type: "app", tags: ["layer:app"] },
+        ],
+      },
+      ...extra,
+    })}\n`;
+
+  const VALID_LAW = `export const depConstraints = [
+  { sourceTag: "layer:app", onlyDependOnLibsWithTags: ["layer:core", "layer:app"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`;
+
+  /** The same law as an inline `lattice.json` object — the fourth spelling. */
+  const INLINE_LAW = {
+    depConstraints: [
+      { sourceTag: "layer:app", onlyDependOnLibsWithTags: ["layer:core", "layer:app"] },
+    ],
+    moduleBoundaryOptions: {
+      allow: [],
+      buildTargets: ["build"],
+      enforceBuildableLibDependency: false,
+      allowCircularSelfDependency: false,
+      checkDynamicDependenciesExceptions: [],
+      ignoredCircularDependencies: [],
+      banTransitiveDependencies: false,
+      checkNestedExternalImports: false,
+    },
+  };
+
+  const GRAPH = {
+    nodes: {
+      core: { name: "core", type: "lib", data: { root: "libs/core", tags: ["layer:core"] } },
+      app: { name: "app", type: "app", data: { root: "apps/app", tags: ["layer:app"] } },
+    },
+    dependencies: { core: [], app: [] },
+  };
+
+  /** Writes `entries` into a fresh tmpdir and returns the tracked-file list. */
+  const treeOf = (prefix, entries) => {
+    const root = mkdtempSync(join(tmpdir(), prefix));
+    fixtures.push(root);
+    for (const [path, text] of Object.entries(entries)) {
+      mkdirSync(join(root, path, ".."), { recursive: true });
+      writeFileSync(join(root, path), text);
+    }
+    return root;
+  };
+
+  /** A tracked Nx tree: `nx.json` plus `files`, with the graph injected. */
+  const nxWorkspace = (nxJson, files = {}) => {
+    const entries = { "nx.json": nxJson, "libs/core/README.md": "core\n", ...files };
+    return {
+      cwd: treeOf("lattice-graph-nx-", entries),
+      readGraph: () => GRAPH,
+      listFiles: () => Object.keys(entries),
+    };
+  };
+
+  /**
+   * A tracked native tree: `lattice.json` plus `files`, and no `readGraph` at
+   * all — the native provider derives the graph from the model itself, which
+   * is why this branch has to be driven separately rather than by swapping one
+   * marker file in the Nx fixture.
+   */
+  const nativeWorkspace = (model, files = {}) => {
+    const entries = {
+      "lattice.json": nativeModel(model),
+      "libs/core/go.mod": "module example.com/core\n\ngo 1.24\n",
+      "libs/core/core.go": "package core\n",
+      "apps/app/go.mod": "module example.com/app\n\ngo 1.24\n",
+      "apps/app/app.go": "package app\n",
+      ...files,
+    };
+    return {
+      cwd: treeOf("lattice-graph-native-", entries),
+      listFiles: () => Object.keys(entries),
+    };
+  };
+
+  const streamsFor = (context) => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      ...context,
+    };
+  };
+
+  /** `graph --format json`'s exit code, stdout envelope and stderr text. */
+  const runGraphOn = async (context) => {
+    const streams = streamsFor(context);
+    const exit = await runCli(["graph", "--format", "json"], streams);
+    const stdout = streams.lines.out.join("\n");
+    return {
+      exit,
+      err: streams.lines.err.join("\n"),
+      envelope: stdout === "" ? null : JSON.parse(stdout),
+    };
+  };
+
+  // -- 1. nothing declared, no law on disk: answered (#265 stays fixed) ------
+
+  it("nx: answers on a workspace that never named a boundary law", async () => {
+    // The reported run. Exit 0, and a real snapshot on stdout — not an empty
+    // one: "it did not refuse" would pass against a command that answered
+    // nothing, so the projects it found are asserted too.
+    const { exit, envelope } = await runGraphOn(nxWorkspace(NX_NAMES_NO_LAW));
+    expect(exit).toBe(EXIT.ok);
+    expect(envelope.result.projects.map((project) => project.name)).toEqual(["app", "core"]);
+    // No law, no policy identity — the snapshot says so by omission rather
+    // than by carrying a fingerprint of nothing.
+    expect(envelope.result.policy).toBeUndefined();
+  });
+
+  it("nx: answers on a workspace with no plugins entry at all", async () => {
+    // The other undeclared shape, and the commoner one: a tree that never
+    // registered the plugin. `readPluginOptions` defaults both filenames for
+    // it, and defaulting is not declaring.
+    const { exit, envelope } = await runGraphOn(nxWorkspace("{}\n"));
+    expect(exit).toBe(EXIT.ok);
+    expect(envelope.result.projects.map((project) => project.name)).toEqual(["app", "core"]);
+    expect(envelope.result.policy).toBeUndefined();
+  });
+
+  it("native: answers on a lattice.json that names no boundary law", async () => {
+    const { exit, envelope } = await runGraphOn(nativeWorkspace({}));
+    expect(exit).toBe(EXIT.ok);
+    expect(envelope.result.projects.map((project) => project.name)).toEqual(["app", "core"]);
+    expect(envelope.result.policy).toBeUndefined();
+  });
+
+  // -- 2. declared, and the file is gone: refused, naming the file ----------
+
+  it("nx: refuses when the workspace NAMED a boundary law that is not there", async () => {
+    // The silent direction this suite exists for, and the one case that goes
+    // red without the provenance bit: `nx.json` names `policy-we-declared.mjs`
+    // and the file is absent. Before `options.boundaryConfigDeclared`, the
+    // tolerance written for the case above swallowed this one too and `graph`
+    // exited 0 with no `policy` field — byte-identical to the run above, on a
+    // tree whose law someone renamed or deleted. The message has to name the
+    // file, because "a config is missing" is not actionable when the fix is a
+    // rename.
+    const { exit, err, envelope } = await runGraphOn(
+      nxWorkspace(nxNaming("policy-we-declared.mjs")),
+    );
+    expect(exit).toBe(EXIT.error);
+    expect(err).toContain("policy-we-declared.mjs");
+    expect(envelope).toBeNull();
+  });
+
+  it("nx: refuses even when the declared name IS the convention filename", async () => {
+    // The pair that proves the fix reads provenance rather than the value.
+    // This `nx.json` resolves `boundaryConfig` to the exact string the
+    // undeclared case above resolves to by default; only the declaration
+    // differs, and only the declaration may decide the verdict.
+    const { exit, err } = await runGraphOn(nxWorkspace(nxNaming("module-boundaries.config.mjs")));
+    expect(exit).toBe(EXIT.error);
+    expect(err).toContain("module-boundaries.config.mjs");
+  });
+
+  it("native: refuses when lattice.json NAMED a boundary law that is not there", async () => {
+    const { exit, err, envelope } = await runGraphOn(
+      nativeWorkspace({ boundaryConfig: "policy-we-declared.mjs" }),
+    );
+    expect(exit).toBe(EXIT.error);
+    expect(err).toContain("policy-we-declared.mjs");
+    expect(envelope).toBeNull();
+  });
+
+  it("native: refuses even when the declared name IS the convention filename", async () => {
+    const { exit, err } = await runGraphOn(
+      nativeWorkspace({ boundaryConfig: "module-boundaries.config.mjs" }),
+    );
+    expect(exit).toBe(EXIT.error);
+    expect(err).toContain("module-boundaries.config.mjs");
+  });
+
+  // -- 3. the law is there and will not load: refused, either way -----------
+
+  it("nx: still refuses when a boundary config is there and will not load", async () => {
+    // The silent-direction guard on the #265 fix itself, on the harder side:
+    // nothing is DECLARED here, so the tolerance applies — and it must still
+    // not extend to a law the workspace wrote and this tool cannot read.
+    // Skipping the load because a file is missing is one thing; swallowing a
+    // law that IS there is another.
+    const { exit, err } = await runGraphOn(
+      nxWorkspace(NX_NAMES_NO_LAW, {
+        "module-boundaries.config.mjs": "export const depConstraints = [\n",
+      }),
+    );
+    expect(exit).toBe(EXIT.error);
+    expect(err).toContain("module-boundaries.config.mjs");
+  });
+
+  it("native: still refuses when a declared boundary config will not load", async () => {
+    const { exit, err } = await runGraphOn(
+      nativeWorkspace(
+        { boundaryConfig: "policy-we-declared.mjs" },
+        { "policy-we-declared.mjs": "export const depConstraints = [\n" },
+      ),
+    );
+    expect(exit).toBe(EXIT.error);
+    expect(err).toContain("policy-we-declared.mjs");
+  });
+
+  // -- 4. every explicit declaration stays loud -----------------------------
+
+  it("nx: still carries a policy fingerprint when the workspace has written a law", async () => {
+    // The positive control for "policy absent when there is no config": that
+    // assertion would pass against a command which had stopped fingerprinting
+    // entirely, so the field has to be reachable on the same fixture shape.
+    const { exit, envelope } = await runGraphOn(
+      nxWorkspace(NX_NAMES_NO_LAW, { "module-boundaries.config.mjs": VALID_LAW }),
+    );
+    expect(exit).toBe(EXIT.ok);
+    expect(envelope.result.policy.fingerprint).toEqual(expect.any(String));
+  });
+
+  it("nx: refuses when a named profile registry is missing", async () => {
+    // The profile spelling. `profiles` turns `boundaryConfig` into a NAME
+    // rather than a filename, so the missing-file tolerance must not reach it
+    // at all — and does not, because it is gated on `hasProfiles` before the
+    // provenance bit is even consulted.
+    const nxJson = `${JSON.stringify({
+      plugins: [
+        {
+          plugin: "@ecoma-io/lattice/nx",
+          options: { boundaryConfig: "strict", profiles: "profiles.json" },
+        },
+      ],
+    })}\n`;
+    const { exit, err } = await runGraphOn(nxWorkspace(nxJson));
+    expect(exit).toBe(EXIT.error);
+    expect(err).toContain("profiles.json");
+  });
+
+  it("native: applies an inline lattice.json policy, which names no file to be missing", async () => {
+    // The fourth spelling, and the one where "declared" cannot be a file
+    // check: the law is a field on `lattice.json`, present by construction.
+    // It must reach the snapshot as a real policy identity rather than being
+    // skipped alongside the absent-file case.
+    const { exit, envelope } = await runGraphOn(nativeWorkspace({ boundaryConfig: INLINE_LAW }));
+    expect(exit).toBe(EXIT.ok);
+    expect(envelope.result.policy.fingerprint).toEqual(expect.any(String));
+  });
+
+  it("takes no --config flag, so there is no override to soften", async () => {
+    // The remaining explicit declaration `check` has and `graph` does not.
+    // Pinned rather than assumed: if `graph` ever grew the flag, the guard
+    // above would need an arm for it, and this test is what says so.
+    const streams = streamsFor(nxWorkspace(NX_NAMES_NO_LAW));
+    expect(await runCli(["graph", "--config", "law.mjs"], streams)).toBe(EXIT.usage);
+  });
+
+  it("does not soften the law for a command that judges against it", async () => {
+    // The constraint the #265 fix had to respect. `check` reads the constraint
+    // table; on a tree with no law it must keep refusing loudly, because
+    // reading "no file" as "no rules" would report a clean workspace over
+    // every crossing there is — the silent direction, and a far worse bug than
+    // the one being fixed.
+    const streams = streamsFor(nxWorkspace(NX_NAMES_NO_LAW));
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    expect(streams.lines.err.join("\n")).toContain("module-boundaries.config.mjs");
   });
 });

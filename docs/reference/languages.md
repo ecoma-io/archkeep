@@ -302,7 +302,7 @@ a second answer to a question that has one.
 workspace's `tsConfig`. It is called rather than reimplemented: path mapping and
 extension probing have too many correct-looking approximations.
 
-Two things that resolver structurally cannot answer, and what happens instead:
+Three things that resolver structurally cannot answer, and what happens instead:
 
 - **A Node built-in** (`node:fs`, `fs`) has no package to find, so it is
   classified by `node:module`'s own `isBuiltin` — checked _after_ TypeScript,
@@ -311,10 +311,34 @@ Two things that resolver structurally cannot answer, and what happens instead:
   it compiles (`.vue`, `.css`, `.svg`) is already a path: it is normalised and
   tested for existence, with no extension probing, no `index` lookup and no
   `paths` mapping.
+- **A specifier of any other spelling landing on the same kind of file** — a
+  `paths` alias or a `baseUrl` mapping reaching
+  `packages/blocks/page-header/src/PageHeader.vue` — resolves to the project
+  that owns that file. `.json` reaches this branch too wherever the workspace's
+  own compiler options leave TypeScript declining the target: measured, with
+  `resolveJsonModule` off it declines in every `moduleResolution` mode, and with
+  the option merely absent it declines in all but `bundler` and `nodenext`.
 
-Anything beyond those two stays unresolved on purpose — including an aliased
-asset like `@scope/ui/styles/global.css`, because resolving it would mean
-applying `paths` here, which is the second resolver this package must not grow.
+**What that decides is a boundary verdict, not a cosmetic detail.** In a
+component library the target of a boundary crossing IS a `.vue` file, and such a
+specifier used to resolve to nothing at all — a site with no target, which is
+[violations.md](violations.md#the-order-matters) step 4. No `depConstraints` row
+is read for one, and at `banTransitiveDependencies`'s own default nothing is
+reported for it either, so a real crossing scored a clean run. The site now
+names the project it reaches and is judged against the constraint table like any
+other edge.
+
+Two things it will not do, both refusals rather than gaps. The target must name
+its own extension, so nothing here probes extensions or looks for an `index` —
+`./widgets` does not reach `./widgets/index.vue`, and `@scope/ui/Button` does
+not reach `Button.vue`. And a specifier whose target is not there is still
+unresolved, and reported at the import site that used it; nothing is invented
+for a dead alias.
+
+How that answer stays `ts.resolveModuleName`'s own — the guards that keep it to
+one question, and why it is not a second resolver — is argued beside the code it
+constrains, at `declinedExtensionHostFor` in
+`packages/lattice/src/analysis/typescript.mjs`. It is not restated here.
 
 **ESLint already covers this language**, and `@nx/enforce-module-boundaries`
 should keep running for it. This analyzer exists because the CLI and the language
@@ -332,9 +356,11 @@ tsconfig declares a `paths` table, `check` judges each alias for life and a
 dead one — one message id, **`tsconfigDeadPathAlias`** — **fails the run with
 exit 1**, the way a violation does.
 
-The check judges the alias table itself and never resolves a specifier —
-resolving one would mean applying `paths` here, which is the second resolver
-this package must not grow (the refusal two paragraphs up). What it may
+The check judges the alias table itself and never resolves a specifier. That is
+not the refusal the resolution section above describes, and the two must not be
+read as one: resolution there is `ts.resolveModuleName`'s, `paths` substitution
+and all, while a check that resolved a specifier would have to apply `paths`
+**here**, in this package — the second resolver it must not grow. What it may
 honestly decide instead rests on one measured fact: every candidate TypeScript
 can form from a target lives at or below the directory of the target's static
 prefix (the text before the first `*`; the whole target when it has none). So

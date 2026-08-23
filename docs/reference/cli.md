@@ -328,6 +328,14 @@ Prints the project graph as a deterministic snapshot: two sorted arrays, one of
 projects and one of edges, with `workspaceLayout` included. Descriptive -- a
 snapshot of what is is never a finding.
 
+**It answers in a workspace that has no boundary law yet**, which is where the
+question it exists for is usually asked: the first thing to establish about a
+new workspace is what Lattice sees, and that is what the first policy gets
+written against. The snapshot then carries no `policy` field -- no law, no
+policy identity for [`diff`](#diff-baseline) to compare against. A boundary
+config that IS there and will not load still fails the run with exit 3, because
+an absent law and a broken one must not report alike.
+
 ### `discover`
 
 Reports the observed architecture: projects, edges, tags, and the coverage a

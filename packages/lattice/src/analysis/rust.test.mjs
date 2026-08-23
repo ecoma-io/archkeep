@@ -432,6 +432,87 @@ describe("parseRustUseSites", () => {
     parseRustUseSites(pathological);
     expect(Date.now() - start).toBeLessThan(1000);
   });
+
+  it("reads a use up to the next `;` in the file, even when that `;` closes a later statement", () => {
+    // The terminator is found by `indexOf` now rather than by a `([^;]*)(?=;)`
+    // tail, and the two have to agree here as well as on the easy cases: the
+    // path runs to the FIRST `;` anywhere after the `use`, wherever it is. So
+    // an unterminated `use` yields one spurious record naming text the file
+    // really contains — the trade this analyzer's header states — and never a
+    // missing one, and the `use` after it is still read.
+    const source = "use a::b\nlet x = 1;\nuse c::d;\n";
+    const sites = parseRustUseSites(source);
+    expect(sites.map((site) => site.specifier)).toEqual(["a::b let x = 1", "c::d"]);
+    expect(sites.map((site) => site.offset)).toEqual([4, 24]);
+  });
+
+  it("claims an inline ::path against the right use when many statements precede it", () => {
+    // Whether a `::path::` was already claimed by a `use` is a binary search
+    // over sorted ranges now rather than a test of every range, so it has to
+    // answer the same with four statements as with one: `use ::serde::de;` is
+    // both forms at once, and recording it twice would double every such
+    // import in a report. The `use` here also spans a range CONTAINING the
+    // `extern crate` line, which is the case where the two passes' ranges
+    // overlap.
+    const source =
+      "use aaa::x;\nextern crate bbb;\nuse ::serde::de::Error;\nfn f() { ::ccc::go(); }\n";
+    expect(parseRustUseSites(source).map((site) => site.specifier)).toEqual([
+      "aaa::x",
+      "bbb",
+      "::serde::de::Error",
+      "::ccc::",
+    ]);
+  });
+
+  it("costs no more on a file with no `;` in it than on the same file terminated (ReDoS)", () => {
+    // A ratio between two measurements taken on this machine moments apart,
+    // never a millisecond budget: the second file is the same size and does
+    // strictly MORE work (8000 real sites against none), so a loaded machine
+    // slows both and the comparison survives it.
+    //
+    // The defect this pins is the `([^;]*)(?=;)` tail the parser used to end
+    // with. `[^;]*` cannot cross a `;`, so it was cheap while one was coming
+    // — and on a file with none it ran to end-of-file and backtracked one
+    // character at a time per `use` start: 22KB→16ms, 44KB→65ms, 89KB→256ms,
+    // 179KB→1141ms, and 17.9 SECONDS for one crafted 1MB `.rs` file, which
+    // is attacker-supplied per SECURITY.md. The verdict is unchanged — a
+    // `use` with no terminator is not a site, then as now.
+    const unterminated = "use engine_core::Task\n".repeat(8000); // not one `;` in it
+    const terminated = "use engine_core::Task;\n".repeat(8000);
+    const cost = (text) => {
+      const start = performance.now();
+      const sites = parseRustUseSites(text);
+      return { ms: performance.now() - start, sites };
+    };
+    const real = cost(terminated);
+    const pathological = cost(unterminated);
+    expect(pathological.sites).toEqual([]);
+    expect(real.sites).toHaveLength(8000);
+    expect(pathological.ms).toBeLessThan(real.ms * 4 + 10);
+  });
+
+  it("costs no more on a file pairing every use with a fully-qualified path than on one without", () => {
+    // The second quadratic in this function, and the one ORDINARY Rust
+    // reaches: every `::crate::` and every bare crate path asked whether a
+    // `use` had already claimed its offset by testing every claimed range,
+    // so N `use` statements beside N qualified calls cost N*N range tests —
+    // measured 11.4ms at 55KB, 32.3ms at 110KB, 122.9ms at 220KB, the same
+    // four-times-for-twice-the-bytes shape. The claim is a binary search now.
+    // Same ratio discipline as the test above: the baseline is the same file
+    // without the qualified calls, so it is the same machine, moments apart.
+    const paired = "use engine_core::Task;\nfn f() { ::other_crate::go(); }\n".repeat(4000);
+    const uses = "use engine_core::Task;\n".repeat(4000);
+    const cost = (text) => {
+      const start = performance.now();
+      const sites = parseRustUseSites(text);
+      return { ms: performance.now() - start, sites };
+    };
+    const baseline = cost(uses);
+    const both = cost(paired);
+    expect(baseline.sites).toHaveLength(4000);
+    expect(both.sites).toHaveLength(8000);
+    expect(both.ms).toBeLessThan(baseline.ms * 8 + 10);
+  });
 });
 
 describe("analyzeRust", () => {

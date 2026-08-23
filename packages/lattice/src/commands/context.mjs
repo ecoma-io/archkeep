@@ -194,11 +194,22 @@ export const WORKSPACE_MARKERS = [NX_CONFIG_FILE, LATTICE_MODEL_FILE, MOON_DIR, 
  *   `exemptedFiles` is always `[]` on nx/moon: `coverage.exempt` is a
  *   native-only `lattice.json` key.
  * @property {{boundaryConfig: string|object, tsConfig: object|undefined,
- *   profiles?: string, inline?: boolean}} options What this workspace names its
- *   boundary law, its shared tsconfig, and — when it uses one — its named
- *   profile registry. `check`'s `--config` flag, if given, still wins over
- *   `options.boundaryConfig`; that override is `check`'s decision, not this
- *   module's.
+ *   boundaryConfigDeclared: boolean, profiles?: string, inline?: boolean}} options
+ *   What this workspace names its boundary law, its shared tsconfig, and —
+ *   when it uses one — its named profile registry. `check`'s `--config` flag,
+ *   if given, still wins over `options.boundaryConfig`; that override is
+ *   `check`'s decision, not this module's.
+ *   `boundaryConfigDeclared` is not a name but the provenance of one: `true`
+ *   when this workspace's own config named a boundary law (`nx.json`'s
+ *   `plugins[].options.boundaryConfig`, or `lattice.json`'s field in either
+ *   its filename or its inline-policy spelling), `false` when the name above
+ *   is `../options.mjs`'s `DEFAULT_OPTIONS` convention and nobody wrote one.
+ *   Always present, on all three providers. A command that may tolerate a law
+ *   file that is not there — `graph`, which describes the project graph and
+ *   judges nothing against a constraint row — reads this to tell "no law was
+ *   ever written" from "the law this workspace named has been renamed or
+ *   deleted", which the merged `boundaryConfig` string alone cannot. That
+ *   module's header owns the argument.
  * @property {{registered: boolean, manifests: string[]}} pluginGap Whether
  *   this workspace's own provider is the one Nx would actually run, and which
  *   tracked polyglot manifests sit under a project root either way. Always
@@ -415,14 +426,19 @@ export function resolveCommandContext(
     annotateMFERemotes(graph.nodes, workspace.readFile);
     annotatePackageFacts(graph.nodes, workspace.readFile);
 
-    options =
-      typeof discovered.model.boundaryConfig === "string"
-        ? { boundaryConfig: discovered.model.boundaryConfig, tsConfig: discovered.model.tsConfig }
-        : {
-            boundaryConfig: discovered.model.boundaryConfig,
-            tsConfig: discovered.model.tsConfig,
-            inline: true,
-          };
+    // `boundaryConfigDeclared` is carried straight off the model rather than
+    // re-derived here: `../providers/native/model.mjs`'s
+    // `normalizeNativeModel` is the only code that still sees the raw
+    // `lattice.json`, so it is the only place that can answer whether the
+    // file named a law. Re-deriving it from `options.boundaryConfig` at this
+    // point is exactly the mistake this whole thread exists to undo — a
+    // declared name and the convention default are the same string by then.
+    options = {
+      boundaryConfig: discovered.model.boundaryConfig,
+      tsConfig: discovered.model.tsConfig,
+      boundaryConfigDeclared: discovered.model.boundaryConfigDeclared,
+      ...(typeof discovered.model.boundaryConfig === "string" ? {} : { inline: true }),
+    };
 
     const selected = selectFiles(
       owned.map(({ file }) => file),
@@ -467,9 +483,18 @@ export function resolveCommandContext(
     // and edges before this package ever asked. Options from defaults (no
     // `nx.json` to carry a plugins table, no `lattice.json` for inline
     // options); a Moon workspace names the same two files by convention.
+    // `boundaryConfigDeclared: false` is a fact about Moon rather than a
+    // fallback: there is no `plugins[].options` table and no `lattice.json`
+    // on this path (a `lattice.json` beside `.moon/` is refused outright,
+    // `../providers/moon.mjs`), so a Moon workspace has nowhere to name its
+    // boundary law and both names above are taken by convention every time.
+    // It is written out rather than left off so the key is present on all
+    // three providers — a reader that had to tell "false" from "this branch
+    // forgot" would be back to guessing provenance, which is the defect.
     options = {
       boundaryConfig: DEFAULT_OPTIONS.boundaryConfig,
       tsConfig: DEFAULT_OPTIONS.tsConfig,
+      boundaryConfigDeclared: false,
     };
 
     graph = effectiveReadGraph(root);
@@ -545,6 +570,10 @@ export function resolveCommandContext(
     options = {
       boundaryConfig: pluginOptions.boundaryConfig,
       tsConfig: pluginOptions.tsConfig,
+      // Straight off `readPluginOptions`, for the reason the native branch
+      // above states: `nx.json`'s `plugins[].options` is the last place the
+      // declaration is still distinguishable from `DEFAULT_OPTIONS`.
+      boundaryConfigDeclared: pluginOptions.boundaryConfigDeclared,
       ...(pluginOptions.profiles === undefined ? {} : { profiles: pluginOptions.profiles }),
     };
 

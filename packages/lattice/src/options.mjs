@@ -51,6 +51,36 @@
  * reason. A `tsconfigBase` typed for `tsConfig` that quietly fell back to the
  * default would produce a full green run against a rule nobody wrote. The
  * failure has to arrive at the first `nx` invocation, naming the key.
+ *
+ * ## The one field here that no workspace writes: `boundaryConfigDeclared`
+ *
+ * Merging the declaration over the default is what makes every reader
+ * downstream simple — one string, always present, never a fallback to
+ * re-derive. It also destroys the only fact that separates two workspaces
+ * whose resolved options are byte-identical: one that never named a boundary
+ * law and takes `DEFAULT_OPTIONS.boundaryConfig` by Nx convention, and one
+ * that named `policy-we-declared.mjs` and then renamed or deleted it. A
+ * command that may tolerate the first must not tolerate the second, and with
+ * the provenance merged away it cannot tell them apart — measured on `graph`,
+ * which answered exit 0 with no `policy` field on a native tree declaring a
+ * `boundaryConfig` that was not there, byte-identical to a tree that never
+ * had a law.
+ *
+ * So the bit rides out alongside the two names: `true` when the caller's own
+ * object carried a `boundaryConfig` key, `false` when the value came from
+ * `DEFAULT_OPTIONS`. It is deliberately NOT a member of `DEFAULT_OPTIONS`,
+ * because that object is also the known-key roster the unknown-key check
+ * above reads: adding it there would make `boundaryConfigDeclared: true` a
+ * spelling a consumer could write into `nx.json`, which is a workspace
+ * asserting its own provenance — the one claim this field exists to compute
+ * rather than accept. Written into a `plugins[].options` table it throws like
+ * any other unknown key.
+ *
+ * `./providers/native/model.mjs` computes the same bit for `lattice.json`'s
+ * own `boundaryConfig` field (including the inline-policy spelling, which
+ * never reaches `resolveOptions` at all) and `./commands/context.mjs` is what
+ * carries it onto `CommandContext.options` for all three providers — each
+ * argued where it is written, not restated here.
  */
 import { existsSync, readFileSync } from "node:fs";
 
@@ -93,21 +123,33 @@ export const NX_CONFIG_FILE = "nx.json";
  *
  * @param {object|undefined|null} rawOptions Whatever `nx.json` carried, or
  *   whatever Nx handed the hook. Absent is legal and means "all defaults".
- * @returns {{boundaryConfig: string, tsConfig: string, profiles?: string}}
+ * @returns {{boundaryConfig: string, tsConfig: string, profiles?: string,
+ *   boundaryConfigDeclared: boolean}} `boundaryConfigDeclared` is the
+ *   provenance of `boundaryConfig` and nothing else — `true` only when
+ *   `rawOptions` carried the key itself. See the module header, "The one
+ *   field here that no workspace writes".
  * @throws {Error} on an unknown key, a non-object, or a value that is not a
  *   non-empty string. An empty string would build `<root>/` and read a
  *   directory as a config, which fails somewhere far from the typo.
  */
 export function resolveOptions(rawOptions) {
-  if (rawOptions === undefined || rawOptions === null) return { ...DEFAULT_OPTIONS };
+  if (rawOptions === undefined || rawOptions === null) {
+    return { ...DEFAULT_OPTIONS, boundaryConfigDeclared: false };
+  }
   if (typeof rawOptions !== "object" || Array.isArray(rawOptions)) {
     throw new Error(
       `lattice: plugin options must be an object, got ${Array.isArray(rawOptions) ? "an array" : typeof rawOptions}`,
     );
   }
 
+  // `known` stays exactly `DEFAULT_OPTIONS`' keys, which is what keeps
+  // `boundaryConfigDeclared` an OUTPUT: it is not in that object, so a
+  // `plugins[].options` table naming it hits the unknown-key throw below.
   const known = Object.keys(DEFAULT_OPTIONS);
-  const resolved = { ...DEFAULT_OPTIONS };
+  const resolved = {
+    ...DEFAULT_OPTIONS,
+    boundaryConfigDeclared: Object.hasOwn(rawOptions, "boundaryConfig"),
+  };
   for (const [key, value] of Object.entries(rawOptions)) {
     if (!known.includes(key)) {
       throw new Error(
@@ -215,18 +257,28 @@ function readNxJsonOrNull(workspaceRoot, readFile) {
  *   derived from this file's own location, for the reason `./config.mjs` gives.
  * @param {{readFile?: (path: string) => string|null}} [io] Injectable read, so
  *   `resolveOptions`'s callers can be driven over a tree that is not on disk.
- * @returns {{boundaryConfig: string, tsConfig: string, profiles?: string}}
+ * @returns {{boundaryConfig: string, tsConfig: string, profiles?: string,
+ *   boundaryConfigDeclared: boolean}} The three no-registration states below
+ *   all answer `boundaryConfigDeclared: false`, because none of them is a
+ *   workspace naming a law — see the module header.
  * @throws {Error} when `nx.json` is unparseable, or its options are malformed.
  *   Loud on purpose, and the same posture as everywhere else here: a tool that
  *   could not read its own configuration must not answer as though it had.
  */
 export function readPluginOptions(workspaceRoot, { readFile = readFileOrNull } = {}) {
   const nxJson = readNxJsonOrNull(workspaceRoot, readFile);
-  if (nxJson === null) return { ...DEFAULT_OPTIONS };
+  // The three "nothing registered here" exits go through `resolveOptions`
+  // rather than spreading `DEFAULT_OPTIONS` directly, so the shape this
+  // function returns is produced in exactly one place. A spread would have to
+  // remember `boundaryConfigDeclared: false` three separate times, and the
+  // one that forgot it would answer `undefined` — a provenance nobody wrote,
+  // read downstream as whichever direction that caller's `??`/`!==` happened
+  // to fall.
+  if (nxJson === null) return resolveOptions(undefined);
 
   const plugins = Array.isArray(nxJson?.plugins) ? nxJson.plugins : [];
   const entry = plugins.find(namesThisPlugin);
-  if (entry === undefined) return { ...DEFAULT_OPTIONS };
+  if (entry === undefined) return resolveOptions(undefined);
   return resolveOptions(typeof entry === "string" ? undefined : entry.options);
 }
 
