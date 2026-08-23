@@ -16,6 +16,7 @@
   <a href="https://github.com/ecoma-io/lattice/actions/workflows/ci.yml"><img src="https://github.com/ecoma-io/lattice/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/ecoma-io/lattice/actions/workflows/analysis.yml"><img src="https://github.com/ecoma-io/lattice/actions/workflows/analysis.yml/badge.svg" alt="Analysis" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0" /></a>
+  <a href="https://www.npmjs.com/package/@ecoma-io/lattice"><img src="https://img.shields.io/npm/dm/@ecoma-io/lattice.svg" alt="npm downloads per month" /></a>
 </p>
 
 <p align="center">
