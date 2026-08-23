@@ -123,6 +123,18 @@ jobs:
       # link; this step is where "does the link land" is answered.
       - run: node scripts/check-docs-links.mjs
 
+      # Three doc-parity gates, each holding a document that restates a fact
+      # owned elsewhere to that source: the CLI roster/count claims to
+      # COMMAND_NAMES (exported by packages/lattice/cli.mjs), installation.md's
+      # prerequisites to packages/lattice/package.json, and CONTRIBUTING's
+      # command roster and hook documentation to THIS FILE and lefthook.yml.
+      # Their judgment functions are unit-tested under `pnpm test`; running the
+      # executables here is what pins the real tree, the same reason
+      # check-skills and check-docs-links above are steps and not only tests.
+      - run: node scripts/check-cli-docs-roster.mjs
+      - run: node scripts/check-installation-prereqs.mjs
+      - run: node scripts/check-contributing-parity.mjs
+
       # The Rust rule SDK's `lint` target runs `cargo clippy`, and the hosted
       # runner's Rust toolchain ships without that component — measured against
       # the ubuntu-24.04 runner image's own software list, which names Cargo,
