@@ -68,8 +68,12 @@ Three conditions refuse loudly (exit 3) instead of degrading to an empty list:
   between "gone" and "never seen";
 - **an intent that cannot be verified** `judgeIntent`'s `unresolved` non-empty —
   "cannot verify" must never read as "no debt";
-- **an unreadable or malformed history directory** — the ledger would either be
-  empty (a shrug) or age against a record it could not read.
+- **a history directory that is unreadable, malformed, or holds no snapshots**
+  — the ledger would either be empty (a shrug) or age against a record it could
+  not read. An existing but unpopulated directory is the same no-verdict: a
+  fresh `.lattice/history/` or a CI cache whose capture step never ran has no
+  record to age against, and `✔ no architecture debt` over it would be a claim
+  the run cannot make.
 
 ## The empty-result invariant
 

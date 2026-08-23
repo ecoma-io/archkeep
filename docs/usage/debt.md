@@ -50,8 +50,8 @@ never "born yesterday".
 as a committed or artifacts directory; locally, wherever you keep snapshots.
 There is no index file and no private store: the ledger is rebuilt from the
 current boundary config, the tracked `architecture-intent.json`, and the
-directory of `graph --format json` snapshots. A missing or malformed snapshot
-directory is a no-verdict, never an empty ledger.
+directory of `graph --format json` snapshots. A snapshot directory that is missing,
+malformed, or holds no snapshots at all is a no-verdict, never an empty ledger.
 
 To keep a ledger current, capture snapshots as the architecture evolves:
 

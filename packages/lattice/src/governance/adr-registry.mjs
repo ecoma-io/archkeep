@@ -290,7 +290,22 @@ export function loadAdrRegistry(root, io = {}) {
   /** @type {string[]} */
   let names;
   try {
-    names = readDir(dir).filter((name) => name.endsWith(".md"));
+    // Every entry, unfiltered: the ONLY filename verdict this loader makes is
+    // the `ADR_FILE_PATTERN` refusal below. An `.endsWith(".md")` pre-filter
+    // here used to drop `0002-cased.MD` and `0003-thing.markdown` before that
+    // throw could see them — an ADR-shaped record the author wrote, silently
+    // absent from the index, so `resolveDecisionRef` answered `unknown` for an
+    // id sitting in the tree and the reverse lookup answered "no ADR in
+    // docs/adr/ binds rule:X — it is not enforced by any recorded decision"
+    // about a binding the registry had simply refused to look at. Two
+    // filters deciding the same question is how one of them goes quiet
+    // (`../../../../AGENTS.md`). `README.md` reaches that same throw, by the
+    // same rule, and always did: this directory is the registry, so a file in
+    // it that is not a record is a thing to say out loud, not to drop. The
+    // `io.tracked` filter below is a different question — whether the bytes
+    // are the reviewed repository state — and stays the one exclusion that is
+    // deliberately silent, for the reason this module's header states.
+    names = readDir(dir);
   } catch (cause) {
     if (cause?.code === "ENOENT") return { records: [], byId: new Map() };
     throw new Error(`lattice: cannot read ${ADR_DIR}: ${cause?.message ?? cause}`, { cause });

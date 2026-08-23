@@ -177,6 +177,23 @@ describe("debtCommand", () => {
     ).rejects.toThrow(/cannot read the history directory/);
   });
 
+  // The silent direction, and the reason this case is a refusal rather than a
+  // "0 snapshots" ledger: a directory that EXISTS and holds nothing reads back
+  // as `✔ no architecture debt`, exit 0, byte-for-byte what a genuinely clean
+  // workspace prints. A fresh `.lattice/history/`, or a CI cache whose capture
+  // step never ran, turns a `lattice debt` gate into a no-op nobody can see.
+  // `historyCommand` already refuses the identical directory ("An empty
+  // directory is not an empty history"), and this command's own header says
+  // exit 3 covers "no snapshots".
+  it("refuses a snapshot directory that exists but holds no snapshots, rather than reporting a clean ledger", async () => {
+    // A resolved promise is the defect this pins, whatever the ledger says —
+    // the message check is the second half, not the assertion that matters.
+    const io = ioWith({ readSnapshots: () => ({ files: [] }) });
+    await expect(debtCommand("/ws/empty", commandContext(), { config: null, io })).rejects.toThrow(
+      /contains no snapshots/,
+    );
+  });
+
   it("reports agings false when fewer than two snapshots exist", async () => {
     const result = await debtCommand("/ws/hist", commandContext(), {
       config: {

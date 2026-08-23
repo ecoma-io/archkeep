@@ -16,9 +16,15 @@
  * - an unreadable registry — a `docs/adr/` that exists but holds a malformed
  *   record, a duplicate id, or a file that will not parse. "Could not read the
  *   registry" must never read as "no ADRs";
- * - an unresolvable `decisionRef` — a binding, a supersedes target, or a row's
- *   decisionRef that names nothing. The invariant (`../../../../AGENTS.md`):
- *   a binding that does not resolve is `unknown`, never `pass`.
+ * - a reference into the registry's OWN name space that names nothing: the id
+ *   a caller asked about, and any record's `supersedes` target. Both resolve
+ *   against the index, so a supersession chain is never rendered as fact
+ *   unless its far end is a record. The invariant (`../../../../AGENTS.md`):
+ *   a reference that does not resolve is `unknown`, never `pass`. A
+ *   `bindings` entry is deliberately NOT on this list — it names an id in the
+ *   rule/fitness name space, which this command holds no authority over;
+ *   "What it cannot assert" below owns that limit and how a binding is
+ *   surfaced instead.
  *
  * It does not need a project graph, Nx, or a boundary config: the registry is
  * self-contained in the tree. `resolveCommandContext`'s heavy preamble is
@@ -29,8 +35,26 @@
  *
  * It reports what the registry records; it does not verify that a bound
  * rule/fitness exists anywhere else in the workspace (that is the decisionRef
- * validator's question at load time). A binding to a fitness id that no
- * declaration carries is listed as `unknown` — named, never hidden.
+ * validator's question at load time). It CANNOT, and the reason is worth
+ * stating because it is easy to write a check that only looks like one: this
+ * command loads no boundary config, so the only id set in reach is
+ * `knownFitness`, and `boundFitnessIds` derives that from the records' own
+ * `bindings`. Testing a binding against it is self-resolution — vacuous for a
+ * bare id, and for a `rule:`/`fitness:`-prefixed one an artifact of
+ * `resolveDecisionRef` stripping the prefix off one side only, which would
+ * refuse `rule:no-such-rule` and the equally valid `rule:no-direct-dep`
+ * alike. So no binding is refused here, and — the honest consequence — the
+ * `(unknown)` marker `../report/adr-text.mjs` renders cannot fire on any run
+ * driven from THIS command: every binding is in the set by construction. The
+ * marker is real and both text faces apply it identically (one `bindingsLine`
+ * serves the dump and the single-record report, so they cannot disagree about
+ * which bindings carry it); what is missing is an id set that did not come
+ * from the bindings, which only a caller holding the workspace's declared
+ * rule/fitness ids can supply. Until one does, a binding is surfaced and
+ * never adjudicated: carried verbatim in the text and in the envelope's
+ * `bindings` beside `knownFitness`, at exit 0. Naming a limit is not a
+ * verdict; leaving it unnamed would be the silent direction
+ * (`../../../../AGENTS.md`).
  */
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import {
@@ -128,9 +152,33 @@ export function adrCommand(root, options, io = {}) {
   const requestedId = options.id;
   const isFitnessRef = requestedId !== undefined && FITNESS_REF_PATTERN.test(requestedId);
   const resolvedAdrId = requestedId === undefined ? undefined : stripAdrPrefix(requestedId);
-  let unresolved = [];
+  const unresolved = [];
   if (requestedId !== undefined && !isFitnessRef && !byId.has(resolvedAdrId)) {
-    unresolved = [{ ref: requestedId, why: `${requestedId} is not an ADR in ${ADR_DIR}` }];
+    unresolved.push({ ref: requestedId, why: `${requestedId} is not an ADR in ${ADR_DIR}` });
+  }
+
+  // Every record's `supersedes` target, resolved against the registry index.
+  // `validateRecord` (`../governance/adr-registry.mjs`) checks the SHAPE of a
+  // supersedes entry — that it looks like an ADR id — and nothing more, so a
+  // `supersedes: ["0000-does-not-exist"]` loaded clean and was rendered below
+  // as a supersession chain, in `result.supersedes` and in the record's own
+  // text block, under `status: "ok"` and `coverage.complete: true`. A chain
+  // whose far end is not a record is a claim about a decision this workspace
+  // never recorded — precisely the "unresolvable decisionRef — a binding, a
+  // supersedes target, or a row's decisionRef that names nothing" this
+  // module's header promises to refuse, and printing it as fact is the silent
+  // direction the invariant (`../../../../AGENTS.md`) forbids. `stripAdrPrefix`
+  // is applied for the same reason the requested-id lookup above applies it:
+  // the `adr:`-prefixed spelling this tool's own docs recommend must not be
+  // the one spelling that fails to resolve against a record that exists.
+  for (const record of records) {
+    for (const ref of record.supersedes) {
+      if (byId.has(stripAdrPrefix(ref))) continue;
+      unresolved.push({
+        ref,
+        why: `${record.id} supersedes ${ref}, which is not an ADR in ${ADR_DIR}`,
+      });
+    }
   }
 
   const result = {
@@ -154,7 +202,7 @@ export function adrCommand(root, options, io = {}) {
     requestedId === undefined
       ? formatAdrDump({ records, knownFitness })
       : byId.has(resolvedAdrId)
-        ? formatAdrRecord(byId.get(resolvedAdrId))
+        ? formatAdrRecord(byId.get(resolvedAdrId), knownFitness)
         : isFitnessRef
           ? formatAdrReverse({ fitnessId: requestedId, adrIds: adrsBinding(records, requestedId) })
           : formatAdrMissing({ adrId: requestedId });

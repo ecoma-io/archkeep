@@ -97,6 +97,25 @@ export async function debtCommand(dir, commandContext, options = {}) {
   // that cannot be read or parsed throws here (exit 3), never an empty ledger.
   const read = (io.readSnapshots ?? readSnapshots)(dir, root);
 
+  // A directory that EXISTS but holds no snapshots is the same state
+  // `historyCommand` refuses in `./history.mjs`, and for the same reason: an
+  // empty directory is not an empty history, it is no record at all. The
+  // ledger ages every entry against that record, so with nothing to age
+  // against a "✔ no architecture debt" line would be a claim this run cannot
+  // make — a fresh `.lattice/history/`, or a CI cache whose capture step never
+  // ran, would silently turn a `lattice debt` gate into a no-op. This
+  // command's own header says so ("A missing directory is a no-verdict
+  // (exit 3), never an empty ledger"); an unpopulated one is the same
+  // no-verdict wearing a different errno.
+  if (read.files.length === 0) {
+    throw new Error(
+      `lattice: the history directory '${dir}' contains no snapshots — there is no record to ` +
+        `age the ledger against, so "no architecture debt" would be a claim this run cannot ` +
+        `make. Capture one first with 'lattice history <dir> --capture' (or point the command ` +
+        `at the directory where you keep graph snapshots).`,
+    );
+  }
+
   const intent = await (io.loadIntentOverride ?? loadIntent)(root, {
     tracked: commandContext.tracked,
   });

@@ -135,6 +135,18 @@ only a pair of relationship lists.
   `allowed`/`forbidden`, this is a full-closure declaration — an observed
   dependency outside it is a finding.
 
+A section present but empty is a **load error**, in every spelling: `projects:
+{}` and `dependencies: {}` name neither list, and `required: []`,
+`forbidden: []`, `allowed: []` state a list that decides nothing. The file would
+read as existence or dependency policy while enforcing none of it, which is the
+silent direction — deleting the last row from `projects.required` leaves exactly
+that file. Omit the section instead. A `dependencies.forbidden` row whose
+`source` equals its `target` is a load error for the same reason: every project
+reaches itself, so the judge can never fire it, and a row that is counted but
+cannot decide is a rule in name only. (`dependencies.allowed` is deliberately
+not held to that: an allowlist is exhaustive, so a self-pair in it states which
+edges are permitted rather than banning nothing.)
+
 `from`/`to` on a dependency row and `name` on a project row are **exact project
 names, never selectors** — a typo'd name is a load-provable
 `intentUnknownProject`, never a boundary that silently matches nothing.
