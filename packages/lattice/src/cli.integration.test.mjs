@@ -14,13 +14,25 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { check, EXIT, parseCheckArgs, runCli } from "../cli.mjs";
 import { computePolicyFingerprint } from "./commands/graph.mjs";
 import { loadBoundaryConfigFile } from "./config.mjs";
 import { readProjectGraph } from "./providers/nx.mjs";
 import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../spawn-budget.mjs";
+
+// Every test in this file that exercises the process boundary makes one or
+// more spawned cold starts (`run`, and every raw `spawnSync("git", ...)`
+// below), so the whole FILE runs under the derived spawn-test ceiling rather
+// than vitest's 5000 ms default (#249's failing test lived here) — one
+// module-scope call, not a `{ timeout: SPAWN_TEST_BUDGET_MS }` repeated on
+// whichever blocks someone remembered to mark. `vi.setConfig` "updates
+// configuration options specifically for the current test file" and vitest
+// resets it after the file runs, so this cannot leak into another file.
+// `../spawn-budget.mjs` owns both numbers; `spawn-budget.test.mjs` is the
+// gate that requires this call rather than trusting the import alone.
+vi.setConfig({ testTimeout: SPAWN_TEST_BUDGET_MS });
 
 const CLI = fileURLToPath(new URL("../cli.mjs", import.meta.url));
 // This package's own directory — the one ancestor whose `node_modules` a
@@ -231,190 +243,134 @@ describe("checking a real tree", () => {
     expect(envelope.result.tsconfigPaths).toBeNull();
   });
 
-  it(
-    "stamps the check envelope with git provenance — commit and dirty flag, the same resolveProvenance every command uses (D-10)",
-    { timeout: SPAWN_TEST_BUDGET_MS },
-    async () => {
-      // D-10: `check`'s JSON envelope used to carry NO provenance, so a CI run
-      // over a dirty tree presented an abstract claim about a tree state it did
-      // not name. Every envelope command now resolves provenance through the one
-      // `resolveProvenance`. This fixture is a real git repo, so the bytes are
-      // real: HEAD short-sha + the dirty flag from `git status --porcelain`.
-      const repo = mkdtempSync(join(tmpdir(), "polyglot-cli-provenance-"));
-      try {
-        const g = (...args) =>
-          spawnSync("git", args, {
-            cwd: repo,
-            encoding: "utf8",
-            timeout: SPAWN_BUDGET_MS,
-            killSignal: "SIGKILL",
-            env: {
-              ...process.env,
-              GIT_AUTHOR_NAME: "t",
-              GIT_AUTHOR_EMAIL: "t@t",
-              GIT_COMMITTER_NAME: "t",
-              GIT_COMMITTER_EMAIL: "t@t",
-              HOME: process.env.HOME,
-            },
-          }).status;
-        const git = (...args) => {
-          const r = spawnSync("git", args, {
-            cwd: repo,
-            encoding: "utf8",
-            timeout: SPAWN_BUDGET_MS,
-            killSignal: "SIGKILL",
-            env: {
-              ...process.env,
-              GIT_AUTHOR_NAME: "t",
-              GIT_AUTHOR_EMAIL: "t@t",
-              GIT_COMMITTER_NAME: "t",
-              GIT_COMMITTER_EMAIL: "t@t",
-              HOME: process.env.HOME,
-            },
-          });
-          return r.stdout.trim();
-        };
-        const repoWrite = (relativePath, text) => {
-          mkdirSync(join(repo, relativePath, ".."), { recursive: true });
-          writeFileSync(join(repo, relativePath), text);
-        };
-        expect(g("init", "-q", "-b", "main")).toBe(0);
-        repoWrite("nx.json", readFileSync(join(root, "nx.json"), "utf8"));
-        repoWrite(
-          "module-boundaries.config.mjs",
-          readFileSync(join(root, "module-boundaries.config.mjs"), "utf8"),
-        );
-        repoWrite("libs/domain/go.mod", readFileSync(join(root, "libs/domain/go.mod"), "utf8"));
-        repoWrite("libs/domain/doc.go", readFileSync(join(root, "libs/domain/doc.go"), "utf8"));
-        repoWrite("libs/adapter/go.mod", readFileSync(join(root, "libs/adapter/go.mod"), "utf8"));
-        repoWrite(
-          "libs/adapter/adapter.go",
-          readFileSync(join(root, "libs/adapter/adapter.go"), "utf8"),
-        );
-        expect(g("add", "-A")).toBe(0);
-        expect(g("commit", "-m", "fixture")).toBe(0);
-        const head = git("rev-parse", "HEAD");
-
-        const streams = {
-          out: (t) => streams.lines.out.push(t),
-          err: (t) => streams.lines.err.push(t),
-          lines: { out: [], err: [] },
+  it("stamps the check envelope with git provenance — commit and dirty flag, the same resolveProvenance every command uses (D-10)", async () => {
+    // D-10: `check`'s JSON envelope used to carry NO provenance, so a CI run
+    // over a dirty tree presented an abstract claim about a tree state it did
+    // not name. Every envelope command now resolves provenance through the one
+    // `resolveProvenance`. This fixture is a real git repo, so the bytes are
+    // real: HEAD short-sha + the dirty flag from `git status --porcelain`.
+    const repo = mkdtempSync(join(tmpdir(), "polyglot-cli-provenance-"));
+    try {
+      const g = (...args) =>
+        spawnSync("git", args, {
           cwd: repo,
-          listFiles: () => files,
-          readGraph: () => graph,
-        };
-        expect(await runCli(["check", "--format", "json"], streams)).toBe(EXIT.violations);
-        const envelope = JSON.parse(streams.lines.out.join("\n"));
-        expect(envelope.workspace).toBeDefined();
-        expect(envelope.workspace.provenance).toEqual({ commit: head, remote: null, dirty: false });
-
-        // Dirty: touching a tracked file flips the flag, so a stamped-but-stale
-        // run can never claim a clean tree.
-        repoWrite("libs/domain/go.mod", "module example.com/domain\n\ngo 1.25\n");
-        const dirtyStreams = {
-          out: (t) => dirtyStreams.lines.out.push(t),
-          err: (t) => dirtyStreams.lines.err.push(t),
-          lines: { out: [], err: [] },
+          encoding: "utf8",
+          timeout: SPAWN_BUDGET_MS,
+          killSignal: "SIGKILL",
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: "t",
+            GIT_AUTHOR_EMAIL: "t@t",
+            GIT_COMMITTER_NAME: "t",
+            GIT_COMMITTER_EMAIL: "t@t",
+            HOME: process.env.HOME,
+          },
+        }).status;
+      const git = (...args) => {
+        const r = spawnSync("git", args, {
           cwd: repo,
-          listFiles: () => files,
-          readGraph: () => graph,
-        };
-        await runCli(["check", "--format", "json"], dirtyStreams);
-        const dirtyEnvelope = JSON.parse(dirtyStreams.lines.out.join("\n"));
-        expect(dirtyEnvelope.workspace.provenance.commit).toBe(head);
-        expect(dirtyEnvelope.workspace.provenance.dirty).toBe(true);
-      } finally {
-        rmSync(repo, { recursive: true, force: true });
-      }
-    },
-  );
+          encoding: "utf8",
+          timeout: SPAWN_BUDGET_MS,
+          killSignal: "SIGKILL",
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: "t",
+            GIT_AUTHOR_EMAIL: "t@t",
+            GIT_COMMITTER_NAME: "t",
+            GIT_COMMITTER_EMAIL: "t@t",
+            HOME: process.env.HOME,
+          },
+        });
+        return r.stdout.trim();
+      };
+      const repoWrite = (relativePath, text) => {
+        mkdirSync(join(repo, relativePath, ".."), { recursive: true });
+        writeFileSync(join(repo, relativePath), text);
+      };
+      expect(g("init", "-q", "-b", "main")).toBe(0);
+      repoWrite("nx.json", readFileSync(join(root, "nx.json"), "utf8"));
+      repoWrite(
+        "module-boundaries.config.mjs",
+        readFileSync(join(root, "module-boundaries.config.mjs"), "utf8"),
+      );
+      repoWrite("libs/domain/go.mod", readFileSync(join(root, "libs/domain/go.mod"), "utf8"));
+      repoWrite("libs/domain/doc.go", readFileSync(join(root, "libs/domain/doc.go"), "utf8"));
+      repoWrite("libs/adapter/go.mod", readFileSync(join(root, "libs/adapter/go.mod"), "utf8"));
+      repoWrite(
+        "libs/adapter/adapter.go",
+        readFileSync(join(root, "libs/adapter/adapter.go"), "utf8"),
+      );
+      expect(g("add", "-A")).toBe(0);
+      expect(g("commit", "-m", "fixture")).toBe(0);
+      const head = git("rev-parse", "HEAD");
 
-  it(
-    "exits 3 on a commitless git repository instead of reporting a clean empty run (D-17)",
-    { timeout: SPAWN_TEST_BUDGET_MS },
-    async () => {
-      // The silent direction this case exists to end: `git init` with nothing
-      // committed. `git ls-files` answers an empty list with exit 0, so a check
-      // run over this tree would previously print "0 imports in 0 files" and
-      // exit 0 — byte-for-byte identical to a clean workspace, while the run
-      // never looked at a single file. `resolveProvenance` now refuses the
-      // unborn-HEAD state loudly, and `check` resolves it BEFORE any verdict, so
-      // BOTH report formats are a loud could-not-look.
-      const repo = mkdtempSync(join(tmpdir(), "polyglot-cli-commitless-"));
-      try {
-        const g = (...args) =>
-          spawnSync("git", args, {
-            cwd: repo,
-            encoding: "utf8",
-            timeout: SPAWN_BUDGET_MS,
-            killSignal: "SIGKILL",
-            env: { ...process.env, HOME: process.env.HOME },
-          }).status;
-        const repoWrite = (relativePath, text) => {
-          mkdirSync(join(repo, relativePath, ".."), { recursive: true });
-          writeFileSync(join(repo, relativePath), text);
-        };
-        expect(g("init", "-q", "-b", "main")).toBe(0);
-        repoWrite("nx.json", readFileSync(join(root, "nx.json"), "utf8"));
-        repoWrite(
-          "module-boundaries.config.mjs",
-          readFileSync(join(root, "module-boundaries.config.mjs"), "utf8"),
-        );
-        // Files exist on disk but nothing is ever committed — `git ls-files`
-        // reports exactly what it would on a clean index, which is nothing.
-        const commitlessStreams = () => {
-          const out = [];
-          const err = [];
-          return {
-            out: (text) => out.push(text),
-            err: (text) => err.push(text),
-            lines: { out, err },
-            cwd: repo,
-            listFiles: () => [],
-            readGraph: () => graph,
-          };
-        };
-        const textStreams = commitlessStreams();
-        expect(await runCli(["check"], textStreams)).toBe(EXIT.error);
-        const textErr = textStreams.lines.err.join("\n");
-        expect(textErr).toContain("no commits");
-        // No verdict bytes reach the primary stream — the run never claimed a
-        // clean tree, which is the point of the exit code.
-        expect(textStreams.lines.out.join("\n")).not.toContain("no boundary violations");
-      } finally {
-        rmSync(repo, { recursive: true, force: true });
-      }
-    },
-  );
+      const streams = {
+        out: (t) => streams.lines.out.push(t),
+        err: (t) => streams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: repo,
+        listFiles: () => files,
+        readGraph: () => graph,
+      };
+      expect(await runCli(["check", "--format", "json"], streams)).toBe(EXIT.violations);
+      const envelope = JSON.parse(streams.lines.out.join("\n"));
+      expect(envelope.workspace).toBeDefined();
+      expect(envelope.workspace.provenance).toEqual({ commit: head, remote: null, dirty: false });
 
-  it(
-    "exits 3 on a commitless git repository through provenance too, naming the missing evidence (D-17)",
-    { timeout: SPAWN_TEST_BUDGET_MS },
-    async () => {
-      // The provenance command previously printed "provenance unavailable — not
-      // a git repository or git not installed" for this state — a false
-      // statement, since `.git` IS present — followed by "✔ every governance
-      // row carries an origin", and exited 0. A tree whose own git cannot name
-      // its state must be a loud could-not-look, never an empty clean record.
-      const repo = mkdtempSync(join(tmpdir(), "polyglot-cli-provenance-commitless-"));
-      try {
-        const g = (...args) =>
-          spawnSync("git", args, {
-            cwd: repo,
-            encoding: "utf8",
-            timeout: SPAWN_BUDGET_MS,
-            killSignal: "SIGKILL",
-            env: { ...process.env, HOME: process.env.HOME },
-          }).status;
-        const repoWrite = (relativePath, text) => {
-          mkdirSync(join(repo, relativePath, ".."), { recursive: true });
-          writeFileSync(join(repo, relativePath), text);
-        };
-        expect(g("init", "-q", "-b", "main")).toBe(0);
-        repoWrite("nx.json", readFileSync(join(root, "nx.json"), "utf8"));
+      // Dirty: touching a tracked file flips the flag, so a stamped-but-stale
+      // run can never claim a clean tree.
+      repoWrite("libs/domain/go.mod", "module example.com/domain\n\ngo 1.25\n");
+      const dirtyStreams = {
+        out: (t) => dirtyStreams.lines.out.push(t),
+        err: (t) => dirtyStreams.lines.err.push(t),
+        lines: { out: [], err: [] },
+        cwd: repo,
+        listFiles: () => files,
+        readGraph: () => graph,
+      };
+      await runCli(["check", "--format", "json"], dirtyStreams);
+      const dirtyEnvelope = JSON.parse(dirtyStreams.lines.out.join("\n"));
+      expect(dirtyEnvelope.workspace.provenance.commit).toBe(head);
+      expect(dirtyEnvelope.workspace.provenance.dirty).toBe(true);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("exits 3 on a commitless git repository instead of reporting a clean empty run (D-17)", async () => {
+    // The silent direction this case exists to end: `git init` with nothing
+    // committed. `git ls-files` answers an empty list with exit 0, so a check
+    // run over this tree would previously print "0 imports in 0 files" and
+    // exit 0 — byte-for-byte identical to a clean workspace, while the run
+    // never looked at a single file. `resolveProvenance` now refuses the
+    // unborn-HEAD state loudly, and `check` resolves it BEFORE any verdict, so
+    // BOTH report formats are a loud could-not-look.
+    const repo = mkdtempSync(join(tmpdir(), "polyglot-cli-commitless-"));
+    try {
+      const g = (...args) =>
+        spawnSync("git", args, {
+          cwd: repo,
+          encoding: "utf8",
+          timeout: SPAWN_BUDGET_MS,
+          killSignal: "SIGKILL",
+          env: { ...process.env, HOME: process.env.HOME },
+        }).status;
+      const repoWrite = (relativePath, text) => {
+        mkdirSync(join(repo, relativePath, ".."), { recursive: true });
+        writeFileSync(join(repo, relativePath), text);
+      };
+      expect(g("init", "-q", "-b", "main")).toBe(0);
+      repoWrite("nx.json", readFileSync(join(root, "nx.json"), "utf8"));
+      repoWrite(
+        "module-boundaries.config.mjs",
+        readFileSync(join(root, "module-boundaries.config.mjs"), "utf8"),
+      );
+      // Files exist on disk but nothing is ever committed — `git ls-files`
+      // reports exactly what it would on a clean index, which is nothing.
+      const commitlessStreams = () => {
         const out = [];
         const err = [];
-        const streams = {
+        return {
           out: (text) => out.push(text),
           err: (text) => err.push(text),
           lines: { out, err },
@@ -422,16 +378,60 @@ describe("checking a real tree", () => {
           listFiles: () => [],
           readGraph: () => graph,
         };
-        expect(await runCli(["provenance"], streams)).toBe(EXIT.error);
-        expect(streams.lines.err.join("\n")).toContain("no commits");
-        expect(streams.lines.out.join("\n")).not.toContain(
-          "✔ every governance row carries an origin",
-        );
-      } finally {
-        rmSync(repo, { recursive: true, force: true });
-      }
-    },
-  );
+      };
+      const textStreams = commitlessStreams();
+      expect(await runCli(["check"], textStreams)).toBe(EXIT.error);
+      const textErr = textStreams.lines.err.join("\n");
+      expect(textErr).toContain("no commits");
+      // No verdict bytes reach the primary stream — the run never claimed a
+      // clean tree, which is the point of the exit code.
+      expect(textStreams.lines.out.join("\n")).not.toContain("no boundary violations");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("exits 3 on a commitless git repository through provenance too, naming the missing evidence (D-17)", async () => {
+    // The provenance command previously printed "provenance unavailable — not
+    // a git repository or git not installed" for this state — a false
+    // statement, since `.git` IS present — followed by "✔ every governance
+    // row carries an origin", and exited 0. A tree whose own git cannot name
+    // its state must be a loud could-not-look, never an empty clean record.
+    const repo = mkdtempSync(join(tmpdir(), "polyglot-cli-provenance-commitless-"));
+    try {
+      const g = (...args) =>
+        spawnSync("git", args, {
+          cwd: repo,
+          encoding: "utf8",
+          timeout: SPAWN_BUDGET_MS,
+          killSignal: "SIGKILL",
+          env: { ...process.env, HOME: process.env.HOME },
+        }).status;
+      const repoWrite = (relativePath, text) => {
+        mkdirSync(join(repo, relativePath, ".."), { recursive: true });
+        writeFileSync(join(repo, relativePath), text);
+      };
+      expect(g("init", "-q", "-b", "main")).toBe(0);
+      repoWrite("nx.json", readFileSync(join(root, "nx.json"), "utf8"));
+      const out = [];
+      const err = [];
+      const streams = {
+        out: (text) => out.push(text),
+        err: (text) => err.push(text),
+        lines: { out, err },
+        cwd: repo,
+        listFiles: () => [],
+        readGraph: () => graph,
+      };
+      expect(await runCli(["provenance"], streams)).toBe(EXIT.error);
+      expect(streams.lines.err.join("\n")).toContain("no commits");
+      expect(streams.lines.out.join("\n")).not.toContain(
+        "✔ every governance row carries an origin",
+      );
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
 
   it("renders the exact byte sequence for the violating fixture — a golden pin against silent format drift", async () => {
     // Every other assertion in this describe block checks a substring; this
@@ -6359,11 +6359,7 @@ var _ = b.Name
   });
 });
 
-// Every test here that exercises the process boundary makes one or two
-// spawned cold starts, so the whole suite runs under the derived spawn-test
-// ceiling rather than vitest's 5000 ms default (#249's failing test lived
-// here). `../spawn-budget.mjs` owns both numbers.
-describe("the exit contract", { timeout: SPAWN_TEST_BUDGET_MS }, () => {
+describe("the exit contract", () => {
   it("exits 1 when the tree violates a boundary — the code a hook and CI block on", async () => {
     const streams = env();
     expect(await runCli(["check"], streams)).toBe(EXIT.violations);
@@ -6645,7 +6641,7 @@ describe("the option surface", () => {
   });
 });
 
-describe("the usage message", { timeout: SPAWN_TEST_BUDGET_MS }, () => {
+describe("the usage message", () => {
   it("prints the surface, the config it reads, and the exit codes a caller branches on", () => {
     const result = run(["--help"]);
     expect(result.status).toBe(EXIT.ok);

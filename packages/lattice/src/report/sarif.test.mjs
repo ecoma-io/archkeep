@@ -31,10 +31,12 @@ vi.mock("./text.mjs", () => ({ formatConstraint: () => "THE CONSTRAINT" }));
 import {
   buildSarifLog,
   formatSarif,
+  sarifCoverageGapNotification,
   sarifCustomRuleNotification,
   sarifCustomRuleResult,
   sarifFitnessNotification,
   sarifFitnessResult,
+  sarifIntentNotification,
   sarifIntentResult,
   sarifRules,
   toUriReference,
@@ -427,6 +429,72 @@ describe("an architecture-intent finding", () => {
   });
 });
 
+describe("an unresolved architecture-intent boundary", () => {
+  const noVerdict = (overrides = {}) => ({
+    verdict: "no-verdict",
+    findings: [],
+    boundaries: [{ name: "domain" }],
+    unresolved: [{ boundary: "domain", issue: "matched no observed project" }],
+    ...overrides,
+  });
+
+  it("is not the log a clean run uploads — the silent direction this closes", () => {
+    // The defect: `check` exits 3 on this intent while the SARIF it uploaded
+    // was byte-identical to the one from a workspace with no intent at all.
+    expect(buildSarifLog({ violations: [], failures: [], intent: noVerdict() })).not.toEqual(
+      buildSarifLog({ violations: [], failures: [], intent: null }),
+    );
+  });
+
+  it("rides one notification per boundary, naming the boundary and its issue", () => {
+    const built = log({
+      intent: noVerdict({
+        unresolved: [
+          { boundary: "domain", issue: "matched no observed project" },
+          { boundary: "adapters", issue: "the row's target side matched nothing" },
+        ],
+      }),
+    });
+    expect(built.invocations[0].toolExecutionNotifications.map((n) => n.message.text)).toEqual([
+      'architecture-intent.json reached no verdict on boundary "domain": matched no observed project',
+      'architecture-intent.json reached no verdict on boundary "adapters": the row\'s target side matched nothing',
+    ]);
+    expect(
+      built.invocations[0].toolExecutionNotifications.every((n) => n.level === "warning"),
+    ).toBe(true);
+  });
+
+  it("is never a result — nothing judged that boundary, so no error-level annotation claims one", () => {
+    expect(log({ intent: noVerdict() }).results).toEqual([]);
+  });
+
+  it("speaks even when the no-verdict names no boundary, rather than falling back to silence", () => {
+    const built = log({ intent: noVerdict({ unresolved: [] }) });
+    const [notification] = built.invocations[0].toolExecutionNotifications;
+    expect(notification.level).toBe("warning");
+    expect(notification.message.text).toContain("reached no verdict and named no boundary");
+  });
+
+  it("says nothing at all for a clean intent, so the fix cannot pass by notifying unconditionally", () => {
+    const built = log({
+      intent: { verdict: "ok", findings: [], unresolved: [], boundaries: [{ name: "domain" }] },
+    });
+    expect(built.results).toEqual([]);
+    expect(built.invocations[0].toolExecutionNotifications).toEqual([]);
+  });
+
+  it("renders directly, not only through buildSarifLog", () => {
+    expect(
+      sarifIntentNotification({ boundary: "domain", issue: "matched no observed project" }),
+    ).toEqual({
+      level: "warning",
+      message: {
+        text: 'architecture-intent.json reached no verdict on boundary "domain": matched no observed project',
+      },
+    });
+  });
+});
+
 describe("a fitness finding (bug A)", () => {
   // Before this fix, `buildSarifLog` had no fitness arm at all: `check
   // --format sarif` exits 1 on a `fail`-verdict fitness function
@@ -753,5 +821,78 @@ describe("a custom rule's descriptors and results", () => {
       sarifCustomRuleNotification({ verdict: "not_applicable", name: "x", message: "why" }).message
         .text,
     ).toBe('Custom rule "x" did not apply to this run: why');
+  });
+});
+
+describe("a degraded-coverage note", () => {
+  const gap = {
+    kind: "unregistered-plugin",
+    manifests: ["libs/engine/go.mod", "libs/tools/Cargo.toml"],
+  };
+
+  it("is not the log a fully covered run uploads", () => {
+    expect(buildSarifLog({ violations: [], failures: [], coverageGaps: [gap] })).not.toEqual(
+      buildSarifLog({ violations: [], failures: [], coverageGaps: [] }),
+    );
+  });
+
+  it("names what is uncovered and which manifests proved it, as a warning and never a result", () => {
+    const built = log({ coverageGaps: [gap] });
+    expect(built.results).toEqual([]);
+    const [notification] = built.invocations[0].toolExecutionNotifications;
+    expect(notification.level).toBe("warning");
+    expect(notification.message.text).toBe(
+      "nx.json does not register this plugin but 2 polyglot manifests found under " +
+        "project roots — nx affected and @nx/enforce-module-boundaries will not cover " +
+        "these edges: libs/engine/go.mod, libs/tools/Cargo.toml",
+    );
+  });
+
+  it("names a gap of any other kind by its kind, rather than borrowing a cause that is not its own", () => {
+    const text = sarifCoverageGapNotification({ kind: "some-later-gap" }).message.text;
+    expect(text).toContain("some-later-gap");
+    expect(text).not.toContain("nx.json");
+  });
+
+  it("says nothing when the run left no gap, so a fully covered workspace's log is unchanged", () => {
+    expect(log({ coverageGaps: [] }).invocations[0].toolExecutionNotifications).toEqual([]);
+    expect(log({}).invocations[0].toolExecutionNotifications).toEqual([]);
+  });
+});
+
+describe("an unresolved decisionRef", () => {
+  it("is not the log a run whose citations all resolve uploads", () => {
+    expect(
+      buildSarifLog({
+        violations: [],
+        failures: [],
+        unresolvedDecisionRefs: new Set(["0007-gone"]),
+      }),
+    ).not.toEqual(
+      buildSarifLog({ violations: [], failures: [], unresolvedDecisionRefs: new Set() }),
+    );
+  });
+
+  it("names each citation in the text face's own words, sorted, as a warning and never a result", () => {
+    const built = log({ unresolvedDecisionRefs: new Set(["0009-later", "0007-gone"]) });
+    expect(built.results).toEqual([]);
+    const notifications = built.invocations[0].toolExecutionNotifications;
+    expect(notifications.map((n) => n.level)).toEqual(["warning", "warning"]);
+    expect(notifications.map((n) => n.message.text)).toEqual([
+      "decisionRef [0007-gone] (UNRESOLVED — no matching ADR, rule, or fitness record)",
+      "decisionRef [0009-later] (UNRESOLVED — no matching ADR, rule, or fitness record)",
+    ]);
+  });
+
+  it("takes the array face of the same set, so a caller holding the JSON envelope's list is not ignored", () => {
+    const built = log({ unresolvedDecisionRefs: ["0007-gone"] });
+    expect(built.invocations[0].toolExecutionNotifications).toHaveLength(1);
+  });
+
+  it("says nothing when every citation resolved", () => {
+    expect(
+      log({ unresolvedDecisionRefs: new Set() }).invocations[0].toolExecutionNotifications,
+    ).toEqual([]);
+    expect(log({}).invocations[0].toolExecutionNotifications).toEqual([]);
   });
 });

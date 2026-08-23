@@ -109,14 +109,25 @@ export function formatReconcileReport({ scores, candidates, intent, observed }) 
       `${observed.edges} edge${observed.edges === 1 ? "" : "s"}${excluded}`,
   );
 
+  // Iterate every key `scores` actually carries, not only the five this
+  // module names in `PLANE_ORDER` — `total` and every rendered section come
+  // from that walk, so a plane the label map does not know is named and
+  // counted rather than silently dropped from the report and from the
+  // "no divergence" claim below (the invariant this module is judged
+  // against, `../../../../AGENTS.md`). Known planes still render first, in
+  // their fixed order; anything else follows, in the order `scores` carries it.
+  const knownPlanes = new Set(PLANE_ORDER);
+  const planes = [...PLANE_ORDER, ...Object.keys(scores).filter((key) => !knownPlanes.has(key))];
+
   let total = 0;
-  for (const plane of PLANE_ORDER) {
+  for (const plane of planes) {
     const group = scores[plane] ?? [];
     const diverging = group.filter((element) => element.state !== "match");
     if (diverging.length === 0) continue;
     total += diverging.length;
     const word = diverging.length === 1 ? "element" : "elements";
-    sections.push(`⚠ ${diverging.length} ${word}: ${PLANE_LABEL.get(plane)}`);
+    const label = PLANE_LABEL.get(plane) ?? `unknown plane "${plane}"`;
+    sections.push(`⚠ ${diverging.length} ${word}: ${label}`);
     for (const element of diverging) sections.push(formatElement(element));
   }
 

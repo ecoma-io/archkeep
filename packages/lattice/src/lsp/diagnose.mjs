@@ -63,7 +63,7 @@ import { indexGaps } from "./workspace-index.mjs";
  * @param {string} request.text Its current contents — the editor's buffer, not
  *   what is on disk. Diagnosing the saved file would answer a question nobody
  *   asked while the developer is looking at their unsaved edit.
- * @param {{workspace: object, graph: object, skippedProjects?: object[], fileFailures?: object[], nativeMarker?: boolean, nativeModelFailure?: string|null, moonModelFailure?: string|null, workspaceLayoutFailure?: string|null}} request.index
+ * @param {{workspace: object, graph: object, skippedProjects?: object[], fileFailures?: object[], nativeMarker?: boolean, nativeModelFailure?: string|null, moonModelFailure?: string|null, nxModelFailure?: string|null, workspaceLayoutFailure?: string|null}} request.index
  *   From `./workspace-index.mjs`.
  * @param {{depConstraints: object[], options: object}} request.config
  * @returns {{analyzed: boolean, diagnostics: object[]}} `analyzed: false`

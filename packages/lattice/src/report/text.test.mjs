@@ -782,6 +782,19 @@ describe("formatCoverageGaps", () => {
     expect(text).toContain("1 polyglot manifest");
     expect(text).not.toContain("1 polyglot manifests");
   });
+
+  // D3: only `coverageGaps[0]` used to render — a second gap (and beyond)
+  // was silently dropped from the terminal report while still riding along
+  // in the JSON envelope (`cli.mjs`'s `coverage.coverageGaps`). Every entry
+  // now renders.
+  it("names every gap, not only the first", () => {
+    const text = formatCoverageGaps([
+      { kind: "unregistered-plugin", manifests: ["libs/a/go.mod"] },
+      { kind: "unregistered-plugin", manifests: ["libs/b/Cargo.toml"] },
+    ]);
+    expect(text).toContain("libs/a/go.mod");
+    expect(text).toContain("libs/b/Cargo.toml");
+  });
 });
 
 describe("formatCustomRulesSection", () => {

@@ -541,12 +541,27 @@ export function formatCustomRulesSection(customRules) {
  * those edges were meant for is incomplete, and anyone relying on `nx affected`
  * or ESLint boundary enforcement for polyglot projects is under-covered.
  *
+ * Every entry in `coverageGaps` renders — not only the first — so a second
+ * gap is never dropped from the report while still riding along in the JSON
+ * envelope (`cli.mjs`'s `coverage.coverageGaps`); the invariant this module is
+ * judged against (`../../../../AGENTS.md`) applies to a report section as much
+ * as to a verdict.
+ *
  * @param {object[]} coverageGaps Each entry has `kind` and `manifests`.
  * @returns {string} Empty exactly when there is no coverage gap to render.
  */
 export function formatCoverageGaps(coverageGaps) {
   if (coverageGaps.length === 0) return "";
-  const gap = coverageGaps[0];
+  return coverageGaps.map(formatCoverageGap).join("\n");
+}
+
+/**
+ * One coverage gap entry.
+ *
+ * @param {object} gap Has `kind` and `manifests`.
+ * @returns {string}
+ */
+function formatCoverageGap(gap) {
   const count = gap.manifests.length;
   const label = `${count} polyglot manifest${count === 1 ? "" : "s"}`;
   const paths = gap.manifests.map((manifest) => `${CONTINUED}${manifest}`).join("\n");

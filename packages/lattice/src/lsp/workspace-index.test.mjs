@@ -936,6 +936,98 @@ describe("what the index could not read, as something a caller can publish", () 
   });
 });
 
+describe("the Nx-shaped branch on an nx.json root that declares no project.json", () => {
+  // The silent direction this whole mechanism exists for, one branch over from
+  // the native case below. A PACKAGE-BASED Nx workspace declares its projects
+  // in `package.json` and carries no `project.json` at all, so
+  // `discoverProjects` finds ZERO of them — and before `nxModelFailure`,
+  // `indexGaps` had no entry to report that with: the Nx branch had neither a
+  // `nativeModelFailure` nor a `moonModelFailure` of its own, so gaps were
+  // `[]`, `./diagnose.mjs` called every open document analyzed, and the editor
+  // published an empty list for the whole workspace. `../../cli.mjs`'s `check`
+  // over the same tree goes through `../providers/nx.mjs`'s `readProjectGraph`
+  // — `nx graph --file=`, Nx's own resolver, which DOES see package-based
+  // projects — and reports the violations. The CLI failing while the editor
+  // paints clean is the disagreement this gap closes.
+  //
+  // `pathExists` is injected because the marker read is a real-filesystem one
+  // (`../commands/context.mjs`'s `requireSingleProjectModel`), the same seam
+  // the Moon suite above uses; `readLayout` is injected for the reason that
+  // suite's own header gives.
+  const files = {
+    "nx.json": '{"plugins":[{"plugin":"@ecoma-io/lattice/nx"}]}',
+    "package.json": '{"name":"root","workspaces":["libs/*"]}',
+    "libs/inner/package.json": '{"name":"inner"}',
+    "libs/inner/main.go": "package inner\n",
+  };
+  const options = (over = {}) => ({
+    root: "/fixture",
+    listFiles: () => Object.keys(files),
+    readFileAt: (_root, path) => files[path] ?? null,
+    readLayout: () => null,
+    pathExists: (path) => path === join("/fixture", "nx.json"),
+    ...over,
+  });
+
+  it("records a gap for a tree it found no project in, never a clean empty index", () => {
+    const index = buildWorkspaceIndex(options());
+
+    // The shape of the defect: nodes really are empty — this fix does not teach
+    // the branch to read package-based projects, which would be the second
+    // project-model reader the package refuses. What changes is that the index
+    // now SAYS so.
+    expect(Object.keys(index.graph.nodes)).toEqual([]);
+    // The silent direction, asserted first and on its own: `[]` is exactly what
+    // this call returned before the fix, and an empty gap list is what let
+    // `./diagnose.mjs` call every document analyzed over a workspace it had
+    // never seen a project in.
+    const gaps = indexGaps(index);
+    expect(gaps).not.toEqual([]);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]).toContain("nx.json");
+    expect(gaps[0]).toContain("missing from the graph");
+    expect(index.nxModelFailure).toContain(PROJECT_CONFIG_FILE);
+  });
+
+  it("stays silent on an nx.json root that does declare a project.json project", () => {
+    // The other half, and the one that keeps the gap meaning something: the
+    // failure must be present only while the branch actually found nothing,
+    // never merely because the root carries `nx.json` — or every Nx workspace
+    // would read as permanently unreadable and the gap list would mean nothing
+    // anywhere else.
+    const withProject = { ...files, [`libs/inner/${PROJECT_CONFIG_FILE}`]: '{"name":"inner"}' };
+    const index = buildWorkspaceIndex(
+      options({
+        listFiles: () => Object.keys(withProject),
+        readFileAt: (_root, path) => withProject[path] ?? null,
+      }),
+    );
+
+    expect(Object.keys(index.graph.nodes)).toEqual(["inner"]);
+    expect(index.nxModelFailure).toBeNull();
+    expect(indexGaps(index)).toEqual([]);
+  });
+
+  it("keeps the failure out of the branches that have their own", () => {
+    // `nxModelFailure` is the Nx-shaped branch's member of the
+    // `nativeModelFailure`/`moonModelFailure` family, not a fourth thing every
+    // branch carries: a `lattice.json` root whose model built cleanly has zero
+    // reason to report an Nx discovery it never ran.
+    const nativeFiles = {
+      "lattice.json": '{"projects":{"declared":[{"root":"apps/a"}]}}',
+      "apps/a/main.go": "package a\n",
+    };
+    const index = buildWorkspaceIndex({
+      root: "/fixture",
+      listFiles: () => Object.keys(nativeFiles),
+      readFileAt: (_root, path) => nativeFiles[path] ?? null,
+    });
+
+    expect(index.nxModelFailure).toBeNull();
+    expect(indexGaps(index)).toEqual([]);
+  });
+});
+
 describe("the native branch buildWorkspaceIndex takes for a lattice.json root", () => {
   const files = {
     "lattice.json": '{"projects":{"declared":[{"root":"apps/a"}]}}',

@@ -83,6 +83,31 @@ describe("formatDriftReport", () => {
     expect(first).toBe(second);
   });
 
+  // D1: a finding whose `rule` is not one of TAXONOMY's ten used to be
+  // rendered nowhere and never counted — `total` was accumulated inside the
+  // taxonomy walk itself, so this finding fell out of both the report and the
+  // "no drift" claim below, silently. `total` now comes from `findings.length`
+  // and an off-taxonomy finding renders under its own "unclassified" heading.
+  it("counts and renders a finding whose rule is not in the taxonomy — never silently drops it", () => {
+    const text = formatDriftReport({
+      findings: [
+        finding({
+          rule: "someFutureRule",
+          source: "app",
+          target: "domain",
+          message: "app must not reach domain",
+        }),
+      ],
+      intent,
+      observed,
+    });
+    expect(text).not.toContain("no drift");
+    expect(text).toContain("1 drift finding");
+    expect(text).toContain("unclassified");
+    expect(text).toContain("someFutureRule");
+    expect(text).toContain("app must not reach domain");
+  });
+
   // Bug B: `judgeIntent`'s `verdict.notes` (e.g. an `optional: true` allowed
   // row the team has not built yet, `../architecture-intent/judge.mjs`) used
   // to have nowhere to go in this report — this formatter never read a

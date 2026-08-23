@@ -195,4 +195,27 @@ describe("formatReconcileReport — the diverging path", () => {
     // …and the total naming both planes' contributions.
     expect(text).toContain("2 divergences (2 projects and 1 edge)");
   });
+
+  // D2: a diverging element under a `scores` key PLANE_ORDER does not name
+  // used to be accumulated nowhere — `total` was summed only over the five
+  // hardcoded plane keys, so this element fell out of both the report and
+  // the "no divergence" claim below, silently. The renderer now walks every
+  // key `scores` actually carries and names an unrecognised one rather than
+  // dropping it.
+  it("counts and renders an element under a plane key the label map does not know", () => {
+    const scores = {
+      ...emptyScores(),
+      unknownFiles: [scored("weird-file.go", "unexpected", "unanalyzed")],
+    };
+    const text = formatReconcileReport({
+      scores,
+      candidates: null,
+      intent: { fingerprint: "2".repeat(64), rows: 1 },
+      observed: { projects: 0, edges: 0, implicitEdges: 0 },
+    });
+    expect(text).not.toContain("no divergence");
+    expect(text).toContain("1 divergence");
+    expect(text).toContain('unknown plane "unknownFiles"');
+    expect(text).toContain("+ weird-file.go  (unanalyzed)");
+  });
 });
