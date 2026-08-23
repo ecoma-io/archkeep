@@ -5,7 +5,10 @@
  * The renderers state the registry and its binding completeness, and never
  * invent a verdict the registry did not establish: an ADR with no bindings is
  * named "not yet enforceable", a binding naming no known rule/fitness is named
- * unknown, and an empty registry stays a sentence, never a table.
+ * unknown, and an empty registry stays a sentence, never a table. The dump and
+ * the single-record report render one record's bindings through one function
+ * (`bindingsLine`), so the two faces cannot disagree about which of them is
+ * marked.
  */
 import { ADR_DIR, ADR_STATUSES } from "../governance/adr-registry.mjs";
 
@@ -14,6 +17,37 @@ function statusLabel(status) {
   if (status === "accepted") return "accepted";
   if (status === "superseded") return "superseded";
   return "proposed";
+}
+
+/**
+ * The `bindings:` line for one record — the ONE place either face decides how
+ * a binding is rendered.
+ *
+ * A binding names an id in the rule/fitness name space, and `../commands/adr.mjs`
+ * cannot verify that anything declares it (its header's "What it cannot
+ * assert" owns why). What it can do is say which ids the registry itself
+ * mentions, and mark the rest — so `(unknown)` is the reader's signal that a
+ * decision claims to bind something nothing here corroborates.
+ *
+ * This lived twice, and the second copy did not carry the marker at all:
+ * `formatAdrRecord` took no known set, so `adr <NNN-slug>` printed a dangling
+ * binding identically to an enforced one while `formatAdrDump` marked it on
+ * the same record, and the JSON face carried the fact to a machine reader that
+ * the terminal reader never saw. One function is what keeps the two faces from
+ * disagreeing again.
+ *
+ * @param {{bindings: string[]}} record
+ * @param {Set<string>} known The ids the registry's records mention.
+ * @returns {string}
+ */
+function bindingsLine(record, known) {
+  if (record.bindings.length === 0) {
+    return `bindings:   (none — not yet enforceable)`;
+  }
+  const bound = record.bindings.map((binding) =>
+    known.has(binding) ? binding : `${binding} (unknown)`,
+  );
+  return `bindings:   ${bound.join(", ")}`;
 }
 
 /**
@@ -34,14 +68,7 @@ export function formatAdrDump({ records, knownFitness }) {
     if (record.supersedes.length > 0) {
       lines.push(`supersedes: ${record.supersedes.join(", ")}`);
     }
-    if (record.bindings.length > 0) {
-      const bound = record.bindings.map((binding) =>
-        known.has(binding) ? binding : `${binding} (unknown)`,
-      );
-      lines.push(`bindings:   ${bound.join(", ")}`);
-    } else {
-      lines.push(`bindings:   (none — not yet enforceable)`);
-    }
+    lines.push(bindingsLine(record, known));
     lines.push(`status set: ${ADR_STATUSES.join(", ")}`);
     return lines.join("\n");
   });
@@ -78,21 +105,25 @@ export function formatAdrMissing({ adrId }) {
 }
 
 /**
- * Renders one record's details.
+ * Renders one record's details — the `adr <NNN-slug>` face of the same record
+ * the dump above renders, and it must mark an unknown binding the same way:
+ * a reader who asked about one record sees strictly less than one who dumped
+ * the registry otherwise, and what they stop seeing is the marker.
  *
  * @param {{id: string, status: string, supersedes: string[], bindings: string[]}} record
+ * @param {Set<string>} [knownFitness] The ids the registry's records mention.
+ *   Optional only so the parameter can be omitted where there is nothing to
+ *   compare against; an absent set marks every binding rather than none,
+ *   because "nothing corroborates this" is the honest answer when no set was
+ *   supplied — never the quiet one.
  * @returns {string}
  */
-export function formatAdrRecord(record) {
+export function formatAdrRecord(record, knownFitness) {
   const header = `${record.id}  (${statusLabel(record.status)})`;
   const lines = [header, "-".repeat(header.length)];
   if (record.supersedes.length > 0) {
     lines.push(`supersedes: ${record.supersedes.join(", ")}`);
   }
-  if (record.bindings.length > 0) {
-    lines.push(`bindings:   ${record.bindings.join(", ")}`);
-  } else {
-    lines.push(`bindings:   (none — not yet enforceable)`);
-  }
+  lines.push(bindingsLine(record, knownFitness ?? new Set()));
   return lines.join("\n");
 }

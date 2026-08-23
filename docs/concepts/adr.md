@@ -12,7 +12,11 @@ committed bytes in the same tree as the rule.
 An ADR is a file under `docs/adr/` named `NNN-slug.md` — `NNN` a zero-padded
 number of at least three digits, `slug` a dash-separated lowercase name. The
 filename is the record's identity: the number is its order in the registry, and
-the slug is its subject. The file may carry a `---` frontmatter block with up to
+the slug is its subject. Every entry in that directory is judged by that one
+rule: a file the pattern does not match — `0002-cased.MD`, `0003-thing.markdown`,
+`README.md` — is a loud load error, never an entry quietly skipped, because a
+record dropped before it is read is an id `decisionRef` then answers `unknown`
+for while the file sits in the tree. The file may carry a `---` frontmatter block with up to
 four keys:
 
 - `id` — the record's own identity. Optional, but when present it MUST equal
@@ -70,9 +74,13 @@ violation", and nothing else) binds the registry two ways:
 - **A `decisionRef` that does not resolve is `unknown`, never `pass`.** The
   registry answers the two-name space — an ADR id (matching a file) or a
   rule/fitness id the workspace's ADRs bind. Anything else is unknown, and the
-  `adr` command reports it the loud way: a requested ADR id it does not know is
-  exit 3, never clean — a rule that reads as bound while nothing binds it is the
-  silent direction. The config and intent loaders still validate a
+  `adr` command reports it the loud way: a requested ADR id it does not know,
+  or a record whose `supersedes` names no record, is exit 3, never clean — a
+  rule that reads as bound while nothing binds it, or a chain that reads as
+  replaced by a decision nobody wrote, is the silent direction. A record's own
+  `bindings` are the one half `adr` reports without adjudicating, and says so:
+  it holds no boundary config, so the only ids it could compare against are the
+  ones the records themselves declare. The config and intent loaders still validate a
   `decisionRef`'s shape only and resolve nothing at load time — that half stays
   a load-time shape check, not a resolution. Reporting is the other half:
   `check`, `context`, `drift`, and `provenance` each resolve every row's

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { loadIntent } from "../architecture-intent/model.mjs";
 import { buildObserved, driftCommand, driftForCheck, refuseIncompleteGraph } from "./drift.mjs";
 
 // The intent is loaded through an overridable seam, so the command paths below
@@ -561,5 +562,28 @@ describe("driftForCheck — the check fold", () => {
     // The observed side is still computed — absence of an intent says nothing
     // about whether the graph itself was read.
     expect(verdict.observed.projects).toBe(2);
+  });
+
+  // The other side of that same quiet result, and the reason it must stay
+  // narrow. The real `loadIntent` is driven here (only its `read` seam is
+  // injected) over a tree where `architecture-intent.json` IS tracked and its
+  // bytes are not there — a dangling symlink, a sparse checkout, an
+  // uninitialised submodule. Folded into "absent", this returns the same
+  // quiet result as the case above, which `../../cli.mjs` renders as
+  // `intent: {checked: true, verdict: "ok", findings: []}` — a verified claim
+  // about a file nobody read. It must reach no verdict instead.
+  it("refuses a tracked architecture-intent.json whose bytes are absent, rather than folding it to the quiet result", async () => {
+    const enoent = Object.assign(new Error("no such file or directory"), { code: "ENOENT" });
+    await expect(
+      driftForCheck(commandContext(), {
+        loadIntentOverride: (root) =>
+          loadIntent(root, {
+            tracked: ["lattice.json", "architecture-intent.json"],
+            read: async () => {
+              throw enoent;
+            },
+          }),
+      }),
+    ).rejects.toThrow(/is tracked but could not be read/);
   });
 });

@@ -176,6 +176,39 @@ describe("loadAdrRegistry", () => {
     expect(() => loadAdrRegistry("/tmp/x", io)).toThrow(/not a valid ADR filename/);
   });
 
+  // The silent direction of the same check. An `.endsWith(".md")` pre-filter
+  // ran BEFORE the `ADR_FILE_PATTERN` throw above, so an ADR-shaped record
+  // whose extension missed by a case or a spelling was dropped without a word:
+  // no record, no id claimed, no error. `resolveDecisionRef` then answered
+  // `unknown` for an id sitting in the tree, and the reverse lookup answered
+  // "no ADR in docs/adr/ binds rule:X — it is not enforced by any recorded
+  // decision" about a binding the loader had simply refused to look at — the
+  // same sentence a genuinely unbound rule gets. Two filters deciding the same
+  // question is how one goes quiet: the pattern above is now the only one.
+  it.each([
+    ["0002-cased.MD", "an uppercase extension"],
+    ["0003-thing.markdown", "a .markdown extension"],
+    ["0004-thing.md.bak", "an editor backup suffix"],
+  ])("refuses %s (%s) by name instead of dropping it before the check", (name) => {
+    const io = treeWith({ [name]: "---\nstatus: accepted\n---\n" });
+    // A returned registry — of ANY shape — is the defect: it is a registry
+    // that silently does not contain a file its own directory holds.
+    expect(() => loadAdrRegistry("/tmp/x", io)).toThrow(/not a valid ADR filename/);
+  });
+
+  it("still excludes an untracked entry silently, whatever its name", () => {
+    // The one exclusion that stays quiet, and the guard that the refusal above
+    // did not swallow it: `tracked` answers "are these the reviewed bytes",
+    // a different question from "is this a record", and a gitignored scratch
+    // file with any name at all is excluded exactly as if it were never there.
+    const io = treeWith({ "scratch.txt": "", "0009-draft.markdown": "" });
+    const { records } = loadAdrRegistry("/tmp/x", {
+      ...io,
+      tracked: ["docs/adr/0001-bind-collaboration.md"],
+    });
+    expect(records.map((r) => r.id)).toEqual(["0001-bind-collaboration"]);
+  });
+
   it("throws on a malformed record file", () => {
     const io = treeWith({ "0001-bind-collaboration.md": "---\nstatus: bad\n---\n" });
     expect(() => loadAdrRegistry("/tmp/x", io)).toThrow(/status "bad"/);

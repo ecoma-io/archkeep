@@ -59,13 +59,21 @@ status set: proposed, accepted, superseded
 ```
 
 A binding naming a rule/fitness id the registry's own records never mention is
-listed `(unknown)` — named, never hidden. An ADR with no bindings is listed
+listed `(unknown)` — named, never hidden — and the single-record report below
+marks it identically, so narrowing to one record never hides what the dump
+showed. Read that marker for exactly what it says: `adr` loads no boundary
+config, so the id set it compares against is derived from the records' own
+`bindings`, and no binding a record declares can fall outside it. `adr` never
+adjudicates a binding — it reports one. Whether a rule/fitness the workspace
+actually declares backs it is `check`'s and `drift`'s question, answered
+against the policy's own declared ids. An ADR with no bindings is listed
 `(none — not yet enforceable)`; a registry with no records is the single
 sentence `no ADRs in docs/adr/ — nothing is recorded, and nothing is
 enforceable through it`, never an empty-looking table. Everything here is
 deterministic: two runs over an unchanged tree produce byte-identical output.
 
-A single-record report shows that record alone. The reverse lookup prints the
+A single-record report shows that record alone, with the same status,
+supersession and binding lines the dump gives it. The reverse lookup prints the
 binding ADRs or the unenforced sentence; an id read as an ADR reference that
 the registry does not know prints:
 
@@ -90,14 +98,18 @@ be resolved and why.
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 0    | completed — the dump, a record, or a lookup answered. A reverse lookup naming a rule/fitness id no ADR binds is still 0: a sentence stating the fact, not a resolved reference |
 | 2    | usage error — more than one positional argument                                                                                                                                |
-| 3    | no verdict — an unknown ADR id, or a registry that could not be read                                                                                                           |
+| 3    | no verdict — an unknown ADR id, a `supersedes` target naming no record, or a registry that could not be read                                                                   |
 
 `adr` never exits 1: a description of what is recorded is never a finding; only
-`check` exits 1. The two exit-3 paths are the command's obligations to the
+`check` exits 1. The three exit-3 paths are the command's obligations to the
 invariant. An id read as an ADR reference — everything except a
 `rule:…`/`fitness:…` id — that the registry does not know is unresolved — an
 empty reverse lookup would read exactly like a clean workspace, which is the
-silent direction. An unreadable registry throws the same loud
+silent direction. A `supersedes` entry is resolved against the registry for the
+same reason: the field is shape-checked at load and nothing more, so a record
+superseding an id no file carries used to print its supersession chain as fact
+at exit 0 — a reader told the older decision was replaced by a decision this
+workspace never recorded. An unreadable registry throws the same loud
 refusal `provenance` makes for a malformed intent file: a list built from a
 registry it could not read would be a claim about records that do not exist.
 

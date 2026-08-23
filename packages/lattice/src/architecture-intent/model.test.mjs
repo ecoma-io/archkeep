@@ -359,6 +359,115 @@ describe("loadIntent — reading and parsing", () => {
       }),
     ).rejects.toThrow(/could not be read/);
   });
+
+  // The silent direction, and the only one of this loader's three failure
+  // modes on an identical tree that was quiet. `../../cli.mjs` establishes the
+  // file is TRACKED before it calls here; a dangling symlink, a sparse
+  // checkout or an uninitialised submodule then makes the read ENOENT, which
+  // was mapped to `undefined` — "the workspace declared no intent".
+  // `../commands/drift.mjs`'s `driftForCheck` returns empty findings for that,
+  // and `../../cli.mjs` folds empty findings to `intent: {checked: true,
+  // verdict: "ok", findings: []}` — `checked: true` about a file nobody read.
+  // The two neighbours are both loud: an ESCAPING symlink throws at the
+  // containment check, and EACCES throws just above.
+  it("refuses a tracked path whose bytes are absent, rather than reading it as no intent at all", async () => {
+    const enoent = Object.assign(new Error("no such file or directory"), { code: "ENOENT" });
+    const run = loadIntent("/ws", {
+      tracked: [INTENT_FILE],
+      read: async () => {
+        throw enoent;
+      },
+    });
+    // Resolving AT ALL is the defect — `undefined` is what every caller reads
+    // as "absent", so the wording below is the second half, not the first.
+    await expect(run).rejects.toThrow(/is tracked but could not be read/);
+  });
+
+  it("still reads ENOENT as absent when the caller supplied no tracked list", async () => {
+    // The other direction: with no `tracked` the loader knows nothing about
+    // whether the workspace declared the file, so a missing path stays the
+    // documented absent answer. The refusal above must not swallow this.
+    const enoent = Object.assign(new Error("no such file"), { code: "ENOENT" });
+    await expect(
+      loadIntent("/ws", {
+        read: async () => {
+          throw enoent;
+        },
+      }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+// F5/F6: three sections whose own comments in `./model.mjs` claimed these
+// refusals and did not make them. Each case below loads clean against the
+// unfixed loader, which means `drift` and `check` both report a clean verdict
+// over a file that decides nothing — the silent direction.
+describe("findIntentViolations — sections that read as policy while deciding nothing", () => {
+  const withSection = (section) => ({ ...VALID, ...section });
+
+  it.each([
+    ["projects: {}", { projects: {} }, "projects: must state required or forbidden"],
+    [
+      "projects.required: []",
+      { projects: { required: [] } },
+      "projects.required: must not be empty",
+    ],
+    [
+      "projects.forbidden: []",
+      { projects: { forbidden: [] } },
+      "projects.forbidden: must not be empty",
+    ],
+    ["dependencies: {}", { dependencies: {} }, "dependencies: must state allowed or forbidden"],
+  ])("rejects %s", (_label, section, expected) => {
+    const messages = violations(withSection(section));
+    // The load-bearing half: SOME violation is reported. An empty list here is
+    // a file that reads as existence/dependency policy and enforces nothing —
+    // deleting the last row from `projects.required` leaves exactly this.
+    expect(messages).not.toEqual([]);
+    expect(mentions(messages, expected)).toBe(true);
+  });
+
+  it("rejects projects.required: [] and projects.forbidden: [] together, naming both", () => {
+    const messages = violations(withSection({ projects: { required: [], forbidden: [] } }));
+    expect(mentions(messages, "projects.required: must not be empty")).toBe(true);
+    expect(mentions(messages, "projects.forbidden: must not be empty")).toBe(true);
+  });
+
+  it("still accepts a section that states one non-empty list", () => {
+    // The refusals above must fire on emptiness, not on a section that names
+    // only one of its two lists — the shape this repository's own
+    // `architecture-intent.json` carries.
+    expect(violations(withSection({ projects: { required: [{ name: "core" }] } }))).toEqual([]);
+    expect(
+      violations(withSection({ dependencies: { forbidden: [{ source: "a", target: "b" }] } })),
+    ).toEqual([]);
+  });
+
+  // F6: `../architecture-intent/judge.mjs` skips a self-pair (`source !==
+  // target` guards the reachability walk, because every project reaches
+  // itself), so the row was COUNTED as an intent row — `drift` prints it in
+  // its "N rows" claim — and then decided nothing. The same concept is
+  // refused twice already in `./model.mjs`: the boundary self-ban, whose
+  // comment says "reading it as holding would be the silent direction", and
+  // `forbiddenTags`' `from === to`. This spelling got neither.
+  it("rejects a dependencies.forbidden row banning a project from itself", () => {
+    const messages = violations(
+      withSection({ dependencies: { forbidden: [{ source: "app", target: "app" }] } }),
+    );
+    expect(messages).not.toEqual([]);
+    expect(mentions(messages, "dependencies.forbidden[0]: source and target must differ")).toBe(
+      true,
+    );
+  });
+
+  it("keeps a dependencies.allowed self-pair legal", () => {
+    // Deliberately not the same rule: a dependency allow-list is exhaustive,
+    // so a self-pair in it states which edges are permitted rather than
+    // banning nothing.
+    expect(
+      violations(withSection({ dependencies: { allowed: [{ source: "app", target: "app" }] } })),
+    ).toEqual([]);
+  });
 });
 
 describe("boundaryNames and normalizeIntent", () => {

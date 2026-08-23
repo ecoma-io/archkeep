@@ -363,10 +363,27 @@ export function findIntentViolations(raw) {
           `projects: unknown key "${key}" — a projects section may carry only ${PROJECT_SECTION_KEYS.join(", ")}`,
         );
       }
+      // A `projects` section that names neither list decides nothing while
+      // reading as existence policy — the state the comment above already
+      // claimed was refused and was not. Deleting the last row from
+      // `projects.required` leaves exactly this file, and `drift`/`check`
+      // both report clean over it.
+      if (PROJECT_SECTION_KEYS.every((key) => raw.projects[key] === undefined)) {
+        violations.push(
+          `projects: must state ${PROJECT_SECTION_KEYS.join(" or ")} — a section present but ` +
+            `empty reads as policy while deciding nothing`,
+        );
+      }
       const requiredList = raw.projects.required;
       if (requiredList !== undefined) {
         if (!Array.isArray(requiredList)) {
           violations.push(`projects.required: must be an array, got ${describe(requiredList)}`);
+        } else if (requiredList.length === 0) {
+          // The same refusal `allowed`/`forbidden`/`dependencies.*`/
+          // `forbiddenTags` already make, in their words.
+          violations.push(
+            `projects.required: must not be empty — a list present but empty reads as policy while deciding nothing`,
+          );
         } else {
           requiredList.forEach((row, index) => {
             const at = `projects.required[${index}]`;
@@ -408,6 +425,10 @@ export function findIntentViolations(raw) {
       if (forbiddenList !== undefined) {
         if (!Array.isArray(forbiddenList)) {
           violations.push(`projects.forbidden: must be an array, got ${describe(forbiddenList)}`);
+        } else if (forbiddenList.length === 0) {
+          violations.push(
+            `projects.forbidden: must not be empty — a list present but empty reads as policy while deciding nothing`,
+          );
         } else {
           forbiddenList.forEach((row, index) => {
             const at = `projects.forbidden[${index}]`;
@@ -447,6 +468,15 @@ export function findIntentViolations(raw) {
           `dependencies: unknown key "${key}" — a dependencies section may carry only ${DEPENDENCY_SECTION_KEYS.join(", ")}`,
         );
       }
+      // The section itself, on the same rule its two lists already carry
+      // below: `dependencies: {}` named neither list, so nothing could fire
+      // and the file still read as dependency policy.
+      if (DEPENDENCY_SECTION_KEYS.every((key) => raw.dependencies[key] === undefined)) {
+        violations.push(
+          `dependencies: must state ${DEPENDENCY_SECTION_KEYS.join(" or ")} — a section present ` +
+            `but empty reads as policy while deciding nothing`,
+        );
+      }
       for (const listName of DEPENDENCY_SECTION_KEYS) {
         const list = raw.dependencies[listName];
         if (list === undefined) continue;
@@ -478,6 +508,27 @@ export function findIntentViolations(raw) {
                 `${at}.${side}: must be a non-empty string, got ${describe(row[side])}`,
               );
             }
+          }
+          // A forbidden row banning a project from itself: `../judge.mjs`
+          // skips it (`source !== target` guards the `pathExists` walk there,
+          // because every project reaches itself), so the row is COUNTED as
+          // an intent row — `drift` prints "3 rows" — and then decides
+          // nothing. The same concept is refused twice already in this file:
+          // the boundary self-ban above, whose comment says "reading it as
+          // holding would be the silent direction", and `forbiddenTags`'
+          // `from === to` below. A dependency row is the third spelling and
+          // it got neither. `allowed` is deliberately not refused here: a
+          // dependency allow-list is exhaustive, so a self-pair in it states
+          // which edges are permitted rather than banning nothing.
+          if (
+            listName === "forbidden" &&
+            typeof row.source === "string" &&
+            typeof row.target === "string" &&
+            row.source === row.target
+          ) {
+            violations.push(
+              `${at}: source and target must differ — a project depending on itself is a no-op and should not be phrased as a rule`,
+            );
           }
         });
       }
@@ -583,7 +634,10 @@ export function normalizeIntent(intent) {
  *   loader treats the file as absent (an untracked intent file is not the
  *   reviewed repository state, the same edge `../../go-work.mjs` documents).
  * @returns {Promise<object>} The normalized, validated model, or `undefined` when the file is absent.
- * @throws {Error} naming every validation violation at once.
+ * @throws {Error} naming every validation violation at once, and — when
+ *   `tracked` is provided and lists the file — when the tracked path cannot be
+ *   read at all. Tracked-but-unreadable is a no-verdict, never absence; see
+ *   the ENOENT branch below.
  */
 export async function loadIntent(root, { read = readFileFromDisk, tracked } = {}) {
   const path = `${root}/${INTENT_FILE}`;
@@ -607,7 +661,29 @@ export async function loadIntent(root, { read = readFileFromDisk, tracked } = {}
   try {
     text = await read(path, "utf8");
   } catch (cause) {
-    if (cause?.code === "ENOENT") return undefined;
+    // ENOENT means two different things, and only one of them is "absent".
+    // With no `tracked` list the caller knows nothing about the file, so a
+    // missing path is a workspace that never declared an intent — undefined,
+    // the documented absent answer. With a `tracked` list the gate above has
+    // ALREADY established that `git ls-files` lists this name: the workspace
+    // declared the file, and the bytes are not there — a dangling symlink, a
+    // sparse checkout, an uninitialised submodule. That is a file this run
+    // could not read, not a declaration that was never made, and folding it
+    // into "absent" makes `../commands/drift.mjs`'s `driftForCheck` return
+    // empty findings, which `../../cli.mjs` folds to `verdict: "ok"` with
+    // `checked: true` — a verified claim about bytes nobody read. Its two
+    // neighbours on the identical tree are both loud: an escaping symlink
+    // throws at the containment check above, and EACCES throws below. Only
+    // this one was silent (`../../../../AGENTS.md`).
+    if (cause?.code === "ENOENT") {
+      if (tracked === undefined) return undefined;
+      throw new Error(
+        `${INTENT_FILE}: is tracked but could not be read: ${cause?.message ?? cause} — ` +
+          `a declared intent whose bytes are absent is a no-verdict, never a workspace that ` +
+          `declared none`,
+        { cause },
+      );
+    }
     throw new Error(`${INTENT_FILE}: could not be read: ${cause?.message ?? cause}`, { cause });
   }
   let raw;

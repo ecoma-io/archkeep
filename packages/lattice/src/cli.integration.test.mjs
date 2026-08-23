@@ -5669,6 +5669,12 @@ var _ = adapter.Name
   it("debt resolves the profile and reaches its own missing-intent refusal, not the ladder's", async () => {
     const debtDir = mkdtempSync(join(tmpdir(), "polyglot-cli-profiles-debt-"));
     try {
+      // A snapshot first: `debt` refuses an EMPTY snapshot directory before it
+      // ever loads the intent (`commands/debt.mjs` — "there is no record to age
+      // the ledger against"), so an unpopulated tmpdir would stop the run one
+      // gate short of the intent refusal this case is about. Capturing one
+      // keeps the assertion below aimed at the depth it was written for.
+      expect(await runCli(["history", debtDir, "--capture"], profEnv())).toBe(EXIT.ok);
       const streams = profEnv();
       expect(await runCli(["debt", debtDir], streams)).toBe(EXIT.error);
       const errText = streams.lines.err.join("\n");

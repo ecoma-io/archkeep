@@ -167,6 +167,55 @@ describe("adrCommand", () => {
     expect(result.report.text).not.toContain("no ADR in docs/adr/ binds");
   });
 
+  // The supersession chain used to be shape-checked and never resolved:
+  // `validateRecord` (`../governance/adr-registry.mjs`) requires a supersedes
+  // entry to LOOK like an ADR id and stops there, so a record superseding an
+  // id no file carries loaded clean and the command printed the chain as fact
+  // — `supersedes: 0000-does-not-exist` in the text, a `{adr, supersedes}` row
+  // in `result.supersedes` — under `status: "ok"`, `exitCode: 0`,
+  // `coverage.complete: true` and `unresolved: []`. That is the module
+  // header's own refusal ("a supersedes target ... that names nothing") going
+  // unmade, and the silent direction: a reader is told the older decision was
+  // replaced by a decision this workspace never recorded.
+  it("reports a supersedes target that names no record as no-verdict, never a printed chain at exit 0", () => {
+    const entries = REGISTRY_ENTRIES();
+    entries[1].supersedes = ["0000-does-not-exist"];
+    const dangling = { records: entries, byId: new Map(entries.map((r) => [r.id, r])) };
+    const result = adrCommand(
+      "/ws",
+      {},
+      ioWith(() => dangling),
+    );
+    // The load-bearing half: no verdict at all, whatever the wording.
+    expect(result.status).toBe("no-verdict");
+    expect(result.coverage.complete).toBe(false);
+    expect(JSON.parse(result.report.json).exitCode).toBe(3);
+    expect(result.result.unresolved).toEqual([
+      {
+        ref: "0000-does-not-exist",
+        why: "0002-bind-logs supersedes 0000-does-not-exist, which is not an ADR in docs/adr",
+      },
+    ]);
+  });
+
+  it("keeps a supersedes target that names a real record resolved, in both spellings", () => {
+    // The other direction of the same check: the refusal above must not fire
+    // on a chain that does resolve, and `adr:`-prefixed — the spelling this
+    // tool's own decisionRef docs recommend — must not be the one spelling
+    // that fails against a record that exists.
+    for (const spelling of ["0001-bind-collaboration", "adr:0001-bind-collaboration"]) {
+      const entries = REGISTRY_ENTRIES();
+      entries[1].supersedes = [spelling];
+      const result = adrCommand(
+        "/ws",
+        {},
+        ioWith(() => ({ records: entries, byId: new Map(entries.map((r) => [r.id, r])) })),
+      );
+      expect(result.result.unresolved).toEqual([]);
+      expect(result.status).toBe("ok");
+    }
+  });
+
   it("builds a versioned JSON envelope naming the command and provider", () => {
     const result = adrCommand(
       "/ws",
