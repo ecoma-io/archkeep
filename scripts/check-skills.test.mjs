@@ -1,13 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   cargoLockPackageVersion,
   tomlSectionVersion,
   evaluate,
   EXPECTED_SKILLS,
+  findHostSpecificFields,
   parseSkillFrontmatter,
   selectMarketplaceVersion,
+  VERSION_CHAIN_PATHS,
 } from "./check-skills.mjs";
 
 describe("selectMarketplaceVersion", () => {
@@ -137,6 +140,106 @@ Body`;
     assert.equal(fm.name, "arch-review");
     assert.equal(fm.description, "Review a change");
   });
+
+  it("refuses frontmatter that does not start at position 0", () => {
+    // The silent direction for the position branch: a thematic break in the
+    // body is a valid opening delimiter to a raw indexOf, so prose like this
+    // parses as frontmatter and a name read out of the body reads as a
+    // valid, checked skill — while the host, which requires frontmatter on
+    // the first line (docs/skills/authoring.md), discovers nothing. The
+    // refusal is null, which `evaluate` reports as missing name/description.
+    const text = "Intro prose about boundaries\n\n---\nname: arch-x\n---\nBody";
+    assert.equal(parseSkillFrontmatter(text), null);
+  });
+
+  it("reads the full value when it contains --- and keeps every later field", () => {
+    // The silent direction for the closing-delimiter branch: an indexOf
+    // search ends the block at the first `---` ANYWHERE, so this value was
+    // truncated to "Covers x" and `compatibility`, sitting after it, was
+    // dropped from the parse entirely.
+    const text = [
+      "---",
+      "name: arch-x",
+      "description: Covers x --- y transitions",
+      "compatibility: Requires lattice CLI",
+      "---",
+      "Body",
+    ].join("\n");
+
+    const fm = parseSkillFrontmatter(text);
+    assert.ok(fm);
+    assert.equal(fm.description, "Covers x --- y transitions");
+    assert.equal(fm.compatibility, "Requires lattice CLI");
+  });
+
+  it("parses double-quoted values with the same unquote rule as single quotes", () => {
+    const text = `---
+name: "arch-check"
+description: "Validate after changes"
+---
+Body`;
+
+    const fm = parseSkillFrontmatter(text);
+    assert.ok(fm);
+    assert.equal(fm.name, "arch-check");
+    assert.equal(fm.description, "Validate after changes");
+  });
+
+  it("parses indented keys into their nested object rather than dropping or flattening them", () => {
+    // Pins the nested-object branch itself: an empty value opens a
+    // sub-object and indented keys land inside it, one level down — the
+    // shape `findHostSpecificFields` has to walk.
+    const text = `---
+name: arch-x
+description: x
+compatibility: Requires lattice CLI
+metadata:
+  version: 0.4.0
+---
+Body`;
+
+    const fm = parseSkillFrontmatter(text);
+    assert.ok(fm);
+    assert.deepEqual(fm.metadata, { version: "0.4.0" });
+  });
+});
+
+describe("findHostSpecificFields", () => {
+  it("names host-specific top-level fields", () => {
+    assert.deepEqual(findHostSpecificFields({ name: "x", context: "fast" }), ["context"]);
+  });
+
+  it("reaches host-specific keys nested under metadata:, where the old filter saw nothing", () => {
+    // The smuggle route: the parser files an indented key inside the
+    // sub-object its parent opened, so a top-level-only key filter reported
+    // this frontmatter as host-independent while `model` sat one level down.
+    assert.deepEqual(findHostSpecificFields({ metadata: { model: "opus" } }), ["metadata.model"]);
+  });
+
+  it("reaches host-specific keys at any depth under any parent key", () => {
+    assert.deepEqual(findHostSpecificFields({ notes: { inner: { effort: "high" } } }), [
+      "notes.inner.effort",
+    ]);
+  });
+
+  it("collects every occurrence, nested and top-level alike", () => {
+    assert.deepEqual(findHostSpecificFields({ paths: "a", metadata: { agent: "x", keep: "y" } }), [
+      "paths",
+      "metadata.agent",
+    ]);
+  });
+
+  it("returns empty only when no host-specific field exists anywhere", () => {
+    assert.deepEqual(
+      findHostSpecificFields({
+        name: "arch-x",
+        description: "x",
+        compatibility: "Requires lattice CLI",
+        metadata: { note: "not host-specific" },
+      }),
+      [],
+    );
+  });
 });
 
 describe("evaluate", () => {
@@ -264,6 +367,34 @@ describe("evaluate", () => {
     assert.ok(result.failures.length > 0);
     assert.ok(
       result.failures.some((f) => f.includes("arch-check") && f.includes("does not exist")),
+    );
+  });
+
+  it("reports an unexpected directory as a named note and stays green when both trees agree", () => {
+    // Deliberately non-fatal, pinned here so the note can neither regress
+    // into silence nor tighten into a failure unannounced. The single-tree
+    // half of an unexpected directory already fails the byte-parity check
+    // (16); what remains is a skill added to BOTH trees without updating
+    // EXPECTED_SKILLS and docs/skills/overview.md — the drift the root
+    // AGENTS.md warns about, reported as one line nobody asserted. It stays
+    // a note because adding a skill is a deliberate act completed by the
+    // roster update, and failing every intermediate commit of that work is
+    // noise; but the note must name the directory, or the class is silent.
+    const files = {
+      "arch-context/SKILL.md": "canonical",
+      "new-skill/SKILL.md": "canonical",
+    };
+    const result = evaluate({
+      ...baseFacts,
+      skillDirs: [...EXPECTED_SKILLS, "new-skill"],
+      skills: [...allGood(), goodSkill("new-skill", "new-skill")],
+      agentsSkillsFiles: files,
+      skillsFiles: files,
+    });
+    assert.equal(result.failures.length, 0);
+    assert.ok(
+      result.lines.some((l) => l === "note new-skill — not in expected set"),
+      "an unexpected directory must be reported by name even though the run exits 0",
     );
   });
 
@@ -672,5 +803,47 @@ describe("evaluate", () => {
     assert.ok(
       result.failures.some((f) => f.includes("overview.md") && f.includes("stale mechanism")),
     );
+  });
+
+  it("fails when a host-specific field smuggled in under a nested block reaches evaluate", () => {
+    // The end-to-end half of the smuggle fix: readSkillFacts now hands
+    // dotted paths to evaluate, so the failure names both the hiding place
+    // and the field instead of reporting the skill as host-independent.
+    const skills = allGood();
+    skills[0] = { ...goodSkill("arch-context", "arch-context"), hostFields: ["metadata.model"] };
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(
+      result.failures.some((f) => f.includes("host-specific") && f.includes("metadata.model")),
+    );
+  });
+
+  it("fails when an extra-files entry sits outside the version chain", () => {
+    // Issue #241's silent direction: release-please-config.json grows an
+    // eleventh version-bearing file and every release bumps it while no
+    // chain check ever reads it — byte-identical to a healthy run. Both
+    // rosters are derived here from their own source files (the gate script's
+    // path constants, this repository's release configuration), so neither
+    // side can grow alone; there is no restated copy of either list.
+    const config = JSON.parse(
+      readFileSync(new URL("../release-please-config.json", import.meta.url), "utf8"),
+    );
+    /** @type {{path?: string}[]} */
+    const extraFiles = config.packages["."]["extra-files"];
+    const outside = extraFiles.map((f) => f.path).filter((p) => !VERSION_CHAIN_PATHS.includes(p));
+    assert.deepEqual(
+      outside,
+      [],
+      `release-please bumps ${outside.join(", ")} on every release, but no version-chain check ` +
+        `verifies it. Put the file on the chain (VERSION_CHAIN_PATHS in check-skills.mjs, ` +
+        `docs/skills/versioning.md) or take it off extra-files.`,
+    );
+  });
+
+  it("holds every extra-files entry against a non-empty chain roster", () => {
+    // If VERSION_CHAIN_PATHS itself were emptied or renamed away, the test
+    // above would pass vacuously — every path would be "outside" only if the
+    // array existed to be filtered. A roster that stopped naming files must
+    // fail loudly rather than agree with everything.
+    assert.ok(VERSION_CHAIN_PATHS.length >= 9);
   });
 });

@@ -59,6 +59,25 @@ export const RUST_SDK_CRATE_NAME = "lattice-rule-sdk";
 export const TS_SDK_PACKAGE_JSON = "packages/lattice-rule-sdk-ts/package.json";
 export const PYTHON_SDK_PYPROJECT = "packages/lattice-rule-sdk-python/pyproject.toml";
 
+// Every version-bearing path the chain compares — the nine files
+// docs/skills/versioning.md enumerates, aggregated from the constants above
+// rather than restated. release-please's `extra-files` list must name no file
+// outside it: a manifest bumped on every release but verified by no chain
+// check is drift nobody sees. check-skills.test.mjs is the cross-check that
+// holds the two rosters together; extend this list in the same commit that
+// adds a chain link.
+export const VERSION_CHAIN_PATHS = [
+  ROOT_PACKAGE_JSON,
+  PACKAGE_JSON,
+  CLAUDE_PLUGIN_MANIFEST,
+  MARKETPLACE_CATALOGUE,
+  CODEX_PLUGIN_MANIFEST,
+  VSCODE_PACKAGE_JSON,
+  RUST_SDK_CARGO_TOML,
+  TS_SDK_PACKAGE_JSON,
+  PYTHON_SDK_PYPROJECT,
+];
+
 // Host-specific frontmatter fields that must NOT appear in canonical skills.
 // These are Claude Code extensions to the Agent Skills spec.
 export const HOST_SPECIFIC_FIELDS = ["context", "model", "effort", "agent", "paths"];
@@ -70,17 +89,25 @@ export const HOST_SPECIFIC_FIELDS = ["context", "model", "effort", "agent", "pat
  * This is a minimal parser — it handles the subset of YAML used in SKILL.md
  * frontmatter (simple key-value pairs, no nested structures beyond `metadata`).
  *
+ * Both delimiters are matched LINE-WISE, and the opening one must be the
+ * file's very first line — what docs/skills/authoring.md already requires. A
+ * raw `indexOf("---")` would instead accept a thematic break in the body as
+ * the opening delimiter, reading a name out of prose the host never parses,
+ * and would end the block at the first `---` ANYWHERE — including inside a
+ * value, silently truncating that value and dropping every field after it. A
+ * null return is the named refusal: `readSkillFacts` turns it into missing
+ * `name`/`description`, which `evaluate` fails on loudly.
+ *
  * @param {string} text full contents of a SKILL.md file
  * @returns {Record<string, any>|null}
  */
 export function parseSkillFrontmatter(text) {
-  const start = text.indexOf("---");
-  if (start === -1) return null;
-  const afterFirst = start + 3;
-  const end = text.indexOf("---", afterFirst);
-  if (end === -1) return null;
+  const lines = text.split("\n");
+  if ((lines[0] ?? "").trimEnd() !== "---") return null;
+  const closeIndex = lines.findIndex((line, i) => i > 0 && line.trimEnd() === "---");
+  if (closeIndex === -1) return null;
 
-  const yaml = text.slice(afterFirst, end).trim();
+  const yaml = lines.slice(1, closeIndex).join("\n").trim();
   const result = /** @type {Record<string, any>} */ ({});
 
   let currentObj = /** @type {Record<string, any>|null} */ (null);
@@ -140,6 +167,30 @@ function unquote(value) {
     return value.slice(1, -1);
   }
   return value;
+}
+
+/**
+ * Every host-specific field found anywhere in parsed frontmatter — top level
+ * or nested — as dotted paths (`metadata.model`). The parser builds a
+ * sub-object for any key whose value is empty, so an indented field lands
+ * one level down; a top-level-only filter misses it, and a host-specific
+ * field that hides there passes as host-independent. Nested paths are the
+ * loud form: `metadata.model` names both the hiding place and the field.
+ *
+ * @param {Record<string, any>} frontmatter parsed frontmatter, `{}` when none
+ * @returns {string[]} dotted paths of every host-specific field found
+ */
+export function findHostSpecificFields(frontmatter) {
+  const found = [];
+  const walk = (/** @type {Record<string, any>} */ obj, /** @type {string} */ prefix) => {
+    for (const [key, value] of Object.entries(obj)) {
+      const path = prefix === "" ? key : `${prefix}.${key}`;
+      if (HOST_SPECIFIC_FIELDS.includes(key)) found.push(path);
+      if (value !== null && typeof value === "object") walk(value, path);
+    }
+  };
+  walk(frontmatter, "");
+  return found;
 }
 
 /**
@@ -789,7 +840,7 @@ export function readSkillFacts() {
     const text = readFileSync(skillPath, "utf8");
     const fm = parseSkillFrontmatter(text);
 
-    const hostFields = Object.keys(fm ?? {}).filter((k) => HOST_SPECIFIC_FIELDS.includes(k));
+    const hostFields = findHostSpecificFields(fm ?? {});
 
     return {
       dir,

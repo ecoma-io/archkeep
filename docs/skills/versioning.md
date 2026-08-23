@@ -67,7 +67,9 @@ version is the pairing.
    `lattice-rule-sdk` entry — read out of the `[[package]]` array by name,
    because every entry there carries the same header and a header-only match
    would report the first dependency's version as the crate's
-10. No host-specific frontmatter fields have leaked into canonical skills
+10. No host-specific frontmatter field has leaked into canonical skills —
+    checked at any depth of parsed frontmatter, so a nested block cannot
+    smuggle one past the top-level filter
 
 A version mismatch fails the build. There is no warning tier.
 
@@ -92,6 +94,12 @@ the `extra-files` configuration in `release-please-config.json` also bumps:
 - `packages/lattice-rule-sdk-ts/package.json` (`$.version`)
 - `packages/lattice-rule-sdk-python/pyproject.toml` (`$.project.version`, the
   TOML updater)
+
+That the two rosters agree is itself gated: every `extra-files` entry must name
+a file on the chain above, a cross-check derived from the gate script's own
+path constants rather than a restated copy (`scripts/check-skills.test.mjs`).
+A manifest added to one list without the other turns red on the pull request
+instead of being bumped every release and verified by nobody.
 
 These eight files are bumped automatically, and `release.yml` then repairs two
 things on release-please's own branch, before CI ever sees the pull request.
