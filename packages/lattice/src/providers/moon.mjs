@@ -3,9 +3,10 @@
  *
  * A Moonrepo workspace is identified by a `.moon/` directory at its root.
  * Moonrepo v2.0+ also supports `.config/moon/` as an alternative config
- * directory; both spellings are recognized by `../commands/context.mjs`'s
- * `markersAt` and `findWorkspaceRoot`, and the one actually found is recorded
- * in the `CommandContext`'s `marker` field.
+ * directory; which one a given root carries is answered by `moonMarkerAt`
+ * below — the one dispatcher every consumer shares, and the place a root
+ * carrying both is refused. The winner is recorded in the `CommandContext`'s
+ * `marker` field (`../commands/context.mjs`).
  *
  * This provider reads the project graph via `moon project-graph --json`,
  * the same way `./nx.mjs` reads the Nx graph via `nx graph --file=`.
@@ -26,9 +27,11 @@
  *   when the provider infers one.
  */
 
-import { delimiter } from "node:path";
+import { existsSync } from "node:fs";
+import { delimiter, join } from "node:path";
 
 import { environmentForTree, runProcess } from "../process.mjs";
+import { buildDependencies } from "./native/graph.mjs";
 
 /**
  * The directory that marks a Moonrepo workspace root.
@@ -42,12 +45,55 @@ export const MOON_DIR = ".moon";
 /**
  * The alternative config directory Moonrepo v2.0+ supports.
  *
- * A workspace may carry either `.moon/` or `.config/moon/` — never both,
- * because Moon treats them as mutually exclusive roots. This constant lets
- * `markersAt` and `findWorkspaceRoot` check for either spelling, the same
- * way they already check for `nx.json` and `lattice.json`.
+ * A workspace may carry either `.moon/` or `.config/moon/`. Moon treats them
+ * as mutually exclusive roots, and so does this tool: a root carrying BOTH is
+ * refused outright by `moonMarkerAt` below, naming both directories, rather
+ * than silently judged against one of them. This constant lets that check —
+ * and the marker walk (`../commands/context.mjs`'s `WORKSPACE_MARKERS`) —
+ * recognize either spelling, the same way they already check for `nx.json`
+ * and `lattice.json`.
  */
 export const MOON_ALT_DIR = ".config/moon";
+
+/**
+ * Which Moon directory marks `root` as a Moonrepo workspace — `.moon/`,
+ * `.config/moon/`, or neither.
+ *
+ * The one answer to that question, shared by every entry point that must
+ * answer it identically: `../commands/context.mjs`'s provider choice reads it
+ * for the CLI, and `../lsp/workspace-index.mjs`'s dispatch reads it for the
+ * language server — so the editor and `check` cannot disagree about which
+ * marker resolves a Moon tree (#223's two-faces defect).
+ *
+ * A root carrying both directories is REFUSED rather than silently resolved:
+ * Moon treats them as mutually exclusive roots, and picking one for the
+ * consumer would judge their workspace against a config nobody chose. It is
+ * the same posture the `.moon`+`nx.json`, `.moon`+`lattice.json` and
+ * `nx.json`+`lattice.json` refusals take one level out
+ * (`../commands/context.mjs`), applied inside the pair itself.
+ *
+ * @param {string} root Absolute workspace root.
+ * @param {{exists?: (path: string) => boolean}} [io] Injectable existence test
+ *   (absolute paths), so a test drives this without a filesystem. The default
+ *   is plain filesystem existence, matching how every other marker is read.
+ * @returns {string} `MOON_DIR` or `MOON_ALT_DIR` — whichever the root carries;
+ *   `.config/moon/` alone wins nothing over `.moon/` alone, each simply names
+ *   itself when it is the only one present.
+ * @throws {Error} when both directories are present.
+ */
+export function moonMarkerAt(root, { exists = existsSync } = {}) {
+  const hasPrimary = exists(join(root, MOON_DIR));
+  const hasAlt = exists(join(root, MOON_ALT_DIR));
+  if (hasPrimary && hasAlt) {
+    throw new Error(
+      `lattice: ${root} declares both ${MOON_DIR} and ${MOON_ALT_DIR} — Moonrepo treats them as ` +
+        `mutually exclusive config roots, and this tool refuses to pick between them rather than ` +
+        `judge the workspace against a config nobody chose. Remove whichever one is not the ` +
+        `workspace's real source of truth.`,
+    );
+  }
+  return hasAlt ? MOON_ALT_DIR : hasPrimary ? MOON_DIR : null;
+}
 
 /**
  * Resolves the Moon CLI binary by adding the workspace root's
@@ -374,6 +420,52 @@ export function transformMoonGraph(raw) {
   return workspaceLayout === null
     ? { nodes, dependencies }
     : { nodes, dependencies, workspaceLayout };
+}
+
+/**
+ * Folds the package's own import analysis into a Moon graph, in place.
+ *
+ * `moon project-graph --json` knows a project depends on another only when
+ * `moon.yml` says `dependsOn` — Moon has no hook this package can register
+ * the way `./nx.mjs`'s `createDependencies` registers into Nx's own graph
+ * computation. A Go, Rust or Python import crossing a project boundary with
+ * no such entry is therefore invisible to the graph alone, while the
+ * reachability rules read exactly these lists (`noCircularDependencies`, the
+ * upstream half of `notDependOnLibsWithTags`) — an edge missing here hides a
+ * cycle or a transitive finding from every verdict built on the graph, which
+ * is the silent direction. The dedupe key is `[source, target, type]`: an
+ * import that agrees with a declared edge adds nothing; one that disagrees in
+ * kind (a dynamic import of a statically declared dependency) survives as its
+ * own record, because `noImportsOfLazyLoadedLibraries` turns on that kind.
+ *
+ * ONE implementation serves both faces that compose a Moon graph — the CLI's
+ * preamble (`../commands/context.mjs`) and the language server's index
+ * (`../lsp/workspace-index.mjs`) — so the editor and `check` cannot disagree
+ * about which edges exist (#223).
+ *
+ * @param {{nodes: object, dependencies: Record<string, object[]>}} graph The
+ *   graph `transformMoonGraph` (or an equivalent) returned; mutated in place.
+ * @param {{importSites: object[], projectOf: (file: string) => string|undefined}} analysis
+ *   Import records in the analysis contract's shape, and the file→project map
+ *   to attribute them with.
+ * @returns {{nodes: object, dependencies: Record<string, object[]>}} The same graph.
+ */
+export function mergeImportEdges(graph, { importSites, projectOf }) {
+  const importEdges = buildDependencies({ importSites, nodes: graph.nodes, projectOf });
+  const seenEdges = new Set(
+    Object.values(graph.dependencies)
+      .flat()
+      .map((edge) => JSON.stringify([edge.source, edge.target, edge.type])),
+  );
+  for (const [source, edges] of Object.entries(importEdges)) {
+    for (const edge of edges) {
+      const key = JSON.stringify([edge.source, edge.target, edge.type]);
+      if (seenEdges.has(key)) continue;
+      seenEdges.add(key);
+      (graph.dependencies[source] ??= []).push(edge);
+    }
+  }
+  return graph;
 }
 
 /**

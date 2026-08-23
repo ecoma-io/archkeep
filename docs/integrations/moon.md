@@ -19,11 +19,15 @@ architecture's central seam —
 
 ## Workspace detection
 
-Lattice detects a Moon workspace by the presence of a `.moon/` directory at the
-workspace root. A `lattice.json` or `nx.json` alongside it is a **hard error**,
-not a config surface: a tree carrying `.moon` and `lattice.json` (or `.moon`
-and `nx.json`) together is refused loudly (exit 3), because this tool judges a
-workspace against exactly one project model. Exactly one marker may be present.
+Lattice detects a Moon workspace by a `.moon/` directory at the workspace root.
+Moonrepo v2.0+'s alternative location, `.config/moon/`, is recognized the same
+way: either one alone makes the tree a Moon workspace, and diagnostics name
+whichever one is present. Both together are a **hard error** — Moon treats the
+two as mutually exclusive config roots, so a tree carrying both is refused
+loudly (exit 3), naming both directories, rather than silently judged against
+one of them. A `lattice.json` or `nx.json` alongside either is refused for the
+same reason: this tool judges a workspace against exactly one project model.
+Exactly one marker may be present.
 
 ## Configuration
 
@@ -71,7 +75,13 @@ The command emits a JSON object with an integer-indexed graph:
 
 Lattice normalises this into the same project-model shape the Nx and native
 providers produce: project records with `id`, `root`, `tags`, and
-`dependencies`.
+`dependencies`. The language server builds its editor index through this same
+`readProjectGraph` call — one dispatch for both faces, so an attached editor
+judges exactly the graph `lattice check` judges. When the invocation fails —
+`moon` missing from `node_modules/.bin`, a nonzero exit, output that will not
+parse — neither face answers with an empty graph: the CLI refuses with exit 3,
+and the server publishes an index-gap diagnostic naming the failed command on
+every open document until the next successful rebuild.
 
 ## Tag format
 

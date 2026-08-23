@@ -7,8 +7,16 @@
  * server has no Nx — it is spawned by an editor, in a directory, with nothing
  * else — so this module builds the same shape from whichever source of truth
  * the root actually carries: the tracked `project.json` files when there is no
- * `lattice.json` at the root, and `../providers/native/`'s own `discover()`/
- * `buildGraph()` when there is (`buildNativeWorkspaceIndex` below).
+ * `lattice.json` at the root, `../providers/native/`'s own `discover()`/
+ * `buildGraph()` when there is (`buildNativeWorkspaceIndex` below), and
+ * `../providers/moon.mjs`'s one-call `readProjectGraph` when the root carries
+ * `.moon/` or `.config/moon/` (`buildMoonWorkspaceIndex`) — the same provider
+ * object `../commands/context.mjs` hands `check`, so the editor's graph and
+ * the CLI's come from one dispatch rather than two (#223). Before that Moon
+ * branch existed, this module fell through to `discoverProjects` on a
+ * `.moon`-rooted tree — which finds a project only by its `project.json`, a
+ * file a Moon workspace never has — and built a zero-node index that read as
+ * clean while `check` exited 1 on the same tree.
  *
  * `nodeTypeOf`, `PROJECT_CONFIG_FILE` and `buildDependencies` are imported
  * from `../providers/native/`, not defined here — that package is where a
@@ -79,7 +87,7 @@
  * both lists into sentences, and `./diagnose.mjs` refuses to call a document
  * analyzed while either is non-empty.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { analyzeFile } from "../analysis/analyze.mjs";
@@ -102,6 +110,8 @@ import { buildDependencies } from "../providers/native/graph.mjs";
 import { nodeTypeOf, PROJECT_CONFIG_FILE } from "../providers/native/discover.mjs";
 import { LATTICE_MODEL_FILE } from "../providers/native/model.mjs";
 import { nativeProvider } from "../providers/native/index.mjs";
+import { requireSingleProjectModel } from "../commands/context.mjs";
+import { mergeImportEdges, moonProvider } from "../providers/moon.mjs";
 
 export { PROJECT_CONFIG_FILE, nodeTypeOf, buildDependencies };
 
@@ -258,12 +268,21 @@ export function buildNodes(projects) {
  * new name arrives with a new object and the old parse is dropped with the old
  * one.
  *
- * @param {{root: string, tsConfig?: string, listFiles?: (root: string) => string[], readFileAt?: (root: string, path: string) => string|null, readLayout?: typeof readWorkspaceLayout}} options
- * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], nativeMarker: boolean, nativeModelFailure: string|null, workspaceLayoutFailure: string|null}}
+ * @param {{root: string, tsConfig?: string, listFiles?: (root: string) => string[], readFileAt?: (root: string, path: string) => string|null, readLayout?: typeof readWorkspaceLayout, pathExists?: (path: string) => boolean, readGraph?: (root: string) => object}} options
+ *   `pathExists` and `readGraph` are the Moon branch's seams — plain
+ *   filesystem existence (the marker is a directory, which `readFileAt`
+ *   cannot answer) and the provider's one-call graph reader, both injectable
+ *   for the same reason `listFiles` is.
+ * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], nativeMarker: boolean, nativeModelFailure: string|null, moonModelFailure: string|null, workspaceLayoutFailure: string|null}}
  * @throws {Error} when the file list cannot be obtained. Loud on purpose: an
  *   index built from no files would put every file in no project, and a file in
  *   no project has no boundary to cross — a clean report, produced by not
- *   looking.
+ *   looking. Also when the root carries more than one project-model marker —
+ *   a Moon directory beside `nx.json`/`lattice.json`, both Moon spellings at
+ *   once, or `nx.json` beside `lattice.json` (`../commands/context.mjs`'s
+ *   `requireSingleProjectModel`, the same refusal `check` makes) — which
+ *   config governs at all is a decision nobody made, refused the same way an
+ *   unreadable `nx.json` is, through this function's caller in `./server.mjs`.
  */
 export function buildWorkspaceIndex({
   root,
@@ -271,9 +290,26 @@ export function buildWorkspaceIndex({
   listFiles = listWorkspaceFiles,
   readFileAt = readWorkspaceFile,
   readLayout = readWorkspaceLayout,
+  pathExists = existsSync,
+  readGraph = moonProvider.readProjectGraph,
 }) {
   const files = listFiles(root);
   const readFile = (path) => readFileAt(root, path);
+  // Which provider may judge this root at all — the SAME gate
+  // (`../commands/context.mjs`'s `requireSingleProjectModel`) the CLI reads
+  // before any command runs, so a tree carrying a Moon directory beside
+  // `nx.json`/`lattice.json` is refused here exactly as `check` refuses it,
+  // in the same words, from the one copy of the rule. Before the shared
+  // gate, this module judged such trees anyway — `.moon` beside `lattice.json`
+  // fell to the native branch and indexed nothing, silently; `.moon` beside
+  // `nx.json` built a Moon index and never read the `nx.json` it sat beside.
+  // Moon-versus-Moon coexistence rides the same gate through
+  // `../providers/moon.mjs`'s `moonMarkerAt`. Checked on the REAL filesystem
+  // (`pathExists`, default `existsSync`), never git's tracked list: a
+  // directory cannot be read the way `lattice.json` is below, and the
+  // tracked-list gate is exactly the native-branch defect that check records
+  // in its own comment.
+  const { moonMarker } = requireSingleProjectModel(root, { exists: pathExists });
   // A root carrying LATTICE_MODEL_FILE has a project model this module does
   // not read from `project.json` at all — see this file's header — so it is
   // handed to the native branch below rather than to `discoverProjects`.
@@ -294,6 +330,9 @@ export function buildWorkspaceIndex({
   // default), so this now agrees with the CLI regardless of git's index.
   if (readFile(LATTICE_MODEL_FILE) !== null) {
     return buildNativeWorkspaceIndex({ root, files, readFile, tsConfig });
+  }
+  if (moonMarker !== null) {
+    return buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph });
   }
 
   const { projects, skipped } = discoverProjects({ files, readFile });
@@ -370,6 +409,7 @@ export function buildWorkspaceIndex({
     fileFailures,
     nativeMarker: false,
     nativeModelFailure: null,
+    moonModelFailure: null,
     workspaceLayoutFailure,
   };
 }
@@ -465,6 +505,7 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
       fileFailures: [],
       nativeMarker: true,
       nativeModelFailure: cause?.message ?? String(cause),
+      moonModelFailure: null,
       workspaceLayoutFailure: null,
     };
   }
@@ -515,6 +556,85 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
     fileFailures,
     nativeMarker: true,
     nativeModelFailure: null,
+    moonModelFailure: null,
+    workspaceLayoutFailure: null,
+  };
+}
+
+/**
+ * The Moon branch of `buildWorkspaceIndex`: drives `../providers/moon.mjs`'s
+ * one-call contract (`readProjectGraph`) — the same provider object
+ * `../commands/context.mjs` hands `check` on this tree — instead of
+ * `discoverProjects`/`buildNodes`, because a Moon project has no `project.json`
+ * for those to find. See this module's header for the fall-through this branch
+ * replaces.
+ *
+ * @param {{root: string, files: string[], readFile: (path: string) => string|null, tsConfig?: string, readGraph: (root: string) => object}} args
+ * @returns {ReturnType<typeof buildWorkspaceIndex>}
+ */
+function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph }) {
+  let graph;
+  try {
+    graph = readGraph(root);
+  } catch (cause) {
+    // A Moon invocation that cannot answer — binary missing from the
+    // workspace's `node_modules/.bin`, nonzero exit, output that will not
+    // parse (`../providers/moon.test.mjs` pins each at the provider) — leaves
+    // ZERO nodes, and a zero-node graph judges every file clean. Recorded as
+    // `moonModelFailure` on an otherwise-valid empty index rather than thrown:
+    // one broken invocation must not blank the session, exactly as a broken
+    // `lattice.json` does not (`buildNativeWorkspaceIndex`'s catch above), and
+    // `indexGaps` turns it into a diagnostic naming the failed command on every
+    // open document. The next successful rebuild clears it; nothing watches the
+    // binary, so that rebuild arrives through any watched-file change or an
+    // editor restart.
+    return {
+      root,
+      files,
+      workspace: { root, projects: [], filesOf: () => [], readFile, tsConfig },
+      graph: { nodes: Object.create(null), dependencies: Object.create(null) },
+      skippedProjects: [],
+      fileFailures: [],
+      nativeMarker: false,
+      nativeModelFailure: null,
+      moonModelFailure: cause?.message ?? String(cause),
+      workspaceLayoutFailure: null,
+    };
+  }
+
+  // The `Workspace` object and ownership map, from the same `createWorkspace`
+  // every other branch here uses — one longest-root answer to "which project
+  // owns this file" for both faces.
+  const { workspace, owned } = createWorkspace({ root, graph, files, tsConfig, read: readFile });
+  const projectOfFile = new Map(owned.map(({ file, project }) => [file, project]));
+  // The same Module Federation and `package.json` facts the Nx branch, the
+  // native branch and `../../cli.mjs`'s Moon branch all compute, from the same
+  // shared functions (`../workspace.mjs`) — a CLI verdict and an editor verdict
+  // on the same import must match.
+  annotateMFERemotes(graph.nodes, readFile);
+  annotatePackageFacts(graph.nodes, readFile);
+
+  const { importSites, fileFailures } = analyzeTrackedFiles({ files, workspace });
+  // Moon's own graph carries only edges Moon itself resolved (`dependsOn`);
+  // the imports this tree writes are folded in by the SAME merge the CLI's
+  // Moon branch runs (`../providers/moon.mjs`'s `mergeImportEdges`), so an
+  // undeclared crossing is judged by the reachability rules in the editor
+  // exactly as `check` judges it — one implementation, not two (#223).
+  mergeImportEdges(graph, {
+    importSites,
+    projectOf: (file) => projectOfFile.get(file),
+  });
+
+  return {
+    root,
+    files,
+    workspace,
+    graph,
+    skippedProjects: [],
+    fileFailures,
+    nativeMarker: false,
+    nativeModelFailure: null,
+    moonModelFailure: null,
     workspaceLayoutFailure: null,
   };
 }
@@ -558,6 +678,14 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
  *   that the root carries one — and it **clears itself** the same way:
  *   `lattice.json` is already a watched file (`./server.mjs`), so fixing it
  *   republishes every open document without any editor action.
+ * - **A `moonModelFailure` gap is the Moon branch's own member of that same
+ *   family**, not a second copy of any of them: present only while
+ *   `../providers/moon.mjs`'s `readProjectGraph` actually threw — binary
+ *   missing, nonzero exit, unparseable output — never merely because the root
+ *   carries a Moon marker. It clears itself on the next successful rebuild,
+ *   which nothing watches the `moon` binary to trigger: it arrives through
+ *   any watched-file change or an editor restart, and the gap names the
+ *   command whose failure a developer has to resolve.
  * - **A `workspaceLayoutFailure` gap is the Nx-shaped branch's own
  *   equivalent of `nativeModelFailure`, not a second copy of it.** It is
  *   present only while `NX_CONFIG_FILE`'s own `workspaceLayout` is malformed
@@ -575,13 +703,14 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
  *
  * Each sentence names a path, so the diagnostic says which file to open.
  *
- * @param {{skippedProjects?: {file: string, reason: string}[], fileFailures?: {sourceFile: string, reason: string}[], nativeModelFailure?: string|null, workspaceLayoutFailure?: string|null}} index
+ * @param {{skippedProjects?: {file: string, reason: string}[], fileFailures?: {sourceFile: string, reason: string}[], nativeModelFailure?: string|null, moonModelFailure?: string|null, workspaceLayoutFailure?: string|null}} index
  * @returns {string[]}
  */
 export function indexGaps({
   skippedProjects = [],
   fileFailures = [],
   nativeModelFailure = null,
+  moonModelFailure = null,
   workspaceLayoutFailure = null,
 } = {}) {
   return [
@@ -591,6 +720,13 @@ export function indexGaps({
           `${LATTICE_MODEL_FILE} at the workspace root could not be turned into a project model ` +
             `(${firstLine(nativeModelFailure)}), so every project it declares or infers is ` +
             `missing from the graph entirely`,
+        ]),
+    ...(moonModelFailure === null
+      ? []
+      : [
+          "`moon project-graph --json` could not be turned into a project model " +
+            `(${firstLine(moonModelFailure)}), so every project it resolves is missing from ` +
+            `the graph entirely`,
         ]),
     ...(workspaceLayoutFailure === null
       ? []
