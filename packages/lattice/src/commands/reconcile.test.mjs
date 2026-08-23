@@ -55,15 +55,16 @@ const ioWithIntent = (model) => ({ loadIntentOverride: async () => model });
 
 describe("reconcileCommand", () => {
   it("reports no divergence when the intent matches, and names the comparison facts", async () => {
-    const result = await reconcileCommand(
-      commandContext({
-        graph: {
-          nodes: {
-            core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
-          },
-          dependencies: {},
+    const context = commandContext({
+      graph: {
+        nodes: {
+          core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
         },
-      }),
+        dependencies: {},
+      },
+    });
+    const result = await reconcileCommand(
+      context,
       ioWithIntent(
         intent({
           projects: { required: [{ name: "core", tags: ["type-package"] }] },
@@ -74,6 +75,22 @@ describe("reconcileCommand", () => {
     expect(result.reconcile.intent.file).toBe("architecture-intent.json");
     expect(result.reconcile.unknownFiles).toEqual([]);
     expect(result.report.text).toContain("✔ no divergence");
+    // The counts clause is the half that says what "no divergence" looked
+    // at — pinned here against numbers computed from THIS context, so a
+    // regression that rendered a clean verdict over zeroed or stale counts
+    // goes red instead of reporting coverage nobody measured.
+    const observedProjects = Object.keys(context.graph.nodes).length;
+    const observedEdges = Object.values(context.graph.dependencies).reduce(
+      (count, list) => count + list.length,
+      0,
+    );
+    expect(result.report.text).toContain(
+      `observed  ${observedProjects} project, ${observedEdges} edges`,
+    );
+    expect(result.report.text).toContain(
+      `✔ no divergence — the observed architecture matches the intended model ` +
+        `(${observedProjects} project and ${observedEdges} edges)`,
+    );
   });
 
   it("scores divergence element by element and names the counts", async () => {
