@@ -149,8 +149,8 @@ table to nest them under; a Moon workspace (`.moon/` directory present — a
 the two names from the defaults by convention, `--config` overriding for one
 run, because Moon's own configuration does not carry a plugin-options table
 (`../../docs/integrations/moon.md` owns that story). `cli.mjs`'s
-`optionsForUsage` and `check` are the two places that read either shape, chosen
-by which marker file the workspace root carries.
+`optionsForUsage` and `src/commands/check.mjs`'s `check` are the two places that
+read either shape, chosen by which marker file the workspace root carries.
 
 ```json
 "plugins": [

@@ -6,14 +6,18 @@ here may read the graph, the workspace and the policy; it may not print, and
 it may not decide the process's exit code — it returns a status and `cli.mjs`
 maps it.
 
-`context.mjs` is the exception in kind, not in rule: it is the preamble the
-commands share rather than a command. It composes `../workspace.mjs`,
-`../providers/` and `../options.mjs`; it does not reimplement any of them.
+`context.mjs` and `policy.mjs` are the exceptions in kind, not in rule: each is
+a preamble the commands share rather than a command. `context.mjs` composes
+`../workspace.mjs`, `../providers/` and `../options.mjs`; it does not
+reimplement any of them. `policy.mjs` holds the one boundary-policy ladder every
+command that reads a law resolves through, so no command grows a second copy of
+the resolution order.
 
 ## Commands
 
-- **`check`** (`../../cli.mjs`'s `runCheck`) — judges every import site against
-  the boundary rules and folds in every other finding class a verdict counts:
+- **`check`** (`./check.mjs`'s `check`, driven by `../../cli.mjs`'s `runCheck`) —
+  judges every import site against the boundary rules and folds in every other
+  finding class a verdict counts:
   declared-edge violations, go.work drift, dead tsconfig path aliases, intent
   drift, a failing fitness gate, and a failing custom rule
   (`./custom-rules.mjs`). Exits 1 on any of them, and it is the only
