@@ -21,10 +21,13 @@
 // language client actually made it in — the check that goes red if either
 // failure mode above ever comes back by another route.
 //
-// The LICENSE is copied in from the repository root because the extension
-// directory does not hold its own copy and vsce refuses to pack without one
-// outside of a TTY (it prompts interactively; in CI the prompt is a failure).
-// One legal text, staged at pack time, rather than a second tracked copy.
+// The LICENSE and the icon are both copied in from the repository root, each
+// because the extension directory does not hold its own copy: the LICENSE
+// because vsce refuses to pack without one outside of a TTY (it prompts
+// interactively; in CI the prompt is a failure), the icon because the brand
+// logo lives once at `.github/assets/logo.png` and the `icon` a manifest names
+// has to resolve inside the extension root for vsce to pack it. One copy of
+// each, staged at pack time, rather than second tracked copies.
 
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -91,6 +94,7 @@ try {
     copyFileSync(join(packageDir, name), target);
   }
   copyFileSync(join(root, "LICENSE"), join(staging, "LICENSE"));
+  copyFileSync(join(root, ".github/assets/logo.png"), join(staging, "icon.png"));
 
   // `--omit=dev` is the point: what installs here is exactly the runtime tree
   // the extension host will see. `--ignore-scripts` because nothing in this
