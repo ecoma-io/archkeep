@@ -262,16 +262,23 @@ const streams = () => {
 };
 
 let baseline;
+let deltaBaseline;
 beforeAll(async () => {
   // `diff` compares against a snapshot the tool itself wrote, and
   // `health`/`report`/`debt` read a history the tool itself captured — both
   // produced here, once, so each matrix row stays independent of the others'
-  // order.
+  // order. `delta` reads an evidence baseline of its own format, captured by
+  // the same command whose row consumes it.
   baseline = join(artifactsDir, "baseline.json");
   const graphRun = { ...streams(), ...seamFor.world() };
   expect(await runCli(["graph", "--format", "json", "--output", baseline], graphRun)).toBe(EXIT.ok);
   const captureRun = { ...streams(), ...seamFor.world() };
   expect(await runCli(["history", histDir, "--capture"], captureRun)).toBe(EXIT.ok);
+  deltaBaseline = join(artifactsDir, "delta-baseline.json");
+  const deltaCaptureRun = { ...streams(), ...seamFor.world() };
+  expect(await runCli(["delta", "--capture", "--output", deltaBaseline], deltaCaptureRun)).toBe(
+    EXIT.ok,
+  );
 });
 
 /**
@@ -306,6 +313,15 @@ const MATRIX = {
     refused: {
       world: "world",
       argv: () => ["diff", join(artifactsDir, "no-such-baseline.json")],
+      exit: EXIT.error,
+    },
+  },
+  delta: {
+    // An unchanged tree against its own baseline: nothing introduced, exit 0.
+    ok: { world: "world", argv: () => ["delta", deltaBaseline], exit: EXIT.ok },
+    refused: {
+      world: "world",
+      argv: () => ["delta", join(artifactsDir, "no-such-evidence.json")],
       exit: EXIT.error,
     },
   },

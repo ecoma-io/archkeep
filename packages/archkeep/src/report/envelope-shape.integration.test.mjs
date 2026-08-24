@@ -145,6 +145,7 @@ const files = [
 let root;
 let historyDir;
 let baseline;
+let deltaBaseline;
 
 /** A git command in the fixture, with an identity that does not read the machine's. */
 const git = (...args) =>
@@ -231,6 +232,18 @@ beforeAll(async () => {
   writeFileSync(baseline, `${JSON.stringify(snapshot.envelope, null, 2)}\n`);
   const captured = await run(["history", historyDir, "--capture"]);
   expect(captured.exitCode).toBe(0);
+
+  // `delta` needs an evidence baseline of its own — a different format from
+  // `diff`'s graph envelope (`../commands/delta-snapshot.mjs`) — captured by
+  // the command that owns it, so the roster measures a file this tool really
+  // writes. Captured to stdout and written here, the same arrangement the
+  // graph baseline above uses. NOT into `historyDir`: `history` reads every
+  // file there as one of its own graph snapshots, and an evidence snapshot
+  // is a different format it rightly refuses.
+  const deltaCapture = await run(["delta", "--capture"]);
+  expect(deltaCapture.exitCode).toBe(0);
+  deltaBaseline = join(root, "delta-baseline.json");
+  writeFileSync(deltaBaseline, `${deltaCapture.out}\n`);
 }, SPAWN_TEST_BUDGET_MS);
 
 afterAll(() => {
@@ -294,6 +307,7 @@ function argvForEveryCommand() {
     check: ["check", "--format", "json"],
     graph: ["graph", "--format", "json"],
     diff: ["diff", baseline, "--format", "json"],
+    delta: ["delta", deltaBaseline, "--format", "json"],
     discover: ["discover", "--format", "json"],
     drift: ["drift", "--format", "json"],
     reconcile: ["reconcile", "--format", "json"],

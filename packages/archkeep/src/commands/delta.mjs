@@ -1,0 +1,481 @@
+/**
+ * The `delta` command: two evidence sets — a captured baseline and the current
+ * tree — re-judged under ONE boundary config and ONE shared reference instant,
+ * then classified `introduced` | `resolved` | `unchanged` | `unknown`.
+ *
+ * Two modes, one module:
+ *
+ * - **capture** (`captureDelta`) — run at a base checkout, writes the evidence
+ *   snapshot `./delta-snapshot.mjs` defines: raw import-site records, the
+ *   graph they were collected against, coverage, provenance, and the policy
+ *   fingerprint. Evidence, never verdicts — the header of that module owns
+ *   the argument.
+ * - **compare** (`deltaCommand`) — run at head, loads the baseline and
+ *   re-judges BOTH sides through `../rules/index.mjs`'s engine under the
+ *   CURRENT config, so a policy edit between capture and now cannot fabricate
+ *   an introduced/resolved pair; only the code can move a classification
+ *   (`./delta-classify.mjs`).
+ *
+ * Unlike `diff` — which compares two GRAPH snapshots edge by edge and never
+ * exits 1 — `delta` is a gate: a non-waived introduced violation is a finding
+ * (exit 1), which is the whole point of carrying re-judgeable evidence rather
+ * than a graph. That makes `delta` the third verb whose verdict carries
+ * exit 1, beside `check` and `fitness`.
+ *
+ * Refusals (each a throw, exit 3 upstream — a delta that could not honestly
+ * classify must never read as "no change"):
+ * - a baseline that cannot be read, parsed, or holds a foreign schemaVersion
+ *   (`./delta-snapshot.mjs`'s loader owns those);
+ * - a provider mismatch between baseline and this run (`providerMismatch`) —
+ *   a THROW here where `diff` settles for a note, because violation IDENTITY
+ *   across two different project models is not trustworthy: the same tree
+ *   attributed to different projects would classify a rename as an
+ *   introduced/resolved pair the code does not contain;
+ * - incomplete CURRENT coverage — a delta over a half-analyzed head is not a
+ *   verdict, the same posture `check` takes on `unchecked` files;
+ * - an Nx workspace with polyglot manifests but no plugin registration — the
+ *   same silently-under-representing graph `graph`/`diff` refuse.
+ *
+ * What is deliberately NOT a refusal: a policy-fingerprint mismatch between
+ * baseline and current. Both sides are re-judged under the current law — that
+ * is the design's point — so the mismatch becomes a loud coverage note
+ * instead. Dirty base provenance and a dirty head are notes too: weaker
+ * evidence, not unreadable evidence.
+ *
+ * This module computes and returns; `../../cli.mjs`'s `runDelta` owns argv,
+ * output destination and the process exit code (`./README.md`).
+ */
+import { createRequire } from "node:module";
+
+import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import { referenceTime } from "../governance/clock.mjs";
+import { jsonEnvelope, renderJson } from "../report/json.mjs";
+import { buildDecision } from "../report/evidence.mjs";
+import { formatDeltaReport } from "../report/delta-text.mjs";
+import { evaluateRun } from "../rules/index.mjs";
+import { classifyDelta } from "./delta-classify.mjs";
+import {
+  buildEvidenceSnapshot,
+  providerMismatch,
+  readEvidenceSnapshot,
+  serializeEvidenceSnapshot,
+} from "./delta-snapshot.mjs";
+import { computePolicyFingerprint } from "./graph.mjs";
+import { resolveProvenance } from "./provenance.mjs";
+import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
+
+const require = createRequire(import.meta.url);
+/** @type {{name: string, version: string}} */
+const { name: TOOL_NAME, version: TOOL_VERSION } = require("../../package.json");
+
+/**
+ * Refuses the two head states no delta side may be built over, shared by both
+ * modes: the unregistered-plugin graph and incomplete analysis coverage.
+ *
+ * @param {object} commandContext From `resolveCommandContext`.
+ * @param {string} activity Which mode is refusing, for the message.
+ * @throws {Error} on either condition.
+ */
+function refuseUnjudgeableHead(commandContext, activity) {
+  const { provider, pluginGap } = commandContext;
+  if (provider === "nx" && !pluginGap.registered && pluginGap.manifests.length > 0) {
+    throw new Error(
+      `archkeep: refusing to ${activity} for an Nx workspace where this plugin is not ` +
+        `registered but polyglot manifests exist under project roots ` +
+        `(${pluginGap.manifests.join(", ")}). The graph would carry no polyglot edges, so the ` +
+        `evidence would silently under-represent the real architecture. Register the plugin in ` +
+        `nx.json: "plugins": [{ "plugin": "@ecoma-io/archkeep/nx" }], or remove the polyglot ` +
+        `manifests if they are not in use.`,
+    );
+  }
+  const notAnalyzed = commandContext.analysis.failures.filter(isWholeFileFailure);
+  if (notAnalyzed.length > 0) {
+    throw new Error(
+      `archkeep: cannot ${activity} — ${notAnalyzed.length} file` +
+        `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so the evidence would ` +
+        `miss violations living there and a later classification would misread the gap as a ` +
+        `code change. Fix the unanalyzed files and re-run.`,
+    );
+  }
+}
+
+/**
+ * Captures the current tree as a delta baseline: the evidence snapshot
+ * serialized, ready for a future `delta <base.json>` run to consume.
+ *
+ * @param {object} commandContext From `resolveCommandContext`.
+ * @param {{config: object|null}} io The resolved boundary config — required,
+ *   because the snapshot's policy fingerprint is what lets a later run say
+ *   loudly that the law moved.
+ * @returns {{snapshot: object, text: string}}
+ * @throws {Error} on an unjudgeable head (above) or a run with no boundary
+ *   law — a baseline with no policy identity could never disclose a law
+ *   change, which is the silent direction.
+ */
+export function captureDelta(commandContext, { config }) {
+  refuseUnjudgeableHead(commandContext, "capture a delta baseline");
+  if (!config) {
+    throw new Error(
+      "archkeep: cannot capture a delta baseline without a boundary config — the snapshot " +
+        "records the policy fingerprint so a later delta run can say loudly when the law moved, " +
+        "and a workspace that resolves no law leaves that claim unmakeable.",
+    );
+  }
+  const { root, provider, graph, analysis } = commandContext;
+  const snapshot = buildEvidenceSnapshot({
+    tool: { name: TOOL_NAME, version: TOOL_VERSION },
+    provenance: resolveProvenance(root),
+    provider,
+    policyFingerprint: computePolicyFingerprint(config),
+    coverage: {
+      // `refuseUnjudgeableHead` already threw on any whole-file failure, so
+      // the capture-side claim is honestly complete.
+      complete: true,
+      analyzedFiles: analysis.analyzed,
+      notAnalyzed: [],
+      blindSpots: analysis.failures
+        .filter((failure) => !isWholeFileFailure(failure))
+        .map(({ sourceFile, line, column, reason }) => ({
+          file: sourceFile,
+          line,
+          column,
+          reason,
+        })),
+    },
+    graph,
+    records: analysis.imports,
+  });
+  return { snapshot, text: serializeEvidenceSnapshot(snapshot) };
+}
+
+/**
+ * Rebuilds an engine-consumable `ProjectGraph` from a snapshot's stored graph.
+ *
+ * The snapshot stores what `graph --format json` publishes — a `projects`
+ * ARRAY and a flat `dependencies` array — while `../rules/index.mjs`'s
+ * `evaluate()` consumes Nx's shape: a `nodes` MAP keyed by name (each with
+ * `type` and `data.{root, tags, targets?}`) plus a source-keyed `dependencies`
+ * map. The conversion is exact where the snapshot kept the fact:
+ *
+ * - `name`/`root`/`type`/`tags` map straight back onto `data`;
+ * - the three rule-relevant extras the snapshot re-attached (`mfeRemote`,
+ *   `entryPoints`, `declaredPackages`) go back onto `data` only when present —
+ *   absence stays absence, because `evaluate()` treats an absent field as
+ *   "declares none" and inventing an empty value would be a second copy of
+ *   that answer (`./delta-snapshot.mjs`);
+ * - `targets` was stored as the NAMES alone, so each becomes `{}` in the
+ *   rebuilt `data.targets` map. That preserves both reads the engine makes of
+ *   it — `Object.keys` in the buildTargets guard, and
+ *   `../rules/topology.mjs`'s `hasBuildExecutor`, whose
+ *   `targets[t].executor !== ""` is true for `{}` — so a declared target
+ *   stays a declared target; the executor STRING itself is the one fact the
+ *   snapshot never held;
+ * - `workspaceLayout` and `exemptedFiles` ride the graph object exactly as
+ *   the provider carried them, because `createContext` reads both off it.
+ *
+ * Every project name gets a `dependencies` entry — an empty array for a
+ * project with no outgoing edge — matching the shape every provider emits.
+ *
+ * A mis-shaped rebuild here is the silent direction in miniature: a base
+ * graph the engine reads as empty yields zero base violations, which
+ * classifies every standing violation as freshly introduced (loud but wrong)
+ * or — with the sides swapped — masks base violations entirely. The test
+ * beside this module holds the non-empty base-side re-judgment.
+ *
+ * @param {{projects: object[], dependencies: {source: string, target: string,
+ *   type: string}[], workspaceLayout?: object, exemptedFiles?: string[]}} storedGraph
+ *   A validated snapshot's `graph` section (`parseEvidenceSnapshot`).
+ * @returns {object} A graph `evaluate()` consumes.
+ */
+export function evidenceGraphToProjectGraph(storedGraph) {
+  /** @type {Record<string, object>} */
+  const nodes = {};
+  /** @type {Record<string, object[]>} */
+  const dependencies = {};
+  for (const project of storedGraph.projects) {
+    /** @type {Record<string, unknown>} */
+    const data = { root: project.root, tags: project.tags ?? [] };
+    if (Array.isArray(project.targets)) {
+      data.targets = Object.fromEntries(project.targets.map((target) => [target, {}]));
+    }
+    if (project.mfeRemote !== undefined) data.mfeRemote = project.mfeRemote;
+    if (Array.isArray(project.entryPoints)) data.entryPoints = project.entryPoints;
+    if (Array.isArray(project.declaredPackages)) data.declaredPackages = project.declaredPackages;
+    nodes[project.name] = { name: project.name, type: project.type, data };
+    dependencies[project.name] = [];
+  }
+  for (const edge of storedGraph.dependencies) {
+    if (!Array.isArray(dependencies[edge.source])) dependencies[edge.source] = [];
+    dependencies[edge.source].push({ source: edge.source, target: edge.target, type: edge.type });
+  }
+  /** @type {Record<string, unknown>} */
+  const graph = { nodes, dependencies };
+  if (storedGraph.workspaceLayout !== undefined)
+    graph.workspaceLayout = storedGraph.workspaceLayout;
+  if (Array.isArray(storedGraph.exemptedFiles)) graph.exemptedFiles = storedGraph.exemptedFiles;
+  return graph;
+}
+
+/**
+ * A longest-root-prefix attributor for `classifyUnresolvableRecords`: the
+ * record's file is matched against project roots, head's first (the current
+ * model is the one both sides are judged under), then any baseline root the
+ * head does not already claim — so a base-side record living in a directory
+ * the head no longer has still attributes to the project that owned it.
+ *
+ * @param {object} headGraph The current run's graph (`nodes` map).
+ * @param {object[]} baselineProjects The snapshot's stored project rows.
+ * @returns {(record: object) => string|null}
+ */
+function sourceProjectAttributor(headGraph, baselineProjects) {
+  /** @type {Map<string, string>} root → project name, head winning ties. */
+  const byRoot = new Map();
+  for (const node of Object.values(headGraph.nodes ?? {})) {
+    const root = typeof node?.data?.root === "string" ? node.data.root : null;
+    if (root !== null && !byRoot.has(root)) byRoot.set(root, node.name);
+  }
+  for (const project of baselineProjects) {
+    if (typeof project.root === "string" && !byRoot.has(project.root)) {
+      byRoot.set(project.root, project.name);
+    }
+  }
+  const entries = [...byRoot.entries()]
+    .map(([root, name]) => [root.replace(/\/+$/u, ""), name])
+    .sort((a, b) => b[0].length - a[0].length);
+  return (record) => {
+    const file = record?.sourceFile;
+    if (typeof file !== "string") return null;
+    for (const [root, name] of entries) {
+      if (root === "" || root === "." || file === root || file.startsWith(`${root}/`)) {
+        return /** @type {string} */ (name);
+      }
+    }
+    return null;
+  };
+}
+
+/** First eight hex characters of a fingerprint, for prose that names one. */
+const short = (fingerprint) =>
+  typeof fingerprint === "string" ? fingerprint.slice(0, 8) : String(fingerprint);
+
+/**
+ * Runs the `delta` compare mode: loads the baseline, re-judges both sides
+ * under the current law and one shared instant, classifies, and folds the
+ * classification into the verdict.
+ *
+ * The exit fold — the whole point of the command:
+ * - any `introduced` violation NOT covered by the current waiver table →
+ *   `findings` (exit 1);
+ * - else any `unknown` entry, in either the violations or the unresolvable
+ *   buckets → `no-verdict` (exit 3): an item the classifier could not place
+ *   is a question this run could not answer, never a clean delta;
+ * - else `ok` (exit 0). Waived-introduced entries are REPORTED — waiving is
+ *   a tracked acceptance, not a fix — but do not fail the gate, which is what
+ *   a waiver is for.
+ *
+ * @param {string} baselinePath Absolute path to the evidence snapshot.
+ * @param {object} commandContext From `resolveCommandContext`.
+ * @param {{config: object|null, readBaseline?: (path: string) => object,
+ *   now?: string}} io The resolved boundary config (required — both sides
+ *   are re-judged under it), an injectable baseline reader, and the one
+ *   shared reference instant (defaults to the shared governance clock).
+ * @returns {{status: "ok"|"findings"|"no-verdict", delta: object,
+ *   coverage: object, report: {text: string, json: string}}}
+ * @throws {Error} on every refusal the module header lists.
+ */
+export function deltaCommand(
+  baselinePath,
+  commandContext,
+  { config, readBaseline = readEvidenceSnapshot, now = referenceTime() },
+) {
+  const { root, provider, marker, graph, analysis } = commandContext;
+
+  refuseUnjudgeableHead(commandContext, "compute a delta");
+  if (!config) {
+    throw new Error(
+      "archkeep: cannot compute a delta without a boundary config — both sides are re-judged " +
+        "under the current law, and a run that resolves no law has nothing to judge either side " +
+        "against.",
+    );
+  }
+
+  const baseline = readBaseline(baselinePath);
+
+  // Provider mismatch is a REFUSAL here, deliberately stricter than `diff`'s
+  // note: `diff` describes structural difference, where a provider artefact is
+  // a caveat; `delta` asserts violation identity across the two sides, and an
+  // identity computed over two different project models is not evidence.
+  const mismatch = providerMismatch(baseline.provider, provider);
+  if (mismatch !== null) {
+    throw new Error(
+      `archkeep: refusing to compute a delta — ${mismatch}. Re-capture the baseline under ` +
+        `this run's provider.`,
+    );
+  }
+
+  const baseGraph = evidenceGraphToProjectGraph(baseline.graph);
+  const configWithNow = { ...config, now };
+  // Both sides RAW (pre-suppression), through the same walk `waivers` reads:
+  // suppression must annotate the classification, never shrink either side —
+  // a suppressed-then-regressed violation has to stay visible
+  // (`./delta-classify.mjs`).
+  const baseViolations = evaluateRun(baseline.records, baseGraph, configWithNow).rawViolations;
+  const headViolations = evaluateRun(analysis.imports, graph, configWithNow).rawViolations;
+
+  const classification = classifyDelta({
+    baseViolations,
+    headViolations,
+    baseRecords: baseline.records,
+    headRecords: analysis.imports,
+    suppressions: config.suppressions ?? [],
+    now,
+    sourceProjectOf: sourceProjectAttributor(graph, baseline.graph.projects),
+  });
+
+  const headProvenance = resolveProvenance(root);
+  const headFingerprint = computePolicyFingerprint(config);
+  const meta = compareSnapshotMetadata({
+    baselineProvider: baseline.provider,
+    headProvider: provider,
+    baselineProvenance: baseline.provenance,
+    headProvenance,
+    baselineFingerprint: baseline.policyFingerprint,
+    headFingerprint,
+  });
+
+  const notes = [];
+  if (meta.policyChanged === true) {
+    notes.push(
+      `the boundary law changed since capture (baseline ${short(baseline.policyFingerprint)}…, ` +
+        `current ${short(headFingerprint)}…) — classifications reflect the current law applied ` +
+        `to both sides, so a violation a policy edit created or retired classifies as unchanged, ` +
+        `not as introduced or resolved`,
+    );
+  }
+  if (meta.crossRepo) {
+    notes.push(
+      `baseline provenance remote (${baseline.provenance.remote}) differs from head provenance ` +
+        `remote (${headProvenance?.remote}) — the delta may be across unrelated repositories ` +
+        `rather than two revisions of the same one`,
+    );
+  } else if (meta.provenanceOneSided) {
+    const side = baseline.provenance ? "head" : "baseline";
+    notes.push(
+      `the ${side} carries no provenance — the delta cannot verify it compares two revisions ` +
+        `of the same repository`,
+    );
+  }
+  if (meta.dirtyBaseline) {
+    notes.push(
+      "the baseline was captured from a dirty working tree — its evidence is not a reproducible " +
+        "claim about the commit it names",
+    );
+  }
+  if (meta.dirtyHead) {
+    notes.push(
+      "this run's working tree is dirty — the head side describes uncommitted state, not the " +
+        "commit HEAD names",
+    );
+  }
+
+  const { violations, unresolvable } = classification;
+  const introducedWaived = violations.introduced.filter((entry) => entry.waived === true).length;
+  const introducedNotWaived = violations.introduced.length - introducedWaived;
+  const unknownCount = violations.unknown.length + unresolvable.unknown.length;
+
+  /** @type {"ok"|"findings"|"no-verdict"} */
+  let status;
+  /** @type {0|1|3} */
+  let exitCode;
+  let decision;
+  if (introducedNotWaived > 0) {
+    status = "findings";
+    exitCode = 1;
+    decision = buildDecision({
+      status,
+      coverageComplete: true,
+      findings: introducedNotWaived,
+    });
+  } else if (unknownCount > 0) {
+    status = "no-verdict";
+    exitCode = 3;
+    decision = buildDecision({
+      status,
+      coverageComplete: true,
+      findings: 0,
+      reason:
+        `${unknownCount} delta item${unknownCount === 1 ? "" : "s"} could not be classified — ` +
+        `an item whose identity cannot be stated is never guessed into a bucket`,
+    });
+  } else {
+    status = "ok";
+    exitCode = 0;
+    decision = buildDecision({ status, coverageComplete: true, findings: 0 });
+  }
+
+  const coverage = {
+    complete: true,
+    projects: Object.keys(graph.nodes).length,
+    analyzedFiles: analysis.analyzed,
+    imports: analysis.imports.length,
+    notAnalyzed: [],
+    blindSpots: analysis.failures
+      .filter((failure) => !isWholeFileFailure(failure))
+      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    notes,
+  };
+
+  const result = {
+    baseline: {
+      path: baselinePath,
+      tool: baseline.tool,
+      provider: baseline.provider,
+      provenance: baseline.provenance,
+      policyFingerprint: baseline.policyFingerprint,
+      records: baseline.records.length,
+      projects: baseline.graph.projects.length,
+    },
+    head: {
+      provenance: headProvenance,
+      policyFingerprint: headFingerprint,
+      records: analysis.imports.length,
+      projects: Object.keys(graph.nodes).length,
+    },
+    policyChanged: meta.policyChanged,
+    summary: {
+      introduced: violations.introduced.length,
+      introducedWaived,
+      resolved: violations.resolved.length,
+      unchanged: violations.unchanged.length,
+      unknown: violations.unknown.length,
+      unresolvable: {
+        introduced: unresolvable.introduced.length,
+        resolved: unresolvable.resolved.length,
+        unchanged: unresolvable.unchanged.length,
+        unknown: unresolvable.unknown.length,
+      },
+    },
+    violations,
+    unresolvable,
+  };
+
+  const envelope = jsonEnvelope({
+    command: "delta",
+    context: { root, provider, marker, provenance: headProvenance },
+    status,
+    exitCode,
+    coverage,
+    result,
+    decision,
+  });
+
+  return {
+    status,
+    delta: result,
+    coverage,
+    report: {
+      text: formatDeltaReport({ delta: result, coverage }),
+      json: renderJson(envelope),
+    },
+  };
+}

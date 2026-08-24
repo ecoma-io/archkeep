@@ -8512,3 +8512,186 @@ export const boundarySuppressions = [];
     expect(existsSync(join(root, "libs/core/project.json"))).toBe(true);
   });
 });
+
+describe("delta: capture → mutate → compare over a real fixture", () => {
+  // Its own tree rather than the file's shared one, because these tests
+  // MUTATE the workspace between capture and compare — the capture/compare
+  // pair is the command's whole contract, and no other block's fixture may
+  // change under it.
+  const deltaRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-delta-"));
+  afterAll(() => rmSync(deltaRoot, { recursive: true, force: true }));
+
+  const writeDelta = (relativePath, text) => {
+    mkdirSync(join(deltaRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(deltaRoot, relativePath), text);
+  };
+
+  writeDelta(
+    "nx.json",
+    `${JSON.stringify({
+      plugins: [
+        {
+          plugin: "@ecoma-io/archkeep/nx",
+          options: { boundaryConfig: "module-boundaries.config.mjs" },
+        },
+      ],
+    })}\n`,
+  );
+  writeDelta(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer-kernel", onlyDependOnLibsWithTags: ["layer-kernel"] },
+  { sourceTag: "layer-outer", onlyDependOnLibsWithTags: ["layer-outer", "layer-kernel"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: [],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeDelta("libs/kernel/go.mod", "module example.invalid/kernel\n\ngo 1.24\n");
+  writeDelta("libs/kernel/kernel.go", 'package kernel\n\nconst Name = "kernel"\n');
+  writeDelta("libs/outer/go.mod", "module example.invalid/outer\n\ngo 1.24\n");
+  writeDelta("libs/outer/outer.go", 'package outer\n\nconst Name = "outer"\n');
+
+  const deltaGraph = {
+    nodes: {
+      kernel: {
+        name: "kernel",
+        type: "lib",
+        data: { root: "libs/kernel", tags: ["layer-kernel"] },
+      },
+      outer: {
+        name: "outer",
+        type: "lib",
+        data: { root: "libs/outer", tags: ["layer-outer"] },
+      },
+    },
+    dependencies: { kernel: [], outer: [] },
+  };
+
+  const deltaFiles = [
+    "nx.json",
+    "module-boundaries.config.mjs",
+    "libs/kernel/go.mod",
+    "libs/kernel/kernel.go",
+    "libs/outer/go.mod",
+    "libs/outer/outer.go",
+  ];
+
+  const deltaEnv = (files = deltaFiles) => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      cwd: deltaRoot,
+      readGraph: () => deltaGraph,
+      listFiles: () => files,
+    };
+  };
+
+  const baselinePath = join(deltaRoot, "delta-base.json");
+
+  it("captures a baseline at base and reports an unchanged tree as a verifiable clean claim", async () => {
+    const capture = deltaEnv();
+    expect(await runCli(["delta", "--capture", "--output", baselinePath], capture)).toBe(EXIT.ok);
+    expect(capture.lines.err.join("\n")).toContain("delta baseline captured");
+    expect(existsSync(baselinePath)).toBe(true);
+
+    // The same tree against its own baseline: exit 0, and the report states
+    // WHAT was compared rather than printing bare silence.
+    const compare = deltaEnv();
+    expect(await runCli(["delta", baselinePath], compare)).toBe(EXIT.ok);
+    const text = compare.lines.out.join("\n");
+    expect(text).toContain("✔ no introduced violations — compared baseline");
+    expect(text).toMatch(/2 projects\)/u);
+  });
+
+  it("classifies a violation the mutation introduced, at the site that wrote it, exit 1", async () => {
+    // The mutation: the kernel starts importing the outer layer, which the
+    // law above forbids. Real file, real analyzer, real rules — only Nx and
+    // git are injected.
+    writeDelta(
+      "libs/kernel/reach.go",
+      'package kernel\n\nimport (\n\t"example.invalid/outer"\n)\n\nvar _ = outer.Name\n',
+    );
+    const mutatedFiles = [...deltaFiles, "libs/kernel/reach.go"];
+
+    const compare = deltaEnv(mutatedFiles);
+    expect(await runCli(["delta", baselinePath], compare)).toBe(EXIT.violations);
+    const text = compare.lines.out.join("\n");
+    expect(text).toContain("⚠ 1 introduced violation");
+    expect(text).toContain("kernel → outer  onlyTagsConstraintViolation");
+    expect(text).toContain("at libs/kernel/reach.go:4:2");
+
+    const json = deltaEnv(mutatedFiles);
+    expect(await runCli(["delta", baselinePath, "--format", "json"], json)).toBe(EXIT.violations);
+    const envelope = JSON.parse(json.lines.out.join("\n"));
+    expect(envelope.command).toBe("delta");
+    expect(envelope.status).toBe("findings");
+    expect(envelope.exitCode).toBe(1);
+    expect(envelope.result.summary.introduced).toBe(1);
+    expect(envelope.result.violations.introduced[0]).toMatchObject({
+      messageId: "onlyTagsConstraintViolation",
+      sourceProject: "kernel",
+      target: "outer",
+    });
+  });
+
+  it("classifies the reverse run as resolved, never as clean silence", async () => {
+    // A baseline captured over the VIOLATING tree, compared against the clean
+    // one: the base side of the re-judgment must produce the violation from
+    // the stored snapshot — the silent-direction case, held end to end.
+    const violatingFiles = [...deltaFiles, "libs/kernel/reach.go"];
+    const violatingBase = join(deltaRoot, "delta-base-violating.json");
+    const capture = deltaEnv(violatingFiles);
+    expect(await runCli(["delta", "--capture", "--output", violatingBase], capture)).toBe(EXIT.ok);
+
+    const compare = deltaEnv();
+    expect(await runCli(["delta", violatingBase], compare)).toBe(EXIT.ok);
+    const text = compare.lines.out.join("\n");
+    expect(text).toContain("✔ 1 resolved violation");
+    expect(text).toContain("kernel → outer  onlyTagsConstraintViolation");
+  });
+
+  it("refuses a baseline that is not an evidence snapshot, exit 3, naming the file", async () => {
+    const junk = join(deltaRoot, "not-a-snapshot.json");
+    writeFileSync(junk, '{"schemaVersion": 999}\n');
+    const compare = deltaEnv();
+    expect(await runCli(["delta", junk], compare)).toBe(EXIT.error);
+    expect(compare.lines.err.join("\n")).toContain("not-a-snapshot.json");
+  });
+
+  it("holds the spawned usage contract: missing baseline, extra positional, unknown flag — all exit 2", () => {
+    const spawnDelta = (args) =>
+      spawnSync(process.execPath, [CLI, "delta", ...args], {
+        cwd: deltaRoot,
+        encoding: "utf8",
+        timeout: SPAWN_BUDGET_MS,
+        killSignal: "SIGKILL",
+      });
+
+    const missing = spawnDelta([]);
+    expect(missing.status).toBe(EXIT.usage);
+    expect(missing.stderr).toContain("exactly one positional argument");
+
+    const extra = spawnDelta(["one.json", "two.json"]);
+    expect(extra.status).toBe(EXIT.usage);
+
+    const capturePositional = spawnDelta(["--capture", "stray.json"]);
+    expect(capturePositional.status).toBe(EXIT.usage);
+    expect(capturePositional.stderr).toContain("--capture takes no positional arguments");
+
+    const typo = spawnDelta(["--fromat", "json", "base.json"]);
+    expect(typo.status).toBe(EXIT.usage);
+    expect(typo.stderr).toContain("unknown option '--fromat'");
+  });
+});
