@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.14.0](https://github.com/ecoma-io/archkeep/compare/v0.13.0...v0.14.0) (2026-08-24)
+
+
+### Features
+
+* **archkeep:** a reason-mandatory acceptance channel for unowned files on Nx/Moon ([c2a8964](https://github.com/ecoma-io/archkeep/commit/c2a8964bf61fa138b509dffc9c87a037fb8c8472))
+* **archkeep:** a reason-mandatory acceptance channel for unowned files on nx/moon ([#303](https://github.com/ecoma-io/archkeep/issues/303)) ([c2a8964](https://github.com/ecoma-io/archkeep/commit/c2a8964bf61fa138b509dffc9c87a037fb8c8472))
+* **archkeep:** classify introduced boundary violations with the delta verb ([#299](https://github.com/ecoma-io/archkeep/issues/299)) ([c8425c5](https://github.com/ecoma-io/archkeep/commit/c8425c5489af8f501a50a90fc96022c9ac6d1c7e))
+* **archkeep:** give explain an agent-native evidence contract ([#302](https://github.com/ecoma-io/archkeep/issues/302)) ([be5bade](https://github.com/ecoma-io/archkeep/commit/be5bade009081a7798ab533a81bf8f16cea85d52))
+
+
+### Bug Fixes
+
+* **archkeep:** correct the stale relative-path claim in the differential fixture header ([#295](https://github.com/ecoma-io/archkeep/issues/295)) ([089e035](https://github.com/ecoma-io/archkeep/commit/089e035fd90dd79102454760b566af8f6c710ee6)), closes [#289](https://github.com/ecoma-io/archkeep/issues/289)
+* **archkeep:** stop two native-branch tests from silently testing the fallback path ([#298](https://github.com/ecoma-io/archkeep/issues/298)) ([fe7f129](https://github.com/ecoma-io/archkeep/commit/fe7f129f10249de9989a5c700ae164d2b1594653))
+* **workspace:** stop restating the extra-files count that already drifted once ([#294](https://github.com/ecoma-io/archkeep/issues/294)) ([a9daa54](https://github.com/ecoma-io/archkeep/commit/a9daa5496a5289dea5f2e12b759c528f26eaef5c)), closes [#284](https://github.com/ecoma-io/archkeep/issues/284)
+
+
+### Documentation
+
+* **docs:** correct ADR 0003's crates.io and Go deprecation mechanics ([#296](https://github.com/ecoma-io/archkeep/issues/296)) ([1569f5d](https://github.com/ecoma-io/archkeep/commit/1569f5db89809eb2346c8b5f152a55146014c75f))
+* **docs:** document version-pinned skills vendoring instead of an npm channel ([#304](https://github.com/ecoma-io/archkeep/issues/304)) ([c63acf7](https://github.com/ecoma-io/archkeep/commit/c63acf779fde2d2e7be2f067eea01d669e581e61))
+
 ## [0.13.0](https://github.com/ecoma-io/archkeep/compare/v0.12.0...v0.13.0) (2026-08-24)
 
 
