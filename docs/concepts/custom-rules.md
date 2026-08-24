@@ -24,7 +24,7 @@ not a license to parse.
 
 That seam is what keeps this from being a second ESLint: an ESLint rule
 receives a file and walks its AST itself, welding the rule to one language's
-parser; a Lattice rule receives facts an analyzer already extracted, so one
+parser; a Archkeep rule receives facts an analyzer already extracted, so one
 contract serves every language the analyzers read — and every language they
 read later, with no rule changing.
 

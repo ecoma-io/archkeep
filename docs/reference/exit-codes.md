@@ -57,7 +57,7 @@ a rename that left files owned by nothing.
 
 ```shell
 # Wrong: turns "could not look" into "looked and found nothing"
-lattice check || true
+archkeep check || true
 ```
 
 Both 1 and 3 must fail the build. They differ in what you go and look at, not
@@ -138,7 +138,7 @@ envelope's `status` follows the same mapping: `"ok"` for 0, `"no-verdict"` for 3
 
 `fitness` is the exception: it is a verdict, not a print job (D-09). It exits 1
 on a failing function and 3 on an undetermined one -- the same two lanes
-`check` uses -- because a CI gating on `lattice fitness` must not be green over
+`check` uses -- because a CI gating on `archkeep fitness` must not be green over
 a function that failed or that the run could not determine.
 
 `diff` also refuses an incomplete baseline or current workspace (exit 3, no

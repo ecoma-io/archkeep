@@ -3,25 +3,25 @@
  *
  * It is here for two reasons, and the second is the one that matters.
  *
- * The first is that `lattice` is an Nx workspace like any other, and a workspace
+ * The first is that `archkeep` is an Nx workspace like any other, and a workspace
  * that ships a boundary enforcer and does not state its own boundaries is
  * asking every consumer to trust a claim it never tested on itself.
- * `packages/lattice/cli.mjs check` runs over this tree in CI, reads
+ * `packages/archkeep/cli.mjs check` runs over this tree in CI, reads
  * this file, and either finds nothing or fails the build — so the tool's own
  * repository is its first consumer.
  *
  * The second is that this file is the only place where "the tool is universal"
  * stops being a design intention and becomes something a run can disprove. The
- * vocabulary below is `lattice`'s own — `type-package`, `scope-nx` — and it has
+ * vocabulary below is `archkeep`'s own — `type-package`, `scope-nx` — and it has
  * no overlap with the tags of the workspace the tool was extracted from. If any
  * project name, area, or tag value from that workspace had survived in the
  * source, this table would be the thing that fails, because none of those names
- * appear here to be found. `packages/lattice/src/conformance/boundary.test.mjs`
+ * appear here to be found. `packages/archkeep/src/conformance/boundary.test.mjs`
  * states that constraint as a rule; this file is what exercises it.
  *
  * Tags use dash separators (`type-package`, `scope-nx`) rather than colons
  * (`type:package`, `scope:nx`) because Moon tags cannot contain colons
- * (`packages/lattice/src/providers/moon.mjs`, `deriveTags`). The Moon
+ * (`packages/archkeep/src/providers/moon.mjs`, `deriveTags`). The Moon
  * provider emits Moon's tags verbatim, and the constraint table must match
  * the provider. Nx- and native-path workspaces may use colons freely; this
  * repository uses Moon, so its tags follow Moon's syntax.
@@ -30,7 +30,7 @@
  * deliberate commitment rather than a convenience: the enforcer reproduces that
  * plugin's semantics for the languages ESLint cannot read, so the vocabulary a
  * reader has to learn is the plugin's documented one and not a local dialect.
- * `packages/lattice/src/config.mjs` validates the shape on load, so a
+ * `packages/archkeep/src/config.mjs` validates the shape on load, so a
  * malformed row fails where it is read rather than as a rule that silently
  * matches nothing — a constraint matching nothing does not error, it approves.
  *
@@ -68,22 +68,22 @@ export const depConstraints = [
   // nothing on a consumer's disk.
   { sourceTag: "type-package", onlyDependOnLibsWithTags: ["type-package"] },
 
-  // `type-extension` is an editor client — today `packages/lattice-vscode`, a
+  // `type-extension` is an editor client — today `packages/archkeep-vscode`, a
   // VS Code extension. It depends on the engine package at runtime (resolves
   // and drives the boundary server), and the constraint states that direction
   // as law: an extension may depend on a package, and on nothing else. Combined
   // with the `type-package` row above (packages may only depend on packages),
   // the enforced directions are:
   //
-  //   lattice-vscode → lattice  ✅  allowed (extension depends on package)
-  //   lattice → lattice-vscode  ❌  forbidden (package cannot depend on extension)
+  //   archkeep-vscode → archkeep  ✅  allowed (extension depends on package)
+  //   archkeep → archkeep-vscode  ❌  forbidden (package cannot depend on extension)
   //
   // The extension does not bundle the boundary server — it resolves the server
   // out of the workspace being edited and speaks to it over stdio, so the
   // diagnostics in the buffer come from the same version that workspace's
   // pipeline runs. That design decision is about how the dependency is
   // expressed (runtime resolution, not a bundled copy), not whether it exists.
-  // An `import` of `@ecoma-io/lattice` from the extension would be a
+  // An `import` of `@ecoma-io/archkeep` from the extension would be a
   // compile-time dependency the architecture allows; a bundled copy would be
   // one the architecture forbids, because a marketplace-pinned analyzer is free
   // to disagree with CI about the same import while both report confidently.
@@ -99,9 +99,9 @@ export const depConstraints = [
   //     so it never reaches this table.
   //   - By package name, with the server linked in as a workspace dependency:
   //     resolves, but to the pnpm link path
-  //     (`packages/lattice-vscode/node_modules/@ecoma-io/lattice/index.mjs`),
+  //     (`packages/archkeep-vscode/node_modules/@ecoma-io/archkeep/index.mjs`),
   //     which classifies `external` — and an external target never reaches the
-  //     tag block. `packages/lattice/src/analysis/typescript.mjs`
+  //     tag block. `packages/archkeep/src/analysis/typescript.mjs`
   //     states why in its header — it does not call `realpath`, so a pnpm
   //     workspace link resolves to its link path instead of naming the project
   //     behind it. The tsconfig changed nothing here: `nodenext` resolution
@@ -113,7 +113,7 @@ export const depConstraints = [
   // kept anyway for the same reason the eight options below are written out at
   // their defaults: it is the value a second reader cannot recover from silence.
   // What makes it decide is a `paths` alias, not the tsconfig's mere existence:
-  // mapping `@ecoma-io/lattice` onto the project's own source in
+  // mapping `@ecoma-io/archkeep` onto the project's own source in
   // `tsconfig.base.json` made the probe import resolve inside the workspace,
   // reach this table, and trip the constraint (`onlyDependOnLibsWithTags`
   // violation, exit 1 — measured, then reverted). This tree's tsconfig carries
@@ -127,7 +127,7 @@ export const depConstraints = [
   // inside itself and nowhere else.
   { sourceTag: "scope-nx", onlyDependOnLibsWithTags: ["scope-nx"] },
 
-  // `scope-sdk` is the rule-authoring scope, and `packages/lattice-rule-sdk-rust`
+  // `scope-sdk` is the rule-authoring scope, and `packages/archkeep-rule-sdk-rust`
   // is the first package in this repository that is not Nx tooling — the
   // second scope the row above was written in anticipation of. An SDK is a
   // BINDING for the custom-rule contract
@@ -138,8 +138,8 @@ export const depConstraints = [
   //
   // What the pair of rows prevents, in the direction each is read:
   //
-  //   lattice → lattice-rule-sdk-rust  ❌  the engine reaching into an SDK
-  //   lattice-rule-sdk-rust → lattice  ❌  an SDK reaching into the engine
+  //   archkeep → archkeep-rule-sdk-rust  ❌  the engine reaching into an SDK
+  //   archkeep-rule-sdk-rust → archkeep  ❌  an SDK reaching into the engine
   //
   // The first is the one with teeth. An engine that imported an SDK would make
   // the contract's two sides one program, and "the host validates what the SDK
@@ -153,7 +153,7 @@ export const depConstraints = [
   // **The row judges nothing on this workspace today, and that is measured
   // rather than assumed.** The crate declares two dependencies, serde and
   // serde_json, both resolved from crates.io, and nothing in this tree imports
-  // it — `node packages/lattice/cli.mjs check` over the three projects reports
+  // it — `node packages/archkeep/cli.mjs check` over the three projects reports
   // no edge in either direction. It is stated anyway, for the reason the eight
   // options below are written out at their defaults: a law nobody wrote down
   // is a law the next package gets to define by accident.
@@ -162,12 +162,12 @@ export const depConstraints = [
 
 /**
  * The four governance keys a constraint row may carry, so a row's origin is
- * never silently dropped by the loader (`packages/lattice/src/config.mjs`):
+ * never silently dropped by the loader (`packages/archkeep/src/config.mjs`):
  * `origin` (who decided, with which tool, optionally when — the provenance
- * record `packages/lattice/src/governance/provenance-record.mjs` owns),
+ * record `packages/archkeep/src/governance/provenance-record.mjs` owns),
  * `rationale` (why the rule exists), `decisionRef` (the decision that made it),
  * and `fitnessBindings` (the fitness functions that hold it honest). A row
- * without an origin is flagged by `lattice provenance` as unattestable rather
+ * without an origin is flagged by `archkeep provenance` as unattestable rather
  * than read as decided. The rows above carry no block because each was authored
  * before the governance keys existed; they remain valid and byte-identical.
  */
@@ -189,7 +189,7 @@ export const depConstraints = [
  *     by `enforceBuildableLibDependency`. Nx's own default name.
  *   enforceBuildableLibDependency — off, and it follows from what is here rather
  *     than from taste: nothing in this repository is built. Nx loads a plugin's
- *     entry point directly, so `packages/lattice` has no `build`
+ *     entry point directly, so `packages/archkeep` has no `build`
  *     target at all (its `project.json` declares `lint` and `test` and nothing
  *     else, deliberately) and the check would have nothing true to say.
  *   allowCircularSelfDependency — off: a file reaching its own project through
@@ -228,7 +228,7 @@ export const moduleBoundaryOptions = {
  * was accepted.
  *
  * The list is where an accepted violation goes, and `reason` is mandatory —
- * `packages/lattice/src/config.mjs` rejects an entry without one at
+ * `packages/archkeep/src/config.mjs` rejects an entry without one at
  * load. An unexplained suppression is indistinguishable from a boundary that
  * quietly stopped being enforced, and nobody can tell later whether it still
  * applies. Each entry below carries its own whole argument; both are SDK rows,
@@ -241,7 +241,7 @@ export const moduleBoundaryOptions = {
  */
 export const boundarySuppressions = [
   {
-    path: "packages/lattice-rule-sdk-ts/test/golden.test.mjs",
+    path: "packages/archkeep-rule-sdk-ts/test/golden.test.mjs",
     messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
     reason:
       "the TS SDK's conformance harness drives the engine's real custom-rule host — the one SDK that can, because both sides are JavaScript in one tree. It is a test-time reach and nothing under assembly/ knows the engine exists, so the scope-sdk separation this table holds is intact in the shipped artifact.",
@@ -250,26 +250,26 @@ export const boundarySuppressions = [
     // The companion to the row above, and a demonstration of why a suppression
     // now behaves like a fix: removing the spelling verdict used to silence
     // every check below it in silence, so this same edge's tags violation —
-    // the harness reaches into `lattice`'s source across the scope-sdk axis —
+    // the harness reaches into `archkeep`'s source across the scope-sdk axis —
     // was never reported. With the fall-through in place it surfaced here,
     // and accepting it explicitly (same reach, same argument) keeps each
     // verdict's acceptance its own written row instead of one row hiding two.
-    path: "packages/lattice-rule-sdk-ts/test/golden.test.mjs",
+    path: "packages/archkeep-rule-sdk-ts/test/golden.test.mjs",
     messageId: "onlyTagsConstraintViolation",
     reason:
-      "the same test-time reach the spelling row above accepts: the conformance harness imports the engine's custom-rule host directly, which crosses the scope-sdk axis by construction. Nothing under assembly/ depends on lattice, so the shipped SDK artifact stays inside its axis; only this one test file reaches across, and it does so because the contract under test IS the engine's host.",
+      "the same test-time reach the spelling row above accepts: the conformance harness imports the engine's custom-rule host directly, which crosses the scope-sdk axis by construction. Nothing under assembly/ depends on archkeep, so the shipped SDK artifact stays inside its axis; only this one test file reaches across, and it does so because the contract under test IS the engine's host.",
   },
   {
-    path: "packages/lattice-rule-sdk-python/**/*.py",
+    path: "packages/archkeep-rule-sdk-python/**/*.py",
     messageId: "noSelfCircularDependencies",
     reason:
-      "`from lattice_rule_sdk import ...` is the only spelling that resolves inside a Python rule's wasm carrier: the carrier registers the SDK runtime under that name in sys.modules, and there is no filesystem for the relative import this message recommends to walk. So the package's reference rule imports the SDK exactly as an outside author's rule does, and its tests import it exactly as the rule does. The rule being waived is about a language with two spellings for one import, where reaching a sibling file through the barrel is a real cycle — Python names a package one way, and taking the message's advice would produce an artifact that cannot load.",
+      "`from archkeep_rule_sdk import ...` is the only spelling that resolves inside a Python rule's wasm carrier: the carrier registers the SDK runtime under that name in sys.modules, and there is no filesystem for the relative import this message recommends to walk. So the package's reference rule imports the SDK exactly as an outside author's rule does, and its tests import it exactly as the rule does. The rule being waived is about a language with two spellings for one import, where reaching a sibling file through the barrel is a real cycle — Python names a package one way, and taking the message's advice would produce an artifact that cannot load.",
   },
 ];
 
 /**
  * The fitness functions this workspace holds itself to — every one judged by
- * `packages/lattice/cli.mjs check` on the same observed facts as the constraint
+ * `packages/archkeep/cli.mjs check` on the same observed facts as the constraint
  * table above, each verdict a `pass`/`fail`/`unknown`/`skipped` row.
  *
  * Fitness is folded into `check` by presence — there is no flag to forget, so a

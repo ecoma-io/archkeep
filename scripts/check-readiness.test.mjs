@@ -22,7 +22,7 @@ const nothing = {
 /** `count` ordinary commits, newest first. */
 const quiet = (count) =>
   Array.from({ length: count }, (_, index) => ({
-    subject: `fix(lattice): something harmless ${index}`,
+    subject: `fix(archkeep): something harmless ${index}`,
     body: "",
   }));
 
@@ -91,7 +91,7 @@ test("an empty adopter list is not met — supplying nothing is not the same as 
 test("the quiet stretch counts commits since the last breaking change", () => {
   const commits = [
     ...quiet(3),
-    { subject: "fix(lattice)!: change a verdict", body: "" },
+    { subject: "fix(archkeep)!: change a verdict", body: "" },
     ...quiet(9),
   ];
   const row = evaluate({ ...nothing, commits }).find((entry) => entry.condition === CONDITIONS[2]);
@@ -105,7 +105,7 @@ test("a BREAKING CHANGE footer breaks the stretch even when the subject does not
   // report a stretch that never happened.
   const commits = [
     ...quiet(2),
-    { subject: "feat(lattice): add a kind", body: "BREAKING CHANGE: the bundle renamed a field" },
+    { subject: "feat(archkeep): add a kind", body: "BREAKING CHANGE: the bundle renamed a field" },
     ...quiet(60),
   ];
   const row = evaluate({ ...nothing, commits }).find((entry) => entry.condition === CONDITIONS[2]);

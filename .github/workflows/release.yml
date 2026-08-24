@@ -25,10 +25,10 @@ name: Release
 # released with, and one version makes the pairing visible.
 #
 # Two more destinations ride the same release. The crates.io job serves the
-# Rust rule SDK (`packages/lattice-rule-sdk-rust`): it publishes on every
+# Rust rule SDK (`packages/archkeep-rule-sdk-rust`): it publishes on every
 # release, re-proving the crate from the tagged bytes first, and an empty
 # token fails it red. The PyPI job serves the Python rule SDK
-# (`packages/lattice-rule-sdk-python`) the same way now that the package is
+# (`packages/archkeep-rule-sdk-python`) the same way now that the package is
 # in the tree; its find-the-package guard stays, because it is also the
 # job's honest answer on any old tag re-run from before the package existed,
 # and an empty token with the package present fails red for the same
@@ -72,7 +72,7 @@ jobs:
       # ROOT; every path in a manifest gets `<path>--<name>` instead. The
       # component sits at the root (`"."` in release-please-config.json), so
       # its pair is the un-prefixed one, and EVERY publish job — npm, vsix,
-      # PyPI, crates.io — steers on it. This workflow once read the `packages/lattice--`-prefixed
+      # PyPI, crates.io — steers on it. This workflow once read the `packages/archkeep--`-prefixed
       # pair while the component was keyed by its package path — which in a
       # manifest configuration names the release-please output for that path —
       # so it evaluated to the empty string, `released == 'true'` was false,
@@ -157,7 +157,7 @@ jobs:
       # stay off it: Prettier has no TOML parser (naming one errors the run),
       # and no gate checks TOML layout.
       #
-      # LOCKFILE. release-please writes `packages/lattice-rule-sdk-rust/
+      # LOCKFILE. release-please writes `packages/archkeep-rule-sdk-rust/
       # Cargo.toml` and no lockfile, so the crate's manifest and its Cargo.lock
       # disagree from the moment the branch opens. `cargo test --locked` and
       # `cargo publish --locked` — what `publish-crates` below runs before it
@@ -254,9 +254,9 @@ jobs:
             .claude-plugin/plugin.json \
             .claude-plugin/marketplace.json \
             .codex-plugin/plugin.json \
-            packages/lattice/package.json \
-            packages/lattice-vscode/package.json \
-            packages/lattice-rule-sdk-ts/package.json
+            packages/archkeep/package.json \
+            packages/archkeep-vscode/package.json \
+            packages/archkeep-rule-sdk-ts/package.json
 
           node scripts/sync-cargo-lock.mjs
 
@@ -472,7 +472,7 @@ jobs:
       # It runs before publish, not after, because a package that resolves
       # nothing at install time cannot be unpublished away.
       - name: Prove the packed artifact works outside this workspace
-        run: node scripts/verify-package.mjs packages/lattice
+        run: node scripts/verify-package.mjs packages/archkeep
 
       # The full E2E suite, run against the exact tag checkout, same as
       # verify-package.mjs above. A version that fails E2E cannot be unpublished
@@ -493,11 +493,11 @@ jobs:
       # `NODE_AUTH_TOKEN` rather than OIDC trusted publishing, and only because
       # of an ordering rule: trusted publishing cannot create a package that
       # does not exist yet, so the first version of a name has to go through a
-      # token. Once `@ecoma-io/lattice` exists on the registry, bind
+      # token. Once `@ecoma-io/archkeep` exists on the registry, bind
       # this workflow as a trusted publisher there and delete the `env:` block —
       # the `id-token: write` above is already what that mode needs.
       - name: Publish
-        working-directory: packages/lattice
+        working-directory: packages/archkeep
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
         run: npm publish --provenance --access public
@@ -559,7 +559,7 @@ jobs:
       # question because this package ships SOURCE rather than a runnable tool:
       # it packs the tarball, installs it into a throwaway workspace beside the
       # compiler, and builds the rule the SDK's own documentation prints —
-      # through the `@ecoma-io/lattice-rule-sdk/assembly` specifier that
+      # through the `@ecoma-io/archkeep-rule-sdk/assembly` specifier that
       # documentation promises, which nothing in this repository compiled
       # before. The script's header argues each check. It runs before publish,
       # not after, because an npm version cannot be unpublished away.
@@ -573,7 +573,7 @@ jobs:
       # which goes red when the file is absent because npm and pnpm then select
       # different files from the same tree.
       - name: Publish
-        working-directory: packages/lattice-rule-sdk-ts
+        working-directory: packages/archkeep-rule-sdk-ts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
         run: npm publish --provenance --access public
@@ -619,16 +619,16 @@ jobs:
       # needs are inside. Before upload, not after, because an asset on a
       # tagged release is a record people install from.
       - name: Package the VS Code extension
-        run: node scripts/package-vsix.mjs packages/lattice-vscode dist/lattice-vscode.vsix
+        run: node scripts/package-vsix.mjs packages/archkeep-vscode dist/archkeep-vscode.vsix
 
       - name: Prove the vsix holds what an install needs
-        run: node scripts/verify-vsix.mjs dist/lattice-vscode.vsix
+        run: node scripts/verify-vsix.mjs dist/archkeep-vscode.vsix
 
       - name: Upload the vsix to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
-        run: gh release upload "$TAG" dist/lattice-vscode.vsix
+        run: gh release upload "$TAG" dist/archkeep-vscode.vsix
 
       # Publishing is guarded, not wired to a publisher that does not exist
       # yet: the `ecoma-io` marketplace publisher account has not been created,
@@ -666,7 +666,7 @@ jobs:
             echo ".vsix is on the GitHub release. Store an ECOMA_VSCE_PAT secret to turn publishing on."
             exit 0
           fi
-          pnpm --dir packages/lattice-vscode exec vsce publish --packagePath "$GITHUB_WORKSPACE/dist/lattice-vscode.vsix"
+          pnpm --dir packages/archkeep-vscode exec vsce publish --packagePath "$GITHUB_WORKSPACE/dist/archkeep-vscode.vsix"
           {
             echo "## Marketplace publish"
             echo ""
@@ -679,10 +679,10 @@ jobs:
     # and there is no registry to upload to: `go get` reads the module path,
     # fetches the repository, and looks for a tag — and for a module below the
     # repository root that tag is prefixed with the module's own directory,
-    # `packages/lattice-rule-sdk-go/v<version>` rather than the bare
+    # `packages/archkeep-rule-sdk-go/v<version>` rather than the bare
     # `v<version>` release-please already cuts.
     #
-    # Nothing minted it, while `packages/lattice-rule-sdk-go/go.mod` and
+    # Nothing minted it, while `packages/archkeep-rule-sdk-go/go.mod` and
     # docs/adr/0002-custom-rules-one-contract.md both said this lane did. That
     # is the failure with no observable: `go get` falls back to a pseudo-version
     # off the default branch, which installs and builds, so nobody could tell a
@@ -716,7 +716,7 @@ jobs:
       # `go.mod`'s own floor is what decides whether it is new enough — a
       # `setup-go` pin here would be a second copy of that number.
       - name: Prove the tagged module builds and passes its own suite
-        working-directory: packages/lattice-rule-sdk-go
+        working-directory: packages/archkeep-rule-sdk-go
         run: |
           go build ./...
           go test ./...
@@ -746,7 +746,7 @@ jobs:
     # destination and not another.
     #
     # This destination is guarded on the PACKAGE rather than on a secret: the
-    # Python rule SDK (`packages/lattice-rule-sdk-python`) is staged by
+    # Python rule SDK (`packages/archkeep-rule-sdk-python`) is staged by
     # docs/adr/0002-custom-rules-one-contract.md and has not landed yet, so on
     # a release whose tag carries no such package this job says loudly that
     # there was nothing to publish — the marketplace step's own arrangement,
@@ -790,19 +790,19 @@ jobs:
         env:
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-          if [ -f packages/lattice-rule-sdk-python/pyproject.toml ]; then
+          if [ -f packages/archkeep-rule-sdk-python/pyproject.toml ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
             {
               echo "## PyPI publish SKIPPED"
               echo ""
-              echo "\`$TAG\` carries no \`packages/lattice-rule-sdk-python\` package, so"
+              echo "\`$TAG\` carries no \`packages/archkeep-rule-sdk-python\` package, so"
               echo "nothing was published to PyPI. The Python rule SDK is staged by"
               echo "ADR 0002 and has not landed; the release that first carries it"
               echo "publishes it from this job with no workflow change."
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "SKIPPED, and here is why: $TAG carries no packages/lattice-rule-sdk-python,"
+            echo "SKIPPED, and here is why: $TAG carries no packages/archkeep-rule-sdk-python,"
             echo "so there is no Python distribution to publish. The job goes live with the"
             echo "release that first ships that package."
           fi
@@ -811,7 +811,7 @@ jobs:
         if: steps.sdk.outputs.present == 'true'
         run: |
           python3 -m pip install --upgrade 'build==1.5.0' 'twine==7.0.0'
-          python3 -m build packages/lattice-rule-sdk-python
+          python3 -m build packages/archkeep-rule-sdk-python
 
       - name: Publish to PyPI
         if: steps.sdk.outputs.present == 'true'
@@ -821,7 +821,7 @@ jobs:
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           if [ -z "$TWINE_PASSWORD" ]; then
-            echo "$TAG carries packages/lattice-rule-sdk-python, but ECOMA_PYPI_API_TOKEN"
+            echo "$TAG carries packages/archkeep-rule-sdk-python, but ECOMA_PYPI_API_TOKEN"
             echo "is empty in this repository's context. It is an organisation secret, so"
             echo "either it was removed or it is not granted to this repository — grant it"
             echo "under the organisation's Actions secrets, then re-run this job. Failing"
@@ -829,7 +829,7 @@ jobs:
             echo "does not reach PyPI is the lane shipping nothing under a green light."
             exit 1
           fi
-          python3 -m twine upload --non-interactive packages/lattice-rule-sdk-python/dist/*
+          python3 -m twine upload --non-interactive packages/archkeep-rule-sdk-python/dist/*
 
   publish-crates:
     name: Publish the Rust rule SDK to crates.io
@@ -883,7 +883,7 @@ jobs:
             import { readFileSync } from "node:fs";
             import { tomlSectionVersion } from "./scripts/check-skills.mjs";
             const version = tomlSectionVersion(
-              readFileSync("packages/lattice-rule-sdk-rust/Cargo.toml", "utf8"),
+              readFileSync("packages/archkeep-rule-sdk-rust/Cargo.toml", "utf8"),
               "[package]",
             );
             const tag = process.env.TAG;
@@ -901,19 +901,19 @@ jobs:
           '
 
       - name: Prove the crate publishes before publishing it
-        working-directory: packages/lattice-rule-sdk-rust
+        working-directory: packages/archkeep-rule-sdk-rust
         run: |
           cargo test --locked
           cargo publish --dry-run --locked
 
       - name: Publish to crates.io
-        working-directory: packages/lattice-rule-sdk-rust
+        working-directory: packages/archkeep-rule-sdk-rust
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.ECOMA_CRATES_API_TOKEN }}
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
-            echo "$TAG carries packages/lattice-rule-sdk-rust, but ECOMA_CRATES_API_TOKEN"
+            echo "$TAG carries packages/archkeep-rule-sdk-rust, but ECOMA_CRATES_API_TOKEN"
             echo "is empty in this repository's context. It is an organisation secret, so"
             echo "either the name differs (check the exact spelling — CRATES) or it is"
             echo "not granted to this repository; grant it under the organisation's"

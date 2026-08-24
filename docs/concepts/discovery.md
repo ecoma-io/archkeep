@@ -5,9 +5,9 @@ the projects were placed in, the edges that connect them, the tags the projects
 already carry — a workspace's constraints are visible in the tree before a single
 row of the boundary law is written.
 
-**Discovery** is the read-only face of that fact: `lattice discover` reports what
+**Discovery** is the read-only face of that fact: `archkeep discover` reports what
 is observed (projects, edges, tags, and the coverage a verdict over this tree
-could trust), and `lattice discover --propose` derives the candidate architecture
+could trust), and `archkeep discover --propose` derives the candidate architecture
 those observations imply — candidate components, boundary assertions, tag
 vocabularies and rules — each marked as a proposal that is **not authoritative**
 and **never written**.
@@ -31,7 +31,7 @@ The one invariant everything else in this document holds:
 - **A workspace that does not ask does not get one.** The default `discover` run
   is purely descriptive. `--propose` is opt-in.
 - **No write-back, by construction.** The proposal evaluator
-  (`packages/lattice/src/governance/discovery-proposal.mjs`) is pure: it takes an
+  (`packages/archkeep/src/governance/discovery-proposal.mjs`) is pure: it takes an
   observed model and returns a proposal object. It never reads a file, never
   writes a file, and never imports the module that loads a declaration. Whether a
   candidate later becomes intent is a governance decision owned elsewhere.
@@ -66,7 +66,7 @@ and an uncertainty marker.
 A **component** is a top-level directory grouping — a project's root's first
 path segment (`libs`, `apps`, or the tree root itself). Two or more projects
 sharing a directory is the strongest structural signal that they share a role.
-Lattice proposes the grouping; whether it is real governance is the reader's
+Archkeep proposes the grouping; whether it is real governance is the reader's
 call. The naming is a deliberate simplification: deeper directory prefixes are
 not split out, and when a workspace's nested structure diverges from its
 top-level one, the divergence surfaces as cross-component edges, which the next

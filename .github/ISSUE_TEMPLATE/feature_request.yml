@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Lattice holds what makes a **polyglot** workspace's graph and boundaries
+        Archkeep holds what makes a **polyglot** workspace's graph and boundaries
         real. What decides most questions about scope: does this work for a
         language Nx cannot already see by itself?
 

@@ -24,7 +24,7 @@ workspace uses the Moon integration
 ## Install
 
 ```shell
-pnpm add -D @ecoma-io/lattice
+pnpm add -D @ecoma-io/archkeep
 ```
 
 That is the only install step. What you do next depends on how your workspace is
@@ -32,17 +32,17 @@ structured:
 
 - No workspace tool -- the native provider walks the tree itself: [first-project.md](first-project.md)
 - Nx workspace -- register the integration in `nx.json`: [../integrations/nx.md](../integrations/nx.md)
-- Moonrepo workspace -- add the `.moon/` directory and follow the integration guide (no `lattice.json` — the pair is a hard error): [../integrations/moon.md](../integrations/moon.md)
+- Moonrepo workspace -- add the `.moon/` directory and follow the integration guide (no `archkeep.json` — the pair is a hard error): [../integrations/moon.md](../integrations/moon.md)
 
 ## What the package provides
 
 Three entry points, one engine behind them:
 
-| entry                  | how it runs                  | what it does                                                  |
-| ---------------------- | ---------------------------- | ------------------------------------------------------------- |
-| `lattice check`        | CLI                          | Analyze the tree, report violations, exit 0/1/2/3             |
-| `lattice-lsp`          | Language server over stdio   | Diagnostics at the edit, in any LSP client                    |
-| `@ecoma-io/lattice/nx` | Nx integration, in `nx.json` | Polyglot edges in the project graph, on every `nx` invocation |
+| entry                   | how it runs                  | what it does                                                  |
+| ----------------------- | ---------------------------- | ------------------------------------------------------------- |
+| `archkeep check`        | CLI                          | Analyze the tree, report violations, exit 0/1/2/3             |
+| `archkeep-lsp`          | Language server over stdio   | Diagnostics at the edit, in any LSP client                    |
+| `@ecoma-io/archkeep/nx` | Nx integration, in `nx.json` | Polyglot edges in the project graph, on every `nx` invocation |
 
 The CLI commands are documented individually under [../usage/](../usage/), and
 [../reference/cli.md](../reference/cli.md) is the full command reference. This

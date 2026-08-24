@@ -94,7 +94,7 @@ Three consequences follow directly:
   somewhere in `result`.** Both are claims `buildDecision` refuses to emit
   hollowly, at the verdict layer and independently of the status-level checks.
 - **The envelope stays deterministic** over an unchanged tree with an unchanged
-  `lattice` version. `sampleTime` is the only time-shaped field, and it appears
+  `archkeep` version. `sampleTime` is the only time-shaped field, and it appears
   only when a capability passes it explicitly — a decision for a command whose
   verdict must stay reproducible carries no time at all.
 

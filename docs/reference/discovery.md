@@ -1,13 +1,13 @@
-# `lattice discover`
+# `archkeep discover`
 
 Report the observed architecture, and optionally propose the candidate
 architecture those observations imply.
 
 ```shell
-lattice discover
-lattice discover --propose
-lattice discover --format json
-lattice discover --propose --format json --output proposal.json
+archkeep discover
+archkeep discover --propose
+archkeep discover --format json
+archkeep discover --propose --format json --output proposal.json
 ```
 
 `discover` takes no positional arguments — the observed side is the whole
@@ -17,7 +17,7 @@ workspace, and never exits with a finding.
 ## The observed side
 
 The same project graph the other commands read, from any provider (Nx, Moon, or
-a native `lattice.json` workspace). `discover` reports the projects (name, root,
+a native `archkeep.json` workspace). `discover` reports the projects (name, root,
 type, tags), the observed edges (with implicit edges and edges to external
 packages dropped, the same filter `drift` applies), the union of observed tags,
 and the analysis coverage — how many imports, files and projects were judged,
@@ -51,7 +51,7 @@ intent is a governance decision owned elsewhere.
 `discover` refuses loudly on every path that cannot reach a verdict, all
 exit-3 class:
 
-- the workspace model cannot be loaded (malformed `lattice.json`, `nx graph` or
+- the workspace model cannot be loaded (malformed `archkeep.json`, `nx graph` or
   `git` failure);
 - the observed side has incomplete coverage (whole files the analyzer could not
   read);

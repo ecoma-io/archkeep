@@ -190,7 +190,7 @@ other throws away.
 
 The language server shares the same `evaluate` function and the same constraint
 table, but builds its own workspace index — through the native provider's model
-on a `lattice.json` root, and from tracked `project.json` files on an Nx one.
+on a `archkeep.json` root, and from tracked `project.json` files on an Nx one.
 Its invariant is the CLI's, sharpened: an empty diagnostic list must mean "no
 violation", and nothing else.
 

@@ -13,7 +13,7 @@
 // That question is not hypothetical here, and it is not covered anywhere else:
 //
 //   - `assembly/index.ts`'s header and `README.md`'s "What a rule is" both tell
-//     an author to import from `@ecoma-io/lattice-rule-sdk/assembly`, and state
+//     an author to import from `@ecoma-io/archkeep-rule-sdk/assembly`, and state
 //     that the `/assembly` subpath is load-bearing because asc maps a bare
 //     package name onto `~lib/<name>.ts` and fails to find it. Nothing in this
 //     repository compiles that specifier: the committed reference rule imports
@@ -24,7 +24,7 @@
 //   - The manifest declares Apache-2.0 and the package directory holds no
 //     LICENSE. `pnpm pack` copies the repository-root LICENSE into a tarball
 //     and `npm publish` re-packs without it (the release lane's own comment
-//     records the measurement, which is why `packages/lattice` carries its own
+//     records the measurement, which is why `packages/archkeep` carries its own
 //     copy). The lane verifies a pnpm tarball and publishes with npm, so a
 //     licence present at verify time and absent at publish time is exactly the
 //     shape of defect that reaches the registry unnoticed.
@@ -36,7 +36,7 @@
 //   2. The tarball carries a LICENSE, because the manifest claims one.
 //   3. The tarball installs into a throwaway workspace beside `assemblyscript`.
 //   4. The rule the SDK's own documentation prints — importing through
-//      `@ecoma-io/lattice-rule-sdk/assembly`, from a consumer directory, with
+//      `@ecoma-io/archkeep-rule-sdk/assembly`, from a consumer directory, with
 //      the shipped `asconfig.json` as `--config` — COMPILES.
 //   5. The module it produces declares no imports at all.
 //   6. It exports exactly the four symbols the ABI names, each of the right
@@ -68,7 +68,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const PACKAGE_DIR = "packages/lattice-rule-sdk-ts";
+const PACKAGE_DIR = "packages/archkeep-rule-sdk-ts";
 
 /** @type {string[]} */
 const failures = [];
@@ -155,9 +155,9 @@ export function documentedRuleSource(text) {
 /** The four symbols the ABI names, and the kind each must be. */
 const REQUIRED_EXPORTS = {
   memory: "memory",
-  lattice_alloc: "function",
-  lattice_describe: "function",
-  lattice_evaluate: "function",
+  archkeep_alloc: "function",
+  archkeep_describe: "function",
+  archkeep_evaluate: "function",
 };
 
 /**
@@ -303,8 +303,8 @@ function main() {
       //    above and quietly stop refusing the clock.
       writeFileSync(
         join(consumer, "reaches-for-the-clock.ts"),
-        `export { lattice_alloc } from "${packageName}/assembly";\n` +
-          `export function lattice_describe(): i64 {\n` +
+        `export { archkeep_alloc } from "${packageName}/assembly";\n` +
+          `export function archkeep_describe(): i64 {\n` +
           `  return <i64>Date.now();\n` +
           `}\n`,
       );

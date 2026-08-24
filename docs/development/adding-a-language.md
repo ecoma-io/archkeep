@@ -162,14 +162,14 @@ Two things to get right, both learned the hard way in Python:
 `.claude-plugin/plugin.json` at the repository root, under
 `lspServers.*.extensionToLanguage`. The manifest lives at the root because the
 marketplace entry's `source` is `"./"` — the plugin is the whole repository —
-and the server it launches is `packages/lattice/lsp.mjs`.
+and the server it launches is `packages/archkeep/lsp.mjs`.
 
 A JSON manifest cannot import anything, so this list is a second copy of
 `LANGUAGE_BY_EXTENSION` — allowed only because
 `src/lsp/editor-config.integration.test.mjs` keeps the copy honest and fails the
 day the two disagree.
 
-**And a third copy**, in `packages/lattice-vscode/src/languages.mjs`. A client
+**And a third copy**, in `packages/archkeep-vscode/src/languages.mjs`. A client
 has to name the file types it routes before any server is running, so it cannot
 ask the server what they are; `routed-extensions.integration.test.mjs` in that
 package holds it to the manifest above on the same terms. Both tests fail on a
@@ -181,8 +181,8 @@ and never by an editor, so every project written in it keeps showing no boundary
 problems in the buffer. That reads exactly like a clean tree.
 
 **Bump the manifest `version`** — here, in `.claude-plugin/marketplace.json`,
-in `.codex-plugin/plugin.json`, in `packages/lattice/package.json` and in
-`packages/lattice-vscode/package.json` (the extension routes the new extension
+in `.codex-plugin/plugin.json`, in `packages/archkeep/package.json` and in
+`packages/archkeep-vscode/package.json` (the extension routes the new extension
 too — `src/languages.mjs` is where, and `routed-extensions.integration.test.mjs`
 holds it), which must all match. An installed plugin is cached per version, so
 an unbumped edit reaches nobody, and `scripts/check-skills.mjs` fails when they
@@ -250,8 +250,8 @@ Four files, and none of them optional:
 | ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | [`docs/reference/languages.md`](../reference/languages.md) | A section: identity, what the analyzer reads, every limit, what the record leaves null  |
 | [`docs/doctrine/north-star.md`](../doctrine/north-star.md) | A row in the state table — and it must be honest about which of the four cells are real |
-| `packages/lattice/README.md`                               | The npm landing page mentions the language set; it must stand alone                     |
-| `packages/lattice-vscode/README.md`                        | The marketplace page names the routed extensions one by one                             |
+| `packages/archkeep/README.md`                              | The npm landing page mentions the language set; it must stand alone                     |
+| `packages/archkeep-vscode/README.md`                       | The marketplace page names the routed extensions one by one                             |
 
 ## The definition of done
 

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // Fails when the documents that claim a command count or list the command
-// roster disagree with `COMMAND_NAMES`, the roster `packages/lattice/cli.mjs`
+// roster disagree with `COMMAND_NAMES`, the roster `packages/archkeep/cli.mjs`
 // itself exports.
 //
 // WHY this script exists (issue #238). Four places tell a reader how many
 // commands the CLI has, and two of them list every verb:
 //
 //   - `README.md`            — "<N> commands with versioned, byte-stable JSON"
-//   - `packages/lattice/README.md` — "the rest of the <N>-command surface"
+//   - `packages/archkeep/README.md` — "the rest of the <N>-command surface"
 //   - `docs/concepts/architecture.md` — a "The <N> commands" heading AND a
 //     full table of every verb
 //   - `docs/reference/cli.md` — the authoritative Commands table
@@ -19,7 +19,7 @@
 // docs tree, and nobody ever files it.
 //
 // The roster is DERIVED, never restated here: `main` imports `COMMAND_NAMES`
-// from `packages/lattice/cli.mjs`, the same export
+// from `packages/archkeep/cli.mjs`, the same export
 // `src/report/envelope-shape.integration.test.mjs` builds on. A hard-coded
 // list of seventeen verbs in this file would be exactly the bug
 // `check-packages.mjs` was written to end — a second copy agreeing with the
@@ -46,7 +46,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export const CLAIM_SITES = {
   rootReadme: "README.md",
-  packageReadme: "packages/lattice/README.md",
+  packageReadme: "packages/archkeep/README.md",
   cliReference: "docs/reference/cli.md",
   architectureConcept: "docs/concepts/architecture.md",
 };
@@ -156,7 +156,7 @@ export function extractTableCommands(text, sectionHeading) {
  * @param {object} input
  * @param {string[]} input.commandNames the roster, from `COMMAND_NAMES`
  * @param {string} input.rootReadme contents of `README.md`
- * @param {string} input.packageReadme contents of `packages/lattice/README.md`
+ * @param {string} input.packageReadme contents of `packages/archkeep/README.md`
  * @param {string} input.cliReference contents of `docs/reference/cli.md`
  * @param {string} input.architectureConcept contents of `docs/concepts/architecture.md`
  * @returns {{failures: string[], checked: string[]}} failures name both sides
@@ -208,7 +208,7 @@ export function evaluate({
     if (claim.value !== commandNames.length) {
       failures.push(
         `${site.label}:${claim.line} claims ${claim.raw} commands (${claim.value}), ` +
-          `but packages/lattice/cli.mjs exports ${commandNames.length} ` +
+          `but packages/archkeep/cli.mjs exports ${commandNames.length} ` +
           `(COMMAND_NAMES). One of the two just changed — find out which, then ` +
           `fix it there.`,
       );
@@ -272,11 +272,11 @@ function main() {
     texts[key] = readFileSync(path, "utf8");
   }
 
-  import("../packages/lattice/cli.mjs")
+  import("../packages/archkeep/cli.mjs")
     .then(({ COMMAND_NAMES }) => {
       if (!Array.isArray(COMMAND_NAMES) || COMMAND_NAMES.length === 0) {
         console.error(
-          "packages/lattice/cli.mjs exported no COMMAND_NAMES roster, so there is " +
+          "packages/archkeep/cli.mjs exported no COMMAND_NAMES roster, so there is " +
             "nothing to compare the documents against. Either the export moved or " +
             "was renamed — restore it rather than listing the commands here, " +
             "because a second copy is the drift this gate exists to catch.",
@@ -298,7 +298,7 @@ function main() {
       }
     })
     .catch((error) => {
-      console.error(`importing packages/lattice/cli.mjs failed: ${error.message}`);
+      console.error(`importing packages/archkeep/cli.mjs failed: ${error.message}`);
       process.exit(1);
     });
 }

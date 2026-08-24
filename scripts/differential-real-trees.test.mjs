@@ -401,7 +401,7 @@ test("a stale native-leg ledger row fails — the same classifier, not a second 
   assert.equal(fired.explained.length, 1);
 });
 
-test("deriveNativeModel renormalises Nx's root-project root '.' to lattice.json's '' — root: '.' is otherwise rejected by name", () => {
+test("deriveNativeModel renormalises Nx's root-project root '.' to archkeep.json's '' — root: '.' is otherwise rejected by name", () => {
   const graph = {
     nodes: {
       workspace: nxNode("workspace", { root: ".", projectType: "library" }),
@@ -413,7 +413,7 @@ test("deriveNativeModel renormalises Nx's root-project root '.' to lattice.json'
   // The silent failure this normalisation guards: an unrenormalised "."
   // reaches `nativeProvider.discover`, which loads through `model.mjs`'s
   // `declaredProjectViolations` — that rejects root: "." BY NAME (only ""
-  // names the workspace root in `lattice.json`'s own dialect), turning what
+  // names the workspace root in `archkeep.json`'s own dialect), turning what
   // should be a real fidelity measurement into an infrastructure failure that
   // reads as "could not look," not "found nothing." Measured against a real
   // tree carrying exactly this shape (code-pushup's own root-level project,
@@ -433,12 +433,12 @@ test("deriveNativeModel derives the target-NAME list — the field whose absence
   };
   const model = deriveNativeModel(graph);
   const byName = new Map(model.projects.declared.map((p) => [p.name, p]));
-  // `lattice.json`'s declared row carries target NAMES only, never an executor
+  // `archkeep.json`'s declared row carries target NAMES only, never an executor
   // or options — the shape `model.mjs`'s `declaredProjectViolations` validates
   // and `graph.mjs`'s `buildNativeGraph` synthesises `{executor:
-  // "lattice:declared"}` for (`../packages/lattice/src/providers/native/graph.mjs`'s
+  // "archkeep:declared"}` for (`../packages/archkeep/src/providers/native/graph.mjs`'s
   // `data.targets` doc). Deriving the object's keys, not the object, is what
-  // keeps the derived model a valid `lattice.json` for the tree.
+  // keeps the derived model a valid `archkeep.json` for the tree.
   assert.deepEqual(byName.get("core").targets, ["build", "lint"]);
   // A node whose data carries no targets derives an empty list — the field is
   // present on every row (spec §5's declared row), never dropped.
@@ -451,8 +451,8 @@ test("deriveNativeModel derives the target-NAME list — the field whose absence
   // then refused the run loudly as a silent no-op, turning a fidelity
   // measurement into a "could not look" infrastructure failure. A faithful
   // derivation of the real graph restores parity: the graph's `build` entry
-  // reaches `lattice.json` as the name `build`, and `buildNativeGraph`'s
-  // synthesised `{executor: "lattice:declared"}` reads buildable exactly where
+  // reaches `archkeep.json` as the name `build`, and `buildNativeGraph`'s
+  // synthesised `{executor: "archkeep:declared"}` reads buildable exactly where
   // the real graph's non-empty executor does — which is what the first
   // assertion above pins.
 });

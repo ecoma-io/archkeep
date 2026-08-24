@@ -1,11 +1,11 @@
-# `lattice graph`
+# `archkeep graph`
 
 Print the project graph as a deterministic, serialisable snapshot.
 
 ```shell
-lattice graph
-lattice graph --format json
-lattice graph --format json --output snapshot.json
+archkeep graph
+archkeep graph --format json
+archkeep graph --format json --output snapshot.json
 ```
 
 `graph` reads the same project model every other command reads — Nx or native,
@@ -26,7 +26,7 @@ snapshot of what is is never a finding.
   becoming `dynamic` is two different edges, not one that changed.
 - **Workspace layout**: the `appsDir`/`libsDir` the engine used when judging
   imports, with a `workspaceLayoutSource` that is `"declared"` (the workspace's
-  own `nx.json` or `lattice.json` named it) or `"default"` (neither did, so the
+  own `nx.json` or `archkeep.json` named it) or `"default"` (neither did, so the
   engine fell back to `apps`/`libs`). Two copies of a default is how a report
   ends up describing a layout the engine did not use, so the default is imported
   from where the rule engine defines it, never written a second time.
@@ -57,11 +57,11 @@ no escape flag — an option that makes a check not run is a drift signal.
 
 ## Snapshot for diff
 
-The JSON snapshot (`--format json`) is the file `lattice diff` accepts as its
+The JSON snapshot (`--format json`) is the file `archkeep diff` accepts as its
 baseline. Capture one at a known-good point and diff later to see what changed:
 
 ```shell
-lattice graph --format json --output baseline.json
+archkeep graph --format json --output baseline.json
 # ... later, after changes ...
-lattice diff baseline.json
+archkeep diff baseline.json
 ```

@@ -32,7 +32,7 @@ which languages:
 
 That is a coverage note, not a finding: the exit code does not change, and
 `--format json` carries the complete list in `coverage.coverageGaps`. On the
-native provider (a `lattice.json` workspace) the same state is a refusal
+native provider (a `archkeep.json` workspace) the same state is a refusal
 instead — exit 3, no verdict.
 
 **The project is invisible to the workspace tool.** On an Nx workspace, a
@@ -66,7 +66,7 @@ config for a `path` glob broader than intended. Every entry carries a mandatory
 stays 1) until it expires, so waiving will not make a red build go green; only
 a permanent suppression (no `expiresAt`) removes a violation.
 
-**You scoped the run.** `lattice check <path>` restricts the file set,
+**You scoped the run.** `archkeep check <path>` restricts the file set,
 and the cycle and lazy-load rules judge the file graph as a whole. Re-run without
 paths.
 
@@ -193,7 +193,7 @@ a distinct outcome from both 0 and 1, and it should fail your build.
 
 | symptom                                  | cause                                                                                                                                                                                                                                                                                                                                                                                       |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| no workspace found                       | not run from inside a repository with a workspace marker (`nx.json`, `lattice.json`, `.moon/` or `.config/moon/`)                                                                                                                                                                                                                                                                           |
+| no workspace found                       | not run from inside a repository with a workspace marker (`nx.json`, `archkeep.json`, `.moon/` or `.config/moon/`)                                                                                                                                                                                                                                                                          |
 | config errors, naming the row            | the boundary config is malformed — every problem is listed rather than the first                                                                                                                                                                                                                                                                                                            |
 | a config that loaded before now exits 3  | a pattern this engine refuses by shape, or one it now bounds — the message names the row and what to write instead. ESLint compiles these; this engine will not run them against specifiers a pull request chooses. See [policy-schema.md](../reference/policy-schema.md#refused-pattern-shapes)                                                                                            |
 | a Moon workspace with TypeScript exits 3 | the tree carries `.ts`, `.tsx`, `.mts`, `.cts` or `.vue` files and neither `tsconfig.base.json` nor `tsconfig.json` at its root, so there is no `paths` table to resolve against. Refused rather than judged against the compiler defaults, which would report every aliased import as a boundary crossing. Every command refuses, not only `check`. See [moon.md](../integrations/moon.md) |
@@ -284,7 +284,7 @@ Pass it explicitly through `initializationOptions` if in doubt. See
 
 **Stale after editing the boundary config.** The server asks the client to watch
 five patterns: the boundary config, the resolved `tsConfig`, `**/project.json`,
-`**/nx.json` and `**/lattice.json`. A client that cannot
+`**/nx.json` and `**/archkeep.json`. A client that cannot
 register watchers dynamically is told so **on stderr** — check the server's log
 output. Reopening the file re-runs the check regardless.
 

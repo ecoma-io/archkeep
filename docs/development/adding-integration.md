@@ -2,7 +2,7 @@
 
 How a new integration extends the core, and the contract it must hold.
 
-The core engine (`packages/lattice/`) is independent of any build system or
+The core engine (`packages/archkeep/`) is independent of any build system or
 editor. Integrations sit at the edge, consuming the engine's public surface
 without leaking their own concerns into it. The direction this follows is in
 [../doctrine/north-star.md](../doctrine/north-star.md):
@@ -44,7 +44,7 @@ Three rules that follow:
 
 ### Nx integration
 
-`packages/lattice/nx.mjs` is the entry Nx loads. It is a re-export only — no
+`packages/archkeep/nx.mjs` is the entry Nx loads. It is a re-export only — no
 logic, because Nx loads it on every `nx` invocation and logic here would slow
 every graph computation the workspace runs.
 
@@ -58,7 +58,7 @@ guide.
 
 ### VS Code extension
 
-`packages/lattice-vscode/` is the client. It finds the workspace root, finds
+`packages/archkeep-vscode/` is the client. It finds the workspace root, finds
 the server the workspace installed, starts it over stdio, and shows whether it
 is running. It contains no analysis.
 

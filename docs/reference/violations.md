@@ -310,11 +310,11 @@ not on `"libs/…"` unconditionally — so a workspace naming a non-default pair
 say `{"libsDir": "packages", "appsDir": "applications"}`, now has that pair
 fully honored: an absolute `"packages/…"` import can produce this finding, the
 same as it would under real Nx and `@nx/enforce-module-boundaries` on the
-identical tree. Previously Lattice never read `nx.json`'s `workspaceLayout` at
+identical tree. Previously Archkeep never read `nx.json`'s `workspaceLayout` at
 all and judged every workspace against Nx's own default (`libs`/`apps`)
 regardless of what was declared — a workspace with a custom layout got a rule
 that could never fire on its own layout
-([#31](https://github.com/ecoma-io/lattice/issues/31)).
+([#31](https://github.com/ecoma-io/archkeep/issues/31)).
 
 **A complete declaration is honored; a partial one is refused, loudly.**
 `workspaceLayout` must name both `appsDir` and `libsDir`, or neither.
@@ -322,7 +322,7 @@ Declaring only one of the two exits **3** — no verdict — with a message
 naming the key that is missing, rather than running with the other key
 silently defaulted. Real Nx (measured against nx 23.1.1) does the opposite: it
 accepts a partial `workspaceLayout` and evaluates the missing key as though it
-were never configured, silently running half the rule. Lattice cannot make
+were never configured, silently running half the rule. Archkeep cannot make
 that promise — the check reads both keys off one object with no per-key
 fallback, so a workspace that redirected `libsDir` and forgot `appsDir` would
 get a rule quietly checking the wrong half of the tree, and a clean result from

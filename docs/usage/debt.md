@@ -1,12 +1,12 @@
-# `lattice debt`
+# `archkeep debt`
 
 Print the architecture-debt ledger: the exemptions, gaps and contradictions a
 workspace is carrying, each aged across the snapshot history.
 
 ```shell
-lattice debt .lattice/history
-lattice debt .lattice/history --format json
-lattice debt .lattice/history --format json --output debt.json
+archkeep debt .archkeep/history
+archkeep debt .archkeep/history --format json
+archkeep debt .archkeep/history --format json --output debt.json
 ```
 
 `debt <dir>` reads every snapshot in the same history directory `history` uses
@@ -56,8 +56,8 @@ malformed, or holds no snapshots at all is a no-verdict, never an empty ledger.
 To keep a ledger current, capture snapshots as the architecture evolves:
 
 ```shell
-lattice history .lattice/history --capture
-lattice debt .lattice/history
+archkeep history .archkeep/history --capture
+archkeep debt .archkeep/history
 ```
 
 ## Exit codes
@@ -74,7 +74,7 @@ lattice debt .lattice/history
 ## Example
 
 ```text
-debt  .lattice/history
+debt  .archkeep/history
 3 entries across 12 snapshots — a snapshot-relative ledger
 1 waivers (accepted boundary violations):
   [waiver] low  apps/admin/legacy.go  (age 12, count 1)

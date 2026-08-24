@@ -1,6 +1,6 @@
 # Architecture governance
 
-How Lattice's own development is governed by the same principles it enforces.
+How Archkeep's own development is governed by the same principles it enforces.
 Every mechanism below runs in CI or is pinned by a test.
 
 ## The invariant
@@ -17,14 +17,14 @@ every mechanism in this document is a guard against the silent direction:
   (could not look) against **0** (looked and found nothing) —
   [exit-codes.md](../reference/exit-codes.md).
 - The language server publishes an empty diagnostic list from exactly two named
-  places — packages/lattice/AGENTS.md.
+  places — packages/archkeep/AGENTS.md.
 - An analyzer that cannot read a file records the failure rather than dropping it
   — contract.md.
 
 ## The boundary config as the single source of truth
 
 [north-star.md](north-star.md) refuses a second copy: "One constraint table, in
-the consumer's workspace." What follows is how Lattice's own development
+the consumer's workspace." What follows is how Archkeep's own development
 practices that refusal.
 
 A workspace's architecture is declared in one place, and every consumer — the Nx
@@ -36,7 +36,7 @@ two enforcers reading one source is only trustworthy while you can name the ways
 they disagree.
 
 CI enforces this on itself. The final CI step runs
-`packages/lattice/cli.mjs check` against this repository's own
+`packages/archkeep/cli.mjs check` against this repository's own
 `module-boundaries.config.mjs`, under a tag vocabulary (`type-package`,
 `scope-nx`) that nothing in `src/` knows about. A repository shipping an enforcer
 it did not run on itself would be answering a consumer's first question with a

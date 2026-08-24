@@ -1,12 +1,12 @@
 ---
 name: arch-change
 description: Make an architecture-aware change — inspect context and declared Intent first, change code inside the constraints, and produce verifiable evidence
-compatibility: Requires @ecoma-io/lattice CLI
+compatibility: Requires @ecoma-io/archkeep CLI
 ---
 
 ## When to use
 
-Before and after modifying code in a Lattice-governed project — when adding or
+Before and after modifying code in a Archkeep-governed project — when adding or
 removing imports, creating new files, changing cross-project dependencies, or
 touching anything that declares or moves architecture (policy files,
 `architecture-intent.json`, a profiles registry, `docs/adr/` records, project
@@ -27,7 +27,7 @@ confirm it.
    the change is non-trivial, request the planning context:
 
    ```
-   lattice context <project> --plan path/to/file.go
+   archkeep context <project> --plan path/to/file.go
    ```
 
    Understand which dependency directions are allowed and which are forbidden,
@@ -43,13 +43,13 @@ confirm it.
    registry is active, the constraint rows you are reading are the selected
    profile's effective block, not a file. Then read the rows the context
    named, and check whether the workspace declares `architecture-intent.json`
-   (`lattice drift --format json` shows it and whether the observed graph
+   (`archkeep drift --format json` shows it and whether the observed graph
    agrees). The Intent states what the architecture _is_, not merely what the
    rule table allows. Do not change code that an existing Intent row
    forbids without first resolving that conflict with the team. When a
    constraint or intent row in the change's path carries a `decisionRef`, run
-   `lattice adr rule:no-direct-dep` (the reverse lookup: which ADR binds this
-   rule?) and `lattice adr 0001-bind-collaboration` (that record's status and
+   `archkeep adr rule:no-direct-dep` (the reverse lookup: which ADR binds this
+   rule?) and `archkeep adr 0001-bind-collaboration` (that record's status and
    rationale) before changing code the rule binds. The `decisionRef` literal
    names a record by its bare `NNN-slug` id — and `adr:NNN-slug` is that same
    record written with the `adr:` prefix the decisionRef docs recommend, the
@@ -59,9 +59,9 @@ confirm it.
    reported in a sentence with exit 0, not a resolved reference. Anything
    else, an ADR id the registry does not know, bare or `adr:`-prefixed, is
    no-verdict exit 3, never a clean "not enforced" sentence: verify the
-   literal against the registry with `lattice adr <id>`, or open
+   literal against the registry with `archkeep adr <id>`, or open
    `docs/adr/NNN-slug.md`.
-   `lattice adr <id>` confirms the binding and the record's status, but the
+   `archkeep adr <id>` confirms the binding and the record's status, but the
    decision itself — the rationale, the context, the consequences — lives in
    the record file: open `docs/adr/NNN-slug.md` and read the prose before
    changing code the rule binds.
@@ -88,7 +88,7 @@ confirm it.
    machinery. When the change adds or rewrites a rule the team will enforce,
    the decision behind it belongs in a recorded ADR — a new
    `docs/adr/NNN-slug.md` with `status: proposed`, `bindings` naming the rule
-   id, reviewed like code (no command writes it; `lattice adr` only reads).
+   id, reviewed like code (no command writes it; `archkeep adr` only reads).
    The rule row then carries that decision's `decisionRef`; a change that
    creates an enforceable rule without a recorded decision is governance
    debt, and `arch-review` will flag a rule whose `decisionRef` is missing or
@@ -108,14 +108,14 @@ confirm it.
    Nothing is discovered by convention — a rule that is not declared judges
    nothing. Before writing one at all, check whether a declared `fitness` row
    already says it: a fitness function needs no toolchain, no artifact and no
-   hash ([docs/usage/custom-rules.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/custom-rules.md)).
+   hash ([docs/usage/custom-rules.md](https://github.com/ecoma-io/archkeep/blob/main/docs/usage/custom-rules.md)).
 
 4. **Inspect the architectural diff when the change is architectural.** If a
    baseline graph snapshot exists (from a prior
-   `lattice graph --format json --output baseline.json` run), compare:
+   `archkeep graph --format json --output baseline.json` run), compare:
 
    ```
-   lattice diff baseline.json --format json
+   archkeep diff baseline.json --format json
    ```
 
    This shows the projects and edges added or removed, and — when a boundary
@@ -125,7 +125,7 @@ confirm it.
 5. **Check constraints.** Run the authoritative gate:
 
    ```
-   lattice check --format json
+   archkeep check --format json
    ```
 
    A full-workspace check is the verdict. A scoped check on the changed files is
@@ -133,12 +133,12 @@ confirm it.
    The check enforces the law in effect, declared where the project model puts
    it (`arch-context`, "Know which law is in effect"): in a profile-selected
    workspace — which is always an Nx one — the profile `boundaryConfig`
-   selects (a one-run `lattice check --config <name>` overrides the
+   selects (a one-run `archkeep check --config <name>` overrides the
    selection). There, read the `boundaryConfig` value in `nx.json`'s plugin
    options — that string IS the active profile name — and verify the check
    resolves exactly it; a check that resolves a different profile than the one
    in effect is not the verdict the change needs. In a native or Moon
-   workspace the law is the policy file (or `lattice.json`'s inline policy)
+   workspace the law is the policy file (or `archkeep.json`'s inline policy)
    itself. Write the law down at the start of the change — `--config <NAME>`
    in effect — so the evaluation step 9 reports is the one the change was
    actually made against.
@@ -148,7 +148,7 @@ confirm it.
    Intent names, confirm the observed graph still agrees with the declared one:
 
    ```
-   lattice drift --format json
+   archkeep drift --format json
    ```
 
    `drift` requires a tracked `architecture-intent.json` at the workspace root.
@@ -162,7 +162,7 @@ confirm it.
    who depends on it:
 
    ```
-   lattice impact <project> --format json
+   archkeep impact <project> --format json
    ```
 
    An empty dependents list is a claim ("nothing depends on this"), not a shrug.
@@ -174,7 +174,7 @@ confirm it.
    law, and re-run the full check until it is green. A declared custom rule
    that answered `unknown` is exit 3 — a gate that did not run, never a clean
    result: get the evidence it was handed with
-   `lattice check --evidence-out <dir>` (an existing directory, one
+   `archkeep check --evidence-out <dir>` (an existing directory, one
    `<rule>.json` per declared rule, no verdict and no exit code moved) and fix
    the rule or the tree before reporting anything about that law.
 
@@ -219,7 +219,7 @@ confirm it.
   violation vanish while the boundary table looks untouched. Report the exact
   `--config <NAME>` the gate ran with; a red under the team's active profile is
   a violation to fix in code or escalate, not a law to swap.
-- **A scoped check is not the gate.** `lattice check <paths>` judges only the
+- **A scoped check is not the gate.** `archkeep check <paths>` judges only the
   listed files; cycle and lazy-load rules need the whole graph, and a fitness
   function that needs the whole tree (`coverage-minimum` today) reports
   `not_applicable` rather than a real verdict. Use it for speed, but run a full
@@ -235,7 +235,7 @@ confirm it.
 ## What to do if it fails
 
 - **Exit 3 after change** — coverage is incomplete. Do not assume the workspace
-  is clean. Investigate what Lattice could not analyze — including a profile
+  is clean. Investigate what Archkeep could not analyze — including a profile
   resolution failure in a profile-selected workspace.
 - **Violations in unrelated files** — your change may have exposed pre-existing
   violations. These still need attention, but they are not caused by your edit;
@@ -245,5 +245,5 @@ confirm it.
   the run names a missing `architecture-intent.json`, the workspace simply has
   no declared Intent: the `check` verdict from step 5 is the whole story, not a
   gap.
-- **`lattice check` hangs or times out** — the workspace graph may be very large.
+- **`archkeep check` hangs or times out** — the workspace graph may be very large.
   Try a scoped check on your changed files first, then run the full check.

@@ -24,18 +24,18 @@ may leak freely.
 
 Required exports, checked by name and kind before anything runs:
 
-| export             | kind     | contract                                                             |
-| ------------------ | -------- | -------------------------------------------------------------------- |
-| `memory`           | memory   | the linear memory every pointer below indexes into                   |
-| `lattice_alloc`    | function | `(len: i32) -> i32` — a pointer to `len` writable bytes              |
-| `lattice_describe` | function | `() -> i64` — packed pointer/length of the describe JSON             |
-| `lattice_evaluate` | function | `(ptr: i32, len: i32) -> i64` — packed pointer/length of the verdict |
+| export              | kind     | contract                                                             |
+| ------------------- | -------- | -------------------------------------------------------------------- |
+| `memory`            | memory   | the linear memory every pointer below indexes into                   |
+| `archkeep_alloc`    | function | `(len: i32) -> i32` — a pointer to `len` writable bytes              |
+| `archkeep_describe` | function | `() -> i64` — packed pointer/length of the describe JSON             |
+| `archkeep_evaluate` | function | `(ptr: i32, len: i32) -> i64` — packed pointer/length of the verdict |
 
 The packed `i64` is `(ptr << 32) | len`, both halves unsigned 32-bit values
 into `memory`. A range that leaves the memory, or a return value that is not
 the packed shape, is a named failure — never a guess.
 
-## `lattice_describe` — the self-description
+## `archkeep_describe` — the self-description
 
 Called once, at load, before any evidence exists. UTF-8 JSON:
 
@@ -56,18 +56,18 @@ pattern the policy loader holds rule names to. A describe whose `name`
 disagrees with the declaration, whose catalogue is empty or malformed, or that
 carries a key this table does not name, refuses the load by name.
 
-## The evidence bundle — what `lattice_evaluate` receives
+## The evidence bundle — what `archkeep_evaluate` receives
 
 Canonically serialized UTF-8 JSON, byte-deterministic over an unchanged tree
 (projects and edges sorted), assembled by the engine from the facts the run
 already computed. Contract 1 carries exactly four kinds:
 
-| kind      | what it holds                                                                                                                                                                |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `model`   | `projects`: every project as `{name, root, tags}`                                                                                                                            |
-| `graph`   | `edges`: the dependency records the graph holds                                                                                                                              |
-| `imports` | every import-site record of the analysis contract (`packages/lattice/src/analysis/contract.md`), verbatim, plus `sourceProject` — the attribution the pipeline already holds |
-| `policy`  | `depConstraints` and `moduleBoundaryOptions`, as loaded                                                                                                                      |
+| kind      | what it holds                                                                                                                                                                 |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model`   | `projects`: every project as `{name, root, tags}`                                                                                                                             |
+| `graph`   | `edges`: the dependency records the graph holds                                                                                                                               |
+| `imports` | every import-site record of the analysis contract (`packages/archkeep/src/analysis/contract.md`), verbatim, plus `sourceProject` — the attribution the pipeline already holds |
+| `policy`  | `depConstraints` and `moduleBoundaryOptions`, as loaded                                                                                                                       |
 
 Beside the kinds, the bundle carries the rule's own instance:
 `rule: { name, params }`, with `params` the declared row's object (`{}` when
@@ -77,7 +77,7 @@ the kind named. A rule that wants a fact no kind carries is asking for a new
 extractor in the engine — it never parses source itself
 ([concepts/custom-rules.md](../concepts/custom-rules.md) owns that refusal).
 
-## The verdict — what `lattice_evaluate` returns
+## The verdict — what `archkeep_evaluate` returns
 
 UTF-8 JSON, validated before it becomes a claim; a violation of any line
 below is a **hollow verdict**, and the rule answers `unknown` naming what was
@@ -146,7 +146,7 @@ version: a new kind, or a new field inside a kind, arrives without touching
 `"contract": 1`, and a rule compiled before it keeps judging exactly as it
 did. Every SDK's binding accepts members it does not read for precisely this
 reason, and that is measured rather than promised — the conformance suite
-(`packages/lattice/src/conformance/rule-sdks.integration.test.mjs`) hands all
+(`packages/archkeep/src/conformance/rule-sdks.integration.test.mjs`) hands all
 four reference artifacts a bundle carrying a kind that does not exist and a
 member inside one that does, and requires the verdict not to move by a byte.
 Without that, the first language-namespaced kind would turn every rule already
@@ -235,22 +235,22 @@ Three SDKs ship from this repository, each in its own package with the README
 that owns its build story and declared limits, and each proven by a committed
 reference artifact driven through this very host:
 
-- **Rust** — crate `lattice-rule-sdk`, `packages/lattice-rule-sdk-rust`: a
-  typed `lattice_rule!` declaration generates the exports above, a hollow
+- **Rust** — crate `archkeep-rule-sdk`, `packages/archkeep-rule-sdk-rust`: a
+  typed `archkeep_rule!` declaration generates the exports above, a hollow
   verdict is unrepresentable, and a malformed declaration fails at compile
   time. Built with `wasm32-unknown-unknown`.
-- **Go** — module `github.com/ecoma-io/lattice/packages/lattice-rule-sdk-go`:
+- **Go** — module `github.com/ecoma-io/archkeep/packages/archkeep-rule-sdk-go`:
   the same typed surface with `Register` from `init`, zero dependencies
   (`encoding/json` is the stdlib's). Built with TinyGo's freestanding target —
   standard Go's wasm targets import a host and are refused at load, a measured
   fact that package's README carries.
 - **TypeScript syntax, AssemblyScript semantics** — npm package
-  `@ecoma-io/lattice-rule-sdk`, `packages/lattice-rule-sdk-ts`: TS-syntax
+  `@ecoma-io/archkeep-rule-sdk`, `packages/archkeep-rule-sdk-ts`: TS-syntax
   rules compiled by AssemblyScript to a zero-import module. AssemblyScript is
   not TypeScript's semantics — no `any`, no unions, no `try/catch`, no JS
   stdlib — and that package's README leads with exactly what differs.
-- **Python** — PyPI distribution `lattice-rule-sdk`,
-  `packages/lattice-rule-sdk-python`: the author writes pure Python, and the
+- **Python** — PyPI distribution `archkeep-rule-sdk`,
+  `packages/archkeep-rule-sdk-python`: the author writes pure Python, and the
   build tool bakes it into a Rust carrier embedding the RustPython
   interpreter, compiled to the same zero-import module (with fixed hash
   seeding — determinism as a feature). Two declared limits that package's

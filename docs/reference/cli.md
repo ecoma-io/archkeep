@@ -1,6 +1,6 @@
 # CLI
 
-All commands, all flags, all exit codes in one page. Source: `packages/lattice/cli.mjs`.
+All commands, all flags, all exit codes in one page. Source: `packages/archkeep/cli.mjs`.
 
 ## Commands
 
@@ -28,9 +28,9 @@ All commands, all flags, all exit codes in one page. Source: `packages/lattice/c
 descriptive one: a declared function that `fail`s makes it exit 1 (and an
 undetermined one, 3) — see the prose below.
 
-`lattice --help` prints the help text and exits 0. An omitted command name is a
+`archkeep --help` prints the help text and exits 0. An omitted command name is a
 usage error (exit 2). If the first positional argument names a path that exists
-on disk, it is treated as `check` scoped to that path, the same as `lattice check <path>`.
+on disk, it is treated as `check` scoped to that path, the same as `archkeep check <path>`.
 
 ## Flags
 
@@ -109,7 +109,7 @@ project so the comparison cannot be completed exits 3 with a loud message —
 | `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. |
 
 The optional positional argument names the snapshot directory for trends (the
-same `.lattice/history/` directory `history` reads); with no argument, health
+same `.archkeep/history/` directory `history` reads); with no argument, health
 reports the current run's metrics without a trend. Health is descriptive — it
 never exits 1 — and it exits 3 whenever any metric reads `unknown`: a run that
 could not fully inspect its own evidence is not a healthy run, and "cannot
@@ -330,7 +330,7 @@ snapshot of what is is never a finding.
 
 **It answers in a workspace that has no boundary law yet**, which is where the
 question it exists for is usually asked: the first thing to establish about a
-new workspace is what Lattice sees, and that is what the first policy gets
+new workspace is what Archkeep sees, and that is what the first policy gets
 written against. The snapshot then carries no `policy` field -- no law, no
 policy identity for [`diff`](#diff-baseline) to compare against. A boundary
 config that IS there and will not load still fails the run with exit 3, because
@@ -471,7 +471,7 @@ a coding agent needs before planning a change to `project`. Trailing paths
 scope the change (which project roots or files it touches); with no paths, the
 whole workspace is in scope.
 
-The planning context is facts, not a plan. Lattice reports the current
+The planning context is facts, not a plan. Archkeep reports the current
 architecture snapshot, the applicable policy with the author's Intent
 (`description`/`remediation`), the canonical `architecture-intent.json`
 verdict (the same model `check` and `drift` judge — findings, no-verdict, or

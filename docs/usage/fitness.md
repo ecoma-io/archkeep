@@ -1,11 +1,11 @@
-# `lattice fitness`
+# `archkeep fitness`
 
 Judge every declared fitness function against the observed workspace.
 
 ```shell
-lattice fitness
-lattice fitness --format json
-lattice fitness --format json --output fitness.json
+archkeep fitness
+archkeep fitness --format json
+archkeep fitness --format json --output fitness.json
 ```
 
 `fitness` takes no positional arguments — the observed side is the whole project

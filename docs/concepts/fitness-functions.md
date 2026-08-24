@@ -172,7 +172,7 @@ unchanged tree and policy produce byte-identical output.
 Coverage has a precise meaning: `coverage-minimum` count FILE coverage over the
 analyzable owned files — the same files `analysis` actually reads. A Markdown
 file can neither raise nor lower the claim; a file that was owned but not
-analyzed counts as uncovered. A path-scoped run (`lattice check <path>`)
+analyzed counts as uncovered. A path-scoped run (`archkeep check <path>`)
 analyzes a subset of owned files, so coverage over the whole set is not
 determinable from it: `coverage-minimum` answers `not_applicable` there, never
 a low-looking number that is really "we only looked at part of the tree" — and,
@@ -183,7 +183,7 @@ run just reports that it could not.
 
 ## Two faces, one registry
 
-`lattice fitness` is the descriptive face: it prints each function's verdict as
+`archkeep fitness` is the descriptive face: it prints each function's verdict as
 a table. A function that `fail`s makes it exit 1 — a failing fitness function
 is a finding, not a print job — and any function that is `unknown` makes it
 exit 3. `check` is the gate face: it folds fitness in by presence — a

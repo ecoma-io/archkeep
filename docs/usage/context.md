@@ -1,11 +1,11 @@
-# `lattice context`
+# `archkeep context`
 
 Show the architecture constraints that apply to a project.
 
 ```shell
-lattice context billing-core
-lattice context billing-core --format json
-lattice context billing-core --format json --output context.json
+archkeep context billing-core
+archkeep context billing-core --format json
+archkeep context billing-core --format json --output context.json
 ```
 
 `context` takes a project name and shows the architecture constraints that
@@ -57,8 +57,8 @@ constraint table produces a different set of matching rows.
 ## The planning context (`--plan`)
 
 ```
-lattice context billing-core --plan
-lattice context billing-core --plan path/to/file.go path/to/other.rs
+archkeep context billing-core --plan
+archkeep context billing-core --plan path/to/file.go path/to/other.rs
 ```
 
 `--plan` requests the **agent architecture planning context**: the
@@ -66,7 +66,7 @@ deterministic facts a coding agent needs before planning a change to a
 project. Trailing paths scope the change (which project roots or files it
 touches); with no paths, the whole workspace is in scope.
 
-The planning context is facts, not a plan — Lattice reports the current
+The planning context is facts, not a plan — Archkeep reports the current
 architecture snapshot, the applicable policy with the author's Intent
 (`description`/`remediation`), the impact of a change to the target project
 (dependents capped at 10 with an explicit overflow note), the current

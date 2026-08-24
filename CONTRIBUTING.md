@@ -1,4 +1,4 @@
-# Contributing to Lattice
+# Contributing to Archkeep
 
 Thank you for being here. This document is the short version of everything a
 pull request is judged on, so nothing about the process is a surprise.
@@ -35,8 +35,8 @@ Requirements: **Node ≥ 24** (`.node-version` pins the major) and **pnpm 11**
 four rule SDKs and therefore their toolchains; see that section.
 
 ```bash
-git clone https://github.com/ecoma-io/lattice.git
-cd lattice
+git clone https://github.com/ecoma-io/archkeep.git
+cd archkeep
 pnpm install
 ```
 
@@ -52,7 +52,7 @@ you run no command in the normal case. Two things it does:
 - **Format and lint on every write.** Hooks in `scripts/editor-hooks/` run the
   moment a file is edited, so a problem surfaces while the edit is still in
   context rather than at commit time.
-- **Enables `lattice@lattice`** — this repository's own plugin, the one its
+- **Enables `archkeep@archkeep`** — this repository's own plugin, the one its
   marketplace catalogue (`.claude-plugin/marketplace.json`) publishes. It is the
   language server reporting module-boundary diagnostics as you edit, plus the
   `arch-*` skills; it gates nothing, and no merge depends on it. The same file
@@ -81,7 +81,7 @@ files) loses nothing. If you edit a skill, re-copy it there
 between the two trees, so forgetting is loud.
 
 The plugin route (`codex plugin marketplace add .`, then
-`codex plugin add lattice@lattice`) exists for installing the skills by name
+`codex plugin add archkeep@archkeep`) exists for installing the skills by name
 into sessions outside this repository; it registers and enables per user in
 `~/.codex/config.toml` — the tables it writes there never enter scope from a
 repository's own `.codex/config.toml`, measured — and it copies the tree into
@@ -105,7 +105,7 @@ As with Claude Code, no gate depends on any of this — the editor-time hooks in
 | `node scripts/check-skills.mjs`               | The skills gate: shape, citations, and the plugin-manifest version chain                               |
 | `node scripts/check-docs-links.mjs`           | Fails on any doc reference that cannot resolve — a gone target, a dead anchor                          |
 | `node scripts/check-cli-docs-roster.mjs`      | Holds every documented command count and roster to `COMMAND_NAMES` in cli.mjs                          |
-| `node scripts/check-installation-prereqs.mjs` | Holds installation.md's prerequisites to `packages/lattice/package.json`                               |
+| `node scripts/check-installation-prereqs.mjs` | Holds installation.md's prerequisites to `packages/archkeep/package.json`                              |
 | `node scripts/check-contributing-parity.mjs`  | Holds this document's roster and hooks to ci.yml and lefthook.yml — this row is part of what it checks |
 | `pnpm e2e`                                    | Packs the artifact and drives it as an installed CLI, end to end — CI runs it in two shards            |
 
@@ -125,11 +125,11 @@ skip, which is the whole point of `check-packages` below. If you have not
 touched an SDK, running one project's targets is fine:
 
 ```bash
-moon run lattice:lint lattice:test lattice:typecheck
+moon run archkeep:lint archkeep:test archkeep:typecheck
 ```
 
 Not every SDK declares all three: `check-packages` reports
-`lattice-rule-sdk-python — lint, test (no typecheck)`, and that partial line is
+`archkeep-rule-sdk-python — lint, test (no typecheck)`, and that partial line is
 the truthful answer rather than a gap. Python has no type checker in the
 toolchain this repository already installs, and a `typecheck` target running
 `compileall` would report a passing type check over a file with no types in it
@@ -140,14 +140,14 @@ None of the four declares a `build` target and none rebuilds its `.wasm`: the
 artifact is committed beside its `.sha256`, and each package's
 `rebuild-example.sh` is what reproduces it when the rule itself changes. What
 proves the committed bytes are the law is
-`packages/lattice/src/conformance/rule-sdks.integration.test.mjs`, which loads
+`packages/archkeep/src/conformance/rule-sdks.integration.test.mjs`, which loads
 all four through the engine's real host at their recorded digests and requires
 one verdict document per fixture from all of them.
 
 And the tool on the tree that ships it, which is the last thing CI does:
 
 ```bash
-node packages/lattice/cli.mjs check
+node packages/archkeep/cli.mjs check
 ```
 
 And, last of all, the packed artifact driven from somewhere that is not this
@@ -156,7 +156,7 @@ one command worth skipping locally unless you touched the package's manifest,
 its entry points, or anything it imports:
 
 ```bash
-node scripts/verify-package.mjs packages/lattice
+node scripts/verify-package.mjs packages/archkeep
 ```
 
 Everything above runs where the tool's dependencies already exist, so none of it
@@ -175,14 +175,14 @@ pull request so a change that breaks packaging turns this build red instead of
 the release lane weeks later:
 
 ```bash
-node scripts/package-vsix.mjs packages/lattice-vscode dist/lattice-vscode.vsix
-node scripts/verify-vsix.mjs dist/lattice-vscode.vsix
+node scripts/package-vsix.mjs packages/archkeep-vscode dist/archkeep-vscode.vsix
+node scripts/verify-vsix.mjs dist/archkeep-vscode.vsix
 ```
 
 `package-vsix` stages the tracked files and packs them where npm can resolve
 the runtime dependencies, and `verify-vsix` proves the resulting `.vsix` holds
 what an install needs — `vsce package` exiting 0 proves none of that. Run them
-when you touch `packages/lattice-vscode`; skip them otherwise, as with
+when you touch `packages/archkeep-vscode`; skip them otherwise, as with
 `verify-package` above.
 
 Run all of them before you push. A shorter local run just moves the red to the
@@ -212,10 +212,10 @@ runs only some of the targets is reported as exactly that, and it is the expecte
 answer rather than a finding:
 
 ```text
-ok   lattice — lint, test, typecheck (no build)
+ok   archkeep — lint, test, typecheck (no build)
 ```
 
-`lattice` ships as `.mjs` and has nothing to build. Adding an empty `build` target
+`archkeep` ships as `.mjs` and has nothing to build. Adding an empty `build` target
 to make that line read fuller is the placeholder-green the script exists to catch,
 so do not.
 
@@ -264,15 +264,15 @@ commitlint.
 `ci`, `chore`, `revert`.
 
 **Scope is optional**, and when used it names which package the change lands in:
-`lattice`, `vscode`, `workspace`, `docs`, `deps`, `ci`.
+`archkeep`, `vscode`, `workspace`, `docs`, `deps`, `ci`.
 
 `deps` and `ci` are on that list because Renovate writes them: it opens
 `chore(deps):` and `chore(ci):` pull requests, and a scope list without them
 would fail commitlint on every dependency update.
 
 ```
-feat(lattice): read go.mod requires into the project graph
-fix(lattice): report a replace directive pointing outside the workspace
+feat(archkeep): read go.mod requires into the project graph
+fix(archkeep): report a replace directive pointing outside the workspace
 chore(deps): update dependency nx to v23.1.2
 ```
 
@@ -402,7 +402,7 @@ you will see open on `main` that nobody wrote.
 Conventional Commit subjects since the last tag and keeps one pull request open
 holding the next version and the changelog it derived. **That pull request is the
 release proposal**: merging it tags, and the tag publishes
-`@ecoma-io/lattice` to npm. So the subject line you write is what
+`@ecoma-io/archkeep` to npm. So the subject line you write is what
 decides the next version number — `feat:` moves the minor, `fix:` the patch, and
 a `!` or a `BREAKING CHANGE:` footer the major.
 
@@ -412,7 +412,7 @@ Two details that are easy to trip over:
   release-please owns both and rewrites them on the next run. `CHANGELOG.md` is
   in `.prettierignore` for the same reason: its generated layout and Prettier's
   preferred one disagree, and neither yields.
-- **The release pull request's title is `chore(lattice): release <version>`**,
+- **The release pull request's title is `chore(archkeep): release <version>`**,
   not release-please's default. The default names the target branch as the scope
   (`chore(main): …`), and `main` is not in `commitlint.config.mjs`'s `scope-enum`
   — the release pull request would fail a required check and could never merge.

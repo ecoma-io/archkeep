@@ -24,7 +24,7 @@ with both.
 
 ## What "full consumption" means
 
-Every `arch-*` skill directs the agent to run `lattice` commands with
+Every `arch-*` skill directs the agent to run `archkeep` commands with
 `--format json`. The JSON envelope is versioned and machine-readable; any agent
 that can execute shell commands and parse JSON can follow the protocol in full.
 
@@ -36,14 +36,14 @@ context, but they cannot act on the `HOW` steps.
 ### Claude Code
 
 Full integration: skills appear as slash commands, the plugin provides the LSP
-server for real-time diagnostics, and the agent can run `lattice` commands
+server for real-time diagnostics, and the agent can run `archkeep` commands
 directly. See [claude-code.md](claude-code.md).
 
 ### Codex
 
 Reads AGENTS.md natively, so the skill names and purposes are surfaced through
 that file. For the skills themselves there are two routes:
-`npx skills add ecoma-io/lattice -a codex`, or the plugin — Codex has its own
+`npx skills add ecoma-io/archkeep -a codex`, or the plugin — Codex has its own
 catalogue (`.agents/plugins/marketplace.json`) and manifest
 (`.codex-plugin/plugin.json`), installed with `codex plugin marketplace add`
 and `codex plugin add`.
@@ -58,7 +58,7 @@ so an edited skill reaches a session only after a re-install.
 
 The project-discovery column is what closes that gap: `.agents/skills/` checked
 into a repository is read by every Codex session there with no command and no
-plugin — which is how the Lattice repository itself ships the skills to its own
+plugin — which is how the Archkeep repository itself ships the skills to its own
 Codex sessions. [installation.md](installation.md) has the commands and the
 measurements.
 
@@ -67,10 +67,10 @@ measurements.
 Runs the same editor-time gates as Claude Code and Codex: the PostToolUse
 format, lint and doc-reference checks run after every file edit through this
 repository's opencode plugin (`.opencode/plugins/editor-gates.js`). Install the
-skills via `npx skills add ecoma-io/lattice -a opencode`.
+skills via `npx skills add ecoma-io/archkeep -a opencode`.
 
 ### Other platforms
 
-`npx skills add ecoma-io/lattice` detects the agent platform and installs to
+`npx skills add ecoma-io/archkeep` detects the agent platform and installs to
 the correct directory. If your platform is not detected, use manual installation
 (see [installation.md](installation.md)).

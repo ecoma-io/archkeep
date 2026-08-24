@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.4.0"
+  },
+  "command": "graph",
+  "workspace": {
+    "root": "/ws",
+    "provider": "moon",
+    "marker": ".moon",
+    "provenance": {
+      "commit": "0000000000000000000000000000000000000000",
+      "remote": "https://github.com/ecoma-io/archkeep.git",
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 2,
+    "analyzedFiles": 176,
+    "imports": 607,
+    "notAnalyzed": [],
+    "blindSpots": [
+      {
+        "file": "packages/archkeep-vscode/extension.mjs",
+        "line": 26,
+        "column": 8,
+        "reason": "TypeScript cannot resolve 'vscode' from 'packages/archkeep-vscode/extension.mjs'"
+      },
+      {
+        "file": "packages/archkeep-vscode/extension.mjs",
+        "line": 32,
+        "column": 28,
+        "reason": "TypeScript cannot resolve 'vscode-languageclient/node' from 'packages/archkeep-vscode/extension.mjs'"
+      },
+      {
+        "file": "packages/archkeep/src/config-spelling.integration.test.mjs",
+        "line": 128,
+        "column": 3,
+        "reason": "'import(`data:text/javascript,${encodeURIComponent(SIMPLE_BOUNDARY_CONFIG)}`)' has a non-literal argument, so its target is not knowable statically"
+      },
+      {
+        "file": "packages/archkeep/src/config.mjs",
+        "line": 582,
+        "column": 27,
+        "reason": "'import(pathToFileURL(path).href)' has a non-literal argument, so its target is not knowable statically"
+      },
+      {
+        "file": "packages/archkeep/src/eslint-config.mjs",
+        "line": 399,
+        "column": 27,
+        "reason": "'import(pathToFileURL(path).href)' has a non-literal argument, so its target is not knowable statically"
+      },
+      {
+        "file": "packages/archkeep/src/lsp/boundary-config.mjs",
+        "line": 61,
+        "column": 27,
+        "reason": "'import(url)' has a non-literal argument, so its target is not knowable statically"
+      }
+    ],
+    "notes": []
+  },
+  "result": {
+    "projects": [
+      {
+        "name": "archkeep",
+        "root": "packages/archkeep",
+        "type": "lib",
+        "tags": ["layer:library", "scope-nx", "stack:backend", "type-package"],
+        "targets": ["lint", "test", "typecheck"]
+      },
+      {
+        "name": "archkeep-vscode",
+        "root": "packages/archkeep-vscode",
+        "type": "app",
+        "tags": ["layer:application", "scope-nx", "stack:frontend", "type-extension"],
+        "targets": ["lint", "test", "typecheck"]
+      }
+    ],
+    "dependencies": [],
+    "policy": {
+      "fingerprint": "de56f2b8e3dba5a4a09e3747dd7eaf77040e2681f4360f760beeb369febc5b44"
+    }
+  }
+}

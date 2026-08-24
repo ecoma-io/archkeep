@@ -1,7 +1,7 @@
 ---
 name: arch-review
 description: Review a change or PR for architecture governance — establish context, inspect the change, run the authoritative gate, and produce an evidence-backed review
-compatibility: Requires @ecoma-io/lattice CLI
+compatibility: Requires @ecoma-io/archkeep CLI
 ---
 
 ## When to use
@@ -32,7 +32,7 @@ what the architecture was.
 For each project touched by the change:
 
 ```
-lattice context <project> --format json
+archkeep context <project> --format json
 ```
 
 Understand what constraints apply — which dependency directions are allowed and
@@ -47,7 +47,7 @@ with Intent, impact, current violations, drift, and verification commands in
 one document:
 
 ```
-lattice context <project> --plan path/to/file.go
+archkeep context <project> --plan path/to/file.go
 ```
 
 ### 2. Inspect the change
@@ -59,7 +59,7 @@ project created or removed, ownership boundaries moved, the policy changed, the
 profile registry changed (a profile's `block`, its `base` chain, or the default
 profile a `boundaryConfig` selects), the declared Intent changed, or the
 provider migrated. When a reviewed rule carries a `decisionRef`, cite the
-decision it leans on — `lattice adr rule:<id>` names the record that binds it,
+decision it leans on — `archkeep adr rule:<id>` names the record that binds it,
 and its status and rationale are review evidence. A change that satisfies the
 rule table but contradicts the recorded decision is a finding, not a pass.
 If the change is none of those, the review is: context → check → verdict, and
@@ -68,11 +68,11 @@ you can skip the heavy steps.
 ### 3. Determine whether the architecture changed
 
 If a baseline graph snapshot exists (from a prior
-`lattice graph --format json --output baseline.json` run), compare the current
+`archkeep graph --format json --output baseline.json` run), compare the current
 graph against it:
 
 ```
-lattice diff baseline.json --format json
+archkeep diff baseline.json --format json
 ```
 
 This shows added and removed edges, project changes, and — when a boundary
@@ -86,7 +86,7 @@ baseline is a coverage gap, not "no structural change".
 For each changed project, see who depends on it:
 
 ```
-lattice impact <project> --format json
+archkeep impact <project> --format json
 ```
 
 An empty `dependents` list is a claim ("nothing depends on this"), not a shrug.
@@ -98,14 +98,14 @@ by a change to this one.
 Full workspace — the form a review's verdict may rest on:
 
 ```
-lattice check --format json
+archkeep check --format json
 ```
 
 Scoped to just the files the change touched, when speed matters more than
 completeness:
 
 ```
-lattice check --format json path/to/file.go path/to/other.rs
+archkeep check --format json path/to/file.go path/to/other.rs
 ```
 
 This is the gate — boundary violations **and** the declared Intent, in one run,
@@ -130,7 +130,7 @@ When the change is itself a profile under review, judge it without touching
 the live law:
 
 ```
-lattice check --config <candidate-profile>
+archkeep check --config <candidate-profile>
 ```
 
 That run resolves a different law than the one in effect — it is a review of
@@ -143,7 +143,7 @@ When the change is architectural or Intent-adjacent, confirm the observed graph
 still agrees with the declared architecture:
 
 ```
-lattice drift --format json
+archkeep drift --format json
 ```
 
 Exit 3 — the intent comparison cannot be verified — is NOT "clean". An
@@ -153,7 +153,7 @@ cites when it says "the declared architecture no longer matches the code".
 
 ### 7. Select supporting evidence as the change warrants
 
-- **The whole governance picture at once** — `lattice report` composes the
+- **The whole governance picture at once** — `archkeep report` composes the
   surfaces below into one document: provenance, the health metrics, the waiver
   and fitness tables, and the recorded decisions each governed row cites. Every
   number comes from the same function the owning command calls, and one law is
@@ -171,9 +171,9 @@ cites when it says "the declared architecture no longer matches the code".
   only, while this document's whole subject is on whose authority each governed
   row stands.
 
-- **Health / quality claim** — `lattice health` reports per-metric verdicts
+- **Health / quality claim** — `archkeep health` reports per-metric verdicts
   (a metric whose evidence is unavailable is `unknown`/`not_applicable`, never
-  zero); `lattice fitness`(when the policy declares a `fitness` export) judges
+  zero); `archkeep fitness`(when the policy declares a `fitness` export) judges
   the workspace's named quality gates with `pass` / `fail` / `unknown` /
   `not_applicable` verdicts. `fitness` is descriptive too, but a declared
   function that `fail`s makes it exit 1 — a failing fitness function is a
@@ -191,13 +191,13 @@ cites when it says "the declared architecture no longer matches the code".
   binary blob: the digest is what makes "the law CI ran is the law review saw"
   checkable at all, so a bumped hash needs the same argument any policy edit
   does. Third, an `unknown` is debuggable rather than merely reportable:
-  `lattice check --evidence-out <dir>` writes each declared rule's evidence
+  `archkeep check --evidence-out <dir>` writes each declared rule's evidence
   bundle into an existing directory — the exact document that rule was judged
   over, written even for a rule that trapped — and it changes no verdict and no
   exit code, so asking for it costs the review nothing
-  ([docs/usage/custom-rules.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/custom-rules.md)). Ask for it
+  ([docs/usage/custom-rules.md](https://github.com/ecoma-io/archkeep/blob/main/docs/usage/custom-rules.md)). Ask for it
   before accepting "the rule could not run" as where the review stops.
-- **Pre-existing violations ("debt")** — `lattice debt <dir>` ages waivers, gaps
+- **Pre-existing violations ("debt")** — `archkeep debt <dir>` ages waivers, gaps
   and drift across a snapshots directory: how long a violation has been
   accepted or unknown. It is a ledger, not a live gate — it never changes a
   verdict. For "did THIS change introduce the violation", compare the current
@@ -205,16 +205,16 @@ cites when it says "the declared architecture no longer matches the code".
   this change.
 - **Waivers / exceptions** — a suppression (no `expiresAt`) is permanent, and
   a waiver (with `expiresAt`) accepts a violation for a fixed term. Both live
-  in `boundarySuppressions`; `lattice waivers` names every row — a waiver with
+  in `boundarySuppressions`; `archkeep waivers` names every row — a waiver with
   its term, a permanent suppression with what it is hiding (the one surface
   `check`'s green cannot distinguish), and `check` keeps reporting a waived
   violation as a finding (exit 1) so CI still catches the day the term lapses.
-  `coverage.exempt` in `lattice.json` is the one coverage-count suppression
+  `coverage.exempt` in `archkeep.json` is the one coverage-count suppression
   surface, and it requires a mandatory reason.
   A waiver never promotes `unknown` → `pass`.
 - **Provenance** — each `graph` snapshot carries its git origin;
   `history` classifies transitions (architecture / policy / provider / code
-  drift) by the evidence snapshots carry; `lattice provenance` reports where
+  drift) by the evidence snapshots carry; `archkeep provenance` reports where
   this run's own facts came from — the commit and remote behind them — and how
   many governance rows carry an `origin` against how many do not, naming the
   unattested ones and resolving the `decisionRef` citations among them. A row
@@ -225,14 +225,14 @@ cites when it says "the declared architecture no longer matches the code".
   fitness row carries a `decisionRef` (`decisionRef` is a governance block key
   a fitness row accepts, alongside `name`/`match`/`condition`/`reason`), verify
   the decision it leans on
-  (`lattice adr rule:no-direct-dep` finds the binding ADR; `lattice adr
+  (`archkeep adr rule:no-direct-dep` finds the binding ADR; `archkeep adr
 0001-bind-collaboration` confirms the record's status and its bindings — the
   decision's rationale and context live in the record file, `docs/adr/NNN-slug.md`,
   so open it and read the prose before judging the rule against it). A resolved
   decision is review evidence: the rule is enforced because a recorded decision
   made it so. An ADR id the registry does not know exits 3 — the record is
   missing, and the rule's governance grounding is `unknown`; the review must
-  say so, never read it as bound. The reverse lookup inverts that: `lattice
+  say so, never read it as bound. The reverse lookup inverts that: `archkeep
 adr rule:orphan` names a rule no ADR binds and exits 0 with a sentence —
   verify the rule row's exact spelling against the registry before reading it
   as "not governed". The rationale matters: a rule that contradicts the
@@ -241,7 +241,7 @@ adr rule:orphan` names a rule no ADR binds and exits 0 with a sentence —
 
 ### 8. Inspect history when the change follows architectural evolution
 
-If the repository keeps snapshots, `lattice history <dir>` names which of the
+If the repository keeps snapshots, `archkeep history <dir>` names which of the
 recent transitions were architectural and which were policy or provider — useful
 when the change is the latest move in an evolution the review should connect.
 Snapshots do not appear on their own — they come from `--capture` runs the
@@ -254,7 +254,7 @@ capture writes a file, and it would record the law as the change left it.
 For any violation where the reason matters:
 
 ```
-lattice explain <file:line:column>
+archkeep explain <file:line:column>
 ```
 
 Cite the matching constraint row, the tags on both sides, and whether the
@@ -268,9 +268,9 @@ accept the disagreement, and do **not** silently rewrite the Intent to match.
 The review states the discrepancy as a finding: the declared architecture and
 the code have drifted, and the decision to reconcile them (new architecture, or
 changed code) belongs to the team. When the team wants the shape of the
-disagreement element by element, `lattice reconcile --propose` scores every
+disagreement element by element, `archkeep reconcile --propose` scores every
 observed project and edge against the declared model and derives the edits that
-would make them agree; `lattice discover --propose` derives candidate
+would make them agree; `archkeep discover --propose` derives candidate
 architecture from what is observed. Both mark their output as proposals that
 are never written — no command writes to the Intent, no command writes an ADR,
 and proposed is never authoritative. When the model is not merely stale but
@@ -304,7 +304,7 @@ Report, each half with evidence:
     judging the change against the one that binds.
   - **YES** → `context` → `diff` → `impact` → `check` → `drift` → verdict.
 - **Does a reviewed rule carry a `decisionRef`?** → `context` → inspect the
-  reference (`lattice adr <ref>`, whichever shape the row's `decisionRef`
+  reference (`archkeep adr <ref>`, whichever shape the row's `decisionRef`
   holds — an ADR id `NNN-slug` reads the record, a `rule:`/`fitness:` id is the
   reverse lookup) → `check` → verdict. An unresolved reference is `unknown`,
   never valid evidence; say so.
@@ -315,28 +315,28 @@ Report, each half with evidence:
 
 ## What to do if it fails
 
-- **`lattice diff` exit 3** — the baseline or the head is incomplete. The diff
+- **`archkeep diff` exit 3** — the baseline or the head is incomplete. The diff
   is unreliable; do not treat it as "no changes". Re-generate the baseline with
-  `lattice graph --format json` and try again.
-- **`lattice impact` returns empty dependents** — that is a claim, not a shrug.
+  `archkeep graph --format json` and try again.
+- **`archkeep impact` returns empty dependents** — that is a claim, not a shrug.
   Nothing in the workspace depends on this project. Verify this is expected.
-- **`lattice check` exit 3** — coverage is incomplete. The review cannot reach a
+- **`archkeep check` exit 3** — coverage is incomplete. The review cannot reach a
   verdict on the unchecked files, and this blocks: state it in the review
   summary and do not approve while it stands (step 5) — and in a
   profile-selected workspace check whether the selected profile could be
   resolved before blaming the files: an unknown profile name, an unknown
   `base`, a `base` cycle, or an unreadable registry are all exit 3 with no
   fallback to another law.
-- **`lattice adr` exit 3** — an ADR-pattern id the registry does not know, or a
+- **`archkeep adr` exit 3** — an ADR-pattern id the registry does not know, or a
   registry that could not be read. A `decisionRef` naming a missing record is
   `unknown`, never a pass; the review says the rule's grounding is unverifiable
   rather than citing it as evidence. A reverse lookup that exits 0 with `no ADR
 binds rule:X` is a different answer — it names a rule id the registry binds
   nothing — so verify the exact spelling against the rule row before treating
   the rule as ungoverned.
-- **`lattice drift` exit 3** — the Intent cannot be verified. The governance
+- **`archkeep drift` exit 3** — the Intent cannot be verified. The governance
   status is unknown; the review must say so, not pass on it.
-- **`lattice reconcile --propose` refuses** — `reconcile` exits 3 loudly on
+- **`archkeep reconcile --propose` refuses** — `reconcile` exits 3 loudly on
   every path that cannot reach a verdict; it never exits 1 (describing the
   disagreement is not a finding). An unknown classification means the model
   cannot be scored — say so rather than treating it as "no disagreement".

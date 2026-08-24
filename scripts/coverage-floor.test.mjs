@@ -28,8 +28,8 @@ const FLOOR_URL = new URL("../coverage.config.json", import.meta.url);
 const floor = JSON.parse(readFileSync(FLOOR_URL, "utf8"));
 
 const CONFIGS = [
-  "../packages/lattice/vitest.config.mjs",
-  "../packages/lattice-vscode/vitest.config.mjs",
+  "../packages/archkeep/vitest.config.mjs",
+  "../packages/archkeep-vscode/vitest.config.mjs",
 ];
 
 const floorKeys = Object.keys(floor)

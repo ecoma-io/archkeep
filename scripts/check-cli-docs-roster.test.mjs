@@ -90,7 +90,7 @@ test("count drift fails naming BOTH numbers", () => {
 test("each claiming document is judged, not just the first", () => {
   const { failures } = evaluate(docs({ pkg: "the fifteen-command surface" }));
   assert.equal(failures.length, 1);
-  assert.match(failures[0], /packages\/lattice\/README\.md/);
+  assert.match(failures[0], /packages\/archkeep\/README\.md/);
   assert.match(failures[0], /15/);
 });
 
@@ -165,7 +165,7 @@ test("the real documents agree with COMMAND_NAMES", async () => {
   const texts = Object.fromEntries(
     Object.entries(CLAIM_SITES).map(([key, relative]) => [key, read(relative)]),
   );
-  const { COMMAND_NAMES } = await import("../packages/lattice/cli.mjs");
+  const { COMMAND_NAMES } = await import("../packages/archkeep/cli.mjs");
   // The silent-direction guard for this file: an empty roster or unreadable
   // documents must fail here rather than let a vacuous comparison pass.
   assert.ok(COMMAND_NAMES.length > 0);

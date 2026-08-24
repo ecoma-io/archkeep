@@ -286,7 +286,7 @@ test("parseDocCitations drops a docs/adr/NNN-slug.md placeholder citation, backt
 
 test("parseDocCitations still finds a REAL backtick-wrapped citation — the placeholder rule does not narrow this", () => {
   // This repository's own convention for a live citation IS inline,
-  // backtick-wrapped prose (see packages/lattice/src/rules/match.mjs,
+  // backtick-wrapped prose (see packages/archkeep/src/rules/match.mjs,
   // src/report/json.mjs, and others) — the ADR-placeholder exclusion above
   // is deliberately narrow (matched on the literal "NNN" token) so it does
   // not also silence citations like this one, which name one real file.
@@ -521,7 +521,7 @@ test("evaluate FAILS a top-level docs/ citation that does not exist — the sile
   // citation regex silently ignored. A citation of it must still be checked.
   const { failures } = evaluate({
     files: [
-      file("packages/lattice/src/x.mjs", { citations: [{ target: "docs/why.md", line: 7 }] }),
+      file("packages/archkeep/src/x.mjs", { citations: [{ target: "docs/why.md", line: 7 }] }),
     ],
     existingPaths: new Set(),
     root: "/repo",
@@ -533,24 +533,24 @@ test("evaluate FAILS a top-level docs/ citation that does not exist — the sile
 test("evaluate FAILS a root-relative docs/ citation that does not exist", () => {
   const { failures } = evaluate({
     files: [
-      file("packages/lattice/src/x.mjs", { citations: [{ target: "docs/gone.md", line: 3 }] }),
+      file("packages/archkeep/src/x.mjs", { citations: [{ target: "docs/gone.md", line: 3 }] }),
     ],
     existingPaths: new Set(),
     root: "/repo",
   });
   assert.equal(failures.length, 1);
-  assert.match(failures[0], /packages\/lattice\/src\/x\.mjs:3/);
+  assert.match(failures[0], /packages\/archkeep\/src\/x\.mjs:3/);
 });
 
 test("evaluate resolves a ../ citation from its carrying file", () => {
-  // `../../../docs/…` from `packages/lattice/src/x.mjs` climbs three levels
+  // `../../../docs/…` from `packages/archkeep/src/x.mjs` climbs three levels
   // to the workspace root and lands on `docs/…` — the same path rule that
   // resolves the file, applied to the citation. A shorter climb would be
   // judged against `packages/docs/…` and fail: the file's own directory is
   // the base, not the workspace root.
   const { failures } = evaluate({
     files: [
-      file("packages/lattice/src/x.mjs", {
+      file("packages/archkeep/src/x.mjs", {
         citations: [{ target: "../../../docs/usage/ci.md", line: 1 }],
       }),
     ],
@@ -563,7 +563,7 @@ test("evaluate resolves a ../ citation from its carrying file", () => {
 test("evaluate FAILS a ../ citation whose relative target does not exist", () => {
   const { failures } = evaluate({
     files: [
-      file("packages/lattice/src/x.mjs", {
+      file("packages/archkeep/src/x.mjs", {
         citations: [{ target: "../../../docs/nope.md", line: 5 }],
       }),
     ],
@@ -614,10 +614,10 @@ test("evaluate FAILS a docs/ page linking outside docs/ even when the target exi
   const { failures } = evaluate({
     files: [
       file("docs/usage/ci.md", {
-        links: [{ target: "../../packages/lattice/README.md", line: 9 }],
+        links: [{ target: "../../packages/archkeep/README.md", line: 9 }],
       }),
     ],
-    existingPaths: withDirectories([abs("packages/lattice/README.md")]),
+    existingPaths: withDirectories([abs("packages/archkeep/README.md")]),
     root: "/repo",
   });
   assert.equal(failures.length, 1);

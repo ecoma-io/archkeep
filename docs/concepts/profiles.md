@@ -31,14 +31,14 @@ asking:
   profile, then flips back — without rewriting the file, because the strict
   profile is still there.
 - **A proposal under review.** A profile candidate is checked with
-  `lattice check --config proposed`, reviewed, and deleted or promoted — never
+  `archkeep check --config proposed`, reviewed, and deleted or promoted — never
   edit-and-revert on the live file.
 
 Each is a case where the file was the wrong unit of change. A profile registry
 makes the law a set of named options a run selects, instead of one document a
 run mutates.
 
-A fourth case is a registry you did not write: Lattice ships four architecture
+A fourth case is a registry you did not write: Archkeep ships four architecture
 styles as ready-made registries, which a workspace copies in or points at —
 [presets.md](../usage/presets.md) is the catalogue and the adoption path. They
 are registries like any other, so nothing below is special-cased for them.
@@ -123,7 +123,7 @@ NAME selected from that registry, not as a filename:
 {
   "plugins": [
     {
-      "plugin": "@ecoma-io/lattice/nx",
+      "plugin": "@ecoma-io/archkeep/nx",
       "options": {
         "boundaryConfig": "migration",
         "tsConfig": "tsconfig.base.json",
@@ -137,7 +137,7 @@ NAME selected from that registry, not as a filename:
 `check` resolves the named profile to its effective block and enforces exactly
 as if that block were a file: a profile is a way to name a policy, never a
 second kind of policy. Override for one run the same way a file is overridden —
-`lattice check --config strict` selects the `strict` profile. A one-run override
+`archkeep check --config strict` selects the `strict` profile. A one-run override
 that resolves a different law than the one in effect is a review of that law,
 not a verification of the change — when you report it, name the profile and say
 it is not the law in effect.
@@ -168,7 +168,7 @@ object lives there too.
 A workspace never mixes them per run: `profiles` present means `boundaryConfig`
 is a profile name, `profiles` absent means it is a filename — exactly as
 before. The two are alternatives at the same field, the same way
-`lattice.json`'s inline `boundaryConfig` is an alternative to naming a file.
+`archkeep.json`'s inline `boundaryConfig` is an alternative to naming a file.
 The language server does not read a profile-selected law yet; it refuses
 loudly rather than watching a name as though it were a file, for the same
 reason it refuses an inline law — see the reference page's "The `profiles`

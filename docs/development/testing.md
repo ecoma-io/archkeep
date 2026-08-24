@@ -34,8 +34,8 @@ broken gate reports nothing rather than reporting a failure. They run first in C
 for exactly that reason.
 
 **`moon run ...:test`** is each package's own target — Vitest in both packages.
-For `lattice` that includes the differential against a real
-`@nx/enforce-module-boundaries`; for `lattice-vscode` it is every decision the
+For `archkeep` that includes the differential against a real
+`@nx/enforce-module-boundaries`; for `archkeep-vscode` it is every decision the
 extension makes, driven as pure functions with no editor running.
 
 Running one and assuming the other passed is the most common local mistake. Run
@@ -163,7 +163,7 @@ together and still agree.
 `corpus.mjs` and `corpus.integration.test.mjs` are that half. Architecture
 styles built in those three languages, each probe carrying the findings a
 person decided in advance, run end to end through `cli.mjs`'s `check` over a
-native (`lattice.json`) workspace. The mechanism that keeps a near-miss from
+native (`archkeep.json`) workspace. The mechanism that keeps a near-miss from
 being an engine that never looked — a second, forbid-everything policy every
 case tree carries — and the three numbers each probe states are documented in
 that directory's README rather than here, along with the corpus's own sizes,
@@ -178,13 +178,13 @@ to each other.
 
 The same script carries a second, native-provider leg over the same pinned
 trees — never a second clone, never a second script. It derives a
-`lattice.json`-equivalent model mechanically from the graph JSON the upstream
+`archkeep.json`-equivalent model mechanically from the graph JSON the upstream
 leg already fetched (`deriveNativeModel`), runs `nativeProvider.discover`/
 `buildGraph` over it, and compares the node set, edge set, and rule verdicts
 against that same tree's real Nx-graph-based run — reusing `LEDGER` and
 `classifyDifferences` with its own `"native-extra"`/`"native-missing"`
 direction pair rather than a parallel mechanism
-(`packages/lattice/src/providers/native/README.md`'s "What proves this
+(`packages/archkeep/src/providers/native/README.md`'s "What proves this
 provider against a tree it was not tested on" has the fuller account,
 including what the first real run against `code-pushup` found and why a
 populated ledger there is the expected outcome, not a regression). The tool
@@ -192,7 +192,7 @@ run on this tree, described just below, has a native-provider twin too:
 `.github/workflows/ci.yml`'s "Check this repository's own module boundaries
 (native provider)" step runs the checker against a throwaway copy of this
 same tracked tree with `nx.json` swapped for a tracked
-`.github/native-selfcheck/lattice.json`, and asserts that copy reads the
+`.github/native-selfcheck/archkeep.json`, and asserts that copy reads the
 byte-identical `module-boundaries.config.mjs` the Nx-based step just above it
 judged — so a disagreement between the two is a provider defect, never two
 copies of the law drifting apart.
@@ -231,7 +231,7 @@ The four numbers live in `coverage.config.json` at the root, and each package's
 `vitest.config.mjs` reads them. They started as literals in the one package that
 had tests, with a note saying they would hoist the day a second package earned a
 test target — because four numbers copied into two configs are not a hardcode,
-they are an unsynced config. `lattice-vscode` was that second package. The file
+they are an unsynced config. `archkeep-vscode` was that second package. The file
 is read rather than imported: JSON has no import, and a relative import from
 inside a project up to a root-level file is a violation this repository's own
 checker reports.
