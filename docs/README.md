@@ -117,11 +117,12 @@ is, what it is not, and the line its neighbours may not cross — and
 Numbered, immutable once accepted, and cited by the pages whose behaviour they
 decided rather than summarized into them.
 
-| record                                                                       | what it decided                                                                 |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [0001-boundary-levels.md](adr/0001-boundary-levels.md)                       | The engine and its extension enforce their boundary levels                      |
-| [0002-custom-rules-one-contract.md](adr/0002-custom-rules-one-contract.md)   | Custom rules are one contract, not one system per language — and four SDKs      |
-| [0003-rename-lattice-to-archkeep.md](adr/0003-rename-lattice-to-archkeep.md) | Archkeep replaces Lattice as the project's public identity, and what that costs |
+| record                                                                                               | what it decided                                                                  |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [0001-boundary-levels.md](adr/0001-boundary-levels.md)                                               | The engine and its extension enforce their boundary levels                       |
+| [0002-custom-rules-one-contract.md](adr/0002-custom-rules-one-contract.md)                           | Custom rules are one contract, not one system per language — and four SDKs       |
+| [0003-rename-lattice-to-archkeep.md](adr/0003-rename-lattice-to-archkeep.md)                         | Archkeep replaces Lattice as the project's public identity, and what that costs  |
+| [0004-correct-old-name-deprecation-mechanics.md](adr/0004-correct-old-name-deprecation-mechanics.md) | Corrects ADR 0003's crates.io and Go deprecation mechanics, and records what ran |
 
 ## Doctrine
 
