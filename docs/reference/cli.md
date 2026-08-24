@@ -4,25 +4,26 @@ All commands, all flags, all exit codes in one page. Source: `packages/archkeep/
 
 ## Commands
 
-| command      | positional args      | summary                                                                                            | finds violations |
-| ------------ | -------------------- | -------------------------------------------------------------------------------------------------- | ---------------- |
-| `check`      | `[<path>...]`        | Check imports against the boundary rules                                                           | yes -- exits 1   |
-| `graph`      | (none)               | Print the project graph as a deterministic snapshot                                                | no               |
-| `diff`       | `<baseline>`         | Compare two graph snapshots edge by edge                                                           | no               |
-| `drift`      | (none)               | Compare the observed architecture to the declared intent                                           | no               |
-| `discover`   | (none)               | Report observed facts, and optionally propose candidates                                           | no               |
-| `reconcile`  | (none)               | Score the declared intent against the observed architecture, with proposed edits under `--propose` | no               |
-| `fitness`    | (none)               | Judge every declared fitness function against the workspace; exits 1 on a failing function         | no*              |
-| `waivers`    | (none)               | List the boundary waivers and permanent suppressions on the table                                  | no               |
-| `history`    | `<dir>`              | Describe how the architecture evolved across snapshots                                             | no               |
-| `health`     | `[<snapshot-dir>]`   | Describe architecture health metrics and trends                                                    | no               |
-| `report`     | `[<snapshot-dir>]`   | One governance document: how healthy the architecture is, and why                                  | no               |
-| `debt`       | `<dir>`              | Print the architecture-debt ledger across snapshots                                                | no               |
-| `impact`     | `<project>`          | List projects that depend on the named project                                                     | no               |
-| `explain`    | `<file:line:column>` | Explain the judgment for one import site                                                           | no               |
-| `context`    | `<project>`          | Show the architecture constraints that apply to a project                                          | no               |
-| `provenance` | (none)               | Describe where this run's facts came from and which rows carry an origin                           | no               |
-| `adr`        | `[<id>]`             | List recorded architecture decisions and what each binds                                           | no               |
+| command      | positional args             | summary                                                                                            | finds violations |
+| ------------ | --------------------------- | -------------------------------------------------------------------------------------------------- | ---------------- |
+| `check`      | `[<path>...]`               | Check imports against the boundary rules                                                           | yes -- exits 1   |
+| `graph`      | (none)                      | Print the project graph as a deterministic snapshot                                                | no               |
+| `diff`       | `<baseline>`                | Compare two graph snapshots edge by edge                                                           | no               |
+| `delta`      | `<baseline>` \| `--capture` | Classify how boundary violations moved between a captured baseline and head                        | yes -- exits 1   |
+| `drift`      | (none)                      | Compare the observed architecture to the declared intent                                           | no               |
+| `discover`   | (none)                      | Report observed facts, and optionally propose candidates                                           | no               |
+| `reconcile`  | (none)                      | Score the declared intent against the observed architecture, with proposed edits under `--propose` | no               |
+| `fitness`    | (none)                      | Judge every declared fitness function against the workspace; exits 1 on a failing function         | no*              |
+| `waivers`    | (none)                      | List the boundary waivers and permanent suppressions on the table                                  | no               |
+| `history`    | `<dir>`                     | Describe how the architecture evolved across snapshots                                             | no               |
+| `health`     | `[<snapshot-dir>]`          | Describe architecture health metrics and trends                                                    | no               |
+| `report`     | `[<snapshot-dir>]`          | One governance document: how healthy the architecture is, and why                                  | no               |
+| `debt`       | `<dir>`                     | Print the architecture-debt ledger across snapshots                                                | no               |
+| `impact`     | `<project>`                 | List projects that depend on the named project                                                     | no               |
+| `explain`    | `<file:line:column>`        | Explain the judgment for one import site                                                           | no               |
+| `context`    | `<project>`                 | Show the architecture constraints that apply to a project                                          | no               |
+| `provenance` | (none)                      | Describe where this run's facts came from and which rows carry an origin                           | no               |
+| `adr`        | `[<id>]`                    | List recorded architecture decisions and what each binds                                           | no               |
 
 \* `fitness` reports no boundary violation, but it is a verdict command, not a
 descriptive one: a declared function that `fail`s makes it exit 1 (and an
@@ -84,6 +85,21 @@ must be complete; an incomplete baseline or current workspace exits 3 and
 produces no diff. When a boundary config is available, the report includes a
 rule-impact section showing boundary violations introduced or resolved by the
 diff.
+
+### `delta`
+
+| flag        | argument       | default                  | meaning                                                                                                                                            |
+| ----------- | -------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--capture` | (none)         | off                      | Write an evidence snapshot of the current tree (raw import records, graph, coverage, policy fingerprint) for a later delta run to compare against. |
+| `--format`  | `text`\|`json` | `text`                   | Terminal report (default) or the versioned JSON envelope.                                                                                          |
+| `--output`  | `<file>`       | stdout                   | Write the report — or, with `--capture`, the snapshot — to a file instead of stdout.                                                               |
+| `--config`  | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Both sides are re-judged under whichever law this run resolves.        |
+
+Without `--capture`, the baseline evidence snapshot is the single positional
+argument (a file, not a git ref); with `--capture` there are no positionals.
+Unlike every other descriptive-family verb, `delta`'s compare mode is a gate:
+a non-waived introduced violation exits 1 — see the prose below and
+[../usage/delta.md](../usage/delta.md).
 
 ### `drift`
 
@@ -288,12 +304,12 @@ or verified must never read as "no debt".
 
 ## Exit codes
 
-| code | meaning                                                                                                                                                         | when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | clean -- and every selected file was analyzed                                                                                                                   | No findings and no coverage gaps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| 1    | findings -- boundary violations, declared-edge violations, go.work drift, dead tsconfig path aliases, intent findings, or a failing fitness gate or custom rule | `check` and `fitness`. A failing fitness function is a finding (D-09), and so is a custom rule's `fail`; every other command that finds something reports it but exits 0.                                                                                                                                                                                                                                                                                                                                                                                                                |
-| 2    | usage error                                                                                                                                                     | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| 3    | no verdict -- the run could not start, a selected file could not be read, or the law itself could not be established                                            | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load, a tracked `architecture-intent.json` that will not parse or whose boundaries match no project, a declared custom rule whose artifact will not load or that answered `unknown` ([custom-rules.md](custom-rules.md)), or -- in a profile-selected workspace, on any command that reads a boundary law -- a profile that could not be resolved: an unknown profile name, an unknown `base`, a `base` cycle, or an unreadable registry. |
+| code | meaning                                                                                                                                                                                                                  | when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | clean -- and every selected file was analyzed                                                                                                                                                                            | No findings and no coverage gaps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 1    | findings -- boundary violations, declared-edge violations, go.work drift, dead tsconfig path aliases, intent findings, a failing fitness gate or custom rule, or a non-waived violation `delta` classifies as introduced | `check`, `fitness`, and `delta`. A failing fitness function is a finding (D-09), so is a custom rule's `fail`, and so is a violation this change introduced; every other command that finds something reports it but exits 0.                                                                                                                                                                                                                                                                                                                                                            |
+| 2    | usage error                                                                                                                                                                                                              | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 3    | no verdict -- the run could not start, a selected file could not be read, or the law itself could not be established                                                                                                     | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load, a tracked `architecture-intent.json` that will not parse or whose boundaries match no project, a declared custom rule whose artifact will not load or that answered `unknown` ([custom-rules.md](custom-rules.md)), or -- in a profile-selected workspace, on any command that reads a boundary law -- a profile that could not be resolved: an unknown profile name, an unknown `base`, a `base` cycle, or an unreadable registry. |
 
 **Do not collapse 3 into 0.** A checker that could not look must never be
 mistaken for one that looked and found nothing. Both 1 and 3 must fail a CI
@@ -307,9 +323,11 @@ A descriptive command (`graph`, `diff`, `drift`, `discover`, `reconcile`,
 `waivers`, `history`, `health`, `report`, `debt`, `impact`, `explain`,
 `context`, `provenance`, `adr`) exits 0 when it completes, 3 when coverage is
 incomplete or a metric is `unknown`, and 2 on usage error. None exits 1,
-because a descriptive result is never a finding. `fitness` is the exception —
-it is a verdict, so a failing function exits 1 (the `check` lane) and an
-undetermined one exits 3.
+because a descriptive result is never a finding. `fitness` and `delta` are the
+exceptions — each is a verdict: a failing fitness function exits 1 (the `check`
+lane) and an undetermined one exits 3; a `delta` comparison exits 1 on a
+non-waived introduced violation and 3 on a refusal or an unclassifiable item,
+while its `--capture` mode stays descriptive (0 or 3, never 1).
 
 ## What each command does
 
@@ -352,6 +370,23 @@ reporting projects and edges added or removed. When a boundary config is
 available, also reports which violations the added edges introduce and which
 the removed edges resolve. The baseline is a file, not a git ref. Both sides
 must be complete. Descriptive -- changes do not make it exit 1.
+
+### `delta <baseline> | --capture`
+
+Two modes behind one verb. `--capture` writes an evidence snapshot of the
+current tree — raw import-site records, the graph they were collected against,
+coverage, provenance, and the policy fingerprint — for a later run to compare
+against. `delta <baseline>` loads such a snapshot, re-judges **both** sides
+through the rule engine under the **current** boundary config and one shared
+reference instant, and classifies every violation `introduced` | `resolved` |
+`unchanged` | `unknown`, plus a separate carried category for unresolvable
+import sites. A non-waived introduced violation exits 1; an unclassifiable
+item exits 3; an introduced violation the current waiver table covers is
+reported but does not gate. It refuses (exit 3) an unreadable, malformed, or
+foreign-schema baseline, a baseline captured under a different provider, an
+incomplete side, and the unregistered-plugin graph; a policy change between
+capture and now is a loud note, not a refusal, because both sides are judged
+under the current law. [../usage/delta.md](../usage/delta.md) owns the model.
 
 ### `waivers`
 

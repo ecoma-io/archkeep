@@ -34,8 +34,8 @@
 // ## Why in-process rather than through the packed artifact
 //
 // `runCli` takes its whole outside world as an argument — two streams, a
-// working directory, and the Nx and git seams — so seventeen commands cost
-// seventeen function calls instead of seventeen installs
+// working directory, and the Nx and git seams — so eighteen commands cost
+// eighteen function calls instead of eighteen installs
 // (`../cli.integration.test.mjs` establishes the harness). What this cannot
 // see is the bin shim, and nothing here needs to: the shape under contract is
 // built by `./json.mjs`, which the E2E suite already proves is what reaches a

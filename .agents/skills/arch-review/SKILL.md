@@ -81,6 +81,25 @@ config is available — rule-impact analysis for each changed edge. A diff with
 baseline exists, this step is skipped and the review says so; a lack of a
 baseline is a coverage gap, not "no structural change".
 
+When a delta evidence baseline exists (captured at the base commit with
+`archkeep delta --capture --output delta-base.json`), it answers "what did
+this change introduce" directly, as the review's evidence:
+
+```
+archkeep delta delta-base.json --format json
+```
+
+Every violation is classified introduced / resolved / unchanged / unknown,
+both sides re-judged under the current law. Exit 1 — an introduced violation
+no active waiver covers — blocks the same way `check`'s exit 1 does (step 5).
+An **introduced-but-waived** entry does not gate, but it is a finding the
+review surfaces by name: the change introduced a violation an existing waiver
+happens to accept, and the reviewer decides whether that acceptance was meant
+to cover new code. Exit 3 — a refusal or an unclassifiable item — is a
+coverage gap the review states, never "no change". A renamed project reads as
+one loud introduced + resolved pair by design; the review, not the tool,
+decides whether that pair is a move.
+
 ### 4. Evaluate impact
 
 For each changed project, see who depends on it:
@@ -340,7 +359,11 @@ binds rule:X` is a different answer — it names a rule id the registry binds
   every path that cannot reach a verdict; it never exits 1 (describing the
   disagreement is not a finding). An unknown classification means the model
   cannot be scored — say so rather than treating it as "no disagreement".
-- **Multiple violations, unclear which are new** — compare the check output
-  against the baseline diff. If no baseline exists, the check output shows the
+- **Multiple violations, unclear which are new** — when a delta evidence
+  baseline exists, `archkeep delta <baseline> --format json` answers this
+  directly: each violation is classified introduced, resolved, or unchanged
+  (step 3). Otherwise compare the check output
+  against the baseline diff. If no baseline of either kind exists, the check
+  output shows the
   current state but cannot distinguish new from pre-existing violations; the
   review says which half that is.
