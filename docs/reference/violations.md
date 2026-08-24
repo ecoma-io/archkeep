@@ -228,6 +228,11 @@ Only fires under `banTransitiveDependencies: true`. Node built-ins are exempt.
 A project is loaded lazily somewhere and statically here, which defeats the
 lazy-loading — the bundle it was meant to defer is pulled into the main one.
 
+The listed files name where the library is dynamically imported, each annotated
+with the project chain when it was reached transitively rather than by a direct
+edge. A dynamic edge with no analyzed file behind it says so instead of printing
+nothing.
+
 **One deliberate strictness:** `require()` and `require.resolve()` of a
 lazy-loaded library are reported here, where ESLint exempts them. The analysis
 record cannot tell those two apart from an `import` statement, and the tie is

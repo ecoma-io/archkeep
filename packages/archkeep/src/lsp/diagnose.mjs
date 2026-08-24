@@ -63,8 +63,11 @@ import { indexGaps } from "./workspace-index.mjs";
  * @param {string} request.text Its current contents — the editor's buffer, not
  *   what is on disk. Diagnosing the saved file would answer a question nobody
  *   asked while the developer is looking at their unsaved edit.
- * @param {{workspace: object, graph: object, skippedProjects?: object[], fileFailures?: object[], nativeMarker?: boolean, nativeModelFailure?: string|null, moonModelFailure?: string|null, nxModelFailure?: string|null, workspaceLayoutFailure?: string|null}} request.index
- *   From `./workspace-index.mjs`.
+ * @param {{workspace: object, graph: object, skippedProjects?: object[], fileFailures?: object[], importSites?: object[], nativeMarker?: boolean, nativeModelFailure?: string|null, moonModelFailure?: string|null, nxModelFailure?: string|null, workspaceLayoutFailure?: string|null}} request.index
+ *   From `./workspace-index.mjs`. `importSites` is the whole tree's retained
+ *   analysis output — the evidence half of the run below; absent (an index
+ *   built before it existed) reads as none, which degrades evidence, never a
+ *   verdict.
  * @param {{depConstraints: object[], options: object}} request.config
  * @returns {{analyzed: boolean, diagnostics: object[]}} `analyzed: false`
  *   always comes with at least one diagnostic.
@@ -100,21 +103,49 @@ export function diagnoseDocument({ sourceFile, text, index, config }) {
     ...analysis.failures.map((failure) => failureDiagnostic(failure, lines)),
   ];
 
+  // The engine derives its evidence index from exactly the records it is
+  // handed (`../rules/index.mjs`'s `createContext`), so this run is handed
+  // more than one document's worth: the whole tree's retained disk sites
+  // (`./workspace-index.mjs` keeps them on the index for this) MINUS this
+  // document's own — its stale disk copy, which the live buffer below replaces
+  // — plus the fresh records for the buffer text. Evidence rules then cite the
+  // same backing files `lattice check` cites: without the retained sites,
+  // `noImportsOfLazyLoadedLibraries`' file list and `noCircularDependencies`'
+  // per-hop lists came out empty in the editor whenever the backing import
+  // lived in a file nobody had open, while `check` printed them — two faces of
+  // one analysis disagreeing about the same tree.
+  const combinedSites = [
+    ...(index.importSites ?? []).filter((site) => site.sourceFile !== sourceFile),
+    ...analysis.imports,
+  ];
+  // Computed once, before the run: a violation about a file that is neither
+  // this document nor one of the files handed to the engine means the engine
+  // and this caller disagree about which tree they are discussing (guarded
+  // below). No caching beyond what the declared-edge fold further down already
+  // does: `evaluate()` already ran once per diagnosis, and the added cost of
+  // this change is exactly the larger array it now receives.
+  const handedFiles = new Set(combinedSites.map((site) => site.sourceFile));
+
   let violations;
   try {
-    violations = evaluate(analysis.imports, index.graph, config);
+    violations = evaluate(combinedSites, index.graph, config);
   } catch (cause) {
     diagnostics.push(analysisFailedDiagnostic(reasonOf(cause), lines));
     return { analyzed: false, diagnostics };
   }
 
   for (const violation of violations) {
-    // The engine is handed only this document's import sites, so every
-    // violation it returns is already about this document. Filtering again
-    // would hide a bug rather than prevent one, so the assertion is the shape:
-    // anything else here means the engine and this caller disagree about which
-    // file they are discussing.
-    if (violation.sourceFile !== sourceFile) {
+    if (violation.sourceFile === sourceFile) {
+      diagnostics.push(violationDiagnostic(violation, lines));
+      continue;
+    }
+    // A violation about another HANDED file belongs to that file's own
+    // diagnosis and is dropped here — the engine judged every site it was
+    // given, so foreign-file verdicts are expected output now. One naming a
+    // file that was NOT handed over is different: no site produced it, so
+    // engine and caller are discussing different trees, and the verdict for
+    // this file cannot be trusted.
+    if (!handedFiles.has(violation.sourceFile)) {
       diagnostics.push(
         analysisFailedDiagnostic(
           `the rule engine returned a violation for '${violation.sourceFile}' while judging ` +
@@ -124,7 +155,6 @@ export function diagnoseDocument({ sourceFile, text, index, config }) {
       );
       return { analyzed: false, diagnostics };
     }
-    diagnostics.push(violationDiagnostic(violation, lines));
   }
 
   // The edges `evaluate()` structurally cannot reach. An `implicit` edge — an

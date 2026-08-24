@@ -112,19 +112,47 @@ export function belongsToDifferentEntryPoint(resolvedFile, sourceFile, sourcePro
 }
 
 /**
- * Does `source` reach `target` through any chain of DYNAMIC edges? Port of
- * `hasDynamicImport`, recursion and visited-list included.
+ * The FIRST path of DYNAMIC edges from `source` to `target`, as
+ * `[source, ..., target]`, or `null` when none exists. The walk behind
+ * `hasDynamicImport`, made to return the route it took so a verdict and its
+ * evidence can come from the same traversal: the old predicate answered
+ * "yes" over a transitive chain while the message went looking for files on
+ * the DIRECT pair alone and printed an empty list (`noImportsOfLazyLoadedLibraries`
+ * saying nothing is issue #281's shape).
+ *
+ * Traversal order and cycle guard are exactly the predicate's original ones —
+ * edges in array order, first hit wins, `visited.indexOf` at entry with
+ * `[...visited, source]` handed down — because this function is that code,
+ * not a reimplementation of it.
+ *
+ * @returns {string[]|null}
  */
-export function hasDynamicImport(graph, sourceProjectName, targetProjectName, visited = []) {
-  if (visited.indexOf(sourceProjectName) > -1) return false;
-  return (graph.dependencies?.[sourceProjectName] ?? []).some((dependency) => {
-    if (dependency.type !== DYNAMIC) return false;
-    if (dependency.target === targetProjectName) return true;
-    return hasDynamicImport(graph, dependency.target, targetProjectName, [
+export function findDynamicImportPath(graph, sourceProjectName, targetProjectName, visited = []) {
+  if (visited.indexOf(sourceProjectName) > -1) return null;
+  for (const dependency of graph.dependencies?.[sourceProjectName] ?? []) {
+    if (dependency.type !== DYNAMIC) continue;
+    if (dependency.target === targetProjectName) {
+      return [...visited, sourceProjectName, dependency.target];
+    }
+    const rest = findDynamicImportPath(graph, dependency.target, targetProjectName, [
       ...visited,
       sourceProjectName,
     ]);
-  });
+    if (rest !== null) return rest;
+  }
+  return null;
+}
+
+/**
+ * Does `source` reach `target` through any chain of DYNAMIC edges? Port of
+ * upstream's `hasDynamicImport`, recursion and visited-list included — kept as
+ * its own export because the lazy-load rule reads as a boolean at every call
+ * site, but it now delegates to `findDynamicImportPath` rather than walking
+ * separately: two traversals of one graph could disagree about which chain
+ * fired, and then the verdict would name evidence for a route nobody walked.
+ */
+export function hasDynamicImport(graph, sourceProjectName, targetProjectName) {
+  return findDynamicImportPath(graph, sourceProjectName, targetProjectName) !== null;
 }
 
 /**
@@ -252,6 +280,18 @@ export function circularViolation({
  * would stay silent. Failing closed, and named as a divergence rather than
  * discovered later as a mismatch.
  *
+ * Detection and evidence are two different facts and this function keeps them
+ * on one walk: the GRAPH decides that the target is lazy-loaded (an edge may
+ * come from manifest metadata no analyzer ever read), while the file index only
+ * describes what this run analyzed. So every outcome names something — the
+ * files of each hop when they are known, annotated with the chain when it took
+ * more than one hop, or an explicit sentence saying the graph carries the chain
+ * but no analyzed `import()` backs any hop of it. The empty string the old code
+ * rendered for a transitive hit printed "lazy-loaded in these files:" over
+ * nothing — indistinguishable from a clean run, which is exactly the silent
+ * direction this package exists to end (#281). A direct pair renders byte for
+ * byte as before; only the cases that used to print nothing changed.
+ *
  * @returns {{messageId: string, data: object}|null}
  */
 export function lazyLoadedViolation({
@@ -261,14 +301,33 @@ export function lazyLoadedViolation({
   resolvedFile,
   fileIndex,
 }) {
-  if (!hasDynamicImport(graph, sourceProject.name, targetProject.name)) return null;
+  const path = findDynamicImportPath(graph, sourceProject.name, targetProject.name);
+  if (path === null) return null;
   if (secondaryEntryPointPath(resolvedFile, targetProject)) return null;
-  const files = findFilesWithDynamicImports(fileIndex, sourceProject.name, targetProject.name);
+  // One file list per consecutive hop, deduped in first-seen order — a file
+  // that carries several hops of the chain is still one file to open.
+  const chain = path.join(" -> ");
+  const seen = new Set();
+  const files = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    for (const file of findFilesWithDynamicImports(fileIndex, path[i], path[i + 1])) {
+      if (!seen.has(file)) {
+        seen.add(file);
+        files.push(file);
+      }
+    }
+  }
+  const filePaths =
+    files.length > 0
+      ? path.length > 2
+        ? files.map((file) => `- ${file} (${chain})`).join("\n")
+        : files.map((file) => `- ${file}`).join("\n")
+      : `(the project graph carries dynamic edges along ${chain}, but no analyzed import() names any file on that path — the evidence index only knows the files this run analyzed)`;
   return {
     messageId: "noImportsOfLazyLoadedLibraries",
     data: {
       targetProjectName: targetProject.name,
-      filePaths: files.map((file) => `- ${file}`).join("\n"),
+      filePaths,
     },
   };
 }
