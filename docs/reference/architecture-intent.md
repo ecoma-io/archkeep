@@ -155,7 +155,7 @@ Any intent row — a `boundaries`, `allowed`/`forbidden`, `projects.required`,
 `projects.forbidden`, `dependencies.*`, or `forbiddenTags` row — may also carry
 the shared governance block, the same four keys a constraint row may carry:
 `origin`, `rationale`, `decisionRef`, `fitnessBindings`. A `decisionRef` names
-the recorded architecture decision the row states; `lattice adr <id>` reads it
+the recorded architecture decision the row states; `archkeep adr <id>` reads it
 ([adr.md](../concepts/adr.md)). The block is validated by the one shared schema
 ([provenance.md](../concepts/provenance.md) owns it), and a row without it is a
 legacy row that stays valid byte-identical.
@@ -181,7 +181,7 @@ the `drift` command and `check`'s fold both judge.
 
 ## Drift is a descriptive command, and the reference
 
-`lattice drift` compares the observed architecture to this file — prints the
+`archkeep drift` compares the observed architecture to this file — prints the
 findings and the intent fingerprint, and never exits 1. `check` folds the same
 comparison in by presence: when an intent file exists and is tracked, `check`
 exits 1 on intent findings and 3 on a malformed intent, exactly like a malformed
@@ -190,10 +190,10 @@ go.work. See [drift.md](../usage/drift.md).
 ## Governance is a deterministic comparison
 
 The intent file declares the intended architecture; the observed architecture
-is the graph Lattice already derives from source. Governance is the comparison
+is the graph Archkeep already derives from source. Governance is the comparison
 of the two — a pure, deterministic function of `(intent, graph)`. Nothing in
 this feature reasons, guesses, or generates a law: intent stays a human,
-machine-readable declaration, and Lattice reports, it does not decide what the
+machine-readable declaration, and Archkeep reports, it does not decide what the
 architecture should be.
 
 ## The four states, and the exit code each maps to

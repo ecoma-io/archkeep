@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "$comment": "`enabledPlugins` below names a plugin AND the marketplace it comes from, and publishing a catalogue is not the same as registering one. `../.claude-plugin/marketplace.json` states what this repository OFFERS; nothing reads it on a session's behalf. `extraKnownMarketplaces` is what registers it, and without that block `lattice@lattice` names a marketplace no session has heard of.\n\nMeasured on Claude Code 2.1.239 with the block absent, which is how this repository shipped until the commit that added it: `claude plugin marketplace list` answers `No marketplaces configured`, `claude plugin details lattice@lattice` answers `not found`, and a session starts with none of the five arch-* skills and no language server. There is no warning line — the state is byte-for-byte a session that simply has no plugins, which is the silent direction `../AGENTS.md` refuses, in the repository whose own subject it is.\n\nThe source is a `directory` at `.` rather than the `github` source the same key also accepts. `.` is the repository root: a session reads this file only when it starts there, and that is the directory the path resolves against. A `github` entry would fetch the default branch instead, so a pull request that edits the language server or a skill would be reviewed by sessions still running the version before it — the argument `../.claude-plugin/marketplace.json`'s own note makes for shipping the plugin from the same commit as the code it acts on.\n\nClaude Code follows a directory source to the live tree; it does not copy it. Codex does copy, which is why `../.agents/plugins/marketplace.json` carries the opposite warning.",
+  "$comment": "`enabledPlugins` below names a plugin AND the marketplace it comes from, and publishing a catalogue is not the same as registering one. `../.claude-plugin/marketplace.json` states what this repository OFFERS; nothing reads it on a session's behalf. `extraKnownMarketplaces` is what registers it, and without that block `archkeep@archkeep` names a marketplace no session has heard of.\n\nMeasured on Claude Code 2.1.239 with the block absent, which is how this repository shipped until the commit that added it: `claude plugin marketplace list` answers `No marketplaces configured`, `claude plugin details archkeep@archkeep` answers `not found`, and a session starts with none of the five arch-* skills and no language server. There is no warning line — the state is byte-for-byte a session that simply has no plugins, which is the silent direction `../AGENTS.md` refuses, in the repository whose own subject it is.\n\nThe source is a `directory` at `.` rather than the `github` source the same key also accepts. `.` is the repository root: a session reads this file only when it starts there, and that is the directory the path resolves against. A `github` entry would fetch the default branch instead, so a pull request that edits the language server or a skill would be reviewed by sessions still running the version before it — the argument `../.claude-plugin/marketplace.json`'s own note makes for shipping the plugin from the same commit as the code it acts on.\n\nClaude Code follows a directory source to the live tree; it does not copy it. Codex does copy, which is why `../.agents/plugins/marketplace.json` carries the opposite warning.",
   "hooks": {
     "PostToolUse": [
       {
@@ -26,7 +26,7 @@
     ]
   },
   "extraKnownMarketplaces": {
-    "lattice": {
+    "archkeep": {
       "source": {
         "source": "directory",
         "path": "."
@@ -34,6 +34,6 @@
     }
   },
   "enabledPlugins": {
-    "lattice@lattice": true
+    "archkeep@archkeep": true
   }
 }

@@ -1,6 +1,6 @@
 // The program behind `pnpm typecheck`, covering the gate scripts. scripts/ is
 // not an Nx project, so this runs as a root script rather than a target —
-// same shape and same reasons as ../packages/lattice/tsconfig.json,
+// same shape and same reasons as ../packages/archkeep/tsconfig.json,
 // where the argument for each option lives.
 {
   "extends": "../tsconfig.base.json",

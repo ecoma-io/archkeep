@@ -1,15 +1,15 @@
-# `lattice adr`
+# `archkeep adr`
 
 Describe what is recorded in the workspace's ADR registry: every architecture
 decision, what each makes enforceable, and — given an id — the reverse lookup
 of which decision something leans on.
 
 ```shell
-lattice adr
-lattice adr 0001-bind-collaboration
-lattice adr rule:no-direct-dep
-lattice adr --format json
-lattice adr --format json --output adrs.json
+archkeep adr
+archkeep adr 0001-bind-collaboration
+archkeep adr rule:no-direct-dep
+archkeep adr --format json
+archkeep adr --format json --output adrs.json
 ```
 
 `adr` takes at most one positional argument. With none it dumps the whole
@@ -32,7 +32,7 @@ id's shape:
 - **Anything else is read as an ADR reference.** Bare `NNN-slug`, or
   `adr:`-prefixed (`adr:NNN-slug`) — the alternate spelling `decisionRef`'s own
   docs recommend beside the bare form
-  (`packages/lattice/src/governance/row-schema.mjs`) — resolve identically:
+  (`packages/archkeep/src/governance/row-schema.mjs`) — resolve identically:
   the prefix is stripped before the registry is consulted. A known id, either
   spelling, shows that record; everything that does not resolve — an unknown
   id, a case mismatch, a truncation, a path-traversal shape, or any other
@@ -118,6 +118,6 @@ registry it could not read would be a claim about records that do not exist.
 What an ADR is, the minimum a record needs, why the dialect is strict, and the
 two refusals — all in [concepts/adr.md](../concepts/adr.md). The registry's
 format and index live in
-`packages/lattice/src/governance/adr-registry.mjs`, and a governance row leans
+`packages/archkeep/src/governance/adr-registry.mjs`, and a governance row leans
 on a record through the shared `decisionRef` key that
 [concepts/provenance.md](../concepts/provenance.md)'s governance block defines.

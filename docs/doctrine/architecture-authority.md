@@ -1,13 +1,13 @@
 # Architecture authority
 
-What Lattice is, what surrounds it, and the line every one of those neighbours
+What Archkeep is, what surrounds it, and the line every one of those neighbours
 may not cross. This document owns the system boundary and the non-goals that
 follow from it. It states the boundary once; every other page that touches the
 question links here rather than restating it.
 
 ## The system
 
-Lattice is an **architecture governance system for human and agentic software
+Archkeep is an **architecture governance system for human and agentic software
 development**: a deterministic authority that sits above a repository's
 project tooling and answers one question with a machine-computed verdict —
 _does the code that exists agree with the architecture that was declared_?
@@ -42,7 +42,7 @@ verdict on every reachable path or refusing to look silently
 evidence a human or an agent can act on — context before an edit, impact during
 planning, diff across time, explain after a finding. None of the others judges.
 
-## What is not Lattice
+## What is not Archkeep
 
 Four things sit around the core, and each has a boundary it must not cross.
 They are named so that "replace the authority with the provider" is recognised
@@ -50,13 +50,13 @@ as a direction change rather than an implementation detail.
 
 ### Nx and Moon are providers, not the foundation
 
-Lattice reads a project graph from a provider — Nx, Moon, or the native
+Archkeep reads a project graph from a provider — Nx, Moon, or the native
 discovery that needs neither. That seam exists precisely so the authority does
 not depend on any of them. A workspace with Nx keeps `affected` and the project
 graph; a Moonrepo workspace reads its own graph back; a repository that has
 neither still gets the full verdict. The core model, the constraint table and
 the rule engine are provider-independent — intent contract **A** in
-`packages/lattice/src/intent/intent-manifest.json` states it, and the line
+`packages/archkeep/src/intent/intent-manifest.json` states it, and the line
 under "How the boundary is enforced" names the mechanism that holds it.
 
 What an integration may and must not do is owned by
@@ -65,7 +65,7 @@ What an integration may and must not do is owned by
 ### Agent skills are a protocol, not the engine
 
 The `arch-*` skills teach an agent when to ask the authority and how to read its
-answers. They contain no enforcement logic; every `HOW` step is a `lattice`
+answers. They contain no enforcement logic; every `HOW` step is a `archkeep`
 command. The authority stays in the core: the skills are the teacher, the CLI is
 the judge ([skills/overview.md](../skills/overview.md)).
 
@@ -73,7 +73,7 @@ the judge ([skills/overview.md](../skills/overview.md)).
 
 The agent reasons, plans and modifies code. It does not decide whether the
 architecture is valid. When an agent needs to know whether an edge is allowed,
-it asks `lattice context` / `impact` / `diff` / `check` and reads the machine
+it asks `archkeep context` / `impact` / `diff` / `check` and reads the machine
 verdict. When its code violates a boundary, the violation comes back the same
 way a human's does — from the authority, never from the agent's own judgment.
 
@@ -82,7 +82,7 @@ the constraint table to make its own import pass.
 
 ### CI is a venue, not a jurisdiction
 
-CI runs `lattice check` and gates on its exit code. Governance is defined by the
+CI runs `archkeep check` and gates on its exit code. Governance is defined by the
 constraint table in the workspace and the verdict the authority computes; CI is
 where that verdict is acted on, and it is as replaceable as the provider it
 runs against.
@@ -91,7 +91,7 @@ runs against.
 
 | role                   | decides                                                        | supplies                                 |
 | ---------------------- | -------------------------------------------------------------- | ---------------------------------------- |
-| **Lattice**            | is this edge valid? (deterministic, inspectable, reproducible) | verdict, context, impact, diff, evidence |
+| **Archkeep**           | is this edge valid? (deterministic, inspectable, reproducible) | verdict, context, impact, diff, evidence |
 | **Provider** (Nx/Moon) | how is the project graph shaped?                               | graph edges, project discovery           |
 | **Native discovery**   | how is the graph read with no tool?                            | graph edges, project discovery           |
 | **Agent**              | what code to write, and whether to follow the verdict          | reasoning, planning, code modification   |
@@ -100,17 +100,17 @@ runs against.
 The two columns restated as the model the thesis gives:
 
 ```
-Lattice = architecture truth + constraints + evidence
+Archkeep = architecture truth + constraints + evidence
 Agent   = reasoning + action
 ```
 
 Each side holds its half. An agent that is handed "the architecture is fine"
-without a `lattice` verdict behind it is being handed a claim with no
+without a `archkeep` verdict behind it is being handed a claim with no
 authority — the exact silence this project exists to end.
 
 ## Non-goals
 
-Lattice is not any of these. The list is defensive positioning, not a rule
+Archkeep is not any of these. The list is defensive positioning, not a rule
 change: each item is a direction the project will not take even when it is
 convenient, because taking it would move the boundary above.
 
@@ -120,12 +120,12 @@ convenient, because taking it would move the boundary above.
   resolution it performs is what the boundary rules need — transitive and
   banned-import checks — never dependency management.
 - **An Nx replacement or a Moon replacement.** Both remain first-class
-  integrations; Lattice is the layer above them.
+  integrations; Archkeep is the layer above them.
 - **An LLM.** It computes verdicts from source; it does not reason about them.
 - **An autonomous architect.** It proposes no redesign and prescribes no
   architecture; it reports whether code agrees with the one that was declared.
 - **A code generator.** It writes no code.
-- **An AI code reviewer.** Review remains a human or agent judgment; Lattice
+- **An AI code reviewer.** Review remains a human or agent judgment; Archkeep
   supplies the evidence that judgment is anchored to.
 - **A replacement for CI.** It produces an exit code; a pipeline decides what to
   do with it.
@@ -137,13 +137,13 @@ The line above is not prose. Each piece of it is held by a mechanism:
 - **Provider independence** — the core layers (`rules`, `analysis`, `report`)
   never import a provider; only the orchestration that composes a graph reads
   one. That separation is stated in the intent contract **A**
-  (`packages/lattice/src/intent/intent-manifest.json`); the mechanism that
+  (`packages/archkeep/src/intent/intent-manifest.json`); the mechanism that
   holds the dependency allow-list is
   `src/conformance/boundary.test.mjs`.
 - **The core does not depend on a build system** — principle 5,
   [principles.md](principles.md); no provider shells out to a language toolchain.
 - **Skills never duplicate enforcement** — host-independent `SKILL.md` files,
-  gated by `scripts/check-skills.mjs`; every `HOW` step is a `lattice` command.
+  gated by `scripts/check-skills.mjs`; every `HOW` step is a `archkeep` command.
 - **The agent cannot edit the law** — the constraint table is a file in the
   workspace, and the commands an agent consumes are read-only
   ([agentic-development.md](../concepts/agentic-development.md)).

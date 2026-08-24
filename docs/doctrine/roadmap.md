@@ -1,6 +1,6 @@
 # Roadmap
 
-Where Lattice is going, in stages. This document owns the staged direction —
+Where Archkeep is going, in stages. This document owns the staged direction —
 which capabilities belong to which major version, and in what order the project
 earns them. It deliberately owns nothing finer than that: individual features,
 their design and their sequencing live in GitHub issues and milestones, because
@@ -13,7 +13,7 @@ file needs a finish line, that file is the one that binds.
 
 ## The thesis
 
-Lattice is an **architecture governance system for human and agentic software
+Archkeep is an **architecture governance system for human and agentic software
 development** — a deterministic authority that keeps the intended architecture
 aligned with the observed architecture while humans and agents continuously
 change the codebase. [north-star.md](north-star.md) owns the
@@ -22,7 +22,7 @@ full sentence and the argument behind it; this document owns the staged path.
 Architecture today lives in documents — READMEs, ADRs, diagrams — that nothing
 executes and nothing checks. The code drifts from them silently, and the drift
 compounds fastest exactly where review is thinnest: in codebases where agents
-produce most of the diffs. Lattice's answer is to make the architecture itself
+produce most of the diffs. Archkeep's answer is to make the architecture itself
 machine-readable and its enforcement deterministic, so that "the boundary
 holds" is a verdict a pipeline computes rather than a belief a reviewer holds.
 
@@ -56,7 +56,7 @@ A new reader should find these capabilities described as present, not promised.
   ([usage/presets.md](../usage/presets.md))
 - **ADR / decision registry.** `docs/adr/` records name the recorded
   architecture decision a rule, fitness gate, or intent row leans on through a
-  `decisionRef`, read with `lattice adr`; a reference that resolves to nothing
+  `decisionRef`, read with `archkeep adr`; a reference that resolves to nothing
   is `unknown`, never a pass. ([concepts/adr.md](../concepts/adr.md))
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
@@ -185,7 +185,7 @@ over a stretch of time in which it had the chance to.
    Self-enforcement (`AGENTS.md`, "The repository's own module boundaries")
    proves the tool runs on a tree whose vocabulary it does not know. It cannot
    prove what a tree nobody here designed does to it. Until some other
-   repository has failed a build on a Lattice verdict and been right to, the
+   repository has failed a build on a Archkeep verdict and been right to, the
    parse limits are a list of shapes that were imagined rather than met.
 3. **A quiet stretch in what an unchanged workspace is told.** `AGENTS.md`
    makes a change to what is reported on an unchanged workspace a breaking
@@ -226,7 +226,7 @@ explicit, not silent:
 4. **Architecture Planning Facts for Agents** — context, affected projects,
    dependency impact, constraints, allowed boundaries and violations, provided
    to an agent as facts. The agent reasons, plans and decides how to modify
-   code; Lattice does not become an LLM.
+   code; Archkeep does not become an LLM.
    ([architecture-authority.md](architecture-authority.md))
 
 Each of these four is deterministic and inspectable: the verdict is reproducible

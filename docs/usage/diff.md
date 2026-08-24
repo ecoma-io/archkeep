@@ -1,11 +1,11 @@
-# `lattice diff`
+# `archkeep diff`
 
 Compare two graph snapshots edge by edge.
 
 ```shell
-lattice diff baseline.json
-lattice diff baseline.json --format json
-lattice diff baseline.json --format json --output delta.json
+archkeep diff baseline.json
+archkeep diff baseline.json --format json
+archkeep diff baseline.json --format json --output delta.json
 ```
 
 `diff` takes a baseline snapshot **file** (not a Git ref) and compares it with
@@ -36,7 +36,7 @@ anyway would manufacture architectural changes out of a broken run.
 
 Exit 3, with that sentence in the error message.
 
-The baseline file must be a `lattice graph --format json` envelope whose
+The baseline file must be a `archkeep graph --format json` envelope whose
 `schemaVersion` matches the tool's current version and whose `coverage.complete`
 is `true`. An envelope from a later major version may have a different shape
 this diff would silently misread.
@@ -107,6 +107,6 @@ run already computed, not a graph this command has to guess how to build.
 The workflow is the one CI already uses with artifacts:
 
 ```shell
-git checkout main && lattice graph --format json --output baseline.json
-git checkout my-branch && lattice diff baseline.json
+git checkout main && archkeep graph --format json --output baseline.json
+git checkout my-branch && archkeep diff baseline.json
 ```

@@ -62,7 +62,7 @@ rather than `*`.
 | `remediation` | string | How to fix a violation of this row. Shown alongside the description.                                  |
 
 These fields are optional and do not affect the verdict. They exist so that a
-developer reading `lattice context`, `lattice explain`, or the constraint-context
+developer reading `archkeep context`, `archkeep explain`, or the constraint-context
 sections of `impact` and `diff` can understand both what the rule means and how
 to bring their import back into compliance without consulting the config file
 directly.
@@ -73,7 +73,7 @@ A row may carry the shared governance block — `origin`, `rationale`,
 `decisionRef`, `fitnessBindings` — the same four keys an intent row may carry,
 validated by the one shared schema ([provenance.md](../concepts/provenance.md)
 owns the block). A `decisionRef` names the recorded architecture decision the
-row leans on: `lattice adr <id>` reads it, and a reference that resolves to
+row leans on: `archkeep adr <id>` reads it, and a reference that resolves to
 nothing is `unknown`, never a pass. A row without the block is a legacy row and
 stays valid byte-identical.
 
@@ -83,7 +83,7 @@ restriction on this axis," omit the field.
 
 ### A row that covers nothing
 
-A constraint row can be dead in two ways, and `lattice check` refuses both with
+A constraint row can be dead in two ways, and `archkeep check` refuses both with
 exit 3, naming the row -- a constraint matching nothing does not error, it
 approves:
 
@@ -204,13 +204,13 @@ constraint table forbids surfaces the tag verdict behind it. A suppression
 behaves like a fix, never like an off switch for the file.
 
 A suppression whose verdicts are all gone -- or that never matched one -- is
-refused by `lattice check` with exit 3, naming the row, in the same shape as a
+refused by `archkeep check` with exit 3, naming the row, in the same shape as a
 stale `coverage.exempt` row: a boundary that stopped being enforced must not
 read as clean. An **expired** waiver covering nothing is refused with it -- its
 term has lapsed, and only an edit brings a lapsed term back. A waiver still in
 force that currently covers nothing is deliberately not refused: a fixed
 violation leaves its waiver idle until expiry, which is the feature working,
-and that resting state is reported by `lattice waivers` instead. Both refusals
+and that resting state is reported by `archkeep waivers` instead. Both refusals
 fire only on a whole-workspace run over a fully analyzed tree, for the reason
 the [constraint-table refusal](#a-row-that-covers-nothing) states: elsewhere a
 row covering nothing in what this run saw may cover plenty in what it did not.
@@ -257,7 +257,7 @@ _relative to the source_. [fitness-functions.md](../concepts/fitness-functions.m
 owns what that means and why a constraint row cannot express it; this page owns
 only the field shapes above.
 
-The verdict semantics and the two faces (`lattice fitness` and `check`'s fold)
+The verdict semantics and the two faces (`archkeep fitness` and `check`'s fold)
 live in [fitness-functions.md](../concepts/fitness-functions.md).
 
 ## `customRules`
@@ -293,17 +293,17 @@ identically whichever dialect wrote it.
 | `.json`               | extension                  | plain JSON, `JSON.parse`d (never JSONC)             | supported                    | supported                    | none -- all eight required                                    |
 | ESLint flat config    | basename `eslint.config.*` | flat config's `@nx/enforce-module-boundaries` entry | not supported (always empty) | not supported (always empty) | filled from the workspace's own installed `@nx/eslint-plugin` |
 
-The ESLint dialect is explicit opt-in only -- lattice never probes for one.
+The ESLint dialect is explicit opt-in only -- archkeep never probes for one.
 Legacy `.eslintrc*` names are refused by name. Basename is checked before
 extension. For the conceptual overview of what policies are and how they relate
 to the Nx ecosystem, see [policies.md](../concepts/policies.md).
 
-### Inline policy (`lattice.json` only)
+### Inline policy (`archkeep.json` only)
 
-A native workspace may hold the policy object directly on `lattice.json`'s
+A native workspace may hold the policy object directly on `archkeep.json`'s
 `boundaryConfig` field instead of pointing at a filename. Same five keys as
 the `.json` dialect, validated by the identical function — `$schema` included,
 accepted and checked the same way a `.json` policy file accepts it. Every face
 reads it: the CLI, the Nx hook, and the language server, which re-reads
-`lattice.json` on every invalidation and so sees an edited inline law exactly
+`archkeep.json` on every invalidation and so sees an edited inline law exactly
 as it sees an edited policy file.

@@ -77,7 +77,7 @@ test("#236 — check-skills.mjs still reaches its verdict through a symlinked en
 test("#236 — check-packages.mjs still reaches its verdict through a symlinked entry", () => {
   const result = spawnViaSymlink("check-packages.mjs");
   assert.equal(result.status, 0, `expected the package verdict, got:\n${result.stderr}`);
-  assert.match(result.stdout ?? "", /ok\s+lattice\s—/, "no per-package verdict line was printed");
+  assert.match(result.stdout ?? "", /ok\s+archkeep\s—/, "no per-package verdict line was printed");
 });
 
 test("#236 — check-docs-links.mjs still reaches its verdict through a symlinked entry", () => {
@@ -95,15 +95,15 @@ test("#236 — sync-cargo-lock.mjs still reaches its verdict through a symlinked
   // the script's whole purpose is writing Cargo.lock, and a smoke that could
   // mutate tracked files mid-suite would be a test with side effects on the
   // working tree. In-sync bytes make the verdict deterministic.
-  const root = join(TMP, "cargo-fixture", "packages", "lattice-rule-sdk-rust");
+  const root = join(TMP, "cargo-fixture", "packages", "archkeep-rule-sdk-rust");
   mkdirSync(root, { recursive: true });
   writeFileSync(
     join(root, "Cargo.toml"),
-    readFileSync(join(REPO_ROOT, "packages/lattice-rule-sdk-rust/Cargo.toml")),
+    readFileSync(join(REPO_ROOT, "packages/archkeep-rule-sdk-rust/Cargo.toml")),
   );
   writeFileSync(
     join(root, "Cargo.lock"),
-    readFileSync(join(REPO_ROOT, "packages/lattice-rule-sdk-rust/Cargo.lock")),
+    readFileSync(join(REPO_ROOT, "packages/archkeep-rule-sdk-rust/Cargo.lock")),
   );
 
   const result = spawnViaSymlink("sync-cargo-lock.mjs", {

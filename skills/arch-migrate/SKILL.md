@@ -1,7 +1,7 @@
 ---
 name: arch-migrate
-description: Bring an existing repository under Lattice governance — derive a candidate model from what is observed, review it, and write the Intent by hand as a diff a human can refuse
-compatibility: Requires @ecoma-io/lattice CLI
+description: Bring an existing repository under Archkeep governance — derive a candidate model from what is observed, review it, and write the Intent by hand as a diff a human can refuse
+compatibility: Requires @ecoma-io/archkeep CLI
 ---
 
 ## When to use
@@ -20,7 +20,7 @@ rebuilt from scratch.
 
 ## Why
 
-An agent asked to "set up Lattice here" will, by default, write an
+An agent asked to "set up Archkeep here" will, by default, write an
 `architecture-intent.json` from whatever it inferred while reading the code.
 That file is law: `check` gates on it, and CI turns red on it. A model produced
 by inference and adopted without review is a law nobody authored — and because
@@ -29,7 +29,7 @@ violation the repository already contains. The resulting green run is the
 worst possible outcome: an enforced architecture that enforces the mess.
 
 The `--propose` surfaces exist so the derivation and the adoption are separate
-acts. Lattice derives; a human adopts. The agent's job is to make the second
+acts. Archkeep derives; a human adopts. The agent's job is to make the second
 act easy to perform and easy to refuse — never to perform it silently.
 
 ## How
@@ -38,10 +38,10 @@ act easy to perform and easy to refuse — never to perform it silently.
    tree with none refuses:
 
    ```
-   lattice discover
+   archkeep discover
    ```
 
-   Exit 3 naming `nx.json`, `lattice.json` or `.moon` means there is no
+   Exit 3 naming `nx.json`, `archkeep.json` or `.moon` means there is no
    workspace to govern yet. Adding the marker is a repository decision — say
    which one the repository should carry and why, and let the human make it.
    Do not create it silently as a side effect of "setting up".
@@ -49,7 +49,7 @@ act easy to perform and easy to refuse — never to perform it silently.
 2. **Observe, and clear coverage before anything else.**
 
    ```
-   lattice discover --format json
+   archkeep discover --format json
    ```
 
    `discover` is descriptive and exits 0 on a complete read. An incomplete
@@ -57,13 +57,13 @@ act easy to perform and easy to refuse — never to perform it silently.
    line, not the project list. Every file the analyzer could not read is a
    hole the derived model would silently be missing, so this is the first
    thing to fix and the only step that may not be skipped: give the file a
-   project that owns it, or name it in `lattice.json`'s `coverage.exempt`
+   project that owns it, or name it in `archkeep.json`'s `coverage.exempt`
    with a reason. Report which you chose.
 
 3. **Derive candidates.**
 
    ```
-   lattice discover --propose --format json --output proposal.json
+   archkeep discover --propose --format json --output proposal.json
    ```
 
    Every candidate carries `proposed: true` and `notAuthoritative: true`, and
@@ -104,18 +104,18 @@ act easy to perform and easy to refuse — never to perform it silently.
 
    The two files are law and are reviewed like code:
    `architecture-intent.json` states what the architecture IS
-   ([docs/reference/architecture-intent.md](https://github.com/ecoma-io/lattice/blob/main/docs/reference/architecture-intent.md)),
+   ([docs/reference/architecture-intent.md](https://github.com/ecoma-io/archkeep/blob/main/docs/reference/architecture-intent.md)),
    and the boundary config states which imports are permitted
-   ([docs/concepts/policies.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/policies.md)).
+   ([docs/concepts/policies.md](https://github.com/ecoma-io/archkeep/blob/main/docs/concepts/policies.md)).
 
    **A shipped policy pack is a starting point for the second file.** Six ship
    with the package under `presets/` — clean architecture, hexagonal, layered,
    modular monolith, vertical slice, DDD bounded contexts — each a profile
    registry that states the tag vocabulary it expects. An Nx workspace either
    copies one in and names the copy in the `profiles` plugin option (the copy
-   is yours to extend, and a Lattice upgrade then cannot change what CI
+   is yours to extend, and a Archkeep upgrade then cannot change what CI
    enforces) or points `profiles` at the file inside `node_modules` and accepts
-   that an upgrade can move the law. A `lattice.json` or Moon workspace has no
+   that an upgrade can move the law. A `archkeep.json` or Moon workspace has no
    `profiles` option, so it copies the profile's `block` into its own `.json`
    boundary law instead — flattening a `base` chain by hand first, base before
    child, because nothing resolves it once the `block` has left the registry. Adopting a pack is the same act as adopting a derived
@@ -123,7 +123,7 @@ act easy to perform and easy to refuse — never to perform it silently.
    it, the step-4 candidates are what say whether this tree actually matches
    the style, and a pack whose tag vocabulary the repository does not carry
    enforces nothing while looking enforced
-   ([docs/usage/presets.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/presets.md)).
+   ([docs/usage/presets.md](https://github.com/ecoma-io/archkeep/blob/main/docs/usage/presets.md)).
 
    **A rule the migration writes is a rule somebody has to defend later.**
    Where the decision behind a row is not evident from the row, record it as
@@ -132,8 +132,8 @@ act easy to perform and easy to refuse — never to perform it silently.
    `arch-change` requires of every enforceable rule. Write the record in the
    same change as the citation: an **intent** row citing an id the registry
    does not know makes `check` a no-verdict run (exit 3), which is worse than a
-   row that cites nothing. No command writes an ADR — `lattice adr` only reads
-   ([docs/concepts/adr.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/adr.md)).
+   row that cites nothing. No command writes an ADR — `archkeep adr` only reads
+   ([docs/concepts/adr.md](https://github.com/ecoma-io/archkeep/blob/main/docs/concepts/adr.md)).
 
    Write the boundary config before running `drift`: `drift` resolves the
    boundary law and exits 3 when the file `boundaryConfig` names is absent,
@@ -142,7 +142,7 @@ act easy to perform and easy to refuse — never to perform it silently.
 6. **Converge, one divergence at a time.**
 
    ```
-   lattice reconcile --propose --format json
+   archkeep reconcile --propose --format json
    ```
 
    `reconcile` scores every observed project and edge against the declared
@@ -162,14 +162,14 @@ act easy to perform and easy to refuse — never to perform it silently.
 7. **Enforce, and hand over the gate.**
 
    ```
-   lattice drift --format json
-   lattice check --format json
+   archkeep drift --format json
+   archkeep check --format json
    ```
 
    `drift` describes the disagreement and exits 0 even when it finds one;
    `check` is the gate and exits 1 on findings, folding the intent comparison
    in by presence. Only `check` belongs in CI as the blocking step
-   ([docs/usage/ci.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/ci.md)).
+   ([docs/usage/ci.md](https://github.com/ecoma-io/archkeep/blob/main/docs/usage/ci.md)).
 
 8. **Report the migration.** State: which marker the workspace carries, what
    coverage gaps were cleared and how, which candidates were adopted, which
@@ -179,7 +179,7 @@ act easy to perform and easy to refuse — never to perform it silently.
    the tool decided.
 
 The whole path, with the detail each step needs, is
-[docs/usage/migration.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/migration.md).
+[docs/usage/migration.md](https://github.com/ecoma-io/archkeep/blob/main/docs/usage/migration.md).
 
 ## The authority boundary
 
@@ -196,7 +196,7 @@ cross while being helpful:
   is allowed and useful. Writing it without presenting it as a diff the human
   can refuse is not — that converts a derivation into an adoption, which is a
   decision the agent does not hold
-  ([docs/doctrine/architecture-authority.md](https://github.com/ecoma-io/lattice/blob/main/docs/doctrine/architecture-authority.md)).
+  ([docs/doctrine/architecture-authority.md](https://github.com/ecoma-io/archkeep/blob/main/docs/doctrine/architecture-authority.md)).
 - **Never derive the model from a tree that was not fully read.** An incomplete
   coverage read is exit 3 at every step above. Clear it; do not route around it.
 - **Never weaken a rule to reach green.** During a migration the model and the

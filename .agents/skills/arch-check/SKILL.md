@@ -1,7 +1,7 @@
 ---
 name: arch-check
 description: Run the authoritative governance gate after a change — boundary rules and declared Intent, as a fail-closed deterministic verdict
-compatibility: Requires @ecoma-io/lattice CLI
+compatibility: Requires @ecoma-io/archkeep CLI
 ---
 
 ## When to use
@@ -13,7 +13,7 @@ red.
 
 ## Why
 
-`lattice check` is the authoritative governance gate for a Lattice-governed
+`archkeep check` is the authoritative governance gate for a Archkeep-governed
 workspace. It judges every import against the constraint table **and** folds the
 declared architecture intent in by presence: everything the workspace states
 about its own structure is compared with what the files actually do, in one
@@ -28,19 +28,19 @@ leave it sound must show the check green.
    Full workspace (authoritative — also the form CI runs):
 
    ```
-   lattice check
+   archkeep check
    ```
 
    Scoped to specific files (fast pre-check):
 
    ```
-   lattice check path/to/file.go path/to/other.rs
+   archkeep check path/to/file.go path/to/other.rs
    ```
 
    Know whether this workspace enforces by **file** or by **named profile**
    before you read the verdict. Where `boundaryConfig` is declared follows
    from the project model (`arch-context`, "Know which law is in effect"):
-   `nx.json`'s plugin options in an Nx workspace, `lattice.json`'s own
+   `nx.json`'s plugin options in an Nx workspace, `archkeep.json`'s own
    `boundaryConfig` field in a native one (a filename, or the policy inline),
    and the conventional default `module-boundaries.config.mjs` in a Moon
    workspace, where only `--config` selects another file for one run. A
@@ -55,14 +55,14 @@ leave it sound must show the check green.
    CLI overrides a filename:
 
    ```
-   lattice check --config migration
+   archkeep check --config migration
    ```
 
    A run that resolves a different profile than in effect is a review of that
    profile, not a verification of the change — never substitute one law for
    another to get a green run, and when you report a run like this, name the
    profile and say it is not the law in effect. See
-   [docs/concepts/profiles.md](https://github.com/ecoma-io/lattice/blob/main/docs/concepts/profiles.md).
+   [docs/concepts/profiles.md](https://github.com/ecoma-io/archkeep/blob/main/docs/concepts/profiles.md).
 
 2. **Choose the output format.**
 
@@ -108,7 +108,7 @@ leave it sound must show the check green.
    Those four describe an **import-site** finding, and not every finding is
    one. An `implicitDependencies` edge is declared in a manifest rather than
    written as an import, so a **declared-edge** finding names the file that
-   declared it — `<project-root>/project.json` under Nx, `lattice.json`
+   declared it — `<project-root>/project.json` under Nx, `archkeep.json`
    natively — with no line and no column, alongside the edge `source → target`
    and the constraint row it broke. There is no import to delete: the declared
    dependency itself has to go, or the two projects' tags be reconciled. Step
@@ -119,7 +119,7 @@ leave it sound must show the check green.
 5. **Explain individual findings.** For any violation that is unclear:
 
    ```
-   lattice explain <file:line:column>
+   archkeep explain <file:line:column>
    ```
 
    This shows the import specifier, the source and target tags, the matched
@@ -163,7 +163,7 @@ leave it sound must show the check green.
      matter to the question you were asked, the unscoped run is the only one
      that answers it.
    - **When a rule answers `unknown`, ask what it was handed.**
-     `lattice check --evidence-out <dir>` writes one `<rule>.json` per declared
+     `archkeep check --evidence-out <dir>` writes one `<rule>.json` per declared
      rule into that directory — the exact evidence document the rule was judged
      over, written even for a rule that trapped or exhausted its budget, which
      is when it is needed. Create the directory first — the flag writes into
@@ -173,8 +173,8 @@ leave it sound must show the check green.
      declaring no `customRules` each say so on stderr rather than leaving an
      empty directory. Feed the bundle to the replay harness the rule's SDK
      ships
-     ([docs/usage/custom-rules.md](https://github.com/ecoma-io/lattice/blob/main/docs/usage/custom-rules.md),
-     [docs/reference/custom-rules.md](https://github.com/ecoma-io/lattice/blob/main/docs/reference/custom-rules.md)).
+     ([docs/usage/custom-rules.md](https://github.com/ecoma-io/archkeep/blob/main/docs/usage/custom-rules.md),
+     [docs/reference/custom-rules.md](https://github.com/ecoma-io/archkeep/blob/main/docs/reference/custom-rules.md)).
 
    An _unverifiable_ intent is never a _satisfied_ one, an unresolved profile
    is never a satisfied law, and a custom rule that could not be loaded or run
@@ -183,17 +183,17 @@ leave it sound must show the check green.
 7. **For CI: generate SARIF.**
 
    ```
-   lattice check --format sarif --output boundaries.sarif
+   archkeep check --format sarif --output boundaries.sarif
    ```
 
 ## Fail-closed semantics
 
 - **Exit 3 is never "clean."** A gate that could not look must never be mistaken
-  for one that looked and found nothing. If Lattice could not analyze a file,
+  for one that looked and found nothing. If Archkeep could not analyze a file,
   the verdict for that file is unknown — not absent. Treat exit 3 as a red that
   you investigate, distinct from exit 1's red that you fix: both fail a build,
   they differ in what you go and look at.
-- **An empty violations list is a claim.** When exit 0, Lattice states what it
+- **An empty violations list is a claim.** When exit 0, Archkeep states what it
   inspected: files, projects, imports. "No violations" means those imports were
   checked and all complied — and "no findings" from a scoped run says nothing
   about the files outside its scope. **A permanent suppression is the one
@@ -204,7 +204,7 @@ leave it sound must show the check green.
   does not distinguish the two — unlike a waiver (a row WITH `expiresAt`),
   which stays a finding under "accepted violations" until its term lapses
   rather than disappearing (`arch-review`, "Waivers / exceptions"). To tell
-  which "empty" a green run is, run `lattice waivers`: it names every
+  which "empty" a green run is, run `archkeep waivers`: it names every
   `boundarySuppressions` row — a waiver with its term, a permanent suppression
   with what it is hiding — the one surface that distinguishes the two. In a
   profile workspace, a run that
@@ -217,7 +217,7 @@ leave it sound must show the check green.
   the verdict instead of folding into the green. An unresolved decision is the
   same rule in the agent's hands: `check` resolves each row's `decisionRef`
   against the ADR registry and names an unresolved one inline and under
-  `result.unresolvedDecisionRefs`, so an ADR id that `lattice adr` cannot look
+  `result.unresolvedDecisionRefs`, so an ADR id that `archkeep adr` cannot look
   up stays `unknown` evidence, never a pass — say so rather than citing it.
   **Which row carries the citation decides whether it also moves the verdict.**
   On a `depConstraints` row it is report-only: the resolution changes no byte
@@ -279,7 +279,7 @@ nothing else.
   that cannot be established, or — in a profile-selected workspace — a profile
   that could not be resolved (unknown name, unknown `base`, a `base` cycle, an
   unreadable registry). Do not re-run until the gap is understood.
-- **Unexpected violations** — use `lattice explain` to understand why each import
+- **Unexpected violations** — use `archkeep explain` to understand why each import
   was flagged before deciding how to respond.
 - **No violations but expected some** — verify the boundary config applies to the
   relevant project tags, and that the intent file is tracked. A project with no

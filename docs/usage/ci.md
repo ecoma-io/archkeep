@@ -3,11 +3,11 @@
 The whole job is one command and one rule about how to read its exit code.
 
 ```shell
-pnpm exec lattice check
+pnpm exec archkeep check
 ```
 
 Everything on this page holds unchanged for a workspace with no Nx at all — a
-`lattice.json` root instead of an `nx.json` one. The command, the flags, the
+`archkeep.json` root instead of an `nx.json` one. The command, the flags, the
 exit codes and what a clean run prints are all provider-agnostic; `check`
 resolves the root from whichever marker is present and the rest of this page
 does not need to know which one it found. The two places that name Nx
@@ -17,8 +17,8 @@ called out where they apply and nowhere else on this page.
 ## The command
 
 ```text
-lattice check [<path>...]   Check imports against the boundary rules
-lattice --help              Show this message
+archkeep check [<path>...]   Check imports against the boundary rules
+archkeep --help              Show this message
 
   --format text|sarif|json   Terminal report (default), SARIF 2.1.0 for GitHub
                         code scanning, or the versioned JSON envelope
@@ -56,7 +56,7 @@ this tool's design turns on, and a CI step that treats "no verdict" as success
 converts an outage into a green build.
 
 Note what 3 covers: not only a total failure (no workspace, malformed config,
-`nx graph` or `git` failing — or, on a `lattice.json` workspace, a model
+`nx graph` or `git` failing — or, on a `archkeep.json` workspace, a model
 defect: a declared root with no tracked file, two projects colliding on one
 name, a stale `coverage.exempt` waiver) but a **partial** one. An unreadable
 file, a file with no analyzer, or a `tsconfig` that will not load each leaves
@@ -64,9 +64,9 @@ a file the summary counted but no rule ever judged, and that is enough to
 withhold the verdict. A tracked `architecture-intent.json` that will not parse
 or validate, or whose boundaries match no observed project, is exit 3 for the
 same reason: an intent the tool cannot establish must never read as a
-satisfied one. A `lattice.json` workspace has one partial-failure case
+satisfied one. A `archkeep.json` workspace has one partial-failure case
 the Nx path does not: a tracked, analyzable file no discovered project owns
-is also exit 3, for the same reason — `../../packages/lattice/src/providers/native/README.md`'s
+is also exit 3, for the same reason — `../../packages/archkeep/src/providers/native/README.md`'s
 "Two failure classes, both loud" owns that distinction.
 
 The workspace's own declared gates ride those same two lanes rather than a new
@@ -84,13 +84,13 @@ code alike, which is fine — the failure is visible. What is not fine is:
 
 ```shell
 # Wrong: turns "could not look" into "looked and found nothing"
-lattice check || true
+archkeep check || true
 ```
 
 If you need to distinguish, distinguish explicitly:
 
 ```shell
-lattice check
+archkeep check
 case $? in
   0) echo "clean" ;;
   1) echo "findings — a boundary, a workspace declaration, or a declared gate"; exit 1 ;;
@@ -127,13 +127,13 @@ The minimal version:
 - name: Check module boundaries
   env:
     NX_DAEMON: "false"
-  run: pnpm exec lattice check
+  run: pnpm exec archkeep check
 ```
 
 `NX_DAEMON: "false"` is worth setting — **on an Nx-registered workspace only.**
 The daemon is a long-lived process that caches the graph between invocations; a
 single-shot runner has no second invocation to reuse it for, and it outlives
-the step that started it. A `lattice.json` workspace has no Nx daemon to
+the step that started it. A `archkeep.json` workspace has no Nx daemon to
 disable — `check` reads the tree fresh from `git ls-files` on every run, so
 the variable does nothing there and naming it is harmless rather than wrong.
 
@@ -141,7 +141,7 @@ the variable does nothing there and naming it is harmless rather than wrong.
 step spawns `nx graph` on an Nx-registered workspace, so a plugin that broke
 graph computation fails an earlier `nx run-many` with a clearer message than
 this step could give. That is the order this repository's own CI uses on
-itself. A `lattice.json` workspace has no `nx run-many` step to order after —
+itself. A `archkeep.json` workspace has no `nx run-many` step to order after —
 there is nothing Nx-shaped in its pipeline for this step to spawn.
 
 ## SARIF and GitHub code scanning
@@ -157,7 +157,7 @@ scanning tracks new-versus-base. Two steps, in that order:
 - name: Check module boundaries
   env:
     NX_DAEMON: "false"
-  run: pnpm exec lattice check
+  run: pnpm exec archkeep check
 
 # The presentation. Runs even when the gate just failed — the annotations
 # matter most on a red run — and its own exit code decides nothing, because
@@ -166,7 +166,7 @@ scanning tracks new-versus-base. Two steps, in that order:
   if: ${{ !cancelled() }}
   env:
     NX_DAEMON: "false"
-  run: pnpm exec lattice check --format sarif --output boundaries.sarif
+  run: pnpm exec archkeep check --format sarif --output boundaries.sarif
   continue-on-error: true
 
 - uses: github/codeql-action/upload-sarif@v3
@@ -226,7 +226,7 @@ wants to script against the result instead of scraping a report:
 - name: Check module boundaries
   env:
     NX_DAEMON: "false"
-  run: pnpm exec lattice check --format json --output boundaries.json
+  run: pnpm exec archkeep check --format json --output boundaries.json
 
 - name: Post a summary from the JSON envelope
   if: ${{ !cancelled() }}
@@ -277,7 +277,7 @@ A scoped run over the changed files is a reasonable hook, as long as everyone
 understands it is a pre-check and not the gate:
 
 ```shell
-lattice check $(git diff --cached --name-only --diff-filter=ACM)
+archkeep check $(git diff --cached --name-only --diff-filter=ACM)
 ```
 
 The cycle and lazy-load rules will not see what a whole-workspace run sees, so a

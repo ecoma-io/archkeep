@@ -1,0 +1,63 @@
+{
+  "projects": {
+    "declared": [
+      {
+        "root": "packages/archkeep",
+        "name": "archkeep",
+        "type": "lib",
+        "tags": ["type-package", "scope-nx", "layer:library", "stack:backend"]
+      },
+      {
+        "root": "packages/archkeep-rule-sdk-go",
+        "name": "archkeep-rule-sdk-go",
+        "type": "lib",
+        "tags": ["type-package", "scope-sdk", "layer:library", "stack:backend"]
+      },
+      {
+        "root": "packages/archkeep-rule-sdk-python",
+        "name": "archkeep-rule-sdk-python",
+        "type": "lib",
+        "tags": ["type-package", "scope-sdk", "layer:library", "stack:backend"]
+      },
+      {
+        "root": "packages/archkeep-rule-sdk-rust",
+        "name": "archkeep-rule-sdk-rust",
+        "type": "lib",
+        "tags": ["type-package", "scope-sdk", "layer:library", "stack:backend"]
+      },
+      {
+        "root": "packages/archkeep-rule-sdk-ts",
+        "name": "archkeep-rule-sdk-ts",
+        "type": "lib",
+        "tags": ["type-package", "scope-sdk", "layer:library", "stack:backend"]
+      },
+      {
+        "root": "packages/archkeep-vscode",
+        "name": "archkeep-vscode",
+        "type": "app",
+        "tags": ["type-extension", "scope-nx", "layer:application", "stack:frontend"]
+      }
+    ]
+  },
+  "coverage": {
+    "exempt": [
+      {
+        "path": "scripts/**",
+        "reason": "the repository's own gate scripts (check-packages, differential-real-trees, verify-package, verify-vsix, package-vsix) and their tests — apparatus that keeps the two packages honest, never a project of its own."
+      },
+      {
+        "path": ".github/**",
+        "reason": "CI/analysis workflow config plus its own Semgrep test runner (.github/semgrep/scripts.mjs) — repository apparatus, not a project this workspace's boundary law judges."
+      },
+      {
+        "path": ".opencode/plugins/**",
+        "reason": "the opencode plugin that runs the shared editor-hook gates (scripts/editor-hooks/) at edit time, outside any package's own lint/test/typecheck target."
+      },
+      {
+        "path": "*.mjs",
+        "reason": "root-level tool configuration read by the tools that consume it directly (eslint.config.mjs, commitlint.config.mjs, and this repository's own module-boundaries.config.mjs), not owned by either declared project."
+      }
+    ]
+  },
+  "boundaryConfig": "module-boundaries.config.mjs"
+}

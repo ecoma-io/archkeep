@@ -22,12 +22,12 @@ Four ship from this repository, on the same version chain as the engine. Each
 package's README owns its build story and its measured limits, and those limits
 are the reason to read it before choosing:
 
-| language          | package                                                    | built with                        |
-| ----------------- | ---------------------------------------------------------- | --------------------------------- |
-| Rust              | `lattice-rule-sdk` (crates.io)                             | `wasm32-unknown-unknown`          |
-| Go                | `github.com/ecoma-io/lattice/packages/lattice-rule-sdk-go` | TinyGo's freestanding target      |
-| TypeScript syntax | `@ecoma-io/lattice-rule-sdk` (npm)                         | AssemblyScript                    |
-| Python            | `lattice-rule-sdk` (PyPI)                                  | a RustPython carrier, needs cargo |
+| language          | package                                                      | built with                        |
+| ----------------- | ------------------------------------------------------------ | --------------------------------- |
+| Rust              | `archkeep-rule-sdk` (crates.io)                              | `wasm32-unknown-unknown`          |
+| Go                | `github.com/ecoma-io/archkeep/packages/archkeep-rule-sdk-go` | TinyGo's freestanding target      |
+| TypeScript syntax | `@ecoma-io/archkeep-rule-sdk` (npm)                          | AssemblyScript                    |
+| Python            | `archkeep-rule-sdk` (PyPI)                                   | a RustPython carrier, needs cargo |
 
 The contract, not the SDK, is the interface: any toolchain that emits a
 core-wasm module with no imports is equally valid.
@@ -97,7 +97,7 @@ exemption for it is refused as matching no unclaimed file.
 ## 5. Run it
 
 ```shell
-lattice check
+archkeep check
 ```
 
 There is no flag. A policy that declares `customRules` gets them judged on
@@ -107,7 +107,7 @@ other — exit 1, on all three report faces, under the namespaced id
 `custom/<rule>/<finding>`, accepted only through the same declared
 suppressions and waivers ([checking.md](checking.md), [ci.md](ci.md)).
 
-A **path-scoped** run (`lattice check libs/app`) answers `not_applicable` for
+A **path-scoped** run (`archkeep check libs/app`) answers `not_applicable` for
 every declared rule: a rule's evidence is the whole tree, and a scoped run
 read part of it. Use the whole-workspace run as the gate.
 
@@ -123,7 +123,7 @@ command for it:
 
 ```shell
 mkdir -p evidence
-lattice check --evidence-out evidence
+archkeep check --evidence-out evidence
 ```
 
 That writes `evidence/<rule>.json` for every declared rule — the exact

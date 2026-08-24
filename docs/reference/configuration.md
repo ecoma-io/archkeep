@@ -1,14 +1,14 @@
 # Configuration
 
-Every configuration surface in one place: `lattice.json` fields, `nx.json`
+Every configuration surface in one place: `archkeep.json` fields, `nx.json`
 plugin options, Moon workspace options, and CLI flags. A consumer never needs
 to look elsewhere for a field's definition.
 
-## `lattice.json`
+## `archkeep.json`
 
-For a workspace with no Nx at all. `nx.json` and `lattice.json` are
+For a workspace with no Nx at all. `nx.json` and `archkeep.json` are
 alternatives -- a root carrying both is refused loudly (exit 3). A Moon workspace
-(`.moon/` directory present) must NOT create a `lattice.json` alongside it: a
+(`.moon/` directory present) must NOT create a `archkeep.json` alongside it: a
 tree carrying both markers is refused loudly (exit 3), because this tool
 judges a workspace against exactly one project model. Every field below is
 optional; an empty `{}` validates but declares zero projects.
@@ -103,7 +103,7 @@ When the value is an object, the same five keys as the `.json` dialect are
 validated by the identical function — `customRules` included, so a native
 workspace declares a rule of its own here exactly as a policy file would
 ([custom-rules.md](custom-rules.md)). The language server reads the inline form
-too: it watches `lattice.json` itself, so an edit to the policy re-diagnoses
+too: it watches `archkeep.json` itself, so an edit to the policy re-diagnoses
 every open file the same way an edit to a policy file does.
 
 ### `tsConfig`
@@ -114,7 +114,7 @@ every open file the same way an edit to a policy file does.
 
 No second shape -- stays a filename. An Nx-registered workspace states this
 under `nx.json -> plugins[].options` instead. A Moon workspace carries no
-`lattice.json` (the `.moon`/`lattice.json` pair is refused loudly, exit 3), so
+`archkeep.json` (the `.moon`/`archkeep.json` pair is refused loudly, exit 3), so
 the Moon provider reads the two options from defaults by convention.
 
 ## `nx.json` plugin options
@@ -125,7 +125,7 @@ For a workspace with an Nx root. Stated under `plugins[].options`:
 {
   "plugins": [
     {
-      "plugin": "@ecoma-io/lattice/nx",
+      "plugin": "@ecoma-io/archkeep/nx",
       "options": {
         "boundaryConfig": "module-boundaries.config.mjs",
         "tsConfig": "tsconfig.base.json"
@@ -153,10 +153,10 @@ All commands share the same flag-parsing rules. Both `--flag value` and
 `--flag=value` work. An unknown flag is a usage error rather than a path.
 `--help` is the one exception to the shared rules — see below.
 
-Help is shown by `lattice --help` (running `lattice` with no arguments prints
+Help is shown by `archkeep --help` (running `archkeep` with no arguments prints
 the same text, but as a usage error: exit 2, on stderr), and only as the first
-argument — `lattice <command> --help` is a usage error
-(exit 2), because `--help` is not parsed per command. A bare `lattice help`
+argument — `archkeep <command> --help` is a usage error
+(exit 2), because `--help` is not parsed per command. A bare `archkeep help`
 (no `--`) is likewise a usage error: `help` is not a command name.
 
 ### `--format`

@@ -1,7 +1,7 @@
 // This workspace runs on .mjs with JSDoc and emits nothing (AGENTS.md, "No
 // TypeScript here, and why"). This file's first duty is the boundary checker's
 // import resolution — it is what lets that resolution read modern
-// packages: lattice resolves every specifier through
+// packages: archkeep resolves every specifier through
 // `ts.resolveModuleName`, and with no tsconfig that call runs under default
 // (pre-Node16) settings that cannot read a package `exports` map. Measured on
 // this tree with typescript 5.9.3: without this file the checker reported six
@@ -12,10 +12,10 @@
 // `resolveJsonModule` were probed too and changed nothing, so they are absent.
 //
 // The engine reads this file through `ts.parseConfigFileTextToJson`
-// (packages/lattice/src/analysis/typescript.mjs), which accepts these
+// (packages/archkeep/src/analysis/typescript.mjs), which accepts these
 // comments; it uses `compilerOptions` only and ignores include/files globs.
 // The filename is the default value of the plugin's `tsConfig` option
-// (packages/lattice/src/options.mjs), so no nx.json change is needed.
+// (packages/archkeep/src/options.mjs), so no nx.json change is needed.
 //
 // The `typecheck` programs — packages/*/tsconfig.json and scripts/tsconfig.json
 // — extend this file because their `tsc --noEmit` runs need the same `nodenext`

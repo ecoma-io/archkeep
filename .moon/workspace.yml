@@ -1,4 +1,4 @@
-# Moonrepo workspace configuration for the Lattice repository.
+# Moonrepo workspace configuration for the Archkeep repository.
 #
 # Replaces the former nx.json + project.json files. Projects and targets
 # are declared in per-project `moon.yml` files instead.
@@ -7,12 +7,12 @@
 # identical exit-0 states `../scripts/check-packages.mjs` exists to tell apart —
 # so a package arrives in this list and in that gate's output together.
 projects:
-  lattice: "packages/lattice"
-  lattice-rule-sdk-go: "packages/lattice-rule-sdk-go"
-  lattice-rule-sdk-python: "packages/lattice-rule-sdk-python"
-  lattice-rule-sdk-rust: "packages/lattice-rule-sdk-rust"
-  lattice-rule-sdk-ts: "packages/lattice-rule-sdk-ts"
-  lattice-vscode: "packages/lattice-vscode"
+  archkeep: "packages/archkeep"
+  archkeep-rule-sdk-go: "packages/archkeep-rule-sdk-go"
+  archkeep-rule-sdk-python: "packages/archkeep-rule-sdk-python"
+  archkeep-rule-sdk-rust: "packages/archkeep-rule-sdk-rust"
+  archkeep-rule-sdk-ts: "packages/archkeep-rule-sdk-ts"
+  archkeep-vscode: "packages/archkeep-vscode"
 vcs:
   provider: other
   # The repository uses `main`, not the traditional `master`. Without this

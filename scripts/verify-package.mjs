@@ -62,13 +62,13 @@
 // known to be clean, not merely when it happens to still produce output.
 //
 // A second, native-provider workspace runs the SAME questions 2, 4-6, 7, 3
-// again, against a `lattice.json` root instead of an `nx.json` one, with no
+// again, against a `archkeep.json` root instead of an `nx.json` one, with no
 // `nx` package installed at all. Before this addition, the native provider added
 // by this package's M2 had been proven correct only against fixtures this
 // tool's own tests built — a synthetic tree constructed in-process
-// (`../packages/lattice/src/providers/native/discover.test.mjs` and friends)
+// (`../packages/archkeep/src/providers/native/discover.test.mjs` and friends)
 // or co-located under the package itself
-// (`../packages/lattice/src/providers/native/differential.integration.test.mjs`).
+// (`../packages/archkeep/src/providers/native/differential.integration.test.mjs`).
 // None of that is what questions 2-3 above actually answer for the Nx path: a
 // real `pnpm pack` tarball, installed into a workspace this repository never
 // built, with a tag vocabulary nothing in `src/` has seen. The native
@@ -179,7 +179,7 @@ function fixtureFiles(packageName, peers, packageManager) {
     // engine (`index.mjs`), whose only Nx-shaped export is a
     // `createDependencies` that throws, naming this exact misregistration —
     // only the `./nx` subpath is the working Nx-plugin face Nx is meant to
-    // load (`packages/lattice/nx.mjs`).
+    // load (`packages/archkeep/nx.mjs`).
     "nx.json": `${JSON.stringify(
       {
         plugins: [
@@ -219,20 +219,20 @@ function fixtureFiles(packageName, peers, packageManager) {
 
 /**
  * The same two-project shape as `fixtureFiles`, described as a native
- * workspace instead: `lattice.json` at the root, no `nx.json`, no
+ * workspace instead: `archkeep.json` at the root, no `nx.json`, no
  * `project.json` per project — native discovery reads the project list from
- * `lattice.json` itself — and critically no `nx` package requested at all,
+ * `archkeep.json` itself — and critically no `nx` package requested at all,
  * so what installs here proves the peer is optional in fact, not only in the
  * manifest's `peerDependenciesMeta`.
  *
  * `module-boundaries.config.mjs` is a `.mjs` file at the root, inside no
  * project's directory, and `.mjs` is an analyzable extension
- * (`../packages/lattice/src/analysis/analyze.mjs`'s `LANGUAGE_BY_EXTENSION`).
+ * (`../packages/archkeep/src/analysis/analyze.mjs`'s `LANGUAGE_BY_EXTENSION`).
  * Left unwaived it would be an unclaimed-file coverage failure — a question
- * the Nx path never asks (`../packages/lattice/src/providers/native/coverage.mjs`'s
+ * the Nx path never asks (`../packages/archkeep/src/providers/native/coverage.mjs`'s
  * header) — turning what should read as a clean tree into a false one, so
- * `lattice.json`'s own `coverage.exempt` waives it, the same waiver
- * `../packages/lattice/src/providers/native/differential.integration.test.mjs`
+ * `archkeep.json`'s own `coverage.exempt` waives it, the same waiver
+ * `../packages/archkeep/src/providers/native/differential.integration.test.mjs`
  * uses for the identical file.
  *
  * @param {string} packageName the name to depend on, read from the manifest
@@ -258,7 +258,7 @@ function fixtureFilesNative(packageName, peers, packageManager) {
       null,
       2,
     )}\n`,
-    "lattice.json": `${JSON.stringify(
+    "archkeep.json": `${JSON.stringify(
       {
         boundaryConfig: "module-boundaries.config.mjs",
         projects: {
@@ -301,7 +301,7 @@ function fixtureFilesNative(packageName, peers, packageManager) {
  *
  * The `@moonrepo/cli` version is pinned so the Moon provider can find the
  * binary via the consumer's `node_modules/.bin/moon`. A TypeScript
- * `tsconfig.base.json` provides the path aliases Lattice resolves against.
+ * `tsconfig.base.json` provides the path aliases Archkeep resolves against.
  *
  * @param {string} packageName the name to depend on, read from the manifest
  * @param {Record<string, string>} peers the package's declared peer ranges
@@ -514,7 +514,7 @@ function verifyCleanAndLspChecks(consumer, label, packageName) {
   //    never committed, `git ls-files` returned nothing, and the checker
   //    truthfully reported "no violations (0 imports in 0 files)" — which a
   //    `/\d+ import/` test passes.
-  const clean = run("pnpm", ["exec", "lattice", "check"], consumer);
+  const clean = run("pnpm", ["exec", "archkeep", "check"], consumer);
   check(
     `the checker exits 0 on a clean tree (${label})`,
     clean.status === 0,
@@ -531,7 +531,7 @@ function verifyCleanAndLspChecks(consumer, label, packageName) {
   // structurally clean, fully read tree emits `pass`. The four-state
   // vocabulary is what every governance capability consumes, so the contract
   // is pinned against the real installed tarball, not only against fixtures.
-  const cleanJson = run("pnpm", ["exec", "lattice", "check", "--format", "json"], consumer);
+  const cleanJson = run("pnpm", ["exec", "archkeep", "check", "--format", "json"], consumer);
   let cleanEnvelope = null;
   try {
     cleanEnvelope = JSON.parse(cleanJson.stdout ?? "");
@@ -587,7 +587,7 @@ function verifyCleanAndLspChecks(consumer, label, packageName) {
   //    anywhere above it, which a path inside the consumer could never be —
   //    and the CLI is the installed artifact's own `cli.mjs` run by absolute
   //    path, so this proves the packed bytes answer 3 on no-verdict, never 0.
-  const nowhere = join(dirname(consumer), "lattice-no-workspace");
+  const nowhere = join(dirname(consumer), "archkeep-no-workspace");
   mkdirSync(nowhere, { recursive: true });
   const cannotLook = run(
     process.execPath,
@@ -608,7 +608,7 @@ function verifyCleanAndLspChecks(consumer, label, packageName) {
  * installed tarball, is the law that judges the tree.
  *
  * Everything the packs have otherwise been proven by reads them from this
- * repository's own source tree (`../packages/lattice/src/governance/presets.integration.test.mjs`,
+ * repository's own source tree (`../packages/archkeep/src/governance/presets.integration.test.mjs`,
  * and the fingerprint pin beside it), where `presets/` is present whether or
  * not `package.json` was ever told to publish it, and where `profiles` never
  * has to name a path through `node_modules`. Two things only a real install can
@@ -665,7 +665,7 @@ function verifyPresetSelectedCheck(consumer, label, packageName) {
   commitTree(consumer, "select the shipped hexagonal pack by name", false);
   run("pnpm", ["exec", "nx", "reset"], consumer);
 
-  const judged = run("pnpm", ["exec", "lattice", "check"], consumer);
+  const judged = run("pnpm", ["exec", "archkeep", "check"], consumer);
   const output = `${judged.stdout ?? ""}${judged.stderr ?? ""}`;
   check(
     `a shipped pack installed from the tarball judges the tree, exit 1 (${label})`,
@@ -714,7 +714,7 @@ function verifyViolatingCheck(
   write(consumer, violatingFiles);
   commitTree(consumer, "core reaches up into app", false);
   afterViolatingCommit?.();
-  const dirty = run("pnpm", ["exec", "lattice", "check"], consumer);
+  const dirty = run("pnpm", ["exec", "archkeep", "check"], consumer);
   const dirtyOutput = `${dirty.stdout ?? ""}${dirty.stderr ?? ""}`;
   check(
     `the checker exits 1 on a violating tree (${label})`,
@@ -730,7 +730,7 @@ function verifyViolatingCheck(
   // The violating tree's envelope carries the `fail` decision — the verdict
   // the four-state vocabulary gives a run with findings, agreeing with the
   // three-state status the way status and exitCode agree.
-  const dirtyJson = run("pnpm", ["exec", "lattice", "check", "--format", "json"], consumer);
+  const dirtyJson = run("pnpm", ["exec", "archkeep", "check", "--format", "json"], consumer);
   let dirtyEnvelope = null;
   try {
     dirtyEnvelope = JSON.parse(dirtyJson.stdout ?? "");
@@ -764,7 +764,7 @@ function verifyViolatingCheck(
  * package records — not a fixture emitted for the occasion. So what runs here
  * is the whole shipped path end to end: an author's toolchain produced these
  * bytes, a workspace declares them with a pinned hash, and an installed
- * `lattice` loads, hashes, instantiates and judges them.
+ * `archkeep` loads, hashes, instantiates and judges them.
  *
  * Both directions are driven, because a gate only proves it runs when it can
  * go red: the same rule fails the run on an otherwise CLEAN tree — so the red
@@ -784,7 +784,7 @@ function verifyCustomRuleChecks(consumer, label) {
   const artifactSource = join(
     root,
     "packages",
-    "lattice-rule-sdk-rust",
+    "archkeep-rule-sdk-rust",
     "examples",
     "forbidden_tag_dependency.wasm",
   );
@@ -819,7 +819,7 @@ function verifyCustomRuleChecks(consumer, label) {
     "module-boundaries.config.mjs": lawWith({ forbiddenTag: "layer:core", exemptTags: [] }),
   });
   commitTree(consumer, "declare a custom rule that the tree violates", false);
-  const failing = run("pnpm", ["exec", "lattice", "check"], consumer);
+  const failing = run("pnpm", ["exec", "archkeep", "check"], consumer);
   const failingOutput = `${failing.stdout ?? ""}${failing.stderr ?? ""}`;
   check(
     `a committed SDK-built rule fails an otherwise clean tree (${label})`,
@@ -831,7 +831,11 @@ function verifyCustomRuleChecks(consumer, label) {
   // replay through their SDK harness.
   const evidenceDir = join(consumer, "evidence");
   mkdirSync(evidenceDir, { recursive: true });
-  const dumped = run("pnpm", ["exec", "lattice", "check", "--evidence-out", evidenceDir], consumer);
+  const dumped = run(
+    "pnpm",
+    ["exec", "archkeep", "check", "--evidence-out", evidenceDir],
+    consumer,
+  );
   let bundle = null;
   try {
     bundle = JSON.parse(readFileSync(join(evidenceDir, "forbidden-tag-dependency.json"), "utf8"));
@@ -860,7 +864,7 @@ function verifyCustomRuleChecks(consumer, label) {
     }),
   });
   commitTree(consumer, "exempt the app layer from the custom rule", false);
-  const passing = run("pnpm", ["exec", "lattice", "check"], consumer);
+  const passing = run("pnpm", ["exec", "archkeep", "check"], consumer);
   const passingOutput = `${passing.stdout ?? ""}${passing.stderr ?? ""}`;
   check(
     `the same rule passes once the law exempts the depending layer (${label})`,
@@ -889,7 +893,7 @@ function verifyCustomRuleChecks(consumer, label) {
  */
 function verifyGraphDiffChecks(consumer, label) {
   // 4. `graph` exits 0 on a clean tree and states the project and edge counts.
-  const graphClean = run("pnpm", ["exec", "lattice", "graph"], consumer);
+  const graphClean = run("pnpm", ["exec", "archkeep", "graph"], consumer);
   check(
     `graph exits 0 on a clean tree (${label})`,
     graphClean.status === 0,
@@ -903,7 +907,7 @@ function verifyGraphDiffChecks(consumer, label) {
   );
 
   // 5. `graph --format json` produces a valid JSON envelope with command "graph".
-  const graphJson = run("pnpm", ["exec", "lattice", "graph", "--format", "json"], consumer);
+  const graphJson = run("pnpm", ["exec", "archkeep", "graph", "--format", "json"], consumer);
   let graphEnvelope = null;
   try {
     graphEnvelope = JSON.parse(graphJson.stdout ?? "");
@@ -925,7 +929,7 @@ function verifyGraphDiffChecks(consumer, label) {
   const baselineFile = join(consumer, "baseline-snapshot.json");
   const graphOutput = run(
     "pnpm",
-    ["exec", "lattice", "graph", "--format", "json", "--output", baselineFile],
+    ["exec", "archkeep", "graph", "--format", "json", "--output", baselineFile],
     consumer,
   );
   check(
@@ -933,7 +937,7 @@ function verifyGraphDiffChecks(consumer, label) {
     graphOutput.status === 0 && existsSync(baselineFile),
     `exit ${graphOutput.status}\nstderr: ${graphOutput.stderr ?? "(empty)"}`,
   );
-  const diffSelf = run("pnpm", ["exec", "lattice", "diff", baselineFile], consumer);
+  const diffSelf = run("pnpm", ["exec", "archkeep", "diff", baselineFile], consumer);
   check(
     `diff against a self-baseline exits 0 (${label})`,
     diffSelf.status === 0,
@@ -1109,7 +1113,7 @@ try {
   //    and reuses the tree check 7 already made violating.
   verifyPresetSelectedCheck(consumer, "Nx path", packageName);
 
-  // --- the native consumer: same physical shape, `lattice.json` instead of
+  // --- the native consumer: same physical shape, `archkeep.json` instead of
   // `nx.json`, no `nx` requested at all. See this file's header for why this
   // is not redundant with `differential.integration.test.mjs`'s Oracle 1.
   const filesNative = fixtureFilesNative(packageName, peers, packageManager);

@@ -3,7 +3,7 @@
 Run the boundary law against the workspace.
 
 ```shell
-pnpm exec lattice check
+pnpm exec archkeep check
 ```
 
 A clean tree prints what it inspected, not just that it found nothing — and
@@ -41,7 +41,7 @@ One run combines six verdicts:
    forbidden relationships are held against the observed graph. The schema and
    the four verdict states live in
    [architecture-intent.md](../reference/architecture-intent.md).
-5. **Declared edges** — when a `project.json` or `lattice.json` row declares
+5. **Declared edges** — when a `project.json` or `archkeep.json` row declares
    `implicitDependencies`, each declared edge is judged against the same
    `depConstraints` table, even though it has no import site to report.
 6. **Fitness functions** — when the policy declares them, each function's
@@ -73,15 +73,15 @@ said so** — because that is the line a fix has to agree with.
 The full catalogue of message ids and what resolves each one is in
 [violations.md](../reference/violations.md). To inspect one site's full judgment — including
 the tags and every matching constraint row — use
-[`lattice explain`](explain.md). To see which constraints apply to a project
-before editing it, use [`lattice context`](context.md).
+[`archkeep explain`](explain.md). To see which constraints apply to a project
+before editing it, use [`archkeep context`](context.md).
 
 ## Scoped runs
 
 Name paths after `check` to narrow source analysis:
 
 ```shell
-lattice check apps/payments libs/ledger/src/lib.rs
+archkeep check apps/payments libs/ledger/src/lib.rs
 ```
 
 A path outside the workspace, or one that matches no tracked file at all (a
@@ -90,7 +90,7 @@ error, not a silent empty selection.
 
 A scoped run is a fast local pre-check and **not the gate**: cycle and lazy-load
 rules judge the file graph as a whole, so a scoped run can miss what a
-whole-workspace run would find. CI should always run `lattice check` with no
+whole-workspace run would find. CI should always run `archkeep check` with no
 paths.
 
 A fitness function that needs the whole tree (`coverage-minimum` today, see
@@ -108,8 +108,8 @@ enforced only by the unscoped run.
 ### Text
 
 ```shell
-lattice check
-lattice check --output report.txt
+archkeep check
+archkeep check --output report.txt
 ```
 
 The default. `file:line:column` positions are terminal-linkable.
@@ -117,7 +117,7 @@ The default. `file:line:column` positions are terminal-linkable.
 ### SARIF
 
 ```shell
-lattice check --format sarif --output lattice.sarif
+archkeep check --format sarif --output archkeep.sarif
 ```
 
 SARIF 2.1.0 for GitHub code scanning. [ci.md](ci.md) shows the upload step.
@@ -125,8 +125,8 @@ SARIF 2.1.0 for GitHub code scanning. [ci.md](ci.md) shows the upload step.
 ### JSON
 
 ```shell
-lattice check --format json
-lattice check --format json --output report.json
+archkeep check --format json
+archkeep check --format json --output report.json
 ```
 
 A deterministic, versioned envelope for scripts. The schema and stability
@@ -155,7 +155,7 @@ contract.
 ## Override the policy for one run
 
 ```shell
-lattice check --config proposed-boundaries.mjs
+archkeep check --config proposed-boundaries.mjs
 ```
 
 The file is resolved from the workspace root. It changes the boundary law, not

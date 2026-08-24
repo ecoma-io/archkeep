@@ -1,7 +1,7 @@
 # Evidence
 
 A verdict without its evidence is a rumor. This is the model that makes the
-governance capabilities speak one language: every judgment Lattice reaches can
+governance capabilities speak one language: every judgment Archkeep reaches can
 be stated as a verdict in one four-state vocabulary, with the evidence each
 state is required to carry, so a consumer can compare verdicts across runs,
 feeds, and rules — and so a verdict that cannot be backed is never emitted at

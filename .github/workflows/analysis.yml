@@ -149,7 +149,7 @@ jobs:
       # error in the log while the exit code still comes back clean — the one
       # silent direction left in this gate, and the reason its output stays
       # readable. `--timeout 60` because the default 5s per file is not enough
-      # for the largest files here (`packages/lattice/cli.mjs`, ~3700 lines,
+      # for the largest files here (`packages/archkeep/cli.mjs`, ~3700 lines,
       # measured timing out under the default); `--timeout-threshold 1` is what
       # turns whatever still overruns into a red job — a rule that gave up on a
       # file must never be indistinguishable from one that looked and found

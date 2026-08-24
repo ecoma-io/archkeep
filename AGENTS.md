@@ -6,7 +6,7 @@ inferable from the code.
 
 ## What this repository is
 
-Lattice makes an Nx workspace's dependency graph and module boundaries real for
+Archkeep makes an Nx workspace's dependency graph and module boundaries real for
 the languages ESLint cannot parse: Go, Rust and Python. Nx reads TypeScript and
 JavaScript imports and so `nx affected` and `@nx/enforce-module-boundaries` work
 there; for the other three both go quiet, and quiet is the problem — an
@@ -14,15 +14,15 @@ under-selecting `affected` and an absent boundary rule look exactly like a clean
 workspace.
 
 **The repository holds the toolchain and the engine it exists to ship.**
-`packages/lattice/` is that engine — an Nx plugin plus a boundary
+`packages/archkeep/` is that engine — an Nx plugin plus a boundary
 checker and a language server, one analysis behind three faces.
-`packages/lattice-vscode/` is a client of it and holds no analysis at all; it
+`packages/archkeep-vscode/` is a client of it and holds no analysis at all; it
 ships to a marketplace rather than to npm, and it deliberately does not bundle
-the server. The four `packages/lattice-rule-sdk-*/` are bindings rather than
+the server. The four `packages/archkeep-rule-sdk-*/` are bindings rather than
 engines: each is one language's typed way to author a custom rule and build it
 to the wasm the engine already runs, so none of them holds analysis either and
 none may grow a second opinion about what a verdict means — one contract, four
-spellings, and `packages/lattice/src/conformance/rule-sdks.integration.test.mjs`
+spellings, and `packages/archkeep/src/conformance/rule-sdks.integration.test.mjs`
 is the gate that keeps it one (`docs/adr/0002-custom-rules-one-contract.md`
 records the decision). Everything else here is the apparatus that keeps them
 honest. If you are about to write product code, check that it is actually what
@@ -30,7 +30,7 @@ was asked for.
 
 The repository also ships the `arch-*` agent architecture skills in `skills/`
 at the root: host-independent behavioral protocols that teach an AI agent when
-and how to use Lattice commands. `scripts/check-skills.mjs` is the CI gate that
+and how to use Archkeep commands. `scripts/check-skills.mjs` is the CI gate that
 validates them, and its `EXPECTED_SKILLS` list is the roster — not restated
 here, because this paragraph's own copy of it is what drifted the last time a
 skill was added. See `docs/skills/overview.md` for the architecture, and
@@ -103,17 +103,17 @@ scripts/
                            .opencode/plugins/, and the Codex adapter in
                            .codex/config.toml all reach these same scripts
 packages/
-  lattice/                 the plugin, the checker, the language server
-  lattice-vscode/          the VS Code client for that server
-  lattice-rule-sdk-rust/   the four custom-rule SDKs — one contract, four
-  lattice-rule-sdk-go/     spellings. Each ships a reference rule, five shared
-  lattice-rule-sdk-ts/     evidence fixtures, and a committed `.wasm` with its
-  lattice-rule-sdk-python/ digest; each README owns its build story and limits
+  archkeep/                 the plugin, the checker, the language server
+  archkeep-vscode/          the VS Code client for that server
+  archkeep-rule-sdk-rust/   the four custom-rule SDKs — one contract, four
+  archkeep-rule-sdk-go/     spellings. Each ships a reference rule, five shared
+  archkeep-rule-sdk-ts/     evidence fixtures, and a committed `.wasm` with its
+  archkeep-rule-sdk-python/ digest; each README owns its build story and limits
 module-boundaries.config.mjs   this repository's own boundary law
 coverage.config.json           the coverage floor the two `.mjs` packages read
 ```
 
-`lattice` carries its own `AGENTS.md` for everything below this level —
+`archkeep` carries its own `AGENTS.md` for everything below this level —
 the layer split, the per-language parse limits, the modelling assumptions. It
 loads when the work happens inside that directory, which is why none of it is
 here. Each host reaches it its own way: Claude Code through the one-line
@@ -123,7 +123,7 @@ chain from the root down (`project_doc_max_bytes` in `.codex/config.toml` is
 raised past the two files' measured size, because past that limit Codex
 truncates the chain with no warning line), and opencode through the
 `instructions` glob in `opencode.json`, because it does not walk into
-subdirectories on its own. `lattice-vscode` has none: it is a client whose
+subdirectories on its own. `archkeep-vscode` has none: it is a client whose
 every decision is a pure function under `src/`, and its README says what it
 refuses and why.
 
@@ -139,10 +139,10 @@ refuses and why.
   runs:
 
   ```text
-  ok   lattice — lint, test, typecheck (no build)
+  ok   archkeep — lint, test, typecheck (no build)
   ```
 
-  A partial set is the expected answer, not a finding. `lattice` ships as `.mjs` and
+  A partial set is the expected answer, not a finding. `archkeep` ships as `.mjs` and
   has nothing to build; declaring an empty `build` that exits 0 to make that line
   read fuller is exactly the placeholder-green the script exists to catch. Do not
   weaken it, and do not "fix" a failure from it by adding a target.
@@ -186,7 +186,7 @@ refuses and why.
   at the same time.
 - **A comment may only cite a document in this repository, and only by a path
   that resolves from where it is written.** This file and
-  `packages/lattice/AGENTS.md` are the two that exist; there is no
+  `packages/archkeep/AGENTS.md` are the two that exist; there is no
   numbered rule list anywhere here, so a citation of the form "Rule 14" or "root
   `CLAUDE.md`" points at nothing a reader can open. The extraction arrived
   carrying thirty of them, plus prose justifying real behaviour with mechanisms
@@ -235,7 +235,7 @@ another.
   merge condition for CodeQL and Semgrep OSS at the `errors` threshold, which
   is a second, finding-level door the two `*-gate` job names do not cover.
 - **The repository's own module boundaries** — the final CI step runs
-  `packages/lattice/cli.mjs check` against `module-boundaries.config.mjs`
+  `packages/archkeep/cli.mjs check` against `module-boundaries.config.mjs`
   at this root. Every step before it proves the code correct against fixtures it
   built itself; this is the only one where the enforcer meets real source under a
   tag vocabulary (`type-package`, `scope-nx`) that nothing in `src/` knows about.
@@ -244,7 +244,7 @@ another.
 - **The packed artifact, installed somewhere else** —
   `scripts/verify-package.mjs` runs `pnpm pack` and installs the tarball into
   throwaway workspaces this repository never built, one per provider face the
-  package ships — an Nx root, a `lattice.json` root with no `nx` package
+  package ships — an Nx root, a `archkeep.json` root with no `nx` package
   installed at all, a Moon root — and drives the questions a consumer's first
   hour asks: the plugin loads and draws an edge Nx cannot infer, the checker's
   exit contract holds on a clean tree and a violating one, the language server
@@ -336,12 +336,12 @@ node scripts/check-contributing-parity.mjs # parity gate: CONTRIBUTING vs ci.yml
 node scripts/sync-cargo-lock.mjs # writes Cargo.toml's version into Cargo.lock — the chain link release-please cannot write
 pnpm readiness          # the four 1.0 conditions, read off git and a registry — a report
 moon run ...:lint ...:test ...:typecheck   # each package's own suite
-node packages/lattice/cli.mjs check        # this tree's own boundaries
+node packages/archkeep/cli.mjs check        # this tree's own boundaries
 ```
 
 `pnpm test` and `moon run` are not the same suite and neither covers the other:
 the first is `node --test` over `scripts/`, the second is each package's own
-`test` target — which for `lattice` is Vitest, including the
+`test` target — which for `archkeep` is Vitest, including the
 differential against a real `@nx/enforce-module-boundaries`.
 
 Semgrep the way CI runs it, needing Docker but no local install:

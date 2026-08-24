@@ -1,6 +1,6 @@
 # Reconciliation reference
 
-The scored element and candidate shapes behind `lattice reconcile` — the
+The scored element and candidate shapes behind `archkeep reconcile` — the
 catalogue the report and the JSON envelope both draw from. See
 [usage/reconcile.md](../usage/reconcile.md) for how to run it and
 [concepts/reconciliation.md](../concepts/reconciliation.md) for what the

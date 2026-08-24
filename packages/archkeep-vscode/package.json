@@ -1,0 +1,81 @@
+{
+  "name": "archkeep",
+  "displayName": "Archkeep — polyglot module boundaries",
+  "description": "Module-boundary diagnostics in the buffer for Go, Rust, Python and Vue, read from your Nx workspace's own boundary config",
+  "version": "0.12.0",
+  "private": true,
+  "publisher": "ecoma-io",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./extension.mjs",
+  "icon": "icon.png",
+  "categories": [
+    "Linters",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "nx",
+    "monorepo",
+    "module-boundaries",
+    "polyglot",
+    "language-server"
+  ],
+  "engines": {
+    "vscode": "^1.100.0",
+    "node": ">=22"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "Archkeep",
+      "properties": {
+        "archkeep.server.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "markdownDescription": "Path to the boundary server's `lsp.mjs`. Relative paths resolve against the Nx workspace root.\n\nLeave this empty unless you are developing the server itself. Empty means the `@ecoma-io/archkeep` installed in the workspace — the same version your pipeline runs, and therefore the only one whose verdicts are guaranteed to match it.\n\nA path that does not exist is reported rather than ignored: this extension will not quietly fall back to a different server than the one you named."
+        },
+        "archkeep.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Log the conversation with the boundary server to the Archkeep output channel. The channel's log-level dropdown (Output panel gear icon) is the master switch: set it to Trace, then choose messages or verbose here."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "archkeep.restart",
+        "title": "Restart the boundary server",
+        "category": "Archkeep"
+      },
+      {
+        "command": "archkeep.showLog",
+        "title": "Show the log",
+        "category": "Archkeep"
+      }
+    ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "10.1.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "1.100.0",
+    "@vscode/vsce": "3.9.2"
+  },
+  "homepage": "https://github.com/ecoma-io/archkeep/tree/main/packages/archkeep-vscode#readme",
+  "bugs": {
+    "url": "https://github.com/ecoma-io/archkeep/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ecoma-io/archkeep.git",
+    "directory": "packages/archkeep-vscode"
+  }
+}

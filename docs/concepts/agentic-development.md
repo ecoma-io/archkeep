@@ -4,7 +4,7 @@ When an AI agent edits code, it can violate an architectural boundary as easily 
 a human can — and faster. The question is not whether agents will cross boundaries,
 but whether the architecture answers them before they do.
 
-Lattice's answer is three questions, asked at three moments, each served by a
+Archkeep's answer is three questions, asked at three moments, each served by a
 command that produces machine-readable output a model can consume without parsing
 prose.
 
@@ -20,7 +20,7 @@ may reach `scope:shared` but not `scope:checkout` — before writing an import
 that violates it.
 
 ```shell
-lattice context billing-core --format json
+archkeep context billing-core --format json
 ```
 
 ### During planning — "What depends on this?"
@@ -33,7 +33,7 @@ depend on it, one of them across a scope boundary — and knows the change has
 architectural weight.
 
 ```shell
-lattice impact billing-core --format json
+archkeep impact billing-core --format json
 ```
 
 ### After the change — "Why was this flagged?"
@@ -44,7 +44,7 @@ When a `check` run reports a violation, an agent reads the explanation rather th
 guessing at the fix.
 
 ```shell
-lattice explain libs/billing/main.go:10:5 --format json
+archkeep explain libs/billing/main.go:10:5 --format json
 ```
 
 A fourth question — "what boundary implications does this change carry?" — is

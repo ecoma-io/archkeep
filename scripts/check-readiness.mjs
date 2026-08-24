@@ -168,7 +168,7 @@ function adoptionRow(adopters) {
       state: "unmeasured",
       evidence:
         "an external repository's own CI — pass --adopters '<owner/repo>,...' once one has failed " +
-        "a build on a Lattice verdict and been right to",
+        "a build on a Archkeep verdict and been right to",
     };
   }
   return {
@@ -308,7 +308,7 @@ export function versionsFromRegistry(path) {
   const versions = document?.versions;
   if (versions === null || typeof versions !== "object") {
     throw new Error(
-      `lattice: ${path} holds no "versions" object — that is a registry document's own shape, ` +
+      `archkeep: ${path} holds no "versions" object — that is a registry document's own shape, ` +
         `and reading a different one as if it were would report a release history nobody has.`,
     );
   }
@@ -327,11 +327,11 @@ export function parseArgs(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (!token.startsWith("--")) {
-      throw new Error(`lattice: unexpected argument '${token}' — every input is a --flag <value>`);
+      throw new Error(`archkeep: unexpected argument '${token}' — every input is a --flag <value>`);
     }
     const value = argv[index + 1];
     if (value === undefined || value.startsWith("--")) {
-      throw new Error(`lattice: '${token}' needs a value`);
+      throw new Error(`archkeep: '${token}' needs a value`);
     }
     parsed[token.slice(2)] = value;
     index += 1;
@@ -350,7 +350,7 @@ export function parseDifferential(value) {
   const [runs, colour] = value.split(",").map((part) => part.trim());
   if (!/^\d+$/u.test(runs ?? "") || (colour !== "red" && colour !== "green")) {
     throw new Error(
-      `lattice: --differential expects '<runs>,<red|green>', got '${value}' — a shape this ` +
+      `archkeep: --differential expects '<runs>,<red|green>', got '${value}' — a shape this ` +
         `script cannot read must not be rounded into a verdict about readiness.`,
     );
   }

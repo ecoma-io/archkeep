@@ -2,7 +2,7 @@
 // Runs the conformance differential — this repository's boundary engine against
 // the real `@nx/enforce-module-boundaries` — over REAL public Nx workspaces,
 // pinned at fixed commits. The fixture suite in
-// `packages/lattice/src/conformance/` proves the two engines agree
+// `packages/archkeep/src/conformance/` proves the two engines agree
 // about the situations someone thought to build; this script is the third
 // condition its README names: agreement measured on trees nobody here built,
 // under constraint tables and tag vocabularies this repository had no hand in.
@@ -19,7 +19,7 @@
 //   4. spawns one child process per tree (`differential-real-trees-child.mjs` —
 //      its header says why a process boundary is required) which runs BOTH
 //      engines over every tracked file and compares verdicts per file, THEN a
-//      third leg: a `lattice.json` mechanically derived from the same graph
+//      third leg: a `archkeep.json` mechanically derived from the same graph
 //      (`deriveNativeModel` below), run through the native provider, and
 //      compared node-set/edge-set/verdict-set against the Nx-graph-based run
 //      — the provider's fidelity on a tree nobody built for it;
@@ -27,7 +27,7 @@
 //      — against the ledger below, and checks the empty-verdict claim for
 //      trees measured to contain violations.
 //
-// Exit codes mirror `packages/lattice/cli.mjs`: 0 clean, 1 findings
+// Exit codes mirror `packages/archkeep/cli.mjs`: 0 clean, 1 findings
 // (an unexplained difference, a stale ledger entry, or an empty verdict set
 // where violations are known to exist), 2 usage, 3 infrastructure (clone,
 // install, graph or child failure — a run that could not look must never read
@@ -54,12 +54,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 
-import { environmentForTree } from "../packages/lattice/src/workspace.mjs";
-import { nodeTypeOf } from "../packages/lattice/src/providers/native/discover.mjs";
+import { environmentForTree } from "../packages/archkeep/src/workspace.mjs";
+import { nodeTypeOf } from "../packages/archkeep/src/providers/native/discover.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Same meanings as the CLI's exit contract (`packages/lattice/cli.mjs`). */
+/** Same meanings as the CLI's exit contract (`packages/archkeep/cli.mjs`). */
 export const EXIT = Object.freeze({ ok: 0, findings: 1, usage: 2, error: 3 });
 
 /**
@@ -227,7 +227,7 @@ export const LEDGER = Object.freeze([
   // Nx reaches that answer through the filesystem fallback `getProjectType`
   // applies when `projectType` is absent (probing `tsconfig.lib.json` /
   // `tsconfig.app.json` / a `package.json` entry point). `nodeTypeOf`
-  // (../packages/lattice/src/providers/native/discover.mjs) documents, at the
+  // (../packages/archkeep/src/providers/native/discover.mjs) documents, at the
   // point it is defined, that it deliberately does NOT reproduce that
   // fallback — an unstated `projectType` lands on `"lib"` there on purpose,
   // argued as the safe direction because `lib` is the only type with no
@@ -244,7 +244,7 @@ export const LEDGER = Object.freeze([
       "workspace/project.json declares no projectType; the real Nx graph resolves this node's " +
       "type to 'app' through getProjectType's filesystem fallback (probing tsconfig.lib.json / " +
       "tsconfig.app.json / a package.json entry point), which nodeTypeOf " +
-      "(../packages/lattice/src/providers/native/discover.mjs) documents it deliberately does not " +
+      "(../packages/archkeep/src/providers/native/discover.mjs) documents it deliberately does not " +
       "reproduce — an absent projectType lands on 'lib' there on purpose, the safe direction since " +
       "lib carries no blanket import ban. A pre-existing, argued design limit, not a defect this " +
       "leg discovered; no issue filed.",
@@ -255,7 +255,7 @@ export const LEDGER = Object.freeze([
   // honours that directive and says nothing; this engine does not read ESLint
   // comment syntax and reports the crossing imports. That is the fixture
   // suite's pinned, declared decision
-  // (packages/lattice/src/conformance/README.md, "the exemptions do not live
+  // (packages/archkeep/src/conformance/README.md, "the exemptions do not live
   // in comments" — reading directive comments would tie a five-language tool
   // to a JavaScript convention and give exemptions a second home besides
   // `module-boundaries.config.mjs`), showing up as a real-tree divergence
@@ -270,7 +270,7 @@ export const LEDGER = Object.freeze([
     reason:
       "code-pushup.preset.ts opens with '/* eslint-disable @nx/enforce-module-boundaries */', a " +
       "directive upstream honours and this engine deliberately does not read " +
-      "(packages/lattice/src/conformance/README.md: 'the exemptions do not live in comments'). The " +
+      "(packages/archkeep/src/conformance/README.md: 'the exemptions do not live in comments'). The " +
       "8 crossing imports are reported only here, making each a declared stricter divergence " +
       "rather than an unexplained one.",
   },
@@ -279,14 +279,14 @@ export const LEDGER = Object.freeze([
 /**
  * Reads the `@nx/enforce-module-boundaries` entry off a tree's own flat ESLint
  * config, exactly as ESLint would bind it: the LAST unscoped entry that
- * configures the rule wins. Moved to `packages/lattice/src/eslint-config.mjs`
+ * configures the rule wins. Moved to `packages/archkeep/src/eslint-config.mjs`
  * — the shipped `boundaryConfig` dialect that reads an ESLint flat config
  * parses the identical shape, and a second copy of that parser here would be
  * exactly the drift `AGENTS.md`'s "never state a rule twice" rule exists to
  * catch. Re-exported so this script and its child
  * (`differential-real-trees-child.mjs`) need no import changes.
  */
-export { extractBoundaryRule } from "../packages/lattice/src/eslint-config.mjs";
+export { extractBoundaryRule } from "../packages/archkeep/src/eslint-config.mjs";
 
 /**
  * Narrows `LEDGER` to the rows one leg's `classifyDifferences` call is
@@ -485,7 +485,7 @@ export function upstreamUnreadableBreaches(tree, unreadable) {
 }
 
 /**
- * Derives a `lattice.json`-equivalent native project model from the SAME
+ * Derives a `archkeep.json`-equivalent native project model from the SAME
  * `nx graph --file=` output the existing leg already fetched — mechanically,
  * one `projects.declared` row per Nx node, never hand-authored, so what gets
  * measured is the native provider's discovery-plus-graph pipeline rather than
@@ -494,7 +494,7 @@ export function upstreamUnreadableBreaches(tree, unreadable) {
  * `type` is read through `nodeTypeOf` — the native provider's own `-e2e`
  * suffix rule, applied to `data.projectType` — rather than the Nx graph
  * node's own already-computed top-level `type`, so every field in the derived
- * model traces to a field `lattice.json` itself would carry
+ * model traces to a field `archkeep.json` itself would carry
  * (`../docs/reference/configuration.md`). No `projects.infer`, no `projectRules`: the
  * declared list is exhaustive — "Omitting this key entirely means the
  * declared list is exhaustive" (same document) — the one shape whose meaning
@@ -502,9 +502,9 @@ export function upstreamUnreadableBreaches(tree, unreadable) {
  * disagree about.
  *
  * `root` is renormalised, not passed through: Nx spells the workspace-root
- * project's root `"."`, and `lattice.json`'s own dialect rejects exactly that
+ * project's root `"."`, and `archkeep.json`'s own dialect rejects exactly that
  * spelling by name — `''` names the workspace root there
- * (`../packages/lattice/src/providers/native/model.mjs`'s
+ * (`../packages/archkeep/src/providers/native/model.mjs`'s
  * `declaredProjectViolations`, and `../docs/reference/configuration.md`).
  * Found by running this leg against a real tree rather than by reading:
  * `code-pushup` at its pinned commit carries a root-level project, and the
@@ -514,17 +514,17 @@ export function upstreamUnreadableBreaches(tree, unreadable) {
  * workspace root".
  *
  * `targets` is derived as the target-NAME list, not passed through as the
- * graph's `data.targets` object: `lattice.json`'s `projects.declared[].targets`
+ * graph's `data.targets` object: `archkeep.json`'s `projects.declared[].targets`
  * is a plain list of names (`../docs/reference/configuration.md`, and
- * `../packages/lattice/src/providers/native/model.mjs`'s
+ * `../packages/archkeep/src/providers/native/model.mjs`'s
  * `declaredProjectViolations` validates exactly that), and
- * `../packages/lattice/src/providers/native/graph.mjs`'s `buildNativeGraph`
- * synthesises `{executor: "lattice:declared"}` for each name. Before this field
+ * `../packages/archkeep/src/providers/native/graph.mjs`'s `buildNativeGraph`
+ * synthesises `{executor: "archkeep:declared"}` for each name. Before this field
  * existed the derived model carried no targets anywhere, and a real tree that
  * runs `enforceBuildableLibDependency` with the default `buildTargets: ['build']`
  * (code-pushup and ng-doc both do, at their pinned shas) turned the native leg
  * into an infrastructure failure: `evaluate`'s buildTargets gate
- * (`../packages/lattice/src/rules/index.mjs`'s `createContext`) loudly refuses a
+ * (`../packages/archkeep/src/rules/index.mjs`'s `createContext`) loudly refuses a
  * `buildTargets` entry no project declares, and with an empty derived `targets`
  * list every project declared none — a self-inflicted "could not look" on a
  * tree the real Nx graph resolves fine. The names come from the graph Nx
@@ -607,7 +607,7 @@ export function nodeFieldDifferences(name, nxFields, nativeFields) {
 export function nativeProjectCountBreach(tree, derivedProjectCount) {
   if (derivedProjectCount >= tree.expectedNativeProjects) return [];
   return [
-    `${tree.name}: the derived lattice.json declared only ${derivedProjectCount} project(s) at ` +
+    `${tree.name}: the derived archkeep.json declared only ${derivedProjectCount} project(s) at ` +
       `${tree.sha}, fewer than the ${tree.expectedNativeProjects} measured for this pinned ` +
       `commit — that is a derivation that stopped looking, not a smaller tree.`,
   ];
@@ -851,10 +851,10 @@ export function reportNativeLeg(tree, native, toolVerdictCount) {
   const { counts, differences, derivedProjectCount, discoveryFailureCount } = native;
   // `discoveryFailureCount` is informational, not gated: it is
   // `nativeProvider.discover`'s combined manifest-read failures and unclaimed
-  // (uncovered) files (`packages/lattice/src/providers/native/index.mjs`'s
+  // (uncovered) files (`packages/archkeep/src/providers/native/index.mjs`'s
   // `discover`), and `deriveNativeModel` above never emits a `coverage.exempt`
   // list for the derived model — every file the tree's own real
-  // `lattice.json` would have exempted is, here, simply unclaimed. Nothing
+  // `archkeep.json` would have exempted is, here, simply unclaimed. Nothing
   // bounds this number for that reason; it is printed for a reader's
   // context, never compared against a floor or ceiling the way
   // `derivedProjectCount` and the verdict counts are.
@@ -1055,7 +1055,7 @@ function main() {
   /** @type {{name: string, verdict: "ok"|"findings"|"infrastructure", lines: string[], infrastructure?: string}[]} */
   const treeResults = [];
   for (const tree of TREES) {
-    const workdir = mkdtempSync(join(tmpdir(), `lattice-differential-${tree.name}-`));
+    const workdir = mkdtempSync(join(tmpdir(), `archkeep-differential-${tree.name}-`));
     /** @type {{infrastructure?: string, unexplained: object[], stale: object[], breaches: string[], lines: string[]}} */
     let outcome;
     try {

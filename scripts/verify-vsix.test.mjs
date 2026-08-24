@@ -23,7 +23,7 @@ function completeFixture() {
   // drop or replace a key — the tampering is the point of the fixture.
   /** @type {Record<string, any>} */
   const sourceManifest = {
-    name: "lattice",
+    name: "archkeep",
     version: "0.1.0",
     main: "./extension.mjs",
     icon: "icon.png",

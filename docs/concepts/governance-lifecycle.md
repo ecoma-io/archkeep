@@ -26,7 +26,7 @@ Agent                         reads the facts, changes the code, gets verified
 `architecture-intent.json` declares the intended architecture: what the
 grouping is, which relationships the team holds sacred, which projects and
 dependencies may exist. It is optional — a workspace without one runs exactly
-as it did before — and it is a **declaration, not a permission list**: Lattice
+as it did before — and it is a **declaration, not a permission list**: Archkeep
 judges the observed graph against it and reports, it never decides what the
 architecture should be.
 
@@ -94,29 +94,29 @@ the law's own selectors, not observations of it:
   command still must name the `--config <NAME>` it ran with
   ([profiles.md](../concepts/profiles.md) is the full model).
 - **ADR / decision records** — a rule's `decisionRef` points at a recorded
-  decision in `docs/adr/`, read by `lattice adr` (the evidence bullet above).
+  decision in `docs/adr/`, read by `archkeep adr` (the evidence bullet above).
   The record is committed governance like the rule itself; authoring one is a
   human decision, and a `decisionRef` that resolves to nothing is `unknown`
   unless the record exists to ground it.
 - **Waivers** — a boundary violation accepted for a fixed term. It lives in
   `boundarySuppressions` as a row with an `expiresAt`, is listed by
-  `lattice waivers`, and stays a finding in `check` (exit 1, under "accepted
+  `archkeep waivers`, and stays a finding in `check` (exit 1, under "accepted
   violations") so CI still catches the day the term lapses. A waiver never
   promotes `unknown` → `pass`.
 - **Fitness** — named quality gates the workspace holds itself to. Their
   verdicts fold into `check` by presence (`fail` → 1, `unknown` → 3), and
-  `lattice fitness` prints the same table standalone.
-- **Health / debt** — `lattice health` reports per-metric verdicts (a metric
+  `archkeep fitness` prints the same table standalone.
+- **Health / debt** — `archkeep health` reports per-metric verdicts (a metric
   whose evidence is unavailable is `unknown`/`not_applicable`, never zero);
-  `lattice debt` ages waivers, gaps and drift across snapshots. Both are
-  reports, never gates. `lattice report` gathers the health metrics with the
+  `archkeep debt` ages waivers, gaps and drift across snapshots. Both are
+  reports, never gates. `archkeep report` gathers the health metrics with the
   waiver, fitness and decision surfaces above into one document, every number
   taken from the command that owns it and one boundary law resolved once for
   the whole page, so no two sections can answer from two
   ([usage/report.md](../usage/report.md)).
-- **Reconcile / discover** — `lattice reconcile --propose` scores every
+- **Reconcile / discover** — `archkeep reconcile --propose` scores every
   observed project and edge against the declared model and derives the edits
-  that would make them agree; `lattice discover --propose` derives candidate
+  that would make them agree; `archkeep discover --propose` derives candidate
   architecture from what is observed. Both mark their output as proposals
   that are never written — no command rewrites `architecture-intent.json`:
   **proposed is never authoritative.** Intent stays a human, machine-readable

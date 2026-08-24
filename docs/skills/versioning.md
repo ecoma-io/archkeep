@@ -1,6 +1,6 @@
 # Version synchronization
 
-Every version-bearing file that ships together carries the Lattice package
+Every version-bearing file that ships together carries the Archkeep package
 version, and the same mechanism keeps them in lockstep. This page documents
 how the sync works, what enforces it, and what happens on release.
 
@@ -8,15 +8,15 @@ how the sync works, what enforces it, and what happens on release.
 
 ```
 package.json (repository root — what release-please bumps directly)
-  = packages/lattice/package.json (the baseline the gate compares against)
+  = packages/archkeep/package.json (the baseline the gate compares against)
   = .claude-plugin/plugin.json
   = .claude-plugin/marketplace.json (entry version)
   = .codex-plugin/plugin.json
-  = packages/lattice-vscode/package.json
-  = packages/lattice-rule-sdk-rust/Cargo.toml ([package] version)
-  = packages/lattice-rule-sdk-ts/package.json
-  = packages/lattice-rule-sdk-python/pyproject.toml ([project] version)
-      └ packages/lattice-rule-sdk-rust/Cargo.lock (the lattice-rule-sdk entry)
+  = packages/archkeep-vscode/package.json
+  = packages/archkeep-rule-sdk-rust/Cargo.toml ([package] version)
+  = packages/archkeep-rule-sdk-ts/package.json
+  = packages/archkeep-rule-sdk-python/pyproject.toml ([project] version)
+      └ packages/archkeep-rule-sdk-rust/Cargo.lock (the archkeep-rule-sdk entry)
 ```
 
 All nine must agree. The root `package.json` is the release-please `"."`
@@ -54,17 +54,17 @@ version is the pairing.
 2. `.claude-plugin/plugin.json` version matches the package version
 3. `.claude-plugin/marketplace.json` entry version matches the package version
 4. `.codex-plugin/plugin.json` version matches the package version
-5. `packages/lattice-vscode/package.json` version matches the package version
-6. `packages/lattice-rule-sdk-rust/Cargo.toml`'s `[package]` version matches
+5. `packages/archkeep-vscode/package.json` version matches the package version
+6. `packages/archkeep-rule-sdk-rust/Cargo.toml`'s `[package]` version matches
    the package version — read section-scoped, so a dependency's pin can never
    stand in for the crate's own number
-7. `packages/lattice-rule-sdk-ts/package.json` version matches the package
+7. `packages/archkeep-rule-sdk-ts/package.json` version matches the package
    version
-8. `packages/lattice-rule-sdk-python/pyproject.toml`'s `[project]` version
+8. `packages/archkeep-rule-sdk-python/pyproject.toml`'s `[project]` version
    matches the package version — the same section-scoped TOML read as the
    Cargo check
-9. `packages/lattice-rule-sdk-rust/Cargo.lock` records that version for the
-   `lattice-rule-sdk` entry — read out of the `[[package]]` array by name,
+9. `packages/archkeep-rule-sdk-rust/Cargo.lock` records that version for the
+   `archkeep-rule-sdk` entry — read out of the `[[package]]` array by name,
    because every entry there carries the same header and a header-only match
    would report the first dependency's version as the crate's
 10. No host-specific frontmatter field has leaked into canonical skills —
@@ -74,7 +74,7 @@ version is the pairing.
 A version mismatch fails the build. There is no warning tier.
 
 The conformance test in
-`packages/lattice/src/conformance/plugin-catalogue.integration.test.mjs` also
+`packages/archkeep/src/conformance/plugin-catalogue.integration.test.mjs` also
 asserts that `plugin.json` and `marketplace.json` versions match the package
 version — a second enforcement point, independent of the gate script.
 
@@ -87,12 +87,12 @@ the `extra-files` configuration in `release-please-config.json` also bumps:
 - `.claude-plugin/plugin.json` (`$.version`)
 - `.claude-plugin/marketplace.json` (`$.plugins[0].version`)
 - `.codex-plugin/plugin.json` (`$.version`)
-- `packages/lattice/package.json` (`$.version`)
-- `packages/lattice-vscode/package.json` (`$.version`)
-- `packages/lattice-rule-sdk-rust/Cargo.toml` (`$.package.version`, the TOML
+- `packages/archkeep/package.json` (`$.version`)
+- `packages/archkeep-vscode/package.json` (`$.version`)
+- `packages/archkeep-rule-sdk-rust/Cargo.toml` (`$.package.version`, the TOML
   updater)
-- `packages/lattice-rule-sdk-ts/package.json` (`$.version`)
-- `packages/lattice-rule-sdk-python/pyproject.toml` (`$.project.version`, the
+- `packages/archkeep-rule-sdk-ts/package.json` (`$.version`)
+- `packages/archkeep-rule-sdk-python/pyproject.toml` (`$.project.version`, the
   TOML updater)
 
 That the two rosters agree is itself gated: every `extra-files` entry must name
@@ -114,7 +114,7 @@ One package is bumped by neither mechanism. The Go SDK carries no version
 anywhere in its tree, so there is nothing for `extra-files` to write and nothing
 for the chain gate to compare: its version is a git tag, and Go's rule for a
 module below the repository root is that the tag carries the module's own
-directory — `packages/lattice-rule-sdk-go/v<version>`, beside the bare
+directory — `packages/archkeep-rule-sdk-go/v<version>`, beside the bare
 `v<version>` release-please cuts. `release.yml`'s `publish-go-module` job mints
 it from `scripts/tag-go-module.mjs`, which derives the name from `go.mod`'s
 module path rather than restating it and refuses a path that does not resolve to

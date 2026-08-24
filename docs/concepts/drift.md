@@ -4,7 +4,7 @@ Architecture drifts. Not because anyone decides to violate a boundary, but becau
 the workspace changes faster than the constraints do — and because some forms of
 drift are invisible to a checker that only judges imports.
 
-Lattice surfaces four kinds of drift through three commands. Each is a different
+Archkeep surfaces four kinds of drift through three commands. Each is a different
 failure mode, and none requires a toolchain installed. Boundary violations and
 configuration drift surface through `check`; structural drift and its rule
 impact surface through `diff`; architecture-intent drift surfaces both as its
@@ -30,7 +30,7 @@ produces a boundary violation:
   requires is absent, or one the intent forbids has appeared. These are not
   constraint rows either, but a gap between intention and reality.
 
-A checker that only looks at imports misses all of these classes. Lattice
+A checker that only looks at imports misses all of these classes. Archkeep
 surfaces the four through `check` and `diff`, because a gap in any one of them
 looks like "clean" from inside the others.
 
@@ -43,7 +43,7 @@ declared. `check` judges every import site against the constraint table and
 reports violations with `file:line:column` positions.
 
 This is the class `@nx/enforce-module-boundaries` already covers for TypeScript
-and JavaScript, and the class Lattice extends to Go, Rust, Python and Vue.
+and JavaScript, and the class Archkeep extends to Go, Rust, Python and Vue.
 
 ### 2. Structural drift — `diff`
 
@@ -62,8 +62,8 @@ architecturally.
 The workflow is the one CI already uses with artifacts:
 
 ```shell
-git checkout main && lattice graph --format json --output baseline.json
-git checkout my-branch && lattice diff baseline.json
+git checkout main && archkeep graph --format json --output baseline.json
+git checkout my-branch && archkeep diff baseline.json
 ```
 
 ### 3. Configuration drift — `check` (workspace checks)
@@ -106,10 +106,10 @@ satisfied one.
 
 ## A `drift` command, and why it does not replace `check`
 
-The intent then has a descriptive verb of its own — `lattice drift` prints the
+The intent then has a descriptive verb of its own — `archkeep drift` prints the
 full comparison for a developer reading it at a terminal, while `check` decides
 whether the same comparison means the build is red. The two share one analysis
-(`packages/lattice/src/commands/drift.mjs` owns the single verdict both
+(`packages/archkeep/src/commands/drift.mjs` owns the single verdict both
 consume), so a description and a gate can never disagree about the same intent.
 There is no `--drift` flag:
 an opt-in flag would make a forgotten flag byte-identical to "no drift checked",

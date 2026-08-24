@@ -30,14 +30,14 @@ put the report where its fix is not.
 ## How it works
 
 The extension is a client and nothing else. All the analysis lives in
-`@ecoma-io/lattice`, which ships a language
+`@ecoma-io/archkeep`, which ships a language
 server; what is here starts that server, tells it where the workspace root is,
 and shows you whether it is running.
 
 ### The server is the workspace's, not the extension's
 
 This is the one design decision worth knowing before you file a bug against it.
-The extension resolves `@ecoma-io/lattice` out of the workspace — not a copy
+The extension resolves `@ecoma-io/archkeep` out of the workspace — not a copy
 bundled inside the extension. A bundled server would be pinned to whatever was
 published to the marketplace, while your CI runs whatever is in your lockfile.
 Two versions of an analyzer, both confident, judging the same import — and the
@@ -49,12 +49,12 @@ to a copy of its own.
 
 ## Two settings
 
-| setting                | default | what it does                                                            |
-| ---------------------- | ------- | ----------------------------------------------------------------------- |
-| `lattice.server.path`  | `""`    | Path to an `lsp.mjs`; relative paths resolve against the workspace root |
-| `lattice.trace.server` | `off`   | Logs the LSP conversation to the Lattice output channel                 |
+| setting                 | default | what it does                                                            |
+| ----------------------- | ------- | ----------------------------------------------------------------------- |
+| `archkeep.server.path`  | `""`    | Path to an `lsp.mjs`; relative paths resolve against the workspace root |
+| `archkeep.trace.server` | `off`   | Logs the LSP conversation to the Archkeep output channel                |
 
-`lattice.server.path` overrides the workspace lookup, and exists for people
+`archkeep.server.path` overrides the workspace lookup, and exists for people
 working on the server itself. A path that does not resolve is reported rather
 than ignored: the extension will not quietly run a different server than the one
 you named.
@@ -66,7 +66,7 @@ worth knowing because they are easy to mistake for missing features.
 
 ### No enable/disable switch
 
-There is no `lattice.enable` setting. A workspace with the checker switched off
+There is no `archkeep.enable` setting. A workspace with the checker switched off
 produces a report byte-for-byte identical to a workspace whose code is clean —
 which is the silence this project exists to end. If the extension is wrong about
 your workspace, that is a bug worth reporting; if it is noisy, the boundary
@@ -104,7 +104,7 @@ answers through ESLint. `.vue` is claimed anyway, as a second opinion on the
 one extension both enforcers cover.
 
 The routed list is held to the engine's own analyzer registry by an integration
-test (`packages/lattice/src/lsp/editor-config.integration.test.mjs`), so a
+test (`packages/archkeep/src/lsp/editor-config.integration.test.mjs`), so a
 language cannot arrive in the engine and stay invisible in the editor.
 
 ## Installation
@@ -118,7 +118,7 @@ GitHub release.
 
 ### From a .vsix
 
-Install the `.vsix` attached to the `lattice-vscode-v*` release on GitHub:
+Install the `.vsix` attached to the `archkeep-vscode-v*` release on GitHub:
 
 1. Download the `.vsix` file
 2. In VS Code: **Extensions: Install from VSIX...**
@@ -131,8 +131,8 @@ Or run from a development host for local development.
 One-time install, from this repository's marketplace:
 
 ```shell
-claude plugin marketplace add ecoma-io/lattice
-claude plugin install lattice@lattice
+claude plugin marketplace add ecoma-io/archkeep
+claude plugin install archkeep@archkeep
 ```
 
 After that, a session editing a `.go`, `.rs`, `.py` or `.vue` file gets boundary
@@ -148,12 +148,12 @@ TypeScript server a developer needs.
 The server is a plain stdio LSP executable. Any LSP client can connect to it
 without going through this extension.
 
-|                         |                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| command                 | `node <workspace>/node_modules/@ecoma-io/lattice/lsp.mjs`                                                                                                                                                                                                                                                                                                                                                        |
-| transport               | stdio                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `initializationOptions` | `{ "workspaceRoot": "<workspace>" }` — only when the editor's root is not the workspace root                                                                                                                                                                                                                                                                                                                     |
-| watched files           | the boundary config, the tsConfig, `**/project.json`, `**/nx.json`, `**/lattice.json`, and the three that WAIVE a verdict rather than produce one -- `**/package.json` (`declaredPackages`, `entryPoints`) and `**/module-federation.config.{js,ts}` (`mfeRemote`). Unwatched, a deleted Module Federation config or a dropped dependency left the running session holding the waiver until the editor restarted |
+|                         |                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| command                 | `node <workspace>/node_modules/@ecoma-io/archkeep/lsp.mjs`                                                                                                                                                                                                                                                                                                                                                        |
+| transport               | stdio                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `initializationOptions` | `{ "workspaceRoot": "<workspace>" }` — only when the editor's root is not the workspace root                                                                                                                                                                                                                                                                                                                      |
+| watched files           | the boundary config, the tsConfig, `**/project.json`, `**/nx.json`, `**/archkeep.json`, and the three that WAIVE a verdict rather than produce one -- `**/package.json` (`declaredPackages`, `entryPoints`) and `**/module-federation.config.{js,ts}` (`mfeRemote`). Unwatched, a deleted Module Federation config or a dropped dependency left the running session holding the waiver until the editor restarted |
 
 The workspace root is taken from `initializationOptions`, then
 `workspaceFolders`, then `rootUri`, then `rootPath`, then the working directory
@@ -184,4 +184,4 @@ duplicates what `@nx/enforce-module-boundaries` already tells you.
 - What each analyzer reads, and the shapes it cannot:
   [languages.md](../reference/languages.md)
 - The VS Code extension's own reference:
-  `packages/lattice-vscode/README.md`
+  `packages/archkeep-vscode/README.md`

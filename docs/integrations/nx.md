@@ -1,12 +1,12 @@
 # Nx integration
 
-Lattice's Nx integration is the one surface with no user interface of its own,
+Archkeep's Nx integration is the one surface with no user interface of its own,
 and the one everything else depends on being cheap. It runs on every `nx`
 invocation, contributes polyglot dependency edges into the project graph, and
 makes those edges visible to `nx affected` and to the boundary rules.
 
 What it does **not** do is re-infer what Nx already knows. TypeScript and
-JavaScript edges are Nx's own — Lattice adds Go, Rust and Python, and leaves
+JavaScript edges are Nx's own — Archkeep adds Go, Rust and Python, and leaves
 the rest alone ([north-star.md](../doctrine/north-star.md): _TypeScript and
 JavaScript stay with `@nx/eslint-plugin`_).
 
@@ -29,13 +29,13 @@ In `nx.json`:
 
 ```json
 {
-  "plugins": ["@ecoma-io/lattice/nx"]
+  "plugins": ["@ecoma-io/archkeep/nx"]
 }
 ```
 
 The `/nx` subpath is not optional. It is the one module Nx is allowed to load,
 reached through the package's `exports` map. The bare package name
-(`"@ecoma-io/lattice"`) resolves to the engine entry instead — see
+(`"@ecoma-io/archkeep"`) resolves to the engine entry instead — see
 _The misregistration guard_ below.
 
 If your workspace renamed either file the plugin reads, say so:
@@ -44,7 +44,7 @@ If your workspace renamed either file the plugin reads, say so:
 {
   "plugins": [
     {
-      "plugin": "@ecoma-io/lattice/nx",
+      "plugin": "@ecoma-io/archkeep/nx",
       "options": {
         "boundaryConfig": "module-boundaries.config.mjs",
         "tsConfig": "tsconfig.base.json"
@@ -73,7 +73,7 @@ in its dependencies.
 
 ## How the plugin loads
 
-Nx loads `./nx` (`packages/lattice/nx.mjs`) on every graph computation,
+Nx loads `./nx` (`packages/archkeep/nx.mjs`) on every graph computation,
 including on machines running a single unrelated target. That is why the file
 holds no logic — it re-exports `createDependencies` and `name` from
 `src/graph/create-dependencies.mjs`, and nothing else. What it imports is what
@@ -86,7 +86,7 @@ export {
   createDependencies,
   resolvePolyglotDependencies,
 } from "./src/graph/create-dependencies.mjs";
-export const name = "lattice";
+export const name = "archkeep";
 ```
 
 `createDependencies` is the hook Nx calls. It validates the options (so a
@@ -111,7 +111,7 @@ third opts a workspace into named-law selection.
 
 The same options table is read by three faces, each through a different route.
 The differences are load-bearing —
-`packages/lattice/AGENTS.md`'s
+`packages/archkeep/AGENTS.md`'s
 "The three consumers of the options" owns the full detail.
 
 | consumer                           | how it reads the options                                                              |
@@ -129,7 +129,7 @@ in every report from that language having no violations — which is the exact
 silence this tool exists to refuse. A workspace with no Go pays nothing for Go
 support already: each resolver keys off the manifests that exist, finds none,
 and does nothing. See
-`packages/lattice/src/options.mjs`
+`packages/archkeep/src/options.mjs`
 for the full argument.
 
 ## readProjectGraph
@@ -140,7 +140,7 @@ They get it through `readProjectGraph`, which spawns the Nx CLI rather than
 importing Nx directly:
 
 ```shell
-node <nxCli> graph --file=/tmp/lattice-XXXXX/graph.json
+node <nxCli> graph --file=/tmp/archkeep-XXXXX/graph.json
 ```
 
 `nx graph --file=` is a stable, documented surface. The package resolves the
@@ -165,7 +165,7 @@ imports, so a change to a TypeScript or JavaScript library correctly marks its
 consumers affected. For Go, Rust and Python, that inference does not exist — the
 edges are absent, and `nx affected` silently under-selects.
 
-Lattice's plugin fills that gap. A Go project importing a sibling's module path,
+Archkeep's plugin fills that gap. A Go project importing a sibling's module path,
 a Rust crate with a `path` dependency, a Python package wired through
 `[tool.uv.sources]` — each becomes a graph edge at computation time, and
 `nx affected` works the same way it does for TypeScript and JavaScript.
@@ -188,12 +188,12 @@ A declared-but-incomplete layout (one key present, the other absent) throws
 rather than being silently completed from the default. The refusal and its
 diagnostic are in [violations.md](../reference/violations.md).
 
-A native workspace (no `nx.json`) states the same fact on `lattice.json`'s own
+A native workspace (no `nx.json`) states the same fact on `archkeep.json`'s own
 `workspaceLayout` field — see [configuration.md](../reference/configuration.md).
 
 ## What Nx already does
 
-Nx infers TypeScript and JavaScript edges from import statements. Lattice does
+Nx infers TypeScript and JavaScript edges from import statements. Archkeep does
 not re-infer them. A second inference would be a second answer to a question
 that already has one, and the project's position is that
 `@nx/enforce-module-boundaries` should keep running for those languages
@@ -207,7 +207,7 @@ Nx, not from this integration.
 
 ## The misregistration guard
 
-Writing `"plugins": ["@ecoma-io/lattice"]` — the bare package name, missing
+Writing `"plugins": ["@ecoma-io/archkeep"]` — the bare package name, missing
 `/nx` — resolves to `index.mjs`, the engine entry. Before the guard existed,
 Nx accepted that silently: `nx graph` exited 0, printed no warning, and
 computed zero polyglot edges. A silent graph, not a loud failure.
@@ -216,9 +216,9 @@ computed zero polyglot edges. A silent graph, not a loud failure.
 fix:
 
 ```text
-lattice: registered as the engine entry, not the Nx plugin face — nx.json named
-"@ecoma-io/lattice" instead of "@ecoma-io/lattice/nx". Change the `plugin`
-value in nx.json to "@ecoma-io/lattice/nx".
+archkeep: registered as the engine entry, not the Nx plugin face — nx.json named
+"@ecoma-io/archkeep" instead of "@ecoma-io/archkeep/nx". Change the `plugin`
+value in nx.json to "@ecoma-io/archkeep/nx".
 ```
 
 The guard is the only logic `index.mjs` carries beyond its re-exports. It does

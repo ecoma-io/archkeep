@@ -1,11 +1,11 @@
-# `lattice drift`
+# `archkeep drift`
 
 Compare the observed architecture to the workspace's declared intended one.
 
 ```shell
-lattice drift
-lattice drift --format json
-lattice drift --format json --output drift.json
+archkeep drift
+archkeep drift --format json
+archkeep drift --format json --output drift.json
 ```
 
 `drift` takes no positional arguments — the observed side is the whole project
@@ -23,7 +23,7 @@ names the intent row and the observed fact that violates it.
 ## The observed side
 
 The same project graph the other commands read, from any provider (Nx, Moon, or
-a native `lattice.json` workspace). Edges whose target is not a project in the
+a native `archkeep.json` workspace). Edges whose target is not a project in the
 model are dropped — an external package is not a project an intent row can name —
 and `implicit` edges (build-ordering declarations, not code dependencies) are
 excluded and counted, so the report states exactly what was compared.

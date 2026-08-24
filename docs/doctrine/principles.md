@@ -1,6 +1,6 @@
 # Principles
 
-The binding principles of Lattice. Each is stated as an imperative and each
+The binding principles of Archkeep. Each is stated as an imperative and each
 refuses something concrete — a direction the project will not take even when the
 alternative is inconvenient. They are not aspirations; they are enforced by code,
 by tests, or by the structure of the repository itself. Where a principle has a
@@ -11,7 +11,7 @@ mechanism, the file that owns the mechanism is linked.
 Architecture that cannot be checked by a machine is documentation that looks like
 enforcement. A workspace whose projects carry `layer:` and `scope:` tags that no
 tool reads has boundaries in name only — the tags are decoration until something
-refuses an import that crosses them. Lattice exists because Nx's boundary
+refuses an import that crosses them. Archkeep exists because Nx's boundary
 enforcement covers TypeScript and JavaScript and covers nothing else, and
 "nothing else" on a dashboard is identical to "clean". This principle refuses
 architecture that lives only in diagrams and decisions.
@@ -48,7 +48,7 @@ that trades determinism for coverage.
 
 ## 5. The core must not depend on a build system
 
-Lattice reads source files and manifests, not build outputs. It does not invoke
+Archkeep reads source files and manifests, not build outputs. It does not invoke
 compilers, package managers, or language toolchains to answer a question about
 imports, because Nx computes the graph on every invocation and a graph that needs
 a build step fails in lint-only CI. The shipped artifact is loadable with no
@@ -78,7 +78,7 @@ trustworthy. This principle refuses any path that makes architecture a
 conversation rather than a contract. [agentic-development.md](../concepts/agentic-development.md)
 shows how the current commands keep the agent on the consumer side of that line,
 and [architecture-authority.md](architecture-authority.md) owns the full boundary —
-what Lattice is, what it is not, and the line its neighbours may not cross.
+what Archkeep is, what it is not, and the line its neighbours may not cross.
 
 ---
 

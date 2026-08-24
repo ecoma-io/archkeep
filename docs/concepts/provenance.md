@@ -7,7 +7,7 @@ that, with what tool, and when?" — and its absence is a finding, never a shrug
 
 ## The two halves
 
-`lattice provenance` answers two questions, descriptively:
+`archkeep provenance` answers two questions, descriptively:
 
 1. **Repository provenance** — the git commit, remote, and dirty state of the
    tree this run judged. A verdict about code is only as trustworthy as the
@@ -30,7 +30,7 @@ A row may carry the governance block, of which `origin` is the first key:
 
 ```json
 {
-  "origin": { "by": "jane@example.com", "tool": "lattice:v1" },
+  "origin": { "by": "jane@example.com", "tool": "archkeep:v1" },
   "rationale": "why this row exists",
   "decisionRef": "0012-bind-collaboration",
   "fitnessBindings": ["fitness:hotspot"]
@@ -48,12 +48,12 @@ owned by the capabilities that consume them.
 - `by` — who decided, a non-empty string (a name, an email, a handle). Free
   form; no format is enforced.
 - `tool` — which tool or process recorded the decision, a non-empty string
-  (`lattice:v1`, `claude`, an ADR editor).
+  (`archkeep:v1`, `claude`, an ADR editor).
 - `on` — when the decision was recorded, optional.
 
 **A row without the block is a legacy row and stays valid.** Additivity is the
 contract: a workspace that never writes an origin runs exactly as it did
-before, byte-for-byte. The block only changes what `lattice provenance`
+before, byte-for-byte. The block only changes what `archkeep provenance`
 reports.
 
 ## Determinism — why `on` exists and when it does not
@@ -76,7 +76,7 @@ defaults to the wall clock.
 
 An `origin` already committed in a declaration file is a **static fact** about
 committed bytes: reading it needs no clock, never touches the wall clock, and
-is byte-identical across every read. `lattice provenance` reads origins; it
+is byte-identical across every read. `archkeep provenance` reads origins; it
 does not write them. If a workspace wants fresh rows to carry `on`, the tool
 that writes those rows does so through the clock, not this command.
 
@@ -85,7 +85,7 @@ that writes those rows does so through the clock, not this command.
 A malformed origin is rejected where it is read — a constraint row whose
 `origin` is missing `by`, an intent row whose `origin` names an unknown key, a
 crafted `__proto__` key that would pollute a naive load. The same loud refusal
-a malformed `architecture-intent.json` already earns. `lattice provenance`
+a malformed `architecture-intent.json` already earns. `archkeep provenance`
 never pretends a row it could not read is attested, and never pretends a row it
 could not read exists.
 

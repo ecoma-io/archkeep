@@ -14,31 +14,31 @@ const LOCK =
   "version = 4\n\n" +
   '[[package]]\nname = "itoa"\nversion = "1.0.18"\n' +
   'source = "registry+https://github.com/rust-lang/crates.io-index"\n\n' +
-  '[[package]]\nname = "lattice-rule-sdk"\nversion = "0.9.0"\n' +
+  '[[package]]\nname = "archkeep-rule-sdk"\nversion = "0.9.0"\n' +
   'dependencies = [\n "serde",\n]\n';
 
 describe("syncCargoLockVersion", () => {
   it("writes the manifest's version into the named package's entry", () => {
-    const { text, changed } = syncCargoLockVersion(LOCK, "lattice-rule-sdk", "0.10.0");
+    const { text, changed } = syncCargoLockVersion(LOCK, "archkeep-rule-sdk", "0.10.0");
     assert.equal(changed, true);
-    assert.match(text, /name = "lattice-rule-sdk"\nversion = "0\.10\.0"/u);
+    assert.match(text, /name = "archkeep-rule-sdk"\nversion = "0\.10\.0"/u);
   });
 
   it("leaves every other package's version alone", () => {
     // The lock is a flat array of same-shaped entries, so a rewrite that
     // matched on the version line alone would bump a dependency's pin and
     // produce a lock cargo rejects for a reason nothing in the diff explains.
-    const { text } = syncCargoLockVersion(LOCK, "lattice-rule-sdk", "0.10.0");
+    const { text } = syncCargoLockVersion(LOCK, "archkeep-rule-sdk", "0.10.0");
     assert.match(text, /name = "itoa"\nversion = "1\.0\.18"/u);
   });
 
   it("preserves the rest of the file byte for byte", () => {
-    const { text } = syncCargoLockVersion(LOCK, "lattice-rule-sdk", "0.10.0");
+    const { text } = syncCargoLockVersion(LOCK, "archkeep-rule-sdk", "0.10.0");
     assert.equal(text, LOCK.replace('version = "0.9.0"', 'version = "0.10.0"'));
   });
 
   it("reports no change when the lock already records the version", () => {
-    const { text, changed } = syncCargoLockVersion(LOCK, "lattice-rule-sdk", "0.9.0");
+    const { text, changed } = syncCargoLockVersion(LOCK, "archkeep-rule-sdk", "0.9.0");
     assert.equal(changed, false);
     assert.equal(text, LOCK);
   });

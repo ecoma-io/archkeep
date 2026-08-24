@@ -9,7 +9,7 @@ concept and the schema are
 {
   "plugins": [
     {
-      "plugin": "@ecoma-io/lattice/nx",
+      "plugin": "@ecoma-io/archkeep/nx",
       "options": {
         "boundaryConfig": "strict",
         "tsConfig": "tsconfig.base.json",
@@ -32,7 +32,7 @@ were a file.
 ## Check a different profile for one run
 
 ```shell
-lattice check --config migration
+archkeep check --config migration
 ```
 
 `--config` decides the same way it decides a filename: the value overrides
@@ -48,8 +48,8 @@ not the law in effect.
 `health`, `report`, and `history --capture` all read `boundaryConfig` — and `--config`,
 on the commands that accept one; `graph` takes no `--config` — the same way
 `check` does: a profile NAME when the workspace names a `profiles` registry,
-never a file path. `lattice context <project>` and
-`lattice graph --output` work against a profile-selected workspace exactly as
+never a file path. `archkeep context <project>` and
+`archkeep graph --output` work against a profile-selected workspace exactly as
 they do against a file-selected one — `graph`'s snapshot carries the resolved
 profile's policy fingerprint, so `history` and `diff` see a profile edit as a
 policy change the same way they already see a file edit as one. Fitness

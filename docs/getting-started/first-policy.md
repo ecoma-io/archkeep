@@ -73,7 +73,7 @@ proposed.
 ## Run the check
 
 ```shell
-pnpm exec lattice check
+pnpm exec archkeep check
 ```
 
 A clean tree prints what it inspected, not just that it found nothing:
@@ -138,9 +138,9 @@ removal is the breadth of the real-tree evidence.
 - `.json` -- plain JSON, no comments, no trailing commas. Same four keys.
 - `eslint.config.*` -- reads the constraint table out of an ESLint flat config's
   `@nx/enforce-module-boundaries` entry directly, so the file you already have
-  is the file Lattice reads.
+  is the file Archkeep reads.
 
-A native workspace can also write the policy inline in `lattice.json` rather
+A native workspace can also write the policy inline in `archkeep.json` rather
 than as a separate file.
 
 The full reference for all four spellings, including what each one cannot see,

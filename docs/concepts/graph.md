@@ -3,7 +3,7 @@
 The project graph is the engine's model of which projects exist and how they
 depend on each other. It is a deterministic, serialisable snapshot: two runs
 over an unchanged workspace produce byte-identical output, given the same
-lattice version (a newer release may change the schema or field ordering).
+archkeep version (a newer release may change the schema or field ordering).
 
 ## What a project is
 

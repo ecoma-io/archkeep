@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Fails when `docs/getting-started/installation.md`'s prerequisites table
-// disagrees with what `packages/lattice/package.json` actually declares.
+// disagrees with what `packages/archkeep/package.json` actually declares.
 //
 // WHY this script exists (issue #239). The table restates, in prose a new user
 // reads before installing:
@@ -34,7 +34,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export const DOC_PATH = "docs/getting-started/installation.md";
-export const MANIFEST_PATH = "packages/lattice/package.json";
+export const MANIFEST_PATH = "packages/archkeep/package.json";
 
 /** The prerequisite rows the table must carry; absence is a failure, not a skip. */
 export const REQUIRED_ROWS = ["Node", "TypeScript", "Vue"];
@@ -102,7 +102,7 @@ const sameClauses = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([
  * reads a file; both sides arrive as arguments.
  *
  * @param {object} input
- * @param {object} input.manifest parsed `packages/lattice/package.json`
+ * @param {object} input.manifest parsed `packages/archkeep/package.json`
  * @param {string} input.installationDoc contents of installation.md
  * @returns {{failures: string[], checked: string[]}}
  */

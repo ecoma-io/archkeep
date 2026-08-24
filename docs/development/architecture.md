@@ -3,7 +3,7 @@
 One `check` run, end to end, and why the cuts between layers are where they are.
 
 This page owns the **flow**. What each layer is _allowed to know_ is owned by
-`packages/lattice/AGENTS.md`,
+`packages/archkeep/AGENTS.md`,
 and the record passed between them is frozen in
 `src/analysis/contract.md`.
 Those two bind; this page explains how they fit together.
@@ -40,8 +40,8 @@ reading top to bottom — every step is a decision.
 
 ### 1. Find the workspace root
 
-`findWorkspaceRoot(cwd, [NX_CONFIG_FILE, MOON_DIR, LATTICE_MODEL_FILE])` walks up
-for a marker — `nx.json`, `.moon/`, or `lattice.json` — **from the working
+`findWorkspaceRoot(cwd, [NX_CONFIG_FILE, MOON_DIR, ARCHKEEP_MODEL_FILE])` walks up
+for a marker — `nx.json`, `.moon/`, or `archkeep.json` — **from the working
 directory and never from this tool's own location**. Installed from a
 registry, the tool sits inside `node_modules` while the tree it judges is
 above it — and under a pinned harness clone the two are different trees
@@ -53,10 +53,10 @@ which one was meant.
 
 On an Nx-registered workspace, `readPluginOptions(root)` reads
 `nx.json → plugins[].options` for the two filenames a workspace may have
-renamed. A `lattice.json` workspace has no `plugins[].options` table to nest
+renamed. A `archkeep.json` workspace has no `plugins[].options` table to nest
 those under, so it states the same two keys — `boundaryConfig` and
-`tsConfig` — directly on `lattice.json` itself
-(`packages/lattice/AGENTS.md`'s "The three
+`tsConfig` — directly on `archkeep.json` itself
+(`packages/archkeep/AGENTS.md`'s "The three
 consumers of the options" owns the exact shape). Either way this happens
 _before_ the config is loaded, because it decides _which_ config.
 
@@ -82,8 +82,8 @@ config's location and the tree being judged are separate facts.
 
 The graph comes from whichever `ProjectModelProvider` the marker found in step 1
 selected — `src/providers/nx.mjs` on an `nx.json` root, `src/providers/moon.mjs`
-on a `.moon/` root, `src/providers/native/` on a `lattice.json` one — and
-`packages/lattice/AGENTS.md`'s "`src/providers/` is the only layer allowed to
+on a `.moon/` root, `src/providers/native/` on a `archkeep.json` one — and
+`packages/archkeep/AGENTS.md`'s "`src/providers/` is the only layer allowed to
 build a graph" is the rule that keeps `cli.mjs` and `src/lsp/` from needing to
 know which one they are holding.
 
@@ -96,10 +96,10 @@ know which one they are holding.
   shape. The provider resolves the `moon` binary from the workspace's own
   `node_modules/.bin`.
 - **The native path** has no graph to ask for: `discover()` reads
-  `lattice.json`'s declared∪inferred project list against the tracked tree,
+  `archkeep.json`'s declared∪inferred project list against the tracked tree,
   and `buildGraph()` reduces that plus the analysis records from step 7 into
   the same `{nodes, dependencies}` shape the Nx and Moon paths build from a
-  real `nx graph` or `moon project-graph`. `packages/lattice/src/providers/native/README.md`
+  real `nx graph` or `moon project-graph`. `packages/archkeep/src/providers/native/README.md`
   owns this path's own semantics and declared limits.
 
 Both providers, and `listFiles(root)` (`git ls-files`, in `src/workspace.mjs`
@@ -118,7 +118,7 @@ files attributed to a project.
 `src/workspace.mjs` is the **only** layer allowed to answer "which files". An
 analyzer is handed one file and a rule is handed records, so the question has to
 land somewhere, and it lands here with the git spawn that comes with it — which
-layer may build the graph itself is `packages/lattice/AGENTS.md`'s rule.
+layer may build the graph itself is `packages/archkeep/AGENTS.md`'s rule.
 
 Before anything is judged, the graph nodes are annotated with the three facts
 `nx graph --file=` cannot carry — `mfeRemote`, `entryPoints` and
@@ -294,7 +294,7 @@ than on whichever later CLI run happens to notice.
 
 The one structural difference from the CLI: the CLI's graph comes from a
 `src/providers/` provider — `src/providers/nx.mjs` reading it from Nx, or
-`src/providers/native/` reading `lattice.json` — while the language server has
+`src/providers/native/` reading `archkeep.json` — while the language server has
 no provider at all. It is spawned by an editor in a directory, with nothing
 else, so `src/lsp/workspace-index.mjs` still builds the same shape by hand from
 the tracked `project.json` files: `discoverProjects` and `buildNodes` read
@@ -305,12 +305,12 @@ rather than reproduced a second time, so the native provider and the language
 server share one copy of Nx's own `getProjectType` rule (including the `-e2e`
 suffix rule) and its implicit-dependency expansion. `evaluate` is pure and
 takes a graph it does not build either way. Which layers may build one is
-`packages/lattice/AGENTS.md`'s rule, not this page's.
+`packages/archkeep/AGENTS.md`'s rule, not this page's.
 
 That reuse now reaches the native root directly: on a tree whose tracked files
-include `lattice.json`, the index is built through `nativeProvider.discover`
+include `archkeep.json`, the index is built through `nativeProvider.discover`
 and `buildGraph` rather than from `project.json` files, so a native project
-with no `project.json` (the case `lattice.json` exists to allow) is indexed
+with no `project.json` (the case `archkeep.json` exists to allow) is indexed
 like any other. What stays loud rather than papered over is the model that
 will not load: that becomes a named, self-clearing index gap — the same
 `indexGaps` mechanism a skipped `project.json` uses — so no editor ever draws
@@ -326,7 +326,7 @@ around.
 
 ### The editor client
 
-`packages/lattice-vscode` is a client of that server, and the only part of this
+`packages/archkeep-vscode` is a client of that server, and the only part of this
 project outside the engine package. It contains no analysis: it finds the workspace
 root, finds
 the server the workspace installed, starts it over stdio, and shows whether it is
@@ -385,6 +385,6 @@ either convention would answer confidently about a workspace it had misread.
 
 - Adding a language → [adding-a-language.md](adding-a-language.md)
 - Which suite proves what → [testing.md](testing.md)
-- The native provider's own declared limits → `packages/lattice/src/providers/native/README.md`
-- `lattice.json`'s fields → [../reference/configuration.md](../reference/configuration.md)
+- The native provider's own declared limits → `packages/archkeep/src/providers/native/README.md`
+- `archkeep.json`'s fields → [../reference/configuration.md](../reference/configuration.md)
 - The direction all of this serves → [../doctrine/north-star.md](../doctrine/north-star.md)

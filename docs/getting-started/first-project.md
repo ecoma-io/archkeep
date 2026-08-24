@@ -1,6 +1,6 @@
 # Your first project
 
-Set up a workspace with no Nx at all. Lattice's native provider discovers
+Set up a workspace with no Nx at all. Archkeep's native provider discovers
 projects and builds the graph from the tree itself -- no `nx.json`, no Nx
 installation, no build system as a precondition.
 
@@ -14,9 +14,9 @@ directory's files from the root's `git ls-files` instead of tracking them.
 If your workspace already has `nx.json` at its root, this is not the page you
 need: [../integrations/nx.md](../integrations/nx.md) covers the Nx path.
 
-## 1. Create `lattice.json`
+## 1. Create `archkeep.json`
 
-A workspace declares itself native by putting a `lattice.json` at its root. Its
+A workspace declares itself native by putting a `archkeep.json` at its root. Its
 presence is the marker; its contents are the project-and-tag model the Nx path
 gets from Nx instead.
 
@@ -97,7 +97,7 @@ nested second manifest inside one project yields no edge.
 
 Tags drive the boundary rules, and the tags are yours. Two ways to attach them:
 
-**In `lattice.json`**, using `projectRules` -- a glob over a project's root,
+**In `archkeep.json`**, using `projectRules` -- a glob over a project's root,
 plus tags to apply to every match:
 
 ```jsonc
@@ -178,7 +178,7 @@ page in this sequence walks through writing and running it step by step:
 the workspace root -- above every project this walkthrough created, the same
 "analyzable but unowned" shape as any stray script would have. Left alone, the
 next step's check refuses over exactly this one file: coverage incomplete.
-Exempt it in `lattice.json`, with the reason on record:
+Exempt it in `archkeep.json`, with the reason on record:
 
 ```jsonc
 {
@@ -208,11 +208,11 @@ Stage what the steps above created -- an untracked file is invisible to
 `git ls-files`, and this workspace has not tracked anything yet:
 
 ```shell
-git add lattice.json module-boundaries.config.mjs apps/api libs/billing-core
+git add archkeep.json module-boundaries.config.mjs apps/api libs/billing-core
 ```
 
 ```shell
-pnpm exec lattice check
+pnpm exec archkeep check
 ```
 
 A clean tree prints what it inspected, not just that it found nothing:
@@ -235,6 +235,6 @@ covers it in full.
 ## Next
 
 - Write and run your first constraint table: [first-policy.md](first-policy.md)
-- `lattice.json` field reference: [../reference/configuration.md](../reference/configuration.md)
+- `archkeep.json` field reference: [../reference/configuration.md](../reference/configuration.md)
 - Boundary config dialects and shape: [../concepts/policies.md](../concepts/policies.md)
 - Nx integration (if you add Nx later): [../integrations/nx.md](../integrations/nx.md)

@@ -7,13 +7,13 @@ the current workspace. The _meaning_ of each metric is owned by
 ## What it runs
 
 ```bash
-lattice health                       # current run's metrics
-lattice health .lattice/history      # metrics + trends across snapshots
-lattice health --format json         # the versioned envelope
+archkeep health                       # current run's metrics
+archkeep health .archkeep/history      # metrics + trends across snapshots
+archkeep health --format json         # the versioned envelope
 ```
 
 The optional positional argument names the snapshot directory for trends — the
-same directory `history` reads (`.lattice/history/` by convention). With no
+same directory `history` reads (`.archkeep/history/` by convention). With no
 argument, health reports the current run's metrics without a trend.
 
 ## Flags

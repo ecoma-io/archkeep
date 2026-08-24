@@ -1,0 +1,19 @@
+# Archkeep — the architecture enforcement engine.
+#
+# Tags use dash separators (type-package, scope-nx) because Moon tags cannot
+# contain colons. The boundary constraint table uses the same format the Moon
+# provider emits, which is the verbatim Moon tags.
+id: archkeep
+language: javascript
+layer: library
+stack: backend
+tags:
+  - type-package
+  - scope-nx
+tasks:
+  lint:
+    command: eslint . --max-warnings 0
+  test:
+    command: vitest run
+  typecheck:
+    command: tsc -p tsconfig.json

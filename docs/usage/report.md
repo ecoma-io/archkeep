@@ -13,10 +13,10 @@ same function the owning command calls, so this document cannot disagree with
 ## What it runs
 
 ```bash
-lattice report                       # the whole document for this run
-lattice report .lattice/history      # the same, with trends across snapshots
-lattice report --format json         # the versioned envelope
-lattice report --output GOVERNANCE.txt
+archkeep report                       # the whole document for this run
+archkeep report .archkeep/history      # the same, with trends across snapshots
+archkeep report --format json         # the versioned envelope
+archkeep report --output GOVERNANCE.txt
 ```
 
 The optional positional argument names the snapshot directory for trends — the
@@ -98,7 +98,7 @@ architecture governance report — every surface reached a verdict
 
 provenance
   root        /workspace
-  provider    native (lattice.json)
+  provider    native (archkeep.json)
   policy      module-boundaries.config.mjs
   commit      1993fa7 (dirty)
   remote      https://example.invalid/tree

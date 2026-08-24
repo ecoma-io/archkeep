@@ -1,5 +1,5 @@
 {
-  "name": "lattice",
+  "name": "archkeep",
   "version": "0.12.0",
   "description": "Module-boundary diagnostics at edit time, and architecture agent skills, for Go, Rust, Python and Vue",
   "skills": "./skills/",
@@ -20,6 +20,6 @@
     "architecture"
   ],
   "license": "Apache-2.0",
-  "homepage": "https://github.com/ecoma-io/lattice#readme",
-  "repository": "https://github.com/ecoma-io/lattice"
+  "homepage": "https://github.com/ecoma-io/archkeep#readme",
+  "repository": "https://github.com/ecoma-io/archkeep"
 }

@@ -1,6 +1,6 @@
 # Release
 
-How a version of Lattice reaches the people who use it. This is the mechanics;
+How a version of Archkeep reaches the people who use it. This is the mechanics;
 CONTRIBUTING.md owns the contribution bar, and
 [testing.md](testing.md) owns the suite that must pass before anything ships.
 
@@ -10,7 +10,7 @@ CONTRIBUTING.md owns the contribution bar, and
 Conventional Commit subjects since the last tag and keeps one pull request open
 holding the next version and the changelog it derived. **Merging that pull
 request is the release**: it tags the commit, and the tag publishes
-`@ecoma-io/lattice` to npm.
+`@ecoma-io/archkeep` to npm.
 
 The subject line you write decides the next version number — `feat:` moves the
 minor, `fix:` the patch, and a `!` or a `BREAKING CHANGE:` footer the major.
@@ -21,11 +21,11 @@ Do not hand-edit these. It rewrites both on its next run:
 
 - `CHANGELOG.md` — in `.prettierignore` because its generated layout and
   Prettier's preferred one disagree.
-- The version in `packages/lattice/package.json`.
+- The version in `packages/archkeep/package.json`.
 
 ### The release pull request title
 
-`chore(lattice): release <version>` — not release-please's default. The
+`chore(archkeep): release <version>` — not release-please's default. The
 default names the target branch as the scope (`chore(main): …`), and `main` is
 not in `commitlint.config.mjs`'s `scope-enum`, so the default title would fail
 a required check and could never merge.
@@ -40,7 +40,7 @@ publishing. That step proves four things a consumer's first hour asks:
 2. The checker exits 0 on a clean tree and **1** on a violating one.
 3. The language server answers `initialize` through the symlinked path an
    installed plugin is launched by.
-4. All three of those work against a second workspace with `lattice.json` at
+4. All three of those work against a second workspace with `archkeep.json` at
    its root instead of `nx.json` and no `nx` package installed — and again
    against a third, Moon-shaped workspace (`.moon/workspace.yml` at its root,
    `@moonrepo/cli` resolving from its own `node_modules`).
@@ -51,10 +51,10 @@ at install time cannot be unpublished away, which is why this check runs before
 
 ## The two packages, two registries
 
-| package                   | registry            | what publishes it                     |
-| ------------------------- | ------------------- | ------------------------------------- |
-| `packages/lattice`        | npm                 | release-please tag                    |
-| `packages/lattice-vscode` | VS Code Marketplace | the release lane's `publish-vsix` job |
+| package                    | registry            | what publishes it                     |
+| -------------------------- | ------------------- | ------------------------------------- |
+| `packages/archkeep`        | npm                 | release-please tag                    |
+| `packages/archkeep-vscode` | VS Code Marketplace | the release lane's `publish-vsix` job |
 
 Both publish from the same release lane when the tag lands. The `publish-vsix`
 job packs and verifies the `.vsix` and attaches it to the GitHub release on

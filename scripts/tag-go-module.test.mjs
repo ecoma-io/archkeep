@@ -19,10 +19,10 @@ describe("goModulePath", () => {
       "// The Go binding for the custom-rule contract.\n" +
       "//\n" +
       "// A Go module carries no version field.\n" +
-      "module github.com/ecoma-io/lattice/packages/lattice-rule-sdk-go\n" +
+      "module github.com/ecoma-io/archkeep/packages/archkeep-rule-sdk-go\n" +
       "\n" +
       "go 1.24\n";
-    assert.equal(goModulePath(text), "github.com/ecoma-io/lattice/packages/lattice-rule-sdk-go");
+    assert.equal(goModulePath(text), "github.com/ecoma-io/archkeep/packages/archkeep-rule-sdk-go");
   });
 
   it("throws when there is no module directive", () => {
@@ -34,15 +34,15 @@ describe("goModuleTagPrefix", () => {
   it("returns the module's directory relative to the repository root", () => {
     assert.equal(
       goModuleTagPrefix(
-        "github.com/ecoma-io/lattice/packages/lattice-rule-sdk-go",
-        "ecoma-io/lattice",
+        "github.com/ecoma-io/archkeep/packages/archkeep-rule-sdk-go",
+        "ecoma-io/archkeep",
       ),
-      "packages/lattice-rule-sdk-go",
+      "packages/archkeep-rule-sdk-go",
     );
   });
 
   it("returns an empty prefix for a module at the repository root", () => {
-    assert.equal(goModuleTagPrefix("github.com/ecoma-io/lattice", "ecoma-io/lattice"), "");
+    assert.equal(goModuleTagPrefix("github.com/ecoma-io/archkeep", "ecoma-io/archkeep"), "");
   });
 
   it("throws when the module path names a different repository", () => {
@@ -51,17 +51,17 @@ describe("goModuleTagPrefix", () => {
     // the path, so it would never look at this repository at all — and the
     // release lane would report the version published.
     assert.throws(
-      () => goModuleTagPrefix("github.com/someone-else/other/pkg", "ecoma-io/lattice"),
-      /is not under "github\.com\/ecoma-io\/lattice"/u,
+      () => goModuleTagPrefix("github.com/someone-else/other/pkg", "ecoma-io/archkeep"),
+      /is not under "github\.com\/ecoma-io\/archkeep"/u,
     );
   });
 
   it("does not treat a repository whose name is a prefix of ours as ours", () => {
-    // `github.com/ecoma-io/lattice-extras` starts with `github.com/ecoma-io/lattice`
+    // `github.com/ecoma-io/archkeep-extras` starts with `github.com/ecoma-io/archkeep`
     // as a STRING, and a naive startsWith would slice it into the nonsense
     // prefix `-extras/pkg` and cut a tag under it.
     assert.throws(
-      () => goModuleTagPrefix("github.com/ecoma-io/lattice-extras/pkg", "ecoma-io/lattice"),
+      () => goModuleTagPrefix("github.com/ecoma-io/archkeep-extras/pkg", "ecoma-io/archkeep"),
       /is not under/u,
     );
   });
@@ -70,15 +70,15 @@ describe("goModuleTagPrefix", () => {
 describe("goModuleTag", () => {
   it("prefixes the version with the module's directory", () => {
     assert.equal(
-      goModuleTag("packages/lattice-rule-sdk-go", "0.11.0"),
-      "packages/lattice-rule-sdk-go/v0.11.0",
+      goModuleTag("packages/archkeep-rule-sdk-go", "0.11.0"),
+      "packages/archkeep-rule-sdk-go/v0.11.0",
     );
   });
 
   it("accepts a version that already carries its v", () => {
     assert.equal(
-      goModuleTag("packages/lattice-rule-sdk-go", "v0.11.0"),
-      "packages/lattice-rule-sdk-go/v0.11.0",
+      goModuleTag("packages/archkeep-rule-sdk-go", "v0.11.0"),
+      "packages/archkeep-rule-sdk-go/v0.11.0",
     );
   });
 

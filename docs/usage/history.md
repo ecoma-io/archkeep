@@ -1,13 +1,13 @@
-# `lattice history`
+# `archkeep history`
 
 Describe how the architecture evolved across a directory of graph snapshots.
 
 ```shell
-lattice history .lattice/history
-lattice history .lattice/history --format json
-lattice history .lattice/history --format json --output evolution.json
-lattice history .lattice/history --capture
-lattice history .lattice/history --capture --format json
+archkeep history .archkeep/history
+archkeep history .archkeep/history --format json
+archkeep history .archkeep/history --format json --output evolution.json
+archkeep history .archkeep/history --capture
+archkeep history .archkeep/history --capture --format json
 ```
 
 `history <dir>` reads every snapshot in a directory and produces one evolution
@@ -55,7 +55,7 @@ verdict, or `diff` for one transition's rule-impact.
 then produces the record that includes it:
 
 ```shell
-lattice history .lattice/history --capture
+archkeep history .archkeep/history --capture
 ```
 
 It writes `<sequence>-<sha8>.json` — a zero-padded monotonic sequence and the
@@ -120,10 +120,10 @@ Capture the architecture at a commit, later capture again, and describe the
 space between:
 
 ```shell
-git checkout 1.0.0 && lattice history .lattice/history --capture
+git checkout 1.0.0 && archkeep history .archkeep/history --capture
 # ... work happens; boundaries move ...
-git checkout main && lattice history .lattice/history --capture
-lattice history .lattice/history --format json
+git checkout main && archkeep history .archkeep/history --capture
+archkeep history .archkeep/history --format json
 ```
 
 The second capture writes a new snapshot only if the architecture actually
@@ -132,9 +132,9 @@ snapshots.
 
 ## Dogfooding: this repository's own migration
 
-This repository's `lattice` command is dogfooded on its own history: the
+This repository's `archkeep` command is dogfooded on its own history: the
 snapshots in
-`packages/lattice/e2e/fixtures/evolution/` are real bytes captured from two
+`packages/archkeep/e2e/fixtures/evolution/` are real bytes captured from two
 points on this repository's own timeline — the commit that migrated the
 workspace from Nx to Moonrepo and its parent. Describing that directory yields
 a record in which all three signals fire in one transition: the two projects'

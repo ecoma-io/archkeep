@@ -1,6 +1,6 @@
 # Architecture debt
 
-`lattice debt <dir>` is the ledger of the architecture debt a workspace is
+`archkeep debt <dir>` is the ledger of the architecture debt a workspace is
 carrying: the accepted violations, the un-built aspirations, and the drift —
 each aged across the snapshot history, ranked by severity, and printed as one
 deterministic report. It is an **aging record, not a finance metaphor**: age,
@@ -71,7 +71,7 @@ Three conditions refuse loudly (exit 3) instead of degrading to an empty list:
 - **a history directory that is unreadable, malformed, or holds no snapshots**
   — the ledger would either be empty (a shrug) or age against a record it could
   not read. An existing but unpopulated directory is the same no-verdict: a
-  fresh `.lattice/history/` or a CI cache whose capture step never ran has no
+  fresh `.archkeep/history/` or a CI cache whose capture step never ran has no
   record to age against, and `✔ no architecture debt` over it would be a claim
   the run cannot make.
 
