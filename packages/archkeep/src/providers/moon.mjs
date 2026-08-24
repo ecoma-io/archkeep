@@ -258,11 +258,23 @@ function resolveMoonEnv(workspaceRoot, { env = process.env, platform = process.p
  * "implicit wins per pair" rule in `transformMoonGraph`'s `add` correct: the
  * loop that can see `source` overrules the loop that cannot.
  *
- * Once `source` is not `"explicit"` (or is unknown), Moon's `scope` decides:
+ * Once `source` is not `"explicit"` (or is unknown), Moon's `scope` decides —
+ * and every scope it can decide maps to `"static"`, never to `"dynamic"`
+ * (#280). A scope is a fact about a MANIFEST ROW — when the dependency is
+ * needed, runtime or build time — while `"dynamic"` upstream is a fact about
+ * SOURCE TEXT (`import()` written at an import site,
+ * `../../rules/topology.mjs`'s `noImportsOfLazyLoadedLibraries`). Feeding the
+ * first to rules that read the second manufactured lazy-loading nobody wrote:
+ * every dev-only dependency looked lazy-loaded, and that rule fired at the
+ * declaring project's own test file. The previous `"dynamic"` mapping existed
+ * only to serve that rule, which is exactly why a scope cannot feed it.
+ * Nothing is lost by refusing: genuine lazy loading still arrives through
+ * ANALYSIS — `mergeImportEdges` below folds real `import()` sites into this
+ * graph keyed `[source, target, type]`, so a real dynamic import adds its own
+ * `dynamic` edge regardless of the declared scope:
  * - `"production"` — a runtime dependency. Maps to `"static"`.
- * - `"development"` — a build-time-only dependency. Maps to `"dynamic"`,
- *   because `noImportsOfLazyLoadedLibraries` is decided on exactly that
- *   distinction (`../../rules/topology.mjs`).
+ * - `"development"` — a build-time-only dependency. Maps to `"static"`
+ *   (#280).
  * - `"build"` — a build-system dependency (not a source-level import). Maps
  *   to `"static"` as a conservative default; Archkeep judges source imports,
  *   not build graphs.
@@ -286,10 +298,12 @@ function edgeTypeFromScope(scope, source) {
   // Moon "explicit" — written by hand in `moon.yml` — IS Archkeep "implicit".
   if (source === "explicit") return "implicit";
   switch (scope) {
+    // A manifest scope says WHEN a dependency is needed, never HOW its imports
+    // are written — "dynamic" is a source-text fact only analysis can attest,
+    // which `mergeImportEdges` below keeps flowing — so every scope lands on
+    // "static" (#280).
     case "production":
-      return "static";
     case "development":
-      return "dynamic";
     case "build":
     case "peer":
       return "static";

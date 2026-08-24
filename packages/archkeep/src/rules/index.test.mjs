@@ -776,9 +776,55 @@ describe("evaluate", () => {
           },
         },
       );
-      expect(idsOf(evaluate([site()], graph, config(permissive)))).toEqual([
-        "noImportsOfLazyLoadedLibraries",
-      ]);
+      // The dynamic import sites are what give the verdict its evidence: the
+      // engine indexes exactly the sites it was handed, and #281's empty
+      // "lazy-loaded in these files:" list is what a chain without them used
+      // to print.
+      const sites = [
+        site(),
+        site({
+          kind: "dynamic",
+          specifier: "@fixture/gamma",
+          resolved: {
+            target: "gamma",
+            file: "area/gamma/src/index.ts",
+            external: false,
+            packageName: null,
+          },
+        }),
+        site({
+          sourceFile: "area/gamma/src/loader.ts",
+          kind: "dynamic",
+          specifier: "@fixture/beta",
+          resolved: {
+            target: "beta",
+            file: "area/beta/src/index.ts",
+            external: false,
+            packageName: null,
+          },
+        }),
+      ];
+      const violations = evaluate(sites, graph, config(permissive));
+      expect(idsOf(violations)).toEqual(["noImportsOfLazyLoadedLibraries"]);
+      // The message must carry non-empty evidence naming both hops, each
+      // annotated with the chain that was walked — never the bare header.
+      expect(violations[0].message).toContain("- area/alpha/src/index.ts (alpha -> gamma -> beta)");
+      expect(violations[0].message).toContain(
+        "- area/gamma/src/loader.ts (alpha -> gamma -> beta)",
+      );
+    });
+
+    it("stays silent when every edge fact is STATIC typed (#280)", () => {
+      // The lock behind the Moon provider's correction: dev-scope manifest
+      // dependencies arrive as static edges, and laziness is decided ONLY by
+      // an edge typed dynamic — it is never inferred from facts no analyzer
+      // produced. Reintroduce either and this goes red in the silent
+      // direction: a plain dependency would start reporting as lazy-loaded.
+      const staticTyped = graphOf(
+        [project("alpha", { tags: ["zone:x"] }), project("beta", { tags: ["zone:y"] })],
+        { dependencies: { alpha: [{ source: "alpha", target: "beta", type: "static" }] } },
+      );
+      expect(evaluate([site()], staticTyped, config(permissive))).toEqual([]);
     });
 
     it("stays silent for the dynamic import itself", () => {

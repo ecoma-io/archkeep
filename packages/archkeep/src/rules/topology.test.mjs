@@ -6,6 +6,7 @@ import {
   circularViolation,
   createFileDependencyIndex,
   entryPointOf,
+  findDynamicImportPath,
   findFilesInCircularPath,
   findFilesWithDynamicImports,
   hasBuildExecutor,
@@ -121,6 +122,67 @@ describe("hasDynamicImport", () => {
       },
     };
     expect(hasDynamicImport(cyclic, "a", "z")).toBe(false);
+  });
+});
+
+describe("findDynamicImportPath", () => {
+  // The walk is the one `hasDynamicImport` was, so its cases are mirrored here
+  // one shape richer — a predicate answers yes/no, this names the route, and
+  // `lazyLoadedViolation` renders evidence from the route it decided on.
+  const graph = {
+    dependencies: {
+      a: [{ source: "a", target: "b", type: "dynamic" }],
+      b: [{ source: "b", target: "c", type: "static" }],
+    },
+  };
+  /** The dynamic-edge cycle fixture, shared by the equivalence test below. */
+  const cyclic = {
+    dependencies: {
+      a: [{ source: "a", target: "b", type: "dynamic" }],
+      b: [{ source: "b", target: "a", type: "dynamic" }],
+    },
+  };
+
+  it("returns the pair itself for a direct dynamic edge", () => {
+    expect(findDynamicImportPath(graph, "a", "b")).toEqual(["a", "b"]);
+  });
+
+  it("returns the full chain through an intermediate project", () => {
+    const chained = {
+      dependencies: {
+        a: [{ source: "a", target: "g", type: "dynamic" }],
+        g: [{ source: "g", target: "z", type: "dynamic" }],
+      },
+    };
+    expect(findDynamicImportPath(chained, "a", "z")).toEqual(["a", "g", "z"]);
+  });
+
+  it("skips static edges at every hop", () => {
+    expect(findDynamicImportPath(graph, "a", "c")).toBeNull();
+  });
+
+  it("answers null when no path exists", () => {
+    expect(findDynamicImportPath(graph, "b", "a")).toBeNull();
+    expect(findDynamicImportPath(graph, "missing", "a")).toBeNull();
+  });
+
+  it("terminates on a cycle of dynamic edges and answers null", () => {
+    expect(findDynamicImportPath(cyclic, "a", "z")).toBeNull();
+  });
+
+  it("agrees with hasDynamicImport on every graph above — one walk, two faces", () => {
+    // The equivalence IS the fix for #281's first half: if these ever diverge,
+    // the rule fires on a chain whose files it then cannot name.
+    for (const g of [graph, cyclic]) {
+      for (const [from, to] of [
+        ["a", "b"],
+        ["a", "c"],
+        ["a", "z"],
+        ["b", "a"],
+      ]) {
+        expect(hasDynamicImport(g, from, to)).toBe(findDynamicImportPath(g, from, to) !== null);
+      }
+    }
   });
 });
 
@@ -357,7 +419,7 @@ describe("lazyLoadedViolation", () => {
     ).toBeNull();
   });
 
-  it("carries targetProjectName and filePaths in data", () => {
+  it("carries targetProjectName and the exact file line in data", () => {
     const result = lazyLoadedViolation({
       graph,
       sourceProject: alpha,
@@ -368,6 +430,66 @@ describe("lazyLoadedViolation", () => {
     expect(result.data).toMatchObject({
       targetProjectName: "beta",
     });
+    // Pinned byte for byte: this rendering is the golden a consumer's snapshot
+    // or suppression workflow leans on, so only the cases that printed nothing
+    // before may ever change its shape.
+    expect(result.data.filePaths).toBe("- area/alpha/src/index.ts");
+  });
+
+  it("names every hop's file, each annotated with the chain, when the path is transitive", () => {
+    // #281's shape: the predicate walked alpha -> gamma -> beta while the
+    // evidence lookup read only the direct pair key — a violation announced
+    // with an empty list. Evidence now comes off the same walk.
+    const gamma = project("gamma");
+    const transitiveGraph = {
+      nodes: { alpha, beta, gamma },
+      dependencies: {
+        alpha: [{ source: "alpha", target: "gamma", type: "dynamic" }],
+        gamma: [{ source: "gamma", target: "beta", type: "dynamic" }],
+      },
+    };
+    const hopEdges = [
+      {
+        sourceFile: "area/alpha/src/lazy.ts",
+        sourceProject: "alpha",
+        targetProject: "gamma",
+        dynamic: true,
+      },
+      {
+        sourceFile: "area/gamma/src/loader.ts",
+        sourceProject: "gamma",
+        targetProject: "beta",
+        dynamic: true,
+      },
+    ];
+    const result = lazyLoadedViolation({
+      graph: transitiveGraph,
+      sourceProject: alpha,
+      targetProject: beta,
+      resolvedFile: "area/beta/src/index.ts",
+      fileIndex: createFileDependencyIndex(hopEdges),
+    });
+    expect(result).not.toBeNull();
+    expect(result.data.filePaths).toBe(
+      "- area/alpha/src/lazy.ts (alpha -> gamma -> beta)\n- area/gamma/src/loader.ts (alpha -> gamma -> beta)",
+    );
+  });
+
+  it("says the chain has no analyzed file behind it instead of printing an empty list", () => {
+    // The silent direction made explicit: the graph edge is real (detection
+    // never depended on the index), but nothing analyzed names a file on it.
+    // An empty string here would read as "checked, clean".
+    const result = lazyLoadedViolation({
+      graph,
+      sourceProject: alpha,
+      targetProject: beta,
+      resolvedFile: "area/beta/src/index.ts",
+      fileIndex: createFileDependencyIndex([]),
+    });
+    expect(result).not.toBeNull();
     expect(typeof result.data.filePaths).toBe("string");
+    expect(result.data.filePaths.startsWith("(")).toBe(true);
+    expect(result.data.filePaths).toContain("->");
+    expect(result.data.filePaths).toContain("alpha -> beta");
   });
 });

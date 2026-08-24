@@ -7,7 +7,17 @@ import { diagnoseDocument } from "./diagnose.mjs";
 // analyzer cannot be made to throw on demand without feeding it a file whose
 // failure mode is itself a moving target.
 vi.mock("../analysis/analyze.mjs", () => ({ analyzeFile: vi.fn() }));
-vi.mock("../rules/index.mjs", () => ({ evaluate: vi.fn() }));
+vi.mock("../rules/index.mjs", async (importOriginal) => {
+  const mod = /** @type {any} */ (await importOriginal());
+  return {
+    ...mod,
+    evaluate: vi.fn((...args) => mod.evaluate(...args)),
+    // Re-exposed for the one test that drives the REAL engine — the evidence
+    // composition cannot be pinned against a stubbed verdict, because a stub's
+    // message text is whatever the test wrote into it.
+    __realEvaluate: mod.evaluate,
+  };
+});
 vi.mock("../commands/edge-constraints.mjs", async (importOriginal) => {
   const mod = /** @type {any} */ (await importOriginal());
   return {
@@ -16,15 +26,31 @@ vi.mock("../commands/edge-constraints.mjs", async (importOriginal) => {
   };
 });
 
-// The module is mocked (so its call count can be asserted); the real
-// implementation is `importOriginal`ed and re-exposed for the one test that
-// wants both a spy AND the true verdict. TypeScript cannot see the extra
-// synthetic key on the mocked module, so the cast is explicit.
+// The modules are mocked (so their call counts can be asserted); the real
+// implementations are `importOriginal`ed and re-exposed for the tests that
+// want both a spy AND the true verdict. TypeScript cannot see the extra
+// synthetic keys on the mocked modules, so the casts are explicit.
 const edgeConstraints = /** @type {any} */ (await import("../commands/edge-constraints.mjs"));
+const rulesEngine = /** @type {any} */ (await import("../rules/index.mjs"));
 const analyzeFile = vi.mocked((await import("../analysis/analyze.mjs")).analyzeFile);
 const evaluate = vi.mocked((await import("../rules/index.mjs")).evaluate);
 const declaredEdgeViolationsForCheck = vi.mocked(edgeConstraints.declaredEdgeViolationsForCheck);
 const realDeclaredEdgeViolationsForCheck = edgeConstraints.__realDeclaredEdgeViolationsForCheck;
+const realEvaluate = /** @type {typeof import("../rules/index.mjs").evaluate} */ (
+  rulesEngine.__realEvaluate
+);
+
+/** All eight options at the values `@nx/enforce-module-boundaries` defaults to — the shape the real engine reads unguarded (`../rules/index.test.mjs` states the same table). */
+const engineOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
 
 const SOURCE_FILE = "libs/inner/main.go";
 const TEXT = 'package inner\n\nimport "example.test/outer"\n';
@@ -236,11 +262,15 @@ describe("an empty diagnostic list means no violation, and nothing else", () => 
     expect(diagnostics).toEqual([]);
   });
 
-  it("refuses a verdict the engine returned about a different file", () => {
-    // The engine is handed only this document's sites, so this cannot happen
-    // unless the two disagree about which file they are discussing — at which
-    // point the verdict for the open file is not trustworthy and must not be
-    // published as if it were.
+  it("refuses a verdict naming a file the engine was never handed", () => {
+    // The engine is handed the whole tree's retained sites plus this
+    // document's buffer records, and it judges every site it is given — so a
+    // violation about another handed file is expected output, filtered below.
+    // One naming a file that was NOT handed over is different: no site could
+    // have produced it, so engine and caller are discussing different trees,
+    // and the verdict for the open file is not trustworthy. Here nothing was
+    // handed at all (no retained sites, no buffer imports), so any foreign
+    // name trips the guard.
     analyzeFile.mockReturnValue({ imports: [], failures: [] });
     evaluate.mockReturnValue([
       /** @type {any} */ ({
@@ -254,6 +284,194 @@ describe("an empty diagnostic list means no violation, and nothing else", () => 
     ]);
 
     const { analyzed, diagnostics } = diagnoseDocument(REQUEST);
+
+    expect(analyzed).toBe(false);
+    expect(diagnostics.at(-1).message).toContain("cannot be trusted");
+  });
+});
+
+describe("the evidence the engine renders comes from the sites it was handed", () => {
+  // The composition this describe pins (#280/#281 follow-up): the rule engine
+  // derives its evidence index from exactly the records it is handed, so
+  // `diagnoseDocument` hands it the whole tree's retained disk sites minus this
+  // document's stale copy, plus the live buffer's fresh records. With only the
+  // open document's records — the old composition — the file lists of
+  // `noImportsOfLazyLoadedLibraries` came out empty in the editor whenever the
+  // backing dynamic import lived in another file, while `lattice check`
+  // printed them.
+  const OPEN_FILE = "area/host/src/index.ts";
+  const LAZY_FILE = "area/host/src/routes.ts";
+  const BUFFER_TEXT = [
+    "export const host = init();",
+    "",
+    'import { thing } from "@fixture/beta";',
+    "",
+  ].join("\n");
+  /** Where `BUFFER_TEXT` writes the import, as the analysis contract counts. */
+  const bufferLine = BUFFER_TEXT.slice(0, BUFFER_TEXT.indexOf('"@fixture/beta"')).split(
+    "\n",
+  ).length;
+  const bufferColumn = BUFFER_TEXT.split("\n")[bufferLine - 1].indexOf('"') + 1;
+
+  /**
+   * A record in the analysis contract's shape (`../analysis/analyze.mjs`'s
+   * `ImportSite`), spelled the way the TypeScript analyzer spells this family:
+   * non-path, non-relative. Annotated so the literal's `kind` stays a `kind`.
+   *
+   * @param {Partial<import("../analysis/analyze.mjs").ImportSite>} overrides
+   * @returns {import("../analysis/analyze.mjs").ImportSite}
+   */
+  const site = (overrides = {}) => ({
+    sourceFile: OPEN_FILE,
+    line: bufferLine,
+    column: bufferColumn,
+    specifier: "@fixture/beta",
+    spelling: { path: false, relative: false },
+    kind: "static",
+    resolved: {
+      target: "beta",
+      file: "area/beta/src/index.ts",
+      external: false,
+      packageName: null,
+    },
+    ...overrides,
+  });
+  /** Two libraries; the graph already carries the DYNAMIC edge `routes.ts` produces on disk. */
+  const index = {
+    workspace: {},
+    graph: {
+      nodes: {
+        host: { name: "host", type: "lib", data: { root: "area/host", tags: ["zone:host"] } },
+        beta: { name: "beta", type: "lib", data: { root: "area/beta", tags: ["zone:beta"] } },
+      },
+      dependencies: { host: [{ source: "host", target: "beta", type: "dynamic" }] },
+    },
+    importSites: [
+      // The stale disk copy of the OPEN document: the same static import, at
+      // the line it used to sit on before the developer edited the buffer. If
+      // it were handed over beside the buffer's fresh records, the verdict
+      // would render twice — once at the stale line — so it must be excluded.
+      site({ line: 9 }),
+      // Another file of the SAME project lazily loads beta on disk. This is
+      // what makes beta lazy-loaded at all — and exactly the record the old
+      // composition threw away with the rest of the tree.
+      site({ sourceFile: LAZY_FILE, kind: "dynamic", line: 4 }),
+    ],
+  };
+  const config = {
+    depConstraints: [{ sourceTag: "*", onlyDependOnLibsWithTags: ["*"] }],
+    options: engineOptions,
+  };
+
+  beforeEach(() => {
+    evaluate.mockImplementation(realEvaluate);
+    declaredEdgeViolationsForCheck.mockReturnValue([]);
+  });
+
+  it("names the other file's backing import in the open document's lazy-load verdict", () => {
+    analyzeFile.mockReturnValue({ imports: [site()], failures: [] });
+
+    const { analyzed, diagnostics } = diagnoseDocument({
+      sourceFile: OPEN_FILE,
+      text: BUFFER_TEXT,
+      index,
+      config,
+    });
+
+    expect(analyzed).toBe(true);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].code).toBe("noImportsOfLazyLoadedLibraries");
+    // The evidence names the file the dynamic import lives in — computed from
+    // the fixture, never a literal — where the one-file evidence index used to
+    // render the no-evidence fallback sentence instead.
+    expect(diagnostics[0].message).toContain(`- ${LAZY_FILE}`);
+    expect(diagnostics[0].message).not.toContain("no analyzed import()");
+    // Rendered from the LIVE BUFFER's position, not the stale disk copy's
+    // line 9 — proving which of the two records was replaced before evaluation.
+    expect(diagnostics[0].range.start.line).toBe(bufferLine - 1);
+    // And exactly once: the stale copy did not ride along as a second verdict.
+    expect(diagnostics.filter((d) => d.code === "noImportsOfLazyLoadedLibraries")).toHaveLength(1);
+  });
+
+  it("hands the engine the retained sites plus the buffer's, minus the stale disk copy", () => {
+    analyzeFile.mockReturnValue({ imports: [site()], failures: [] });
+
+    diagnoseDocument({ sourceFile: OPEN_FILE, text: BUFFER_TEXT, index, config });
+
+    const handed = /** @type {any[][]} */ (evaluate.mock.calls.at(-1))[0];
+    expect(handed.map((s) => `${s.sourceFile}:${s.kind}:${s.line}`)).toEqual([
+      // The other file's retained disk site...
+      `${LAZY_FILE}:dynamic:4`,
+      // ...and the buffer's fresh record for the open document — the line-9
+      // stale copy is gone.
+      `${OPEN_FILE}:static:${bufferLine}`,
+    ]);
+  });
+
+  it("filters a violation about another handed file into that file's own diagnosis", () => {
+    // The engine now judges every site it receives, so its output covers other
+    // files too. Those verdicts belong to those files' documents; they must be
+    // dropped here without failing THIS one — the opposite direction of the
+    // guard below.
+    analyzeFile.mockReturnValue({ imports: [], failures: [] });
+    evaluate.mockReturnValue([
+      /** @type {any} */ ({
+        sourceFile: OPEN_FILE,
+        line: bufferLine,
+        column: bufferColumn,
+        specifier: "@fixture/beta",
+        messageId: "noImportsOfLazyLoadedLibraries",
+        message: `Static imports of lazy-loaded libraries are forbidden.\n\nLibrary "beta" is lazy-loaded in these files:\n- ${LAZY_FILE}`,
+      }),
+      /** @type {any} */ ({
+        sourceFile: LAZY_FILE,
+        line: 4,
+        column: 1,
+        specifier: "@fixture/beta",
+        messageId: "noImportsOfApps",
+        message: "Imports of apps are forbidden",
+      }),
+    ]);
+
+    const { analyzed, diagnostics } = diagnoseDocument({
+      sourceFile: OPEN_FILE,
+      text: BUFFER_TEXT,
+      index,
+      config: { depConstraints: [], options: {} },
+    });
+
+    expect(analyzed).toBe(true);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].message).toContain(LAZY_FILE);
+  });
+
+  it("refuses a verdict naming a file absent from the sites the engine was handed", () => {
+    // The guard's spirit, kept under the new composition: a violation whose
+    // file is neither the open document nor any file whose records were passed
+    // cannot have come from this run. A fake index with one retained site is
+    // enough to draw the boundary precisely — the named file is neither of the
+    // two files this run actually covered.
+    analyzeFile.mockReturnValue({
+      imports: [{ ...site(), sourceFile: "area/host/src/other.ts" }],
+      failures: [],
+    });
+    evaluate.mockReturnValue([
+      /** @type {any} */ ({
+        sourceFile: "libs/nowhere/main.go",
+        line: 1,
+        column: 1,
+        specifier: "x",
+        messageId: "noImportsOfApps",
+        message: "Imports of apps are forbidden",
+      }),
+    ]);
+
+    const { analyzed, diagnostics } = diagnoseDocument({
+      sourceFile: OPEN_FILE,
+      text: BUFFER_TEXT,
+      index: { ...index, importSites: [site({ sourceFile: "area/other/first.ts", line: 2 })] },
+      config: { depConstraints: [], options: {} },
+    });
 
     expect(analyzed).toBe(false);
     expect(diagnostics.at(-1).message).toContain("cannot be trusted");
