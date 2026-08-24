@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/ecoma-io/lattice/compare/v0.12.0...v0.12.1) (2026-08-24)
+
+
+### Documentation
+
+* **docs:** specify the Archkeep rebrand as ADR 0003 ([#283](https://github.com/ecoma-io/lattice/issues/283)) ([77e25e4](https://github.com/ecoma-io/lattice/commit/77e25e46e924fcafcceb718df18870b7a335952d))
+
 ## [0.12.0](https://github.com/ecoma-io/lattice/compare/v0.11.1...v0.12.0) (2026-08-23)
 
 
