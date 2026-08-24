@@ -61,16 +61,22 @@
  * against a bare system-tmpdir fails with `NX Could not find Nx modules`,
  * and succeeds once nested here with no other change.
  *
- * Every Nx fixture's `nx.json` registers `../nx.mjs` — this package's own
- * plugin — as a LOCAL plugin, by relative path rather than by package name:
- * `nx graph` cannot draw a Go import edge on its own (`../../../../../AGENTS.md`'s
- * "what this repository is" — Nx reads TypeScript and JavaScript and stays
- * quiet on everything else), so without a plugin computing that edge the Nx
- * side of
- * this comparison would trivially show zero dependencies and the test would
- * prove nothing. This is the plugin under test, so registering it here is
- * the same self-check `node packages/archkeep/cli.mjs check` already runs
- * over this repository's OWN boundaries, aimed at a throwaway tree instead.
+ * Every Nx fixture's `nx.json` registers `@ecoma-io/archkeep/nx` — this
+ * package's own plugin — by its real package name, the same spelling a
+ * consumer's `nx.json` would carry: `nx graph` cannot draw a Go import edge on
+ * its own (`../../../../../AGENTS.md`'s "what this repository is" — Nx reads
+ * TypeScript and JavaScript and stays quiet on everything else), so without a
+ * plugin computing that edge the Nx side of this comparison would trivially
+ * show zero dependencies and the test would prove nothing. This is the plugin
+ * under test, so registering it here is the same self-check
+ * `node packages/archkeep/cli.mjs check` already runs over this repository's
+ * OWN boundaries, aimed at a throwaway tree instead. Resolving that name needs
+ * no `node_modules/@ecoma-io` entry: the same nesting that puts
+ * `node_modules/nx` in reach also puts `packages/archkeep/package.json`
+ * (`name: "@ecoma-io/archkeep"`, an `exports` map naming `./nx`) in the walk-up
+ * from every fixture file, and Node resolves a package importing its own name
+ * against that package's own `exports` — self-referencing, built in since
+ * Node 12.16 — with no symlink of any kind involved.
  *
  * A native-vs-Nx disagreement surfaced by one of these axes is either a real
  * difference (native reports something Nx does not — loud, self-correcting,
