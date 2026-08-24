@@ -65,7 +65,9 @@ test that only pins the message text is half a test.
   workflows/analysis.yml   CodeQL · Semgrep · Gitleaks → analysis-gate
   semgrep/                 this repository's own rules, each with fixtures
   ISSUE_TEMPLATE/          bug · missed violation · feature
-  assets/                  logo.svg is the source; the PNGs are rendered
+  assets/                  banner.png and logo.png, the tracked brand images;
+                           logo.png is the one `package-vsix.mjs` stages as
+                           the vsix icon
   renovate.json5
 .claude-plugin/
   marketplace.json         the catalogue this repository publishes
