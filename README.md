@@ -59,6 +59,11 @@ npm install -D @ecoma-io/archkeep   # or pnpm / yarn / bun
 Ten minutes end to end, most of it spent deciding what your tags mean:
 [**Getting started →**](docs/getting-started/installation.md)
 
+> **Coming from Lattice?** This is the same tool under a new name. Three things
+> break until you change them — the workspace file, the binaries, and any
+> compiled custom rule — and everything already published stays installable:
+> [**Upgrading from Lattice →**](docs/getting-started/upgrading-from-lattice.md)
+
 ## Documentation
 
 |                                                                                                            |                                                                        |

@@ -117,6 +117,40 @@ a breaking change to that schema: a field renamed, retyped, or removed. A
 consumer that reads an unrecognised `schemaVersion` should refuse to parse the
 rest of the envelope rather than guess.
 
+## Deprecating the Lattice names
+
+One-time, and manual on purpose: these are registry operations, not repository
+state, so no workflow here can be the record of whether they happened. The
+decision behind each — including why nothing is unpublished or yanked — is
+[ADR 0003](../adr/0003-rename-lattice-to-archkeep.md) §3. The upgrade path they
+point consumers at is
+[getting-started/upgrading-from-lattice.md](../getting-started/upgrading-from-lattice.md).
+
+Run each only once the same identity has actually published under its new name,
+so the notice never points at something that does not exist yet.
+
+```bash
+# npm — the old versions stay installable; every fresh install prints the notice
+npm deprecate "@ecoma-io/lattice" \
+  "renamed to @ecoma-io/archkeep — see https://github.com/ecoma-io/archkeep/blob/main/docs/getting-started/upgrading-from-lattice.md"
+npm deprecate "@ecoma-io/lattice-rule-sdk" \
+  "renamed to @ecoma-io/archkeep-rule-sdk — see https://github.com/ecoma-io/archkeep/blob/main/docs/getting-started/upgrading-from-lattice.md"
+```
+
+- **crates.io** has no deprecate verb. Edit the `lattice-rule-sdk` crate's
+  description and homepage to name `archkeep-rule-sdk` — an owner-level edit
+  that needs no publish. Do not yank: a yank hides the version from new
+  resolution and helps nobody already depending on it.
+- **PyPI** has no release-independent deprecation flag. If a notice is wanted,
+  it takes one final `lattice-rule-sdk` release whose long description says the
+  project moved, and no release after it.
+- **Go** has no deprecation mechanism at all. `proxy.golang.org` caches fetched
+  versions immutably, so the four existing tags stay resolvable for anyone
+  pinned to them whatever happens to the source; new tags only ever land under
+  the new module path.
+- **The VS Code extension** needs nothing. It never reached the Marketplace
+  under the old name — measured against the `extensionquery` API, not assumed.
+
 ## What does not ship
 
 - **A `languages` option.** A report from a workspace that switched a language

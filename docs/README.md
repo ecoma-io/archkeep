@@ -15,11 +15,12 @@ is, what it is not, and the line its neighbours may not cross — and
 
 ## Getting started
 
-| page                                                 | what it answers                                             |
-| ---------------------------------------------------- | ----------------------------------------------------------- |
-| [installation.md](getting-started/installation.md)   | Prerequisites, install, and what each entry point provides  |
-| [first-project.md](getting-started/first-project.md) | Create a `archkeep.json` workspace, add a project, tag it   |
-| [first-policy.md](getting-started/first-policy.md)   | Write and run your first constraint table, read a violation |
+| page                                                                   | what it answers                                                 |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------- |
+| [installation.md](getting-started/installation.md)                     | Prerequisites, install, and what each entry point provides      |
+| [first-project.md](getting-started/first-project.md)                   | Create a `archkeep.json` workspace, add a project, tag it       |
+| [first-policy.md](getting-started/first-policy.md)                     | Write and run your first constraint table, read a violation     |
+| [upgrading-from-lattice.md](getting-started/upgrading-from-lattice.md) | Moving a workspace off the old name: what breaks, what does not |
 
 ## Concepts
 
@@ -162,7 +163,7 @@ allowed to say it". That table:
 | [`docs/doctrine/architecture-authority.md`](doctrine/architecture-authority.md) | What Archkeep is, what it is not, and the boundary its neighbours may not cross                                                                                                                                                                  |
 | [`docs/doctrine/principles.md`](doctrine/principles.md)                         | The seven binding principles                                                                                                                                                                                                                     |
 | [`docs/doctrine/roadmap.md`](doctrine/roadmap.md)                               | The staged path: what ships today, which capabilities belong to which major version, and in what order                                                                                                                                           |
-| `docs/getting-started/`                                                         | Installation, first project, first policy                                                                                                                                                                                                        |
+| `docs/getting-started/`                                                         | Installation, first project, first policy, and the upgrade off the Lattice name — which owns every consumer-facing consequence of the rename, so no other page restates one                                                                      |
 | `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, profiles, projects, drift, discovery, evidence, provenance, adr, waivers, health, fitness functions, custom rules, reconciliation, governance lifecycle, agentic development, integrations |
 | `docs/concepts/discovery.md`                                                    | Discovery: the proposal-only line, what is observed, the four candidate classes, uncertainty markers                                                                                                                                             |
 | `docs/usage/`                                                                   | How a consumer runs it and reads its answers                                                                                                                                                                                                     |
