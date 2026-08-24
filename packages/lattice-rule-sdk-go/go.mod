@@ -11,6 +11,9 @@
 //
 // The module path is the ADR's, spelled out in full because Go's import path
 // IS the name; the length is the accepted cost of the monorepo decision.
+//
+// Deprecated: renamed to github.com/ecoma-io/archkeep/packages/archkeep-rule-sdk-go.
+// See https://github.com/ecoma-io/archkeep/blob/main/docs/getting-started/upgrading-from-lattice.md.
 module github.com/ecoma-io/lattice/packages/lattice-rule-sdk-go
 
 // Measured rather than remembered: tinygo 0.41.0 — the toolchain that builds
