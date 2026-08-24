@@ -1,6 +1,6 @@
 {
   "name": "@ecoma-io/archkeep",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "private": true,
   "description": "Architecture enforcement for polyglot repositories — dependency graphs and module boundaries for the languages ESLint cannot read.",
   "keywords": [
