@@ -122,8 +122,11 @@ rest of the envelope rather than guess.
 One-time, and manual on purpose: these are registry operations, not repository
 state, so no workflow here can be the record of whether they happened. The
 decision behind each — including why nothing is unpublished or yanked — is
-[ADR 0003](../adr/0003-rename-lattice-to-archkeep.md) §3. The upgrade path they
-point consumers at is
+[ADR 0003](../adr/0003-rename-lattice-to-archkeep.md) §3, corrected for
+crates.io and Go by
+[ADR 0004](../adr/0004-correct-old-name-deprecation-mechanics.md) — read that
+record before repeating either of its two claims from memory. The upgrade path
+they point consumers at is
 [getting-started/upgrading-from-lattice.md](../getting-started/upgrading-from-lattice.md).
 
 Run each only once the same identity has actually published under its new name,
@@ -137,17 +140,25 @@ npm deprecate "@ecoma-io/lattice-rule-sdk" \
   "renamed to @ecoma-io/archkeep-rule-sdk — see https://github.com/ecoma-io/archkeep/blob/main/docs/getting-started/upgrading-from-lattice.md"
 ```
 
-- **crates.io** has no deprecate verb. Edit the `lattice-rule-sdk` crate's
-  description and homepage to name `archkeep-rule-sdk` — an owner-level edit
-  that needs no publish. Do not yank: a yank hides the version from new
-  resolution and helps nobody already depending on it.
-- **PyPI** has no release-independent deprecation flag. If a notice is wanted,
-  it takes one final `lattice-rule-sdk` release whose long description says the
-  project moved, and no release after it.
-- **Go** has no deprecation mechanism at all. `proxy.golang.org` caches fetched
-  versions immutably, so the four existing tags stay resolvable for anyone
-  pinned to them whatever happens to the source; new tags only ever land under
-  the new module path.
+- **crates.io** has no deprecate verb, and no owner-level metadata edit either:
+  `description`/`homepage` are read from `Cargo.toml` only at publish time and
+  are frozen into that version forever. The only way to carry a notice is one
+  more `lattice-rule-sdk` release whose `Cargo.toml` and `README.md` say so —
+  ADR 0004 records the one already published, `0.12.1`. Do not yank the prior
+  versions: a yank hides a version from new resolution and helps nobody
+  already depending on it.
+- **PyPI** has no release-independent deprecation flag. A notice takes one
+  final `lattice-rule-sdk` release whose long description says the project
+  moved, and no release after it — ADR 0004 records the one already published,
+  `0.12.1`.
+- **Go** supports a `// Deprecated:` comment placed directly before the
+  `module` directive in `go.mod`, read by `go get`, `go list -m -u`, and
+  pkg.go.dev once a tag carrying it becomes `@latest` for that module path.
+  `proxy.golang.org` caches fetched versions immutably regardless of the
+  notice, so every existing tag stays resolvable for anyone pinned to it
+  whatever happens to the source; new tags land only under the new module
+  path except the one deprecation tag itself — ADR 0004 records
+  `packages/lattice-rule-sdk-go/v0.12.1`, already pushed.
 - **The VS Code extension** needs nothing. It never reached the Marketplace
   under the old name — measured against the `extensionquery` API, not assumed.
 
