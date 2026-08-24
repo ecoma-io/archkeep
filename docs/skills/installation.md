@@ -158,3 +158,30 @@ Each `SKILL.md` file must be inside a subdirectory named after the skill:
 
 Manual installations do not receive version updates automatically. Use `npx
 skills add` or the plugin mechanism when possible.
+
+## Pinning a vendored copy to the version you run
+
+The skills are deliberately not shipped in the npm tarball — the four routes
+above are the distribution channels, and the Claude Code plugin already pairs
+skill content with a version through the plugin manifest
+([versioning.md](versioning.md)). What a workspace vendoring the skills by
+hand actually needs is not a fifth channel but a single fact answering "which
+version am I vendoring": derive it from the package your lockfile already
+resolves, and fetch the matching tag —
+
+```bash
+TAG="v$(node -p "require('@ecoma-io/archkeep/package.json').version")"
+gh api "repos/ecoma-io/archkeep/contents/skills?ref=$TAG" --jq '.[].name'
+```
+
+release-please cuts that tag from the same release as the published tarball,
+so the tag is the installed version's own fact, derived — not a second source
+of truth to keep in sync. The cost that remains is a network fetch at sync
+time, not at build time.
+
+For the `npx skills add` route, the CLI keeps its own pin: installs are
+recorded in `skills-lock.json`, and `npx skills experimental_install` restores
+the recorded versions from it (measured against `skills` CLI help; the
+subcommand is marked experimental by its authors). `skills add` itself has no
+`@tag` form — the `@` in `skills use <package>@<skill>` selects a skill, not a
+ref.
