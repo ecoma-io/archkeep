@@ -1179,14 +1179,14 @@ describe("the whole-tree import sites the index retains", () => {
     );
   };
   // One fixture per dispatch branch, each the smallest tree that reaches it:
-  // a `project.json` for the Nx-shaped branch, `lattice.json` for the native
+  // a `project.json` for the Nx-shaped branch, `archkeep.json` for the native
   // one, `.moon/` for Moon.
   const nxFiles = {
     [`libs/inner/${PROJECT_CONFIG_FILE}`]: '{"name":"inner"}',
     "libs/inner/main.go": "package inner\n",
   };
   const nativeFiles = {
-    "lattice.json": '{"projects":{"declared":[{"root":"apps/a"}]}}',
+    "archkeep.json": '{"projects":{"declared":[{"root":"apps/a"}]}}',
     "apps/a/main.go": "package a\n",
   };
   const moonFiles = {
@@ -1225,7 +1225,14 @@ describe("the whole-tree import sites the index retains", () => {
 
   it("exposes the analyzed sites on the native branch", () => {
     withSiteIn("apps/a/main.go");
-    expect(run(nativeFiles).importSites).toEqual([siteIn("apps/a/main.go")]);
+    const index = run(nativeFiles);
+    // Pinned alongside importSites so a marker-name drift like the one this
+    // case is named after — the fixture once read `lattice.json`, a leftover
+    // from before the rename, and reached this same assertion through the
+    // Nx-shaped fallback instead — fails loudly instead of passing for the
+    // wrong reason.
+    expect(index.nativeMarker).toBe(true);
+    expect(index.importSites).toEqual([siteIn("apps/a/main.go")]);
   });
 
   it("exposes the analyzed sites on the Moon branch", () => {
@@ -1237,7 +1244,14 @@ describe("the whole-tree import sites the index retains", () => {
     // The failure branch analyzes nothing, so an empty list is the honest
     // answer; a missing field would make every consumer guess at whether the
     // tree was read.
-    expect(run({ "lattice.json": "{ not json" }).importSites).toEqual([]);
+    const index = run({ "archkeep.json": "{ not json" });
+    // Without this, an absent marker (dispatch falls through instead of
+    // throwing) and a malformed one (dispatch throws, caught below) both
+    // produce the same empty importSites — the assertion below would pass
+    // either way, so it has to fail if the failure ever stops being caught.
+    expect(index.nativeMarker).toBe(true);
+    expect(index.nativeModelFailure).not.toBeNull();
+    expect(index.importSites).toEqual([]);
   });
 
   it("exposes an empty list when the Moon invocation fails, never a missing field", () => {
