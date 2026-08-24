@@ -520,6 +520,23 @@ export function findNativeModelViolations(raw) {
           (message) => `boundaryConfig.${message}`,
         ),
       );
+      // The policy's `coverage` key is an Nx/Moon channel, refused here BY
+      // NAME on the one provider that already has its own: this very file's
+      // `coverage.exempt` is where a native tree records an unowned-file
+      // acceptance, and two channels for one decision on one tree is how
+      // copies drift (the same posture as the `.moon`-beside-`archkeep.json`
+      // refusal in `../../commands/context.mjs`'s `requireSingleProjectModel`).
+      // The file-dialect spelling of the same mistake — a native tree whose
+      // boundaryConfig FILE declares `coverage` — is refused by
+      // `../../commands/policy.mjs`'s `resolvePolicy`, which is the first
+      // point that knows both the provider and the loaded policy.
+      if ("coverage" in raw.boundaryConfig) {
+        violations.push(
+          `boundaryConfig.coverage: not accepted on a native workspace — this tree records ` +
+            `unowned-file acceptances on archkeep.json's own coverage.exempt, and a second ` +
+            `channel for the same decision is a copy that will drift. Move the rows there`,
+        );
+      }
     } else if (typeof raw.boundaryConfig !== "string") {
       violations.push(
         `boundaryConfig: must be a string (a filename) or an object (an inline policy), got ` +

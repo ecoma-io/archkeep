@@ -77,6 +77,11 @@ project-to-project edge nor an external import -- instead of being reported as
 coverage notes directly after the exempted-file count, so "not constrained,
 by this declaration" stays distinguishable from "not analyzed".
 
+An Nx or Moon workspace has no `archkeep.json` to carry this list; its
+counterpart is the boundary policy's own
+[`coverage.unowned`](policy-schema.md#coverage) key, which a native tree is
+refused in turn -- one channel per decision per tree, in each direction.
+
 ### `workspaceLayout`
 
 | field     | type   | meaning                                        |
@@ -99,10 +104,13 @@ roots.
 | object | --                               | The boundary law inline: `{ depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness, customRules }`. |
 
 When the value is a string, `--config` on the CLI overrides it for one run.
-When the value is an object, the same five keys as the `.json` dialect are
+When the value is an object, the same keys as the `.json` dialect are
 validated by the identical function — `customRules` included, so a native
 workspace declares a rule of its own here exactly as a policy file would
-([custom-rules.md](custom-rules.md)). The language server reads the inline form
+([custom-rules.md](custom-rules.md)) — except the policy's
+[`coverage`](policy-schema.md#coverage) key, refused inline and in a policy
+file alike on a native tree: `coverage.exempt` above is this file's own
+channel for that decision. The language server reads the inline form
 too: it watches `archkeep.json` itself, so an edit to the policy re-diagnoses
 every open file the same way an edit to a policy file does.
 

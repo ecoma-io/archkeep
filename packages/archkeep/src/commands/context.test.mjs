@@ -744,6 +744,8 @@ describe("resolveCommandContext — unownedGap, the tolerated half of the same q
     // And the decision the gap must not move: still no failure, so nothing
     // downstream turns `coverage.complete` false or the exit code to 3.
     expect(context.analysis.failures).toEqual([]);
+    // The other unowned list stays empty here: no Go/Rust/Python orphan.
+    expect(context.unclaimedGap).toEqual({ files: [] });
   });
 
   it("names the same file on a Moon workspace", () => {
@@ -822,6 +824,11 @@ describe("resolveCommandContext — unownedGap, the tolerated half of the same q
     expect(
       context.analysis.failures.some((failure) => failure.sourceFile === "libs/orphan/orphan.go"),
     ).toBe(true);
+    // The same file, as DATA: `unclaimedGap` lists what the failure above
+    // narrates, so the `coverage.unowned` acceptance channel
+    // (`./coverage-acceptance.mjs`) can match rows against a file list
+    // rather than parse a sentence.
+    expect(context.unclaimedGap).toEqual({ files: ["libs/orphan/orphan.go"] });
   });
 
   it("stays empty on a native workspace, which refuses the same state loudly instead", () => {
@@ -845,6 +852,7 @@ describe("resolveCommandContext — unownedGap, the tolerated half of the same q
 
     expect(context.provider).toBe("native");
     expect(context.unownedGap).toEqual({ files: [], languages: [] });
+    expect(context.unclaimedGap).toEqual({ files: [] });
     expect(
       context.analysis.failures.some((failure) => failure.sourceFile === "tooling.config.mjs"),
     ).toBe(true);

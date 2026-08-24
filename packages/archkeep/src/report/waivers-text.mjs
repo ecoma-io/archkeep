@@ -16,7 +16,11 @@
 
 /**
  * @param {{waivers: object[], covered: number, expired: number, stale: number,
- *   suppressions: object[], suppressed: number}} result
+ *   suppressions: object[], suppressed: number,
+ *   unownedAcceptances?: {path: string, reason: string, covered: number}[]}} result
+ *   `unownedAcceptances` is present exactly when the policy declares
+ *   `coverage.unowned` (`../commands/waivers.mjs`) — the third surface, and
+ *   the one the acceptances' reasons live on.
  * @returns {string}
  */
 export function formatWaiversReport({
@@ -26,10 +30,17 @@ export function formatWaiversReport({
   stale,
   suppressions,
   suppressed,
+  unownedAcceptances,
 }) {
   const sections = [];
+  const acceptances = unownedAcceptances ?? [];
 
-  if (waivers.length === 0 && suppressions.length === 0) {
+  if (waivers.length === 0 && suppressions.length === 0 && acceptances.length === 0) {
+    // The all-empty claim may only be made when all THREE surfaces were
+    // measured and found empty — a declared `coverage.unowned` row is an
+    // acceptance on the table exactly as a suppression is, and this line
+    // reading "nothing is accepted" over one would be the module header's
+    // defect on a third table.
     return `no waivers — every boundary is enforced, nothing is being accepted temporarily or permanently`;
   }
 
@@ -93,6 +104,28 @@ export function formatWaiversReport({
       ];
       if (suppression.origin) lines.push(`  origin: ${suppression.origin}`);
       sections.push(lines.join("\n"));
+    }
+  }
+
+  if (acceptances.length > 0) {
+    // The coverage half of the table: each row accepts unowned FILES rather
+    // than a verdict — `check` still states the files as an accepted
+    // coverage gap, and this section is where their reasons live
+    // (`../commands/coverage-acceptance.mjs`). A row covering nothing is
+    // named the way a stale waiver is; `check` refuses it outright.
+    const totalCovered = acceptances.reduce((sum, row) => sum + row.covered, 0);
+    sections.push(
+      `${acceptances.length} coverage acceptance${acceptances.length === 1 ? "" : "s"} ` +
+        `(coverage.unowned) on the table — currently accepting ${totalCovered} unowned ` +
+        `file${totalCovered === 1 ? "" : "s"} as recorded coverage holes`,
+    );
+
+    for (const row of acceptances) {
+      const coverage =
+        row.covered === 0
+          ? "covers no unowned file right now — the files it accepted may be owned by a project now"
+          : `currently covers ${row.covered} unowned file${row.covered === 1 ? "" : "s"}`;
+      sections.push([`- ${row.path}: ${coverage}`, `  reason: ${row.reason}`].join("\n"));
     }
   }
 

@@ -57,8 +57,9 @@ act easy to perform and easy to refuse — never to perform it silently.
    line, not the project list. Every file the analyzer could not read is a
    hole the derived model would silently be missing, so this is the first
    thing to fix and the only step that may not be skipped: give the file a
-   project that owns it, or name it in `archkeep.json`'s `coverage.exempt`
-   with a reason. Report which you chose.
+   project that owns it, or record the acceptance with a reason — in
+   `archkeep.json`'s `coverage.exempt` on a native workspace, or the boundary
+   policy's `coverage.unowned` on an Nx or Moon one. Report which you chose.
 
 3. **Derive candidates.**
 

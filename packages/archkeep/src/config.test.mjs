@@ -981,6 +981,80 @@ describe("policyKeyViolations — the $schema carve-out is accepted AND checked"
   });
 });
 
+describe("findBoundaryConfigViolations — the coverage acceptance table", () => {
+  // The sixth top-level key: `coverage.unowned` rows record the acceptance of
+  // files no project owns (Nx/Moon only — the native refusal is
+  // `resolvePolicy`'s and the inline model's, tested beside them). The row
+  // semantics copy the native `coverage.exempt` row exactly
+  // (`./providers/native/model.mjs`'s `exemptRowViolations`): mandatory
+  // reason, unknown keys refused by name, brace-bomb paths refused at load.
+  it("accepts a well-formed unowned list, and an empty one — empty accepts nothing, which hides nothing", () => {
+    expect(
+      findBoundaryConfigViolations({
+        ...wellFormed(),
+        coverage: { unowned: [{ path: "tools/**", reason: "generated release tooling" }] },
+      }),
+    ).toEqual([]);
+    expect(findBoundaryConfigViolations({ ...wellFormed(), coverage: { unowned: [] } })).toEqual(
+      [],
+    );
+  });
+
+  it("rejects a missing, empty, or whitespace reason, naming the field", () => {
+    for (const row of [
+      { path: "tools/**" },
+      { path: "tools/**", reason: "" },
+      { path: "tools/**", reason: "   " },
+    ]) {
+      expect(
+        findBoundaryConfigViolations({ ...wellFormed(), coverage: { unowned: [row] } }),
+      ).toEqual([
+        expect.stringContaining("coverage.unowned[0].reason: must be a non-empty string"),
+      ]);
+    }
+  });
+
+  it("rejects an unknown key in a row, and an unknown key beside 'unowned', by name", () => {
+    expect(
+      findBoundaryConfigViolations({
+        ...wellFormed(),
+        coverage: { unowned: [{ path: "a/**", reason: "vendored", pathes: "typo" }] },
+      }),
+    ).toEqual([
+      expect.stringContaining("coverage.unowned[0].pathes: not a coverage.unowned field"),
+    ]);
+    // `exempt` is the native spelling of the same decision — a likely paste
+    // from `archkeep.json` — so the refusal has to name the one key this
+    // table does hold.
+    expect(
+      findBoundaryConfigViolations({ ...wellFormed(), coverage: { unowned: [], exempt: [] } }),
+    ).toEqual([
+      expect.stringContaining("coverage.exempt: not a coverage field — expected 'unowned'"),
+    ]);
+  });
+
+  it("rejects a non-object coverage, a missing unowned, an empty path, and a brace-bomb path", () => {
+    expect(findBoundaryConfigViolations({ ...wellFormed(), coverage: [] })[0]).toMatch(
+      /coverage: must be an object/,
+    );
+    expect(findBoundaryConfigViolations({ ...wellFormed(), coverage: {} })[0]).toMatch(
+      /coverage\.unowned: must be an array/,
+    );
+    expect(
+      findBoundaryConfigViolations({
+        ...wellFormed(),
+        coverage: { unowned: [{ path: "", reason: "vendored" }] },
+      })[0],
+    ).toMatch(/coverage\.unowned\[0\]\.path: must be a non-empty glob/);
+    expect(
+      findBoundaryConfigViolations({
+        ...wellFormed(),
+        coverage: { unowned: [{ path: bracePattern(), reason: "vendored" }] },
+      })[0],
+    ).toMatch(/coverage\.unowned\[0\]\.path: .*expands to more than/);
+  });
+});
+
 describe("loadBoundaryConfigFile", () => {
   it("throws on a legacy .eslintrc basename", async () => {
     await expect(loadBoundaryConfigFile("/tmp/.eslintrc.json")).rejects.toThrow(

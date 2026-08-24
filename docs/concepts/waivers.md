@@ -118,6 +118,16 @@ generated artifact, a fixture that shares a package by design. If you cannot
 name the day it ends, a waiver's date would be a fiction, and a fiction is
 worse than an honest permanent suppression.
 
+## Coverage acceptances are listed here too
+
+A `boundarySuppressions` row accepts a **verdict** the engine reached; a
+policy's [`coverage.unowned`](../reference/policy-schema.md#coverage) row
+accepts a **coverage hole** — a file owned by no project and judged by
+nothing. `archkeep waivers` lists that third table beside the other two,
+each row with its reason and how many unowned files it currently covers, so
+"no waivers — every boundary is enforced" is never claimed over a table that
+is accepting coverage holes unmeasured.
+
 What neither may do is silence a **blind spot** — a site the analyzer could
 not resolve, a file it could not read. Those are reported as failures on every
 path (coverage gaps, no-verdict runs), and a waiver over one covers nothing.

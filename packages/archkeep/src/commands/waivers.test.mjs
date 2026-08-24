@@ -53,6 +53,13 @@ function commandContext(overrides = {}) {
       imports: [],
       failures: [],
     },
+    tracked: [],
+    options: { boundaryConfig: "module-boundaries.config.mjs", boundaryConfigDeclared: false },
+    // The two unowned-file lists `resolveCommandContext` always carries —
+    // empty here because these fixtures own no orphan files; the
+    // `coverage.unowned` matching (`./coverage-acceptance.mjs`) reads both.
+    unownedGap: { files: [], languages: [] },
+    unclaimedGap: { files: [] },
     ...overrides,
   };
 }
@@ -429,5 +436,75 @@ describe("waiversCommand — determinism", () => {
     expect(envelope.coverage.notes).toEqual(
       expect.arrayContaining([expect.stringContaining("remainingMs is the wall clock")]),
     );
+  });
+});
+
+describe("waiversCommand — the coverage.unowned acceptance surface", () => {
+  // The third surface on the table (`../report/waivers-text.mjs`), and the
+  // one the acceptances' REASONS live on: `check` states the accepted files
+  // and points here. Judged through the same partition `check` runs
+  // (`./coverage-acceptance.mjs`), so the two faces cannot disagree.
+  const acceptingPolicy = () => ({
+    ...policy(),
+    coverage: { unowned: [{ path: "tools/**", reason: "generated release tooling" }] },
+  });
+  const orphanContext = () =>
+    commandContext({
+      provider: "nx",
+      marker: "nx.json",
+      pluginGap: { registered: true, manifests: [] },
+      tracked: ["area/alpha/a.ts", "tools/gen.go"],
+      analysis: {
+        analyzed: 1,
+        imports: [],
+        failures: [
+          {
+            sourceFile: "tools/gen.go",
+            line: null,
+            column: null,
+            reason: "is not owned by any project in the Nx project graph",
+          },
+        ],
+      },
+      unclaimedGap: { files: ["tools/gen.go"] },
+    });
+
+  it("names each acceptance row with its reason and coverage, withdrawing the accepted unclaimed failure", async () => {
+    const result = await waiversCommand(orphanContext(), acceptingPolicy(), { now: NOW });
+    expect(result.waivers.unownedAcceptances).toEqual([
+      { path: "tools/**", reason: "generated release tooling", covered: 1 },
+    ]);
+    expect(result.report.text).toContain("1 coverage acceptance");
+    expect(result.report.text).toContain("generated release tooling");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.result.unownedAcceptances).toEqual(result.waivers.unownedAcceptances);
+    // The accepted file's whole-file failure is withdrawn exactly as `check`
+    // withdraws it — a recorded acceptance, not a hole this run failed to
+    // look at.
+    expect(envelope.coverage.notAnalyzed).toEqual([]);
+  });
+
+  it("still refuses the same tree once the policy stops accepting it — the silent-direction guard", async () => {
+    await expect(waiversCommand(orphanContext(), policy(), { now: NOW })).rejects.toThrow(
+      /incomplete coverage/,
+    );
+  });
+
+  it("keeps the all-empty claim away from a table that declares an acceptance", async () => {
+    // A declared row covering nothing right now is `check`'s dead-row
+    // refusal; this descriptive surface names the state instead, the same
+    // division the stale waiver already has.
+    const result = await waiversCommand(commandContext(), acceptingPolicy(), { now: NOW });
+    expect(result.waivers.unownedAcceptances).toEqual([
+      { path: "tools/**", reason: "generated release tooling", covered: 0 },
+    ]);
+    expect(result.report.text).not.toContain("every boundary is enforced");
+    expect(result.report.text).toContain("covers no unowned file right now");
+  });
+
+  it("carries no acceptance key at all when the policy declares none — an unchanged tree's envelope is unchanged", async () => {
+    const result = await waiversCommand(commandContext(), policy([waiver()]), { now: NOW });
+    const envelope = JSON.parse(result.report.json);
+    expect("unownedAcceptances" in envelope.result).toBe(false);
   });
 });

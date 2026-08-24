@@ -680,6 +680,31 @@ export function sarifCoverageGapNotification(gap) {
       },
     };
   }
+  // The accepted counterpart: the same bounded sample, saying the state is a
+  // recorded acceptance (`coverage.unowned`) rather than an open question —
+  // still a warning, because an accepted hole is still a hole, and this face
+  // must not be the one that stops saying so.
+  if (gap.kind === "accepted-unowned-files") {
+    const files = gap.files ?? [];
+    const languages = gap.languages ?? [];
+    const spans = languages.length > 0 ? ` (${languages.join(", ")})` : "";
+    const shown = files.slice(0, UNOWNED_SAMPLE_LIMIT);
+    const remaining = files.length - shown.length;
+    const listed =
+      shown.length > 0
+        ? `: ${shown.join(", ")}${remaining > 0 ? `, and ${remaining} more` : ""}`
+        : "";
+    return {
+      level: "warning",
+      message: {
+        text:
+          `${files.length} tracked analyzable file${files.length === 1 ? "" : "s"}${spans} ` +
+          `owned by no project — accepted as coverage holes by the policy's coverage.unowned, ` +
+          `so no boundary verdict in this run covers ` +
+          `${files.length === 1 ? "it" : "them"}${listed}`,
+      },
+    };
+  }
   return {
     level: "warning",
     message: {

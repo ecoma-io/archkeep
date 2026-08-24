@@ -105,6 +105,13 @@ function context(overrides = {}) {
       failures: [],
     },
     pluginGap: { registered: true, manifests: [] },
+    options: { boundaryConfig: "module-boundaries.config.mjs", boundaryConfigDeclared: false },
+    // The two unowned-file lists `resolveCommandContext` always carries —
+    // empty here because these fixtures own no orphan files; `waiversCommand`
+    // matches the policy's `coverage.unowned` rows against both
+    // (`./coverage-acceptance.mjs`).
+    unownedGap: { files: [], languages: [] },
+    unclaimedGap: { files: [] },
     ...overrides,
   };
 }

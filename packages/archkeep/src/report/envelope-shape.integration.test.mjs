@@ -89,6 +89,10 @@ export const fitness = [
     reason: "a cycle makes every layer statement unfalsifiable",
   },
 ];
+
+export const coverage = {
+  unowned: [{ path: "tools/**", reason: "generated tooling accepted as a coverage hole" }],
+};
 `;
 
 /** The declared architecture, matching the observed graph. */
@@ -140,6 +144,11 @@ const files = [
   "libs/domain/doc.go",
   "libs/adapter/go.mod",
   "libs/adapter/adapter.go",
+  // Owned by no project, and accepted by the law's `coverage.unowned` row
+  // above — so `check` emits the `accepted-unowned-files` coverage gap and
+  // `waivers` emits `result.unownedAcceptances`, and the roster holds both
+  // new shapes rather than leaving them the one surface nothing measures.
+  "tools/gen.mjs",
 ];
 
 let root;
@@ -219,6 +228,7 @@ beforeAll(async () => {
   );
   write("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.22\n");
   write("libs/adapter/adapter.go", 'package adapter\n\nconst Name = "adapter"\n');
+  write("tools/gen.mjs", "export const gen = 1;\n");
 
   expect(git("init", "-q", "-b", "main")).toBe(0);
   expect(git("add", "-A")).toBe(0);

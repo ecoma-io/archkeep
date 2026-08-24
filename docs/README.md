@@ -94,24 +94,24 @@ is, what it is not, and the line its neighbours may not cross — and
 
 ## Reference
 
-| page                                                       | what it answers                                                                                                                   |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| [configuration.md](reference/configuration.md)             | `archkeep.json` fields, `nx.json` options, Moon options, inline boundary config                                                   |
-| [policy-schema.md](reference/policy-schema.md)             | Constraint table schema: every key of `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, `fitness`, `customRules` |
-| [custom-rules.md](reference/custom-rules.md)               | The custom-rule contract: the artifact's exports, the evidence bundle, the verdict, every failure                                 |
-| [profiles.md](reference/profiles.md)                       | The profile registry schema, the `profiles` option, and the four loud conditions                                                  |
-| [cli.md](reference/cli.md)                                 | All commands, all flags, all exit codes                                                                                           |
-| [discovery.md](reference/discovery.md)                     | The `discover` command: flags, exit codes, the additive JSON envelope                                                             |
-| [exit-codes.md](reference/exit-codes.md)                   | The four exit codes with exact meaning                                                                                            |
-| [json-output.md](reference/json-output.md)                 | `--format json`'s versioned envelope: every field, and the stability promise                                                      |
-| [evidence.md](reference/evidence.md)                       | The four-state verdict vocabulary, the five invariants, and the `decision` shape                                                  |
-| [architecture-intent.md](reference/architecture-intent.md) | The `architecture-intent.json` schema, the five sections, and the four verdict states                                             |
-| [debt.md](reference/debt.md)                               | The architecture-debt ledger: entry kinds, age model, severity, and the refusals                                                  |
-| [provenance.md](reference/provenance.md)                   | The `provenance` command: report shapes, the JSON envelope, exit codes                                                            |
-| [adr.md](reference/adr.md)                                 | The `adr` command: report shapes, the JSON envelope, exit codes, the id name space                                                |
-| [reconciliation.md](reference/reconciliation.md)           | The scored element and candidate shapes behind `archkeep reconcile`                                                               |
-| [languages.md](reference/languages.md)                     | What each analyzer reads, the shapes it cannot, and the two workspace checks                                                      |
-| [violations.md](reference/violations.md)                   | Each of the fifteen violations: what it means, and what fixes it                                                                  |
+| page                                                       | what it answers                                                                                                                               |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [configuration.md](reference/configuration.md)             | `archkeep.json` fields, `nx.json` options, Moon options, inline boundary config                                                               |
+| [policy-schema.md](reference/policy-schema.md)             | Constraint table schema: every key of `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, `fitness`, `customRules`, `coverage` |
+| [custom-rules.md](reference/custom-rules.md)               | The custom-rule contract: the artifact's exports, the evidence bundle, the verdict, every failure                                             |
+| [profiles.md](reference/profiles.md)                       | The profile registry schema, the `profiles` option, and the four loud conditions                                                              |
+| [cli.md](reference/cli.md)                                 | All commands, all flags, all exit codes                                                                                                       |
+| [discovery.md](reference/discovery.md)                     | The `discover` command: flags, exit codes, the additive JSON envelope                                                                         |
+| [exit-codes.md](reference/exit-codes.md)                   | The four exit codes with exact meaning                                                                                                        |
+| [json-output.md](reference/json-output.md)                 | `--format json`'s versioned envelope: every field, and the stability promise                                                                  |
+| [evidence.md](reference/evidence.md)                       | The four-state verdict vocabulary, the five invariants, and the `decision` shape                                                              |
+| [architecture-intent.md](reference/architecture-intent.md) | The `architecture-intent.json` schema, the five sections, and the four verdict states                                                         |
+| [debt.md](reference/debt.md)                               | The architecture-debt ledger: entry kinds, age model, severity, and the refusals                                                              |
+| [provenance.md](reference/provenance.md)                   | The `provenance` command: report shapes, the JSON envelope, exit codes                                                                        |
+| [adr.md](reference/adr.md)                                 | The `adr` command: report shapes, the JSON envelope, exit codes, the id name space                                                            |
+| [reconciliation.md](reference/reconciliation.md)           | The scored element and candidate shapes behind `archkeep reconcile`                                                                           |
+| [languages.md](reference/languages.md)                     | What each analyzer reads, the shapes it cannot, and the two workspace checks                                                                  |
+| [violations.md](reference/violations.md)                   | Each of the fifteen violations: what it means, and what fixes it                                                                              |
 
 ## Decision records
 

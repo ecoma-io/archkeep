@@ -169,6 +169,30 @@ describe("reading a boundary config that outlives the process reading it", () =>
     );
   });
 
+  it("loads a policy that declares coverage.unowned, and refuses a malformed row the same way the CLI does", async () => {
+    // The sixth top-level law reaches this face exactly as `customRules`
+    // above does — through the shared `policyKeyViolations`/`policyFrom`
+    // pair, no dispatch here knowing it by name. The server ACCEPTS the key
+    // and acts on none of it: an unowned-file acceptance is a whole-run
+    // coverage decision (`../commands/coverage-acceptance.mjs`), never a
+    // per-file diagnostic. What this pins is parity: a config carrying the
+    // key that the CLI enforces must not be rejected — or silently dropped —
+    // by the editor.
+    const coverage = { unowned: [{ path: "tools/**", reason: "generated release tooling" }] };
+    write(`${config("zone:coverage")}export const coverage = ${JSON.stringify(coverage)};\n`);
+    const loaded = await readBoundaryConfig(root, 32, CONFIG_FILE);
+    expect(loaded.coverage).toEqual(coverage);
+
+    write(
+      `${config("zone:coverage")}export const coverage = ${JSON.stringify({
+        unowned: [{ path: "tools/**" }],
+      })};\n`,
+    );
+    await expect(readBoundaryConfig(root, 33, CONFIG_FILE)).rejects.toThrow(
+      /coverage\.unowned\[0\]\.reason: must be a non-empty string/u,
+    );
+  });
+
   it("names the file it could not load, since a missing law enforces nothing silently", async () => {
     const empty = mkdtempSync(join(tmpdir(), "archkeep-config-empty-"));
     try {
