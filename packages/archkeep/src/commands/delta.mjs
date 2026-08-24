@@ -52,6 +52,7 @@ import { referenceTime } from "../governance/clock.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { buildDecision } from "../report/evidence.mjs";
 import { formatDeltaReport } from "../report/delta-text.mjs";
+import { formatDeltaSarif } from "../report/sarif.mjs";
 import { evaluateRun } from "../rules/index.mjs";
 import { customRulesForDelta, declaresCustomRules } from "./custom-rules.mjs";
 import { classifyCustomFindings, classifyDelta } from "./delta-classify.mjs";
@@ -302,7 +303,7 @@ const short = (fingerprint) =>
  *   and the custom-rule host's two injectable seams, passed through to
  *   `customRulesForDelta`.
  * @returns {Promise<{status: "ok"|"findings"|"no-verdict", delta: object,
- *   coverage: object, report: {text: string, json: string}}>}
+ *   coverage: object, report: {text: string, json: string, sarif: string}}>}
  * @throws {Error} on every refusal the module header lists, and on a
  *   custom-rule LOAD failure (`./custom-rules.mjs` argues the split).
  */
@@ -412,6 +413,12 @@ export async function deltaCommand(
    *   findings: {introduced: object[], resolved: object[], unchanged: object[],
    *   unknown: object[]}}|null} */
   let custom = null;
+  // The head-declared finding catalogue, held for the SARIF face alone: the
+  // envelope deliberately does not carry it (the JSON contract predates the
+  // SARIF face and must stay byte-identical), while `sarifRules` needs it so
+  // an introduced custom finding's `ruleId` resolves to a descriptor.
+  /** @type {{ruleId: string, rule: string, findingId: string, message: string}[]} */
+  let customCatalogue = [];
   if (declaresCustomRules(config)) {
     const twoSided = await customRulesForDelta(commandContext, {
       rows: config.customRules,
@@ -419,6 +426,7 @@ export async function deltaCommand(
       baseline,
       ...customRuleIo,
     });
+    customCatalogue = twoSided.catalogue;
     custom = {
       judged: twoSided.judged.map(({ name, sha256, notes: ruleNotes }) => ({
         name,
@@ -576,6 +584,10 @@ export async function deltaCommand(
     report: {
       text: formatDeltaReport({ delta: result, coverage }),
       json: renderJson(envelope),
+      // Eager beside the other two faces: the render is pure and cheap, and a
+      // lazy face is one a caller can forget to build — the SARIF is the same
+      // verdict, ready whichever face `--format` selects.
+      sarif: formatDeltaSarif({ delta: result, coverage, customCatalogue }),
     },
   };
 }

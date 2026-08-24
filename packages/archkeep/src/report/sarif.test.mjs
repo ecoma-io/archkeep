@@ -29,11 +29,14 @@ vi.mock("../architecture-intent/judge.mjs", () => ({
 vi.mock("./text.mjs", () => ({ formatConstraint: () => "THE CONSTRAINT" }));
 
 import {
+  buildDeltaSarifLog,
   buildSarifLog,
+  formatDeltaSarif,
   formatSarif,
   sarifCoverageGapNotification,
   sarifCustomRuleNotification,
   sarifCustomRuleResult,
+  sarifDeltaResult,
   sarifFitnessNotification,
   sarifFitnessResult,
   sarifIntentNotification,
@@ -894,5 +897,264 @@ describe("an unresolved decisionRef", () => {
       log({ unresolvedDecisionRefs: new Set() }).invocations[0].toolExecutionNotifications,
     ).toEqual([]);
     expect(log({}).invocations[0].toolExecutionNotifications).toEqual([]);
+  });
+});
+
+describe("the delta log", () => {
+  // The classifier's shapes (`../commands/delta-classify.mjs`), built by hand
+  // so this file pins the TRANSFORM against the mocked two-id message table.
+  const introducedEntry = (overrides = {}) => ({
+    classification: "introduced",
+    messageId: "secondRule",
+    sourceProject: "engine-domain",
+    target: "engine-adapters",
+    targetIsSpecifier: false,
+    constraint: { sourceTag: "layer:domain" },
+    baseCount: 0,
+    headCount: 2,
+    reason: "absent at base",
+    waived: false,
+    baseSites: [],
+    headSites: [
+      { file: "acme/libs/engine-domain/a.go", line: 3, column: 2, specifier: "x", kind: "static" },
+      { file: "acme/libs/engine-domain/b.go", line: 7, column: 4, specifier: "x", kind: "static" },
+    ],
+    ...overrides,
+  });
+
+  const emptyDelta = () => ({
+    violations: { introduced: [], resolved: [], unchanged: [], unknown: [] },
+    unresolvable: { introduced: [], resolved: [], unchanged: [], unknown: [] },
+  });
+
+  const deltaLog = (overrides = {}) =>
+    buildDeltaSarifLog({
+      delta: { ...emptyDelta(), ...overrides.delta },
+      coverage: { notes: [], ...overrides.coverage },
+      ...(overrides.customCatalogue ? { customCatalogue: overrides.customCatalogue } : {}),
+    }).runs[0];
+
+  describe("sarifDeltaResult", () => {
+    it("resolves its ruleId in the same catalogue check's results resolve in — no second table", () => {
+      const result = sarifDeltaResult(introducedEntry(), introducedEntry().headSites[0]);
+      expect(result.ruleId).toBe("secondRule");
+      expect(sarifRules()[result.ruleIndex].id).toBe(result.ruleId);
+    });
+
+    it("composes a non-empty message carrying both counts and the constraint", () => {
+      const result = sarifDeltaResult(
+        introducedEntry({
+          baseCount: 1,
+          headCount: 3,
+          reason: "occurrence growth: 1 at base, 3 at head",
+        }),
+        introducedEntry().headSites[0],
+      );
+      expect(result.message.text.length).toBeGreaterThan(0);
+      expect(result.message.text).toContain("1 occurrence at base");
+      expect(result.message.text).toContain("3 at head");
+      expect(result.message.text).toContain("THE CONSTRAINT");
+      expect(result.level).toBe("error");
+    });
+
+    it("locates the head site 1-based, exactly as the analysis record carries it", () => {
+      const result = sarifDeltaResult(introducedEntry(), {
+        file: "acme/libs/engine-domain/a.go",
+        line: 3,
+        column: 2,
+      });
+      const { artifactLocation, region } = result.locations[0].physicalLocation;
+      expect(artifactLocation.uri).toBe("acme/libs/engine-domain/a.go");
+      expect(region).toEqual({ startLine: 3, startColumn: 2 });
+    });
+
+    it("carries the delta vocabulary in the property bag", () => {
+      const result = sarifDeltaResult(introducedEntry(), introducedEntry().headSites[0]);
+      expect(result.properties).toMatchObject({ delta: "introduced", baseCount: 0, headCount: 2 });
+      expect(result.properties.accepted).toBeUndefined();
+    });
+
+    it("tags a waived-introduced entry accepted, in sarifResult's own vocabulary", () => {
+      const result = sarifDeltaResult(
+        introducedEntry({
+          waived: true,
+          waivedBy: { expiresAt: "2027-01-01T00:00:00Z", reason: "tracked debt" },
+        }),
+        introducedEntry().headSites[0],
+      );
+      expect(result.properties.accepted).toBe(true);
+      expect(result.properties.acceptedUntil).toBe("2027-01-01T00:00:00Z");
+      expect(result.properties.acceptedReason).toBe("tracked debt");
+      // Still an error-level result: an accepted violation is still a violation.
+      expect(result.level).toBe("error");
+    });
+  });
+
+  describe("buildDeltaSarifLog", () => {
+    it("never uploads an empty results array for an exit-1 delta — one result per head site", () => {
+      // The silent-direction red case: a gate that exits 1 while its SARIF
+      // face reports nothing is the empty upload this face exists to refuse.
+      const built = deltaLog({
+        delta: { violations: { ...emptyDelta().violations, introduced: [introducedEntry()] } },
+      });
+      expect(built.results).toHaveLength(2);
+      expect(
+        built.results.map((r) => r.locations[0].physicalLocation.artifactLocation.uri),
+      ).toEqual(["acme/libs/engine-domain/a.go", "acme/libs/engine-domain/b.go"]);
+    });
+
+    it("never uploads a notification-free log for an exit-3 delta, whichever bucket the unknown sits in", () => {
+      for (const delta of [
+        {
+          violations: {
+            ...emptyDelta().violations,
+            unknown: [{ classification: "unknown", reason: "no usable messageId", violation: {} }],
+          },
+        },
+        {
+          unresolvable: {
+            ...emptyDelta().unresolvable,
+            unknown: [{ classification: "unknown", reason: "no usable specifier", record: {} }],
+          },
+        },
+        {
+          customRules: {
+            findings: {
+              introduced: [],
+              resolved: [],
+              unchanged: [],
+              unknown: [
+                { classification: "unknown", rule: "no-forbidden", reason: "digest drift" },
+              ],
+            },
+          },
+        },
+      ]) {
+        const built = deltaLog({ delta });
+        expect(built.results).toEqual([]);
+        const notifications = built.invocations[0].toolExecutionNotifications;
+        expect(notifications.length).toBeGreaterThan(0);
+        expect(notifications[0].level).toBe("warning");
+        expect(notifications[0].message.text.length).toBeGreaterThan(0);
+      }
+    });
+
+    it("names the unknown custom rule in its notification", () => {
+      const built = deltaLog({
+        delta: {
+          customRules: {
+            findings: {
+              introduced: [],
+              resolved: [],
+              unchanged: [],
+              unknown: [
+                { classification: "unknown", rule: "no-forbidden", reason: "digest drift" },
+              ],
+            },
+          },
+        },
+      });
+      const [notification] = built.invocations[0].toolExecutionNotifications;
+      expect(notification.message.text).toContain('rule "no-forbidden"');
+      expect(notification.message.text).toContain("digest drift");
+    });
+
+    it("renders an introduced custom finding through the end-of-catalogue descriptors", () => {
+      const customCatalogue = [
+        {
+          ruleId: "custom/no-forbidden/found",
+          rule: "no-forbidden",
+          findingId: "found",
+          message: "Forbidden thing found",
+        },
+      ];
+      const built = deltaLog({
+        customCatalogue,
+        delta: {
+          customRules: {
+            findings: {
+              introduced: [
+                {
+                  classification: "introduced",
+                  rule: "no-forbidden",
+                  findingId: "found",
+                  ruleId: "custom/no-forbidden/found",
+                  project: "engine-domain",
+                  message: "Forbidden thing found",
+                  baseCount: 0,
+                  headCount: 1,
+                  reason: "absent at base",
+                  baseSites: [],
+                  headSites: [{ file: "acme/libs/engine-domain/a.go", line: 4, column: 1 }],
+                },
+              ],
+              resolved: [],
+              unchanged: [],
+              unknown: [],
+            },
+          },
+        },
+      });
+      expect(built.results).toHaveLength(1);
+      const [result] = built.results;
+      // The descriptor sits past every fixed id — the custom tail assumption
+      // `sarifRules` documents — and the id resolves in the SAME array.
+      expect(result.ruleIndex).toBeGreaterThanOrEqual(6);
+      expect(built.tool.driver.rules[result.ruleIndex].id).toBe("custom/no-forbidden/found");
+      expect(result.message.text).toContain("0 occurrences at base");
+      expect(result.properties).toMatchObject({ delta: "introduced", project: "engine-domain" });
+    });
+
+    it("carries every coverage note and each introduced unresolvable record as warnings", () => {
+      const built = deltaLog({
+        coverage: { notes: ["the boundary law changed since capture"] },
+        delta: {
+          unresolvable: {
+            ...emptyDelta().unresolvable,
+            introduced: [
+              {
+                classification: "introduced",
+                specifier: "mystery/pkg",
+                kind: "static",
+                sourceProject: "engine-domain",
+                baseCount: 0,
+                headCount: 1,
+                baseSites: [],
+                headSites: [{ file: "acme/libs/engine-domain/a.go", line: 9, column: 2 }],
+              },
+            ],
+          },
+        },
+      });
+      const texts = built.invocations[0].toolExecutionNotifications.map((n) => n.message.text);
+      expect(texts.some((t) => t.includes("the boundary law changed since capture"))).toBe(true);
+      const unresolvable = built.invocations[0].toolExecutionNotifications.find((n) =>
+        n.message.text.includes('"mystery/pkg"'),
+      );
+      expect(unresolvable.level).toBe("warning");
+      expect(unresolvable.locations[0].physicalLocation.region.startLine).toBe(9);
+    });
+
+    it("keeps the envelope facts a rejected upload turns on: version, columnKind, executionSuccessful", () => {
+      const log2 = buildDeltaSarifLog({ delta: emptyDelta(), coverage: { notes: [] } });
+      expect(log2.version).toBe("2.1.0");
+      expect(log2.runs[0].columnKind).toBe("utf16CodeUnits");
+      expect(log2.runs[0].invocations[0].executionSuccessful).toBe(true);
+    });
+  });
+
+  describe("formatDeltaSarif", () => {
+    it("round-trips as JSON with a trailing newline", () => {
+      const text = formatDeltaSarif({
+        delta: {
+          violations: { introduced: [introducedEntry()], resolved: [], unchanged: [], unknown: [] },
+          unresolvable: emptyDelta().unresolvable,
+        },
+        coverage: { notes: [] },
+      });
+      expect(text.endsWith("\n")).toBe(true);
+      const parsed = JSON.parse(text);
+      expect(parsed.runs[0].results).toHaveLength(2);
+    });
   });
 });

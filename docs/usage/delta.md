@@ -8,6 +8,7 @@ judged under the current law.
 archkeep delta --capture --output delta-base.json   # at the base commit
 archkeep delta delta-base.json                      # at head
 archkeep delta delta-base.json --format json
+archkeep delta delta-base.json --format sarif    # for GitHub code scanning
 ```
 
 `delta` answers the question a review actually asks about one change: **which
@@ -212,6 +213,52 @@ report and in `coverage.notes` instead:
 
 The `--format json` envelope for compare mode is documented in
 [json-output.md](../reference/json-output.md).
+
+## SARIF for code scanning
+
+`delta <baseline> --format sarif` renders the same verdict as SARIF 2.1.0 for
+GitHub's `upload-sarif`, so the violations a pull request **introduces** appear
+as inline annotations on its diff. The log's shape follows the same choices
+[ci.md's SARIF section](ci.md#sarif-and-github-code-scanning) argues for `check` — same rule
+catalogue, workspace-relative percent-encoded URIs, 1-based positions, `error`
+level — with the delta-specific decisions on top:
+
+- **Results are the introduced buckets only**, one result per head site.
+  Resolved and unchanged entries are not results: the log is uploaded against
+  the head checkout, and an annotation for a violation the change resolved
+  would mark code that no longer contains it. Each result's `properties` carry
+  `delta: "introduced"` and both sides' occurrence counts; an introduced
+  **custom-rule finding** is a result too, resolving to its own descriptor at
+  the end of the catalogue.
+- **A waived-introduced entry is still a result**, tagged
+  `properties.accepted: true` (with the waiver's expiry and reason) — reported,
+  not gating, the same vocabulary `check`'s SARIF uses for a waived violation.
+- **Everything unclassifiable rides `toolExecutionNotifications`**: every
+  `unknown` entry (violations, unresolvable sites, custom-rule items), every
+  coverage note (policy drift, dirty trees, skipped or removed custom rules),
+  and every introduced unresolvable import site. A delta that exits 3 therefore
+  never uploads a log a clean run could have produced.
+
+Two steps in CI, in this order — the gate first, the presentation second, for
+the reasons [ci.md](ci.md#sarif-and-github-code-scanning) gives:
+
+```yaml
+# The gate. Fails the job — exit 1 on introduced findings, exit 3 on "no verdict".
+- name: Delta against the merge-base baseline
+  run: pnpm exec archkeep delta delta-base.json
+
+# The presentation. Runs even when the gate just failed — the annotations
+# matter most on a red run — and its own exit code decides nothing.
+- name: Render the delta as SARIF
+  if: ${{ !cancelled() }}
+  run: pnpm exec archkeep delta delta-base.json --format sarif --output delta.sarif
+  continue-on-error: true
+
+- uses: github/codeql-action/upload-sarif@v3
+  if: ${{ !cancelled() }}
+  with:
+    sarif_file: delta.sarif
+```
 
 ## Known limitations
 

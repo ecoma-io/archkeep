@@ -8951,6 +8951,54 @@ export const moduleBoundaryOptions = {
     expect(text).toContain("kernel → outer  onlyTagsConstraintViolation");
   });
 
+  it("renders the introduced finding as SARIF end to end: capture, mutate, compare with --format sarif", async () => {
+    // Same mutation as the exit-1 test above — the head tree still carries
+    // libs/kernel/reach.go — so this pins the third face of the same verdict.
+    const mutatedFiles = [...deltaFiles, "libs/kernel/reach.go"];
+    const compare = deltaEnv(mutatedFiles);
+    expect(await runCli(["delta", baselinePath, "--format", "sarif"], compare)).toBe(
+      EXIT.violations,
+    );
+    const log = JSON.parse(compare.lines.out.join("\n"));
+    expect(log.version).toBe("2.1.0");
+    expect(log.runs[0].columnKind).toBe("utf16CodeUnits");
+    // The exit-1 red case, end to end: a gate exiting 1 must never upload an
+    // empty results array.
+    expect(log.runs[0].results.length).toBeGreaterThan(0);
+    const [result] = log.runs[0].results;
+    expect(result.ruleId).toBe("onlyTagsConstraintViolation");
+    expect(log.runs[0].tool.driver.rules[result.ruleIndex].id).toBe(result.ruleId);
+    expect(result.message.text).toContain("0 occurrences at base");
+    const { artifactLocation, region } = result.locations[0].physicalLocation;
+    expect(artifactLocation.uri).toBe("libs/kernel/reach.go");
+    expect(artifactLocation.uri.split("/")).not.toContain("..");
+    expect(region).toEqual({ startLine: 4, startColumn: 2 });
+    expect(result.properties).toMatchObject({ delta: "introduced", baseCount: 0, headCount: 1 });
+    expect(log.runs[0].invocations[0].executionSuccessful).toBe(true);
+  });
+
+  it("writes the SARIF to --output, ready for upload-sarif, with the exit code unchanged", async () => {
+    const mutatedFiles = [...deltaFiles, "libs/kernel/reach.go"];
+    const sarifPath = join(deltaRoot, "delta.sarif");
+    const compare = deltaEnv(mutatedFiles);
+    expect(
+      await runCli(["delta", baselinePath, "--format", "sarif", "--output", sarifPath], compare),
+    ).toBe(EXIT.violations);
+    expect(compare.lines.err.join("\n")).toContain("delta complete");
+    const log = JSON.parse(readFileSync(sarifPath, "utf8"));
+    expect(log.runs[0].results.length).toBeGreaterThan(0);
+  });
+
+  it("still rejects sarif on the descriptive verbs — delta is the only one that gained it", async () => {
+    // `graph` and `diff` produce no findings, and SARIF's results[] is a
+    // findings container (`DELTA_FORMATS`' comment in ../cli.mjs).
+    for (const verb of [["graph"], ["diff", baselinePath]]) {
+      const streams = deltaEnv();
+      expect(await runCli([...verb, "--format", "sarif"], streams)).toBe(EXIT.usage);
+      expect(streams.lines.err.join("\n")).toContain("unknown format 'sarif'");
+    }
+  });
+
   it("refuses a baseline that is not an evidence snapshot, exit 3, naming the file", async () => {
     const junk = join(deltaRoot, "not-a-snapshot.json");
     writeFileSync(junk, '{"schemaVersion": 999}\n');

@@ -957,6 +957,261 @@ export function buildSarifLog({
 }
 
 /**
+ * One introduced boundary-violation entry, at one of its head sites, as a
+ * SARIF result — the `delta` verb's rendering of the same rule catalogue
+ * `sarifResult` resolves into.
+ *
+ * `ruleId` is the entry's `messageId`, spelled exactly, so a delta upload and
+ * a `check` upload name the same rule for the same law — no new descriptors,
+ * and no second catalogue. The classifier's entry carries no rendered upstream
+ * message (`../commands/delta-classify.mjs` keeps identity and evidence, not
+ * prose), so the message is composed here from the facts the entry does carry:
+ * the classification, both sides' occurrence counts, the edge, and the
+ * constraint row — never empty, because GitHub rejects a result whose
+ * `message.text` is.
+ *
+ * One result per HEAD site: an introduced violation exists at head by
+ * construction (`headCount > 0`), and the head sites are the lines a reviewer
+ * of the change can act on — a base site names code the checkout under review
+ * may no longer contain.
+ *
+ * A waived-introduced entry is still a result (reported, not gating —
+ * `../commands/delta.mjs`'s fold), tagged with the same `accepted` vocabulary
+ * `sarifResult` uses for a waived violation, so one consumer query covers both
+ * verbs' uploads.
+ *
+ * @param {{messageId: string, sourceProject: string|null, target: string,
+ *   targetIsSpecifier: boolean, constraint: object|null, baseCount: number,
+ *   headCount: number, reason?: string, waived?: boolean,
+ *   waivedBy?: {expiresAt?: string, reason?: string}}} entry One `introduced`
+ *   entry from `classifyViolations` (`../commands/delta-classify.mjs`).
+ * @param {{file: string, line: number, column: number, specifier?: string,
+ *   kind?: string}} site One of the entry's head sites — 1-based, as the
+ *   analysis records carry them.
+ * @returns {object}
+ */
+export function sarifDeltaResult(entry, site) {
+  const target = entry.targetIsSpecifier
+    ? `specifier ${JSON.stringify(entry.target)}`
+    : entry.target;
+  const text =
+    `Introduced by this change: ${entry.messageId} — ` +
+    `from ${entry.sourceProject ?? "(no project)"} to ${target} ` +
+    `(${entry.baseCount} occurrence${entry.baseCount === 1 ? "" : "s"} at base, ` +
+    `${entry.headCount} at head)` +
+    `${entry.reason ? ` — ${entry.reason}` : ""}. ` +
+    `Constraint: ${formatConstraint(entry.constraint)}`;
+  return {
+    ruleId: entry.messageId,
+    ruleIndex: MESSAGE_IDS.indexOf(entry.messageId),
+    level: "error",
+    message: { text },
+    locations: [
+      {
+        physicalLocation: {
+          artifactLocation: { uri: toUriReference(site.file) },
+          region: { startLine: site.line, startColumn: site.column },
+        },
+      },
+    ],
+    properties: {
+      delta: "introduced",
+      baseCount: entry.baseCount,
+      headCount: entry.headCount,
+      sourceProject: entry.sourceProject,
+      target: entry.target,
+      // The same vocabulary `sarifResult` uses for a waived violation: the
+      // result is still an error (an accepted violation is still a violation),
+      // and the properties say why it does not gate.
+      ...(entry.waived === true
+        ? {
+            accepted: true,
+            acceptedUntil: entry.waivedBy?.expiresAt,
+            acceptedReason: entry.waivedBy?.reason,
+          }
+        : {}),
+    },
+  };
+}
+
+/**
+ * The `delta` verb's SARIF log: the INTRODUCED buckets as results, everything
+ * the classification could not answer as tool-execution notifications.
+ *
+ * Results are introduced entries only — the classified boundary violations
+ * (`sarifDeltaResult`, waived ones included and tagged) and the introduced
+ * custom-rule findings, the latter through the same `sarifCustomRuleResult`
+ * and end-of-catalogue descriptors `check`'s log uses, so a custom finding
+ * resolves in `sarifRules(customCatalogue)` here exactly as it does there.
+ * Resolved and unchanged entries are deliberately NOT results: this log is
+ * uploaded against the head checkout, and an annotation for a violation the
+ * change resolved would mark code that no longer contains it.
+ *
+ * The notification lane is the load-bearing half. `delta` exits 3 on any
+ * `unknown` entry (`../commands/delta.mjs`'s fold), and every one of those
+ * rides here — a violation, unresolvable-record, or custom-rule item whose
+ * identity could not be stated — so an exit-3 delta can never upload a log
+ * byte-identical to a clean run's, the same guarantee `buildSarifLog` keeps
+ * for `check`'s no-verdict lanes. Coverage notes (policy drift, dirty trees,
+ * skipped or removed custom rules) and introduced unresolvable records ride
+ * the same lane: none is a verdict, and dropping any of them is the silent
+ * direction (`../../../../AGENTS.md`).
+ *
+ * `executionSuccessful` stays `true` on every status — the run completed and
+ * classified; the findings are results, not tool errors — and `columnKind`
+ * states the analyzers' real UTF-16 convention, both for the reasons the
+ * module header gives.
+ *
+ * @param {{delta: {violations: {introduced: object[], resolved?: object[],
+ *     unchanged?: object[], unknown: object[]},
+ *   unresolvable: {introduced: object[], resolved?: object[],
+ *     unchanged?: object[], unknown: object[]},
+ *   customRules?: {findings: {introduced: object[], resolved?: object[],
+ *     unchanged?: object[], unknown: object[]}}},
+ *   coverage: {notes?: string[]},
+ *   customCatalogue?: {ruleId: string, rule: string, findingId: string,
+ *     message: string}[]}} run The `deltaCommand` result's `delta` and
+ *   `coverage`, plus the head-declared custom-rule catalogue
+ *   (`../commands/custom-rules.mjs`'s `customRulesForDelta`) — passed
+ *   separately because the envelope deliberately does not carry it.
+ * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
+ */
+export function buildDeltaSarifLog({ delta, coverage, customCatalogue = [] }) {
+  const customRuleIndex = new Map(
+    customCatalogue.map((entry, index) => [entry.ruleId, CUSTOM_RULE_INDEX_BASE + index]),
+  );
+  const customIntroduced = delta.customRules?.findings.introduced ?? [];
+  const results = [
+    ...delta.violations.introduced.flatMap((entry) =>
+      entry.headSites.map((site) => sarifDeltaResult(entry, site)),
+    ),
+    ...customIntroduced.flatMap((entry) =>
+      entry.headSites.map((site) => {
+        const rendered = sarifCustomRuleResult(
+          {
+            id: entry.ruleId,
+            message:
+              `Introduced by this change: custom rule finding ${entry.ruleId} ` +
+              `(${entry.baseCount} occurrence${entry.baseCount === 1 ? "" : "s"} at base, ` +
+              `${entry.headCount} at head)` +
+              `${entry.reason ? ` — ${entry.reason}` : ""}` +
+              `${typeof entry.message === "string" && entry.message !== "" ? `: ${entry.message}` : ""}`,
+            ...(typeof site.file === "string" ? { sourceFile: site.file } : {}),
+            ...(typeof site.line === "number" ? { line: site.line } : {}),
+            ...(typeof site.column === "number" ? { column: site.column } : {}),
+            ...(entry.project === null ? {} : { project: entry.project }),
+          },
+          // `?? -1` for the same reason `buildSarifLog` gives: an introduced
+          // finding whose id its own head catalogue does not declare cannot
+          // arrive here, and a regression in that guarantee must be a visibly
+          // broken index rather than an `undefined` GitHub ignores.
+          customRuleIndex.get(entry.ruleId) ?? -1,
+        );
+        return {
+          ...rendered,
+          properties: {
+            ...(rendered.properties ?? {}),
+            delta: "introduced",
+            baseCount: entry.baseCount,
+            headCount: entry.headCount,
+          },
+        };
+      }),
+    ),
+  ];
+  const toolExecutionNotifications = [
+    ...delta.violations.unknown.map((entry) => ({
+      level: "warning",
+      message: {
+        text: `delta could not classify a violation — ${entry.reason}. The run reaches no verdict.`,
+      },
+    })),
+    ...delta.unresolvable.unknown.map((entry) => ({
+      level: "warning",
+      message: {
+        text:
+          `delta could not classify an unresolvable import site — ${entry.reason}. ` +
+          `The run reaches no verdict.`,
+      },
+    })),
+    ...(delta.customRules?.findings.unknown ?? []).map((entry) => ({
+      level: "warning",
+      message: {
+        text:
+          `delta could not classify a custom-rule item` +
+          `${typeof entry.rule === "string" ? ` (rule "${entry.rule}")` : ""} — ` +
+          `${entry.reason}. The run reaches no verdict.`,
+      },
+    })),
+    // Introduced unresolvable records: sites the change added whose target
+    // analysis could not resolve. Never results — no rule reached a verdict
+    // about them — but a change that adds them must not upload the log a
+    // change that adds nothing would.
+    ...delta.unresolvable.introduced.map((entry) => ({
+      level: "warning",
+      message: {
+        text:
+          `This change introduces ${entry.headCount - entry.baseCount} unresolvable import ` +
+          `site${entry.headCount - entry.baseCount === 1 ? "" : "s"} for specifier ` +
+          `${JSON.stringify(entry.specifier)} (${entry.kind || "unknown kind"})` +
+          `${entry.sourceProject === null ? "" : ` in ${entry.sourceProject}`} — ` +
+          `no rule reached a verdict about ${entry.headCount - entry.baseCount === 1 ? "it" : "them"}`,
+      },
+      locations: (entry.headSites ?? [])
+        .filter((site) => typeof site.file === "string")
+        .map((site) => ({
+          physicalLocation: {
+            artifactLocation: { uri: toUriReference(site.file) },
+            ...(typeof site.line === "number"
+              ? {
+                  region: {
+                    startLine: site.line,
+                    ...(typeof site.column === "number" ? { startColumn: site.column } : {}),
+                  },
+                }
+              : {}),
+          },
+        })),
+    })),
+    ...(coverage.notes ?? []).map((note) => ({
+      level: "warning",
+      message: { text: `Coverage note: ${note}` },
+    })),
+  ];
+  return {
+    $schema: SARIF_SCHEMA,
+    version: SARIF_VERSION,
+    runs: [
+      {
+        tool: { driver: { name: "archkeep", rules: sarifRules(customCatalogue) } },
+        columnKind: "utf16CodeUnits",
+        results,
+        invocations: [
+          {
+            // True even on exit 1 or 3: the classification completed and said
+            // what it could not answer — the same reasoning `buildSarifLog`
+            // states for `check`.
+            executionSuccessful: true,
+            toolExecutionNotifications,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * The delta SARIF log as the bytes to write — pretty-printed with a trailing
+ * newline, the same presentation `formatSarif` gives `check`'s log.
+ *
+ * @param {Parameters<typeof buildDeltaSarifLog>[0]} run
+ * @returns {string}
+ */
+export function formatDeltaSarif(run) {
+  return `${JSON.stringify(buildDeltaSarifLog(run), null, 2)}\n`;
+}
+
+/**
  * The SARIF log as the bytes to write — pretty-printed with a trailing newline,
  * so a file that lands in a diff or a log stays readable.
  *

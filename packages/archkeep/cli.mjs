@@ -171,6 +171,16 @@ const CHECK_FORMATS = Object.freeze(["text", "sarif", "json"]);
 const DESCRIBABLE_FORMATS = Object.freeze(["text", "json"]);
 
 /**
+ * Every format `delta --format` accepts. SARIF joins the two descriptive
+ * formats because `delta`'s compare mode is a gate that produces findings —
+ * the introduced bucket is exactly what a code-scanning upload annotates at
+ * head sites — while every other descriptive-family verb stays on
+ * `DESCRIBABLE_FORMATS`: none of them produces findings, and SARIF's
+ * `results[]` is a findings container.
+ */
+const DELTA_FORMATS = Object.freeze(["text", "sarif", "json"]);
+
+/**
  * Column `usage()`'s Options block aligns flag descriptions to. Matches the
  * hand-written text this table-driven rendering replaced, so deriving the
  * block from `COMMANDS` changes no byte of it.
@@ -1008,7 +1018,12 @@ async function runDelta(options, { cwd, env }) {
     return usageError ? EXIT.usage : EXIT.error;
   }
 
-  const report = options.format === "json" ? result.report.json : result.report.text;
+  const report =
+    options.format === "json"
+      ? result.report.json
+      : options.format === "sarif"
+        ? result.report.sarif
+        : result.report.text;
 
   if (options.output) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
@@ -2127,10 +2142,11 @@ const DELTA_FLAG_HELP = Object.freeze([
   Object.freeze({
     flag: "--format",
     key: "format",
-    arg: "text|json",
+    arg: "text|sarif|json",
     describe: Object.freeze([
-      "Terminal report (default) or the versioned JSON envelope",
-      "docs/reference/json-output.md documents",
+      "Terminal report (default), SARIF 2.1.0 of the introduced",
+      "findings for GitHub code scanning, or the versioned JSON",
+      "envelope docs/reference/json-output.md documents",
     ]),
   }),
   Object.freeze({
@@ -2679,7 +2695,7 @@ const COMMANDS = Object.freeze({
     flagHelp: DELTA_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(DELTA_FLAG_HELP.map((f) => [f.flag, f.key]))),
     defaults: Object.freeze({ format: "text", output: null, config: null, capture: false }),
-    formats: DESCRIBABLE_FORMATS,
+    formats: DELTA_FORMATS,
     booleans: Object.freeze(["capture"]),
     run: runDelta,
   }),

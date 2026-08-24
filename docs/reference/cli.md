@@ -88,12 +88,12 @@ diff.
 
 ### `delta`
 
-| flag        | argument       | default                  | meaning                                                                                                                                            |
-| ----------- | -------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--capture` | (none)         | off                      | Write an evidence snapshot of the current tree (raw import records, graph, coverage, policy fingerprint) for a later delta run to compare against. |
-| `--format`  | `text`\|`json` | `text`                   | Terminal report (default) or the versioned JSON envelope.                                                                                          |
-| `--output`  | `<file>`       | stdout                   | Write the report — or, with `--capture`, the snapshot — to a file instead of stdout.                                                               |
-| `--config`  | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Both sides are re-judged under whichever law this run resolves.        |
+| flag        | argument                | default                  | meaning                                                                                                                                            |
+| ----------- | ----------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--capture` | (none)                  | off                      | Write an evidence snapshot of the current tree (raw import records, graph, coverage, policy fingerprint) for a later delta run to compare against. |
+| `--format`  | `text`\|`sarif`\|`json` | `text`                   | Terminal report (default), SARIF 2.1.0 of the introduced findings for GitHub code scanning, or the versioned JSON envelope.                        |
+| `--output`  | `<file>`                | stdout                   | Write the report — or, with `--capture`, the snapshot — to a file instead of stdout.                                                               |
+| `--config`  | `<file>`                | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Both sides are re-judged under whichever law this run resolves.        |
 
 Without `--capture`, the baseline evidence snapshot is the single positional
 argument (a file, not a git ref); with `--capture` there are no positionals.
