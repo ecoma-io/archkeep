@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.13.0](https://github.com/ecoma-io/archkeep/compare/v0.12.0...v0.13.0) (2026-08-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **workspace:** the workspace marker file is now `archkeep.json` rather than `lattice.json`, the custom-rule wasm ABI exports are `archkeep_alloc`, `archkeep_describe` and `archkeep_evaluate` rather than their `lattice_` spellings, and the CLI and LSP binaries are `archkeep` and `archkeep-lsp`. Every published package is renamed; the previously published Lattice versions stay installable and are deprecated in place rather than unpublished.
+
+### Features
+
+* **workspace:** rebrand the banner and logo and share one icon with the vsix ([#293](https://github.com/ecoma-io/archkeep/issues/293)) ([edf7319](https://github.com/ecoma-io/archkeep/commit/edf7319f2b4c28ee851fe7d3b257aa98471b05da))
+
+
+### Bug Fixes
+
+* **archkeep:** decide lazy-loading from source facts, never manifest scopes ([#292](https://github.com/ecoma-io/archkeep/issues/292)) ([40a2fa4](https://github.com/ecoma-io/archkeep/commit/40a2fa4ab82d6a11db0b51aad75347892d03b9bf))
+
+
+### Documentation
+
+* **docs:** give the Lattice upgrade a page and the deprecations a runbook ([#291](https://github.com/ecoma-io/archkeep/issues/291)) ([72bfd2a](https://github.com/ecoma-io/archkeep/commit/72bfd2a3512cdbcf597abf73a6ffee18a1f09856))
+* **docs:** specify the Archkeep rebrand as ADR 0003 ([#283](https://github.com/ecoma-io/archkeep/issues/283)) ([77e25e4](https://github.com/ecoma-io/archkeep/commit/77e25e46e924fcafcceb718df18870b7a335952d))
+
+
+### Internal
+
+* **workspace:** rename every Lattice identity to Archkeep ([#287](https://github.com/ecoma-io/archkeep/issues/287)) ([b128c30](https://github.com/ecoma-io/archkeep/commit/b128c3097df2e91f74d36467a5ba2f8632a27aae))
+
 ## [0.12.0](https://github.com/ecoma-io/lattice/compare/v0.11.1...v0.12.0) (2026-08-23)
 
 
