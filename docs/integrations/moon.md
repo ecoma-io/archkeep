@@ -184,10 +184,18 @@ Moon's project-graph edges carry a scope that Archkeep maps to dependency types:
 | Moon scope    | Archkeep type |
 | ------------- | ------------- |
 | `production`  | `static`      |
-| `development` | `dynamic`     |
+| `development` | `static`      |
 | `build`       | `static`      |
 | `peer`        | `static`      |
 | `root`        | _(skipped)_   |
+
+A scope states **when** a dependency is needed — runtime, build time, peer
+consumption — never **how** the importing code is written, so no scope can
+produce a `dynamic` edge: that type is reserved for an `import()` a source
+file actually wrote (#280). Such sites are still found by the checker's own
+analysis and folded onto the graph afterward, so a genuinely lazy-loaded
+dependency carries a `dynamic` edge regardless of the scope it was declared
+with.
 
 `root` dependencies are internal to Moon's runtime and carry no
 source-code-level meaning, so Archkeep does not surface them.

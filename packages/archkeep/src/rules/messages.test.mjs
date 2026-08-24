@@ -22,6 +22,18 @@ describe("renderMessage", () => {
     expect(renderMessage("emptyOnlyTagsConstraintViolation")).toContain("{{sourceTag}}");
   });
 
+  it("ends the lazy-loaded listing with its last file line, never a dangling colon", () => {
+    // #281's rendered shape: "lazy-loaded in these files:" over an empty
+    // {{filePaths}} — a header promising evidence with none after it.
+    const lastFile = "- area/gamma/src/loader.ts (alpha -> gamma -> beta)";
+    expect(
+      renderMessage("noImportsOfLazyLoadedLibraries", {
+        targetProjectName: "beta",
+        filePaths: "- area/alpha/src/lazy.ts (alpha -> gamma -> beta)\n" + lastFile,
+      }).endsWith(lastFile),
+    ).toBe(true);
+  });
+
   it("refuses an id that is not one upstream defines", () => {
     expect(() => renderMessage("noImportsOfAppsPlease")).toThrow(/no message template/);
   });

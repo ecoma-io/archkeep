@@ -1142,3 +1142,120 @@ describe("the native branch buildWorkspaceIndex takes for a archkeep.json root",
     expect(indexGaps(index)).toEqual([]);
   });
 });
+
+describe("the whole-tree import sites the index retains", () => {
+  // The sites used to be discarded once the graph was built, and
+  // `./diagnose.mjs` then handed the rule engine one open document's records —
+  // so the engine's evidence index (`../rules/index.mjs`'s `createContext`)
+  // covered one file, and the evidence two rules render from it (the file list
+  // of `noImportsOfLazyLoadedLibraries`, `noCircularDependencies`' per-hop file
+  // lists) came out empty in the editor wherever the backing import lived in a
+  // file nobody had open. `lattice check`, handing over the whole tree's sites,
+  // printed them: two faces of one analysis disagreeing about the same tree.
+  // What is pinned here is the retention contract itself: every success branch
+  // exposes exactly what its analyzers produced, every failure branch exposes
+  // an empty list rather than a field consumers must guard against.
+  /**
+   * A record in the analysis contract's shape (`../analysis/analyze.mjs`'s
+   * `ImportSite`) — annotated so the literal's `kind` stays a `kind`.
+   *
+   * @returns {import("../analysis/analyze.mjs").ImportSite}
+   */
+  const siteIn = (sourceFile) => ({
+    sourceFile,
+    line: 3,
+    column: 1,
+    specifier: "example.test/outer",
+    spelling: { path: false, relative: false },
+    kind: "static",
+    resolved: { target: "outer", file: null, external: false, packageName: null },
+  });
+  /** Points the mocked analyzer at one file and restores the default after. */
+  const withSiteIn = (sourceFile) => {
+    analyzeFile.mockImplementation(({ sourceFile: file }) =>
+      file === sourceFile
+        ? { imports: [siteIn(sourceFile)], failures: [] }
+        : { imports: [], failures: [] },
+    );
+  };
+  // One fixture per dispatch branch, each the smallest tree that reaches it:
+  // a `project.json` for the Nx-shaped branch, `lattice.json` for the native
+  // one, `.moon/` for Moon.
+  const nxFiles = {
+    [`libs/inner/${PROJECT_CONFIG_FILE}`]: '{"name":"inner"}',
+    "libs/inner/main.go": "package inner\n",
+  };
+  const nativeFiles = {
+    "lattice.json": '{"projects":{"declared":[{"root":"apps/a"}]}}',
+    "apps/a/main.go": "package a\n",
+  };
+  const moonFiles = {
+    ".moon/workspace.yml": "projects:\n",
+    "libs/inner/main.go": "package inner\n",
+  };
+  const run = (files, over = {}) => {
+    const index = buildWorkspaceIndex({
+      root: "/fixture",
+      listFiles: () => Object.keys(files),
+      readFileAt: (_root, path) => files[path] ?? null,
+      ...over,
+    });
+    analyzeFile.mockImplementation(() => ({ imports: [], failures: [] }));
+    return index;
+  };
+  /** The Moon branch's two seams — marker existence and the provider's graph. */
+  const moonSeams = () => ({
+    pathExists: (path) => path === join("/fixture", ".moon"),
+    readGraph: () => ({
+      nodes: {
+        inner: {
+          name: "inner",
+          type: "lib",
+          data: { root: "libs/inner", tags: [], implicitDependencies: [] },
+        },
+      },
+      dependencies: {},
+    }),
+  });
+
+  it("exposes the analyzed sites on the Nx-shaped branch, not only their edges", () => {
+    withSiteIn("libs/inner/main.go");
+    expect(run(nxFiles).importSites).toEqual([siteIn("libs/inner/main.go")]);
+  });
+
+  it("exposes the analyzed sites on the native branch", () => {
+    withSiteIn("apps/a/main.go");
+    expect(run(nativeFiles).importSites).toEqual([siteIn("apps/a/main.go")]);
+  });
+
+  it("exposes the analyzed sites on the Moon branch", () => {
+    withSiteIn("libs/inner/main.go");
+    expect(run(moonFiles, moonSeams()).importSites).toEqual([siteIn("libs/inner/main.go")]);
+  });
+
+  it("exposes an empty list when the native model fails, never a missing field", () => {
+    // The failure branch analyzes nothing, so an empty list is the honest
+    // answer; a missing field would make every consumer guess at whether the
+    // tree was read.
+    expect(run({ "lattice.json": "{ not json" }).importSites).toEqual([]);
+  });
+
+  it("exposes an empty list when the Moon invocation fails, never a missing field", () => {
+    const failing = {
+      ".moon/workspace.yml": "projects:\n",
+      "libs/inner/main.go": "package inner\n",
+    };
+    const index = buildWorkspaceIndex({
+      ...moonSeams(),
+      root: "/fixture",
+      listFiles: () => Object.keys(failing),
+      readFileAt: (_root, path) => failing[path] ?? null,
+      readGraph: () => {
+        throw new Error("`moon project-graph --json` failed: spawn moon ENOENT");
+      },
+    });
+
+    expect(index.moonModelFailure).not.toBeNull();
+    expect(index.importSites).toEqual([]);
+  });
+});

@@ -15,6 +15,7 @@ import { MOON_TSCONFIG_CHAIN, readMoonOptions } from "../options.mjs";
 import { createWorkspace } from "../workspace.mjs";
 
 import {
+  mergeImportEdges,
   moonProvider,
   moonMarkerAt,
   readProjectGraph,
@@ -337,11 +338,17 @@ describe("transformMoonGraph — edge type from scope", () => {
     expect(result.dependencies.web[0].type).toBe("static");
   });
 
-  it("maps development to dynamic", () => {
+  it("maps development to static — a scope never manufactures a source-text fact (#280)", () => {
+    // The red direction of #280's false positive: typed "dynamic", the
+    // dev-only edge made `noImportsOfLazyLoadedLibraries` fire at the
+    // declaring project's own test file, and moving the specifier from
+    // devDependencies to dependencies silenced it — isolating cause to this
+    // mapping. A scope is a fact about a manifest row; "dynamic" is a fact
+    // about source text.
     const raw = twoProjectGraph();
     raw.graph.edges = [[0, 1, "development"]];
     const result = transformMoonGraph(raw);
-    expect(result.dependencies.web[0].type).toBe("dynamic");
+    expect(result.dependencies.web[0].type).toBe("static");
   });
 
   it("maps build to static", () => {
@@ -515,7 +522,7 @@ describe("transformMoonGraph — Moon `explicit` is Archkeep `implicit`", () => 
     // `syncProjectWorkspaceDependencies` that is almost every edge there is.
     for (const [scope, type] of [
       ["production", "static"],
-      ["development", "dynamic"],
+      ["development", "static"],
       ["build", "static"],
       ["peer", "static"],
       ["mystery-scope", "static"],
@@ -575,6 +582,65 @@ describe("transformMoonGraph — Moon `explicit` is Archkeep `implicit`", () => 
     };
     const result = transformMoonGraph(raw);
     expect(result.dependencies["root-marker"]).toBeUndefined();
+  });
+});
+
+// The other half of #280, and the reason mapping `development` to `static`
+// loses nothing: genuine lazy loading arrives through ANALYSIS, not through
+// the manifest. `mergeImportEdges` folds real `import()` sites onto the
+// declared graph keyed `[source, target, type]`, so a dynamic import between
+// two projects already joined by a development-scoped edge survives as its
+// OWN record — and `noImportsOfLazyLoadedLibraries` still sees the
+// source-text fact it was written for, without the scope manufacturing it.
+describe("mergeImportEdges — a real dynamic import survives alongside a development-scoped declared edge", () => {
+  /**
+   * An `import()` site in web resolving into api, in the analysis contract's
+   * shape (`../analysis/analyze.mjs`'s `ImportSite`).
+   *
+   * @returns {import("../analysis/analyze.mjs").ImportSite}
+   */
+  const dynamicImportOfApi = () => ({
+    sourceFile: "apps/web/lazy.ts",
+    line: 3,
+    column: 1,
+    specifier: "@api/client",
+    spelling: { path: false, relative: false },
+    kind: "dynamic",
+    resolved: { target: "api", file: null, external: false, packageName: null },
+  });
+  const projectOf = (file) =>
+    file.startsWith("apps/web/") ? "web" : file.startsWith("libs/api/") ? "api" : undefined;
+
+  it("keeps both records: the declared static edge and the analysis-derived dynamic one", () => {
+    // The declared edge is typed from the DEVELOPMENT scope — "static" since
+    // #280 — by the ordinary transform.
+    const raw = twoProjectGraph();
+    raw.graph.edges = [[0, 1, "development"]];
+    const graph = transformMoonGraph(raw);
+    expect(graph.dependencies.web).toEqual([{ source: "web", target: "api", type: "static" }]);
+
+    mergeImportEdges(graph, { importSites: [dynamicImportOfApi()], projectOf });
+
+    // Two records for one pair that differ in kind: the manifest's static
+    // fact and the analysis's dynamic one. Folding them into one would be
+    // the silent direction — the lazy-loading finding would vanish.
+    expect(graph.dependencies.web).toEqual([
+      { source: "web", target: "api", type: "static" },
+      { source: "web", target: "api", type: "dynamic" },
+    ]);
+  });
+
+  it("adds nothing when the analysis agrees in kind with the declared static edge", () => {
+    // The dedupe half of the same key: an ordinary static import of a dev
+    // dependency is already fully represented by the declared edge.
+    const raw = twoProjectGraph();
+    raw.graph.edges = [[0, 1, "development"]];
+    const graph = transformMoonGraph(raw);
+    mergeImportEdges(graph, {
+      importSites: [{ ...dynamicImportOfApi(), kind: "static" }],
+      projectOf,
+    });
+    expect(graph.dependencies.web).toEqual([{ source: "web", target: "api", type: "static" }]);
   });
 });
 

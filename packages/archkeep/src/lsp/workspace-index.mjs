@@ -77,6 +77,26 @@
  * index: `buildWorkspaceIndex` throws, and the server turns that into a
  * diagnostic on every open document rather than a clean bill of health.
  *
+ * ## Why the whole tree's import sites stay on the index
+ *
+ * `analyzeTrackedFiles` runs in every success branch below, and its sites used
+ * to be discarded once the graph was built — `evaluate(sites, graph, config)`
+ * judges the graph, so what else could the records be for? The evidence. The
+ * rule engine derives its evidence index (`../rules/index.mjs`'s
+ * `createContext`) from exactly the records it is handed, and two rules render
+ * evidence out of that index: the file list of
+ * `noImportsOfLazyLoadedLibraries` ("Library X is lazy-loaded in these
+ * files:") and the per-hop file lists of `noCircularDependencies`. Handed one
+ * open document's records, the engine can cite only that document — so an
+ * editor verdict named no backing files wherever the backing import lived in a
+ * file nobody had open, while `lattice check`, which hands over the whole
+ * tree's sites, named them: two faces of one analysis disagreeing about the
+ * same tree. So the sites are retained on every returned index (an empty list
+ * on the two failure branches below, which analyze nothing), and
+ * `./diagnose.mjs` composes its input from them — every retained site EXCEPT
+ * the diagnosed document's own stale disk copy, plus the fresh records for the
+ * live editor buffer that replaces it before evaluation.
+ *
  * ## What the index could not read is data the caller must publish
  *
  * The two failures below are recorded rather than thrown, because one project
@@ -273,7 +293,10 @@ export function buildNodes(projects) {
  *   filesystem existence (the marker is a directory, which `readFileAt`
  *   cannot answer) and the provider's one-call graph reader, both injectable
  *   for the same reason `listFiles` is.
- * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], nativeMarker: boolean, nativeModelFailure: string|null, moonModelFailure: string|null, nxModelFailure: string|null, workspaceLayoutFailure: string|null}}
+ * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], importSites: object[], nativeMarker: boolean, nativeModelFailure: string|null, moonModelFailure: string|null, nxModelFailure: string|null, workspaceLayoutFailure: string|null}}
+ *   `importSites` is the whole tree's analysis output, retained past the graph
+ *   build for the rule engine's evidence index — see this module header's "Why
+ *   the whole tree's import sites stay on the index".
  * @throws {Error} when the file list cannot be obtained. Loud on purpose: an
  *   index built from no files would put every file in no project, and a file in
  *   no project has no boundary to cross — a clean report, produced by not
@@ -442,6 +465,10 @@ export function buildWorkspaceIndex({
     },
     skippedProjects: skipped,
     fileFailures,
+    // Retained past the graph build — the evidence half of `evaluate()`'s
+    // input (`./diagnose.mjs` composes its run from these). See this module
+    // header's "Why the whole tree's import sites stay on the index".
+    importSites,
     nativeMarker: false,
     nativeModelFailure: null,
     moonModelFailure: null,
@@ -539,6 +566,10 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
       graph: { nodes: Object.create(null), dependencies: Object.create(null) },
       skippedProjects: [],
       fileFailures: [],
+      // Nothing was analyzed on this path — the model threw before any file
+      // was read — and an empty list is the honest answer, not a missing field
+      // every consumer would have to guard against.
+      importSites: [],
       nativeMarker: true,
       nativeModelFailure: cause?.message ?? String(cause),
       moonModelFailure: null,
@@ -591,6 +622,10 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
     graph,
     skippedProjects: [],
     fileFailures,
+    // Retained past the graph build — the evidence half of `evaluate()`'s
+    // input (`./diagnose.mjs` composes its run from these), on this branch
+    // exactly as on the Nx-shaped one.
+    importSites,
     nativeMarker: true,
     nativeModelFailure: null,
     moonModelFailure: null,
@@ -633,6 +668,11 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
       graph: { nodes: Object.create(null), dependencies: Object.create(null) },
       skippedProjects: [],
       fileFailures: [],
+      // Nothing was analyzed on this path — the provider threw before any
+      // project was known, so no file could be attributed or read — and an
+      // empty list is the honest answer, not a missing field every consumer
+      // would have to guard against.
+      importSites: [],
       nativeMarker: false,
       nativeModelFailure: null,
       moonModelFailure: cause?.message ?? String(cause),
@@ -671,6 +711,10 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
     graph,
     skippedProjects: [],
     fileFailures,
+    // Retained past the graph build — the evidence half of `evaluate()`'s
+    // input (`./diagnose.mjs` composes its run from these), on this branch
+    // exactly as on the other two.
+    importSites,
     nativeMarker: false,
     nativeModelFailure: null,
     moonModelFailure: null,
