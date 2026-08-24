@@ -1244,9 +1244,14 @@ async function runWaivers(options, { cwd, env }) {
     // against this tool's own location, and a `profiles` registry resolves
     // `--config`/`boundaryConfig` as a profile NAME the same way `check`
     // does. A malformed law throws here, exit 3, exactly as in `check`.
-    const { config } = await resolvePolicy(options, commandContext, cwd);
+    const { config, source } = await resolvePolicy(options, commandContext, cwd);
 
-    result = await waiversCommand(commandContext, config);
+    // `source` rides along for one job: `waiversCommand` subtracts the law's
+    // own file from the unowned-file set the `coverage.unowned` acceptances
+    // are matched against, exactly as `check` does — the law is not source
+    // judged by the law (`../src/commands/context.mjs`'s
+    // `unownedGapWithoutRunConfiguration`).
+    result = await waiversCommand(commandContext, config, { policySource: source });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));

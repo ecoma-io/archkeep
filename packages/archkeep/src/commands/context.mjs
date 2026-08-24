@@ -228,6 +228,15 @@ export const WORKSPACE_MARKERS = [NX_CONFIG_FILE, ARCHKEEP_MODEL_FILE, MOON_DIR,
  *   failure (`../providers/native/coverage.mjs`'s `judgeCoverage`) and so
  *   already refuses the run with exit 3 — a gap beside it would be a second,
  *   quieter voice for a state that is answered loudly.
+ * @property {{files: string[]}} unclaimedGap The tracked Go, Rust or Python
+ *   files no project owns — the SAME files whose whole-file failures
+ *   `unclaimedFileFailures` already put in `analysis.failures`, listed a
+ *   second time as data so `./check.mjs` and `./waivers.mjs` can match the
+ *   policy's `coverage.unowned` acceptance rows against them
+ *   (`./coverage-acceptance.mjs`) without parsing a failure's sentence back
+ *   into a file list. Always `{files: []}` on a native workspace, whose own
+ *   `coverage.exempt` channel makes the policy key unreachable there
+ *   (`./policy.mjs`'s `resolvePolicy`).
  * @property {{file: string, project: string}[]} owned Every tracked file that
  *   belongs to a project, paired with its owning project — the ownership map
  *   `createWorkspace` already built. A command that needs to know WHICH project
@@ -305,20 +314,37 @@ const UNCLAIMED_CHECK_LANGUAGES = new Set(["go", "rust", "python"]);
  * tool reads — inventing one is out of scope here; this only detects and
  * reports.
  *
- * @param {{tracked: string[], owned: {file: string, project: string}[], providerLabel: string}} args
+ * The file list and the failures it becomes are two exports on purpose:
+ * `./check.mjs` and `./waivers.mjs` need the LIST a second time — the
+ * `coverage.unowned` acceptance channel (`./coverage-acceptance.mjs`) matches
+ * its rows against exactly this set, and deriving the set from the failures'
+ * wording would bind an acceptance decision to a sentence.
+ *
+ * @param {{tracked: string[], owned: {file: string, project: string}[]}} args
+ * @returns {string[]}
+ */
+function unclaimedAnalyzableFiles({ tracked, owned }) {
+  const ownedFiles = new Set(owned.map(({ file }) => file));
+  return tracked.filter(
+    (file) => UNCLAIMED_CHECK_LANGUAGES.has(languageOf(file)) && !ownedFiles.has(file),
+  );
+}
+
+/**
+ * The whole-file failures for `unclaimedAnalyzableFiles`' list — the shape
+ * argued in the comment above the two functions.
+ *
+ * @param {{files: string[], providerLabel: string}} args
  * @returns {object[]}
  */
-function unclaimedFileFailures({ tracked, owned, providerLabel }) {
-  const ownedFiles = new Set(owned.map(({ file }) => file));
-  return tracked
-    .filter((file) => UNCLAIMED_CHECK_LANGUAGES.has(languageOf(file)) && !ownedFiles.has(file))
-    .map((file) =>
-      fileFailure(
-        file,
-        `is not owned by any project in ${providerLabel} — every tracked Go, Rust or Python file ` +
-          `must belong to exactly one declared project, so its cross-project imports can be checked`,
-      ),
-    );
+function unclaimedFileFailures({ files, providerLabel }) {
+  return files.map((file) =>
+    fileFailure(
+      file,
+      `is not owned by any project in ${providerLabel} — every tracked Go, Rust or Python file ` +
+        `must belong to exactly one declared project, so its cross-project imports can be checked`,
+    ),
+  );
 }
 
 /**
@@ -498,6 +524,7 @@ export function resolveCommandContext(
   let analyzedFiles;
   let pluginGap;
   let unownedGap;
+  let unclaimedGap;
   let exemptedFiles;
 
   if (hasNative) {
@@ -607,6 +634,12 @@ export function resolveCommandContext(
     // the reason `pluginGap` is: a reader must not have to tell "false" from
     // "this branch forgot".
     unownedGap = { files: [], languages: [] };
+    // Same statement one list over: native's unclaimed files are already
+    // whole-file failures in `discovered.failures` above, and the policy's
+    // `coverage.unowned` channel is refused outright on this provider
+    // (`./policy.mjs`'s `resolvePolicy`), so there is nothing here for that
+    // channel to match against.
+    unclaimedGap = { files: [] };
   } else if (hasMoon) {
     // Moon provider — reads graph from `moon project-graph --json`, the same
     // one-call contract as the Nx path: Moon already resolved projects, tags
@@ -683,11 +716,13 @@ export function resolveCommandContext(
     // native's own `discovered.failures` has (this branch's header already
     // analyzes the whole tree before `paths` narrows anything, for the same
     // reason).
+    const unclaimedFiles = unclaimedAnalyzableFiles({ tracked, owned });
     failures = [
       ...wholeTreeAnalysis.failures.filter((failure) => selectedFiles.has(failure.sourceFile)),
-      ...unclaimedFileFailures({ tracked, owned, providerLabel: "the Moon project graph" }),
+      ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Moon project graph" }),
       ...pythonUnmodelledFailures(workspace),
     ];
+    unclaimedGap = { files: unclaimedFiles };
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
     analyzed = analyzedFiles.length;
     // `coverage.exempt` is a native-only key (`../providers/native/coverage.mjs`'s
@@ -742,11 +777,13 @@ export function resolveCommandContext(
     // unconditionally, the same workspace-wide posture native's own
     // `discovered.failures` has, so a scoped `check <path>` cannot hide an
     // orphan file elsewhere in the tree by naming a path that excludes it.
+    const unclaimedFiles = unclaimedAnalyzableFiles({ tracked, owned });
     failures = [
       ...failures,
-      ...unclaimedFileFailures({ tracked, owned, providerLabel: "the Nx project graph" }),
+      ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Nx project graph" }),
       ...pythonUnmodelledFailures(workspace),
     ];
+    unclaimedGap = { files: unclaimedFiles };
     // Same reason as the Moon branch above: `coverage.exempt` is a native-only
     // concept, so an Nx workspace has nothing to report here.
     exemptedFiles = [];
@@ -774,6 +811,7 @@ export function resolveCommandContext(
     options,
     pluginGap,
     unownedGap,
+    unclaimedGap,
     // Every tracked file that belongs to a project, paired with its project —
     // the ownership map `createWorkspace` already built (`own ./workspace.mjs`).
     // A command that needs to know WHICH project owns a file (the planning

@@ -18,6 +18,7 @@ import { suppressionCovers } from "../config.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import { suppressionFate } from "../governance/waiver.mjs";
 import { resolveCommandContext, unownedGapWithoutRunConfiguration } from "./context.mjs";
+import { partitionUnownedCoverage } from "./coverage-acceptance.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 import { declaredEdgeViolationsForCheck } from "./edge-constraints.mjs";
@@ -247,6 +248,51 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
         fingerprint: computePolicyFingerprint(config),
       }
     : null;
+
+  // The unowned-file question, answered once and BEFORE any verdict below
+  // reads `failures`: the tolerated TS/JS/Vue gap (`./context.mjs`'s
+  // `unownedGap`), minus the files this run read as its own configuration —
+  // the law that actually governed THIS run, which `policySource` names
+  // (`--config` override and resolved profile included), never the declared
+  // name alone. Subtracting here rather than inside `resolveCommandContext`
+  // is forced: `resolvePolicy` takes the context as an argument, so it cannot
+  // run before it, and until it has run nothing knows which law governed.
+  // `tsConfig` joins it because it is configuration by the same test, though
+  // every spelling of it is `.json` today and so never reaches the list.
+  const unownedGap = unownedGapWithoutRunConfiguration(commandContext.unownedGap, [
+    policySource,
+    commandContext.options.tsConfig,
+  ]);
+  // Then the acceptance channel: the policy's `coverage.unowned` rows,
+  // matched against BOTH unowned sets — this gap and the Go/Rust/Python
+  // unclaimed list — and nothing else (`./coverage-acceptance.mjs` owns the
+  // guarantee that an owned file is unreachable). Unowned-ness is decided
+  // exactly as before this channel existed; the rows only partition the
+  // result into accepted and uncovered.
+  const coverageRows = config?.coverage?.unowned ?? [];
+  const unownedCoverage = partitionUnownedCoverage({
+    rows: coverageRows,
+    unownedGap,
+    unclaimedFiles: commandContext.unclaimedGap.files,
+    tracked,
+  });
+  // A covered unclaimed file's whole-file failure is withdrawn here: the file
+  // is still unowned and still unanalyzed, but its state is a RECORDED
+  // acceptance now — stated below as the `"accepted-unowned-files"` coverage
+  // gap, never silently — rather than the exit-3 refusal an unanswered
+  // orphan earns. Uncovered unclaimed files keep their failures, and with
+  // them the exit code, byte-identical to before the channel existed. An
+  // unclaimed file carries exactly one failure (it is unowned, so no
+  // analyzer ever read it), so filtering by file cannot drop an unrelated
+  // read failure.
+  const acceptedUnclaimed = new Set(
+    commandContext.unclaimedGap.files.filter((file) => unownedCoverage.acceptedFiles.has(file)),
+  );
+  if (acceptedUnclaimed.size > 0) {
+    for (let at = failures.length - 1; at >= 0; at -= 1) {
+      if (acceptedUnclaimed.has(failures[at].sourceFile)) failures.splice(at, 1);
+    }
+  }
 
   // The go.work drift check, keyed off the manifest's presence the way every
   // resolver keys off its language's manifest: no tracked root go.work, no
@@ -622,9 +668,22 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     config !== null &&
     options.paths.length === 0 &&
     failures.length === 0 &&
-    (config.suppressions.length > 0 || config.depConstraints.length > 0)
+    (config.suppressions.length > 0 || config.depConstraints.length > 0 || coverageRows.length > 0)
   ) {
     const deadRows = [];
+    // The third dead table: a `coverage.unowned` row matching no unowned file
+    // across BOTH sets (`./coverage-acceptance.mjs`) accepts nothing — the
+    // files it covered are owned now, or the path was never right — and it is
+    // refused in the same sentence shape the native provider's stale
+    // `coverage.exempt` row has always gotten
+    // (`../providers/native/index.mjs`), under the same gate as its two
+    // siblings above this comment's block.
+    for (const { path, index } of unownedCoverage.dead) {
+      deadRows.push(
+        `coverage.unowned[${index}]: '${path}' matches no unowned file this run judged — either ` +
+          `the files it accepted are owned by a project now, or the path was never right`,
+      );
+    }
     config.suppressions.forEach((row, index) => {
       const fate = suppressionFate(row, now);
       if (fate === "waive") return;
@@ -739,25 +798,16 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // `coverage.complete` untouched — those belong to `unchecked`, and moving
   // this state into them would turn `check` red on trees whose only sin is a
   // root-level tooling script.
-  // The law that actually governed THIS run, not the one the workspace
-  // declared: `policySource` already carries the `--config` override and the
-  // resolved profile, workspace-relative. Subtracting it here rather than
-  // inside `resolveCommandContext` is forced — `resolvePolicy` takes the
-  // context as an argument, so it cannot run before it. `tsConfig` joins it
-  // because it is configuration by the same test, though every spelling of it
-  // is `.json` today and so never reaches the list.
-  const unownedGap = unownedGapWithoutRunConfiguration(commandContext.unownedGap, [
-    policySource,
-    commandContext.options.tsConfig,
-  ]);
-
+  // The subtraction of the run's own configuration, and the acceptance
+  // partition, both happened beside the policy above — `unownedCoverage` is
+  // that one computation's result, read here rather than recomputed.
   const coverageGaps = [
     ...(commandContext.provider === "nx" &&
     !commandContext.pluginGap.registered &&
     commandContext.pluginGap.manifests.length > 0
       ? [{ kind: "unregistered-plugin", manifests: commandContext.pluginGap.manifests }]
       : []),
-    ...(unownedGap.files.length > 0
+    ...(unownedCoverage.uncoveredUnowned.files.length > 0
       ? [
           {
             kind: "unowned-files",
@@ -766,8 +816,24 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
             // `moon.yml`), and the faces that render this carry no other way
             // to know which tree they are describing.
             provider: commandContext.provider,
-            languages: unownedGap.languages,
-            files: unownedGap.files,
+            languages: unownedCoverage.uncoveredUnowned.languages,
+            files: unownedCoverage.uncoveredUnowned.files,
+          },
+        ]
+      : []),
+    // The accepted half of both unowned sets, stated every run the
+    // acceptance is in force: an accepted hole is loud, never invisible —
+    // the report keeps naming the files, and `archkeep waivers` names each
+    // accepting row with its reason. Only the permanent unanswerable
+    // question (the warning above) and the unclaimed exit 3 are gone for
+    // these files.
+    ...(unownedCoverage.accepted.files.length > 0
+      ? [
+          {
+            kind: "accepted-unowned-files",
+            provider: commandContext.provider,
+            languages: unownedCoverage.accepted.languages,
+            files: unownedCoverage.accepted.files,
           },
         ]
       : []),

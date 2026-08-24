@@ -506,8 +506,29 @@ describe("findNativeModelViolations", () => {
           boundaryConfig: { ...wellFormedPolicy(), extra: "decorative" },
         }),
       ).toEqual([
-        "boundaryConfig.extra: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness, customRules, plus '$schema' (for editor validation)",
+        "boundaryConfig.extra: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness, customRules, coverage, plus '$schema' (for editor validation)",
       ]);
+    });
+
+    it("refuses the policy's coverage key inline, naming this file's own channel", () => {
+      // The key is a recognised policy key everywhere else (the Nx/Moon
+      // unowned-file acceptance channel, `../../config.mjs`'s
+      // `findCoverageViolations`) — refused HERE by name because a native
+      // tree already records the identical decision on this very file's
+      // `coverage.exempt`, and two channels for one decision on one tree is
+      // how copies drift. The file-dialect spelling of the same mistake is
+      // `resolvePolicy`'s refusal (`../../commands/policy.mjs`).
+      const violations = findNativeModelViolations({
+        ...wellFormed(),
+        boundaryConfig: {
+          ...wellFormedPolicy(),
+          coverage: { unowned: [{ path: "tools/**", reason: "generated tooling" }] },
+        },
+      });
+      expect(violations).toEqual([
+        expect.stringContaining("boundaryConfig.coverage: not accepted on a native workspace"),
+      ]);
+      expect(violations[0]).toContain("coverage.exempt");
     });
 
     // The fifth top-level law reaches this spelling through the same

@@ -85,7 +85,7 @@ export function hasProfiles(options) {
  * @param {string} cwd The process's working directory a relative `--config`
  *   resolves against — kept separate from the workspace root for the reason
  *   above.
- * @returns {Promise<{config: {depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], notes?: string[]}|null, profile: string|null, source: string|null}>}
+ * @returns {Promise<{config: {depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], coverage?: object, notes?: string[]}|null, profile: string|null, source: string|null}>}
  *   `fitness` and `customRules` are present only when the resolved policy
  *   declares them — an absent key is the workspace's decision not to declare
  *   that law, never an empty one (`../config.mjs`'s `policyFrom`).
@@ -94,6 +94,41 @@ export function hasProfiles(options) {
  *   mode, unchanged by the extraction.
  */
 export async function resolvePolicy(options, commandContext, cwd) {
+  const resolved = await resolvePolicyArm(options, commandContext, cwd);
+  // The policy's `coverage` key (unowned-file acceptances,
+  // `../config.mjs`'s `findCoverageViolations`) is an Nx/Moon channel: a
+  // native tree already records the identical decision on `archkeep.json`'s
+  // own `coverage.exempt` (`../providers/native/coverage.mjs`), and two
+  // channels for one decision on one tree is how copies drift. The inline
+  // spelling is refused at model load
+  // (`../providers/native/model.mjs`'s `findNativeModelViolations`); this is
+  // the file-dialect spelling of the same refusal, held here because the
+  // ladder below is the first point that knows both the provider and the
+  // loaded policy — and held for every command that reads a policy, so the
+  // editor-adjacent commands cannot accept a law `check` refuses.
+  if (resolved.config?.coverage !== undefined && commandContext.provider === "native") {
+    throw new Error(
+      `archkeep: ${resolved.source ?? "the boundary config"} declares 'coverage', but this ` +
+        `workspace's project model is ${ARCHKEEP_MODEL_FILE} — a native tree records ` +
+        `unowned-file acceptances on ${ARCHKEEP_MODEL_FILE}'s own coverage.exempt, and a second ` +
+        `channel for the same decision is a copy that will drift. Move the rows there and ` +
+        `delete the policy key.`,
+    );
+  }
+  return resolved;
+}
+
+/**
+ * The four arms of the ladder, unguarded — `resolvePolicy` above wraps this
+ * with the one post-resolution refusal that needs both the provider and the
+ * loaded policy in hand.
+ *
+ * @param {{config: string|null}} options
+ * @param {object} commandContext
+ * @param {string} cwd
+ * @returns {Promise<{config: object|null, profile: string|null, source: string|null}>}
+ */
+async function resolvePolicyArm(options, commandContext, cwd) {
   const { root } = commandContext;
   if (hasProfiles(commandContext.options)) {
     const profileName = String(options.config ?? commandContext.options.boundaryConfig);

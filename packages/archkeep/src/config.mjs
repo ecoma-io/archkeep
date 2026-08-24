@@ -96,7 +96,8 @@
  *
  * The `.mjs`/`.js` and `.json` dialects share the same top-level key law: a
  * top-level export (or key) beyond `depConstraints`, `moduleBoundaryOptions`,
- * `boundarySuppressions`, `fitness` and `customRules` is rejected by name. The
+ * `boundarySuppressions`, `fitness`, `customRules` and `coverage` is rejected
+ * by name. The
  * `.mjs` dialect's tolerance for a helper export used to let a misspelled key
  * (`moduleBoundaryOptions` → `moduleBoundaryOption`) disappear into silence —
  * a typo'd law is a law that is not enforced, the exact silent direction this
@@ -558,6 +559,94 @@ function suppressionRowViolations(row, index) {
 }
 
 /**
+ * The keys a `coverage.unowned` row may carry. `reason` is not optional, for
+ * the same reason it is not optional on a suppression row above and on a
+ * native `coverage.exempt` row (`./providers/native/model.mjs`'s
+ * `exemptRowViolations`, whose semantics this row copies exactly): an
+ * accepted coverage hole with no reason written down is indistinguishable
+ * from coverage that quietly stopped being enforced.
+ */
+const COVERAGE_UNOWNED_KEYS = ["path", "reason"];
+
+/**
+ * One `coverage.unowned` row's problems, prefixed with its index.
+ *
+ * @param {unknown} row
+ * @param {number} index
+ * @returns {string[]}
+ */
+function coverageUnownedRowViolations(row, index) {
+  const at = `coverage.unowned[${index}]`;
+  if (!isPlainObject(row)) return [`${at}: must be an object, got ${describe(row)}`];
+
+  const violations = [];
+  if (typeof row.path !== "string" || row.path === "") {
+    violations.push(
+      `${at}.path: must be a non-empty glob over a workspace-relative path, matched with ` +
+        `\`path.posix.matchesGlob\`, got ${describe(row.path)}`,
+    );
+  } else {
+    const problem = globComplexityError(row.path);
+    if (problem) violations.push(`${at}.path: '${row.path}' ${problem}`);
+  }
+  if (typeof row.reason !== "string" || row.reason.trim() === "") {
+    violations.push(
+      `${at}.reason: must be a non-empty string — an accepted coverage hole with no reason ` +
+        `written down reads as coverage that is still enforced`,
+    );
+  }
+  for (const key of Object.keys(row)) {
+    if (!COVERAGE_UNOWNED_KEYS.includes(key)) {
+      violations.push(
+        `${at}.${key}: not a coverage.unowned field — expected one of ` +
+          COVERAGE_UNOWNED_KEYS.join(", "),
+      );
+    }
+  }
+  return violations;
+}
+
+/**
+ * Everything wrong with a policy's `coverage` key, as messages; empty when it
+ * is well-formed.
+ *
+ * The key holds exactly one field: `unowned`, an array of `{path, reason}`
+ * rows — a recorded acceptance of tracked files no project owns, for the Nx
+ * and Moon providers whose project model has no channel of its own for that
+ * decision (`../../../docs/reference/policy-schema.md`, "`coverage`"). A row
+ * is matched ONLY against files already decided to be unowned, so even a `**`
+ * row can never silence a verdict about an owned file — the same guarantee
+ * the native provider's `coverage.exempt` states
+ * (`./providers/native/coverage.mjs`). An empty `unowned` list is accepted
+ * for the reason an empty suppression list is: it accepts nothing, which is
+ * the direction that cannot hide anything.
+ *
+ * @param {unknown} value The parsed `coverage` value.
+ * @returns {string[]}
+ */
+function findCoverageViolations(value) {
+  if (!isPlainObject(value)) {
+    return [`coverage: must be an object carrying an 'unowned' array, got ${describe(value)}`];
+  }
+  const violations = [];
+  if (!Array.isArray(value.unowned)) {
+    violations.push(
+      `coverage.unowned: must be an array of {path, reason} rows, got ${describe(value.unowned)}`,
+    );
+  } else {
+    value.unowned.forEach((row, index) =>
+      violations.push(...coverageUnownedRowViolations(row, index)),
+    );
+  }
+  for (const key of Object.keys(value)) {
+    if (key !== "unowned") {
+      violations.push(`coverage.${key}: not a coverage field — expected 'unowned'`);
+    }
+  }
+  return violations;
+}
+
+/**
  * The grammar a custom rule's `name` is written in: lowercase letters and
  * digits, single `-` separators, nothing else.
  *
@@ -863,8 +952,14 @@ export function findBoundaryConfigViolations(module, io = {}) {
   if (!isPlainObject(module)) return [`config: expected a module object, got ${describe(module)}`];
 
   const violations = [];
-  const { depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness, customRules } =
-    module;
+  const {
+    depConstraints,
+    moduleBoundaryOptions,
+    boundarySuppressions,
+    fitness,
+    customRules,
+    coverage,
+  } = module;
   // F05: the resolution half of the governance block (`row-schema.mjs`'s
   // `io.resolve`) was validator-only until now — no production caller passed
   // one, so a row bound to a fitness rule that does not exist loaded and ran
@@ -907,6 +1002,16 @@ export function findBoundaryConfigViolations(module, io = {}) {
   // policy still says it does.
   if (customRules !== undefined) {
     violations.push(...findCustomRuleViolations(customRules, io));
+  }
+
+  // The unowned-file acceptances — the sixth top-level law, shaped here and
+  // matched by `./commands/coverage-acceptance.mjs` against files already
+  // decided to be unowned, never against owned ones. Absent means "no
+  // acceptance recorded"; present and malformed is refused loudly, because a
+  // row this reader could not understand is an acceptance that would not
+  // apply while the policy still says it does.
+  if (coverage !== undefined) {
+    violations.push(...findCoverageViolations(coverage));
   }
 
   // Absent means "nothing is suppressed", which is the only default that fails
@@ -996,8 +1101,15 @@ export function findBoundaryConfigViolations(module, io = {}) {
  * general "ignore unknown" rule, which is exactly the leniency this file's
  * header argues a JSON object must not get). `fitness` is the fourth: the
  * boundary dialect's key for the fitness-functions list, validated as an array
- * of fitness rows. `customRules` is the fifth and newest — the declared rules
+ * of fitness rows. `customRules` is the fifth — the declared rules
  * this engine did not write, validated as an array of custom-rule rows.
+ * `coverage` is the sixth and newest: the recorded acceptances of unowned
+ * files on an Nx or Moon workspace (`findCoverageViolations` above owns the
+ * shape). On a native tree the key is refused — `archkeep.json`'s own
+ * `coverage.exempt` is that provider's one channel for the same decision —
+ * and the refusal lives in `./commands/policy.mjs`'s `resolvePolicy` and
+ * `./providers/native/model.mjs`'s inline-policy check, because only they
+ * know which provider is reading.
  *
  * The name says `.json` and the list binds both file dialects: `loadModulePolicy`
  * runs the same check over an ES module's exports, which is what makes a
@@ -1010,6 +1122,7 @@ const JSON_POLICY_KEYS = [
   "boundarySuppressions",
   "fitness",
   "customRules",
+  "coverage",
 ];
 
 /**
@@ -1086,7 +1199,7 @@ export function policyKeyViolations(parsed, { allowSchema }) {
  *   inline one.
  * @param {string[]} [extraViolations] Violations the caller already found that
  *   `findBoundaryConfigViolations` does not check on its own.
- * @returns {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[] }}
+ * @returns {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], coverage?: object }}
  *   `fitness` and `customRules` are present only when the config declares
  *   them — a workspace without one carries no key, the same "absent is a
  *   decision" posture `cli.mjs`'s `check` uses for a missing
@@ -1109,6 +1222,7 @@ export function policyFrom(parsed, sourceLabel, extraViolations = []) {
     suppressions: parsed.boundarySuppressions ?? [],
     ...(parsed.fitness === undefined ? {} : { fitness: parsed.fitness }),
     ...(parsed.customRules === undefined ? {} : { customRules: parsed.customRules }),
+    ...(parsed.coverage === undefined ? {} : { coverage: parsed.coverage }),
   };
 }
 
@@ -1125,7 +1239,7 @@ export function policyFrom(parsed, sourceLabel, extraViolations = []) {
  * legitimate namespace to share a helper in gave a typo the same silence.
  *
  * @param {string} path Absolute path of the config file.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], coverage?: object }>}
  * @throws {Error} when the file is missing, unloadable, or malformed.
  */
 async function loadModulePolicy(path) {
@@ -1151,7 +1265,7 @@ async function loadModulePolicy(path) {
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Injectable read, defaulting to `node:fs/promises`' `readFile` — the only
  *   code in this function that reaches outside the process.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], coverage?: object }>}
  * @throws {Error} when the file is missing, unreadable, not valid JSON, or
  *   malformed — either by `findBoundaryConfigViolations`' rules or by carrying
  *   a top-level key none of those rules knows about.
@@ -1198,7 +1312,7 @@ async function loadJsonPolicy(path, { readFile = readFileFromDisk } = {}) {
  * @param {string} path Absolute path of the config file.
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Injectable read, used only by the `.json` dialect — see `loadJsonPolicy`.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], notes?: string[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], coverage?: object, notes?: string[] }>}
  *   `suppressions` is `[]` when the config declares none. `notes` is present
  *   only under the ESLint dialect, and only when `./eslint-config.mjs` has
  *   something worth telling a reader about which entry it bound — see
@@ -1250,8 +1364,12 @@ export async function loadBoundaryConfigFile(path, io = {}) {
       // from (see this module's header). Never populated under this dialect —
       // `policyFrom` already resolves that to `[]` since the object above
       // states no `boundarySuppressions` key, and it leaves `customRules`
-      // absent for the same reason, the header's own distinction between an
-      // absent law and an empty one.
+      // and `coverage` absent for the same reason, the header's own
+      // distinction between an absent law and an empty one: a flat config's
+      // one rule entry is a constraint table and its options, with nowhere to
+      // name a rule artifact or an unowned-file acceptance
+      // (`../../../docs/reference/policy-schema.md`'s dialect table names both
+      // gaps on the consumer-facing side).
       ...(note !== undefined ? { notes: [note] } : {}),
     };
   }
@@ -1279,7 +1397,7 @@ export async function loadBoundaryConfigFile(path, io = {}) {
  *   misconfigured tool.
  * @param {{readFile?: (path: string, encoding: "utf8") => Promise<string>}} [io]
  *   Forwarded to `loadBoundaryConfigFile` — see there.
- * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], notes?: string[] }>}
+ * @returns {Promise<{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], coverage?: object, notes?: string[] }>}
  * @throws {Error} as `loadBoundaryConfigFile`.
  */
 export async function loadBoundaryConfig(workspaceRoot, boundaryConfig, io = {}) {

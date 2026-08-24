@@ -7,16 +7,18 @@ What each field contains; not what to put in it (that is
 
 ## Top-level keys
 
-Four keys, same names in every dialect. A fifth, `$schema`, is accepted in the
-`.json` dialect (file or inline) for editor validation, and must be a non-empty
-string.
+Six keys, same names in every dialect. A seventh, `$schema`, is accepted in
+the `.json` dialect (file or inline) for editor validation, and must be a
+non-empty string.
 
-| key                     | type   | required | meaning                                                           |
-| ----------------------- | ------ | -------- | ----------------------------------------------------------------- |
-| `depConstraints`        | array  | yes      | The constraint table.                                             |
-| `moduleBoundaryOptions` | object | yes      | The eight `@nx/enforce-module-boundaries` options.                |
-| `boundarySuppressions`  | array  | no       | Accepted violations. Absent means nothing suppressed.             |
-| `fitness`               | array  | no       | Named quality gates judged every run. Absent means none declared. |
+| key                     | type   | required | meaning                                                                                       |
+| ----------------------- | ------ | -------- | --------------------------------------------------------------------------------------------- |
+| `depConstraints`        | array  | yes      | The constraint table.                                                                         |
+| `moduleBoundaryOptions` | object | yes      | The eight `@nx/enforce-module-boundaries` options.                                            |
+| `boundarySuppressions`  | array  | no       | Accepted violations. Absent means nothing suppressed.                                         |
+| `fitness`               | array  | no       | Named quality gates judged every run. Absent means none declared.                             |
+| `customRules`           | array  | no       | Declared WebAssembly rules of the workspace's own. Absent means none declared.                |
+| `coverage`              | object | no       | Accepted unowned files (`coverage.unowned`), Nx/Moon only. Absent means no acceptance record. |
 
 Any other key is rejected by name in every dialect that reads this table — the
 `.mjs`/`.js` module's extra exports included, so a misspelled key cannot load
@@ -282,6 +284,58 @@ rejected — law present but judging nothing reads as protection. Unknown keys
 in a row, a duplicate name, or a malformed field are rejected at load, naming
 the key and the row.
 
+## `coverage`
+
+An object with exactly one field: `unowned`, an array of `{ path, reason }`
+rows. Each row records the acceptance of tracked analyzable files **owned by
+no project** on an Nx or Moon workspace — the files `check` otherwise reports
+as the permanent `unowned-files` warning (TypeScript, JavaScript, Vue) or
+refuses with exit 3 (an unclaimed Go, Rust or Python file). See
+[troubleshooting.md](../usage/troubleshooting.md#it-reported-nothing-and-i-expected-a-violation)
+for the state each row answers.
+
+| field    | type   | required | meaning                                                                                                                                            |
+| -------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`   | string | yes      | Glob over a workspace-relative path, matched with `path.posix.matchesGlob` and capped at 512 brace-driven alternatives like every other glob here. |
+| `reason` | string | yes      | Non-empty. An accepted coverage hole with no reason written down reads as coverage that is still enforced.                                         |
+
+Rows are matched **only against files already decided to be unowned** — never
+against owned files — so even a `**` row cannot silence a verdict about a file
+a project owns. This is the same guarantee the native provider's
+[`coverage.exempt`](configuration.md#coverageexempt) states, and it is what
+separates accepting a **coverage hole** (a file judged by nothing) from a
+`boundarySuppressions` row's accepting a **verdict** the engine reached.
+
+A covered file is a recorded acceptance, never an invisible one. `check`
+still states every accepted file, in every format, as an
+`accepted-unowned-files` coverage gap
+([json-output.md](json-output.md#coverage)), and `archkeep waivers` names
+each row with its reason and how many unowned files it currently covers. What
+stops for a covered file is only the permanent half: the unanswerable
+warning, and the unclaimed exit 3.
+
+A row matching no unowned file across both sets is refused by `archkeep
+check` with exit 3, naming the row — the same stale-row sentence a native
+`coverage.exempt` row gets, under the same whole-workspace, fully-analyzed
+gate as [the constraint-table refusal](#a-row-that-covers-nothing). A fixed
+tree deletes its dead acceptances the way it deletes dead suppressions: by an
+explicit edit, never silently.
+
+Two provider rules, and one compatibility note:
+
+- **A native workspace is refused the key, loudly.** `archkeep.json`'s own
+  [`coverage.exempt`](configuration.md#coverageexempt) is that provider's one
+  channel for the identical decision, so a policy carrying `coverage` on a
+  native tree exits 3 naming it — in the inline spelling and the file
+  spelling alike. One channel per decision per tree.
+- **The ESLint dialect cannot carry it.** A flat config's rule entry has
+  nowhere to declare the key — the same structural gap `boundarySuppressions`
+  and `customRules` have under that dialect (the table below).
+- **Older archkeep refuses the key.** A policy carrying `coverage` exits 3 on
+  archkeep ≤ 0.13.x, whose loaders reject the unknown key by name. That is
+  the loud direction, and deliberate pre-1.0: an older enforcer must refuse a
+  law it cannot fully read rather than enforce the half it understood.
+
 ## Three dialects
 
 All three are validated by the same function. A constraint row is checked
@@ -293,6 +347,10 @@ identically whichever dialect wrote it.
 | `.json`               | extension                  | plain JSON, `JSON.parse`d (never JSONC)             | supported                    | supported                    | none -- all eight required                                    |
 | ESLint flat config    | basename `eslint.config.*` | flat config's `@nx/enforce-module-boundaries` entry | not supported (always empty) | not supported (always empty) | filled from the workspace's own installed `@nx/eslint-plugin` |
 
+`coverage` follows the `customRules` column exactly: supported in the
+`.mjs`/`.js` and `.json` dialects, never present under the ESLint dialect —
+absent there, as the workspace's own statement, not empty.
+
 The ESLint dialect is explicit opt-in only -- archkeep never probes for one.
 Legacy `.eslintrc*` names are refused by name. Basename is checked before
 extension. For the conceptual overview of what policies are and how they relate
@@ -301,9 +359,12 @@ to the Nx ecosystem, see [policies.md](../concepts/policies.md).
 ### Inline policy (`archkeep.json` only)
 
 A native workspace may hold the policy object directly on `archkeep.json`'s
-`boundaryConfig` field instead of pointing at a filename. Same five keys as
-the `.json` dialect, validated by the identical function — `$schema` included,
-accepted and checked the same way a `.json` policy file accepts it. Every face
+`boundaryConfig` field instead of pointing at a filename. Same keys as the
+`.json` dialect, validated by the identical function — `$schema` included,
+accepted and checked the same way a `.json` policy file accepts it — with the
+one exception [`coverage`](#coverage) states: the inline form refuses that
+key by name, because `archkeep.json`'s own `coverage.exempt` is the native
+provider's channel for the same decision. Every face
 reads it: the CLI, the Nx hook, and the language server, which re-reads
 `archkeep.json` on every invalidation and so sees an edited inline law exactly
 as it sees an edited policy file.

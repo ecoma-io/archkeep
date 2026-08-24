@@ -43,6 +43,8 @@ import { referenceTime } from "../governance/clock.mjs";
 import { isWaiver, remainingMs, waiverStatus } from "../governance/waiver.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatWaiversReport } from "../report/waivers-text.mjs";
+import { partitionUnownedCoverage } from "./coverage-acceptance.mjs";
+import { unownedGapWithoutRunConfiguration } from "./context.mjs";
 import { refuseIncompleteGraph } from "./drift.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { evaluateRun } from "../rules/index.mjs";
@@ -144,7 +146,10 @@ export function computeWaivers(suppressions, rawViolations, now = referenceTime(
  *   by the same three-way call `check` makes — `cli.mjs`'s `runWaivers`
  *   resolves `--config` against the working directory exactly as `runCheck`
  *   does, so the surface listed is the surface the law actually enforces.
- * @param {{now?: string}} [io] The injected clock.
+ * @param {{now?: string, policySource?: string|null}} [io] The injected
+ *   clock, and — from `cli.mjs`'s `runWaivers` — the workspace-relative path
+ *   the run's law actually resolved from, so the `coverage.unowned` matching
+ *   below subtracts the same configuration files `check` subtracts.
  * @returns {Promise<{status: "ok", waivers: object, report: {text: string, json: string}}>}
  * @throws {Error} whenever the run's law is malformed, or the tree has
  *   whole-file analysis failures — exit-3 class, the same posture `check` takes
@@ -155,15 +160,37 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
   const now = io.now ?? referenceTime();
   const config = boundaryConfig;
 
+  // The policy's `coverage.unowned` acceptances, matched through the SAME
+  // partition `check` runs (`./coverage-acceptance.mjs`) so the two surfaces
+  // cannot disagree about what a row covers. This command is the surface the
+  // acceptances' REASONS live on: `check` states the accepted files and
+  // points here, this names each row with its reason and current coverage —
+  // the same division of labour the suppression table already has between
+  // `check`'s accepted-violations section and this command's rows.
+  const unownedCoverage = partitionUnownedCoverage({
+    rows: config?.coverage?.unowned ?? [],
+    unownedGap: unownedGapWithoutRunConfiguration(commandContext.unownedGap, [
+      io.policySource ?? null,
+      commandContext.options.tsConfig,
+    ]),
+    unclaimedFiles: commandContext.unclaimedGap.files,
+    tracked: commandContext.tracked,
+  });
+
   // A waiver surface over a tree it could not fully read is a lottery ticket,
   // not a surface: a file the analyzer never judged contributes no raw
   // violation, so every waiver that names it reads as stale and the report
   // says "covers nothing" about a finding the run never looked at. Refuse
   // loudly on whole-file failures, the same posture `impact`, `drift`, and
   // `history` take — "could not look" must never read as "looked and found
-  // nothing" (`./impact.mjs`'s refusal names the same silence).
+  // nothing" (`./impact.mjs`'s refusal names the same silence). A whole-file
+  // failure whose file a `coverage.unowned` row accepts is withdrawn first,
+  // exactly as `check` withdraws it (`./check.mjs`'s `acceptedUnclaimed`):
+  // its state is a recorded acceptance this very report is about to name,
+  // not a hole the run failed to look at.
   const notAnalyzed = analysis.failures
     .filter(isWholeFileFailure)
+    .filter(({ sourceFile }) => !unownedCoverage.acceptedFiles.has(sourceFile))
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
 
   if (notAnalyzed.length > 0) {
@@ -218,7 +245,30 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
   };
 
   const context = { root, provider, marker, provenance: resolveProvenance(root) };
-  const result = { waivers, covered, expired, stale, suppressions, suppressed };
+  const result = {
+    waivers,
+    covered,
+    expired,
+    stale,
+    suppressions,
+    suppressed,
+    // The third surface, present only when the policy declares the channel —
+    // the same absent-is-a-decision key discipline `check`'s envelope keeps
+    // for `fitness`/`customRules`, so a workspace without the key gets a
+    // byte-identical envelope. Each row is the declared acceptance with how
+    // many unowned files it currently covers; a `covered: 0` row reads like
+    // a stale waiver above — dead weight this command surfaces and `check`
+    // refuses (`./check.mjs`'s dead-row block).
+    ...(config?.coverage === undefined
+      ? {}
+      : {
+          unownedAcceptances: unownedCoverage.rows.map(({ path, reason, files }) => ({
+            path,
+            reason,
+            covered: files.length,
+          })),
+        }),
+  };
 
   const envelope = jsonEnvelope({
     command: "waivers",

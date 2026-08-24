@@ -35,6 +35,15 @@ That is a coverage note, not a finding: the exit code does not change, and
 native provider (a `archkeep.json` workspace) the same state is a refusal
 instead — exit 3, no verdict.
 
+If a file is _meant_ to sit outside every project, record the acceptance: a
+[`coverage.unowned`](../reference/policy-schema.md#coverage) row in the
+boundary policy (`{ "path": "tools/**", "reason": "…" }`) turns the warning —
+and, for a Go, Rust or Python orphan, the exit-3 refusal — into a stated
+acceptance the report still names on every run. The key is Nx/Moon only (a
+native tree records the same decision in `archkeep.json`'s `coverage.exempt`
+and is refused the policy key), and archkeep ≤ 0.13.x rejects a policy
+carrying it, loudly, as an unknown key.
+
 **The project is invisible to the workspace tool.** On an Nx workspace, a
 directory with sources but no `project.json` or `package.json` does not appear
 in `nx show projects` at all — not as a warning, as an absence. On a Moon

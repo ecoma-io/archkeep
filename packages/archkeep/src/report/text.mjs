@@ -588,6 +588,7 @@ const UNOWNED_SAMPLE_LIMIT = 10;
 function formatCoverageGap(gap) {
   if (gap.kind === "unregistered-plugin") return formatUnregisteredPluginGap(gap);
   if (gap.kind === "unowned-files") return formatUnownedFilesGap(gap);
+  if (gap.kind === "accepted-unowned-files") return formatAcceptedUnownedFilesGap(gap);
   return `⚠ coverage gap "${gap.kind}" — part of this workspace is outside what this run covered`;
 }
 
@@ -652,6 +653,41 @@ function formatUnownedFilesGap(gap) {
     `${lines.join("\n")}\n` +
     `${DETAIL}declare a project that owns ${them} (a ${manifest} under a directory that ` +
     `contains ${them}), or leave ${them} outside the boundary system knowingly`
+  );
+}
+
+/**
+ * The accepted counterpart of the gap above: unowned files the boundary
+ * policy's `coverage.unowned` rows accept (`../commands/check.mjs`,
+ * `../commands/coverage-acceptance.mjs`). An accepted hole is still a hole,
+ * so the section renders on every run the acceptance is in force, with the
+ * same bounded sample the warning uses — what it no longer does is ask the
+ * reader a question someone already answered, which is the warning's job.
+ * The reasons live on the accepting rows, and `archkeep waivers` is the
+ * surface that names each row with its reason and current coverage; this
+ * face points there rather than restating them.
+ *
+ * @param {{languages?: string[], files: string[]}} gap
+ * @returns {string}
+ */
+function formatAcceptedUnownedFilesGap(gap) {
+  const files = gap.files ?? [];
+  const count = files.length;
+  const languages = gap.languages ?? [];
+  const spans = languages.length > 0 ? ` (${languages.join(", ")})` : "";
+  const shown = files.slice(0, UNOWNED_SAMPLE_LIMIT);
+  const remaining = count - shown.length;
+  const lines = shown.map((file) => `${CONTINUED}${file}`);
+  if (remaining > 0) {
+    lines.push(`${CONTINUED}… and ${remaining} more — the full list is in --format json`);
+  }
+  const them = count === 1 ? "it" : "them";
+  return (
+    `⚠ ${count} tracked analyzable file${count === 1 ? "" : "s"}${spans} ` +
+    `owned by no project — accepted as coverage holes by the policy's coverage.unowned, ` +
+    `so no boundary verdict covers ${them}\n` +
+    `${lines.join("\n")}\n` +
+    `${DETAIL}each accepting row's reason: archkeep waivers`
   );
 }
 

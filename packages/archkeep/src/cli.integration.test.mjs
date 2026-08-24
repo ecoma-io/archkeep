@@ -7160,6 +7160,295 @@ export const moduleBoundaryOptions = {
   });
 });
 
+describe("`check` accepts unowned files through the policy's coverage.unowned", () => {
+  // Issue #282: both unowned states used to be permanent — the TS/JS/Vue gap
+  // warned on every run with no way to answer it, and a Go/Rust/Python
+  // unclaimed file was a hard exit 3 with no accepted middle ground. A
+  // `coverage.unowned` row turns either into a RECORDED acceptance: the run
+  // still states every accepted file (the assertions below pin presence, not
+  // merely the absence of the old warning — an acceptance that went
+  // invisible would be the silent direction wearing a feature's name), but
+  // the unanswerable warning and the exit 3 stop firing for it.
+  const coverageRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-coverage-unowned-"));
+  afterAll(() => rmSync(coverageRoot, { recursive: true, force: true }));
+
+  const writeCov = (relativePath, text) => {
+    mkdirSync(join(coverageRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(coverageRoot, relativePath), text);
+  };
+
+  const COV_OPTIONS = {
+    allow: [],
+    buildTargets: ["build"],
+    enforceBuildableLibDependency: false,
+    allowCircularSelfDependency: false,
+    checkDynamicDependenciesExceptions: [],
+    ignoredCircularDependencies: [],
+    banTransitiveDependencies: false,
+    checkNestedExternalImports: false,
+  };
+  const lawWith = (coverage) =>
+    JSON.stringify({
+      depConstraints: [],
+      moduleBoundaryOptions: COV_OPTIONS,
+      ...(coverage === null ? {} : { coverage }),
+    });
+
+  writeCov(
+    "nx.json",
+    JSON.stringify({ plugins: [{ plugin: "@ecoma-io/archkeep/nx", options: {} }] }),
+  );
+  // The `.json` dialect on purpose, twice over: it re-reads from disk on
+  // every load (no module cache between the spellings below), and a tracked
+  // `.json` is not an analyzable file, so the alternative law spellings do
+  // not themselves join the unowned set the way extra `.mjs` laws would.
+  writeCov(
+    "law-accept.json",
+    lawWith({
+      unowned: [
+        { path: "orphans/**", reason: "vendored fixture corpus imported wholesale" },
+        { path: "tools/**", reason: "generated release tooling, judged by its own pipeline" },
+      ],
+    }),
+  );
+  writeCov(
+    "law-partial.json",
+    lawWith({ unowned: [{ path: "orphans/**", reason: "vendored fixture corpus" }] }),
+  );
+  writeCov(
+    "law-tools.json",
+    lawWith({ unowned: [{ path: "tools/**", reason: "generated release tooling" }] }),
+  );
+  writeCov("law-none.json", lawWith(null));
+  writeCov("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+  writeCov("libs/domain/doc.go", "package domain\n");
+  writeCov("orphans/legacy.go", "package legacy\n");
+  writeCov("tools/release.mjs", "export const release = 1;\n");
+
+  const covGraph = {
+    nodes: { domain: { name: "domain", type: "lib", data: { root: "libs/domain", tags: [] } } },
+    dependencies: { domain: [] },
+  };
+  const covFiles = [
+    "nx.json",
+    "law-accept.json",
+    "law-none.json",
+    "law-partial.json",
+    "law-tools.json",
+    "libs/domain/go.mod",
+    "libs/domain/doc.go",
+    "orphans/legacy.go",
+    "tools/release.mjs",
+  ];
+  const covContext = (files = covFiles) => ({
+    cwd: coverageRoot,
+    readGraph: () => covGraph,
+    listFiles: () => files,
+  });
+
+  it("records both unowned kinds as accepted — loudly, with no exit 3 and no permanent warning", async () => {
+    const result = await check(
+      { format: "text", config: "law-accept.json", paths: [] },
+      covContext(),
+    );
+    expect(result.unchecked).toBe(0);
+    expect(result.violations).toBe(0);
+    const text = result.report;
+    // Presence first: the acceptance is stated, files named.
+    expect(text).toContain("accepted as coverage holes by the policy's coverage.unowned");
+    expect(text).toContain("orphans/legacy.go");
+    expect(text).toContain("tools/release.mjs");
+    // Then absence: the permanent warning and the unclaimed refusal are gone.
+    expect(text).not.toContain("— skipped");
+    expect(text).not.toContain("is not owned by any project");
+
+    const { report } = await check(
+      { format: "json", config: "law-accept.json", paths: [] },
+      covContext(),
+    );
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("ok");
+    expect(envelope.exitCode).toBe(EXIT.ok);
+    expect(envelope.coverage.complete).toBe(true);
+    const gaps = envelope.coverage.coverageGaps;
+    expect(gaps.filter((gap) => gap.kind === "unowned-files")).toEqual([]);
+    const accepted = gaps.find((gap) => gap.kind === "accepted-unowned-files");
+    expect(accepted).toBeDefined();
+    // Tracked order, both languages, and the provider the remediation would
+    // name — the same fields the warning gap carries.
+    expect(accepted.files).toEqual(["orphans/legacy.go", "tools/release.mjs"]);
+    expect(accepted.languages).toEqual(["go", "typescript"]);
+    expect(accepted.provider).toBe("nx");
+  });
+
+  it("keeps today's behavior verbatim when the policy declares no coverage", async () => {
+    const { report, unchecked } = await check(
+      { format: "json", config: "law-none.json", paths: [] },
+      covContext(),
+    );
+    expect(unchecked).toBe(1);
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.coverage.notAnalyzed.map(({ file }) => file)).toEqual(["orphans/legacy.go"]);
+    const gap = envelope.coverage.coverageGaps.find((entry) => entry.kind === "unowned-files");
+    expect(gap.files).toEqual(["tools/release.mjs"]);
+    expect(
+      envelope.coverage.coverageGaps.filter((entry) => entry.kind === "accepted-unowned-files"),
+    ).toEqual([]);
+  });
+
+  it("leaves an uncovered TS file's warning untouched while accepting the Go orphan", async () => {
+    const result = await check(
+      { format: "text", config: "law-partial.json", paths: [] },
+      covContext(),
+    );
+    // The accepted Go orphan no longer refuses the run…
+    expect(result.unchecked).toBe(0);
+    expect(result.report).toContain("accepted as coverage holes");
+    expect(result.report).toContain("orphans/legacy.go");
+    // …and the uncovered TS file keeps today's warning verbatim.
+    expect(result.report).toContain(
+      "1 tracked analyzable file (typescript) owned by no project — skipped",
+    );
+    expect(result.report).toContain("tools/release.mjs");
+  });
+
+  it("keeps exit 3 for an unclaimed Go file no row covers", async () => {
+    const { report, unchecked } = await check(
+      { format: "json", config: "law-tools.json", paths: [] },
+      covContext(),
+    );
+    expect(unchecked).toBe(1);
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.coverage.notAnalyzed.map(({ file }) => file)).toEqual(["orphans/legacy.go"]);
+    // The accepted TS file is still stated — acceptance and refusal coexist.
+    expect(
+      envelope.coverage.coverageGaps.find((entry) => entry.kind === "accepted-unowned-files").files,
+    ).toEqual(["tools/release.mjs"]);
+  });
+
+  it("refuses a row whose last file gained an owner, naming the row — the native stale-row sentence", async () => {
+    // Same law, but the tree no longer carries the files the row accepted:
+    // the acceptance is dead, and dead must be a loud verdict (exit-3 class),
+    // not a key that silently stops meaning anything.
+    const owned = covFiles.filter(
+      (file) => file !== "orphans/legacy.go" && file !== "tools/release.mjs",
+    );
+    await expect(
+      check({ format: "text", config: "law-partial.json", paths: [] }, covContext(owned)),
+    ).rejects.toThrow(
+      /coverage\.unowned\[0\]: 'orphans\/\*\*' matches no unowned file this run judged/,
+    );
+  });
+
+  it("surfaces the acceptances — path, reason, current coverage — through `archkeep waivers`", async () => {
+    const out = [];
+    const err = [];
+    const exitCode = await runCli(["waivers", "--format", "json", "--config", "law-accept.json"], {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      ...covContext(),
+    });
+    expect(err).toEqual([]);
+    expect(exitCode).toBe(EXIT.ok);
+    const envelope = JSON.parse(out.join("\n"));
+    expect(envelope.result.unownedAcceptances).toEqual([
+      { path: "orphans/**", reason: "vendored fixture corpus imported wholesale", covered: 1 },
+      {
+        path: "tools/**",
+        reason: "generated release tooling, judged by its own pipeline",
+        covered: 1,
+      },
+    ]);
+
+    const textOut = [];
+    await runCli(["waivers", "--config", "law-accept.json"], {
+      out: (text) => textOut.push(text),
+      err: () => {},
+      ...covContext(),
+    });
+    const text = textOut.join("\n");
+    expect(text).toContain("2 coverage acceptances");
+    expect(text).toContain("vendored fixture corpus imported wholesale");
+  });
+
+  it("accepts a Moon workspace's Go orphan the same way", async () => {
+    const moonRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-coverage-moon-"));
+    try {
+      const writeMoon = (relativePath, text) => {
+        mkdirSync(join(moonRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(moonRoot, relativePath), text);
+      };
+      writeMoon(".moon/tool.yml", " ");
+      writeMoon(
+        "law.json",
+        lawWith({ unowned: [{ path: "orphans/**", reason: "vendored fixture corpus" }] }),
+      );
+      writeMoon("orphans/legacy.go", "package legacy\n");
+      writeMoon("libs/a/a.go", "package a\n");
+      const moonGraph = {
+        nodes: { a: { name: "a", type: "lib", data: { root: "libs/a", tags: [] } } },
+        dependencies: { a: [] },
+      };
+      const { report, unchecked } = await check(
+        { format: "json", config: "law.json", paths: [] },
+        {
+          cwd: moonRoot,
+          readGraph: () => moonGraph,
+          listFiles: () => [".moon/tool.yml", "law.json", "libs/a/a.go", "orphans/legacy.go"],
+        },
+      );
+      expect(unchecked).toBe(0);
+      const envelope = JSON.parse(report);
+      expect(envelope.status).toBe("ok");
+      const accepted = envelope.coverage.coverageGaps.find(
+        (entry) => entry.kind === "accepted-unowned-files",
+      );
+      expect(accepted.files).toEqual(["orphans/legacy.go"]);
+      expect(accepted.provider).toBe("moon");
+    } finally {
+      rmSync(moonRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses the key loudly on a native tree, naming archkeep.json's own channel", async () => {
+    // One channel per decision per tree: a native workspace records the same
+    // acceptance on `archkeep.json`'s coverage.exempt, so the policy key is
+    // refused rather than carried as a second copy — the same posture the
+    // `.moon`-beside-`archkeep.json` pair gets.
+    const nativeCovRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-coverage-native-"));
+    try {
+      const writeNat = (relativePath, text) => {
+        mkdirSync(join(nativeCovRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(nativeCovRoot, relativePath), text);
+      };
+      writeNat(
+        "archkeep.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "libs/a", name: "a", type: "lib", tags: [] }] },
+        }),
+      );
+      writeNat(
+        "law.json",
+        lawWith({ unowned: [{ path: "orphans/**", reason: "vendored fixture corpus" }] }),
+      );
+      writeNat("libs/a/a.go", "package a\n");
+      await expect(
+        check(
+          { format: "text", config: "law.json", paths: [] },
+          {
+            cwd: nativeCovRoot,
+            listFiles: () => ["archkeep.json", "law.json", "libs/a/a.go"],
+          },
+        ),
+      ).rejects.toThrow(/coverage\.exempt/);
+    } finally {
+      rmSync(nativeCovRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("`graph` refuses when the plugin is unregistered but polyglot manifests exist", () => {
   // Silent direction: a graph printed with no Go edges and exit 0 — the exact
   // failure AGENTS.md's opening paragraph describes.
