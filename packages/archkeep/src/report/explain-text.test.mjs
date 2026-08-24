@@ -466,7 +466,7 @@ describe("formatExplainReport", () => {
     expect(report).toContain("remediation  Depend on an application-owned interface");
   });
 
-  it("omits rule and remediation lines when the violation's constraint has none", () => {
+  it("omits the rule line and prints an explicit remediation pointer when the constraint declares neither", () => {
     const report = formatExplainReport({
       explanation: {
         site: { file: "libs/alpha/main.go", line: 10, column: 5 },
@@ -498,7 +498,126 @@ describe("formatExplainReport", () => {
       },
     });
     expect(report).not.toContain("rule         ");
-    expect(report).not.toContain("remediation  ");
+    // No declared remediation never prints nothing: the explicit pointer at
+    // the constraint row is the honest line, and inventing a fix would be a
+    // rule wearing a formatter's name.
+    expect(report).toContain("remediation  none declared — consult the constraint row");
+  });
+
+  it("names the constraint row's decisionRef in the no-remediation pointer when it carries one", () => {
+    const report = formatExplainReport({
+      explanation: {
+        site: { file: "libs/alpha/main.go", line: 10, column: 5 },
+        import: { specifier: "beta", kind: "static" },
+        sourceProject: "alpha",
+        targetProject: "beta",
+        sourceTags: ["layer:domain"],
+        targetTags: ["layer:app"],
+        matchedConstraints: [],
+        violations: [
+          {
+            messageId: "depConstraints",
+            message: "Domain layer must not depend on app layer",
+            constraint: {
+              sourceTag: "layer:domain",
+              onlyDependOnLibsWithTags: ["layer:domain"],
+              decisionRef: "0007-domain-isolation",
+            },
+          },
+        ],
+        unresolvable: false,
+        reason: null,
+      },
+      coverage: { complete: true, imports: 1, analyzedFiles: 1, projects: 2, notAnalyzed: [] },
+    });
+    expect(report).toContain(
+      "remediation  none declared — consult the constraint row and its decisionRef 0007-domain-isolation",
+    );
+  });
+
+  it("points at the messageId's check when no depConstraints row drives the violation", () => {
+    const report = formatExplainReport({
+      explanation: {
+        site: { file: "libs/alpha/main.go", line: 10, column: 5 },
+        import: { specifier: "beta", kind: "static" },
+        sourceProject: "alpha",
+        targetProject: "beta",
+        sourceTags: [],
+        targetTags: [],
+        matchedConstraints: [],
+        violations: [
+          {
+            messageId: "noCircularDependencies",
+            message: "Circular dependency detected",
+            constraint: null,
+          },
+        ],
+        unresolvable: false,
+        reason: null,
+      },
+      coverage: { complete: true, imports: 1, analyzedFiles: 1, projects: 2, notAnalyzed: [] },
+    });
+    expect(report).toContain(
+      "remediation  none declared — no depConstraints row drives this check",
+    );
+  });
+
+  it("prints the governing row's allowed tags verbatim on a violation", () => {
+    const report = formatExplainReport({
+      explanation: {
+        site: { file: "libs/alpha/main.go", line: 10, column: 5 },
+        import: { specifier: "beta", kind: "static" },
+        sourceProject: "alpha",
+        targetProject: "beta",
+        sourceTags: ["layer:domain"],
+        targetTags: ["layer:app"],
+        matchedConstraints: [],
+        violations: [
+          {
+            messageId: "depConstraints",
+            message: "Domain layer must not depend on app layer",
+            constraint: {
+              sourceTag: "layer:domain",
+              onlyDependOnLibsWithTags: ["layer:domain", "layer:util"],
+            },
+          },
+        ],
+        unresolvable: false,
+        reason: null,
+      },
+      coverage: { complete: true, imports: 1, analyzedFiles: 1, projects: 2, notAnalyzed: [] },
+    });
+    expect(report).toContain("allowed      [layer:domain, layer:util]");
+  });
+
+  it("prints no allowed line for a notDependOnLibsWithTags row — never a computed complement", () => {
+    const report = formatExplainReport({
+      explanation: {
+        site: { file: "libs/alpha/main.go", line: 10, column: 5 },
+        import: { specifier: "beta", kind: "static" },
+        sourceProject: "alpha",
+        targetProject: "beta",
+        sourceTags: ["zone:x"],
+        targetTags: ["grade:closed"],
+        matchedConstraints: [],
+        violations: [
+          {
+            messageId: "notTagsConstraintViolation",
+            message: "zone:x may not depend on grade:closed",
+            constraint: {
+              sourceTag: "zone:x",
+              notDependOnLibsWithTags: ["grade:closed"],
+            },
+          },
+        ],
+        unresolvable: false,
+        reason: null,
+      },
+      coverage: { complete: true, imports: 1, analyzedFiles: 1, projects: 2, notAnalyzed: [] },
+    });
+    expect(report).not.toContain("allowed      ");
+    // The ban list itself is never rewritten into an allowed direction.
+    expect(report).not.toContain("grade:open");
   });
 
   it("renders an allSourceTags constraint row", () => {

@@ -478,9 +478,13 @@ violates them. Descriptive.
 
 Explains the judgment for one import site: which constraint row matched, which
 tags applied, whether it is a violation and why. Constraint rows that carry
-`description` or `remediation` show those fields. A site whose target is not
+`description` or `remediation` show those fields; a violation whose row
+declares no remediation prints an explicit `none declared` pointer at the row
+and its `decisionRef` rather than nothing. A site whose target is not
 statically knowable gets an `UNRESOLVABLE` verdict with the reason.
-Descriptive.
+`--format json` additionally carries a site-level `result.verdict` and, on
+every violation entry, guaranteed `remediation` and `allowed` fields
+([json-output.md](json-output.md)). Descriptive.
 
 ### `context <project>`
 

@@ -506,4 +506,153 @@ describe("explainCommand", () => {
     expect(result.explanation.matchedConstraints).toEqual([]);
     expect(result.report.text).toContain("(none");
   });
+
+  // -------------------------------------------------------------------------
+  // result.verdict — the site-level verdict, on all three result shapes
+  // -------------------------------------------------------------------------
+
+  /** A graph where alpha (layer:domain) reaches beta (layer:app) — violating. */
+  function violatingGraph() {
+    return {
+      nodes: {
+        alpha: { name: "alpha", type: "lib", data: { root: "libs/alpha", tags: ["layer:domain"] } },
+        beta: { name: "beta", type: "lib", data: { root: "libs/beta", tags: ["layer:app"] } },
+      },
+      dependencies: {
+        alpha: [{ target: "beta", type: "static" }],
+      },
+    };
+  }
+
+  it("carries verdict 'clean' on a resolved non-violating site, with the old fields intact", () => {
+    const result = explainCommand("libs/alpha/main.go:10:5", commandContext(), config());
+    expect(result.explanation.verdict).toBe("clean");
+    const envelope = JSON.parse(result.report.json);
+    expect(Object.hasOwn(envelope.result, "verdict")).toBe(true);
+    expect(envelope.result.verdict).toBe("clean");
+    // Additive proof: every field the shape carried before is still present.
+    expect(envelope.result.violations).toBe(null);
+    expect(envelope.result.site).toEqual({ file: "libs/alpha/main.go", line: 10, column: 5 });
+    expect(envelope.result.import.specifier).toBe("beta");
+    expect(envelope.result.sourceTags).toEqual(["layer:domain"]);
+    expect(envelope.result.matchedConstraints.length).toBe(1);
+  });
+
+  it("carries verdict 'violation' on a resolved violating site", () => {
+    const ctx = commandContext({ graph: violatingGraph() });
+    const result = explainCommand("libs/alpha/main.go:10:5", ctx, config());
+    expect(result.explanation.verdict).toBe("violation");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.result.verdict).toBe("violation");
+    expect(envelope.result.violations).not.toBe(null);
+  });
+
+  it("carries verdict 'unknown' on an unresolvable site, keeping unresolvable and reason", () => {
+    const ctx = commandContext({
+      analysis: {
+        analyzed: 1,
+        imports: [],
+        failures: [
+          { sourceFile: "libs/alpha/main.go", line: 10, column: 5, reason: "non-literal argument" },
+        ],
+      },
+    });
+    const result = explainCommand("libs/alpha/main.go:10:5", ctx, config());
+    expect(result.explanation.verdict).toBe("unknown");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.result.verdict).toBe("unknown");
+    // Additive proof: the unresolvable shape's old fields are untouched.
+    expect(envelope.result.unresolvable).toBe(true);
+    expect(envelope.result.reason).toBe("non-literal argument");
+  });
+
+  // -------------------------------------------------------------------------
+  // violations[].remediation — a guaranteed key, verbatim or explicit null
+  // -------------------------------------------------------------------------
+
+  it("surfaces a declared remediation string verbatim on the violation entry", () => {
+    const ctx = commandContext({ graph: violatingGraph() });
+    const cfg = config({
+      depConstraints: [
+        {
+          sourceTag: "layer:domain",
+          onlyDependOnLibsWithTags: ["layer:domain", "layer:util"],
+          remediation: "Depend on the domain's published interface instead",
+        },
+      ],
+    });
+    const result = explainCommand("libs/alpha/main.go:10:5", ctx, cfg);
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.result.violations[0].remediation).toBe(
+      "Depend on the domain's published interface instead",
+    );
+  });
+
+  it("guarantees remediation as an explicit null when the row declares none", () => {
+    const ctx = commandContext({ graph: violatingGraph() });
+    const result = explainCommand("libs/alpha/main.go:10:5", ctx, config());
+    const envelope = JSON.parse(result.report.json);
+    for (const v of envelope.result.violations) {
+      // The guarantee IS the test: the key exists, and its value is null —
+      // never an absent key a consumer cannot tell from a field that does
+      // not exist yet.
+      expect(Object.hasOwn(v, "remediation")).toBe(true);
+      expect(v.remediation).toBe(null);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // violations[].allowed — the governing row's own law-fact, never a computed
+  // complement
+  // -------------------------------------------------------------------------
+
+  it("surfaces the governing row's onlyDependOnLibsWithTags verbatim as allowed", () => {
+    const ctx = commandContext({ graph: violatingGraph() });
+    const result = explainCommand("libs/alpha/main.go:10:5", ctx, config());
+    const envelope = JSON.parse(result.report.json);
+    const constraintViolation = envelope.result.violations.find(
+      (v) => v.constraint?.onlyDependOnLibsWithTags,
+    );
+    expect(constraintViolation.allowed).toEqual(["layer:domain", "layer:util"]);
+  });
+
+  it("guarantees allowed as null for a notDependOnLibsWithTags row, computing no complement", () => {
+    // gamma carries a tag the ban list does not name: a computed complement
+    // would surface it ("everything but grade:closed"), and the law never
+    // stated that direction — so it must appear nowhere in the entry.
+    const ctx = commandContext({
+      graph: {
+        nodes: {
+          alpha: { name: "alpha", type: "lib", data: { root: "libs/alpha", tags: ["zone:x"] } },
+          beta: { name: "beta", type: "lib", data: { root: "libs/beta", tags: ["grade:closed"] } },
+          gamma: { name: "gamma", type: "lib", data: { root: "libs/gamma", tags: ["grade:open"] } },
+        },
+        dependencies: {
+          alpha: [{ target: "beta", type: "static" }],
+        },
+      },
+    });
+    const cfg = config({
+      depConstraints: [{ sourceTag: "zone:x", notDependOnLibsWithTags: ["grade:closed"] }],
+    });
+    const result = explainCommand("libs/alpha/main.go:10:5", ctx, cfg);
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.result.verdict).toBe("violation");
+    for (const v of envelope.result.violations) {
+      expect(Object.hasOwn(v, "allowed")).toBe(true);
+      expect(v.allowed).toBe(null);
+      // The complement tag must not have been invented anywhere in the entry.
+      expect(JSON.stringify(v)).not.toContain("grade:open");
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Determinism — same fixture, byte-identical JSON
+  // -------------------------------------------------------------------------
+
+  it("produces byte-identical JSON across two runs over the same fixture", () => {
+    const first = explainCommand("libs/alpha/main.go:10:5", commandContext(), config());
+    const second = explainCommand("libs/alpha/main.go:10:5", commandContext(), config());
+    expect(first.report.json).toBe(second.report.json);
+  });
 });
