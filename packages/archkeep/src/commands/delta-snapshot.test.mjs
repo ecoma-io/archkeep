@@ -241,6 +241,26 @@ describe("the optional custom-rule blocks", () => {
     );
   });
 
+  it("refuses duplicate rule names at parse — a compare run keys base rows by name", () => {
+    // The silent direction: the compare side builds a Map over these rows, so
+    // a duplicate name would last-win and the delta would silently match
+    // against whichever row happened to come later.
+    const snapshot = buildEvidenceSnapshot(validInput({ customRules: [CUSTOM_ROW], owned: OWNED }));
+    const doc = JSON.parse(serializeEvidenceSnapshot(snapshot));
+    doc.customRules.push({ ...doc.customRules[0], sha256: "b".repeat(64) });
+    expect(() => parseEvidenceSnapshot(JSON.stringify(doc), "/dup.json")).toThrow(
+      /customRules\[1\]\.name: duplicates customRules\[0\]\.name \("no-invented-reach"\)/,
+    );
+  });
+
+  it("refuses duplicate rule names at capture, before they can be stored at all", () => {
+    const input = validInput({
+      customRules: [CUSTOM_ROW, { ...CUSTOM_ROW, sha256: "b".repeat(64) }],
+      owned: OWNED,
+    });
+    expect(() => buildEvidenceSnapshot(input)).toThrow(/duplicates customRules\[0\]\.name/);
+  });
+
   it("refuses malformed rows in either block, naming index and field", () => {
     const input = validInput({
       customRules: [{ name: "x", artifact: "", sha256: 7 }],

@@ -586,6 +586,8 @@ function describeCustomRuleBlockProblems(customRules, owned) {
         `${describe(customRules)}`,
     );
   } else {
+    /** @type {Map<string, number>} */
+    const firstIndexOfName = new Map();
     customRules.forEach((row, index) => {
       if (!isPlainObject(row)) {
         problems.push(`customRules[${index}]: must be an object, got ${describe(row)}`);
@@ -594,6 +596,23 @@ function describeCustomRuleBlockProblems(customRules, owned) {
       for (const field of ["name", "artifact", "sha256"]) {
         if (typeof row[field] !== "string" || row[field] === "") {
           problems.push(`customRules[${index}].${field}: must be a non-empty string`);
+        }
+      }
+      // A duplicate name is a loud refusal, not a last-one-wins: the compare
+      // side keys stored rows by name (`./custom-rules.mjs`'s
+      // `customRulesForDelta` builds a Map over them), so a second row under
+      // one name would silently shadow the first — and which law the delta
+      // then matched against would be an accident of row order.
+      if (typeof row.name === "string" && row.name !== "") {
+        const first = firstIndexOfName.get(row.name);
+        if (first !== undefined) {
+          problems.push(
+            `customRules[${index}].name: duplicates customRules[${first}].name ("${row.name}") — ` +
+              `rule names are the identity a delta matches base rows by, and two rows under one ` +
+              `name would silently shadow each other`,
+          );
+        } else {
+          firstIndexOfName.set(row.name, index);
         }
       }
       if (row.params !== undefined && !isPlainObject(row.params)) {

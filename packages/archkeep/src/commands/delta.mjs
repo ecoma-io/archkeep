@@ -297,7 +297,7 @@ const short = (fingerprint) =>
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config: object|null, readBaseline?: (path: string) => object,
  *   now?: string, readArtifact?: (artifact: string) => Uint8Array|null,
- *   customRuleTimeoutMs?: number}} io The resolved boundary config (required
+ *   timeoutMs?: number}} io The resolved boundary config (required
  *   — both sides are re-judged under it), an injectable baseline reader, the
  *   one shared reference instant (defaults to the shared governance clock),
  *   and the custom-rule host's two injectable seams, passed through to

@@ -362,7 +362,11 @@ function customFindingIdentity(ruleName, finding) {
  * @returns {{introduced: object[], resolved: object[], unchanged: object[],
  *   unknown: object[]}} Classified entries carry `rule`, `findingId`,
  *   `ruleId`, `project`, `message`, both sides' counts and sites, and the
- *   ladder's optional `reason`/`note`. Unknown entries are
+ *   ladder's optional `reason`/`note`. When a rule produced at least one
+ *   no-id finding on either side, every classified entry of that rule also
+ *   carries (or extends) a `note` saying its classification may be incomplete
+ *   — the no-id finding fell out of the grouping, so a counterpart it should
+ *   have matched reads introduced or resolved. Unknown entries are
  *   `{classification, rule, reason}` plus the offending `finding` where one
  *   exists.
  */
@@ -383,9 +387,11 @@ export function classifyCustomFindings({ judged, unknownRules = [] }) {
     const headIdentified = rule.headFindings.map((finding) =>
       customFindingIdentity(rule.name, finding),
     );
+    let namelessCount = 0;
     for (const identified of baseIdentified.concat(headIdentified)) {
       // The same non-strict narrowing constraint as `classifyViolations`' loop.
       if (identified.ok === false) {
+        namelessCount += 1;
         unknown.push({
           classification: "unknown",
           rule: rule.name,
@@ -394,6 +400,18 @@ export function classifyCustomFindings({ judged, unknownRules = [] }) {
         });
       }
     }
+    // A no-id finding fell out of the grouping below, so its identical
+    // counterpart on the other side — if one exists — reads introduced or
+    // resolved with nothing to match against. The unknown entries above keep
+    // the run loud (exit 3); this note keeps the CLASSIFIED entries honest,
+    // because a reader acting on this rule's buckets is acting on a grouping
+    // that may be missing occurrences.
+    const incompleteNote =
+      namelessCount === 0
+        ? null
+        : `classification for this rule may be incomplete: ${namelessCount} finding` +
+          `${namelessCount === 1 ? "" : "s"} had no usable id and could not be matched ` +
+          `across the two sides`;
 
     const baseGroups = groupBy(baseIdentified);
     const headGroups = groupBy(headIdentified);
@@ -419,6 +437,10 @@ export function classifyCustomFindings({ judged, unknownRules = [] }) {
         headSites: headGroup ? headGroup.sites : [],
       };
       Object.assign(entry, occurrenceClassification(baseCount, headCount, "the finding"));
+      if (incompleteNote !== null) {
+        entry.note =
+          typeof entry.note === "string" ? `${entry.note}; ${incompleteNote}` : incompleteNote;
+      }
       bucketFor(entry.classification, { introduced, resolved, unchanged }).push(entry);
     }
   }

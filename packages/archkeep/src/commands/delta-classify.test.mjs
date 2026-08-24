@@ -591,6 +591,53 @@ describe("classifyCustomFindings", () => {
     expect(result.unknown[0].reason).toContain("no usable id");
   });
 
+  it("notes on every classified entry of a rule that a no-id finding fell out of its grouping", () => {
+    // The silent direction: a no-id finding drops out of the grouping, so its
+    // identical counterpart on the other side reads introduced or resolved
+    // with nothing to match against. The unknown entry keeps the exit loud;
+    // the classified entries must SAY the grouping may be incomplete rather
+    // than presenting their buckets as a full account of the rule.
+    const result = classifyCustomFindings({
+      judged: [
+        judgedRule({
+          base: [customFinding(), customFinding({ id: "" })],
+          head: [customFinding(), customFinding({ id: "second-reach" })],
+        }),
+      ],
+    });
+    expect(result.unknown).toHaveLength(1);
+    expect(result.unchanged[0].note).toContain(
+      "classification for this rule may be incomplete: 1 finding had no usable id",
+    );
+    expect(result.introduced[0].note).toContain("may be incomplete");
+  });
+
+  it("extends an existing occurrence note rather than overwriting it", () => {
+    const result = classifyCustomFindings({
+      judged: [
+        judgedRule({
+          base: [customFinding(), customFinding({ line: 20 }), customFinding({ id: null })],
+          head: [customFinding()],
+        }),
+      ],
+    });
+    expect(result.unchanged[0].note).toMatch(/occurrencesReduced: 2 at base, 1 at head/u);
+    expect(result.unchanged[0].note).toContain("may be incomplete: 1 finding had no usable id");
+  });
+
+  it("scopes the incomplete-classification note to the rule that produced the no-id finding", () => {
+    const result = classifyCustomFindings({
+      judged: [
+        judgedRule({ base: [customFinding({ id: "" })], head: [customFinding()] }),
+        { ...judgedRule({ head: [customFinding()] }), name: "clean-rule" },
+      ],
+    });
+    const cleanEntry = result.introduced.find((entry) => entry.rule === "clean-rule");
+    const noisyEntry = result.introduced.find((entry) => entry.rule === "no-app-to-ring");
+    expect(noisyEntry.note).toContain("may be incomplete");
+    expect("note" in cleanEntry).toBe(false);
+  });
+
   it("turns every unknownRules entry into one unknown entry carrying its reason", () => {
     const result = classifyCustomFindings({
       judged: [],

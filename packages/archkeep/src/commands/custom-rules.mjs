@@ -529,12 +529,18 @@ function unjudgeableRowReason(row, baseRow) {
  * - digest or params drift (`unjudgeableRowReason`);
  * - either side's evidence bundle refuses to build (an unattributable stored
  *   record, a graph row the bundle cannot read);
- * - either side's evaluation fails, or the rule itself answers `unknown`.
+ * - either side's evaluation fails, or the rule itself answers `unknown`;
+ * - the rule answers `not_applicable` on exactly one side (the asymmetric
+ *   case the paragraph below argues).
  *
- * A rule that answers `not_applicable` on a side contributes an EMPTY finding
- * list for that side plus a note naming the reason — not applicable is a
+ * A rule that answers `not_applicable` on BOTH sides contributes an EMPTY
+ * finding list per side plus a note naming each reason — not applicable is a
  * judged answer, not a failure (`../governance/fitness-rules.mjs` draws the
- * same line).
+ * same line). A rule that answers `not_applicable` on only ONE side lands in
+ * `unknownRules` instead: an empty list for the inapplicable side beside real
+ * findings (or a judged pass) on the other would classify every base finding
+ * as resolved — or every head finding as introduced — on the strength of a
+ * side the rule never judged, which is the silent direction.
  *
  * Rules the baseline declares that the head no longer does are returned as
  * `removedRules` — nothing is judged for them (the head declares no law to
@@ -638,6 +644,8 @@ export async function customRulesForDelta(
     const findingsBySide = {};
     /** @type {string[]} */
     const notes = [];
+    /** @type {string[]} */
+    const notApplicableSides = [];
     /** @type {string|null} */
     let unknownReason = null;
     for (const { side, observed } of sides) {
@@ -665,10 +673,27 @@ export async function customRulesForDelta(
       }
       if (outcome.verdict.verdict === "not_applicable") {
         notes.push(`${side} side: not applicable — ${outcome.verdict.notApplicableReason}`);
+        notApplicableSides.push(side);
         findingsBySide[side] = [];
         continue;
       }
       findingsBySide[side] = outcome.verdict.findings;
+    }
+    // Applicability must be SYMMETRIC to judge a delta: a rule that did not
+    // apply on one side contributed an empty list there, and classifying real
+    // findings from the other side against that emptiness would call base
+    // findings resolved — or head findings introduced — on the strength of a
+    // side the rule never judged. Both-sides not_applicable stays a judged
+    // (empty) answer; one-sided lands in `unknownRules`, fail-closed.
+    if (unknownReason === null && notApplicableSides.length === 1) {
+      const inapplicable = notApplicableSides[0];
+      const applicable = inapplicable === "base" ? "head" : "base";
+      unknownReason =
+        `the rule did not apply at ${inapplicable} while it judged the ${applicable} side — ` +
+        (inapplicable === "head"
+          ? `base findings cannot be called resolved by a side the rule did not judge`
+          : `head findings cannot be called introduced against a side the rule did not judge`) +
+        `; ${notes.join("; ")}`;
     }
     if (unknownReason !== null) {
       unknownRules.push({ name: row.name, reason: unknownReason });

@@ -159,10 +159,14 @@ reason:
 - **either side's evidence could not be assembled** — for example a stored
   record the baseline's ownership map does not claim;
 - **either side's evaluation failed, or the rule answered `unknown`** — the
-  host's own reason is carried through.
+  host's own reason is carried through;
+- **the rule answered `not_applicable` on exactly one side** — the reason
+  names the side that did not apply: base findings cannot be called resolved
+  (nor head findings introduced) by a side the rule did not judge.
 
-A rule that answers `not_applicable` on a side contributes an empty finding
-list plus a note; a rule the baseline declares that the head no longer does is
+A rule that answers `not_applicable` on **both** sides contributes an empty
+finding list per side plus a note naming each side's reason — a judged answer,
+not a failure; a rule the baseline declares that the head no longer does is
 reported as **removed** in a coverage note, never judged. A head artifact that
 cannot be **loaded** at all (unreadable, hash mismatch against the head
 declaration) is a refusal (exit 3, no report) — the same posture `check` takes

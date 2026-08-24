@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, describe, expect, it } from "vitest";
 
+import { buildRuleModule } from "../custom-rules/wasm-fixture.mjs";
 import { captureDelta, deltaCommand, evidenceGraphToProjectGraph } from "./delta.mjs";
 import { parseEvidenceSnapshot, serializeEvidenceSnapshot } from "./delta-snapshot.mjs";
 import { computePolicyFingerprint } from "./graph.mjs";
@@ -605,6 +607,41 @@ describe("deltaCommand with custom rules", () => {
       unknown: 0,
     });
     expect(result.coverage.notes.join("\n")).toContain("not by the current policy");
+  });
+
+  it("passes the caller's timeoutMs through to the wasm host — the option's spelling is load-bearing", async () => {
+    // The silent direction of an option name: `deltaCommand` forwards its rest
+    // options to `customRulesForDelta`, so a misspelled key (the JSDoc once
+    // said `customRuleTimeoutMs`) would vanish in the spread and every rule
+    // would silently run under the 10s default. The refusal reason naming the
+    // caller's own number is the proof the value reached the host.
+    const loopBytes = buildRuleModule({
+      describeJson: JSON.stringify({
+        contract: 1,
+        name: "loop-rule",
+        needs: ["model", "graph", "imports", "policy"],
+        findings: [{ id: "spin", message: "never reported" }],
+      }),
+      evaluateBehavior: "loop",
+    });
+    const loopRow = {
+      name: "loop-rule",
+      artifact: "tools/rules/loop-rule.wasm",
+      sha256: createHash("sha256").update(loopBytes).digest("hex"),
+      reason: "the timeout fixture",
+    };
+    const law = customLaw({ customRules: [loopRow] });
+    const { readBaseline } = baselineOf({ law, owned: CUSTOM_OWNED });
+    const result = await deltaCommand("/invented/base.json", contextOf({ owned: CUSTOM_OWNED }), {
+      config: law,
+      readBaseline,
+      now: NOW,
+      readArtifact: (artifact) => (artifact === loopRow.artifact ? loopBytes : null),
+      timeoutMs: 400,
+    });
+
+    expect(result.status).toBe("no-verdict");
+    expect(result.delta.customRules.skipped[0].reason).toContain("400ms budget");
   });
 
   it("keeps the envelope byte-free of custom keys when neither side declares rules", async () => {
