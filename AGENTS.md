@@ -261,9 +261,10 @@ another.
   carried is a copy that already drifted once.
 - **Release (`release.yml`)** — release-please keeps one pull request open
   holding the next version of the root component `"."`, which is every package
-  and skill this repository ships at once, written into five places by
-  `extra-files` — the chain `docs/skills/versioning.md` owns and `check-skills`
-  holds on every PR, so a bump cannot land half-applied. Everything else the
+  and skill this repository ships at once, written into every file
+  `release-please-config.json`'s `extra-files` lists — the chain
+  `docs/skills/versioning.md` owns and `check-skills` holds on every PR, so a
+  bump cannot land half-applied. Everything else the
   lane does to stay honest — the Prettier reformat of release-please's output,
   the un-prefixed outputs both publish jobs steer on, the `paths_released`
   tripwire that fails the lane loudly when a release was cut that no publish
