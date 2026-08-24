@@ -270,7 +270,7 @@ function main() {
  * gate exits 0 having checked nothing — the silent green this script exists to
  * refuse, arriving by way of its own entry guard.
  *
- * Not imported from `packages/lattice/src/entry-point.mjs`, which
+ * Not imported from `packages/archkeep/src/entry-point.mjs`, which
  * holds the same function for the same reason: that package's conformance suite
  * requires it to be self-contained and reachable only from its own tree, and a
  * repo-root script importing into it would make this file part of what the

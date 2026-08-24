@@ -49,7 +49,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { analyzeFile } from "../packages/lattice/src/analysis/analyze.mjs";
+import { analyzeFile } from "../packages/archkeep/src/analysis/analyze.mjs";
 
 /**
  * The trees, pinned. Every entry is a public repository under a permissive
@@ -74,7 +74,7 @@ import { analyzeFile } from "../packages/lattice/src/analysis/analyze.mjs";
  *   ones after the fix.
  * - **requests** hits the analysis contract's own decision twice: a dynamic
  *   import whose argument is not a literal resolves to nothing and is reported
- *   unresolvable rather than dropped (`packages/lattice/src/analysis/contract.md`).
+ *   unresolvable rather than dropped (`packages/archkeep/src/analysis/contract.md`).
  *   That is correct behaviour, and the count is pinned so it stays two.
  */
 export const TREES = Object.freeze([
@@ -138,7 +138,7 @@ export function evaluate(trees, measurements) {
     // refused rather than reported as a breach nobody can fix in the tree.
     if (tree.expected.sources <= 0) {
       throw new Error(
-        `lattice: ${tree.name} pins ${tree.expected.sources} source files — a tree with no ` +
+        `archkeep: ${tree.name} pins ${tree.expected.sources} source files — a tree with no ` +
           `sources measures nothing and would pass by comparing nothing.`,
       );
     }
@@ -179,7 +179,7 @@ export function evaluate(trees, measurements) {
  * @returns {Measurement}
  */
 export function measureTree(tree) {
-  const dir = mkdtempSync(join(tmpdir(), `lattice-coverage-${tree.name}-`));
+  const dir = mkdtempSync(join(tmpdir(), `archkeep-coverage-${tree.name}-`));
   try {
     const git = (...args) => execFileSync("git", args, { cwd: dir, encoding: "utf8" });
     git("init", "-q");
@@ -188,7 +188,7 @@ export function measureTree(tree) {
     const head = git("rev-parse", "HEAD").trim();
     if (head !== tree.sha) {
       throw new Error(
-        `lattice: ${tree.name} checked out ${head}, and the table pins ${tree.sha} — a ` +
+        `archkeep: ${tree.name} checked out ${head}, and the table pins ${tree.sha} — a ` +
           `measurement against a commit nobody pinned says nothing about the pinned one.`,
       );
     }
@@ -220,7 +220,7 @@ export function measureTree(tree) {
       if (text === null) {
         // A tracked file that cannot be read is not an analyzer result and
         // must not be counted as one; it is a broken checkout.
-        throw new Error(`lattice: ${tree.name} could not read its own tracked file ${file}`);
+        throw new Error(`archkeep: ${tree.name} could not read its own tracked file ${file}`);
       }
       const result = analyzeFile({ sourceFile: file, text, workspace });
       records += result.imports.length;
@@ -248,7 +248,7 @@ function main() {
       // Could not look: the network, the host, or the checkout. Loud, and its
       // own exit code — a run that never read a tree must not be reported as a
       // run that read it and found the pinned numbers.
-      console.error(`lattice: ${tree.name} could not be measured — ${error?.message ?? error}`);
+      console.error(`archkeep: ${tree.name} could not be measured — ${error?.message ?? error}`);
       process.exit(3);
     }
   }

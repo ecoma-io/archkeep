@@ -1,6 +1,6 @@
 # Configuration
 
-Every surface Lattice reads, and where each option lives.
+Every surface Archkeep reads, and where each option lives.
 
 Three providers, three config shapes, one engine. The engine reads the same
 boundary law and produces the same verdicts either way; configuration decides
@@ -10,11 +10,11 @@ which provider runs and what filenames it reads.
 
 A marker file at the workspace root decides:
 
-| marker         | provider | project model from                          |
-| -------------- | -------- | ------------------------------------------- |
-| `nx.json`      | Nx       | Nx's project graph (`nx graph`)             |
-| `.moon/`       | Moon     | Moon's project graph (`moon project-graph`) |
-| `lattice.json` | native   | `lattice.json` + tracked tree               |
+| marker          | provider | project model from                          |
+| --------------- | -------- | ------------------------------------------- |
+| `nx.json`       | Nx       | Nx's project graph (`nx graph`)             |
+| `.moon/`        | Moon     | Moon's project graph (`moon project-graph`) |
+| `archkeep.json` | native   | `archkeep.json` + tracked tree              |
 
 More than one marker present is a hard error (exit 3) — the engine refuses to
 guess. Neither present exits 3 too, naming what it looked for.
@@ -35,7 +35,7 @@ On an `nx.json` workspace, the options live in the plugin registration:
 {
   "plugins": [
     {
-      "plugin": "@ecoma-io/lattice/nx",
+      "plugin": "@ecoma-io/archkeep/nx",
       "options": {
         "boundaryConfig": "module-boundaries.config.mjs",
         "tsConfig": "tsconfig.base.json",
@@ -62,8 +62,8 @@ A Moon workspace carries a `.moon/` directory at the root. Because Moon's
 configuration does not provide a plugin-options table the way `nx.json`'s
 `plugins[].options` does, the two options fall back to their defaults by
 convention — `module-boundaries.config.mjs` and `tsconfig.base.json` at the
-root. A Moon workspace must **not** create a `lattice.json` to name them: a
-tree carrying both the `.moon/` marker and a root `lattice.json` is refused
+root. A Moon workspace must **not** create a `archkeep.json` to name them: a
+tree carrying both the `.moon/` marker and a root `archkeep.json` is refused
 loudly as a hard error (exit 3), never read as a config surface. See
 [moon.md](../integrations/moon.md) for the integration guide.
 
@@ -80,12 +80,12 @@ section below.
 
 ## Native provider options
 
-On a `lattice.json` workspace, the same two options sit directly on the model
+On a `archkeep.json` workspace, the same two options sit directly on the model
 file — there is no `plugins[].options` table to nest them under. The full
-`lattice.json` shape is at [configuration.md](../reference/configuration.md).
+`archkeep.json` shape is at [configuration.md](../reference/configuration.md).
 
 ```jsonc
-// lattice.json
+// archkeep.json
 {
   "boundaryConfig": "module-boundaries.config.mjs",
   "tsConfig": "tsconfig.base.json",
@@ -96,7 +96,7 @@ file — there is no `plugins[].options` table to nest them under. The full
 rather than a filename pointing at it. Its keys are the `.json` dialect's five —
 `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, `fitness`,
 `customRules` — validated by the same check a separate file goes through. Every face reads it,
-the language server included: it watches `lattice.json` itself, so editing an
+the language server included: it watches `archkeep.json` itself, so editing an
 inline law re-diagnoses open files just as editing a policy file does.
 
 ## CLI flags

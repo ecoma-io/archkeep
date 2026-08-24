@@ -2,7 +2,7 @@
 // declares — the one link in the release version chain release-please cannot
 // write for itself.
 //
-// release-please bumps `packages/lattice-rule-sdk-rust/Cargo.toml` through the
+// release-please bumps `packages/archkeep-rule-sdk-rust/Cargo.toml` through the
 // TOML updater in `../release-please-config.json`'s `extra-files`. It has no
 // lockfile updater, and cargo's own answer — re-resolving the lock — reaches
 // for the crates.io index, which is a network call on a branch that has none

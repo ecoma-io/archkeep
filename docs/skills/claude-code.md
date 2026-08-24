@@ -1,6 +1,6 @@
 # Claude Code integration
 
-Two things the Lattice plugin provides to a Claude Code session:
+Two things the Archkeep plugin provides to a Claude Code session:
 
 1. **The LSP server** — real-time boundary diagnostics in the editor, via the
    plugin's language server.
@@ -14,19 +14,19 @@ as you type; the skills teach the agent what to do before and after changes.
 
 ### Enable the plugin
 
-`.claude/settings.json` needs two keys, not one — `lattice@lattice` names a
+`.claude/settings.json` needs two keys, not one — `archkeep@archkeep` names a
 plugin AND the marketplace it comes from, and the marketplace has to be
 registered before the name resolves:
 
 ```json
 {
   "extraKnownMarketplaces": {
-    "lattice": {
-      "source": { "source": "github", "repo": "ecoma-io/lattice" }
+    "archkeep": {
+      "source": { "source": "github", "repo": "ecoma-io/archkeep" }
     }
   },
   "enabledPlugins": {
-    "lattice@lattice": true
+    "archkeep@archkeep": true
   }
 }
 ```
@@ -38,7 +38,7 @@ server, and no line says so — run `claude plugin marketplace list` to tell tha
 state apart from a working one.
 
 Once both keys are in place, the LSP server starts automatically when you open a
-file in a Lattice-governed project.
+file in a Archkeep-governed project.
 
 This repository configures itself the same way, with one difference: its own
 `.claude/settings.json` uses a `directory` source at `.` rather than the
@@ -66,7 +66,7 @@ completions:
 ```
 
 The agent reads the boundary constraints for the project you are about to
-modify. It runs `lattice context <project>` and interprets the constraints
+modify. It runs `archkeep context <project>` and interprets the constraints
 before proposing any code change.
 
 ### After changing code
@@ -98,21 +98,21 @@ summarizes architecture implications.
 ## What the skills do not do
 
 - **They do not auto-bypass permission checks.** The skills contain no
-  `allowed-tools` field. The agent must request permission to run `lattice`
+  `allowed-tools` field. The agent must request permission to run `archkeep`
   commands — this is intentional friction.
 - **They do not modify boundary policy.** A skill that told the agent to edit
   `module-boundaries.config.*` to make a check pass would be a skill that
   subverts the architecture it is supposed to enforce.
 - **They do not replace the CLI.** The skills teach; the CLI decides. An agent
   following `arch-check` gets the same exit codes and the same JSON envelope a
-  human running `lattice check` would get.
+  human running `archkeep check` would get.
 
 ## Alternative: npx skills add
 
 If you prefer not to use the plugin, skills can be installed independently:
 
 ```bash
-npx skills add ecoma-io/lattice -a claude-code
+npx skills add ecoma-io/archkeep -a claude-code
 ```
 
 This installs the `SKILL.md` files to `.claude/skills/` in your project. The

@@ -1,24 +1,24 @@
 # Repository
 
-The workspace that holds Lattice, and how its moving parts relate.
+The workspace that holds Archkeep, and how its moving parts relate.
 
 ## The six packages
 
-| package                            | what it ships            | where it goes       | has its own AGENTS.md |
-| ---------------------------------- | ------------------------ | ------------------- | --------------------- |
-| `packages/lattice`                 | the engine               | npm                 | yes                   |
-| `packages/lattice-vscode`          | the VS Code client       | VS Code marketplace | no                    |
-| `packages/lattice-rule-sdk-rust`   | the Rust custom-rule SDK | crates.io           | no                    |
-| `packages/lattice-rule-sdk-ts`     | the AssemblyScript SDK   | npm                 | no                    |
-| `packages/lattice-rule-sdk-python` | the Python SDK           | PyPI                | no                    |
-| `packages/lattice-rule-sdk-go`     | the Go SDK               | the Go module proxy | no                    |
+| package                             | what it ships            | where it goes       | has its own AGENTS.md |
+| ----------------------------------- | ------------------------ | ------------------- | --------------------- |
+| `packages/archkeep`                 | the engine               | npm                 | yes                   |
+| `packages/archkeep-vscode`          | the VS Code client       | VS Code marketplace | no                    |
+| `packages/archkeep-rule-sdk-rust`   | the Rust custom-rule SDK | crates.io           | no                    |
+| `packages/archkeep-rule-sdk-ts`     | the AssemblyScript SDK   | npm                 | no                    |
+| `packages/archkeep-rule-sdk-python` | the Python SDK           | PyPI                | no                    |
+| `packages/archkeep-rule-sdk-go`     | the Go SDK               | the Go module proxy | no                    |
 
-`lattice` is the engine — the Nx and Moon integrations, the boundary checker,
-and the language server behind one analysis. `lattice-vscode` is a client of it
+`archkeep` is the engine — the Nx and Moon integrations, the boundary checker,
+and the language server behind one analysis. `archkeep-vscode` is a client of it
 and holds no analysis at all; it ships to a marketplace rather than to npm, and
 it deliberately does not bundle the server.
 
-The four `lattice-rule-sdk-*` packages are **bindings, not engines**. Each is
+The four `archkeep-rule-sdk-*` packages are **bindings, not engines**. Each is
 one language's typed way to author a custom rule and build it to the wasm the
 engine already runs, so none of them holds analysis either, and none may grow
 its own view of what a verdict means: four SDKs that disagreed would be four
@@ -32,7 +32,7 @@ Everything else in this repository is the apparatus that keeps them honest.
 
 ## Plain ESM, no build — for the two packages that ship JavaScript
 
-`lattice` and `lattice-vscode` ship as `.mjs` with JSDoc. Nx loads a plugin's
+`archkeep` and `archkeep-vscode` ship as `.mjs` with JSDoc. Nx loads a plugin's
 entry point directly in the process that runs every `nx` invocation, and Moon's
 integration reads the project graph via `moon project-graph --json`, so the
 shipped artefact has to be loadable with no build step in the way. That is why
@@ -123,7 +123,7 @@ setting touched.
 
 `module-boundaries.config.mjs` at the repository root is this workspace's own
 constraint table, with the tag vocabulary `type-package`/`scope-nx`. CI runs
-`lattice check` against it — the enforcer runs on itself.
+`archkeep check` against it — the enforcer runs on itself.
 
 ## What owns what
 

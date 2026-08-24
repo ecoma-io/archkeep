@@ -8,7 +8,7 @@
 # Claude Code and opencode use, so the checks have exactly one implementation
 # across every agent.
 
-# The AGENTS.md chain Codex assembles for work inside packages/lattice — the
+# The AGENTS.md chain Codex assembles for work inside packages/archkeep — the
 # root file plus the package's own — measures ~50 KiB (`wc -c` over the two
 # files), and Codex's default for this limit is 32 KiB. Past it the chain is
 # truncated with no warning line: guidance silently cut mid-file, which is the

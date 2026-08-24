@@ -40,9 +40,9 @@ failure travels beside the records and no waiver ever touches it.
 expiresAt` is already expired.
 3. **Stale** — a waiver, active or expired, that currently covers no violation
    at all (the finding it accepted was fixed, or the row's glob never matched
-   this run's findings). Lattice never deletes a row for you — waivers are
+   this run's findings). Archkeep never deletes a row for you — waivers are
    recorded, and a stale one is surfaced loudly as dead weight by
-   `lattice waivers`, never quietly forgotten.
+   `archkeep waivers`, never quietly forgotten.
 
 ## The two surfaces
 
@@ -59,11 +59,11 @@ not a new defect a reader must chase. When the term lapses the same report
 swaps the acceptance for the `evidence: expired waiver` line, and the
 violation is just a violation again.
 
-### `lattice waivers` — the surface, read-only
+### `archkeep waivers` — the surface, read-only
 
 ```shell
-lattice waivers
-lattice waivers --format json
+archkeep waivers
+archkeep waivers --format json
 ```
 
 Lists every row with an `expiresAt`: its path, its term, and the current
@@ -100,7 +100,7 @@ byte-identical bytes — the determinism rule every governance capability
 shares. Expiry is judged at epoch-millisecond precision, so a waiver expiring
 mid-day is respected at mid-day, not at midnight.
 
-Without an injected clock — every real `lattice waivers` run — `remainingMs`
+Without an injected clock — every real `archkeep waivers` run — `remainingMs`
 is the one field that differs run to run, because it names time remaining as
 of right now; `coverage.notes` discloses that in-band, and
 [the JSON reference](../reference/json-output.md#result-for-command-waivers)

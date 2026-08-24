@@ -1,11 +1,11 @@
-# `lattice explain`
+# `archkeep explain`
 
 Explain the judgment for one import site.
 
 ```shell
-lattice explain libs/alpha/main.go:10:5
-lattice explain libs/alpha/main.go:10:5 --format json
-lattice explain libs/alpha/main.go:10:5 --format json --output explanation.json
+archkeep explain libs/alpha/main.go:10:5
+archkeep explain libs/alpha/main.go:10:5 --format json
+archkeep explain libs/alpha/main.go:10:5 --format json --output explanation.json
 ```
 
 `explain` takes a `file:line:column` site, finds the matching import record,

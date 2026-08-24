@@ -1,9 +1,9 @@
 # Moon integration
 
-Lattice's Moon integration supplies the project graph from a Moonrepo workspace,
+Archkeep's Moon integration supplies the project graph from a Moonrepo workspace,
 using `moon project-graph --json` to read what Moon already knows. It follows the
 same one-call `readProjectGraph` pattern as the Nx integration: Moon resolves
-projects and their dependencies, and Lattice builds its enforcement model from
+projects and their dependencies, and Archkeep builds its enforcement model from
 that graph.
 
 ## What the integration provides
@@ -19,19 +19,19 @@ architecture's central seam —
 
 ## Workspace detection
 
-Lattice detects a Moon workspace by a `.moon/` directory at the workspace root.
+Archkeep detects a Moon workspace by a `.moon/` directory at the workspace root.
 Moonrepo v2.0+'s alternative location, `.config/moon/`, is recognized the same
 way: either one alone makes the tree a Moon workspace, and diagnostics name
 whichever one is present. Both together are a **hard error** — Moon treats the
 two as mutually exclusive config roots, so a tree carrying both is refused
 loudly (exit 3), naming both directories, rather than silently judged against
-one of them. A `lattice.json` or `nx.json` alongside either is refused for the
+one of them. A `archkeep.json` or `nx.json` alongside either is refused for the
 same reason: this tool judges a workspace against exactly one project model.
 Exactly one marker may be present.
 
 ## Configuration
 
-A Moon workspace cannot create a `lattice.json` — the `.moon`/`lattice.json`
+A Moon workspace cannot create a `archkeep.json` — the `.moon`/`archkeep.json`
 pair is refused. The provider therefore reads the two options by convention
 rather than from a declaration: `boundaryConfig` names
 `module-boundaries.config.mjs`, and `tsConfig` is the first of
@@ -55,7 +55,7 @@ in both the tool finds a config and has no way to know it is the wrong one:
 - **A shared config that is neither candidate.** A workspace whose `paths`
   table lives in `config/tsconfig.shared.json` — or in any name outside those
   two — has nowhere to say so, because Moon has no plugin-options table and no
-  `lattice.json` to carry a `tsConfig` field.
+  `archkeep.json` to carry a `tsConfig` field.
 - **Both candidates present, with the table in the second one.** The chain
   picks by existence, not by content: a `tsconfig.base.json` holding only
   `compilerOptions.target`, beside a `tsconfig.json` holding the real `paths`
@@ -104,7 +104,7 @@ was not found":
   at the file holding the aliases.
 
 Those are the only options. There are no others. An unknown key in a workspace
-that does carry a `lattice.json` under another provider **throws** rather than
+that does carry a `archkeep.json` under another provider **throws** rather than
 falling back — a `tsconfigBase` typed for `tsConfig` that quietly used the
 default would give you a full green run against a rule nobody wrote.
 
@@ -142,11 +142,11 @@ The command emits a JSON object with an integer-indexed graph:
 }
 ```
 
-Lattice normalises this into the same project-model shape the Nx and native
+Archkeep normalises this into the same project-model shape the Nx and native
 providers produce: project records with `id`, `root`, `tags`, and
 `dependencies`. The language server builds its editor index through this same
 `readProjectGraph` call — one dispatch for both faces, so an attached editor
-judges exactly the graph `lattice check` judges. When the invocation fails —
+judges exactly the graph `archkeep check` judges. When the invocation fails —
 `moon` missing from `node_modules/.bin`, a nonzero exit, output that will not
 parse — neither face answers with an empty graph: the CLI refuses with exit 3,
 and the server publishes an index-gap diagnostic naming the failed command on
@@ -179,35 +179,35 @@ exactly.
 
 ## Dependency scopes
 
-Moon's project-graph edges carry a scope that Lattice maps to dependency types:
+Moon's project-graph edges carry a scope that Archkeep maps to dependency types:
 
-| Moon scope    | Lattice type |
-| ------------- | ------------ |
-| `production`  | `static`     |
-| `development` | `dynamic`    |
-| `build`       | `static`     |
-| `peer`        | `static`     |
-| `root`        | _(skipped)_  |
+| Moon scope    | Archkeep type |
+| ------------- | ------------- |
+| `production`  | `static`      |
+| `development` | `dynamic`     |
+| `build`       | `static`      |
+| `peer`        | `static`      |
+| `root`        | _(skipped)_   |
 
 `root` dependencies are internal to Moon's runtime and carry no
-source-code-level meaning, so Lattice does not surface them.
+source-code-level meaning, so Archkeep does not surface them.
 
 ## Declared dependencies, and Moon's `source`
 
 Moon marks each dependency with a `source` as well as a scope, and **Moon's
-`implicit` is the opposite of Lattice's**. Moon's own schema defines the field
+`implicit` is the opposite of Archkeep's**. Moon's own schema defines the field
 as "either explicitly defined in configuration, or implicitly derived from
 source files":
 
-| Moon `source` | what it means                                             | Lattice type       |
+| Moon `source` | what it means                                             | Archkeep type      |
 | ------------- | --------------------------------------------------------- | ------------------ |
 | `explicit`    | written by hand in `moon.yml`'s `dependsOn`               | `implicit`         |
 | `implicit`    | Moon derived it from source files (e.g. a `package.json`) | from `scope` above |
 
-Lattice's `implicit` type means what Nx's `implicitDependencies` means: a
+Archkeep's `implicit` type means what Nx's `implicitDependencies` means: a
 dependency a human declared, with no import behind it. That is the one kind the
 boundary checker cannot judge at an import site — there is no import site — so
-`lattice check` judges it as a graph edge instead and reports it separately, as
+`archkeep check` judges it as a graph edge instead and reports it separately, as
 a **declared-edge violation**. A dependency Moon derived from a manifest does
 have code behind it, so it is typed from its scope and judged the ordinary way,
 at the import.
@@ -226,7 +226,7 @@ dependsOn:
 ## What Moon already does
 
 Moon infers TypeScript and JavaScript edges from import statements (when
-configured to do so). Lattice does not re-infer them. The boundary checker still
+configured to do so). Archkeep does not re-infer them. The boundary checker still
 analyzes `.ts`, `.js` and `.vue` files — it uses `ts.resolveModuleName` to
 resolve specifiers and reports violations against the same constraint table —
 but the graph edges those projects depend on come from Moon, not from this
@@ -235,10 +235,10 @@ integration.
 ## What this integration does not do
 
 - **It does not register as a Moon plugin.** Moon does not carry a hook
-  equivalent to Nx's `createDependencies`. Lattice reads the graph after Moon
+  equivalent to Nx's `createDependencies`. Archkeep reads the graph after Moon
   has computed it, rather than contributing edges into the computation.
 - **It does not infer polyglot edges for `moon affected`.** Moon's own
-  affected-command walks the graph Moon builds; Lattice reads that graph for
+  affected-command walks the graph Moon builds; Archkeep reads that graph for
   enforcement, not for contribution. A workspace that needs polyglot edges in
   `moon affected` should declare them through Moon's own `dependsOn` in
   `moon.yml`.

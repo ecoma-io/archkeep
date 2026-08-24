@@ -4,11 +4,11 @@
 // Every other package this repository ships carries a version in a manifest,
 // and release-please writes it. A Go module carries none: its version is a git
 // tag, and Go's rule for a module below the repository root is that the tag is
-// prefixed with the module's own directory — `packages/lattice-rule-sdk-go/
+// prefixed with the module's own directory — `packages/archkeep-rule-sdk-go/
 // v0.11.0`, not the bare `v0.11.0` the release already cuts. Nothing minted it.
 //
 // That gap was invisible in the way this repository cares about most. Both
-// `packages/lattice-rule-sdk-go/go.mod` and
+// `packages/archkeep-rule-sdk-go/go.mod` and
 // `docs/adr/0002-custom-rules-one-contract.md` state that the release lane
 // mints the prefixed tag "beside the bare `v<version>` it already tags"; the
 // lane never did. Nothing was red, no gate had an opinion, and the only
@@ -43,7 +43,7 @@ import { fileURLToPath } from "node:url";
 
 import { requestGit } from "./push-reformatted-files.mjs";
 
-export const GO_SDK_DIR = "packages/lattice-rule-sdk-go";
+export const GO_SDK_DIR = "packages/archkeep-rule-sdk-go";
 
 /**
  * The `module` directive's path from a go.mod.

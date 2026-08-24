@@ -1,4 +1,4 @@
-# Lattice documentation
+# Archkeep documentation
 
 Two doors. Take the one that matches what you are here to do.
 
@@ -9,7 +9,7 @@ And four documents that are neither, but decide what the rest say — all four
 live in [doctrine/](doctrine/):
 [why.md](doctrine/why.md) — the problem this exists for, with the measurement behind it —
 [north-star.md](doctrine/north-star.md) — where it is going and what it will refuse on
-the way — [architecture-authority.md](doctrine/architecture-authority.md) — what Lattice
+the way — [architecture-authority.md](doctrine/architecture-authority.md) — what Archkeep
 is, what it is not, and the line its neighbours may not cross — and
 [roadmap.md](doctrine/roadmap.md) — the staged path there, by major version.
 
@@ -18,7 +18,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | page                                                 | what it answers                                             |
 | ---------------------------------------------------- | ----------------------------------------------------------- |
 | [installation.md](getting-started/installation.md)   | Prerequisites, install, and what each entry point provides  |
-| [first-project.md](getting-started/first-project.md) | Create a `lattice.json` workspace, add a project, tag it    |
+| [first-project.md](getting-started/first-project.md) | Create a `archkeep.json` workspace, add a project, tag it   |
 | [first-policy.md](getting-started/first-policy.md)   | Write and run your first constraint table, read a violation |
 
 ## Concepts
@@ -31,7 +31,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [policies.md](concepts/policies.md)                         | Three dialects, one table, stability contract                                          |
 | [profiles.md](concepts/profiles.md)                         | Named law profiles: why they exist, precedence, and what is loud                       |
 | [projects.md](concepts/projects.md)                         | What a project is, discovery, naming                                                   |
-| [drift.md](concepts/drift.md)                               | The four drift signals Lattice detects, and which command surfaces each                |
+| [drift.md](concepts/drift.md)                               | The four drift signals Archkeep detects, and which command surfaces each               |
 | [governance-lifecycle.md](concepts/governance-lifecycle.md) | Why the commands exist as a system: intent → check → evidence → evolution → agent      |
 | [discovery.md](concepts/discovery.md)                       | The proposal-only line, the observed side, the four candidate classes                  |
 | [health.md](concepts/health.md)                             | What "architecture health" means, and the invariant behind every metric                |
@@ -49,7 +49,7 @@ is, what it is not, and the line its neighbours may not cross — and
 
 | page                                           | what it answers                                                                          |
 | ---------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| [configuration.md](usage/configuration.md)     | Every surface Lattice reads, and where each option lives                                 |
+| [configuration.md](usage/configuration.md)     | Every surface Archkeep reads, and where each option lives                                |
 | [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                                      |
 | [profiles.md](usage/profiles.md)               | Enforcing a named profile: the option, `--config`, loud failures                         |
 | [presets.md](usage/presets.md)                 | The six shipped policy packs, the tags each expects, and how to adopt one                |
@@ -87,14 +87,14 @@ is, what it is not, and the line its neighbours may not cross — and
 | [installation.md](skills/installation.md)       | npx skills add, Claude Code plugin, manual installation          |
 | [supported-hosts.md](skills/supported-hosts.md) | Feature matrix across agent platforms                            |
 | [claude-code.md](skills/claude-code.md)         | Claude Code specific setup and invocation                        |
-| [versioning.md](skills/versioning.md)           | Version sync with Lattice, CI enforcement, release-please        |
+| [versioning.md](skills/versioning.md)           | Version sync with Archkeep, CI enforcement, release-please       |
 | [authoring.md](skills/authoring.md)             | Conventions for writing new arch-* skills                        |
 
 ## Reference
 
 | page                                                       | what it answers                                                                                                                   |
 | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| [configuration.md](reference/configuration.md)             | `lattice.json` fields, `nx.json` options, Moon options, inline boundary config                                                    |
+| [configuration.md](reference/configuration.md)             | `archkeep.json` fields, `nx.json` options, Moon options, inline boundary config                                                   |
 | [policy-schema.md](reference/policy-schema.md)             | Constraint table schema: every key of `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, `fitness`, `customRules` |
 | [custom-rules.md](reference/custom-rules.md)               | The custom-rule contract: the artifact's exports, the evidence bundle, the verdict, every failure                                 |
 | [profiles.md](reference/profiles.md)                       | The profile registry schema, the `profiles` option, and the four loud conditions                                                  |
@@ -107,7 +107,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [debt.md](reference/debt.md)                               | The architecture-debt ledger: entry kinds, age model, severity, and the refusals                                                  |
 | [provenance.md](reference/provenance.md)                   | The `provenance` command: report shapes, the JSON envelope, exit codes                                                            |
 | [adr.md](reference/adr.md)                                 | The `adr` command: report shapes, the JSON envelope, exit codes, the id name space                                                |
-| [reconciliation.md](reference/reconciliation.md)           | The scored element and candidate shapes behind `lattice reconcile`                                                                |
+| [reconciliation.md](reference/reconciliation.md)           | The scored element and candidate shapes behind `archkeep reconcile`                                                               |
 | [languages.md](reference/languages.md)                     | What each analyzer reads, the shapes it cannot, and the two workspace checks                                                      |
 | [violations.md](reference/violations.md)                   | Each of the fifteen violations: what it means, and what fixes it                                                                  |
 
@@ -128,9 +128,9 @@ decided rather than summarized into them.
 | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | [why.md](doctrine/why.md)                                         | The gap this exists to close, and the measurement that proves it is real                |
 | [north-star.md](doctrine/north-star.md)                           | The direction, what "finished" means per language, and the refusals                     |
-| [architecture-authority.md](doctrine/architecture-authority.md)   | What Lattice is, what it is not, and the line providers/skills/agents/CI may not cross  |
+| [architecture-authority.md](doctrine/architecture-authority.md)   | What Archkeep is, what it is not, and the line providers/skills/agents/CI may not cross |
 | [principles.md](doctrine/principles.md)                           | The seven binding principles                                                            |
-| [architecture-governance.md](doctrine/architecture-governance.md) | How Lattice practices what it enforces                                                  |
+| [architecture-governance.md](doctrine/architecture-governance.md) | How Archkeep practices what it enforces                                                 |
 | [roadmap.md](doctrine/roadmap.md)                                 | The staged path: what ships today, and which capabilities belong to which major version |
 
 ## Development
@@ -156,10 +156,10 @@ allowed to say it". That table:
 
 | file                                                                            | owns                                                                                                                                                                                                                                             |
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `README.md`                                                                     | The pitch: what Lattice is in one breath, and the way in                                                                                                                                                                                         |
+| `README.md`                                                                     | The pitch: what Archkeep is in one breath, and the way in                                                                                                                                                                                        |
 | [`docs/doctrine/why.md`](doctrine/why.md)                                       | The gap, and the evidence that it is real                                                                                                                                                                                                        |
 | [`docs/doctrine/north-star.md`](doctrine/north-star.md)                         | The direction, what "finished" means per language, and the refusals                                                                                                                                                                              |
-| [`docs/doctrine/architecture-authority.md`](doctrine/architecture-authority.md) | What Lattice is, what it is not, and the boundary its neighbours may not cross                                                                                                                                                                   |
+| [`docs/doctrine/architecture-authority.md`](doctrine/architecture-authority.md) | What Archkeep is, what it is not, and the boundary its neighbours may not cross                                                                                                                                                                  |
 | [`docs/doctrine/principles.md`](doctrine/principles.md)                         | The seven binding principles                                                                                                                                                                                                                     |
 | [`docs/doctrine/roadmap.md`](doctrine/roadmap.md)                               | The staged path: what ships today, which capabilities belong to which major version, and in what order                                                                                                                                           |
 | `docs/getting-started/`                                                         | Installation, first project, first policy                                                                                                                                                                                                        |
@@ -176,13 +176,13 @@ allowed to say it". That table:
 | `CONTRIBUTING.md`                                                               | The contribution bar, the commands, hooks, commits, review, release                                                                                                                                                                              |
 | `SECURITY.md`                                                                   | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/`                                                                                                                                            |
 | `AGENTS.md`                                                                     | The rules a diff is rejected for violating, for humans and agents alike                                                                                                                                                                          |
-| `packages/lattice/README.md`                                                    | The package's own reference — it is the npm landing page and must stand alone                                                                                                                                                                    |
-| `packages/lattice-vscode/README.md`                                             | The VS Code client: what it requires, the two settings it has, and the two it refuses                                                                                                                                                            |
-| `packages/lattice-rule-sdk-*/README.md`                                         | One per SDK: that language's build story for a custom rule, and its own MEASURED limits. The limits are why an SDK is chosen by reading these rather than from the table in [`docs/usage/custom-rules.md`](usage/custom-rules.md)                |
+| `packages/archkeep/README.md`                                                   | The package's own reference — it is the npm landing page and must stand alone                                                                                                                                                                    |
+| `packages/archkeep-vscode/README.md`                                            | The VS Code client: what it requires, the two settings it has, and the two it refuses                                                                                                                                                            |
+| `packages/archkeep-rule-sdk-*/README.md`                                        | One per SDK: that language's build story for a custom rule, and its own MEASURED limits. The limits are why an SDK is chosen by reading these rather than from the table in [`docs/usage/custom-rules.md`](usage/custom-rules.md)                |
 | `docs/adr/`                                                                     | The numbered decision records: what was decided, against which alternatives, and what it cost. Immutable once accepted — a decision that changed is a NEW record, never an edit to the old one                                                   |
-| `packages/lattice/AGENTS.md`                                                    | Layer mechanics: what each layer may know                                                                                                                                                                                                        |
-| `packages/lattice/src/*/README.md`                                              | Each layer's own semantics — rules, report, conformance, commands, the native provider                                                                                                                                                           |
-| `packages/lattice/src/analysis/contract.md`                                     | The frozen record every analyzer returns                                                                                                                                                                                                         |
+| `packages/archkeep/AGENTS.md`                                                   | Layer mechanics: what each layer may know                                                                                                                                                                                                        |
+| `packages/archkeep/src/*/README.md`                                             | Each layer's own semantics — rules, report, conformance, commands, the native provider                                                                                                                                                           |
+| `packages/archkeep/src/analysis/contract.md`                                    | The frozen record every analyzer returns                                                                                                                                                                                                         |
 | `skills/`                                                                       | Canonical agent architecture skills — the `arch-*` behavioral protocol                                                                                                                                                                           |
 
 Two of those rows overlap on purpose, and it is worth knowing which way:

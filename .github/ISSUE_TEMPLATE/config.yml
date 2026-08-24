@@ -3,7 +3,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/ecoma-io/lattice/security/advisories/new
+    url: https://github.com/ecoma-io/archkeep/security/advisories/new
     about: Never open a public issue for a vulnerability — use a private security advisory.
   - name: The Ecoma platform
     url: https://ecoma.io

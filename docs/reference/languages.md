@@ -338,7 +338,7 @@ for a dead alias.
 How that answer stays `ts.resolveModuleName`'s own — the guards that keep it to
 one question, and why it is not a second resolver — is argued beside the code it
 constrains, at `declinedExtensionHostFor` in
-`packages/lattice/src/analysis/typescript.mjs`. It is not restated here.
+`packages/archkeep/src/analysis/typescript.mjs`. It is not restated here.
 
 **ESLint already covers this language**, and `@nx/enforce-module-boundaries`
 should keep running for it. This analyzer exists because the CLI and the language

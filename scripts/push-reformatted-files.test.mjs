@@ -99,10 +99,10 @@ test("the reformat list is every file the lane repairs", () => {
     ".claude-plugin/plugin.json",
     ".claude-plugin/marketplace.json",
     ".codex-plugin/plugin.json",
-    "packages/lattice/package.json",
-    "packages/lattice-vscode/package.json",
-    "packages/lattice-rule-sdk-ts/package.json",
-    "packages/lattice-rule-sdk-rust/Cargo.lock",
+    "packages/archkeep/package.json",
+    "packages/archkeep-vscode/package.json",
+    "packages/archkeep-rule-sdk-ts/package.json",
+    "packages/archkeep-rule-sdk-rust/Cargo.lock",
   ]);
 });
 
@@ -111,7 +111,7 @@ test("the list carries every JSON extra-file release-please re-serializes", () =
   // second copy of that roster agrees with the first only until someone adds
   // an SDK. A manifest release-please rewrites and Prettier never sees is a
   // release pull request that fails its own required format check — which is
-  // exactly how `packages/lattice-rule-sdk-ts/package.json` sat unlisted from
+  // exactly how `packages/archkeep-rule-sdk-ts/package.json` sat unlisted from
   // the release that introduced it.
   const config = JSON.parse(
     readFileSync(new URL("../release-please-config.json", import.meta.url), "utf8"),

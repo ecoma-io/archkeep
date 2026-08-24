@@ -1,8 +1,8 @@
 # Why this exists
 
 The short version: in a polyglot Nx workspace, two of Nx's best features stop
-working, and neither of them tells you. That was the gap Lattice was extracted
-from. Today Lattice is an architecture governance system that works in any
+working, and neither of them tells you. That was the gap Archkeep was extracted
+from. Today Archkeep is an architecture governance system that works in any
 repository — Nx and Moon are providers of the project graph, not the
 foundation ([architecture-authority.md](architecture-authority.md)).
 
@@ -88,7 +88,7 @@ they all come with inferred targets: install one and your Go projects acquire a
 different product. It moves the answer to "what does `build` do here" out of
 `project.json` and into a plugin's defaults, which is a trade a workspace should
 make deliberately and not as the price of getting its dependency graph right.
-Lattice contributes **edges only, and never a node or a target** — that refusal
+Archkeep contributes **edges only, and never a node or a target** — that refusal
 is its reason to exist.
 
 **Reproduce the rule over records instead of an AST.** Which is this. The

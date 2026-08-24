@@ -1,6 +1,6 @@
 # Architecture health
 
-What "architecture health" means to Lattice, and the invariant that decides
+What "architecture health" means to Archkeep, and the invariant that decides
 every metric. The `health` command's behavior is documented in
 [usage/health.md](../usage/health.md); the reference schema lives in
 [reference/cli.md](../reference/cli.md). This page owns the _meaning_.
@@ -84,7 +84,7 @@ trend is read from it rather than re-derived by accumulation.
 ## Where there is no service
 
 There is no hosted metric surface. The numbers are computed read-only, per run,
-and a maintainer acts on the trend across the same `.lattice/history/`
+and a maintainer acts on the trend across the same `.archkeep/history/`
 snapshots `history` reads — so there is one history, not two. A snapshot is a
 `graph` envelope, so the trend carries the structural metrics and discloses
 that rule-impact cannot be re-derived from stored bytes: snapshots carry the

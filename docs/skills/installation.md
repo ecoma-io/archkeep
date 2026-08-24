@@ -6,10 +6,10 @@ them.
 ## npx skills add (recommended)
 
 ```bash
-npx skills add ecoma-io/lattice
+npx skills add ecoma-io/archkeep
 ```
 
-This walks the `skills/` directory in the Lattice repository, discovers all five
+This walks the `skills/` directory in the Archkeep repository, discovers all five
 `SKILL.md` files, and installs them to each detected agent platform's native
 directory. It is the primary distribution channel and requires no repository
 configuration.
@@ -18,13 +18,13 @@ configuration.
 
 ```bash
 # Install specific skills only (`-s` takes space-separated names)
-npx skills add ecoma-io/lattice -s arch-context arch-check
+npx skills add ecoma-io/archkeep -s arch-context arch-check
 
 # Install for a specific agent platform
-npx skills add ecoma-io/lattice -a claude-code
+npx skills add ecoma-io/archkeep -a claude-code
 
 # List available skills without installing
-npx skills add ecoma-io/lattice -l
+npx skills add ecoma-io/archkeep -l
 
 # Update previously installed skills to the latest version
 npx skills update
@@ -39,8 +39,8 @@ registered before that name resolves. Both halves, or neither works.
 Per user, with the CLI:
 
 ```bash
-claude plugin marketplace add ecoma-io/lattice
-claude plugin install lattice@lattice
+claude plugin marketplace add ecoma-io/archkeep
+claude plugin install archkeep@archkeep
 ```
 
 Per repository, so everyone who clones it gets the same thing, in a checked-in
@@ -49,18 +49,18 @@ Per repository, so everyone who clones it gets the same thing, in a checked-in
 ```json
 {
   "extraKnownMarketplaces": {
-    "lattice": {
-      "source": { "source": "github", "repo": "ecoma-io/lattice" }
+    "archkeep": {
+      "source": { "source": "github", "repo": "ecoma-io/archkeep" }
     }
   },
   "enabledPlugins": {
-    "lattice@lattice": true
+    "archkeep@archkeep": true
   }
 }
 ```
 
 `enabledPlugins` alone is the failure worth naming, because it does not look
-like one: `lattice@lattice` names a marketplace nothing registered, so the
+like one: `archkeep@archkeep` names a marketplace nothing registered, so the
 session starts with no skills and no language server, and says nothing about it.
 `claude plugin marketplace list` answering `No marketplaces configured` is how
 you tell that state from a working one.
@@ -78,16 +78,16 @@ repository's own — and its own manifest, `.codex-plugin/plugin.json`. From a
 clone of a repository that ships those two files:
 
 ```bash
-codex plugin marketplace add .          # or: codex plugin marketplace add ecoma-io/lattice
-codex plugin add lattice@lattice
+codex plugin marketplace add .          # or: codex plugin marketplace add ecoma-io/archkeep
+codex plugin add archkeep@archkeep
 ```
 
 Both commands are per user, and this is the part that does not carry over from
 Claude Code: **a repository cannot enable a Codex plugin for everyone who clones
 it.** Measured with codex-cli 0.149.0:
 
-- The two commands write `[marketplaces.lattice]` and
-  `[plugins."lattice@lattice"] enabled = true` into `~/.codex/config.toml`.
+- The two commands write `[marketplaces.archkeep]` and
+  `[plugins."archkeep@archkeep"] enabled = true` into `~/.codex/config.toml`.
   Those tables are what enables the plugin for every session that user starts —
   the per-user equivalent of `enabledPlugins`.
 - The same tables in a repository's own `.codex/config.toml` do nothing:
@@ -132,7 +132,7 @@ vendor's parser continuing to accept another's manifest.
 `codex plugin add` then **copies** the plugin into
 `~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/` rather than following
 a live path, so a snapshot is what a session reads. After editing a skill, re-run
-`codex plugin add lattice@lattice` to refresh that copy. Claude Code's directory
+`codex plugin add archkeep@archkeep` to refresh that copy. Claude Code's directory
 source behaves the opposite way — it reads the tree in place — which is why the
 two hosts need different advice about the same edit.
 

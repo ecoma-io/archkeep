@@ -109,7 +109,7 @@ reviews:
       description: >
         Every mechanism claim in skills/*/SKILL.md — a command name, a flag, an
         exit code, a JSON envelope key, a config surface — must match
-        packages/lattice in the same tree. Flag both directions: a change to
+        packages/archkeep in the same tree. Flag both directions: a change to
         the CLI's command surface (commands, flags, exit codes, envelope keys,
         the config surfaces a provider reads) that does not touch the skill
         teaching it, and a skill edit whose claim the code does not implement.
@@ -117,14 +117,14 @@ reviews:
         regexes; this rule owns the ones no regex anticipated.
       include:
         - skills/**
-        - packages/lattice/**
+        - packages/archkeep/**
 
     - name: Canonical skills are host- and provider-independent
       description: >
         The arch-* skills must work unchanged on every Agent Skills host
         (Claude Code, Codex, Cursor, Copilot, Windsurf, opencode) and describe
         every project-model provider the engine ships (Nx, native
-        lattice.json, Moon). Flag frontmatter beyond
+        archkeep.json, Moon). Flag frontmatter beyond
         name/description/compatibility (metadata and allowed-tools are
         spec-legal but refused here by decision — docs/skills/authoring.md),
         any skill body that assumes a single agent host (a slash-command

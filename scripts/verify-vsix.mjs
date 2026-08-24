@@ -236,7 +236,7 @@ function must(result, label) {
 }
 
 function main() {
-  const [vsixArg, packageArg = "packages/lattice-vscode"] = process.argv.slice(2);
+  const [vsixArg, packageArg = "packages/archkeep-vscode"] = process.argv.slice(2);
   if (!vsixArg) {
     console.error("usage: verify-vsix.mjs <vsix-file> [package-directory]");
     process.exit(2);

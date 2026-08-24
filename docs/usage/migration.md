@@ -1,6 +1,6 @@
 # Migrating an existing repository
 
-Bringing a repository that already has an architecture under Lattice governance,
+Bringing a repository that already has an architecture under Archkeep governance,
 without hand-writing the model up front.
 
 This page owns the **order**. Every step below has a page that owns its detail,
@@ -16,15 +16,15 @@ written — by hand.
 
 ## The path
 
-| step                                           | command                          | who decides                              |
-| ---------------------------------------------- | -------------------------------- | ---------------------------------------- |
-| [0. Mark the workspace](#0-mark-the-workspace) | —                                | the operator                             |
-| [1. Observe](#1-observe)                       | `lattice discover`               | the tool reports; nobody decides         |
-| [2. Propose](#2-propose)                       | `lattice discover --propose`     | the tool proposes; nobody decides        |
-| [3. Review](#3-review)                         | —                                | a human, or an agent on a human's behalf |
-| [4. Write back](#4-write-back)                 | —                                | the operator, by hand                    |
-| [5. Converge](#5-converge)                     | `lattice reconcile --propose`    | the operator, each round                 |
-| [6. Enforce](#6-enforce)                       | `lattice drift`, `lattice check` | CI gates on the verdict                  |
+| step                                           | command                            | who decides                              |
+| ---------------------------------------------- | ---------------------------------- | ---------------------------------------- |
+| [0. Mark the workspace](#0-mark-the-workspace) | —                                  | the operator                             |
+| [1. Observe](#1-observe)                       | `archkeep discover`                | the tool reports; nobody decides         |
+| [2. Propose](#2-propose)                       | `archkeep discover --propose`      | the tool proposes; nobody decides        |
+| [3. Review](#3-review)                         | —                                  | a human, or an agent on a human's behalf |
+| [4. Write back](#4-write-back)                 | —                                  | the operator, by hand                    |
+| [5. Converge](#5-converge)                     | `archkeep reconcile --propose`     | the operator, each round                 |
+| [6. Enforce](#6-enforce)                       | `archkeep drift`, `archkeep check` | CI gates on the verdict                  |
 
 Every command in that table is read-only: none of them writes a byte of the
 model, at any step, under any flag. Steps 3 and 4 are where the architecture is
@@ -38,13 +38,13 @@ Nothing runs until the tree has a workspace root. A repository with none gets a
 refusal, not an empty answer:
 
 ```text
-lattice: no workspace root above <dir> — looked for an nx.json, a lattice.json,
+archkeep: no workspace root above <dir> — looked for an nx.json, a archkeep.json,
 or a .moon (or .config/moon) directory in every parent.
 ```
 
 That is exit 3. Pick the marker the repository already has, or add the native
 one: [first-project.md](../getting-started/first-project.md) for a
-`lattice.json` workspace, [nx.md](../integrations/nx.md) for Nx,
+`archkeep.json` workspace, [nx.md](../integrations/nx.md) for Nx,
 [moon.md](../integrations/moon.md) for Moon.
 
 No boundary law is needed yet. Steps 1 and 2 read the graph, not the rules.
@@ -52,7 +52,7 @@ No boundary law is needed yet. Steps 1 and 2 read the graph, not the rules.
 ## 1. Observe
 
 ```shell
-lattice discover
+archkeep discover
 ```
 
 `discover` is descriptive: it reports the projects, the edges between them, the
@@ -73,7 +73,7 @@ That run exits 3 even though it printed a full-looking report. The observations
 under it are real but incomplete, and a model derived from them would be missing
 whatever the unread file imports. Two ways to clear it, both of which put the
 answer on the record: give the file a project that owns it, or name it in
-`lattice.json`'s `coverage.exempt` with a reason
+`archkeep.json`'s `coverage.exempt` with a reason
 ([configuration.md](../reference/configuration.md)).
 
 Clear coverage first. Everything downstream inherits it.
@@ -81,8 +81,8 @@ Clear coverage first. Everything downstream inherits it.
 ## 2. Propose
 
 ```shell
-lattice discover --propose
-lattice discover --propose --format json --output proposal.json
+archkeep discover --propose
+archkeep discover --propose --format json --output proposal.json
 ```
 
 `--propose` adds the candidate architecture the observations imply, under a
@@ -107,7 +107,7 @@ Two properties of this step matter more than its output:
   produce candidates at all:
 
   ```text
-  lattice: discover --propose has incomplete coverage — 1 file could not be
+  archkeep: discover --propose has incomplete coverage — 1 file could not be
   analyzed, so every candidate would be ambiguous between "gone" and "never
   seen". Fix the unanalyzed files and re-run.
   ```
@@ -157,7 +157,7 @@ a decision; the file is the decision.
 exits 3 when the file its `boundaryConfig` names is absent:
 
 ```text
-lattice: cannot load <root>/module-boundaries.config.mjs: Cannot find module …
+archkeep: cannot load <root>/module-boundaries.config.mjs: Cannot find module …
 ```
 
 That is a missing law, not drift — and it is easy to misread as a clean
@@ -169,7 +169,7 @@ With a model on disk, the repository and the model can be moved toward each
 other. The command that shapes that work:
 
 ```shell
-lattice reconcile --propose
+archkeep reconcile --propose
 ```
 
 `reconcile` scores every observed project and edge against the declared model
@@ -214,8 +214,8 @@ Converged looks like this:
 Two commands, and only one of them is a gate.
 
 ```shell
-lattice drift     # describes the disagreement — exit 0 even when it finds one
-lattice check     # the verdict — exit 1 on findings
+archkeep drift     # describes the disagreement — exit 0 even when it finds one
+archkeep check     # the verdict — exit 1 on findings
 ```
 
 `drift` names every intent row the observed graph violates and still exits 0:

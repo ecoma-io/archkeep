@@ -19,7 +19,7 @@ import {
 } from "./reconcile-differential-issue.mjs";
 
 const summary = {
-  runUrl: "https://github.com/ecoma-io/lattice/actions/runs/42",
+  runUrl: "https://github.com/ecoma-io/archkeep/actions/runs/42",
   sha: "abcdef0123456789",
   trees: [
     {
@@ -38,7 +38,7 @@ test("findings with no existing issue opens one; the body carries run, ref and t
   const decision = decideIssue({ exitClass: "findings", summary, existing: undefined });
   assert.equal(decision.action, "open");
   assert.match(decision.title, /differential: findings/u);
-  assert.ok(decision.body.includes("Run: https://github.com/ecoma-io/lattice/actions/runs/42"));
+  assert.ok(decision.body.includes("Run: https://github.com/ecoma-io/archkeep/actions/runs/42"));
   assert.ok(decision.body.includes("Measured ref: abcdef0123456789"));
   // The body IS the log fragment — verbatim, not re-formatted.
   assert.ok(
@@ -84,7 +84,7 @@ test("a green run closes an open issue with one comment naming the green run", (
   assert.equal(decision.number, 7);
   assert.ok(
     decision.closeComment.includes(
-      "Green run https://github.com/ecoma-io/lattice/actions/runs/42 (default branch @ abcdef0123456789)",
+      "Green run https://github.com/ecoma-io/archkeep/actions/runs/42 (default branch @ abcdef0123456789)",
     ),
   );
 });
@@ -130,7 +130,7 @@ test("an exitClass this script does not know throws rather than silently doing n
 
 test("buildIssueBody renders the footer contract and only the trees with lines", () => {
   const body = buildIssueBody({
-    runUrl: "https://github.com/ecoma-io/lattice/actions/runs/42",
+    runUrl: "https://github.com/ecoma-io/archkeep/actions/runs/42",
     sha: "abcdef0123456789",
     trees: [
       { name: "a", verdict: "findings", lines: ["UNEXPLAINED stricter x @ a:1:1"] },
@@ -158,9 +158,9 @@ test("reopen issues `gh issue reopen`, never `gh issue edit --state` — the fla
     summary,
     existing: { number: 7, state: "closed" },
   });
-  const commands = buildGhCommands(decision, "ecoma-io/lattice");
+  const commands = buildGhCommands(decision, "ecoma-io/archkeep");
   assert.equal(commands.length, 2);
-  assert.deepEqual(commands[0], ["issue", "reopen", "--repo", "ecoma-io/lattice", "7"]);
+  assert.deepEqual(commands[0], ["issue", "reopen", "--repo", "ecoma-io/archkeep", "7"]);
   // No command may carry a `--state` flag anywhere — that is the exact typo
   // that made reopening error out against a real `gh`.
   for (const args of commands) assert.equal(args.includes("--state"), false);
@@ -169,7 +169,7 @@ test("reopen issues `gh issue reopen`, never `gh issue edit --state` — the fla
     "issue",
     "edit",
     "--repo",
-    "ecoma-io/lattice",
+    "ecoma-io/archkeep",
     "7",
     "--body",
     decision.body,
@@ -178,13 +178,13 @@ test("reopen issues `gh issue reopen`, never `gh issue edit --state` — the fla
 
 test("open, update and close each build exactly one gh command, unchanged from before the reopen fix", () => {
   const openDecision = decideIssue({ exitClass: "findings", summary, existing: undefined });
-  const openCommands = buildGhCommands(openDecision, "ecoma-io/lattice");
+  const openCommands = buildGhCommands(openDecision, "ecoma-io/archkeep");
   assert.equal(openCommands.length, 1);
   assert.deepEqual(openCommands[0], [
     "issue",
     "create",
     "--repo",
-    "ecoma-io/lattice",
+    "ecoma-io/archkeep",
     "--title",
     openDecision.title,
     "--body",
@@ -198,9 +198,9 @@ test("open, update and close each build exactly one gh command, unchanged from b
     summary,
     existing: { number: 7, state: "open" },
   });
-  const updateCommands = buildGhCommands(updateDecision, "ecoma-io/lattice");
+  const updateCommands = buildGhCommands(updateDecision, "ecoma-io/archkeep");
   assert.deepEqual(updateCommands, [
-    ["issue", "edit", "--repo", "ecoma-io/lattice", "7", "--body", updateDecision.body],
+    ["issue", "edit", "--repo", "ecoma-io/archkeep", "7", "--body", updateDecision.body],
   ]);
 
   const closeDecision = decideIssue({
@@ -208,20 +208,20 @@ test("open, update and close each build exactly one gh command, unchanged from b
     summary,
     existing: { number: 7, state: "open" },
   });
-  const closeCommands = buildGhCommands(closeDecision, "ecoma-io/lattice");
+  const closeCommands = buildGhCommands(closeDecision, "ecoma-io/archkeep");
   assert.deepEqual(closeCommands, [
-    ["issue", "close", "--repo", "ecoma-io/lattice", "7", "--comment", closeDecision.closeComment],
+    ["issue", "close", "--repo", "ecoma-io/archkeep", "7", "--comment", closeDecision.closeComment],
   ]);
 });
 
 test("a none decision requires no gh command at all", () => {
   const decision = decideIssue({ exitClass: "ok", summary, existing: undefined });
-  assert.deepEqual(buildGhCommands(decision, "ecoma-io/lattice"), []);
+  assert.deepEqual(buildGhCommands(decision, "ecoma-io/archkeep"), []);
 });
 
 test("an action buildGhCommands does not know throws rather than silently doing nothing", () => {
   assert.throws(
-    () => buildGhCommands({ action: "banana" }, "ecoma-io/lattice"),
+    () => buildGhCommands({ action: "banana" }, "ecoma-io/archkeep"),
     /unknown decision action/u,
   );
 });

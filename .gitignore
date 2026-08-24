@@ -14,7 +14,7 @@ coverage/
 #
 # Stated here rather than in a `.gitignore` beside the crate, and the reason is
 # measured: Prettier reads the ROOT ignore files only, so a crate-local entry
-# leaves `packages/lattice-rule-sdk-rust/target/` visible to `prettier --check .`
+# leaves `packages/archkeep-rule-sdk-rust/target/` visible to `prettier --check .`
 # — which then reports style violations inside cargo's build cache on any
 # machine that has run `cargo test`, while CI (where nothing has built yet)
 # stays green. One entry that both git and Prettier read is the only spelling
@@ -53,5 +53,5 @@ pnpm-debug.log*
 # the shape of accidental `git add -A`. Kept out of git rather than moved to
 # tmpdir(): the fixtures must sit inside the package to be resolvable by the
 # resolver under test.
-packages/lattice/.cli-eslint-config-fixture-*/
+packages/archkeep/.cli-eslint-config-fixture-*/
 __pycache__/

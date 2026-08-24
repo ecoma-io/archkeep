@@ -1,6 +1,6 @@
 # Adopting a shipped policy pack
 
-Lattice publishes six architecture styles as ready-made law. Each one is a
+Archkeep publishes six architecture styles as ready-made law. Each one is a
 **policy pack**: a profile registry, shipped inside the package, holding the
 rows that make a style enforceable instead of aspirational.
 
@@ -233,7 +233,7 @@ the projects the axis actually describes.
 The form to reach for, and the only one that lets you extend the pack:
 
 ```shell
-cp node_modules/@ecoma-io/lattice/presets/hexagonal.json lattice-profiles.json
+cp node_modules/@ecoma-io/archkeep/presets/hexagonal.json archkeep-profiles.json
 ```
 
 Then name your copy in the plugin options, and select a profile from it exactly
@@ -243,11 +243,11 @@ as [profiles.md](profiles.md) describes:
 {
   "plugins": [
     {
-      "plugin": "@ecoma-io/lattice/nx",
+      "plugin": "@ecoma-io/archkeep/nx",
       "options": {
         "boundaryConfig": "hexagonal",
         "tsConfig": "tsconfig.base.json",
-        "profiles": "lattice-profiles.json"
+        "profiles": "archkeep-profiles.json"
       }
     }
   ]
@@ -256,7 +256,7 @@ as [profiles.md](profiles.md) describes:
 
 Your copy is a registry like any other: add profiles to it, give them the
 shipped one as their `base`, and add the per-context rows a pack cannot ship.
-The law is now yours, and a Lattice upgrade cannot change what your CI enforces.
+The law is now yours, and a Archkeep upgrade cannot change what your CI enforces.
 
 ### Point at it where it is installed
 
@@ -266,18 +266,18 @@ The law is now yours, and a Lattice upgrade cannot change what your CI enforces.
 ```json
 "options": {
   "boundaryConfig": "hexagonal",
-  "profiles": "node_modules/@ecoma-io/lattice/presets/hexagonal.json"
+  "profiles": "node_modules/@ecoma-io/archkeep/presets/hexagonal.json"
 }
 ```
 
-Nothing to copy, and no fork to maintain — at the cost that upgrading Lattice
+Nothing to copy, and no fork to maintain — at the cost that upgrading Archkeep
 can change the law your pipeline enforces. Read the release notes before
 upgrading, and see the stability note below.
 
 ### Workspaces without an `nx.json`
 
 The `profiles` option lives in `nx.json`'s plugin options and only there
-([configuration.md](../reference/configuration.md)), so a `lattice.json`
+([configuration.md](../reference/configuration.md)), so a `archkeep.json`
 workspace and a Moon workspace cannot select a profile by name. They can still
 use a pack: a profile's `block` is exactly the four keys a `.json` boundary
 config carries ([policies.md](../concepts/policies.md)), so copy the `block` of

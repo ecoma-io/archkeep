@@ -45,7 +45,7 @@ continuation lines, `#` for comments, no full YAML and no JSON. The registry is
 read by an enforcer, so a line it cannot trust must be a loud parse error, never
 a line silently dropped. The same decision the intent model makes for
 `architecture-intent.json`: this tool's own files get no parser leniency.
-`packages/lattice/src/governance/adr-registry.mjs` is the dialect's home — it
+`packages/archkeep/src/governance/adr-registry.mjs` is the dialect's home — it
 parses, validates, and indexes every record.
 
 ## Determinism, and the two refusals
@@ -91,7 +91,7 @@ violation", and nothing else) binds the registry two ways:
   `decisionRef` is a fact about the row's documentation, not about whether the
   boundary holds, so it changes no exit code and no finding count — the same
   posture `provenance`'s `unattested` (a row with no `origin`) already takes.
-  `lattice adr <id>` remains how a reader inspects the record itself — its
+  `archkeep adr <id>` remains how a reader inspects the record itself — its
   status, supersession chain, and what else it binds — once a citation is known
   to resolve.
 
@@ -108,7 +108,7 @@ unenforceable, and a remote answer carries the moment it was taken.
 
 An ADR does not _create_ a rule. The rule lives in the boundary law or the
 intent; the ADR records the decision the rule leans on, and `decisionRef` is the
-pointer from one to the other. `lattice adr` reports what is recorded; it does
+pointer from one to the other. `archkeep adr` reports what is recorded; it does
 not verify that a bound rule/fitness exists anywhere else in the workspace, and
 it never exits 1 — a description of what is recorded is not a finding.
 

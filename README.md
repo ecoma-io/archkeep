@@ -1,22 +1,22 @@
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Lattice — architecture governance for human and agentic software development: a deterministic authority that keeps the architecture your team declared aligned with the code your team keeps changing" width="100%" />
+  <img src=".github/assets/banner.png" alt="Archkeep — architecture governance for human and agentic software development: a deterministic authority that keeps the architecture your team declared aligned with the code your team keeps changing" width="100%" />
 </p>
 
-<h1 align="center">Lattice</h1>
+<h1 align="center">Archkeep</h1>
 
 <p align="center">
   <strong>A deterministic architecture governance system for humans and coding agents.</strong><br />
-  Declare your architecture as code — layers, scopes, allowed dependencies — and Lattice
+  Declare your architecture as code — layers, scopes, allowed dependencies — and Archkeep
   turns it into a verdict: every import in Go, Rust, Python, TypeScript, JavaScript and Vue,
   judged against your declared intent, in any repository, with or without Nx or Moon.<br />
   <em>A rule that reports nothing looks exactly like a rule with nothing to report.</em>
 </p>
 
 <p align="center">
-  <a href="https://github.com/ecoma-io/lattice/actions/workflows/ci.yml"><img src="https://github.com/ecoma-io/lattice/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/ecoma-io/lattice/actions/workflows/analysis.yml"><img src="https://github.com/ecoma-io/lattice/actions/workflows/analysis.yml/badge.svg" alt="Analysis" /></a>
+  <a href="https://github.com/ecoma-io/archkeep/actions/workflows/ci.yml"><img src="https://github.com/ecoma-io/archkeep/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/ecoma-io/archkeep/actions/workflows/analysis.yml"><img src="https://github.com/ecoma-io/archkeep/actions/workflows/analysis.yml/badge.svg" alt="Analysis" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0" /></a>
-  <a href="https://www.npmjs.com/package/@ecoma-io/lattice"><img src="https://img.shields.io/npm/dm/@ecoma-io/lattice.svg" alt="npm downloads per month" /></a>
+  <a href="https://www.npmjs.com/package/@ecoma-io/archkeep"><img src="https://img.shields.io/npm/dm/@ecoma-io/archkeep.svg" alt="npm downloads per month" /></a>
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@ Agentic coding creates architectural decisions faster than human review can
 hold, and in a polyglot repository the existing tools go quiet exactly where
 you need them: ESLint cannot parse Go, Rust or Python, and `nx affected`
 cannot see their edges — an unenforced boundary looks identical to a clean
-workspace. Lattice ends that silence with one deterministic authority serving
+workspace. Archkeep ends that silence with one deterministic authority serving
 both your CI and your coding agents: same tree, same config, same answer,
 everywhere. The measurement behind the claim is in
 [docs/doctrine/why.md](docs/doctrine/why.md).
@@ -53,7 +53,7 @@ everywhere. The measurement behind the claim is in
 ## Get started
 
 ```bash
-npm install -D @ecoma-io/lattice   # or pnpm / yarn / bun
+npm install -D @ecoma-io/archkeep   # or pnpm / yarn / bun
 ```
 
 Ten minutes end to end, most of it spent deciding what your tags mean:
@@ -73,7 +73,7 @@ Ten minutes end to end, most of it spent deciding what your tags mean:
 | [Development](docs/development/architecture.md)                                                            | For contributors: how it works inside                                  |
 
 Full index: [**docs/**](docs/README.md). The package's own reference, which
-stands alone as the npm landing page, is [here](packages/lattice/README.md).
+stands alone as the npm landing page, is [here](packages/archkeep/README.md).
 
 ## Contributing
 
@@ -85,7 +85,7 @@ else: [CONTRIBUTING.md](CONTRIBUTING.md) ·
 
 ## License
 
-[Apache License 2.0](LICENSE) — © Mai Ngọc Hóa (John Martin) and the Lattice
+[Apache License 2.0](LICENSE) — © Mai Ngọc Hóa (John Martin) and the Archkeep
 contributors. Apache-2.0 for its explicit patent grant.
 
 ---

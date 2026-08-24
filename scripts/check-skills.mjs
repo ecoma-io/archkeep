@@ -14,7 +14,7 @@
 // `check-packages.mjs` uses, for the same reason: a pure function can be tested
 // without a filesystem and without a mocking library.
 //
-// The version it checks against comes from `packages/lattice/package.json` —
+// The version it checks against comes from `packages/archkeep/package.json` —
 // the baseline docs/skills/versioning.md calls the source of truth. The Claude
 // Code plugin manifest version, the marketplace entry version, the Codex
 // plugin manifest version, and the VS Code extension's package.json version
@@ -46,19 +46,19 @@ export const EXPECTED_SKILLS = [
   "arch-review",
   "arch-migrate",
 ];
-export const PACKAGE_JSON = "packages/lattice/package.json";
+export const PACKAGE_JSON = "packages/archkeep/package.json";
 export const ROOT_PACKAGE_JSON = "package.json";
 export const CLAUDE_PLUGIN_MANIFEST = ".claude-plugin/plugin.json";
 export const MARKETPLACE_CATALOGUE = ".claude-plugin/marketplace.json";
-export const MARKETPLACE_PLUGIN_NAME = "lattice";
+export const MARKETPLACE_PLUGIN_NAME = "archkeep";
 export const CODEX_PLUGIN_MANIFEST = ".codex-plugin/plugin.json";
 export const AGENTS_SKILLS_DIR = ".agents/skills";
-export const VSCODE_PACKAGE_JSON = "packages/lattice-vscode/package.json";
-export const RUST_SDK_CARGO_TOML = "packages/lattice-rule-sdk-rust/Cargo.toml";
-export const RUST_SDK_CARGO_LOCK = "packages/lattice-rule-sdk-rust/Cargo.lock";
-export const RUST_SDK_CRATE_NAME = "lattice-rule-sdk";
-export const TS_SDK_PACKAGE_JSON = "packages/lattice-rule-sdk-ts/package.json";
-export const PYTHON_SDK_PYPROJECT = "packages/lattice-rule-sdk-python/pyproject.toml";
+export const VSCODE_PACKAGE_JSON = "packages/archkeep-vscode/package.json";
+export const RUST_SDK_CARGO_TOML = "packages/archkeep-rule-sdk-rust/Cargo.toml";
+export const RUST_SDK_CARGO_LOCK = "packages/archkeep-rule-sdk-rust/Cargo.lock";
+export const RUST_SDK_CRATE_NAME = "archkeep-rule-sdk";
+export const TS_SDK_PACKAGE_JSON = "packages/archkeep-rule-sdk-ts/package.json";
+export const PYTHON_SDK_PYPROJECT = "packages/archkeep-rule-sdk-python/pyproject.toml";
 
 // Every version-bearing path the chain compares — the nine files
 // docs/skills/versioning.md enumerates, aggregated from the constants above
@@ -84,9 +84,9 @@ export const VERSION_CHAIN_PATHS = [
 export const HOST_SPECIFIC_FIELDS = ["context", "model", "effort", "agent", "paths"];
 
 // The one prefix under which a skill's link is a link into THIS repository.
-// Everything a skill cites about Lattice is reached through it, and check 17
+// Everything a skill cites about Archkeep is reached through it, and check 17
 // resolves the path that follows against the tracked tree.
-export const REPO_BLOB_PREFIX = "https://github.com/ecoma-io/lattice/blob/main/";
+export const REPO_BLOB_PREFIX = "https://github.com/ecoma-io/archkeep/blob/main/";
 
 /**
  * The destination of every `[text](target)` markdown link in a SKILL.md, with
@@ -318,7 +318,7 @@ export function cargoLockPackageVersion(text, name) {
  * name/identity rather than array position. `.claude-plugin/marketplace.json`
  * is a catalogue and `plugins` is a list this repository controls today, but
  * nothing stops it growing a second entry — a decoy plugin prepended ahead of
- * `lattice` would leave the real entry unchecked by a positional read while
+ * `archkeep` would leave the real entry unchecked by a positional read while
  * still returning a plausible-looking version string.
  *
  * @param {{plugins?: {name?: string, version?: string}[]}} catalogue parsed marketplace.json
@@ -335,14 +335,14 @@ export function selectMarketplaceVersion(catalogue, pluginName) {
  *
  * @param {object} input
  * @param {string[]} input.skillDirs directory names under skills/
- * @param {string} input.packageVersion version from packages/lattice/package.json
+ * @param {string} input.packageVersion version from packages/archkeep/package.json
  * @param {string} input.rootVersion version from the repository root package.json — the
  *   release-please "." component release-please writes directly; the other four files
- *   (including packages/lattice/package.json) are copies of it via `extra-files`
+ *   (including packages/archkeep/package.json) are copies of it via `extra-files`
  * @param {string} input.pluginVersion version from the Claude Code plugin manifest
  * @param {string} input.marketplaceVersion version from the marketplace.json entry
  * @param {string} input.codexPluginVersion version from the Codex plugin manifest
- * @param {string} input.vscodeVersion version from packages/lattice-vscode/package.json
+ * @param {string} input.vscodeVersion version from packages/archkeep-vscode/package.json
  * @param {string} input.cargoVersion version from the Rust SDK's Cargo.toml `[package]` section
  * @param {string} input.cargoLockVersion version Cargo.lock records for the Rust SDK crate
  * @param {string} input.tsSdkVersion version from the TS SDK's package.json
@@ -440,9 +440,9 @@ export function evaluate({
       lines.push(`FAIL ${skill.dir} — host-specific fields`);
     }
 
-    // 6. compatibility field should mention lattice
-    if (skill.compatibility !== null && !skill.compatibility.toLowerCase().includes("lattice")) {
-      lines.push(`note ${skill.dir} — compatibility does not mention lattice`);
+    // 6. compatibility field should mention archkeep
+    if (skill.compatibility !== null && !skill.compatibility.toLowerCase().includes("archkeep")) {
+      lines.push(`note ${skill.dir} — compatibility does not mention archkeep`);
     }
 
     // 7. OK line if no failures for this skill
@@ -503,13 +503,13 @@ export function evaluate({
       // WS1-F03: `waivers` names/lists only the term-bound rows.
       re: /(?:names|lists)\s+only\s+the\s+(?:term-bound|temporary)\b/u,
       skills: ["arch-check", "arch-review"],
-      why: "`lattice waivers` names every boundarySuppressions row, permanent suppressions included",
+      why: "`archkeep waivers` names every boundarySuppressions row, permanent suppressions included",
     },
     {
       // WS1-F03 additive: "shows/reports/displays only the waivers".
       re: /(?:shows|reports|displays)\s+only\s+(?:the\s+)?waivers\b[^\n]{0,60}(?:not\s+the|never|absent)/iu,
       skills: ["arch-check", "arch-review"],
-      why: "`lattice waivers` names every boundarySuppressions row, permanent suppressions included",
+      why: "`archkeep waivers` names every boundarySuppressions row, permanent suppressions included",
     },
     {
       // WS1-F10: authoring requires a per-skill version. The negative
@@ -542,7 +542,7 @@ export function evaluate({
         `A skill still teaches a stale mechanism (${owner}): ${why}. ` +
           `Post-#139 the \`adr:\`-prefixed spelling resolves like the bare slug, ` +
           `\`check\` resolves decisionRefs (report-only on a constraint row, exit 3 ` +
-          `on an applied intent row), \`lattice waivers\` names ` +
+          `on an applied intent row), \`archkeep waivers\` names ` +
           `permanent suppressions, and skills carry no version by decision. ` +
           `Correct the skill, not this gate.`,
       );
@@ -557,7 +557,7 @@ export function evaluate({
   // arch-migrate is the one skill whose subject is a repository with no
   // declared model, which makes it the one place an agent is most likely to
   // write `architecture-intent.json` and call the job done. The separation it
-  // has to teach — Lattice derives, a human adopts — is the whole reason the
+  // has to teach — Archkeep derives, a human adopts — is the whole reason the
   // `--propose` surfaces refuse to write. A reversion here is silent in the
   // worst direction: the skill would still read as a competent migration
   // protocol while having dropped the sentence that keeps the authority on the
@@ -589,7 +589,7 @@ export function evaluate({
   // The intent half of the same lane, required rather than trusted. The
   // report-only sentence above is true of a `depConstraints` row and false of
   // an applied intent row, where an unresolvable citation withholds the
-  // verdict (`../packages/lattice/cli.mjs`, the `intentUnresolvedDecisionRefRows`
+  // verdict (`../packages/archkeep/cli.mjs`, the `intentUnresolvedDecisionRefRows`
   // fold, pinned over a tree carrying no boundary violation at all). A skill
   // stating only the report-only half reads as a complete account of the
   // mechanism while leaving an agent to call a no-verdict run clean — the
@@ -618,7 +618,7 @@ export function evaluate({
     (skillText.has("arch-review") && !/names every row/u.test(review))
   ) {
     failures.push(
-      `the skills must teach that \`lattice waivers\` names every ` +
+      `the skills must teach that \`archkeep waivers\` names every ` +
         `boundarySuppressions row, permanent suppressions included (audit WS1-F03).`,
     );
     lines.push(`FAIL waivers — permanent suppressions claim not stated`);
@@ -637,7 +637,7 @@ export function evaluate({
   // it still fails.
 
   // 7c. Root package.json version — the "." release-please component that
-  // release-please writes directly — must match packages/lattice/package.json.
+  // release-please writes directly — must match packages/archkeep/package.json.
   // Every other check below compares a file against `packageVersion` as the
   // baseline, but that baseline was never itself checked against the file
   // release-please actually bumps: a drift there would leave every other
@@ -645,9 +645,9 @@ export function evaluate({
   // behind, which is silent in exactly the shape this gate exists to refuse.
   if (rootVersion !== packageVersion) {
     failures.push(
-      `package.json (root) version is "${rootVersion}" but packages/lattice/package.json ` +
+      `package.json (root) version is "${rootVersion}" but packages/archkeep/package.json ` +
         `version is "${packageVersion}". release-please bumps the root "." component ` +
-        `directly and copies it into packages/lattice/package.json via extra-files — if ` +
+        `directly and copies it into packages/archkeep/package.json via extra-files — if ` +
         `the two disagree the version chain has drifted at its source.`,
     );
     lines.push(`FAIL package.json (root) — version mismatch`);
@@ -683,11 +683,11 @@ export function evaluate({
   // 11. VS Code extension version must match package version
   if (vscodeVersion !== packageVersion) {
     failures.push(
-      `packages/lattice-vscode/package.json version is "${vscodeVersion}" but package version is ` +
+      `packages/archkeep-vscode/package.json version is "${vscodeVersion}" but package version is ` +
         `"${packageVersion}". The extension is released with the engine it pairs with, ` +
         `so its version must be synchronized with the package.`,
     );
-    lines.push(`FAIL lattice-vscode/package.json — version mismatch`);
+    lines.push(`FAIL archkeep-vscode/package.json — version mismatch`);
   }
 
   // 12. Rust SDK crate version must match package version. ADR 0002 puts
@@ -696,36 +696,36 @@ export function evaluate({
   // it, the same way it holds the extension's pairing above.
   if (cargoVersion !== packageVersion) {
     failures.push(
-      `packages/lattice-rule-sdk-rust/Cargo.toml version is "${cargoVersion}" but package ` +
+      `packages/archkeep-rule-sdk-rust/Cargo.toml version is "${cargoVersion}" but package ` +
         `version is "${packageVersion}". The Rust SDK versions with the engine it pairs ` +
         `with (docs/adr/0002-custom-rules-one-contract.md), and release-please writes it ` +
         `via extra-files — if the two disagree the chain has drifted.`,
     );
-    lines.push(`FAIL lattice-rule-sdk-rust/Cargo.toml — version mismatch`);
+    lines.push(`FAIL archkeep-rule-sdk-rust/Cargo.toml — version mismatch`);
   }
 
   // 13. TS SDK package version must match package version — the same chain
   // decision as check 12, for the npm-published SDK.
   if (tsSdkVersion !== packageVersion) {
     failures.push(
-      `packages/lattice-rule-sdk-ts/package.json version is "${tsSdkVersion}" but package ` +
+      `packages/archkeep-rule-sdk-ts/package.json version is "${tsSdkVersion}" but package ` +
         `version is "${packageVersion}". The TS SDK versions with the engine it pairs ` +
         `with (docs/adr/0002-custom-rules-one-contract.md), and release-please writes it ` +
         `via extra-files — if the two disagree the chain has drifted.`,
     );
-    lines.push(`FAIL lattice-rule-sdk-ts/package.json — version mismatch`);
+    lines.push(`FAIL archkeep-rule-sdk-ts/package.json — version mismatch`);
   }
 
   // 14. Python SDK version must match package version — the same chain
   // decision as checks 12 and 13, for the PyPI-published SDK.
   if (pySdkVersion !== packageVersion) {
     failures.push(
-      `packages/lattice-rule-sdk-python/pyproject.toml version is "${pySdkVersion}" but ` +
+      `packages/archkeep-rule-sdk-python/pyproject.toml version is "${pySdkVersion}" but ` +
         `package version is "${packageVersion}". The Python SDK versions with the engine ` +
         `it pairs with (docs/adr/0002-custom-rules-one-contract.md), and release-please ` +
         `writes it via extra-files — if the two disagree the chain has drifted.`,
     );
-    lines.push(`FAIL lattice-rule-sdk-python/pyproject.toml — version mismatch`);
+    lines.push(`FAIL archkeep-rule-sdk-python/pyproject.toml — version mismatch`);
   }
 
   // 15. Cargo.lock must record the version Cargo.toml declares. This is the
@@ -740,13 +740,13 @@ export function evaluate({
   // lock needs its own parser.
   if (cargoLockVersion !== cargoVersion) {
     failures.push(
-      `packages/lattice-rule-sdk-rust/Cargo.lock records "${cargoLockVersion}" for the ` +
+      `packages/archkeep-rule-sdk-rust/Cargo.lock records "${cargoLockVersion}" for the ` +
         `${RUST_SDK_CRATE_NAME} crate but Cargo.toml declares "${cargoVersion}". ` +
         `release-please writes the manifest via extra-files and writes no lockfile, so ` +
         `this pair drifts on every version bump — and \`cargo publish --locked\`, which ` +
         `the release lane runs before it uploads, refuses to publish through the drift.`,
     );
-    lines.push(`FAIL lattice-rule-sdk-rust/Cargo.lock — version mismatch`);
+    lines.push(`FAIL archkeep-rule-sdk-rust/Cargo.lock — version mismatch`);
   }
 
   // 16. `.agents/skills` must equal `skills/` byte for byte, every file. It is

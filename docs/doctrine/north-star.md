@@ -1,6 +1,6 @@
 # North star
 
-Lattice is an architecture governance system for human and agentic software
+Archkeep is an architecture governance system for human and agentic software
 development — a deterministic authority that keeps the intended architecture
 aligned with the observed architecture while humans and agents continuously
 change the codebase.
@@ -13,14 +13,14 @@ dependency graph, not an architecture linter, not a plugin — the authority a
 repository consults for "does the code that exists agree with the architecture
 that was declared".
 
-Where Lattice is going, what counts as arriving, and what it will not do on the
+Where Archkeep is going, what counts as arriving, and what it will not do on the
 way. This document owns the direction. It owns no mechanism — where a claim here
 has a mechanism behind it, the file that owns the mechanism is linked, and that
 file is the one that binds. [architecture-authority.md](architecture-authority.md)
 owns the system boundary: which of the surrounding pieces — providers, skills,
-agents, CI — are Lattice, and the line none of them may cross.
+agents, CI — are Archkeep, and the line none of them may cross.
 
-The direction is wider than it was when this document was written. Lattice
+The direction is wider than it was when this document was written. Archkeep
 started as an Nx plugin closing one instance of the gap — module boundaries for
 the languages ESLint cannot parse — and the engine underneath was always bigger
 than the integration around it. Today it is a standalone governance system that
@@ -44,14 +44,14 @@ For TypeScript and JavaScript, an Nx workspace already has an enforcer
 rebuilds — but only for those two. A Go service, a Rust crate and a Python
 package carry `layer:`, `scope:` and `license:` tags that match no mechanism at
 all, and the graph that decides what `nx affected` rebuilds has no edge between
-any two of them. Lattice exists to close that — and, because its model is
+any two of them. Archkeep exists to close that — and, because its model is
 provider-independent, to do it in a Moonrepo workspace or a repository with no
 workspace tool at all, not only in an Nx one. The target state is closure
 across the board — not across three languages that happened to be needed first.
 
 ## What arriving looks like
 
-A language is **finished** in Lattice when all four of these are true. Anything
+A language is **finished** in Archkeep when all four of these are true. Anything
 less is a language that is partly supported, and partial support is worth saying
 out loud rather than implying with a checkmark.
 
@@ -73,7 +73,7 @@ Against that bar, the state today:
 | Vue                       | Nx's own |     ✅      |      LSP · VS Code       |       ✅        |
 
 _LSP_ means any LSP client reaches the diagnostics; Claude Code does, from this
-repository's own marketplace. _VS Code_ means `packages/lattice-vscode`, which
+repository's own marketplace. _VS Code_ means `packages/archkeep-vscode`, which
 routes the same four extensions and starts the server the workspace has
 installed. The cell is not a checkmark because that client is not on the
 marketplace yet: it runs from a development host or the `.vsix` CI builds,
@@ -109,7 +109,7 @@ Three consequences worth stating, because each has already been a temptation:
 
 - **A language ships complete or not at all.** Edges without enforcement is the
   state Nx is already in, and it is the state this project was built to end.
-  Shipping it under Lattice's name would be worse than not shipping it, because
+  Shipping it under Archkeep's name would be worse than not shipping it, because
   it comes with the implication that the boundary is now covered.
 - **An analyzer that cannot read a common shape says so in its header, in the
   same commit.** Not in an issue, not in a follow-up. The limits sections in
@@ -124,7 +124,7 @@ Three consequences worth stating, because each has already been a temptation:
 
 ## The surfaces
 
-A language is how Lattice reads a workspace; a surface is how a person reaches
+A language is how Archkeep reads a workspace; a surface is how a person reaches
 the verdict. The surfaces are deliberately few, and each exists because a
 different reader needs the answer at a different moment.
 
@@ -144,14 +144,14 @@ different reader needs the answer at a different moment.
 - **The language server** — the verdict at the edit. It runs in any LSP client;
   Claude Code installs it from this repository's own marketplace.
 - **The editor extension** — the same server, packaged so a developer installs it
-  without knowing what LSP is. `packages/lattice-vscode` is that surface for VS
+  without knowing what LSP is. `packages/archkeep-vscode` is that surface for VS
   Code; what is left is the marketplace listing, not the client.
 - **The Nx integration** — the graph, computed on every `nx` invocation. It is the
   one surface with no user interface at all, and the one everything else depends
   on being cheap. One provider among the integrations, not the foundation.
 - **The Moon integration** — the graph, read from `moon project-graph --json`.
   A Moonrepo workspace carries a `.moon/` or `.config/moon/` directory at its
-  root; Lattice reads the same project graph Moon already computed, the same
+  root; Archkeep reads the same project graph Moon already computed, the same
   one-call contract the Nx provider follows.
 
 What is _not_ on that list, and is not planned: a dashboard, a hosted service, a
@@ -164,7 +164,7 @@ that makes it trustworthy.
 There is one measurable finish line already written down, and it is not this
 document's to restate: `src/conformance/README.md` § _What this licenses_ states
 the three things that have to be true before a workspace can drop
-`@nx/enforce-module-boundaries` and run Lattice alone. All three now have a
+`@nx/enforce-module-boundaries` and run Archkeep alone. All three now have a
 mechanism holding them; what remains open is breadth of evidence, not a missing
 feature:
 
@@ -202,7 +202,7 @@ hand-written `project.json`, and no target is ever inferred. The community
 plugins that solve the edge problem also infer targets, and rejecting that is
 this tool's reason to exist: what a target does keeps one source of truth.
 
-**TypeScript and JavaScript stay with `@nx/eslint-plugin`.** Lattice does not
+**TypeScript and JavaScript stay with `@nx/eslint-plugin`.** Archkeep does not
 replace a rule that already works.
 
 **One constraint table, in the consumer's workspace.** Nothing in this project

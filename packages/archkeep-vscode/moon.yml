@@ -1,0 +1,18 @@
+# Archkeep VS Code extension — the client for the Archkeep language server.
+#
+# Tags use dash separators (type-extension, scope-nx) because Moon tags
+# cannot contain colons.
+id: archkeep-vscode
+language: javascript
+layer: application
+stack: frontend
+tags:
+  - type-extension
+  - scope-nx
+tasks:
+  lint:
+    command: eslint . --max-warnings 0
+  test:
+    command: vitest run
+  typecheck:
+    command: tsc -p tsconfig.json

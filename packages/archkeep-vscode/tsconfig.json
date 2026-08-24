@@ -1,0 +1,14 @@
+// The `typecheck` target's program, same shape and same reasons as
+// ../archkeep/tsconfig.json — the argument for each option lives
+// there once rather than twice.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    "target": "es2022",
+    "skipLibCheck": true
+  },
+  "include": ["**/*.mjs"]
+}

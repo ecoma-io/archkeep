@@ -14,7 +14,7 @@ Every `SKILL.md` must begin with YAML frontmatter containing at minimum:
 ---
 name: arch-skill-name
 description: One-line description of what the skill teaches
-compatibility: Requires @ecoma-io/lattice CLI
+compatibility: Requires @ecoma-io/archkeep CLI
 ---
 ```
 
@@ -28,7 +28,7 @@ compatibility: Requires @ecoma-io/lattice CLI
 ### Optional fields
 
 - **`compatibility`** — describes what the skill requires. Should mention
-  `lattice` or `@ecoma-io/lattice` so consumers know the dependency.
+  `archkeep` or `@ecoma-io/archkeep` so consumers know the dependency.
 
 ### Forbidden fields
 
@@ -58,7 +58,7 @@ detects them and fails the build.
 Every skill should teach four things:
 
 1. **WHEN** — the situation where the agent should invoke this skill. Be
-   specific: "before modifying code in a Lattice-governed project" is better
+   specific: "before modifying code in a Archkeep-governed project" is better
    than "when you need architecture help."
 
 2. **WHY** — the reason the skill exists. What goes wrong when the agent does
@@ -66,7 +66,7 @@ Every skill should teach four things:
    create violations by default" is the kind of reasoning that helps the agent
    decide whether to invoke the skill in an edge case.
 
-3. **HOW** — the steps the agent should follow. Each step names a `lattice`
+3. **HOW** — the steps the agent should follow. Each step names a `archkeep`
    command and explains what to do with the output. Use `--format json` for
    machine-readable output.
 
@@ -78,14 +78,14 @@ Every skill should teach four things:
 ### No `allowed-tools`
 
 Do not add `allowed-tools` to the frontmatter. The agent must request permission
-to run `lattice` commands — this is a safety feature, not a friction. A skill
+to run `archkeep` commands — this is a safety feature, not a friction. A skill
 that auto-bypasses permission checks is a skill that could silently modify
 boundary policy.
 
 ### Skills teach; the CLI decides
 
 Never duplicate enforcement logic in skill content. The skill describes the
-protocol ("run `lattice check` and interpret the exit code"); the CLI provides
+protocol ("run `archkeep check` and interpret the exit code"); the CLI provides
 the verdict. If the skill says "check if an import crosses a boundary," it has
 taken a decision away from the engine.
 
@@ -102,7 +102,7 @@ repository does not control and lands on some other page, or on nothing. A link
 that points at the wrong page reads as authoritative while being wrong.
 
 Links into this repository take the form
-`https://github.com/ecoma-io/lattice/blob/main/<path>`. `scripts/check-skills.mjs`
+`https://github.com/ecoma-io/archkeep/blob/main/<path>`. `scripts/check-skills.mjs`
 refuses any other shape and resolves `<path>` against the tracked tree, so a doc
 renamed on `main` turns the gate red instead of leaving a dead URL in a shipped
 skill. Note the exemption is a PREFIX test: `../../elsewhere/page.md#status` is

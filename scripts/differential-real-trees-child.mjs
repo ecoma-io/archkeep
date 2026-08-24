@@ -4,7 +4,7 @@
 // once per tree, never called twice in one process, because `@nx/devkit`
 // freezes its `workspaceRoot` at first load from `NX_WORKSPACE_ROOT_PATH` —
 // the same one-root-per-process constraint
-// `packages/lattice/src/conformance/fixture.mjs` documents for the
+// `packages/archkeep/src/conformance/fixture.mjs` documents for the
 // fixture suite. The parent sets that variable and the working directory
 // before this file's imports run; both are asserted below rather than trusted,
 // because a wrong root here would lint one tree against another tree's graph
@@ -38,14 +38,14 @@ import {
   annotatePackageFacts,
   createWorkspace,
   listTrackedFiles,
-} from "../packages/lattice/src/workspace.mjs";
-import { evaluate } from "../packages/lattice/src/rules/index.mjs";
-import { compareFile } from "../packages/lattice/src/conformance/differential.mjs";
+} from "../packages/archkeep/src/workspace.mjs";
+import { evaluate } from "../packages/archkeep/src/rules/index.mjs";
+import { compareFile } from "../packages/archkeep/src/conformance/differential.mjs";
 import {
   createUpstreamRunner,
   isUpstreamReadable,
-} from "../packages/lattice/src/conformance/engines.mjs";
-import { nativeProvider } from "../packages/lattice/src/providers/native/index.mjs";
+} from "../packages/archkeep/src/conformance/engines.mjs";
+import { nativeProvider } from "../packages/archkeep/src/providers/native/index.mjs";
 import {
   deriveNativeModel,
   extractBoundaryRule,
@@ -284,7 +284,7 @@ async function main() {
   // (`deriveNativeModel`, in `./differential-real-trees.mjs`) from the graph
   // JSON already on disk, never hand-authored, so this measures the provider's
   // discovery-plus-graph pipeline on source nobody here wrote, which is the one
-  // thing the fixture suite under `packages/lattice/src/providers/native/`
+  // thing the fixture suite under `packages/archkeep/src/providers/native/`
   // cannot answer — its fixtures were built by someone who knew the answer.
   //
   // Isolated in its own try/catch: a defect in the derived model or the
@@ -295,11 +295,11 @@ async function main() {
   let native;
   try {
     const derivedModel = deriveNativeModel(graph);
-    // `nativeProvider.discover` reads `lattice.json` through the injected
+    // `nativeProvider.discover` reads `archkeep.json` through the injected
     // `readFile` — intercepted here rather than written to disk, so the derived
     // model never becomes a tracked file the tree's own tooling could trip on.
     const nativeReadFile = (path) =>
-      path === "lattice.json" ? `${JSON.stringify(derivedModel, null, 2)}\n` : readTree(path);
+      path === "archkeep.json" ? `${JSON.stringify(derivedModel, null, 2)}\n` : readTree(path);
     const discovered = nativeProvider.discover({ root: treeRoot, files, readFile: nativeReadFile });
     const nativeGraph = nativeProvider.buildGraph({ discovered, importSites: analysis.imports });
     // The same fail-closed annotations the Nx-graph-based run gets above —

@@ -1,18 +1,18 @@
-# `lattice provenance`
+# `archkeep provenance`
 
 Describe where this run's facts came from, and which governance rows carry an
 origin to attest them.
 
 ```shell
-lattice provenance
-lattice provenance --format json
-lattice provenance --format json --output provenance.json
+archkeep provenance
+archkeep provenance --format json
+archkeep provenance --format json --output provenance.json
 ```
 
 `provenance` takes no positional arguments and no `--config` flag — it reads
 the workspace's own declared files: the tracked `architecture-intent.json` at
 the workspace root, and the boundary config the workspace's options name (or an
-inline policy object in `lattice.json`). It reads origins; it never writes
+inline policy object in `archkeep.json`). It reads origins; it never writes
 them.
 
 ## The report
@@ -74,7 +74,7 @@ What an `origin` record is, why `on` is optional, why provenance never
 changes a verdict, and the full governance block (`origin`, `rationale`,
 `decisionRef`, `fitnessBindings`) a row may carry — all in
 [concepts/provenance.md](../concepts/provenance.md). The block is defined once
-and validated by every row's loader (`packages/lattice/src/governance/row-schema.mjs`),
+and validated by every row's loader (`packages/archkeep/src/governance/row-schema.mjs`),
 so the row tables this command walks — the boundary law's `depConstraints` and
 `architecture-intent.json` — accept it additively, and legacy rows without it
 stay valid and byte-identical.

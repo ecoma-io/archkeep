@@ -19,11 +19,11 @@ const header = (body) =>
 describe("documentedRuleSource", () => {
   it("extracts the fenced block and strips the comment prefix", () => {
     const text = header(
-      '// import { Verdict } from "@ecoma-io/lattice-rule-sdk/assembly";\n//\n// const x = 1;',
+      '// import { Verdict } from "@ecoma-io/archkeep-rule-sdk/assembly";\n//\n// const x = 1;',
     );
     assert.equal(
       documentedRuleSource(text),
-      'import { Verdict } from "@ecoma-io/lattice-rule-sdk/assembly";\n\nconst x = 1;\n',
+      'import { Verdict } from "@ecoma-io/archkeep-rule-sdk/assembly";\n\nconst x = 1;\n',
     );
   });
 

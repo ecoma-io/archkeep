@@ -27,7 +27,7 @@ test("parses Update, Add, and Delete File markers", () => {
 @@ -1,1 +1,2 @@
 - old
 + new
-*** Add File: packages/lattice/src/editor-gates.js ***
+*** Add File: packages/archkeep/src/editor-gates.js ***
 @@ -0,0 +1,1 @@
 + new file
 *** Delete File: docs/usage/troubleshooting.md ***
@@ -37,7 +37,7 @@ test("parses Update, Add, and Delete File markers", () => {
 `;
   assert.deepEqual(parseTouchedFiles(command), [
     "docs/usage/ci.md",
-    "packages/lattice/src/editor-gates.js",
+    "packages/archkeep/src/editor-gates.js",
     "docs/usage/troubleshooting.md",
   ]);
 });

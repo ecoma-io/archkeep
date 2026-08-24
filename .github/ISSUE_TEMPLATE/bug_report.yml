@@ -89,7 +89,7 @@ body:
       label: Environment
       description: Read these from commands rather than memory.
       value: |
-        - `@ecoma-io/lattice` version:
+        - `@ecoma-io/archkeep` version:
         - Nx (`nx --version`):
         - Node (`node --version`):
         - pnpm (`pnpm --version`):

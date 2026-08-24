@@ -1,16 +1,16 @@
-# `lattice reconcile`
+# `archkeep reconcile`
 
 Compare the declared intended model against the observed architecture element by
-element — the two-sided mirror of [`lattice drift`](drift.md). Drift asks which
+element — the two-sided mirror of [`archkeep drift`](drift.md). Drift asks which
 intended rows reality violates; reconcile asks what the model says about every
 observed project and edge, and — under `--propose` — what it would take to make
 the two agree.
 
 ```shell
-lattice reconcile
-lattice reconcile --format json
-lattice reconcile --propose
-lattice reconcile --propose --format json --output reconcile.json
+archkeep reconcile
+archkeep reconcile --format json
+archkeep reconcile --propose
+archkeep reconcile --propose --format json --output reconcile.json
 ```
 
 `reconcile` takes no positional arguments — the observed side is the whole
@@ -68,7 +68,7 @@ names an observed element or an intent row, never an extrapolation.
 ## The observed side
 
 The same project graph the other commands read, from any provider (Nx, Moon, or
-a native `lattice.json` workspace). Edges whose target is not a project in the
+a native `archkeep.json` workspace). Edges whose target is not a project in the
 model are dropped, and `implicit` edges are excluded and counted, so the report
 states exactly what was compared. Reconcile reuses the graph the other commands
 already build — it does not re-scan the tree.

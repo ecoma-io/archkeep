@@ -18,25 +18,25 @@ import {
 describe("selectMarketplaceVersion", () => {
   it("picks the entry by name, not array position", () => {
     // A positional read (`catalogue.plugins[0]`) is correct only as long as
-    // `lattice` happens to be first — a second plugin prepended to the
+    // `archkeep` happens to be first — a second plugin prepended to the
     // catalogue would leave the real entry unchecked while a positional read
     // silently validates the decoy's version instead.
     const catalogue = {
       plugins: [
         { name: "decoy", version: "9.9.9" },
-        { name: "lattice", version: "0.7.1" },
+        { name: "archkeep", version: "0.7.1" },
       ],
     };
-    assert.equal(selectMarketplaceVersion(catalogue, "lattice"), "0.7.1");
+    assert.equal(selectMarketplaceVersion(catalogue, "archkeep"), "0.7.1");
   });
 
   it("returns '?' when no entry matches the plugin name", () => {
     const catalogue = { plugins: [{ name: "decoy", version: "9.9.9" }] };
-    assert.equal(selectMarketplaceVersion(catalogue, "lattice"), "?");
+    assert.equal(selectMarketplaceVersion(catalogue, "archkeep"), "?");
   });
 
   it("returns '?' when the catalogue has no plugins list", () => {
-    assert.equal(selectMarketplaceVersion({}, "lattice"), "?");
+    assert.equal(selectMarketplaceVersion({}, "archkeep"), "?");
   });
 });
 
@@ -44,8 +44,8 @@ describe("cargoLockPackageVersion", () => {
   it("reads the named package's version out of the [[package]] array", () => {
     const lock =
       '[[package]]\nname = "serde"\nversion = "1.0.229"\n\n' +
-      '[[package]]\nname = "lattice-rule-sdk"\nversion = "0.10.0"\n';
-    assert.equal(cargoLockPackageVersion(lock, "lattice-rule-sdk"), "0.10.0");
+      '[[package]]\nname = "archkeep-rule-sdk"\nversion = "0.10.0"\n';
+    assert.equal(cargoLockPackageVersion(lock, "archkeep-rule-sdk"), "0.10.0");
   });
 
   it("never reads another package's version as the named one's", () => {
@@ -57,18 +57,18 @@ describe("cargoLockPackageVersion", () => {
     const lock =
       '[[package]]\nname = "itoa"\nversion = "1.0.18"\n\n' +
       '[[package]]\nname = "memchr"\nversion = "2.8.3"\n';
-    assert.equal(cargoLockPackageVersion(lock, "lattice-rule-sdk"), "?");
+    assert.equal(cargoLockPackageVersion(lock, "archkeep-rule-sdk"), "?");
   });
 
   it("returns '?' when the named entry carries no version line", () => {
-    const lock = '[[package]]\nname = "lattice-rule-sdk"\ndependencies = [\n "serde",\n]\n';
-    assert.equal(cargoLockPackageVersion(lock, "lattice-rule-sdk"), "?");
+    const lock = '[[package]]\nname = "archkeep-rule-sdk"\ndependencies = [\n "serde",\n]\n';
+    assert.equal(cargoLockPackageVersion(lock, "archkeep-rule-sdk"), "?");
   });
 });
 
 describe("tomlSectionVersion", () => {
   it("reads the [package] section's version", () => {
-    const toml = '[package]\nname = "lattice-rule-sdk"\nversion = "0.9.0"\nedition = "2024"\n';
+    const toml = '[package]\nname = "archkeep-rule-sdk"\nversion = "0.9.0"\nedition = "2024"\n';
     assert.equal(tomlSectionVersion(toml, "[package]"), "0.9.0");
   });
 
@@ -83,7 +83,7 @@ describe("tomlSectionVersion", () => {
 
   it("reads pyproject's [project] section the same way", () => {
     const toml =
-      '[project]\nname = "lattice-rule-sdk"\nversion = "0.9.0"\n[tool.x]\nversion = "9.9.9"\n';
+      '[project]\nname = "archkeep-rule-sdk"\nversion = "0.9.0"\n[tool.x]\nversion = "9.9.9"\n';
     assert.equal(tomlSectionVersion(toml, "[project]"), "0.9.0");
   });
 
@@ -97,7 +97,7 @@ describe("parseSkillFrontmatter", () => {
     const text = `---
 name: arch-context
 description: Understand architecture boundaries
-compatibility: Requires lattice CLI
+compatibility: Requires archkeep CLI
 ---
 Body text here`;
 
@@ -105,7 +105,7 @@ Body text here`;
     assert.ok(fm);
     assert.equal(fm.name, "arch-context");
     assert.equal(fm.description, "Understand architecture boundaries");
-    assert.equal(fm.compatibility, "Requires lattice CLI");
+    assert.equal(fm.compatibility, "Requires archkeep CLI");
   });
 
   it("parses frontmatter with single-quoted values", () => {
@@ -163,7 +163,7 @@ Body`;
       "---",
       "name: arch-x",
       "description: Covers x --- y transitions",
-      "compatibility: Requires lattice CLI",
+      "compatibility: Requires archkeep CLI",
       "---",
       "Body",
     ].join("\n");
@@ -171,7 +171,7 @@ Body`;
     const fm = parseSkillFrontmatter(text);
     assert.ok(fm);
     assert.equal(fm.description, "Covers x --- y transitions");
-    assert.equal(fm.compatibility, "Requires lattice CLI");
+    assert.equal(fm.compatibility, "Requires archkeep CLI");
   });
 
   it("parses double-quoted values with the same unquote rule as single quotes", () => {
@@ -194,7 +194,7 @@ Body`;
     const text = `---
 name: arch-x
 description: x
-compatibility: Requires lattice CLI
+compatibility: Requires archkeep CLI
 metadata:
   version: 0.4.0
 ---
@@ -236,7 +236,7 @@ describe("findHostSpecificFields", () => {
       findHostSpecificFields({
         name: "arch-x",
         description: "x",
-        compatibility: "Requires lattice CLI",
+        compatibility: "Requires archkeep CLI",
         metadata: { note: "not host-specific" },
       }),
       [],
@@ -279,7 +279,7 @@ describe("evaluate", () => {
     dir,
     name,
     description: `Skill ${name}`,
-    compatibility: "Requires @ecoma-io/lattice CLI",
+    compatibility: "Requires @ecoma-io/archkeep CLI",
     hostFields: [],
     text: "",
   });
@@ -302,10 +302,10 @@ describe("evaluate", () => {
         "On an intent row it is the fail-closed lane instead: an unresolvable " +
         "intent citation is a no-verdict run (exit 3) even beside a clean " +
         "boundary table. " +
-        "`lattice waivers` names every `boundarySuppressions` row — a waiver with " +
+        "`archkeep waivers` names every `boundarySuppressions` row — a waiver with " +
         "its term, a permanent suppression with what it is hiding.",
       "arch-review":
-        "`lattice waivers` names every row — a waiver with its term, a permanent " +
+        "`archkeep waivers` names every row — a waiver with its term, a permanent " +
         "suppression with what it is hiding.",
       "arch-migrate":
         "A proposal is never a decision. `discover --propose` and " +
@@ -458,7 +458,7 @@ describe("evaluate", () => {
       dir: "arch-context",
       name: null,
       description: "x",
-      compatibility: "lattice",
+      compatibility: "archkeep",
       hostFields: [],
       text: correctedText("arch-context"),
     };
@@ -475,7 +475,7 @@ describe("evaluate", () => {
       dir: "arch-context",
       name: "arch-context",
       description: null,
-      compatibility: "lattice",
+      compatibility: "archkeep",
       hostFields: [],
       text: correctedText("arch-context"),
     };
@@ -496,7 +496,7 @@ describe("evaluate", () => {
     assert.ok(result.failures.some((f) => f.includes("host-specific")));
   });
 
-  it("fails when the root package.json version disagrees with packages/lattice/package.json", () => {
+  it("fails when the root package.json version disagrees with packages/archkeep/package.json", () => {
     // release-please bumps the root "." component directly; every other
     // check compares a file against `packageVersion` as the baseline, but
     // without this check that baseline itself was never verified against the
@@ -545,7 +545,7 @@ describe("evaluate", () => {
       vscodeVersion: "1.0.1",
       skills: allGood(),
     });
-    assert.ok(result.failures.some((f) => f.includes("lattice-vscode") && f.includes("1.0.1")));
+    assert.ok(result.failures.some((f) => f.includes("archkeep-vscode") && f.includes("1.0.1")));
   });
 
   it("fails when the Rust SDK crate version does not match package version", () => {
@@ -555,7 +555,7 @@ describe("evaluate", () => {
       skills: allGood(),
     });
     assert.ok(
-      result.failures.some((f) => f.includes("lattice-rule-sdk-rust") && f.includes("1.0.1")),
+      result.failures.some((f) => f.includes("archkeep-rule-sdk-rust") && f.includes("1.0.1")),
     );
   });
 
@@ -566,7 +566,7 @@ describe("evaluate", () => {
       skills: allGood(),
     });
     assert.ok(
-      result.failures.some((f) => f.includes("lattice-rule-sdk-python") && f.includes("1.0.1")),
+      result.failures.some((f) => f.includes("archkeep-rule-sdk-python") && f.includes("1.0.1")),
     );
   });
 
@@ -593,7 +593,7 @@ describe("evaluate", () => {
       skills: allGood(),
     });
     assert.ok(
-      result.failures.some((f) => f.includes("lattice-rule-sdk-ts") && f.includes("1.0.1")),
+      result.failures.some((f) => f.includes("archkeep-rule-sdk-ts") && f.includes("1.0.1")),
     );
   });
 
@@ -775,7 +775,7 @@ describe("evaluate", () => {
         s.dir === "arch-check"
           ? "`check` resolves each row's `decisionRef` against the ADR registry " +
             "(report-only — the resolution changes no byte of the verdict). " +
-            "`lattice waivers` names every `boundarySuppressions` row."
+            "`archkeep waivers` names every `boundarySuppressions` row."
           : correctedText(s.dir),
     }));
     const result = evaluate({ ...baseFacts, skills });
@@ -787,7 +787,7 @@ describe("evaluate", () => {
       ...s,
       text:
         s.dir === "arch-review"
-          ? "lattice waivers lists only the term-bound rows (a permanent suppression is absent)"
+          ? "archkeep waivers lists only the term-bound rows (a permanent suppression is absent)"
           : correctedText(s.dir),
     }));
     const result = evaluate({ ...baseFacts, skills });

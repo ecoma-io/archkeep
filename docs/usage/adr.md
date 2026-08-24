@@ -8,11 +8,11 @@ frontmatter dialect, and the two loud refusals — is owned by
 ## What it runs
 
 ```bash
-lattice adr                         # dump the whole registry
-lattice adr 0001-bind-collaboration # one record
-lattice adr rule:no-direct-dep      # reverse lookup: which ADRs bind it
-lattice adr --format json           # the versioned envelope
-lattice adr --format json --output adrs.json
+archkeep adr                         # dump the whole registry
+archkeep adr 0001-bind-collaboration # one record
+archkeep adr rule:no-direct-dep      # reverse lookup: which ADRs bind it
+archkeep adr --format json           # the versioned envelope
+archkeep adr --format json --output adrs.json
 ```
 
 The optional positional argument names an id — an ADR id (`NNN-slug`) or a
@@ -52,12 +52,12 @@ decision`: a fact about the registry, reported in a sentence, never as a
   reader that does not: it displays a constraint row's `decisionRef` as
   written, unresolved, so the string to verify there must be read from the row
   itself (the boundary config or `architecture-intent.json`, or copied from
-  `context`'s output) and asked of `lattice adr` byte for byte — the same way a
+  `context`'s output) and asked of `archkeep adr` byte for byte — the same way a
   reader inspects the RECORD an already-resolved citation names: its status,
   supersession chain, and what else it binds.
 - **Anything else is read as an ADR reference** — bare `NNN-slug`, or the
   `adr:`-prefixed spelling `decisionRef` docs recommend as an alternate ADR-id
-  form (`packages/lattice/src/governance/row-schema.mjs`); both resolve to the
+  form (`packages/archkeep/src/governance/row-schema.mjs`); both resolve to the
   same record. One the registry does not know — an unknown id, a wrong case,
   a truncation, a path-traversal shape, or any other spelling that is not a
   `rule:…`/`fitness:…` reference above — reads `no ADR 0999-ghost in

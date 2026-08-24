@@ -14,10 +14,10 @@
     {
       "from": "packages",
       "to": "extensions",
-      "reason": "a package must never reach out into an editor extension \u2014 this workspace's only dependency direction is the reverse, an extension resolving the engine's server out of the workspace (packages/lattice-vscode/src/server-module.mjs). Verified against the observed graph on 2026-08-16: no path connects the two.",
+      "reason": "a package must never reach out into an editor extension \u2014 this workspace's only dependency direction is the reverse, an extension resolving the engine's server out of the workspace (packages/archkeep-vscode/src/server-module.mjs). Verified against the observed graph on 2026-08-16: no path connects the two.",
       "origin": {
-        "by": "lattice governance",
-        "tool": "lattice:v1"
+        "by": "archkeep governance",
+        "tool": "archkeep:v1"
       },
       "rationale": "the engine ships to npm; the extension ships to a marketplace. A package reaching into the extension would resolve nothing on a consumer's disk.",
       "decisionRef": "0001-boundary-levels"
@@ -26,21 +26,21 @@
   "projects": {
     "required": [
       {
-        "name": "lattice",
+        "name": "archkeep",
         "tags": ["type-package", "scope-nx", "layer:library"],
         "origin": {
-          "by": "lattice governance",
-          "tool": "lattice:v1"
+          "by": "archkeep governance",
+          "tool": "archkeep:v1"
         },
         "rationale": "the engine is the product; its presence is the intent's first claim.",
         "decisionRef": "0001-boundary-levels"
       },
       {
-        "name": "lattice-vscode",
+        "name": "archkeep-vscode",
         "tags": ["type-extension", "scope-nx", "layer:application"],
         "origin": {
-          "by": "lattice governance",
-          "tool": "lattice:v1"
+          "by": "archkeep governance",
+          "tool": "archkeep:v1"
         },
         "rationale": "the extension is the engine's client; its absence would hide the direction the forbidden row protects.",
         "decisionRef": "0001-boundary-levels"

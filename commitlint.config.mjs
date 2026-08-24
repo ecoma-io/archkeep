@@ -17,11 +17,11 @@ export default {
         // `vscode` was listed before its directory existed, so the commit that
         // created it was not also the commit that had to edit this file to
         // describe itself.
-        "lattice",
+        "archkeep",
         "vscode",
         // The rule SDKs — the language, not the directory, because the SDK
         // per language is what a reader routes on and every registry name is
-        // `lattice-rule-sdk` with the language implied.
+        // `archkeep-rule-sdk` with the language implied.
         "rust-sdk",
         "go-sdk",
         "ts-sdk",

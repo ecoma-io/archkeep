@@ -29,7 +29,7 @@
 // is how a broken reference reads as a clean run.
 //
 // WHY this script exists. The documentation IA restructure deleted two pages
-// from `docs/usage/` (the `policy-file.md` and `lattice-json.md` references
+// from `docs/usage/` (the `policy-file.md` and `archkeep-json.md` references
 // below are the old names, gone from the tree) and moved `json-output.md` and
 // `languages.md` out of that directory, and twenty-five references — including
 // two inside shipped error messages — kept pointing at the old paths. No
@@ -398,8 +398,8 @@ export function maskFencedCodeBlocks(text) {
  * digits. Deliberately narrow: an inline code span or backtick span is NOT a
  * general "this is an example" signal here, because this repository's own
  * convention is to write a REAL citation the same way — inline, backtick-
- * wrapped (see `packages/lattice/src/rules/match.mjs`,
- * `packages/lattice/src/report/json.mjs`, and a dozen others) — so treating
+ * wrapped (see `packages/archkeep/src/rules/match.mjs`,
+ * `packages/archkeep/src/report/json.mjs`, and a dozen others) — so treating
  * every backtick-wrapped mention as non-live would silently stop checking
  * all of those. "NNN" is not a real path component under any real
  * lowercase-kebab doc name in this tree, so matching it specifically cannot

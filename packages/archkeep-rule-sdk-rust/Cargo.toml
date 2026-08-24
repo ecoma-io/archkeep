@@ -1,0 +1,86 @@
+# The Rust binding for the custom-rule contract
+# (`../../docs/adr/0002-custom-rules-one-contract.md`).
+#
+# The directory carries the language suffix and the CRATE DOES NOT: the ADR's
+# "One name on every registry" section settled `archkeep-rule-sdk` as the
+# published name on crates.io — a registry that already names the language does
+# not repeat it, while the tree, which will hold four of these, does.
+#
+# The version is the repository's single version (`../../.release-please-manifest.json`),
+# because the releasable unit here is the repository rather than any one package.
+# release-please writes it via the `extra-files` TOML updater
+# (`../../release-please-config.json`), and `../../scripts/check-skills.mjs`
+# holds the chain on every pull request — the ADR's "Every SDK joins the one
+# version chain", wired.
+[package]
+name = "archkeep-rule-sdk"
+version = "0.12.0"
+edition = "2024"
+# Edition 2024 stabilized in Rust 1.85.0 (the edition guide's own release note),
+# which is what makes this the floor rather than a number someone remembered.
+rust-version = "1.85"
+description = "Author Archkeep custom architecture rules in Rust and compile them to core WebAssembly."
+license = "Apache-2.0"
+repository = "https://github.com/ecoma-io/archkeep"
+readme = "README.md"
+keywords = ["architecture", "webassembly", "monorepo", "archkeep", "lint"]
+categories = ["development-tools", "wasm"]
+
+# Two dependencies, and the list is meant to stay this short. A rule module is
+# loaded by a host that grants it NO imports
+# (`../archkeep/src/custom-rules/host.mjs`), so anything reaching for a clock, a
+# socket or a random number cannot even be instantiated — the smaller the
+# dependency set, the fewer ways a transitive crate can put one there. serde is
+# how the evidence bundle becomes types and the verdict becomes bytes; nothing
+# else here needs a crate.
+#
+# `default-features = false` on neither: both need `std`, which
+# wasm32-unknown-unknown supplies, and a `no_std` build would buy nothing a
+# rule can use — the allocator is what serde_json needs, and it is there.
+#
+# `Cargo.lock` IS committed, which for a library crate is the less usual half of
+# Cargo's own guidance. The reason is `examples/forbidden_tag_dependency.wasm`:
+# this package commits a built artifact and pins it by digest, and a digest over
+# bytes built from unpinned inputs describes nothing a reviewer can reproduce.
+# The lockfile is also what keeps a dependency's own release from turning this
+# repository's CI red on a change nobody here made.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lib]
+# An rlib, so `tests/` and `examples/` in this crate link against the same code
+# an external author's crate does.
+crate-type = ["rlib"]
+
+# The reference rule, built to wasm exactly the way an author's rule is
+# (`./rebuild-example.sh` is the command, `./README.md` the story). A cdylib
+# rather than a bin: a rule module has no `main`, it has the four ABI exports
+# the macro writes.
+[[example]]
+name = "forbidden_tag_dependency"
+path = "examples/forbidden_tag_dependency.rs"
+crate-type = ["cdylib"]
+
+# The profile the committed artifact is built with, stated here rather than in
+# the build command so the artifact a contributor rebuilds is the artifact CI
+# would have.
+#
+# `panic = "abort"` is the load-bearing one, and it is a contract requirement
+# rather than a size tweak: unwinding across the `extern "C"` boundary the ABI
+# fixes is undefined behaviour, so a rule that panics must trap instead — and a
+# trap is a failure the host NAMES (`../archkeep/src/custom-rules/host.mjs`,
+# `outcomeReason`'s "trap" arm) rather than a verdict it invents. Abort is what
+# turns a panic into that trap.
+#
+# `opt-level = "z"`, `lto` and `codegen-units = 1` are size, and size matters
+# here for a reason it usually does not: the artifact is COMMITTED to the
+# workspace that declares the rule, reviewed as bytes, and pinned by a sha256 in
+# the policy row. `strip = true` removes the symbol names, which are the largest
+# single contributor and which no reader of a wasm rule uses.
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

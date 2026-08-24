@@ -1,11 +1,11 @@
-# `lattice impact`
+# `archkeep impact`
 
 List every project that depends on the named project.
 
 ```shell
-lattice impact billing-core
-lattice impact billing-core --format json
-lattice impact billing-core --format json --output impact.json
+archkeep impact billing-core
+archkeep impact billing-core --format json
+archkeep impact billing-core --format json --output impact.json
 ```
 
 `impact` takes a project name and lists every project that transitively depends
