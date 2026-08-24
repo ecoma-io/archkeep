@@ -15,6 +15,10 @@
  * - the constraint row(s) that matched (which rule applied)
  * - the verdict (violation or allowed)
  * - the message, when there is one (what the verdict means in prose)
+ * - for a violation: the allowed direction when the governing row states one,
+ *   and a remediation line that is the author's declared guidance verbatim —
+ *   or, when none is declared, an explicit pointer at the constraint row and
+ *   its `decisionRef`, never a fix this renderer composed
  * - coverage information (whether this explanation is complete)
  *
  * This module decides nothing. A formatter that filtered would be a rule
@@ -131,8 +135,31 @@ export function formatExplainReport({ explanation, coverage }) {
         if (v.constraint?.description) {
           sections.push(`${DETAIL}rule         ${v.constraint.description}`);
         }
+        // The allowed direction, verbatim from the governing row when it
+        // states one. A `notDependOnLibsWithTags` row states no allowed list,
+        // and computing its complement here would be this renderer inventing
+        // a direction the law never wrote — the constraint line above is the
+        // honest answer there, so no line is printed.
+        if (Array.isArray(v.constraint?.onlyDependOnLibsWithTags)) {
+          sections.push(
+            `${DETAIL}allowed      ${formatTags(v.constraint.onlyDependOnLibsWithTags)}`,
+          );
+        }
+        // The remediation line is always printed for a violation: the
+        // author's declared guidance verbatim, or an explicit pointer at
+        // where guidance lives — never a fix this renderer composed, and
+        // never silence a reader could mistake for "nothing to consult".
         if (v.constraint?.remediation) {
           sections.push(`${DETAIL}remediation  ${v.constraint.remediation}`);
+        } else if (v.constraint) {
+          const ref = v.constraint.decisionRef
+            ? ` and its decisionRef ${v.constraint.decisionRef}`
+            : "";
+          sections.push(`${DETAIL}remediation  none declared — consult the constraint row${ref}`);
+        } else {
+          sections.push(
+            `${DETAIL}remediation  none declared — no depConstraints row drives this check`,
+          );
         }
       }
     } else {

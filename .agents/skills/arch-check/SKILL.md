@@ -127,6 +127,24 @@ leave it sound must show the check green.
    `UNRESOLVABLE` verdict names a target that is not statically knowable —
    that is a declared blind spot, not the absence of a judgment.
 
+   With `--format json`, read three fields off `result` rather than guessing
+   at the fix:
+
+   - `verdict` says WHETHER for this one site: `"violation"`, `"clean"`, or
+     `"unknown"` for an unresolvable site. It is site-level and descriptive —
+     a `"violation"` verdict still exits 0, because explaining is never the
+     gate; `check` is.
+   - each violation entry's `constraint` plus `allowed` say WHICH LAW governs
+     it: `allowed` is the governing row's own `onlyDependOnLibsWithTags`
+     list, verbatim from the law, and `allowed: null` means the row states no
+     allowed list (a `notDependOnLibsWithTags` row, or a check no row
+     drives) — read the `constraint` row itself there; the tool never
+     computes a complement of a ban list.
+   - `remediation` is the workspace author's declared guidance, verbatim.
+     `remediation: null` means none was declared — consult the constraint
+     row and its `decisionRef`/ADR, not improvise a fix. It is never an
+     instruction to edit the policy.
+
 6. **Distinguish what `check` folds in.** `check` is the gate. It enforces
    whatever law is in effect — a file, or the profile `boundaryConfig`/`--config`
    selects — and folds in the intent comparison by presence (the same findings

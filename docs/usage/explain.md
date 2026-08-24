@@ -25,8 +25,12 @@ an explanation of what the rules decided is never a finding.
   the source project's tags. `(none)` when no row matched. When a constraint
   row carries `description` or `remediation`, those appear indented below it.
 - **The verdict** — `allowed` when no constraint was violated; `VIOLATION` with
-  the `messageId`, the message, the rule description (when present), and the
-  remediation guidance (when present) when one was.
+  the `messageId`, the message, the rule description (when present), the
+  allowed direction when the governing row states one
+  (`onlyDependOnLibsWithTags`, verbatim), and a remediation line when one was.
+  The remediation line is always printed for a violation: the author's declared
+  guidance verbatim, or an explicit `none declared` pointer at the constraint
+  row and its `decisionRef` — never a fix the tool composed.
 - **Coverage** — whether this explanation is complete, same shape as every other
   command's footer.
 

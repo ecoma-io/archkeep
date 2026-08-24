@@ -208,7 +208,12 @@ confirm it.
 - **Exit 0** — no violations found. The change respects boundaries and the
   declared Intent.
 - **Exit 1** — violations exist. Read each one: it names the file, the import,
-  and the violated constraint. Fix the code, not the policy. Re-check. Exit 1
+  and the violated constraint. Fix the code, not the policy. Re-check. For any
+  finding that is unclear, `archkeep explain <site> --format json` gives the
+  site's `verdict`, the governing row's `allowed` direction verbatim from the
+  law, and the author's declared `remediation` — where `remediation: null`
+  means consult the constraint row and its `decisionRef`/ADR rather than
+  improvise a fix (`arch-check`, step 5). Exit 1
   from `check` also covers intent findings — a forbidden path appeared or an
   allowed relationship is missing — which may point at a code change, not a
   policy one.

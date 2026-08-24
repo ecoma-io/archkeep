@@ -575,22 +575,45 @@ Two shapes, depending on whether the import resolved:
 
 **Resolved import:**
 
-| field                | type                                              | meaning                                                                                                                          |
-| -------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `site`               | `{file, line, column}`                            | The site that was explained, 1-based.                                                                                            |
-| `import`             | `{specifier, kind, sourceProject, targetProject}` | The import at that site. `sourceProject` and `targetProject` are `null` when the record resolved to no project.                  |
-| `sourceTags`         | `string[]`                                        | The source project's tags, empty when unresolvable.                                                                              |
-| `targetTags`         | `string[]`                                        | The target project's tags, empty when unresolvable.                                                                              |
-| `matchedConstraints` | `object[]`                                        | The constraint rows from the boundary law whose `sourceTag`/`allSourceTags` matched the source project. Empty when none matched. |
-| `violations`         | `null` \| `{messageId, message, constraint}[]`    | The violations, if any. Same shape as each entry in `check`'s `result.violations`. `null` when the import is allowed.            |
+| field                | type                                              | meaning                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `site`               | `{file, line, column}`                            | The site that was explained, 1-based.                                                                                                                                        |
+| `import`             | `{specifier, kind, sourceProject, targetProject}` | The import at that site. `sourceProject` and `targetProject` are `null` when the record resolved to no project.                                                              |
+| `sourceTags`         | `string[]`                                        | The source project's tags, empty when unresolvable.                                                                                                                          |
+| `targetTags`         | `string[]`                                        | The target project's tags, empty when unresolvable.                                                                                                                          |
+| `matchedConstraints` | `object[]`                                        | The constraint rows from the boundary law whose `sourceTag`/`allSourceTags` matched the source project. Empty when none matched.                                             |
+| `violations`         | `null` \| `object[]`                              | The violations, if any. `null` when the import is allowed. Each entry is described below.                                                                                    |
+| `verdict`            | `"violation"` \| `"clean"`                        | The judgment for this one site. Site-level and descriptive: a `"violation"` verdict still ships with `status: "ok"` and exit `0`, because an explanation is never a finding. |
+
+Each `violations` entry carries `messageId`, `message`, and `constraint` — the
+same three fields as each entry in `check`'s `result.violations` — plus two
+guaranteed keys of its own:
+
+| field         | type                 | meaning                                                                                                                                                                                                                                                                                                                            |
+| ------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `remediation` | `string` \| `null`   | The author-declared `remediation` string from the governing constraint row, verbatim. `null` means the workspace declared none — consult the `constraint` row and its `decisionRef`/ADR. Never engine-generated text: Archkeep does not invent fixes.                                                                              |
+| `allowed`     | `string[]` \| `null` | The governing row's own `onlyDependOnLibsWithTags` list, verbatim from the law. `null` when the row states no allowed list — a `notDependOnLibsWithTags` row, or a check no `depConstraints` row drives — because a complement computed from a ban list would be a direction the law never stated; read `constraint` itself there. |
+
+Both keys are present on every entry — an explicit `null`, never an absent
+key — so a consumer can tell "no declared remediation" from a field that does
+not exist.
+
+For an agent consuming this envelope: `verdict` says WHETHER this site
+violates; `constraint` plus `allowed` say WHICH LAW governs it and the
+direction that law states; `remediation` is the workspace author's guidance,
+or `null` meaning "consult the constraint and its recorded decision". None of
+the three is an instruction to edit the policy — Archkeep supplies evidence
+and the consumer decides, per
+[the architecture-authority doctrine](../doctrine/architecture-authority.md).
 
 **Unresolvable site** (dynamic import with non-literal argument):
 
-| field          | type                   | meaning                                                     |
-| -------------- | ---------------------- | ----------------------------------------------------------- |
-| `site`         | `{file, line, column}` | The site that was explained, 1-based.                       |
-| `unresolvable` | `true`                 | This site's target is not statically knowable.              |
-| `reason`       | string                 | Why the site is unresolvable (e.g. "non-literal argument"). |
+| field          | type                   | meaning                                                            |
+| -------------- | ---------------------- | ------------------------------------------------------------------ |
+| `site`         | `{file, line, column}` | The site that was explained, 1-based.                              |
+| `verdict`      | `"unknown"`            | No judgment was reached for this site — never to be read as clean. |
+| `unresolvable` | `true`                 | This site's target is not statically knowable.                     |
+| `reason`       | string                 | Why the site is unresolvable (e.g. "non-literal argument").        |
 
 ## `result` (for `command: "context"`)
 

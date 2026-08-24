@@ -15,6 +15,29 @@
  * build a correct envelope. It does not print, and it does not decide the
  * process's exit code — `../../cli.mjs` owns those (`./README.md`).
  *
+ * ## The site verdict, and the two guaranteed violation keys
+ *
+ * `result.verdict` names the judgment for the ONE site being explained —
+ * `"violation"`, `"clean"`, or `"unknown"` for an unresolvable site. It lives
+ * inside `result`, never as an envelope-level `decision`: the envelope's
+ * decision block must agree with `status`/`exitCode` (`../report/json.mjs`),
+ * and explain is descriptive — a violating site is still exit 0, so a
+ * site-level verdict is a different tier of fact from a run-level one.
+ *
+ * Every violation entry carries two guaranteed keys beside
+ * `messageId`/`message`/`constraint`:
+ *
+ * - `remediation` — the author-declared `remediation` string from the
+ *   governing constraint row, verbatim, or `null` when the workspace declared
+ *   none. NEVER text this engine composed: Archkeep supplies evidence and the
+ *   consumer decides (`../../../../docs/doctrine/architecture-authority.md`).
+ * - `allowed` — the governing row's own `onlyDependOnLibsWithTags` list,
+ *   verbatim from the law, or `null` when the row states no allowed list
+ *   (a `notDependOnLibsWithTags` row, or a check no row drives). A complement
+ *   computed from a ban list would be the engine inventing a direction the
+ *   law never stated, so `null` plus the `constraint` row itself is the
+ *   honest answer there.
+ *
  * ## The unregistered-plugin refusal
  *
  * Same as `graph`: on an Nx workspace whose `nx.json` does not register this
@@ -195,6 +218,7 @@ export function explainCommand(site, commandContext, config) {
         targetTags: [],
         matchedConstraints: [],
         violations: null,
+        verdict: "unknown",
         unresolvable: true,
         reason: siteFailure.reason,
       };
@@ -219,6 +243,7 @@ export function explainCommand(site, commandContext, config) {
 
       const result = {
         site: explanation.site,
+        verdict: "unknown",
         unresolvable: true,
         reason: siteFailure.reason,
       };
@@ -291,12 +316,24 @@ export function explainCommand(site, commandContext, config) {
     // and `noTransitiveDependencies` can fire together. An agent seeing only
     // the first might fix it and be confused when `check` still fails. Return
     // all of them so the consumer sees the complete picture.
+    //
+    // `remediation` and `allowed` are guaranteed keys (this file's header):
+    // both are read verbatim off the governing constraint row, and both are
+    // an explicit `null` — never absent — when the row does not state them,
+    // so a consumer can tell "no declared remediation" from a field that
+    // does not exist yet.
     violations = siteViolations.map((v) => ({
       messageId: v.messageId,
       message: v.message,
       constraint: v.constraint,
+      remediation: typeof v.constraint?.remediation === "string" ? v.constraint.remediation : null,
+      allowed: Array.isArray(v.constraint?.onlyDependOnLibsWithTags)
+        ? v.constraint.onlyDependOnLibsWithTags
+        : null,
     }));
   }
+
+  const verdict = violations === null ? "clean" : "violation";
 
   const explanation = {
     site: { file: parsed.sourceFile, line: parsed.line, column: parsed.column },
@@ -312,6 +349,7 @@ export function explainCommand(site, commandContext, config) {
     targetTags,
     matchedConstraints,
     violations,
+    verdict,
     unresolvable: false,
     reason: null,
   };
@@ -336,6 +374,7 @@ export function explainCommand(site, commandContext, config) {
     targetTags,
     matchedConstraints,
     violations,
+    verdict,
   };
 
   const envelope = jsonEnvelope({
