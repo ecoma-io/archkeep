@@ -1001,7 +1001,7 @@ async function runDelta(options, { cwd, env }) {
     const baselinePath = isAbsolute(options.paths[0])
       ? resolve(options.paths[0])
       : resolve(cwd, options.paths[0]);
-    result = deltaCommand(baselinePath, commandContext, { config });
+    result = await deltaCommand(baselinePath, commandContext, { config });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));

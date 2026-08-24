@@ -19,6 +19,23 @@
  * this file is read back by `parseEvidenceSnapshot` alone, never by the report
  * renderers, and the two formats will evolve on different clocks.
  *
+ * ## The two OPTIONAL blocks, and why the version stays 1
+ *
+ * `customRules` (the declared rows: name, artifact, sha256, params) and
+ * `owned` (the workspace's file→project ownership map) are stored only when
+ * the capturing policy declares `customRules` — a workspace that declares
+ * none produces byte-identical snapshots before and after this addition, and
+ * a reader of version 1 that predates the blocks ignores keys it never asks
+ * for. Both are evidence in the same sense the records are: the rows are what
+ * lets a compare run say whether the custom LAW moved between capture and
+ * head (digest or params drift), and `owned` is what lets the base-side
+ * evidence bundle attribute each stored record — ownership is the workspace
+ * layer's answer (`../workspace.mjs`) and cannot be re-derived from a graph
+ * that may have changed since. A baseline WITHOUT the blocks is still legal
+ * (an old capture, or one whose policy declared no rules); downstream every
+ * custom finding then classifies `unknown` with a re-capture reason rather
+ * than the blocks' absence reading as "no custom rules existed at base".
+ *
  * ## Purity seam
  *
  * Everything decidable is pure: `buildEvidenceSnapshot` takes already-resolved
@@ -72,6 +89,14 @@ export const EVIDENCE_SNAPSHOT_SCHEMA_VERSION = 1;
  * @param {object[]} input.records The raw import-site records — the analysis
  *   envelope's `imports` array verbatim (`../analysis/contract.md`), including
  *   the `resolved: null` rows.
+ * @param {{name: string, artifact: string, sha256: string,
+ *   params?: Record<string, any>}[]} [input.customRules] The declared
+ *   custom-rule rows, when the capturing policy declares any — see the header's
+ *   optional-blocks section. Omitted means "the capturing policy declared no
+ *   custom rules", and the snapshot carries no key at all.
+ * @param {{file: string, project: string}[]} [input.owned] The ownership map,
+ *   required exactly when `customRules` is given: the base-side evidence
+ *   bundle cannot attribute a record without it. Stored sorted by file.
  * @returns {object} The snapshot, ready for `serializeEvidenceSnapshot`.
  * @throws {Error} naming the first piece of required structure that is missing
  *   or malformed — a snapshot built over half-specified evidence would fail
@@ -85,6 +110,8 @@ export function buildEvidenceSnapshot({
   coverage,
   graph,
   records,
+  customRules,
+  owned,
 }) {
   if (!tool || typeof tool.name !== "string" || tool.name === "") {
     throw new Error(
@@ -147,6 +174,22 @@ export function buildEvidenceSnapshot({
     }
   }
 
+  if (customRules !== undefined) {
+    const customProblems = describeCustomRuleBlockProblems(customRules, owned);
+    if (customProblems.length > 0) {
+      throw new Error(
+        "archkeep: cannot build an evidence snapshot — the custom-rule evidence is malformed:\n  " +
+          customProblems.join("\n  "),
+      );
+    }
+  } else if (owned !== undefined) {
+    throw new Error(
+      "archkeep: cannot build an evidence snapshot with an `owned` map but no `customRules` " +
+        "rows — the map exists to attribute the base side of a custom-rule re-judgment, and " +
+        "storing it alone would claim custom-rule evidence the snapshot does not hold",
+    );
+  }
+
   const projects = buildProjects(graph.nodes).map((project) => {
     // Re-attach the three rule-relevant fields `buildProjects` strips for the
     // public graph contract. Each is attached only when the node DECLARES it —
@@ -179,7 +222,8 @@ export function buildEvidenceSnapshot({
     storedGraph.exemptedFiles = graph.exemptedFiles.slice().sort(cmpString);
   }
 
-  return {
+  /** @type {Record<string, unknown>} */
+  const snapshot = {
     schemaVersion: EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
     tool: { name: tool.name, version: tool.version },
     provider,
@@ -194,6 +238,25 @@ export function buildEvidenceSnapshot({
     graph: storedGraph,
     records,
   };
+  if (customRules !== undefined) {
+    // The declared rows, each reduced to the four fields a compare run reads:
+    // identity (name), the pinned law (artifact + sha256), and the parameters
+    // that ride inside the evidence bundle — params drift is law drift, the
+    // same as digest drift. `reason` and the governance block stay out: they
+    // explain the row to a human and change no judgment.
+    snapshot.customRules = customRules.map((row) => ({
+      name: row.name,
+      artifact: row.artifact,
+      sha256: row.sha256,
+      ...(row.params === undefined ? {} : { params: row.params }),
+    }));
+    // Sorted by file for byte-determinism; `createWorkspace` derives the map
+    // from a Set walk whose order is an accident of the file listing.
+    snapshot.owned = /** @type {{file: string, project: string}[]} */ (owned)
+      .map(({ file, project }) => ({ file, project }))
+      .sort((a, b) => cmpString(a.file, b.file));
+  }
+  return snapshot;
 }
 
 /**
@@ -400,6 +463,18 @@ export function parseEvidenceSnapshot(text, path) {
     });
   }
 
+  // The optional custom-rule pair: absence is a legal old-or-undeclared
+  // baseline, presence must be sound — a half-readable block consumed
+  // silently would attribute base records against a map that is not one.
+  if (parsed.customRules !== undefined) {
+    problems.push(...describeCustomRuleBlockProblems(parsed.customRules, parsed.owned));
+  } else if (parsed.owned !== undefined) {
+    problems.push(
+      "owned: present without customRules — the map only exists as custom-rule evidence, and " +
+        "half the pair is a snapshot no release ever wrote",
+    );
+  }
+
   if (problems.length > 0) {
     throw new Error(
       `archkeep: the evidence snapshot '${path}' is not a usable baseline:\n  ` +
@@ -483,6 +558,67 @@ function describeCoverageProblems(coverage) {
       "coverage.notAnalyzed and coverage.blindSpots: both must be arrays — both are always " +
         "arrays in the analysis envelope, and a consumer iterates them without checking",
     );
+  }
+  return problems;
+}
+
+/**
+ * Everything wrong with the optional custom-rule evidence pair, as messages —
+ * shared by capture-time construction and load-time parsing for the same
+ * reason `describeCoverageProblems` is: one statement of what the blocks are.
+ *
+ * Called only when `customRules` is PRESENT: absence is legal (an old
+ * baseline, or a policy that declares none) and is judged by the caller. When
+ * the rows are present the `owned` map must be too — a base-side re-judgment
+ * without attribution would hand every rule evidence it must refuse, and the
+ * time to say so is when the snapshot is built or read, not per rule at
+ * compare time.
+ *
+ * @param {unknown} customRules The stored (or to-be-stored) rule rows.
+ * @param {unknown} owned The stored (or to-be-stored) ownership map.
+ * @returns {string[]} One entry per problem, empty when both are sound.
+ */
+function describeCustomRuleBlockProblems(customRules, owned) {
+  const problems = [];
+  if (!Array.isArray(customRules)) {
+    problems.push(
+      `customRules: must be an array of declared rule rows when present, got ` +
+        `${describe(customRules)}`,
+    );
+  } else {
+    customRules.forEach((row, index) => {
+      if (!isPlainObject(row)) {
+        problems.push(`customRules[${index}]: must be an object, got ${describe(row)}`);
+        return;
+      }
+      for (const field of ["name", "artifact", "sha256"]) {
+        if (typeof row[field] !== "string" || row[field] === "") {
+          problems.push(`customRules[${index}].${field}: must be a non-empty string`);
+        }
+      }
+      if (row.params !== undefined && !isPlainObject(row.params)) {
+        problems.push(`customRules[${index}].params: must be a plain object when present`);
+      }
+    });
+  }
+  if (!Array.isArray(owned)) {
+    problems.push(
+      `owned: must be an array of {file, project} rows whenever customRules is stored — the ` +
+        `base side of a custom-rule re-judgment cannot attribute a record without it, got ` +
+        `${describe(owned)}`,
+    );
+  } else {
+    owned.forEach((row, index) => {
+      if (!isPlainObject(row)) {
+        problems.push(`owned[${index}]: must be an object, got ${describe(row)}`);
+        return;
+      }
+      for (const field of ["file", "project"]) {
+        if (typeof row[field] !== "string" || row[field] === "") {
+          problems.push(`owned[${index}].${field}: must be a non-empty string`);
+        }
+      }
+    });
   }
   return problems;
 }

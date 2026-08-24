@@ -8984,3 +8984,161 @@ export const moduleBoundaryOptions = {
     expect(typo.stderr).toContain("unknown option '--fromat'");
   });
 });
+
+describe("delta: custom-rule findings, end to end with a committed reference rule", () => {
+  // Its own fixture tree (the shared delta one above must keep its
+  // no-custom-rules byte-compat claims), with the Go SDK's committed
+  // reference artifact copied in and declared by digest — the same file the
+  // cross-SDK conformance gate proves (`./conformance/rule-sdks.mjs`).
+  const customRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-delta-custom-"));
+  afterAll(() => rmSync(customRoot, { recursive: true, force: true }));
+
+  const referenceWasm = fileURLToPath(
+    new URL("../../archkeep-rule-sdk-go/examples/forbidden_tag_dependency.wasm", import.meta.url),
+  );
+  const referenceSha256 = readFileSync(`${referenceWasm}.sha256`, "utf8").trim();
+
+  const writeCustom = (relativePath, contents) => {
+    mkdirSync(join(customRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(customRoot, relativePath), contents);
+  };
+
+  writeCustom(
+    "nx.json",
+    `${JSON.stringify({
+      plugins: [
+        {
+          plugin: "@ecoma-io/archkeep/nx",
+          options: { boundaryConfig: "module-boundaries.config.mjs" },
+        },
+      ],
+    })}\n`,
+  );
+  writeCustom(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer-kernel", onlyDependOnLibsWithTags: ["*"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: [],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+export const customRules = [
+  {
+    name: "forbidden-tag-dependency",
+    artifact: "tools/rules/forbidden-tag-dependency.wasm",
+    sha256: "${referenceSha256}",
+    reason: "nothing may depend on the infra layer",
+    params: { forbiddenTag: "layer-infra", exemptTags: [] },
+  },
+];
+`,
+  );
+  writeCustom("tools/rules/forbidden-tag-dependency.wasm", readFileSync(referenceWasm));
+  writeCustom("libs/kernel/go.mod", "module example.invalid/kernel\n\ngo 1.24\n");
+  writeCustom("libs/kernel/kernel.go", 'package kernel\n\nconst Name = "kernel"\n');
+  writeCustom("libs/infra/go.mod", "module example.invalid/infra\n\ngo 1.24\n");
+  writeCustom("libs/infra/infra.go", 'package infra\n\nconst Name = "infra"\n');
+
+  const graphOf = (withEdge) => ({
+    nodes: {
+      kernel: {
+        name: "kernel",
+        type: "lib",
+        data: { root: "libs/kernel", tags: ["layer-kernel"] },
+      },
+      infra: {
+        name: "infra",
+        type: "lib",
+        data: { root: "libs/infra", tags: ["layer-infra"] },
+      },
+    },
+    dependencies: {
+      kernel: withEdge ? [{ source: "kernel", target: "infra", type: "static" }] : [],
+      infra: [],
+    },
+  });
+
+  const customFiles = [
+    "nx.json",
+    "module-boundaries.config.mjs",
+    "tools/rules/forbidden-tag-dependency.wasm",
+    "libs/kernel/go.mod",
+    "libs/kernel/kernel.go",
+    "libs/infra/go.mod",
+    "libs/infra/infra.go",
+  ];
+
+  const customEnv = (withEdge) => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      cwd: customRoot,
+      readGraph: () => graphOf(withEdge),
+      listFiles: () => customFiles,
+    };
+  };
+
+  const customBaseline = join(customRoot, "delta-base.json");
+
+  it("captures the custom-rule blocks and classifies an introduced custom finding as exit 1", async () => {
+    // Capture at a base with no kernel → infra edge: the reference rule
+    // passes there. The snapshot must carry the two blocks.
+    const capture = customEnv(false);
+    expect(await runCli(["delta", "--capture", "--output", customBaseline], capture)).toBe(EXIT.ok);
+    const snapshot = JSON.parse(readFileSync(customBaseline, "utf8"));
+    expect(snapshot.customRules).toEqual([
+      {
+        name: "forbidden-tag-dependency",
+        artifact: "tools/rules/forbidden-tag-dependency.wasm",
+        sha256: referenceSha256,
+        params: { forbiddenTag: "layer-infra", exemptTags: [] },
+      },
+    ]);
+    expect(Array.isArray(snapshot.owned)).toBe(true);
+
+    // Head grows the edge into the forbidden tag: the boundary law allows it
+    // ("*"), so ONLY the custom rule can catch it — the delta that was
+    // invisible before this feature (the silent direction, held end to end).
+    const compare = customEnv(true);
+    expect(await runCli(["delta", customBaseline, "--format", "json"], compare)).toBe(
+      EXIT.violations,
+    );
+    const envelope = JSON.parse(compare.lines.out.join("\n"));
+    expect(envelope.status).toBe("findings");
+    expect(envelope.result.summary.introduced).toBe(0);
+    expect(envelope.result.summary.customFindings.introduced).toBe(1);
+    expect(envelope.result.customRules.findings.introduced[0]).toMatchObject({
+      ruleId: "custom/forbidden-tag-dependency/dependency-on-forbidden-tag",
+      project: "kernel",
+    });
+
+    const text = customEnv(true);
+    expect(await runCli(["delta", customBaseline], text)).toBe(EXIT.violations);
+    expect(text.lines.out.join("\n")).toContain("1 introduced custom finding");
+  });
+
+  it("answers exit 3 against a baseline captured without custom-rule evidence", async () => {
+    // A baseline whose capturing policy declared no rules: every declared
+    // head rule must classify unknown rather than the absence reading as
+    // "no custom findings existed at base".
+    const oldBaseline = JSON.parse(readFileSync(customBaseline, "utf8"));
+    delete oldBaseline.customRules;
+    delete oldBaseline.owned;
+    const oldPath = join(customRoot, "delta-base-old.json");
+    writeFileSync(oldPath, `${JSON.stringify(oldBaseline, null, 2)}\n`);
+
+    const compare = customEnv(false);
+    expect(await runCli(["delta", oldPath], compare)).toBe(EXIT.error);
+    expect(compare.lines.out.join("\n")).toContain("re-capture the baseline");
+  });
+});

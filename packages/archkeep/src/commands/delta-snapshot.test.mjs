@@ -178,6 +178,88 @@ describe("buildEvidenceSnapshot", () => {
 });
 
 // ---------------------------------------------------------------------------
+// The optional custom-rule pair (customRules + owned)
+// ---------------------------------------------------------------------------
+
+const CUSTOM_ROW = {
+  name: "no-invented-reach",
+  artifact: "tools/rules/no-invented-reach.wasm",
+  sha256: "a".repeat(64),
+  reason: "declared for the fixture",
+  params: { limit: 3 },
+};
+const OWNED = [
+  { file: "libs/beta/src/beta.go", project: "acme-beta" },
+  { file: "libs/alpha/src/main.go", project: "acme-alpha" },
+];
+
+describe("the optional custom-rule blocks", () => {
+  it("round-trips the pair, storing only the four judged fields and a file-sorted owned map", () => {
+    const snapshot = buildEvidenceSnapshot(validInput({ customRules: [CUSTOM_ROW], owned: OWNED }));
+    // `reason` explains the row to a human and changes no judgment — storing
+    // it would be a fifth field a compare run never reads.
+    expect(snapshot.customRules).toEqual([
+      {
+        name: "no-invented-reach",
+        artifact: "tools/rules/no-invented-reach.wasm",
+        sha256: "a".repeat(64),
+        params: { limit: 3 },
+      },
+    ]);
+    expect(snapshot.owned).toEqual([
+      { file: "libs/alpha/src/main.go", project: "acme-alpha" },
+      { file: "libs/beta/src/beta.go", project: "acme-beta" },
+    ]);
+    const text = serializeEvidenceSnapshot(snapshot);
+    expect(parseEvidenceSnapshot(text, "/custom.json")).toEqual(snapshot);
+  });
+
+  it("keeps an absent params absent — the row's own declaration, never a defaulted copy", () => {
+    const { params: _params, ...bare } = CUSTOM_ROW;
+    const snapshot = buildEvidenceSnapshot(validInput({ customRules: [bare], owned: OWNED }));
+    expect("params" in snapshot.customRules[0]).toBe(false);
+  });
+
+  it("stays byte-identical to the pre-block format when no custom rules are declared", () => {
+    // The silent-direction compatibility claim: an undeclaring workspace's
+    // snapshot must carry NO new key at all, so captures before and after
+    // this feature diff clean.
+    const snapshot = buildEvidenceSnapshot(validInput());
+    expect("customRules" in snapshot).toBe(false);
+    expect("owned" in snapshot).toBe(false);
+  });
+
+  it("refuses customRules without an owned map — the base side could attribute nothing", () => {
+    expect(() => buildEvidenceSnapshot(validInput({ customRules: [CUSTOM_ROW] }))).toThrow(
+      /owned: must be an array/,
+    );
+  });
+
+  it("refuses an owned map without customRules — half the pair is not a snapshot", () => {
+    expect(() => buildEvidenceSnapshot(validInput({ owned: OWNED }))).toThrow(
+      /`owned` map but no `customRules` rows/,
+    );
+  });
+
+  it("refuses malformed rows in either block, naming index and field", () => {
+    const input = validInput({
+      customRules: [{ name: "x", artifact: "", sha256: 7 }],
+      owned: [{ file: "libs/alpha/src/main.go" }],
+    });
+    let thrown;
+    try {
+      buildEvidenceSnapshot(input);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown.message).toContain("customRules[0].artifact");
+    expect(thrown.message).toContain("customRules[0].sha256");
+    expect(thrown.message).toContain("owned[0].project");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // serializeEvidenceSnapshot — determinism
 // ---------------------------------------------------------------------------
 
@@ -337,6 +419,53 @@ describe("parseEvidenceSnapshot", () => {
     expect(thrown.message).toContain("graph.projects[0].name");
     expect(thrown.message).toContain("graph.projects[0].root");
     expect(thrown.message).toContain("graph.dependencies[0].target");
+  });
+
+  it("parses an OLD baseline with neither custom block — absence is legal, never a refusal", () => {
+    // A pre-block capture must stay consumable: downstream classifies every
+    // custom finding unknown with a re-capture reason, rather than this
+    // loader refusing evidence that is merely older than the feature.
+    const parsed = validParsed();
+    expect("customRules" in parsed).toBe(false);
+    const snapshot = parseEvidenceSnapshot(JSON.stringify(parsed), "/old.json");
+    expect(snapshot.customRules).toBeUndefined();
+    expect(snapshot.owned).toBeUndefined();
+  });
+
+  it("refuses a stored customRules block whose rows or owned map are malformed", () => {
+    // The silent direction: a compare run consuming a half-readable block
+    // would attribute base records against a map that is not one, and judge a
+    // law whose pinned digest was never a string.
+    const parsed = validParsed();
+    parsed.customRules = [{ name: "no-invented-reach", artifact: "a.wasm" }];
+    parsed.owned = [{ file: "libs/alpha/src/main.go", project: "" }];
+    let thrown;
+    try {
+      parseEvidenceSnapshot(JSON.stringify(parsed), "/half.json");
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown.message).toContain("customRules[0].sha256");
+    expect(thrown.message).toContain("owned[0].project");
+  });
+
+  it("refuses customRules stored without the owned map beside it", () => {
+    const parsed = validParsed();
+    parsed.customRules = [
+      { name: "no-invented-reach", artifact: "a.wasm", sha256: "b".repeat(64) },
+    ];
+    expect(() => parseEvidenceSnapshot(JSON.stringify(parsed), "/no-owned.json")).toThrow(
+      /owned: must be an array/,
+    );
+  });
+
+  it("refuses an owned map stored without customRules", () => {
+    const parsed = validParsed();
+    parsed.owned = [{ file: "libs/alpha/src/main.go", project: "acme-alpha" }];
+    expect(() => parseEvidenceSnapshot(JSON.stringify(parsed), "/half-pair.json")).toThrow(
+      /owned: present without customRules/,
+    );
   });
 
   it("refuses records missing sourceFile or specifier, naming the index", () => {

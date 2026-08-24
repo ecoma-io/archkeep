@@ -66,6 +66,7 @@ import { canonicalizeJson } from "../canonical.mjs";
 import { suppressionCovers } from "../config.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import { suppressionFate } from "../governance/waiver.mjs";
+import { namespacedId } from "./custom-rules.mjs";
 
 /**
  * Computes a violation's architectural identity.
@@ -190,23 +191,7 @@ export function classifyViolations({ base, head, suppressions = [], now = refere
       headSites: headGroup ? headGroup.sites : [],
     };
 
-    if (baseCount === 0) {
-      entry.classification = "introduced";
-      entry.reason = "absent at base";
-    } else if (headCount === 0) {
-      entry.classification = "resolved";
-    } else if (headCount > baseCount) {
-      entry.classification = "introduced";
-      entry.reason = `occurrence growth: ${baseCount} at base, ${headCount} at head`;
-    } else if (headCount < baseCount) {
-      // Still present at head — a shrink is NEVER a resolution.
-      entry.classification = "unchanged";
-      entry.note =
-        `occurrencesReduced: ${baseCount} at base, ${headCount} at head — the violation ` +
-        `still exists`;
-    } else {
-      entry.classification = "unchanged";
-    }
+    Object.assign(entry, occurrenceClassification(baseCount, headCount, "the violation"));
 
     // A resolved item has no head occurrence left; its waive status is judged
     // against the LAST places the violation existed (its base sites) — what
@@ -296,24 +281,146 @@ export function classifyUnresolvableRecords({ base, head, sourceProjectOf }) {
       headSites: headGroup ? headGroup.sites : [],
     };
 
-    if (baseCount === 0) {
-      entry.classification = "introduced";
-      entry.reason = "absent at base";
-    } else if (headCount === 0) {
-      entry.classification = "resolved";
-    } else if (headCount > baseCount) {
-      entry.classification = "introduced";
-      entry.reason = `occurrence growth: ${baseCount} at base, ${headCount} at head`;
-    } else if (headCount < baseCount) {
-      entry.classification = "unchanged";
-      entry.note =
-        `occurrencesReduced: ${baseCount} at base, ${headCount} at head — the site still ` +
-        `exists`;
-    } else {
-      entry.classification = "unchanged";
-    }
+    Object.assign(entry, occurrenceClassification(baseCount, headCount, "the site"));
 
     bucketFor(entry.classification, { introduced, resolved, unchanged }).push(entry);
+  }
+
+  return { introduced, resolved, unchanged, unknown };
+}
+
+/**
+ * Computes a custom finding's identity, or the reason it has none.
+ *
+ * The key is `["custom", ruleName, findingId, project ?? null]`: which rule,
+ * which of its declared findings, against which project — the architectural
+ * facts a rule states about a finding. `sourceFile`/`line`/`column` are
+ * attached evidence exactly as a violation's sites are, never identity, and a
+ * finding that names no project keys on `null` rather than being dropped. A
+ * finding with no usable id has nothing to identify it by and is never
+ * guessed into a bucket — the same refusal `violationIdentity` makes for a
+ * violation with no messageId.
+ *
+ * @param {string} ruleName The judged rule's declared name.
+ * @param {unknown} finding One finding from a rule's verdict document.
+ * @returns {{ok: true, key: string, identity: object, site: object}
+ *   |{ok: false, reason: string, finding: unknown}}
+ */
+function customFindingIdentity(ruleName, finding) {
+  if (finding === null || typeof finding !== "object" || Array.isArray(finding)) {
+    return {
+      ok: false,
+      reason: `custom rule "${ruleName}" reported a finding that is ${describe(finding)}, not an object`,
+      finding,
+    };
+  }
+  const { id, project } = /** @type {Record<string, unknown>} */ (finding);
+  if (typeof id !== "string" || id === "") {
+    return {
+      ok: false,
+      reason:
+        `custom rule "${ruleName}" reported a finding with no usable id — got ${describe(id)}, ` +
+        `and a finding that cannot be named cannot be matched across the two sides`,
+      finding,
+    };
+  }
+  const projectName = typeof project === "string" && project !== "" ? project : null;
+  const record = /** @type {Record<string, unknown>} */ (finding);
+  return {
+    ok: true,
+    key: JSON.stringify(["custom", ruleName, id, projectName]),
+    identity: {
+      rule: ruleName,
+      findingId: id,
+      ruleId: namespacedId(ruleName, id),
+      project: projectName,
+      message: record.message,
+    },
+    site: { file: record.sourceFile, line: record.line, column: record.column },
+  };
+}
+
+/**
+ * Classifies the custom-rule findings of a two-sided judgment
+ * (`./custom-rules.mjs`'s `customRulesForDelta`).
+ *
+ * Same identity discipline, same occurrence ladder, same fail-closed unknowns
+ * as the two classifiers above — with one deliberate absence: there is NO
+ * `waived` annotation. Suppressions key on a `messageId`
+ * (`../config.mjs`'s `suppressionCovers`), and a custom finding has none — its
+ * id lives in the `custom/<rule>/<finding>` namespace no suppression row can
+ * name — so by construction every introduced custom finding gates. Every rule
+ * in `unknownRules` becomes one `unknown` entry carrying the rule's reason:
+ * a rule that could not be judged is a question this delta could not answer,
+ * never a silently thinner report.
+ *
+ * @param {object} input
+ * @param {{name: string, baseFindings: object[], headFindings: object[]}[]}
+ *   input.judged Rules evaluated on both sides.
+ * @param {{name: string, reason: string}[]} [input.unknownRules] Rules that
+ *   could not be judged, each with its mandatory reason.
+ * @returns {{introduced: object[], resolved: object[], unchanged: object[],
+ *   unknown: object[]}} Classified entries carry `rule`, `findingId`,
+ *   `ruleId`, `project`, `message`, both sides' counts and sites, and the
+ *   ladder's optional `reason`/`note`. Unknown entries are
+ *   `{classification, rule, reason}` plus the offending `finding` where one
+ *   exists.
+ */
+export function classifyCustomFindings({ judged, unknownRules = [] }) {
+  const introduced = [];
+  const resolved = [];
+  const unchanged = [];
+  const unknown = [];
+
+  for (const rule of unknownRules) {
+    unknown.push({ classification: "unknown", rule: rule.name, reason: rule.reason });
+  }
+
+  for (const rule of judged) {
+    const baseIdentified = rule.baseFindings.map((finding) =>
+      customFindingIdentity(rule.name, finding),
+    );
+    const headIdentified = rule.headFindings.map((finding) =>
+      customFindingIdentity(rule.name, finding),
+    );
+    for (const identified of baseIdentified.concat(headIdentified)) {
+      // The same non-strict narrowing constraint as `classifyViolations`' loop.
+      if (identified.ok === false) {
+        unknown.push({
+          classification: "unknown",
+          rule: rule.name,
+          reason: identified.reason,
+          finding: identified.finding,
+        });
+      }
+    }
+
+    const baseGroups = groupBy(baseIdentified);
+    const headGroups = groupBy(headIdentified);
+    const keys = [...new Set([...baseGroups.keys(), ...headGroups.keys()])].sort(cmpString);
+    for (const key of keys) {
+      const baseGroup = baseGroups.get(key);
+      const headGroup = headGroups.get(key);
+      const baseCount = baseGroup ? baseGroup.sites.length : 0;
+      const headCount = headGroup ? headGroup.sites.length : 0;
+      const identity = (baseGroup ?? headGroup).identity;
+
+      /** @type {Record<string, unknown>} */
+      const entry = {
+        classification: "",
+        rule: identity.rule,
+        findingId: identity.findingId,
+        ruleId: identity.ruleId,
+        project: identity.project,
+        message: identity.message,
+        baseCount,
+        headCount,
+        baseSites: baseGroup ? baseGroup.sites : [],
+        headSites: headGroup ? headGroup.sites : [],
+      };
+      Object.assign(entry, occurrenceClassification(baseCount, headCount, "the finding"));
+      bucketFor(entry.classification, { introduced, resolved, unchanged }).push(entry);
+    }
   }
 
   return { introduced, resolved, unchanged, unknown };
@@ -426,6 +533,39 @@ function isUnresolvable(record) {
       record.resolved === undefined ||
       typeof record.resolved !== "object")
   );
+}
+
+/**
+ * The occurrence-count ladder every classifier above shares — one statement of
+ * the header's per-identity rules, so the three cannot drift on the one
+ * decision most likely to be re-litigated (a shrink is NEVER a resolution).
+ *
+ * @param {number} baseCount
+ * @param {number} headCount
+ * @param {string} subject What still exists on a shrink, for the note — "the
+ *   violation", "the site", "the finding".
+ * @returns {{classification: "introduced"|"resolved"|"unchanged",
+ *   reason?: string, note?: string}}
+ */
+function occurrenceClassification(baseCount, headCount, subject) {
+  if (baseCount === 0) return { classification: "introduced", reason: "absent at base" };
+  if (headCount === 0) return { classification: "resolved" };
+  if (headCount > baseCount) {
+    return {
+      classification: "introduced",
+      reason: `occurrence growth: ${baseCount} at base, ${headCount} at head`,
+    };
+  }
+  if (headCount < baseCount) {
+    // Still present at head — a shrink is NEVER a resolution.
+    return {
+      classification: "unchanged",
+      note:
+        `occurrencesReduced: ${baseCount} at base, ${headCount} at head — ${subject} still ` +
+        `exists`,
+    };
+  }
+  return { classification: "unchanged" };
 }
 
 /**

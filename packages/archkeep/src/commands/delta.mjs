@@ -53,7 +53,8 @@ import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { buildDecision } from "../report/evidence.mjs";
 import { formatDeltaReport } from "../report/delta-text.mjs";
 import { evaluateRun } from "../rules/index.mjs";
-import { classifyDelta } from "./delta-classify.mjs";
+import { customRulesForDelta, declaresCustomRules } from "./custom-rules.mjs";
+import { classifyCustomFindings, classifyDelta } from "./delta-classify.mjs";
 import {
   buildEvidenceSnapshot,
   providerMismatch,
@@ -123,6 +124,12 @@ export function captureDelta(commandContext, { config }) {
   }
   const { root, provider, graph, analysis } = commandContext;
   const snapshot = buildEvidenceSnapshot({
+    // The two optional custom-rule blocks, stored exactly when the capturing
+    // policy declares rules — an undeclaring workspace's snapshot stays
+    // byte-identical (`./delta-snapshot.mjs`, the optional-blocks section).
+    ...(declaresCustomRules(config)
+      ? { customRules: config.customRules, owned: commandContext.owned }
+      : {}),
     tool: { name: TOOL_NAME, version: TOOL_VERSION },
     provenance: resolveProvenance(root),
     provider,
@@ -273,20 +280,36 @@ const short = (fingerprint) =>
  *   a tracked acceptance, not a fix — but do not fail the gate, which is what
  *   a waiver is for.
  *
+ * Custom-rule (wasm) findings join the classification when either side
+ * declares them: `./custom-rules.mjs`'s `customRulesForDelta` judges every
+ * head-declared rule over both evidence sets, `./delta-classify.mjs`'s
+ * `classifyCustomFindings` buckets the findings, and the result rides the
+ * envelope as `result.customRules` — a block that is ABSENT (never `null`)
+ * when neither side declares any, so an undeclaring workspace's envelope
+ * stays byte-identical. An introduced custom finding gates exactly as an
+ * introduced violation does, with no waiver lane by construction
+ * (suppressions key on a `messageId` custom findings do not have); an
+ * unclassifiable one is a no-verdict. This is also why the function is async:
+ * the wasm host is.
+ *
  * @param {string} baselinePath Absolute path to the evidence snapshot.
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config: object|null, readBaseline?: (path: string) => object,
- *   now?: string}} io The resolved boundary config (required — both sides
- *   are re-judged under it), an injectable baseline reader, and the one
- *   shared reference instant (defaults to the shared governance clock).
- * @returns {{status: "ok"|"findings"|"no-verdict", delta: object,
- *   coverage: object, report: {text: string, json: string}}}
- * @throws {Error} on every refusal the module header lists.
+ *   now?: string, readArtifact?: (artifact: string) => Uint8Array|null,
+ *   customRuleTimeoutMs?: number}} io The resolved boundary config (required
+ *   — both sides are re-judged under it), an injectable baseline reader, the
+ *   one shared reference instant (defaults to the shared governance clock),
+ *   and the custom-rule host's two injectable seams, passed through to
+ *   `customRulesForDelta`.
+ * @returns {Promise<{status: "ok"|"findings"|"no-verdict", delta: object,
+ *   coverage: object, report: {text: string, json: string}}>}
+ * @throws {Error} on every refusal the module header lists, and on a
+ *   custom-rule LOAD failure (`./custom-rules.mjs` argues the split).
  */
-export function deltaCommand(
+export async function deltaCommand(
   baselinePath,
   commandContext,
-  { config, readBaseline = readEvidenceSnapshot, now = referenceTime() },
+  { config, readBaseline = readEvidenceSnapshot, now = referenceTime(), ...customRuleIo },
 ) {
   const { root, provider, marker, graph, analysis } = commandContext;
 
@@ -378,23 +401,86 @@ export function deltaCommand(
     );
   }
 
+  // The custom-rule half, present exactly when a side declares rules: judged
+  // two-sided where the law is identical, `unknown` with a mandatory reason
+  // everywhere else (`./custom-rules.mjs`'s `customRulesForDelta` owns the
+  // routes). `null` when NEITHER side declares any — the envelope block and
+  // the summary key are then absent, and an undeclaring workspace's envelope
+  // stays byte-identical (`../../../../AGENTS.md`, "a change to what is
+  // reported on an unchanged workspace is a breaking change").
+  /** @type {{judged: object[], skipped: object[], removed: string[],
+   *   findings: {introduced: object[], resolved: object[], unchanged: object[],
+   *   unknown: object[]}}|null} */
+  let custom = null;
+  if (declaresCustomRules(config)) {
+    const twoSided = await customRulesForDelta(commandContext, {
+      rows: config.customRules,
+      policy: config,
+      baseline,
+      ...customRuleIo,
+    });
+    custom = {
+      judged: twoSided.judged.map(({ name, sha256, notes: ruleNotes }) => ({
+        name,
+        sha256,
+        ...(ruleNotes === undefined ? {} : { notes: ruleNotes }),
+      })),
+      skipped: twoSided.unknownRules,
+      removed: twoSided.removedRules,
+      findings: classifyCustomFindings({
+        judged: twoSided.judged,
+        unknownRules: twoSided.unknownRules,
+      }),
+    };
+  } else if (baseline.customRules !== undefined) {
+    // The head declares nothing, so there is no law to judge either side
+    // under — every baseline rule is a removal, disclosed rather than judged.
+    custom = {
+      judged: [],
+      skipped: [],
+      removed: baseline.customRules.map((row) => row.name),
+      findings: { introduced: [], resolved: [], unchanged: [], unknown: [] },
+    };
+  }
+  if (custom !== null) {
+    for (const skipped of custom.skipped) {
+      notes.push(`custom rule "${skipped.name}" was not classified — ${skipped.reason}`);
+    }
+    for (const name of custom.removed) {
+      notes.push(
+        `custom rule "${name}" is declared in the baseline but not by the current policy — ` +
+          `nothing was judged for it, so its base-side findings are not classified as resolved`,
+      );
+    }
+    for (const rule of custom.judged) {
+      for (const note of rule.notes ?? []) {
+        notes.push(`custom rule "${rule.name}": ${note}`);
+      }
+    }
+  }
+
   const { violations, unresolvable } = classification;
   const introducedWaived = violations.introduced.filter((entry) => entry.waived === true).length;
   const introducedNotWaived = violations.introduced.length - introducedWaived;
-  const unknownCount = violations.unknown.length + unresolvable.unknown.length;
+  // Custom findings have no waiver lane (`./delta-classify.mjs`'s
+  // `classifyCustomFindings` argues the by-construction absence), so every
+  // introduced one gates.
+  const customIntroduced = custom === null ? 0 : custom.findings.introduced.length;
+  const customUnknown = custom === null ? 0 : custom.findings.unknown.length;
+  const unknownCount = violations.unknown.length + unresolvable.unknown.length + customUnknown;
 
   /** @type {"ok"|"findings"|"no-verdict"} */
   let status;
   /** @type {0|1|3} */
   let exitCode;
   let decision;
-  if (introducedNotWaived > 0) {
+  if (introducedNotWaived + customIntroduced > 0) {
     status = "findings";
     exitCode = 1;
     decision = buildDecision({
       status,
       coverageComplete: true,
-      findings: introducedNotWaived,
+      findings: introducedNotWaived + customIntroduced,
     });
   } else if (unknownCount > 0) {
     status = "no-verdict";
@@ -405,6 +491,9 @@ export function deltaCommand(
       findings: 0,
       reason:
         `${unknownCount} delta item${unknownCount === 1 ? "" : "s"} could not be classified — ` +
+        (customUnknown > 0
+          ? `${customUnknown} of them custom-rule item${customUnknown === 1 ? "" : "s"} — `
+          : "") +
         `an item whose identity cannot be stated is never guessed into a bucket`,
     });
   } else {
@@ -454,9 +543,20 @@ export function deltaCommand(
         unchanged: unresolvable.unchanged.length,
         unknown: unresolvable.unknown.length,
       },
+      ...(custom === null
+        ? {}
+        : {
+            customFindings: {
+              introduced: custom.findings.introduced.length,
+              resolved: custom.findings.resolved.length,
+              unchanged: custom.findings.unchanged.length,
+              unknown: custom.findings.unknown.length,
+            },
+          }),
     },
     violations,
     unresolvable,
+    ...(custom === null ? {} : { customRules: custom }),
   };
 
   const envelope = jsonEnvelope({

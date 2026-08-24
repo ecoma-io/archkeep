@@ -124,6 +124,49 @@ reached a verdict about them, so folding them into either side would fabricate
 findings. They are carried so a change that adds or removes such sites is
 visible.
 
+### Custom-rule findings are classified too
+
+When the current policy declares [`customRules`](../reference/custom-rules.md),
+`delta` judges every declared rule over **both** evidence sets — the head
+tree's facts and the baseline's stored ones — and classifies its findings in
+their own block, keyed per finding by the rule name, the finding id, and the
+project it names (`custom/<rule>/<finding>`). The same occurrence ladder
+applies: absent-at-base is introduced, growth is introduced with the counts
+named, a shrink that leaves occurrences is unchanged, and an **introduced
+custom finding gates (exit 1) exactly as an introduced violation does** — with
+no waiver lane, by construction: `boundarySuppressions` rows key on a
+violation `messageId`, and a custom finding has none.
+
+For this to work the capture side stores two extra blocks when its policy
+declares rules — the declared rows (name, artifact, `sha256`, `params`) and
+the file→project ownership map. A workspace that declares no custom rules
+produces a byte-identical snapshot, envelope, and report.
+
+A rule is judged only when the baseline row pins the **identical law** —
+same `sha256`, same `params`. Everything else is fail-closed: the rule lands
+in the skipped list, one `unknown` entry per rule (exit 3), each with its
+reason:
+
+- **the baseline carries no custom-rule evidence** — an old capture, or one
+  whose policy declared no rules; re-capture the baseline;
+- **no base-side evidence exists for this rule** — the rule was added since
+  capture; re-capture;
+- **artifact digest drift**, both digests named — the law itself moved, so a
+  finding difference cannot be attributed to the code;
+- **params drift** — params ride inside the evidence bundle, so this is law
+  drift exactly as a digest change is;
+- **either side's evidence could not be assembled** — for example a stored
+  record the baseline's ownership map does not claim;
+- **either side's evaluation failed, or the rule answered `unknown`** — the
+  host's own reason is carried through.
+
+A rule that answers `not_applicable` on a side contributes an empty finding
+list plus a note; a rule the baseline declares that the head no longer does is
+reported as **removed** in a coverage note, never judged. A head artifact that
+cannot be **loaded** at all (unreadable, hash mismatch against the head
+declaration) is a refusal (exit 3, no report) — the same posture `check` takes
+on the same tree.
+
 ## Refusals and notes
 
 Every condition under which `delta` cannot honestly classify is a **refusal**
@@ -160,12 +203,12 @@ report and in `coverage.notes` instead:
 
 ## Exit codes
 
-| code | meaning                                                                                                                   |
-| ---- | ------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Capture succeeded, or the comparison found no non-waived introduced violation and nothing unclassifiable.                 |
-| 1    | Compare mode only: at least one introduced violation not covered by an active waiver. Capture mode never exits 1.         |
-| 2    | Usage error: wrong positional count, `--capture` with a positional, unknown flag.                                         |
-| 3    | A refusal from the list above, or a comparison with an `unknown` entry — an unanswerable question is never a clean delta. |
+| code | meaning                                                                                                                                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | Capture succeeded, or the comparison found no non-waived introduced violation, no introduced custom finding, and nothing unclassifiable.                     |
+| 1    | Compare mode only: at least one introduced violation not covered by an active waiver, or at least one introduced custom finding. Capture mode never exits 1. |
+| 2    | Usage error: wrong positional count, `--capture` with a positional, unknown flag.                                                                            |
+| 3    | A refusal from the list above, or a comparison with an `unknown` entry — an unanswerable question is never a clean delta.                                    |
 
 The `--format json` envelope for compare mode is documented in
 [json-output.md](../reference/json-output.md).
