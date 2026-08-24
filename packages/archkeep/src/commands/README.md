@@ -23,7 +23,7 @@ the resolution order.
   (`./custom-rules.mjs`). Exits 1 on any of them, and it is the only
   command holding all four exit codes
   ([which verbs carry exit 1 is settled in `docs/concepts/architecture.md`](../../../../docs/concepts/architecture.md)
-  — `fitness` is the other one).
+  — `fitness` and `delta` are the other two).
 
 - **`graph`** (`./graph.mjs`'s `graphCommand`) — the project graph as a
   deterministic, serialisable snapshot: projects (with `targets` and `tags`) and
@@ -41,6 +41,24 @@ the resolution order.
   Refuses an incomplete baseline or head.
   Refuses an Nx workspace with polyglot manifests but no plugin registration.
   Descriptive: never exits 1.
+
+- **`delta`** (`./delta.mjs`'s `captureDelta` and `deltaCommand`) — two modes
+  behind one verb. `--capture` writes the evidence snapshot
+  `./delta-snapshot.mjs` defines — raw import-site records, the graph, coverage,
+  provenance, the policy fingerprint; evidence, never verdicts. Compare loads a
+  baseline, re-judges BOTH sides through `../rules/index.mjs` under the CURRENT
+  config and one shared instant, and classifies each violation
+  introduced/resolved/unchanged/unknown (`./delta-classify.mjs`), with
+  unresolvable import sites carried as their own category, never counted as
+  violations. Refuses an unreadable, malformed, foreign-schema, or
+  incomplete-coverage baseline, a provider mismatch (stricter than `diff`'s
+  note — violation identity across two project models is not evidence),
+  incomplete head coverage, and an Nx workspace with polyglot manifests but no
+  plugin registration; a policy-fingerprint change is a loud coverage note, not
+  a refusal. A verdict, not a description: a non-waived introduced violation is
+  a finding (exit 1 — the third verb beside `check` and `fitness`), an
+  unclassifiable item is a no-verdict (exit 3), and a waived-introduced entry
+  is reported without gating. Capture stays descriptive: never exits 1.
 
 - **`impact`** (`./impact.mjs`'s `impactCommand`) — reverse reachability from
   the project graph: given a project name, lists every project that transitively

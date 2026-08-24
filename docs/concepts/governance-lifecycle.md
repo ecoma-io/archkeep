@@ -14,7 +14,7 @@ Evidence                      explain · impact · provenance · health · debt 
    ↓  adjudicated
 Waiver / fitness              accept for a term · hold the workspace to its own named gates
    ↓
-Evolution                     diff across a change · history across snapshots
+Evolution                     diff · delta across a change · history across snapshots
    ↓
 Reconcile / discover          score the disagreement · derive candidate architecture — proposals only
    ↓
@@ -65,8 +65,12 @@ across a directory of snapshots, classifying each transition by the evidence
 the snapshots carry — a changed graph is an architecture change, a changed
 `policy.fingerprint` is a policy/intent change, a changed provider is a
 provider change, provenance moving alone is code drift. Neither is a finding;
-evolution is described, and `check` is where failing happens.
-[usage/diff.md](../usage/diff.md) · [usage/history.md](../usage/history.md)
+evolution is described, and `check` is where failing happens. `delta` is the
+one evolution verb that gates: it classifies which boundary violations a
+single change introduced or resolved, both sides re-judged under the current
+law, and a non-waived introduced violation is exit 1.
+[usage/diff.md](../usage/diff.md) · [usage/delta.md](../usage/delta.md) ·
+[usage/history.md](../usage/history.md)
 
 ## Drift
 

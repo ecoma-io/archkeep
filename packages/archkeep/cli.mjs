@@ -104,6 +104,7 @@ import { contextCommand } from "./src/commands/context-command.mjs";
 import { planContextCommand } from "./src/commands/plan-context-command.mjs";
 import { adrCommand } from "./src/commands/adr.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
+import { captureDelta, deltaCommand } from "./src/commands/delta.mjs";
 import { discoverCommand } from "./src/commands/discover.mjs";
 import { driftCommand } from "./src/commands/drift.mjs";
 import { fitnessCommand } from "./src/commands/fitness.mjs";
@@ -939,6 +940,93 @@ async function runDiff(options, { cwd, env }) {
 
   // Diff is descriptive: 0 when it completes, never 1.
   return EXIT.ok;
+}
+
+/**
+ * `delta`'s `run`: two modes behind one verb.
+ *
+ * `--capture` writes the evidence snapshot a later run compares against;
+ * `delta <baseline>` loads one, re-judges both sides under the current law,
+ * and folds the classification into the exit code — the one descriptive-family
+ * verb beside `check` and `fitness` whose verdict carries exit 1
+ * (`./src/commands/delta.mjs` owns the fold).
+ *
+ * @param {{format: string, output: string|null, config: string|null, capture: boolean,
+ *   paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runDelta(options, { cwd, env }) {
+  if (options.capture) {
+    if (options.paths.length !== 0) {
+      env.err(
+        `archkeep: delta --capture takes no positional arguments; got ${options.paths.join(", ")}`,
+      );
+      return EXIT.usage;
+    }
+  } else if (options.paths.length !== 1) {
+    env.err(
+      `archkeep: delta takes exactly one positional argument (the baseline evidence snapshot), ` +
+        `or --capture to write one; got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    // Both modes need the boundary law: capture fingerprints it, compare
+    // re-judges both sides under it — the same ladder every judging command
+    // resolves through (`resolvePolicy`).
+    const { config } = await resolvePolicy(options, commandContext, cwd);
+
+    if (options.capture) {
+      const { text } = captureDelta(commandContext, { config });
+      if (options.output) {
+        // Atomic, symlink-safe write — `writeOutputReport`'s own docstring
+        // owns the mechanism and the threat it closes.
+        if (!writeOutputReport(options.output, text, env, cwd, options.config)) return EXIT.error;
+        env.err(`archkeep: delta baseline captured → ${options.output}`);
+      } else {
+        env.out(text);
+      }
+      // Capture is descriptive: 0 on success, 3 on any failure, never 1.
+      return EXIT.ok;
+    }
+
+    const baselinePath = isAbsolute(options.paths[0])
+      ? resolve(options.paths[0])
+      : resolve(cwd, options.paths[0]);
+    result = deltaCommand(baselinePath, commandContext, { config });
+  } catch (error) {
+    const usageError = error instanceof UsageError;
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
+    env.err(`archkeep: delta complete → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // The exit fold `deltaCommand` computed: a non-waived introduced violation
+  // is a finding, an unclassifiable item is a no-verdict, anything else is
+  // clean — mapped here the same way `fitness`'s status is.
+  return (
+    { ok: EXIT.ok, findings: EXIT.violations, "no-verdict": EXIT.error }[result.status] ??
+    EXIT.error
+  );
 }
 
 /**
@@ -2012,6 +2100,58 @@ const DIFF_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `delta`'s flags: `--capture` writes the evidence snapshot a later run
+ * compares against; without it the baseline file is the single positional
+ * argument. `--config` overrides the boundary law the same way `check`'s
+ * does, because both sides are re-judged under whichever law this run
+ * resolves.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const DELTA_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--capture",
+    key: "capture",
+    arg: "",
+    describe: Object.freeze([
+      "Write an evidence snapshot of the current tree",
+      "(raw import records, graph, coverage, policy",
+      "fingerprint) for a later delta run to compare against",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze([
+      "Write the report — or, with --capture, the snapshot —",
+      "to a file instead of stdout",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: ({ boundaryConfig, inline }) =>
+      Object.freeze([
+        "Read the boundary law from here instead of",
+        inline
+          ? "the inline boundaryConfig in archkeep.json"
+          : `<workspace root>/${boundaryConfig}`,
+      ]),
+  }),
+]);
+
+/**
  * `drift`'s flags: text or JSON envelope, optional file output. The intent is
  * always read from the tracked root `architecture-intent.json` — the same one
  * `check` judges — so there is no `--config` flag: a descriptive comparison
@@ -2526,6 +2666,17 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runDiff,
+  }),
+  delta: Object.freeze({
+    name: "delta",
+    args: "<baseline> | --capture",
+    summary: "Classify how boundary violations moved between a captured baseline and head",
+    flagHelp: DELTA_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(DELTA_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, config: null, capture: false }),
+    formats: DESCRIBABLE_FORMATS,
+    booleans: Object.freeze(["capture"]),
+    run: runDelta,
   }),
   discover: Object.freeze({
     name: "discover",

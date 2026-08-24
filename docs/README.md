@@ -56,6 +56,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [presets.md](usage/presets.md)                 | The six shipped policy packs, the tags each expects, and how to adopt one                |
 | [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph                         |
 | [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis              |
+| [delta.md](usage/delta.md)                     | The `delta` command: violations classified between a captured baseline and head          |
 | [drift.md](usage/drift.md)                     | The `drift` command: observed architecture against the declared intent                   |
 | [fitness.md](usage/fitness.md)                 | The `fitness` command: every declared quality gate judged, as a verdict table            |
 | [history.md](usage/history.md)                 | The `history` command: the architecture's evolution across snapshots                     |

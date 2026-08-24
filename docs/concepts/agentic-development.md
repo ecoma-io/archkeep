@@ -49,7 +49,10 @@ archkeep explain libs/billing/main.go:10:5 --format json
 
 A fourth question — "what boundary implications does this change carry?" — is
 answered by `diff` when a boundary config is available, which computes rule impact
-on the structural diff between two graph snapshots.
+on the structural diff between two graph snapshots — and, as a gate over the
+violations themselves, by `delta`, which classifies what one change introduced
+or resolved against a captured evidence baseline
+([usage/delta.md](../usage/delta.md)).
 
 ## Why machine-readable output matters
 

@@ -122,6 +122,22 @@ confirm it.
    config is available — which of the added edges introduce boundary violations
    and which removed edges resolve them.
 
+   For the violation half of the same question — which violations did THIS
+   change introduce or resolve — capture an evidence baseline before the
+   change and compare after it:
+
+   ```
+   archkeep delta --capture --output delta-base.json   # before the change
+   archkeep delta delta-base.json --format json        # after the change
+   ```
+
+   Both sides are re-judged under the current law, so a policy edit between
+   capture and compare cannot fabricate an introduced/resolved pair. Exit 1
+   means the change introduced a violation no active waiver covers; an
+   introduced-but-waived entry is reported without gating, and belongs in the
+   step-9 report as an accepted cost, not silence. Exit 3 is a refusal or an
+   unclassifiable item — never "no change".
+
 5. **Check constraints.** Run the authoritative gate:
 
    ```
