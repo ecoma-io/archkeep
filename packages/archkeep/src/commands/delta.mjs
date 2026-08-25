@@ -48,6 +48,7 @@
 import { createRequire } from "node:module";
 
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import { stripTrailingSlashes } from "../path-util.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { buildDecision } from "../report/evidence.mjs";
@@ -248,7 +249,7 @@ function sourceProjectAttributor(headGraph, baselineProjects) {
     }
   }
   const entries = [...byRoot.entries()]
-    .map(([root, name]) => [root.replace(/\/+$/u, ""), name])
+    .map(([root, name]) => [stripTrailingSlashes(root), name])
     .sort((a, b) => b[0].length - a[0].length);
   return (record) => {
     const file = record?.sourceFile;

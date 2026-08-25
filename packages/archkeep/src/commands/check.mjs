@@ -14,6 +14,7 @@ import { join } from "node:path";
 
 import { fileFailure, isWholeFileFailure } from "../analysis/source-util.mjs";
 import { tsconfigPathsFacts } from "../analysis/typescript.mjs";
+import { stripTrailingSlashes } from "../path-util.mjs";
 import { suppressionCovers } from "../config.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import { suppressionFate } from "../governance/waiver.mjs";
@@ -155,7 +156,7 @@ function declaredEdgeManifest({ provider, graph }, sourceProject) {
   // spelling) — and `./project.json` is a different string from
   // `project.json` to every consumer that compares paths, this file's own
   // SARIF `uri` included.
-  const scoped = typeof root === "string" ? root.replace(/\/+$/u, "") : "";
+  const scoped = typeof root === "string" ? stripTrailingSlashes(root) : "";
   return scoped === "" || scoped === "." ? site.file : `${scoped}/${site.file}`;
 }
 /**
