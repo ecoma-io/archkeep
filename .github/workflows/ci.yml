@@ -260,6 +260,7 @@ jobs:
           git archive HEAD | tar -x -C "$dir"
           rm -r "$dir/.moon"
           rm "$dir/packages/archkeep/moon.yml"
+          rm "$dir/packages/archkeep-mcp/moon.yml"
           rm "$dir/packages/archkeep-vscode/moon.yml"
           cp .github/native-selfcheck/archkeep.json "$dir/archkeep.json"
           diff -q "$law" "$dir/module-boundaries.config.mjs"

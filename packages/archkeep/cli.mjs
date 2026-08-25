@@ -93,7 +93,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { containmentViolation } from "./src/containment.mjs";
 import { UsageError } from "./src/errors.mjs";
 import { check, sortViolations } from "./src/commands/check.mjs";
-import { hasProfiles, resolvePolicy } from "./src/commands/policy.mjs";
+import { resolveDescribedPolicy, resolvePolicy } from "./src/commands/policy.mjs";
 import {
   DEFAULT_OPTIONS,
   WORKSPACE_MARKERS,
@@ -814,54 +814,14 @@ async function runGraph(options, { cwd, env }) {
     //
     // `graph` describes the project graph, not the boundary law — it reads no
     // constraint row and judges nothing against one — so a workspace that has
-    // not written a law yet must not be refused here. It was, with exit 3: the
-    // workspace-default `boundaryConfig` is never absent on the Nx and Moon
-    // paths (`readPluginOptions` falls back to `DEFAULT_OPTIONS`, and Moon
-    // takes the same default by convention), so that arm of `resolvePolicy`
-    // fired unconditionally and a missing file became the command's exit code.
-    // `discover`, the other descriptive verb over the same graph, answered
-    // fine on the identical tree — and `graph` is what a workspace runs to see
-    // what Archkeep found, which is what it needs in order to WRITE a first
-    // policy.
-    //
-    // What is skipped is the load of a file that is NOT THERE. A boundary
-    // config that exists and will not load still fails the run, because an
-    // absent law and a broken one must not report alike; a `--config`, a
-    // profile, and an inline `archkeep.json` policy are explicit declarations
-    // and stay loud. Every command that JUDGES against the law keeps loading
-    // it unconditionally — making it optional for those would turn a missing
-    // file into a silent no-law run.
-    //
-    // `boundaryConfigDeclared` is what keeps this guard to the un-overridden
-    // default, and it is load-bearing rather than belt-and-braces. The name
-    // alone cannot answer it: `commandContext.options.boundaryConfig` is a
-    // string BOTH when it came from `./src/options.mjs`'s `DEFAULT_OPTIONS`
-    // and when the consumer WROTE it into `nx.json`'s plugin options or
-    // `archkeep.json`, and a workspace is free to declare the convention
-    // filename itself, so comparing against the default would still read a
-    // deliberate declaration as an assumption. Without the bit, measured on a
-    // committed native tree whose `archkeep.json` declares `boundaryConfig:
-    // "policy-we-declared.mjs"` and does not contain that file: `graph` exited
-    // 0 with a snapshot carrying no `policy` field — byte-identical to a
-    // workspace that never had a law — where the same tree with that file
-    // present but unparseable exited 3. A law someone named and then renamed
-    // or deleted is exactly the case that must stay loud, so the provenance
-    // survives the options layer instead (`./src/options.mjs`'s
-    // `resolveOptions`, `./src/providers/native/model.mjs`'s
-    // `normalizeNativeModel`, and `./src/commands/context.mjs`'s three
-    // branches carry it; Moon answers `false` because it has no table to
-    // declare one in).
-    const workspaceDefault =
-      !options.config &&
-      !hasProfiles(commandContext.options) &&
-      commandContext.options.boundaryConfigDeclared === false &&
-      typeof commandContext.options.boundaryConfig === "string"
-        ? resolve(commandContext.root, commandContext.options.boundaryConfig)
-        : null;
-    const { config } =
-      workspaceDefault !== null && !existsSync(workspaceDefault)
-        ? { config: null }
-        : await resolvePolicy(options, commandContext, cwd);
+    // not written a law yet must not be refused here. Every arm of that
+    // decision — what is skipped is the load of a file that is NOT THERE, the
+    // `boundaryConfigDeclared` bit that keeps the guard to the un-overridden
+    // default, and why a law someone named and then deleted stays loud — lives
+    // in `resolveDescribedPolicy` (`./src/commands/policy.mjs`) rather than
+    // here, so the descriptive commands and the MCP face that serves them
+    // cannot disagree about what "no law declared" means.
+    const { config } = await resolveDescribedPolicy(options, commandContext, cwd);
 
     result = graphCommand(commandContext, { config });
   } catch (error) {

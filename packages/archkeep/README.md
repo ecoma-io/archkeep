@@ -191,7 +191,10 @@ a file it cannot edit ([overview.md](https://github.com/ecoma-io/archkeep/blob/m
   ([nx.md](https://github.com/ecoma-io/archkeep/blob/main/docs/integrations/nx.md) ·
   [moon.md](https://github.com/ecoma-io/archkeep/blob/main/docs/integrations/moon.md)).
 - **Agents** — Claude Code, Codex and opencode run the `arch-*` skills, which
-  are host-independent ([supported-hosts.md](https://github.com/ecoma-io/archkeep/blob/main/docs/skills/supported-hosts.md)).
+  are host-independent ([supported-hosts.md](https://github.com/ecoma-io/archkeep/blob/main/docs/skills/supported-hosts.md));
+  agents whose host speaks MCP use `@ecoma-io/archkeep-mcp`, which runs this
+  package's own command layer in-process through the `./commands` subpath
+  ([mcp.md](https://github.com/ecoma-io/archkeep/blob/main/docs/integrations/mcp.md)).
 
 ## Install and quick start
 

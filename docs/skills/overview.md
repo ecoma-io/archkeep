@@ -7,22 +7,34 @@ evidence, and bring a repository that has no declared model under governance in
 the first place. They are the agent-facing layer of a three-part architecture:
 
 ```
-Archkeep CLI (deterministic authority)
-        ↓
+Archkeep engine (deterministic authority)
+        ↓                ↘
+Archkeep CLI              Archkeep MCP (capability interface)
+(human / CI interface)      ↘
+        ↓                    ↘
 arch-* skills (behavioral protocol)
         ↓
-Host integrations (npx skills, Claude Code plugin)
+Host integrations (npx skills, Claude Code plugin, MCP host)
         ↓
 Agent
 ```
 
-- **Core** = deterministic authority. Skills call `archkeep` CLI commands; they
-  never duplicate enforcement logic.
+- **Core** = deterministic authority. The engine's one analysis sits behind
+  every face; skills call `archkeep` CLI commands and the MCP server calls the
+  engine's own command functions in-process — neither duplicates enforcement
+  logic.
 - **Skills** = behavioral protocol. Host-independent `SKILL.md` files at the
-  repository root `skills/` directory, teaching WHEN/WHY/HOW/FAILURE.
+  repository root `skills/` directory, teaching WHEN/WHY/HOW/FAILURE. The
+  workflow they teach is unchanged by MCP: an agent with MCP executes the same
+  steps through tools instead of a shell, and the CLI remains the fallback and
+  the human/CI face ([../integrations/mcp.md](../integrations/mcp.md)).
+- **MCP** = capability interface. `@ecoma-io/archkeep-mcp`, one tool per
+  question an agent asks mid-change, read-only with one deliberate exception
+  that proposes without ever deciding.
 - **Host integrations** = packaging for each agent platform. The Claude Code
   plugin discovers skills through its `skills` field; `npx skills add`
-  discovers them from the repository-root `skills/` directory.
+  discovers them from the repository-root `skills/` directory; an MCP host
+  reaches the same engine through the MCP server.
 
 ## The governance lifecycle in five skills
 

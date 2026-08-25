@@ -20,10 +20,11 @@
 // plugin manifest version, and the VS Code extension's package.json version
 // must all match it — and so must the repository ROOT `package.json`, which
 // is what release-please's "." component actually bumps directly; the other
-// seven (this baseline included) are copies of it via `extra-files` — the
+// nine (this baseline included) are copies of it via `extra-files` — the
 // Rust SDK's Cargo.toml and the TS SDK's package.json joined the chain with
 // their packages, per the ADR 0002 decision that every SDK versions with the
-// engine it pairs with. Checking
+// engine it pairs with, and the MCP package joined it because it composes the
+// engine's command layer directly. Checking
 // every copy against a baseline that was never itself checked against the
 // thing it copies from is the gap this script closes: a drift there would
 // have read as "everything agrees" right up to the file nothing compared.
@@ -58,9 +59,10 @@ export const RUST_SDK_CARGO_TOML = "packages/archkeep-rule-sdk-rust/Cargo.toml";
 export const RUST_SDK_CARGO_LOCK = "packages/archkeep-rule-sdk-rust/Cargo.lock";
 export const RUST_SDK_CRATE_NAME = "archkeep-rule-sdk";
 export const TS_SDK_PACKAGE_JSON = "packages/archkeep-rule-sdk-ts/package.json";
+export const MCP_PACKAGE_JSON = "packages/archkeep-mcp/package.json";
 export const PYTHON_SDK_PYPROJECT = "packages/archkeep-rule-sdk-python/pyproject.toml";
 
-// Every version-bearing path the chain compares — the nine files
+// Every version-bearing path the chain compares — the ten files
 // docs/skills/versioning.md enumerates, aggregated from the constants above
 // rather than restated. release-please's `extra-files` list must name no file
 // outside it: a manifest bumped on every release but verified by no chain
@@ -70,6 +72,7 @@ export const PYTHON_SDK_PYPROJECT = "packages/archkeep-rule-sdk-python/pyproject
 export const VERSION_CHAIN_PATHS = [
   ROOT_PACKAGE_JSON,
   PACKAGE_JSON,
+  MCP_PACKAGE_JSON,
   CLAUDE_PLUGIN_MANIFEST,
   MARKETPLACE_CATALOGUE,
   CODEX_PLUGIN_MANIFEST,
@@ -346,6 +349,9 @@ export function selectMarketplaceVersion(catalogue, pluginName) {
  * @param {string} input.cargoVersion version from the Rust SDK's Cargo.toml `[package]` section
  * @param {string} input.cargoLockVersion version Cargo.lock records for the Rust SDK crate
  * @param {string} input.tsSdkVersion version from the TS SDK's package.json
+ * @param {string} input.mcpVersion version from the MCP package's package.json — the
+ *   agent capability interface, published to npm and versioned with the engine it
+ *   composes through `./commands`
  * @param {string} input.pySdkVersion version from the Python SDK's pyproject.toml `[project]` section
  * @param {{dir: string, name: string|null, description: string|null, compatibility: string|null, hostFields: string[], text?: string}[]} input.skills
  *   parsed frontmatter plus the full SKILL.md text for each skill
@@ -373,6 +379,7 @@ export function evaluate({
   cargoVersion,
   cargoLockVersion,
   tsSdkVersion,
+  mcpVersion,
   pySdkVersion,
   skills,
   agentsSkillsFiles = null,
@@ -716,6 +723,22 @@ export function evaluate({
     lines.push(`FAIL archkeep-rule-sdk-ts/package.json — version mismatch`);
   }
 
+  // 13b. The MCP package's version must match package version. The MCP
+  // server composes the engine's own command layer in-process through the
+  // `./commands` subpath, so "the MCP face for engine 0.x" has to be a fact
+  // rather than a hope — the same one-version pairing the extension and the
+  // SDKs ride, held the same way: release-please writes it via extra-files,
+  // this check refuses the drift.
+  if (mcpVersion !== packageVersion) {
+    failures.push(
+      `packages/archkeep-mcp/package.json version is "${mcpVersion}" but package version is ` +
+        `"${packageVersion}". The MCP server composes the engine's command layer directly, ` +
+        `so the two must ship as one version — release-please writes it via extra-files, and ` +
+        `if the two disagree the chain has drifted.`,
+    );
+    lines.push(`FAIL archkeep-mcp/package.json — version mismatch`);
+  }
+
   // 14. Python SDK version must match package version — the same chain
   // decision as checks 12 and 13, for the PyPI-published SDK.
   if (pySdkVersion !== packageVersion) {
@@ -868,7 +891,7 @@ export function evaluate({
  * Reads the filesystem and returns the facts `evaluate` needs.
  * This is the only function that touches the outside world.
  *
- * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, cargoLockVersion: string, tsSdkVersion: string, pySdkVersion: string, skills: object[], agentsSkillsFiles: Record<string, string>|null, skillsFiles: Record<string, string>|null, trackedFiles: string[]|null, authoring: string, overview: string}}
+ * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, cargoLockVersion: string, tsSdkVersion: string, mcpVersion: string, pySdkVersion: string, skills: object[], agentsSkillsFiles: Record<string, string>|null, skillsFiles: Record<string, string>|null, trackedFiles: string[]|null, authoring: string, overview: string}}
  */
 export function readSkillFacts() {
   const pkgPath = join(root, PACKAGE_JSON);
@@ -920,6 +943,10 @@ export function readSkillFacts() {
     ? JSON.parse(readFileSync(tsSdkPath, "utf8"))
     : { version: "?" };
   const tsSdkVersion = tsSdk.version;
+
+  const mcpPath = join(root, MCP_PACKAGE_JSON);
+  const mcp = existsSync(mcpPath) ? JSON.parse(readFileSync(mcpPath, "utf8")) : { version: "?" };
+  const mcpVersion = mcp.version;
 
   const pyprojectPath = join(root, PYTHON_SDK_PYPROJECT);
   const pySdkVersion = existsSync(pyprojectPath)
@@ -1007,6 +1034,7 @@ export function readSkillFacts() {
     cargoVersion,
     cargoLockVersion,
     tsSdkVersion,
+    mcpVersion,
     pySdkVersion,
     skills,
     agentsSkillsFiles,

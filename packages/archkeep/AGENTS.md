@@ -44,6 +44,8 @@ Two halves of one gap, and the second is why the layering below exists.
 ```
 index.mjs              the engine entry — re-exports discovery + judgment
 nx.mjs                 Nx plugin entry (`./nx` subpath) — re-export only
+commands.mjs           command-layer entry (`./commands` subpath) — re-export
+                       only; what `packages/archkeep-mcp` composes
 cli.mjs, lsp.mjs       executables (bin entries in package.json)
 src/options.mjs        what a workspace may tell this tool about itself
 src/analysis/          which import is written where, and what it resolves to

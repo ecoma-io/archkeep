@@ -12,6 +12,8 @@ reference:
   that reads from `moon project-graph`
 - [VS Code integration](../integrations/vscode.md) — the editor extension that
   hosts the language server
+- [MCP integration](../integrations/mcp.md) — the agent capability server: the
+  engine's commands as structured tools over stdio
 
 ## The provider seam
 

@@ -8,9 +8,9 @@ name: Release
 # tags, and the tag is what publishes.
 #
 # One component releases from here, to four registries and one release page.
-# npm serves TWO of this repository's packages — the engine and the
-# AssemblyScript rule SDK — from one token, in two jobs, because they fail
-# independently and a shared job would hide one behind the other. Neither ships
+# npm serves THREE of this repository's packages — the engine, the MCP server
+# and the AssemblyScript rule SDK — from one token, in three jobs, because
+# they fail independently and a shared job would hide one behind the other. Neither ships
 # an asset: an Nx plugin reaches a workspace through its `node_modules` or it
 # does not reach it at all, and the SDK is source a consumer's own `asc`
 # compiles, so neither release carries one. litmus, the sibling this workflow
@@ -255,6 +255,7 @@ jobs:
             .claude-plugin/marketplace.json \
             .codex-plugin/plugin.json \
             packages/archkeep/package.json \
+            packages/archkeep-mcp/package.json \
             packages/archkeep-vscode/package.json \
             packages/archkeep-rule-sdk-ts/package.json
 
@@ -290,7 +291,7 @@ jobs:
         run: |
           if printf '%s' "$PATHS_RELEASED" | grep -qF '"."' && [ "$GRAPH_RELEASED" != "true" ]; then
             echo "release-please created a release for the root, but the output"
-            echo "both publish jobs steer on did not report it:"
+            echo "every publish job steers on did not report it:"
             echo "  paths_released = $PATHS_RELEASED"
             echo "  release_created read '$GRAPH_RELEASED'"
             echo ""
@@ -501,6 +502,98 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
         run: npm publish --provenance --access public
+
+  publish-mcp:
+    name: Publish the MCP server to npm
+    # The third npm package this repository ships — the agent capability
+    # interface over the engine's command layer. A SEPARATE job for the reason
+    # every destination is its own job: it fails independently, and a step
+    # appended to another job would bury its failure behind a package that
+    # already shipped.
+    #
+    # The gate expression is the npm job's, verbatim — see the comment there;
+    # a divergence between the publish jobs is a release that ships to one
+    # destination and not another. Like the TS SDK's job it carries no token
+    # guard: it publishes with the same secret the engine's job just used in
+    # this same run.
+    #
+    # The MCP package versions with the engine by decision, not convenience:
+    # it composes the engine's own command functions in-process through the
+    # `./commands` subpath, so "the MCP face for engine 0.x" must be a fact a
+    # consumer reads off the number — release-please writes both via
+    # extra-files, and check-skills holds the pairing on every pull request.
+    # Its pre-publish proof is the package's own suite, which spawns the real
+    # bin and drives the MCP handshake over real pipes (`src/mcp.integration.test.mjs`)
+    # — a server that cannot start cannot be unpublished away.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Same provenance attestation the engine's publish mints, for the same
+      # reason: the registry records which workflow, at which commit, built it.
+      id-token: write
+    steps:
+      # The tag, not the branch, for the same reason every publish job states:
+      # `main` may have moved, and the tarball must hold the tagged bytes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      # `registry-url` is what writes the .npmrc that reads NODE_AUTH_TOKEN
+      # below. Without it the token is set and silently unused, and the publish
+      # fails as unauthenticated — the reason every npm job here restates it.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+
+      # The package's own suite — including the spawn test that drives the
+      # shipped `mcp.mjs` bin through a real initialize/tools/call handshake —
+      # runs in CI; this job runs the pack-level proof instead, because the
+      # question it owns is about the TARBALL:
+      #
+      # The manifest declares `"@ecoma-io/archkeep": "workspace:*"`, and
+      # `pnpm pack` rewrites that protocol to the concrete version while
+      # `npm pack` — which a bare `npm publish` runs — leaves it verbatim,
+      # because the repository root has no npm `workspaces` field for npm to
+      # read. Measured on this tree: the npm-packed tarball carried
+      # `workspace:*` byte for byte. So this job packs with pnpm, guards the
+      # packed manifest's dependency on the spot, and publishes THE TARBALL —
+      # the same "verified bytes are the published bytes" bargain
+      # `verify-rule-sdk-ts-package.mjs` holds for the TS SDK. A version that
+      # cannot be unpublished cannot be published unproven.
+      - name: Prove the packed server works outside this workspace
+        run: node scripts/verify-mcp-package.mjs
+
+      - name: Pack the tarball and prove its dependency is a real version
+        working-directory: packages/archkeep-mcp
+        run: |
+          pnpm pack
+          tgz="$(ls ecoma-io-archkeep-mcp-*.tgz)"
+          dep="$(tar -xOf "$tgz" package/package.json | node -e \
+            'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const m=JSON.parse(s);console.log(m.dependencies["@ecoma-io/archkeep"] ?? "?")})')"
+          if [ -z "$dep" ] || [ "${dep#workspace:}" != "$dep" ]; then
+            echo "$tgz depends on '@ecoma-io/archkeep' as '$dep' — a protocol no"
+            echo "registry consumer can install. pnpm pack should have written the"
+            echo "concrete version; publishing this tarball would ship the manifest"
+            echo "that state describes. Not publishing."
+            exit 1
+          fi
+          echo "packed $tgz, depending on @ecoma-io/archkeep $dep"
+
+      - name: Publish the verified tarball
+        working-directory: packages/archkeep-mcp
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
+        run: npm publish ecoma-io-archkeep-mcp-*.tgz --provenance --access public
 
   publish-ts-sdk:
     name: Publish the TypeScript rule SDK to npm
