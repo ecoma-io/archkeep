@@ -329,6 +329,7 @@ describe("evaluate", () => {
     cargoVersion: "0.4.0",
     cargoLockVersion: "0.4.0",
     tsSdkVersion: "0.4.0",
+    mcpVersion: "0.4.0",
     pySdkVersion: "0.4.0",
     agentsSkillsFiles: { "arch-context/SKILL.md": "canonical" },
     skillsFiles: { "arch-context/SKILL.md": "canonical" },
@@ -584,6 +585,15 @@ describe("evaluate", () => {
       result.failures.some((f) => f.includes("Cargo.lock") && f.includes("0.3.0")),
       "a lock left behind by the bump must fail the chain",
     );
+  });
+
+  it("fails when the MCP package version does not match package version", () => {
+    const result = evaluate({
+      ...baseFacts,
+      mcpVersion: "1.0.1",
+      skills: allGood(),
+    });
+    assert.ok(result.failures.some((f) => f.includes("archkeep-mcp") && f.includes("1.0.1")));
   });
 
   it("fails when the TS SDK package version does not match package version", () => {

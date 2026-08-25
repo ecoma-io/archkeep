@@ -18,7 +18,11 @@ workspace.
 checker and a language server, one analysis behind three faces.
 `packages/archkeep-vscode/` is a client of it and holds no analysis at all; it
 ships to a marketplace rather than to npm, and it deliberately does not bundle
-the server. The four `packages/archkeep-rule-sdk-*/` are bindings rather than
+the server. `packages/archkeep-mcp/` is the agent capability client: it exposes
+the engine's own command layer (`./commands` subpath, in-process) as eight MCP
+tools, read-only beside a `propose` that never decides — a client of the
+engine the way the VS Code one is, never a second implementation of it.
+The four `packages/archkeep-rule-sdk-*/` are bindings rather than
 engines: each is one language's typed way to author a custom rule and build it
 to the wasm the engine already runs, so none of them holds analysis either and
 none may grow a second opinion about what a verdict means — one contract, four
@@ -107,6 +111,8 @@ scripts/
 packages/
   archkeep/                 the plugin, the checker, the language server
   archkeep-vscode/          the VS Code client for that server
+  archkeep-mcp/             the MCP server — the engine's commands as agent
+                            tools, composing them through ./commands
   archkeep-rule-sdk-rust/   the four custom-rule SDKs — one contract, four
   archkeep-rule-sdk-go/     spellings. Each ships a reference rule, five shared
   archkeep-rule-sdk-ts/     evidence fixtures, and a committed `.wasm` with its

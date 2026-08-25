@@ -80,6 +80,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [nx.md](integrations/nx.md)         | Nx integration registration, options, graph edges, affected, workspaceLayout |
 | [moon.md](integrations/moon.md)     | Moon integration: workspace detection, graph reading, tag format             |
 | [vscode.md](integrations/vscode.md) | VS Code extension: settings, routing, installation                           |
+| [mcp.md](integrations/mcp.md)       | MCP server: the eight agent tools, the three-state verdict, authority bounds |
 
 ## Agent skills
 

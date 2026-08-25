@@ -8,6 +8,7 @@
  * below argues the order, each arm, and what `profile`/`source` name.
  */
 
+import { existsSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
@@ -116,6 +117,62 @@ export async function resolvePolicy(options, commandContext, cwd) {
     );
   }
   return resolved;
+}
+
+/**
+ * The policy load for a command that DESCRIBES the workspace rather than
+ * judging it — `graph`'s own arm, held here beside the ladder it wraps so
+ * every future descriptive surface (`./graph.mjs`'s MCP caller among them)
+ * answers from one copy of the "absent default law" decision rather than
+ * re-deriving it.
+ *
+ * What is skipped is the load of a file that is NOT THERE. A boundary config
+ * that exists and will not load still fails the run, because an absent law
+ * and a broken one must not report alike; a `--config`, a profile, and an
+ * inline `archkeep.json` policy are explicit declarations and stay loud.
+ * Every command that JUDGES against the law keeps loading it unconditionally
+ * through `resolvePolicy` — making it optional for those would turn a missing
+ * file into a silent no-law run.
+ *
+ * `boundaryConfigDeclared` is what keeps this guard to the un-overridden
+ * default, and it is load-bearing rather than belt-and-braces. The name
+ * alone cannot answer it: `commandContext.options.boundaryConfig` is a
+ * string BOTH when it came from `../options.mjs`'s `DEFAULT_OPTIONS` and
+ * when the consumer WROTE it into `nx.json`'s plugin options or
+ * `archkeep.json`, and a workspace is free to declare the convention
+ * filename itself, so comparing against the default would still read a
+ * deliberate declaration as an assumption. Measured on a committed native
+ * tree whose `archkeep.json` declares a `boundaryConfig` that file does not
+ * contain: skipping on name alone made `graph` exit 0 with no `policy` field
+ * — byte-identical to a workspace that never had a law — where the same tree
+ * with that file present but unparseable exited 3. A law someone named and
+ * then renamed or deleted is exactly the case that must stay loud, so the
+ * provenance survives the options layer instead
+ * (`../options.mjs`'s `resolveOptions`,
+ * `../providers/native/model.mjs`'s `normalizeNativeModel`, and
+ * `./context.mjs`'s three branches carry it; Moon answers `false` because it
+ * has no table to declare one in).
+ *
+ * @param {{config: string|null}} options The command's own parsed flags.
+ * @param {object} commandContext From `resolveCommandContext`.
+ * @param {string} cwd The process's working directory a relative `--config`
+ *   resolves against.
+ * @returns {Promise<{config: object|null, profile: string|null, source: string|null}>}
+ *   `null` config only on the absent-un-overridden-default arm.
+ * @throws {Error} through `resolvePolicy` for every law that is named but
+ *   cannot be loaded.
+ */
+export async function resolveDescribedPolicy(options, commandContext, cwd) {
+  const workspaceDefault =
+    !options.config &&
+    !hasProfiles(commandContext.options) &&
+    commandContext.options.boundaryConfigDeclared === false &&
+    typeof commandContext.options.boundaryConfig === "string"
+      ? resolve(commandContext.root, commandContext.options.boundaryConfig)
+      : null;
+  return workspaceDefault !== null && !existsSync(workspaceDefault)
+    ? { config: null, profile: null, source: null }
+    : resolvePolicy(options, commandContext, cwd);
 }
 
 /**

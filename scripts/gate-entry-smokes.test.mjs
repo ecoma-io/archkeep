@@ -22,8 +22,9 @@
 //   - differential-real-trees.mjs / differential-real-trees-child.mjs — a bare
 //     run starts cloning third-party repositories over the network (measured:
 //     it clones before anything else), which no unit suite may do;
-//   - verify-rule-sdk-ts-package.mjs — packs the SDK and installs it into a
-//     throwaway workspace; an install-lane script, not a cheap gate;
+//   - verify-rule-sdk-ts-package.mjs and verify-mcp-package.mjs — pack their
+//     package and install it into a throwaway workspace; install-lane
+//     scripts, not cheap gates;
 //   - push-reformatted-files.mjs — talks to the GitHub API, and its
 //     symlinked-entry loud failure is already pinned by its own colocated
 //     test ("invoked through a symlinked path…"), so a second copy here would

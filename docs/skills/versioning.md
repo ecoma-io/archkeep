@@ -12,6 +12,7 @@ package.json (repository root — what release-please bumps directly)
   = .claude-plugin/plugin.json
   = .claude-plugin/marketplace.json (entry version)
   = .codex-plugin/plugin.json
+  = packages/archkeep-mcp/package.json
   = packages/archkeep-vscode/package.json
   = packages/archkeep-rule-sdk-rust/Cargo.toml ([package] version)
   = packages/archkeep-rule-sdk-ts/package.json
@@ -19,8 +20,8 @@ package.json (repository root — what release-please bumps directly)
       └ packages/archkeep-rule-sdk-rust/Cargo.lock (the archkeep-rule-sdk entry)
 ```
 
-All nine must agree. The root `package.json` is the release-please `"."`
-component — the one file it bumps directly; the other eight are copies of it
+All ten must agree. The root `package.json` is the release-please `"."`
+component — the one file it bumps directly; the other nine are copies of it
 written by `extra-files`.
 
 `Cargo.lock` hangs off the Cargo manifest rather than sitting on the line
@@ -37,6 +38,11 @@ this one chain, so "the SDK for engine 0.x" is a fact a reader takes from the
 number rather than a compatibility matrix. The Go SDK carries no manifest
 version at all — a Go module's version is its git tag, which is the one place
 the release lane speaks for it.
+
+The MCP package is on the chain for the same reason the extension is: it
+composes the engine's own command layer in-process (the `./commands` subpath),
+so one version is what makes the pairing real — "the MCP face for engine 0.x"
+is a fact a consumer reads off the number, not a compatibility matrix.
 
 The `arch-*` skills carry **no version** by decision. A consumer's skills are
 installed with the plugin that ships them, so the version that matters is the
@@ -60,14 +66,16 @@ version is the pairing.
    stand in for the crate's own number
 7. `packages/archkeep-rule-sdk-ts/package.json` version matches the package
    version
-8. `packages/archkeep-rule-sdk-python/pyproject.toml`'s `[project]` version
+8. `packages/archkeep-mcp/package.json` version matches the package version —
+   the agent capability interface, versioned with the engine it composes
+9. `packages/archkeep-rule-sdk-python/pyproject.toml`'s `[project]` version
    matches the package version — the same section-scoped TOML read as the
    Cargo check
-9. `packages/archkeep-rule-sdk-rust/Cargo.lock` records that version for the
-   `archkeep-rule-sdk` entry — read out of the `[[package]]` array by name,
-   because every entry there carries the same header and a header-only match
-   would report the first dependency's version as the crate's
-10. No host-specific frontmatter field has leaked into canonical skills —
+10. `packages/archkeep-rule-sdk-rust/Cargo.lock` records that version for the
+    `archkeep-rule-sdk` entry — read out of the `[[package]]` array by name,
+    because every entry there carries the same header and a header-only match
+    would report the first dependency's version as the crate's
+11. No host-specific frontmatter field has leaked into canonical skills —
     checked at any depth of parsed frontmatter, so a nested block cannot
     smuggle one past the top-level filter
 
@@ -88,6 +96,7 @@ the `extra-files` configuration in `release-please-config.json` also bumps:
 - `.claude-plugin/marketplace.json` (`$.plugins[0].version`)
 - `.codex-plugin/plugin.json` (`$.version`)
 - `packages/archkeep/package.json` (`$.version`)
+- `packages/archkeep-mcp/package.json` (`$.version`)
 - `packages/archkeep-vscode/package.json` (`$.version`)
 - `packages/archkeep-rule-sdk-rust/Cargo.toml` (`$.package.version`, the TOML
   updater)

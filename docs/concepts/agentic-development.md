@@ -68,6 +68,23 @@ A consumer that wants to script against the result — an agent, a CI gate, a
 pre-commit hook — reads the structured output. A developer at a terminal reads
 the text. Both carry the same verdict; only the rendering differs.
 
+## The MCP face: capabilities for agents that speak it
+
+For an agent whose host implements the
+[Model Context Protocol](https://modelcontextprotocol.io), the same questions
+have a native interface: the `@ecoma-io/archkeep-mcp` server exposes the
+commands above as structured tools — `archkeep_context`, `archkeep_check`,
+`archkeep_impact`, `archkeep_explain`, and four more — returning the same
+versioned envelope `--format json` renders
+([integrations/mcp.md](../integrations/mcp.md) owns the surface and its
+authority bounds).
+
+MCP is a capability interface, not a workflow: the tools answer questions, and
+the `arch-*` skills remain where WHEN and WHY live. An agent with MCP executes
+the skills' workflow through the tools instead of a shell; an agent without it
+runs the CLI. The CLI stays the human and pipeline face either way — same
+engine, same verdicts, three ways in.
+
 ## The agent is a consumer, not an authority
 
 [principles.md](../doctrine/principles.md) states this directly: the constraint

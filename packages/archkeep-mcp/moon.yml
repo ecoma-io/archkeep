@@ -1,0 +1,25 @@
+# Archkeep MCP — the agent capability interface over the engine's commands.
+#
+# Tags use dash separators (type-package, scope-nx) because Moon tags cannot
+# contain colons, the same reason every sibling project does
+# (`../../module-boundaries.config.mjs` argues it once, for the whole tree).
+# `type-package` because this is a published npm unit a consumer installs and
+# runs; `scope-nx` because it is engine toolchain — a sibling face of the CLI
+# and language server, composing the same analysis rather than holding any of
+# its own. The engine is reached through the `@ecoma-io/archkeep` dependency's
+# `./commands` subpath, in-process; nothing here spawns the CLI or parses its
+# text output, which is what keeps one analysis behind every face.
+id: archkeep-mcp
+language: javascript
+layer: library
+stack: backend
+tags:
+  - type-package
+  - scope-nx
+tasks:
+  lint:
+    command: eslint . --max-warnings 0
+  test:
+    command: vitest run
+  typecheck:
+    command: tsc -p tsconfig.json

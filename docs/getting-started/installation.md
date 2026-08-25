@@ -36,18 +36,25 @@ structured:
 
 ## What the package provides
 
-Three entry points, one engine behind them:
+Three entry points, one engine behind them — plus a fourth seam for
+integrations:
 
-| entry                   | how it runs                  | what it does                                                  |
-| ----------------------- | ---------------------------- | ------------------------------------------------------------- |
-| `archkeep check`        | CLI                          | Analyze the tree, report violations, exit 0/1/2/3             |
-| `archkeep-lsp`          | Language server over stdio   | Diagnostics at the edit, in any LSP client                    |
-| `@ecoma-io/archkeep/nx` | Nx integration, in `nx.json` | Polyglot edges in the project graph, on every `nx` invocation |
+| entry                         | how it runs                  | what it does                                                                      |
+| ----------------------------- | ---------------------------- | --------------------------------------------------------------------------------- |
+| `archkeep check`              | CLI                          | Analyze the tree, report violations, exit 0/1/2/3                                 |
+| `archkeep-lsp`                | Language server over stdio   | Diagnostics at the edit, in any LSP client                                        |
+| `@ecoma-io/archkeep/nx`       | Nx integration, in `nx.json` | Polyglot edges in the project graph, on every `nx` invocation                     |
+| `@ecoma-io/archkeep/commands` | In-process, for integrations | The CLI's command functions, for a caller that owns its own output and exit codes |
 
 The CLI commands are documented individually under [../usage/](../usage/), and
 [../reference/cli.md](../reference/cli.md) is the full command reference. This
 page covers
 getting the package onto your machine; the next two pages cover using it.
+
+A fourth face exists for AI agents: `@ecoma-io/archkeep-mcp` exposes the
+engine's commands as structured MCP tools, for agents whose host speaks the
+Model Context Protocol — a separate optional install, described in
+[../integrations/mcp.md](../integrations/mcp.md).
 
 ## Next
 

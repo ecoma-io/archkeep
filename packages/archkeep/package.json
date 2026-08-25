@@ -28,12 +28,14 @@
   "exports": {
     ".": "./index.mjs",
     "./nx": "./nx.mjs",
+    "./commands": "./commands.mjs",
     "./presets/*.json": "./presets/*.json",
     "./package.json": "./package.json"
   },
   "files": [
     "index.mjs",
     "nx.mjs",
+    "commands.mjs",
     "cli.mjs",
     "lsp.mjs",
     "src/",

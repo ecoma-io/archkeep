@@ -1,0 +1,53 @@
+{
+  "name": "@ecoma-io/archkeep-mcp",
+  "version": "0.14.0",
+  "description": "The Archkeep MCP server — the engine's commands as structured agent capabilities, over stdio",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "architecture",
+    "enforcement",
+    "module-boundaries",
+    "agent",
+    "nx",
+    "monorepo"
+  ],
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "archkeep-mcp": "mcp.mjs"
+  },
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "mcp.mjs",
+    "src/",
+    "!src/**/*.test.mjs",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node mcp.mjs"
+  },
+  "dependencies": {
+    "@ecoma-io/archkeep": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "^4.4.3"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "homepage": "https://github.com/ecoma-io/archkeep/tree/main/packages/archkeep-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/ecoma-io/archkeep/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ecoma-io/archkeep.git",
+    "directory": "packages/archkeep-mcp"
+  }
+}

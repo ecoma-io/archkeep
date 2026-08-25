@@ -1,0 +1,16 @@
+// The `typecheck` target's program, same shape and same reasons as
+// ../archkeep/tsconfig.json — the argument for each option lives there once
+// rather than twice. `skipLibCheck` matters more here than anywhere else in
+// this repository: the MCP SDK and zod ship their own declaration files, and
+// this target judges this package's JSDoc, not theirs.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    "target": "es2022",
+    "skipLibCheck": true
+  },
+  "include": ["**/*.mjs"]
+}

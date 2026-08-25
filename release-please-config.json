@@ -33,6 +33,11 @@
         },
         {
           "type": "json",
+          "path": "packages/archkeep-mcp/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
           "path": "packages/archkeep-vscode/package.json",
           "jsonpath": "$.version"
         },

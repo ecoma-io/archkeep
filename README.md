@@ -66,16 +66,16 @@ Ten minutes end to end, most of it spent deciding what your tags mean:
 
 ## Documentation
 
-|                                                                                                            |                                                                        |
-| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| [**Getting started**](docs/getting-started/installation.md)                                                | Install, configure, first violation                                    |
-| [**Doctrine**](docs/doctrine/north-star.md) · [**Roadmap**](docs/doctrine/roadmap.md)                      | The direction, and the staged path (1.x governance → 2.x intelligence) |
-| [Concepts](docs/concepts/architecture.md)                                                                  | The model: graph, boundaries, drift, evidence, agents                  |
-| [Usage](docs/usage/checking.md) · [CI](docs/usage/ci.md)                                                   | Running it, and reading its answers                                    |
-| [Reference](docs/reference/cli.md)                                                                         | Every command, flag, exit code, schema and parse limit                 |
-| [Nx](docs/integrations/nx.md) · [Moon](docs/integrations/moon.md) · [VS Code](docs/integrations/vscode.md) | The integrations at the edge                                           |
-| [Agent skills](docs/skills/overview.md)                                                                    | The architecture-aware agent protocol                                  |
-| [Development](docs/development/architecture.md)                                                            | For contributors: how it works inside                                  |
+|                                                                                                                                              |                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [**Getting started**](docs/getting-started/installation.md)                                                                                  | Install, configure, first violation                                    |
+| [**Doctrine**](docs/doctrine/north-star.md) · [**Roadmap**](docs/doctrine/roadmap.md)                                                        | The direction, and the staged path (1.x governance → 2.x intelligence) |
+| [Concepts](docs/concepts/architecture.md)                                                                                                    | The model: graph, boundaries, drift, evidence, agents                  |
+| [Usage](docs/usage/checking.md) · [CI](docs/usage/ci.md)                                                                                     | Running it, and reading its answers                                    |
+| [Reference](docs/reference/cli.md)                                                                                                           | Every command, flag, exit code, schema and parse limit                 |
+| [Nx](docs/integrations/nx.md) · [Moon](docs/integrations/moon.md) · [VS Code](docs/integrations/vscode.md) · [MCP](docs/integrations/mcp.md) | The integrations at the edge                                           |
+| [Agent skills](docs/skills/overview.md)                                                                                                      | The architecture-aware agent protocol                                  |
+| [Development](docs/development/architecture.md)                                                                                              | For contributors: how it works inside                                  |
 
 Full index: [**docs/**](docs/README.md). The package's own reference, which
 stands alone as the npm landing page, is [here](packages/archkeep/README.md).
