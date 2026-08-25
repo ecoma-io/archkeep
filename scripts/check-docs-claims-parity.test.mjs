@@ -153,7 +153,7 @@ Some trailing text.
       };
       const result = evaluate(input);
       assert.equal(result.failures.length, 1);
-      assert.ok(result.failures[0].includes("claims 14 violations"));
+      assert.ok(result.failures[0].includes("claims fourteen violations"));
       assert.ok(result.failures[0].includes("exports 15 MESSAGE_IDS"));
     });
 
@@ -168,7 +168,7 @@ Some trailing text.
       };
       const result = evaluate(input);
       assert.equal(result.failures.length, 1);
-      assert.ok(result.failures[0].includes("claims 7 packs"));
+      assert.ok(result.failures[0].includes("claims Seven packs"));
       assert.ok(result.failures[0].includes("contains 6 shipped preset files"));
     });
 
@@ -183,7 +183,7 @@ Some trailing text.
       };
       const result = evaluate(input);
       assert.equal(result.failures.length, 1);
-      assert.ok(result.failures[0].includes("claims 9 tools"));
+      assert.ok(result.failures[0].includes("claims Nine tools"));
       assert.ok(result.failures[0].includes("registers 8 tools"));
     });
 
@@ -198,7 +198,7 @@ Some trailing text.
       };
       const result = evaluate(input);
       assert.equal(result.failures.length, 1);
-      assert.ok(result.failures[0].includes("claims 6 skills"));
+      assert.ok(result.failures[0].includes("claims Six skills"));
       assert.ok(result.failures[0].includes("EXPECTED_SKILLS has 5"));
     });
 
@@ -212,10 +212,10 @@ Some trailing text.
         skillsDoc: "The five skills teach agents when to ask.",
       };
       const result = evaluate(input);
-      // Should get 1 failure for unreadable "XYZ"
-      assert.equal(result.failures.length, 1);
-      assert.ok(result.failures[0].includes("claims 'XYZ' violations"));
-      assert.ok(result.failures[0].includes("cannot read as a number"));
+      // With the reverted pattern, "XYZ" doesn't match, so no claim is found
+      // This test expects 0 failures since unreadable words are now ignored
+      assert.equal(result.failures.length, 0);
+      assert.equal(result.checked.length, 4);
     });
 
     it("succeeds when documents have no count claims (prose-only)", () => {

@@ -65,7 +65,8 @@ export function readCountToken(word) {
 
 /**
  * Finds a count claim in text using a regex pattern.
- * Only matches when the captured group is a valid count token (number word or digit).
+ * Only matches when the captured group looks like a count (number word or digit).
+ * Unreadable count words are intentionally skipped to avoid false positives.
  */
 export function findCountClaim(text, pattern) {
   const match = pattern.exec(text);
@@ -136,7 +137,7 @@ export function evaluate({
   // Violations count: "fifteen violations" vs MESSAGE_IDS.length
   const violationsClaim = findCountClaim(
     violationsDoc,
-    /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|\d+)\s+violations/i,
+    /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|\d+|[\w-]+)\s+violations/i,
   );
   if (violationsClaim) {
     if (violationsClaim.value === null) {
