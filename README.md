@@ -50,6 +50,35 @@ everywhere. The measurement behind the claim is in
 - **Agent protocol** — five `arch-*` skills that make a coding agent a consumer
   of the verdict, never its authority.
 
+## In action
+
+**Your declared intent:**
+
+```json
+{
+  "allowed": [
+    { "from": "layer:domain", "to": "layer:application" },
+    { "from": "layer:application", "to": "layer:domain" }
+  ],
+  "forbidden": [{ "from": "layer:domain", "to": "layer:infrastructure" }]
+}
+```
+
+**The verdict:**
+
+```bash
+$ archkeep check
+src/orders/api/order-service.ts:3:7 — error: forbidden dependency
+  ❌ layer:domain → layer:infrastructure
+
+  Dependency chain: order-service → infrastructure-client
+  Intent: layer:domain may not depend on layer:infrastructure
+```
+
+One rule, enforced everywhere. The same command runs on your CI,
+your agent invokes it before proposing changes, and `--format json`
+feeds your governance dashboard. Architecture as code — enforced as law.
+
 ## Get started
 
 ```bash

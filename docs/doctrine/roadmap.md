@@ -61,10 +61,10 @@ A new reader should find these capabilities described as present, not promised.
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer. ([reference/exit-codes.md](../reference/exit-codes.md))
-- **Seventeen commands — `check`, `graph`, `diff`, `discover`, `drift`,
-  `reconcile`, `waivers`, `fitness`, `history`, `health`, `report`, `debt`,
-  `impact`, `explain`, `context`, `provenance`, `adr`** — each with output a
-  script or an agent can consume without parsing prose. `history` records the
+- **Eighteen commands — `check`, `graph`, `diff`, `delta`, `discover`,
+  `drift`, `reconcile`, `waivers`, `fitness`, `history`, `health`, `report`,
+  `debt`, `impact`, `explain`, `context`, `provenance`, `adr`** — each with
+  output a script or an agent can consume without parsing prose. `history` records the
   architecture's evolution across captured snapshots — the deterministic half
   of "how it got here" — `debt` ages the workspace's waivers, gaps and
   drift across that same record, and `report` composes health, waivers,

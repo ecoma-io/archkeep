@@ -21,8 +21,8 @@ guess. Neither present exits 3 too, naming what it looked for.
 
 The rest of this page covers the options each provider accepts. The boundary
 law itself — `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`,
-`fitness` and `customRules`, the five top-level keys every dialect but ESLint's
-recognizes — is the same table regardless of provider;
+`fitness`, `customRules`, and `coverage`, the six top-level keys every dialect
+but ESLint's recognizes — is the same table regardless of provider;
 [policy-schema.md](../reference/policy-schema.md) is its reference and
 [policies.md](../concepts/policies.md) is the dialect reference.
 
@@ -93,20 +93,27 @@ file — there is no `plugins[].options` table to nest them under. The full
 ```
 
 `boundaryConfig` can also be an **inline object** — the boundary law directly,
-rather than a filename pointing at it. Its keys are the `.json` dialect's five —
-`depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, `fitness`,
-`customRules` — validated by the same check a separate file goes through. Every face reads it,
-the language server included: it watches `archkeep.json` itself, so editing an
-inline law re-diagnoses open files just as editing a policy file does.
+rather than a filename pointing at it. Its keys are the native dialect's five
+— `depConstraints`, `moduleBoundaryOptions`, `boundarySuppressions`, `fitness`,
+`customRules` — validated by the same check a separate file goes through. The
+`coverage` key is refused in native mode. Every face reads it, the language
+server included: it watches `archkeep.json` itself, so editing an inline law
+re-diagnoses open files just as editing a policy file does.
 
 ## CLI flags
 
-| flag             | commands that accept it                                                                                                                                                      | meaning                                                                                               |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `--format`       | `check`, `graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`, `fitness`, `history`, `health`, `report`, `debt`, `impact`, `explain`, `context`, `provenance`, `adr` | `text` (default), `sarif` (check only), or `json` (versioned envelope)                                |
-| `--output`       | all commands                                                                                                                                                                 | Write the report to a file instead of stdout                                                          |
-| `--config`       | `check`, `diff`, `waivers`, `fitness`, `history`, `health`, `report`, `debt`, `impact`, `explain`, `context`                                                                 | Read the boundary law from this file instead of the workspace's `boundaryConfig`                      |
-| `--evidence-out` | `check`                                                                                                                                                                      | Also write each declared custom rule's evidence bundle into this existing directory, as `<rule>.json` |
+All commands share the same CLI flags. For the complete reference with per-command
+details and usage examples, see [CLI reference → Flags](../reference/cli.md#flags).
+
+The flags you'll use most often:
+
+- **`--format`** — Choose output format: `text` (default), `sarif` (for GitHub code
+  scanning, `check` and `delta` only), or `json` (versioned machine-readable envelope)
+- **`--output <file>`** — Write the report to a file instead of stdout
+- **`--config <file>`** — Read the boundary law from a specific file instead of the
+  workspace's configured one (available on commands that judge against a policy)
+- **`--evidence-out <dir>`** — Also write custom rule evidence bundles (for `check`
+  only, when debugging custom rules)
 
 `--evidence-out` is `check`'s alone because a custom rule is judged nowhere
 else, and every other command refuses it as an unknown option (exit 2) rather
@@ -114,19 +121,6 @@ than accepting a flag it would ignore. It is a debugging window, not a mode: it
 changes no verdict and no exit code, and it never writes nothing silently — a
 policy declaring no `customRules` and a path-scoped run each say so on stderr
 ([custom-rules.md](custom-rules.md), [cli.md](../reference/cli.md)).
-
-`--format sarif` is only available for `check`; every other command produces
-`text` or `json` only. `diff` accepts `--config` because rule-impact analysis
-depends on which boundary law is in effect. `history` accepts it because a
-captured snapshot records the fingerprint of the law in effect. `waivers`,
-`fitness`, `health` and `debt` accept it because the surface they describe is
-the one the law in effect carries; `report` accepts it for the same reason and
-resolves it once for every section of the document it composes. `impact`
-accepts it for constraint context.
-`explain` and `context` accept it because the judgment and the matching rows
-both depend on which constraint table governs. `graph`, `discover`, `drift`,
-`reconcile`, `provenance`, and `adr` take no `--config` because they describe
-structure, provenance, or the decision registry — not any boundary law.
 
 ## What is not configurable
 

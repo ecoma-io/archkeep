@@ -13,7 +13,54 @@ the way — [architecture-authority.md](doctrine/architecture-authority.md) — 
 is, what it is not, and the line its neighbours may not cross — and
 [roadmap.md](doctrine/roadmap.md) — the staged path there, by major version.
 
-## Getting started
+---
+
+## By intent
+
+**I want to use Archkeep**
+
+- [Install](getting-started/installation.md) — install, quick start, first project
+- [First policy](getting-started/first-policy.md) — write constraints, see a violation
+- [Checking in CI](usage/ci.md) — automated enforcement with SARIF
+- [Agent skills](skills/overview.md) — coding agent protocol
+
+**I want to understand Archkeep**
+
+- [Why it exists](doctrine/why.md) — the problem and evidence
+- [Architecture model](concepts/architecture.md) — engine, faces, layers
+- [Graph](concepts/graph.md) — projects, edges, deterministic snapshots
+- [Boundaries](concepts/boundaries.md) — layers, scopes, constraints, violations
+- [Drift](concepts/drift.md) — intent vs observed architecture
+- [Governance lifecycle](concepts/governance-lifecycle.md) — intent → check → evidence
+- [Agentic development](concepts/agentic-development.md) — agents as consumers
+
+**I want to integrate Archkeep**
+
+- [Nx](integrations/nx.md) — registration, graph edges, affected, workspaceLayout
+- [Moon](integrations/moon.md) — tags, providers, conventions
+- [VS Code](integrations/vscode.md) — language server, settings
+- [MCP](integrations/mcp.md) — eight tools for coding agents
+- [Agent skills](skills/overview.md) — when agents ask before changing code
+
+**I want to extend Archkeep**
+
+- [Custom rules](concepts/custom-rules.md) — WASM rules in your language
+- [Add a language](development/adding-a-language.md) — analyzer contract
+- [Add integration](development/adding-integration.md) — extension points
+- [Development architecture](development/architecture.md) — internals and testing
+- [Testing](development/testing.md) — suites, coverage, differential
+
+**I need exact reference**
+
+- [CLI reference](reference/cli.md) — commands, flags, exit codes
+- [Configuration](reference/configuration.md) — plugins, native, profiles
+- [Policy schema](reference/policy-schema.md) — every table key
+- [Exit codes](reference/exit-codes.md) — 0/1/2/3 contract
+- [JSON output](reference/json-output.md) — schemaVersion 2 envelope
+- [Languages](reference/languages.md) — parse limits per language
+- [Violations](reference/violations.md) — fifteen violation types
+
+---## Getting started
 
 | page                                                                   | what it answers                                                 |
 | ---------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -54,6 +101,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                                      |
 | [profiles.md](usage/profiles.md)               | Enforcing a named profile: the option, `--config`, loud failures                         |
 | [presets.md](usage/presets.md)                 | The six shipped policy packs, the tags each expects, and how to adopt one                |
+| [provenance.md](usage/provenance.md)           | The `provenance` command: governance row schema and run origin                           |
 | [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph                         |
 | [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis              |
 | [delta.md](usage/delta.md)                     | The `delta` command: violations classified between a captured baseline and head          |
@@ -63,6 +111,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [health.md](usage/health.md)                   | The `health` command: per-metric verdicts, trends, and the status contract               |
 | [report.md](usage/report.md)                   | The `report` command: one governance document — how healthy the architecture is, and why |
 | [debt.md](usage/debt.md)                       | The `debt` command: the architecture-debt ledger across snapshots                        |
+| [discover.md](usage/discover.md)               | The `discover` command: observed architecture and candidate proposals                    |
 | [reconcile.md](usage/reconcile.md)             | The `reconcile` command: the model scored element by element, with proposed edits        |
 | [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context                            |
 | [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained                       |
@@ -72,6 +121,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [migration.md](usage/migration.md)             | Bringing an existing repository under governance, step by step                           |
 | [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning                            |
 | [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look                                 |
+| [waivers.md](usage/waivers.md)                 | The `waivers` command: term-bound suppressions and permanent suppressions                |
 
 ## Integrations
 
@@ -144,7 +194,7 @@ decided rather than summarized into them.
 | [architecture.md](development/architecture.md)             | One check, end to end, and why the layers are cut where they are    |
 | [adding-a-language.md](development/adding-a-language.md)   | The full path for a new language, in the order that keeps it honest |
 | [adding-integration.md](development/adding-integration.md) | How a new integration extends the core, and the contract it holds   |
-| [repository.md](development/repository.md)                 | The six packages, plain ESM, gate scripts, CI                       |
+| [repository.md](development/repository.md)                 | The seven packages, plain ESM, gate scripts, CI                     |
 | [release.md](development/release.md)                       | How a version reaches the people who use it                         |
 | [testing.md](development/testing.md)                       | Which suite proves what, and which failure each tier is for         |
 
@@ -172,7 +222,7 @@ allowed to say it". That table:
 | `docs/usage/`                                                                   | How a consumer runs it and reads its answers                                                                                                                                                                                                     |
 | [`docs/usage/migration.md`](usage/migration.md)                                 | The onboarding ORDER: observe → propose → review → write back → converge → enforce, and which step is allowed to decide what. Each step's detail stays with the page that owns the command                                                       |
 | [`docs/usage/presets.md`](usage/presets.md)                                     | The shipped policy packs: what each style enforces, the tag vocabulary it expects, the two ways to consume one, and why changing a pack's rows is a breaking change                                                                              |
-| `docs/integrations/`                                                            | The provider and editor integrations at the edge — Nx, Moon, and the VS Code extension                                                                                                                                                           |
+| `docs/integrations/`                                                            | The provider and editor integrations at the edge — Nx, Moon, the VS Code extension, and the MCP server                                                                                                                                           |
 | `docs/reference/`                                                               | Schemas, exit codes, command reference, language limits, violation catalogue, the profile registry schema, the custom-rule contract                                                                                                              |
 | `docs/reference/discovery.md`                                                   | The `discover` command: flags, exit codes, the additive JSON envelope, the proposal never written                                                                                                                                                |
 | `docs/development/`                                                             | How it works inside, and how to extend it                                                                                                                                                                                                        |
@@ -182,6 +232,7 @@ allowed to say it". That table:
 | `AGENTS.md`                                                                     | The rules a diff is rejected for violating, for humans and agents alike                                                                                                                                                                          |
 | `packages/archkeep/README.md`                                                   | The package's own reference — it is the npm landing page and must stand alone                                                                                                                                                                    |
 | `packages/archkeep-vscode/README.md`                                            | The VS Code client: what it requires, the two settings it has, and the two it refuses                                                                                                                                                            |
+| `packages/archkeep-mcp/README.md`                                               | The MCP server: the eight tools, how they map to CLI commands, and the authority boundary                                                                                                                                                        |
 | `packages/archkeep-rule-sdk-*/README.md`                                        | One per SDK: that language's build story for a custom rule, and its own MEASURED limits. The limits are why an SDK is chosen by reading these rather than from the table in [`docs/usage/custom-rules.md`](usage/custom-rules.md)                |
 | `docs/adr/`                                                                     | The numbered decision records: what was decided, against which alternatives, and what it cost. Immutable once accepted — a decision that changed is a NEW record, never an edit to the old one                                                   |
 | `packages/archkeep/AGENTS.md`                                                   | Layer mechanics: what each layer may know                                                                                                                                                                                                        |

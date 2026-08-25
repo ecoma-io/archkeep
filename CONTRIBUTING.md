@@ -105,6 +105,7 @@ As with Claude Code, no gate depends on any of this — the editor-time hooks in
 | `node scripts/check-skills.mjs`               | The skills gate: shape, citations, and the plugin-manifest version chain                                     |
 | `node scripts/check-docs-links.mjs`           | Fails on any doc reference that cannot resolve — a gone target, a dead anchor                                |
 | `node scripts/check-cli-docs-roster.mjs`      | Holds every documented command count and roster to `COMMAND_NAMES` in cli.mjs                                |
+| `node scripts/check-docs-claims-parity.mjs`   | Validates factual claims in docs against actual code: violations, presets, MCP tools, and skills counts      |
 | `node scripts/check-installation-prereqs.mjs` | Holds installation.md's prerequisites to `packages/archkeep/package.json`                                    |
 | `node scripts/check-contributing-parity.mjs`  | Holds this document's roster and hooks to ci.yml and lefthook.yml — this row is part of what it checks       |
 | `node scripts/check-artifact-hygiene.mjs`     | Fails on a committed `.wasm` carrying its build machine — a home directory, a credential, a tooling variable |
@@ -117,7 +118,7 @@ above:
 moon run ...:lint ...:test ...:typecheck
 ```
 
-**This one needs more than Node.** Four of the six packages are custom-rule
+**This one needs more than Node.** Four of the seven packages are custom-rule
 SDKs, and each runs its targets in its own language's tooling: `cargo` with the
 `clippy` and `rustfmt` components (Rust), `go` with `gofmt` (Go), and `python3`
 (Python). CI installs the Rust components explicitly and gets the rest from the

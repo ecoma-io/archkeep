@@ -145,6 +145,7 @@ jobs:
       - run: node scripts/check-cli-docs-roster.mjs
       - run: node scripts/check-installation-prereqs.mjs
       - run: node scripts/check-contributing-parity.mjs
+      - run: node scripts/check-docs-claims-parity.mjs
 
       # The four committed .wasm artifacts, checked for their own build machine.
       # Gitleaks (analysis.yml) scans text and does not read wasm, and no diff

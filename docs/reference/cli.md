@@ -4,26 +4,26 @@ All commands, all flags, all exit codes in one page. Source: `packages/archkeep/
 
 ## Commands
 
-| command      | positional args             | summary                                                                                            | finds violations |
-| ------------ | --------------------------- | -------------------------------------------------------------------------------------------------- | ---------------- |
-| `check`      | `[<path>...]`               | Check imports against the boundary rules                                                           | yes -- exits 1   |
-| `graph`      | (none)                      | Print the project graph as a deterministic snapshot                                                | no               |
-| `diff`       | `<baseline>`                | Compare two graph snapshots edge by edge                                                           | no               |
-| `delta`      | `<baseline>` \| `--capture` | Classify how boundary violations moved between a captured baseline and head                        | yes -- exits 1   |
-| `drift`      | (none)                      | Compare the observed architecture to the declared intent                                           | no               |
-| `discover`   | (none)                      | Report observed facts, and optionally propose candidates                                           | no               |
-| `reconcile`  | (none)                      | Score the declared intent against the observed architecture, with proposed edits under `--propose` | no               |
-| `fitness`    | (none)                      | Judge every declared fitness function against the workspace; exits 1 on a failing function         | no*              |
-| `waivers`    | (none)                      | List the boundary waivers and permanent suppressions on the table                                  | no               |
-| `history`    | `<dir>`                     | Describe how the architecture evolved across snapshots                                             | no               |
-| `health`     | `[<snapshot-dir>]`          | Describe architecture health metrics and trends                                                    | no               |
-| `report`     | `[<snapshot-dir>]`          | One governance document: how healthy the architecture is, and why                                  | no               |
-| `debt`       | `<dir>`                     | Print the architecture-debt ledger across snapshots                                                | no               |
-| `impact`     | `<project>`                 | List projects that depend on the named project                                                     | no               |
-| `explain`    | `<file:line:column>`        | Explain the judgment for one import site                                                           | no               |
-| `context`    | `<project>`                 | Show the architecture constraints that apply to a project                                          | no               |
-| `provenance` | (none)                      | Describe where this run's facts came from and which rows carry an origin                           | no               |
-| `adr`        | `[<id>]`                    | List recorded architecture decisions and what each binds                                           | no               |
+| command      | positional args                  | summary                                                                                            | finds violations |
+| ------------ | -------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------- |
+| `check`      | `[<path>...]`                    | Check imports against the boundary rules                                                           | yes -- exits 1   |
+| `graph`      | (none)                           | Print the project graph as a deterministic snapshot                                                | no               |
+| `diff`       | `<baseline>`                     | Compare two graph snapshots edge by edge                                                           | no               |
+| `delta`      | `<baseline>` \| `--capture`      | Classify how boundary violations moved between a captured baseline and head                        | yes -- exits 1   |
+| `drift`      | (none)                           | Compare the observed architecture to the declared intent                                           | no               |
+| `discover`   | (none)                           | Report observed facts, and optionally propose candidates                                           | no               |
+| `reconcile`  | (none)                           | Score the declared intent against the observed architecture, with proposed edits under `--propose` | no               |
+| `fitness`    | (none)                           | Judge every declared fitness function against the workspace; exits 1 on a failing function         | no*              |
+| `waivers`    | (none)                           | List the boundary waivers and permanent suppressions on the table                                  | no               |
+| `history`    | `<dir>`                          | Describe how the architecture evolved across snapshots                                             | no               |
+| `health`     | `[<snapshot-dir>]`               | Describe architecture health metrics and trends                                                    | no               |
+| `report`     | `[<snapshot-dir>]`               | One governance document: how healthy the architecture is, and why                                  | no               |
+| `debt`       | `<dir>`                          | Print the architecture-debt ledger across snapshots                                                | no               |
+| `impact`     | `<project>`                      | List projects that depend on the named project                                                     | no               |
+| `explain`    | `<file:line:column>`             | Explain the judgment for one import site                                                           | no               |
+| `context`    | `<project> [--plan [<path>...]]` | Show the architecture constraints that apply to a project                                          | no               |
+| `provenance` | (none)                           | Describe where this run's facts came from and which rows carry an origin                           | no               |
+| `adr`        | `[<id>]`                         | List recorded architecture decisions and what each binds                                           | no               |
 
 \* `fitness` reports no boundary violation, but it is a verdict command, not a
 descriptive one: a declared function that `fail`s makes it exit 1 (and an
@@ -289,6 +289,25 @@ intent, incomplete coverage, or an unreadable/malformed history directory is a
 no-verdict run (exit 3), never an empty ledger — an entry that cannot be read
 or verified must never read as "no debt".
 
+### `provenance`
+
+| flag       | argument       | default | meaning                                         |
+| ---------- | -------------- | ------- | ----------------------------------------------- |
+| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope. |
+| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.   |
+
+No positional arguments. `provenance` takes no `--config` flag — it reads the
+workspace's own declared files.
+
+### `adr [<id>]`
+
+| flag       | argument       | default | meaning                                         |
+| ---------- | -------------- | ------- | ----------------------------------------------- |
+| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope. |
+| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.   |
+
+No `--config` flag — a description of what is recorded needs no boundary law.
+
 - Both `--flag value` and `--flag=value` work.
 - An unknown flag is a usage error (exit 2) rather than treated as a path.
   A typo like `--fromat sarif` would otherwise select no files and report a
@@ -534,58 +553,3 @@ every provider); on Nx and Moon workspaces this is a second analysis pass,
 which costs more than a plain `context` run. The JSON output is deterministic:
 two runs over an unchanged tree produce byte-identical bytes.
 Descriptive.
-
-### `provenance`
-
-| flag       | argument       | default | meaning                                         |
-| ---------- | -------------- | ------- | ----------------------------------------------- |
-| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope. |
-| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.   |
-
-No positional arguments. `provenance` takes no `--config` flag — it reads the
-workspace's own declared files.
-
-`provenance` answers two questions:
-
-- **Repository provenance** — the git commit, remote, and dirty state of the
-  tree this run judged, the same `workspace.provenance` block the JSON envelope
-  already carries for `graph`/`diff`/`drift`/`history`, made a first-class
-  report.
-- **Decision provenance** — for every governance row in the workspace's
-  declared intent (`architecture-intent.json`) and boundary config (the
-  `depConstraints` table), whether the row carries an `origin` block. A row
-  without one is flagged `no origin recorded — cannot attest`, because a row
-  whose decision nobody recorded is indistinguishable from a rule that
-  appeared by editing the file directly.
-
-Descriptive. `provenance` never changes a verdict and never exits 1 — its
-finding is about documentation, not about the architecture. It exits 0 when it
-completes, 3 when a declared file is malformed (a row list built from a file it
-could not read would be a claim about rows that do not exist), and 2 on usage
-error.
-
-### `adr [<id>]`
-
-| flag       | argument       | default | meaning                                         |
-| ---------- | -------------- | ------- | ----------------------------------------------- |
-| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope. |
-| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.   |
-
-With no argument, dumps the whole ADR registry — every recorded architecture
-decision, its status, its supersession chain, and which rule/fitness ids it
-binds. With one argument, answers that id: a `rule:…`/`fitness:…` id is the
-reverse lookup naming which ADRs bind it, and everything else is read as an
-ADR reference — bare `NNN-slug`, or `adr:`-prefixed, the alternate spelling
-`decisionRef` docs recommend — showing the record when it resolves. `adr`
-takes no `--config` — a description of what is recorded needs no boundary law.
-
-Descriptive, never a gate: `adr` never exits 1. Exit 0 (a) when every requested
-ADR reference resolves to a record, or (b) when the request was a reverse
-lookup — `rule:`/`fitness:` ids answer with a sentence naming which ADRs bind
-that id, or `no ADR binds it`; that sentence is exit 0, never a gate verdict.
-Exit 3 when an ADR reference resolves to nothing — an unknown id, a wrong
-case, a truncation, a path-traversal shape, or any other spelling that is not
-a `rule:…`/`fitness:…` reference — or the registry could not be read (a
-`decisionRef` that does not resolve is `unknown`, never clean), and 2 on usage
-error. See [adr.md](adr.md) for the report shapes and the concept in
-[concepts/adr.md](../concepts/adr.md).

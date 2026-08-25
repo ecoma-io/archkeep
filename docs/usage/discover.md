@@ -1,0 +1,116 @@
+# `archkeep discover`
+
+Report the observed architecture, and optionally propose the candidate architecture those observations imply.
+
+```shell
+archkeep discover
+archkeep discover --propose
+archkeep discover --format json
+archkeep discover --propose --format json --output proposal.json
+```
+
+`discover` reports the observed side of the workspace — projects, edges, tags,
+and the coverage a verdict over this tree could trust. With `--propose`, it
+derives the candidate architecture those observations imply: candidate
+components, boundary assertions, tag vocabularies and rules. Every candidate
+carries `proposed: true` and `notAuthoritative: true`, and the command never
+writes to `architecture-intent.json`.
+
+This is a descriptive command: it never exits 1, never mutates the workspace,
+and never hands a candidate the authority of a decision.
+
+## What the observed side contains
+
+The same project model every other command reads — from any provider (Nx, Moon,
+or a native `archkeep.json` workspace):
+
+- **Projects** — name, root directory, type (`"app"` or `"lib"`), and tags
+- **Edges** — the observed project-to-project dependencies, with implicit edges
+  and edges to external packages dropped (the same filter `drift` applies)
+- **Tags** — the union of all project tags, sorted and deduplicated
+- **Coverage** — how many imports, files and projects were analyzed, and which
+  files could not be read
+
+The coverage line leads the report, so the reader knows whether the
+observations are complete before reading any entry.
+
+## `--propose`
+
+`--propose` computes the candidate architecture over the observed observations
+and prints it beneath a banner:
+
+```text
+proposed architecture — NOT authoritative, never written
+```
+
+Four candidate classes, each with its evidence and an uncertainty marker:
+
+- **Components** — top-level directory groupings (`libs`, `apps`, or the tree
+  root itself), proposed because two or more projects share a directory
+- **Boundary assertions** — two shapes:
+  - `component`: "these projects share a role", proposed because they share a
+    directory
+  - `edge`: "source and target belong to different components", proposed because
+    an observed edge crosses the component boundary
+- **Tag vocabulary** — two shapes:
+  - `observed` (high confidence): a tag a strict majority of a component's
+    projects already share
+  - `suggested` (low confidence): an axis implied by the tags' own shape
+    (e.g., `scope:core` and `scope:util` spell a `scope:` axis)
+- **Rules** — the rules that would make the observed separation real:
+  - `noDependency`: one per observed cross-component edge
+  - `boundary`: one per component assertion
+
+Every candidate carries `confidence: "high"|"medium"|"low"` — the entire
+vocabulary, bounded by construction and assigned deterministically from what was
+measured. The report prints a confidence legend with the count of candidates at
+each level.
+
+The proposal is **never written** to `architecture-intent.json`. The evaluator
+is pure — it cannot even express the write. Whether a candidate later becomes
+intent is a governance decision owned elsewhere.
+
+## Exit codes
+
+| code | meaning                                                          |
+| ---- | ---------------------------------------------------------------- |
+| 0    | The observed side was reported, and coverage is complete.        |
+| 2    | Usage error: unknown flag, wrong argument count.                 |
+| 3    | Coverage is incomplete, or the workspace model cannot be loaded. |
+
+`discover` never exits 1. It is descriptive: it answers questions about the
+architecture without claiming a violation.
+
+## Fail-closed
+
+`discover` refuses loudly on every path that cannot reach a verdict, all
+exit-3 class:
+
+- The workspace model cannot be loaded (malformed `archkeep.json`, `nx graph`
+  or `git` failure)
+- The observed side has incomplete coverage (whole files the analyzer could
+  not read)
+- Under `--propose`, incomplete coverage is a **refusal**, not a warning — a
+  proposal over an unread tree would be a fabrication wearing a proposal's
+  name
+- An Nx workspace has polyglot manifests but the plugin is not registered —
+  the graph would silently under-represent the real architecture, and a
+  candidate derived from it would be a guess dressed as a fact
+
+A workspace with zero projects is **not** a refusal: zero observed projects is
+a complete observation, and the honest proposal is the empty one with
+`unknown: true` — nothing observed means nothing to propose, never a fabricated
+candidate set.
+
+## Determinism
+
+`discover` is deterministic: all leaves sort by plain string comparison (never
+`localeCompare`), so two runs over an unchanged tree produce byte-identical
+text and JSON. That is the same promise `graph`'s snapshots make, and it is what
+lets a consumer `diff` two proposals meaningfully — the candidate set changed
+only when the observations changed.
+
+The reference page for the command is
+[`../reference/discovery.md`](../reference/discovery.md). The concept that
+defines the derivation rules and the proposal-only line is
+[`../concepts/discovery.md`](../concepts/discovery.md).
