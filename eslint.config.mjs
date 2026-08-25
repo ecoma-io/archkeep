@@ -29,6 +29,20 @@ export default [
       // Prettier ignores them through `.gitignore`; ESLint reads only its own
       // `ignores`, so the same exclusion is stated here for its own reader.
       ".claude/worktrees/**",
+      // Archkeep test fixtures — temporary directories created inside
+      // packages/archkeep/ to test boundary config loading and differential
+      // analysis. These fixtures contain deliberately incomplete eslint.config.mjs
+      // files that reference the @nx/enforce-module-boundaries rule without
+      // registering the @nx plugin (they are input to loadEslintBoundaryConfig,
+      // not real eslint configs). Without these ignores, eslint . (the lint
+      // target) fails when it walks the tree while tests are running or when
+      // interrupted runs leave fixtures behind. The three fixture families are:
+      // - .eslint-config-fixture-* (eslint-config.integration.test.mjs)
+      // - .cli-eslint-config-fixture-* (cli.integration.test.mjs)
+      // - .oracle-simple-* (providers/native/differential.integration.test.mjs)
+      "**/.eslint-config-fixture-*/**",
+      "**/.cli-eslint-config-fixture-*/**",
+      "**/.oracle-simple-*/**",
     ],
   },
 
