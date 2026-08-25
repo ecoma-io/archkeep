@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  classifyCustomFindings,
   classifyDelta,
   classifyUnresolvableRecords,
   classifyViolations,
@@ -468,5 +469,187 @@ describe("classifyDelta", () => {
     expect(result.violations.unchanged).toHaveLength(1);
     expect(result.violations.unchanged[0].waived).toBe(false);
     expect(result.unresolvable.introduced[0].sourceProject).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// classifyCustomFindings
+// ---------------------------------------------------------------------------
+
+/** One custom finding as a rule's verdict document states it. */
+function customFinding(overrides = {}) {
+  return {
+    id: "reached-ring",
+    message: "the app layer reached a ring internal",
+    sourceFile: "libs/app/main.go",
+    line: 7,
+    column: 2,
+    project: "acme-app",
+    ...overrides,
+  };
+}
+
+/** A judged two-sided rule entry, as customRulesForDelta returns one. */
+function judgedRule({ base = [], head = [] } = {}) {
+  return { name: "no-app-to-ring", sha256: "a".repeat(64), baseFindings: base, headFindings: head };
+}
+
+describe("classifyCustomFindings", () => {
+  it("classifies a head-only finding introduced and a base-only one resolved — neither vanishes", () => {
+    const result = classifyCustomFindings({
+      judged: [
+        judgedRule({
+          base: [customFinding({ id: "old-reach" })],
+          head: [customFinding()],
+        }),
+      ],
+    });
+    expect(result.introduced).toHaveLength(1);
+    expect(result.introduced[0]).toMatchObject({
+      rule: "no-app-to-ring",
+      findingId: "reached-ring",
+      ruleId: "custom/no-app-to-ring/reached-ring",
+      project: "acme-app",
+      baseCount: 0,
+      headCount: 1,
+      reason: "absent at base",
+    });
+    expect(result.introduced[0].headSites).toEqual([
+      { file: "libs/app/main.go", line: 7, column: 2 },
+    ]);
+    expect(result.resolved).toHaveLength(1);
+    expect(result.resolved[0].findingId).toBe("old-reach");
+    expect(result.unchanged).toEqual([]);
+    expect(result.unknown).toEqual([]);
+  });
+
+  it("classifies equal counts unchanged and growth introduced with the reason named", () => {
+    const result = classifyCustomFindings({
+      judged: [
+        judgedRule({
+          base: [customFinding()],
+          head: [customFinding(), customFinding({ line: 20 })],
+        }),
+      ],
+    });
+    expect(result.introduced).toHaveLength(1);
+    expect(result.introduced[0].reason).toBe("occurrence growth: 1 at base, 2 at head");
+  });
+
+  it("keeps a shrunk-but-present finding unchanged — a partial fix never reads as resolved", () => {
+    // The silent direction: two occurrences down to one must NOT land in
+    // resolved, where the remaining finding would read as a clean rule.
+    const result = classifyCustomFindings({
+      judged: [
+        judgedRule({
+          base: [customFinding(), customFinding({ line: 20 })],
+          head: [customFinding()],
+        }),
+      ],
+    });
+    expect(result.resolved).toEqual([]);
+    expect(result.unchanged).toHaveLength(1);
+    expect(result.unchanged[0].note).toMatch(/occurrencesReduced: 2 at base, 1 at head/u);
+  });
+
+  it("keeps the same finding id in two projects as two identities, never merged", () => {
+    const result = classifyCustomFindings({
+      judged: [
+        judgedRule({
+          base: [customFinding({ project: "acme-app" })],
+          head: [customFinding({ project: "acme-admin" })],
+        }),
+      ],
+    });
+    // A cross-project move is a loud introduced/resolved pair — the same
+    // no-rename-guessing posture the violation classifier takes.
+    expect(result.introduced).toHaveLength(1);
+    expect(result.introduced[0].project).toBe("acme-admin");
+    expect(result.resolved).toHaveLength(1);
+    expect(result.resolved[0].project).toBe("acme-app");
+  });
+
+  it("keys a finding naming no project on null rather than dropping it", () => {
+    const result = classifyCustomFindings({
+      judged: [
+        judgedRule({ head: [customFinding({ project: undefined, sourceFile: undefined })] }),
+      ],
+    });
+    expect(result.introduced).toHaveLength(1);
+    expect(result.introduced[0].project).toBeNull();
+  });
+
+  it("routes a finding with no usable id to unknown with a reason — never guessed into a bucket", () => {
+    // The silent direction: an id-less finding that simply vanished would
+    // make this delta byte-identical to one where the rule reported nothing.
+    const result = classifyCustomFindings({
+      judged: [judgedRule({ head: [customFinding({ id: "" })] })],
+    });
+    expect(result.introduced).toEqual([]);
+    expect(result.unknown).toHaveLength(1);
+    expect(result.unknown[0]).toMatchObject({ classification: "unknown", rule: "no-app-to-ring" });
+    expect(result.unknown[0].reason).toContain("no usable id");
+  });
+
+  it("notes on every classified entry of a rule that a no-id finding fell out of its grouping", () => {
+    // The silent direction: a no-id finding drops out of the grouping, so its
+    // identical counterpart on the other side reads introduced or resolved
+    // with nothing to match against. The unknown entry keeps the exit loud;
+    // the classified entries must SAY the grouping may be incomplete rather
+    // than presenting their buckets as a full account of the rule.
+    const result = classifyCustomFindings({
+      judged: [
+        judgedRule({
+          base: [customFinding(), customFinding({ id: "" })],
+          head: [customFinding(), customFinding({ id: "second-reach" })],
+        }),
+      ],
+    });
+    expect(result.unknown).toHaveLength(1);
+    expect(result.unchanged[0].note).toContain(
+      "classification for this rule may be incomplete: 1 finding had no usable id",
+    );
+    expect(result.introduced[0].note).toContain("may be incomplete");
+  });
+
+  it("extends an existing occurrence note rather than overwriting it", () => {
+    const result = classifyCustomFindings({
+      judged: [
+        judgedRule({
+          base: [customFinding(), customFinding({ line: 20 }), customFinding({ id: null })],
+          head: [customFinding()],
+        }),
+      ],
+    });
+    expect(result.unchanged[0].note).toMatch(/occurrencesReduced: 2 at base, 1 at head/u);
+    expect(result.unchanged[0].note).toContain("may be incomplete: 1 finding had no usable id");
+  });
+
+  it("scopes the incomplete-classification note to the rule that produced the no-id finding", () => {
+    const result = classifyCustomFindings({
+      judged: [
+        judgedRule({ base: [customFinding({ id: "" })], head: [customFinding()] }),
+        { ...judgedRule({ head: [customFinding()] }), name: "clean-rule" },
+      ],
+    });
+    const cleanEntry = result.introduced.find((entry) => entry.rule === "clean-rule");
+    const noisyEntry = result.introduced.find((entry) => entry.rule === "no-app-to-ring");
+    expect(noisyEntry.note).toContain("may be incomplete");
+    expect("note" in cleanEntry).toBe(false);
+  });
+
+  it("turns every unknownRules entry into one unknown entry carrying its reason", () => {
+    const result = classifyCustomFindings({
+      judged: [],
+      unknownRules: [{ name: "drifted-rule", reason: "the law itself moved" }],
+    });
+    expect(result.unknown).toEqual([
+      { classification: "unknown", rule: "drifted-rule", reason: "the law itself moved" },
+    ]);
+  });
+
+  it("attaches NO waived annotation — suppressions key on messageIds custom findings lack", () => {
+    const result = classifyCustomFindings({ judged: [judgedRule({ head: [customFinding()] })] });
+    expect("waived" in result.introduced[0]).toBe(false);
   });
 });

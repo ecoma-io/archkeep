@@ -10,7 +10,13 @@ import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
 import { MESSAGE_IDS, renderMessage } from "../rules/messages.mjs";
 import { TSCONFIG_PATHS_MESSAGE_IDS, TSCONFIG_PATHS_MESSAGES } from "../tsconfig-paths.mjs";
 
-import { FITNESS_FAILED_RULE_ID, buildSarifLog } from "./sarif.mjs";
+import {
+  FITNESS_FAILED_RULE_ID,
+  buildDeltaSarifLog,
+  buildSarifLog,
+  formatDeltaSarif,
+  sarifRules,
+} from "./sarif.mjs";
 
 /**
  * The real message table, the real constraint renderer, and every `messageId`
@@ -495,4 +501,168 @@ describe("a custom rule's own path, from the rule's verdict to the uploaded log"
       expect(notification.message.text).toContain(sourceFile);
     });
   }
+});
+
+describe("the delta SARIF log against what GitHub requires of an upload", () => {
+  // One introduced entry per real messageId, in the shape
+  // `../commands/delta-classify.mjs`'s `classifyViolations` emits, so every
+  // ruleId the delta face can produce is driven against the real catalogue.
+  const everyIntroducedEntry = () =>
+    MESSAGE_IDS.map((messageId, index) => ({
+      classification: "introduced",
+      messageId,
+      sourceProject: "engine-domain",
+      target: "engine-adapters",
+      targetIsSpecifier: false,
+      constraint: { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:util"] },
+      baseCount: 0,
+      headCount: 1,
+      reason: "absent at base",
+      waived: false,
+      baseSites: [],
+      headSites: [
+        {
+          file: `acme/libs/engine-domain/file-${index}.go`,
+          line: index + 1,
+          column: index + 2,
+          specifier: "@acme/engine-adapters",
+          kind: "static",
+        },
+      ],
+    }));
+
+  const emptyBuckets = () => ({ introduced: [], resolved: [], unchanged: [], unknown: [] });
+
+  const deltaLog = buildDeltaSarifLog({
+    delta: {
+      violations: { ...emptyBuckets(), introduced: everyIntroducedEntry() },
+      unresolvable: emptyBuckets(),
+    },
+    coverage: { notes: [] },
+  });
+
+  it("resolves every result's ruleId in the catalogue, with a non-empty message and a 1-based repository-relative location", () => {
+    // The red case for an exit-1 delta: a gate exiting 1 whose log carries no
+    // results is the empty upload GitHub keeps green without a word.
+    expect(deltaLog.runs[0].results.length).toBe(MESSAGE_IDS.length);
+    const { rules } = deltaLog.runs[0].tool.driver;
+    for (const result of deltaLog.runs[0].results) {
+      expect(rules[result.ruleIndex].id).toBe(result.ruleId);
+      expect(result.message.text.length).toBeGreaterThan(0);
+      expect(result.level).toBe("error");
+      const { artifactLocation, region } = result.locations[0].physicalLocation;
+      expectRepositoryRelative(artifactLocation.uri);
+      expect(region.startLine).toBeGreaterThanOrEqual(1);
+      expect(region.startColumn).toBeGreaterThanOrEqual(1);
+      expect(result.properties.delta).toBe("introduced");
+    }
+  });
+
+  it("round-trips through formatDeltaSarif as parseable JSON", () => {
+    const text = formatDeltaSarif({
+      delta: {
+        violations: { ...emptyBuckets(), introduced: everyIntroducedEntry() },
+        unresolvable: emptyBuckets(),
+      },
+      coverage: { notes: [] },
+    });
+    expect(text.endsWith("\n")).toBe(true);
+    expect(JSON.parse(text).runs[0].results.length).toBe(MESSAGE_IDS.length);
+  });
+
+  it("tags a waived-introduced entry accepted rather than dropping it — reported, not gating", () => {
+    const [entry] = everyIntroducedEntry();
+    const built = buildDeltaSarifLog({
+      delta: {
+        violations: {
+          ...emptyBuckets(),
+          introduced: [
+            {
+              ...entry,
+              waived: true,
+              waivedBy: { expiresAt: "2027-01-01T00:00:00Z", reason: "tracked" },
+            },
+          ],
+        },
+        unresolvable: emptyBuckets(),
+      },
+      coverage: { notes: [] },
+    });
+    expect(built.runs[0].results).toHaveLength(1);
+    expect(built.runs[0].results[0].properties.accepted).toBe(true);
+    expect(built.runs[0].results[0].properties.acceptedUntil).toBe("2027-01-01T00:00:00Z");
+  });
+
+  it("never produces a notification-free log for an exit-3 delta", () => {
+    // The other silent-direction red case: `delta` exits 3 on any unknown
+    // entry, and a log a clean run could have produced must not be uploadable
+    // from that state.
+    const built = buildDeltaSarifLog({
+      delta: {
+        violations: {
+          ...emptyBuckets(),
+          unknown: [
+            {
+              classification: "unknown",
+              reason: "violation carries no usable messageId",
+              violation: {},
+            },
+          ],
+        },
+        unresolvable: emptyBuckets(),
+      },
+      coverage: { notes: [] },
+    });
+    expect(built.runs[0].results).toEqual([]);
+    const notifications = built.runs[0].invocations[0].toolExecutionNotifications;
+    expect(notifications.length).toBeGreaterThan(0);
+    expect(notifications[0].message.text).toContain("no usable messageId");
+    expect(built.runs[0].invocations[0].executionSuccessful).toBe(true);
+  });
+
+  it("resolves an introduced custom finding past every fixed descriptor, in the same catalogue", () => {
+    const catalogue = [
+      {
+        ruleId: "custom/no-forbidden/found",
+        rule: "no-forbidden",
+        findingId: "found",
+        message: "Forbidden thing",
+      },
+    ];
+    const built = buildDeltaSarifLog({
+      delta: {
+        violations: emptyBuckets(),
+        unresolvable: emptyBuckets(),
+        customRules: {
+          findings: {
+            ...emptyBuckets(),
+            introduced: [
+              {
+                classification: "introduced",
+                rule: "no-forbidden",
+                findingId: "found",
+                ruleId: "custom/no-forbidden/found",
+                project: "engine-domain",
+                message: "Forbidden thing",
+                baseCount: 0,
+                headCount: 1,
+                reason: "absent at base",
+                baseSites: [],
+                headSites: [{ file: "acme/libs/engine-domain/a.go", line: 4, column: 1 }],
+              },
+            ],
+          },
+        },
+      },
+      coverage: { notes: [] },
+      customCatalogue: catalogue,
+    });
+    const [result] = built.runs[0].results;
+    // Past every fixed id: the custom tail `sarifRules` documents, measured
+    // against the undeclared catalogue's real length rather than a literal.
+    expect(result.ruleIndex).toBeGreaterThanOrEqual(sarifRules().length);
+    expect(built.runs[0].tool.driver.rules[result.ruleIndex].id).toBe(result.ruleId);
+    expectRepositoryRelative(result.locations[0].physicalLocation.artifactLocation.uri);
+    expect(result.message.text.length).toBeGreaterThan(0);
+  });
 });

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { buildRuleModule, invalidWasmBytes } from "../custom-rules/wasm-fixture.mjs";
-import { customRulesForCheck, declaresCustomRules } from "./custom-rules.mjs";
+import { customRulesForCheck, customRulesForDelta, declaresCustomRules } from "./custom-rules.mjs";
 
 /**
  * The fold driven over an in-memory command context, with the one seam that
@@ -412,6 +412,355 @@ describe("the facts this module puts on the wire", () => {
     // `../rules/` gives an untagged project.
     const bundle = await bundleFrom(context());
     expect(bundle.model.projects.find((project) => project.name === "ring").tags).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// customRulesForDelta — the two-sided judgment
+// ---------------------------------------------------------------------------
+
+/**
+ * A baseline snapshot shape holding exactly what the base side is rebuilt
+ * from: the stored graph rows, the stored records, and the custom-rule pair.
+ * The base tree differs from the head context (`context()` above) by one
+ * import site, so a rule that echoes evidence could tell the sides apart.
+ */
+function baselineOf(overrides = {}) {
+  return {
+    graph: {
+      projects: [
+        { name: "app", root: "libs/app", tags: ["layer-app"] },
+        { name: "ring", root: "libs/ring", tags: [] },
+      ],
+      dependencies: [{ source: "app", target: "ring", type: "static" }],
+    },
+    records: [
+      {
+        sourceFile: "libs/app/main.go",
+        line: 7,
+        column: 2,
+        specifier: "example.test/ring/internal",
+        kind: "static",
+      },
+    ],
+    owned: [
+      { file: "libs/app/main.go", project: "app" },
+      { file: "libs/ring/x.go", project: "ring" },
+    ],
+    ...overrides,
+  };
+}
+
+/**
+ * The evidence-size threshold the asymmetric-applicability tests key a
+ * `"by-length"` rule on: the base bundle (two projects, one edge, one short
+ * import) serializes well under it, and `widerHeadContext` pushes the head
+ * bundle well past it with one deliberately long specifier — so one module
+ * answers the two sides differently while both run the identical bytes.
+ */
+const ASYMMETRY_THRESHOLD = 4096;
+
+/** The head tree with one extra import whose specifier crosses the threshold. */
+function widerHeadContext() {
+  const base = context();
+  return context({
+    owned: [...base.owned, { file: "libs/app/big.go", project: "app" }],
+    analysis: {
+      imports: [
+        ...base.analysis.imports,
+        {
+          sourceFile: "libs/app/big.go",
+          line: 1,
+          column: 1,
+          specifier: `example.test/ring/${"pad".repeat(2000)}`,
+          kind: "static",
+        },
+      ],
+    },
+  });
+}
+
+/** Drives the two-sided fold with an in-memory artifact store. */
+function deltaFold(rules, { baseline, reads = [], commandContext = context() }) {
+  const bytesFor = new Map(rules.map(({ row, bytes }) => [row.artifact, bytes]));
+  return customRulesForDelta(commandContext, {
+    rows: rules.map(({ row }) => row),
+    policy: POLICY,
+    baseline,
+    readArtifact: (artifact) => {
+      reads.push(artifact);
+      return bytesFor.get(artifact) ?? null;
+    },
+  });
+}
+
+describe("customRulesForDelta", () => {
+  it("judges a rule whose baseline row pins the identical law, over both sides", async () => {
+    const rule = declared({
+      verdictJson: verdictJson({
+        verdict: "fail",
+        findings: [{ id: FINDING, message: "reached", project: "app" }],
+      }),
+    });
+    const baseline = baselineOf({
+      customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 }],
+    });
+    const { judged, unknownRules, removedRules, catalogue } = await deltaFold([rule], {
+      baseline,
+    });
+    expect(unknownRules).toEqual([]);
+    expect(removedRules).toEqual([]);
+    expect(judged).toHaveLength(1);
+    expect(judged[0].name).toBe(RULE);
+    expect(judged[0].sha256).toBe(rule.row.sha256);
+    // Both sides carry the verdict document's findings verbatim —
+    // un-namespaced, because the classifier owns the entry's spelling.
+    expect(judged[0].baseFindings).toEqual([{ id: FINDING, message: "reached", project: "app" }]);
+    expect(judged[0].headFindings).toEqual(judged[0].baseFindings);
+    expect(catalogue.map((entry) => entry.ruleId)).toEqual([
+      `custom/${RULE}/${FINDING}`,
+      `custom/${RULE}/${OTHER_FINDING}`,
+    ]);
+  });
+
+  it("routes digest drift to unknownRules, naming both digests, and reads no artifact", async () => {
+    const rule = declared();
+    const baseline = baselineOf({
+      customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: "0".repeat(64) }],
+    });
+    const reads = [];
+    const { judged, unknownRules } = await deltaFold([rule], { baseline, reads });
+    expect(judged).toEqual([]);
+    expect(unknownRules).toHaveLength(1);
+    expect(unknownRules[0].name).toBe(RULE);
+    expect(unknownRules[0].reason).toContain("0".repeat(64));
+    expect(unknownRules[0].reason).toContain(rule.row.sha256);
+    expect(unknownRules[0].reason).toContain("law itself moved");
+    // The silent direction: a drifted law must not be RUN and its findings
+    // must not classify — nothing was even loaded for it.
+    expect(reads).toEqual([]);
+  });
+
+  it("routes params drift to unknownRules — params ride the evidence, so they are law", async () => {
+    const rule = declared();
+    const withParams = { ...rule, row: { ...rule.row, params: { limit: 3 } } };
+    const baseline = baselineOf({
+      customRules: [
+        {
+          name: RULE,
+          artifact: rule.row.artifact,
+          sha256: rule.row.sha256,
+          params: { limit: 4 },
+        },
+      ],
+    });
+    const { judged, unknownRules } = await deltaFold([withParams], { baseline });
+    expect(judged).toEqual([]);
+    expect(unknownRules[0].reason).toContain("params changed");
+  });
+
+  it("routes a rule the baseline never declared to unknownRules", async () => {
+    const rule = declared();
+    const baseline = baselineOf({ customRules: [] });
+    const { judged, unknownRules } = await deltaFold([rule], { baseline });
+    expect(judged).toEqual([]);
+    expect(unknownRules[0].reason).toContain("no base-side evidence exists");
+  });
+
+  it("routes EVERY head rule to unknownRules when the baseline carries no custom blocks", async () => {
+    // An old baseline, or one captured before the rules were declared: its
+    // absence of blocks must never read as "no custom findings existed at
+    // base" — that is the silent direction.
+    const rule = declared();
+    const { owned: _owned, ...old } = baselineOf();
+    const reads = [];
+    const { judged, unknownRules, removedRules } = await deltaFold([rule], {
+      baseline: old,
+      reads,
+    });
+    expect(judged).toEqual([]);
+    expect(removedRules).toEqual([]);
+    expect(unknownRules[0].reason).toContain("re-capture the baseline");
+    expect(reads).toEqual([]);
+  });
+
+  it("names rules the baseline declares that the head no longer does as removed", async () => {
+    const rule = declared();
+    const baseline = baselineOf({
+      customRules: [
+        { name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 },
+        { name: "gone-rule", artifact: "tools/rules/gone-rule.wasm", sha256: "1".repeat(64) },
+      ],
+    });
+    const { judged, removedRules } = await deltaFold([rule], { baseline });
+    expect(judged).toHaveLength(1);
+    expect(removedRules).toEqual(["gone-rule"]);
+  });
+
+  it("routes a rule that answers unknown to unknownRules, naming the side and its reason", async () => {
+    const rule = declared({
+      verdictJson: verdictJson({ verdict: "unknown", reason: "no layer tags to compare" }),
+    });
+    const baseline = baselineOf({
+      customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 }],
+    });
+    const { judged, unknownRules } = await deltaFold([rule], { baseline });
+    // The whole rule, not half of it: a one-sided judgment has no delta.
+    expect(judged).toEqual([]);
+    expect(unknownRules[0].reason).toContain("base side");
+    expect(unknownRules[0].reason).toContain("no layer tags to compare");
+  });
+
+  it("routes an evaluate-class failure to unknownRules, never a pass by omission", async () => {
+    const rule = declared({ evaluateBehavior: "trap" });
+    const baseline = baselineOf({
+      customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 }],
+    });
+    const { judged, unknownRules } = await deltaFold([rule], { baseline });
+    expect(judged).toEqual([]);
+    expect(unknownRules[0].reason).toContain("archkeep_evaluate trapped");
+  });
+
+  it("carries a not_applicable side as empty findings plus a note — a judged answer, not a failure", async () => {
+    const rule = declared({
+      verdictJson: verdictJson({
+        verdict: "not_applicable",
+        notApplicableReason: "this workspace declares no ring project",
+      }),
+    });
+    const baseline = baselineOf({
+      customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 }],
+    });
+    const { judged, unknownRules } = await deltaFold([rule], { baseline });
+    expect(unknownRules).toEqual([]);
+    expect(judged[0].baseFindings).toEqual([]);
+    expect(judged[0].headFindings).toEqual([]);
+    expect(judged[0].notes).toEqual([
+      "base side: not applicable — this workspace declares no ring project",
+      "head side: not applicable — this workspace declares no ring project",
+    ]);
+  });
+
+  it("routes head-side not_applicable beside base findings to unknownRules — never resolved", async () => {
+    // The silent direction: an empty head list from a rule that did not APPLY
+    // at head would classify every base finding as resolved. The rule answers
+    // by evidence size — the head context below carries one extra, very long
+    // import, so the identical bytes judge the base side and refuse the head.
+    const rule = declared({
+      evaluateBehavior: "by-length",
+      alternateWhenLengthAtLeast: ASYMMETRY_THRESHOLD,
+      verdictJson: verdictJson({
+        verdict: "fail",
+        findings: [{ id: FINDING, message: "reached", project: "app" }],
+      }),
+      verdictJsonAlternate: verdictJson({
+        verdict: "not_applicable",
+        notApplicableReason: "the head tree declares no ring project",
+      }),
+    });
+    const baseline = baselineOf({
+      customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 }],
+    });
+    const { judged, unknownRules } = await deltaFold([rule], {
+      baseline,
+      commandContext: widerHeadContext(),
+    });
+    expect(judged).toEqual([]);
+    expect(unknownRules).toHaveLength(1);
+    expect(unknownRules[0].reason).toContain("did not apply at head");
+    expect(unknownRules[0].reason).toContain("cannot be called resolved");
+    expect(unknownRules[0].reason).toContain("the head tree declares no ring project");
+  });
+
+  it("routes base-side not_applicable beside head findings to unknownRules — never introduced", async () => {
+    // The mirror image: an empty base list from a rule that did not APPLY at
+    // base would classify every head finding as introduced.
+    const rule = declared({
+      evaluateBehavior: "by-length",
+      alternateWhenLengthAtLeast: ASYMMETRY_THRESHOLD,
+      verdictJson: verdictJson({
+        verdict: "not_applicable",
+        notApplicableReason: "the base capture declares no ring project",
+      }),
+      verdictJsonAlternate: verdictJson({
+        verdict: "fail",
+        findings: [{ id: FINDING, message: "reached", project: "app" }],
+      }),
+    });
+    const baseline = baselineOf({
+      customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 }],
+    });
+    const { judged, unknownRules } = await deltaFold([rule], {
+      baseline,
+      commandContext: widerHeadContext(),
+    });
+    expect(judged).toEqual([]);
+    expect(unknownRules).toHaveLength(1);
+    expect(unknownRules[0].reason).toContain("did not apply at base");
+    expect(unknownRules[0].reason).toContain("cannot be called introduced");
+  });
+
+  it("hands the caller's timeoutMs to the host — a looping rule is refused under that budget", async () => {
+    // The silent direction of a dropped option: a timeout that never reached
+    // the host would leave a hostile rule the full default budget, and a
+    // pipeline that believed it had bounded the run would be wrong with no
+    // symptom until it hung. The reason naming the caller's own number is the
+    // proof the value arrived.
+    const rule = declared({ evaluateBehavior: "loop" });
+    const baseline = baselineOf({
+      customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 }],
+    });
+    const bytesFor = new Map([[rule.row.artifact, rule.bytes]]);
+    const { judged, unknownRules } = await customRulesForDelta(context(), {
+      rows: [rule.row],
+      policy: POLICY,
+      baseline,
+      readArtifact: (artifact) => bytesFor.get(artifact) ?? null,
+      timeoutMs: 400,
+    });
+    expect(judged).toEqual([]);
+    expect(unknownRules[0].reason).toContain("400ms budget");
+  });
+
+  it("routes a base record the stored owned map does not claim to unknownRules", async () => {
+    // The stored map is the only attribution the base side has; a record it
+    // does not claim is evidence the bundle refuses, and the rule must say so
+    // rather than being judged over the records that survived.
+    const rule = declared();
+    const baseline = baselineOf({
+      customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 }],
+      owned: [{ file: "libs/ring/x.go", project: "ring" }],
+    });
+    const { judged, unknownRules } = await deltaFold([rule], { baseline });
+    expect(judged).toEqual([]);
+    expect(unknownRules[0].reason).toContain("base-side evidence could not be assembled");
+    expect(unknownRules[0].reason).toContain("sourceProject");
+  });
+
+  it("THROWS on a load-class failure — an unreadable head law refuses the delta", async () => {
+    const rule = declared();
+    const baseline = baselineOf({
+      customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 }],
+    });
+    await expect(
+      customRulesForDelta(context(), {
+        rows: [rule.row],
+        policy: POLICY,
+        baseline,
+        readArtifact: () => null,
+      }),
+    ).rejects.toThrow(/custom rule "no-app-to-ring": the artifact .* could not be read/u);
+  });
+
+  it("THROWS on a hash mismatch between the head bytes and the head declaration", async () => {
+    const rule = declared();
+    const tampered = { bytes: invalidWasmBytes(), row: rule.row };
+    const baseline = baselineOf({
+      customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 }],
+    });
+    await expect(deltaFold([tampered], { baseline })).rejects.toThrow(
+      /the artifact hashes to [0-9a-f]{64}, and the policy pinned/u,
+    );
   });
 });
 

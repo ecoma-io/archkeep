@@ -8,6 +8,7 @@ judged under the current law.
 archkeep delta --capture --output delta-base.json   # at the base commit
 archkeep delta delta-base.json                      # at head
 archkeep delta delta-base.json --format json
+archkeep delta delta-base.json --format sarif    # for GitHub code scanning
 ```
 
 `delta` answers the question a review actually asks about one change: **which
@@ -124,6 +125,53 @@ reached a verdict about them, so folding them into either side would fabricate
 findings. They are carried so a change that adds or removes such sites is
 visible.
 
+### Custom-rule findings are classified too
+
+When the current policy declares [`customRules`](../reference/custom-rules.md),
+`delta` judges every declared rule over **both** evidence sets — the head
+tree's facts and the baseline's stored ones — and classifies its findings in
+their own block, keyed per finding by the rule name, the finding id, and the
+project it names (`custom/<rule>/<finding>`). The same occurrence ladder
+applies: absent-at-base is introduced, growth is introduced with the counts
+named, a shrink that leaves occurrences is unchanged, and an **introduced
+custom finding gates (exit 1) exactly as an introduced violation does** — with
+no waiver lane, by construction: `boundarySuppressions` rows key on a
+violation `messageId`, and a custom finding has none.
+
+For this to work the capture side stores two extra blocks when its policy
+declares rules — the declared rows (name, artifact, `sha256`, `params`) and
+the file→project ownership map. A workspace that declares no custom rules
+produces a byte-identical snapshot, envelope, and report.
+
+A rule is judged only when the baseline row pins the **identical law** —
+same `sha256`, same `params`. Everything else is fail-closed: the rule lands
+in the skipped list, one `unknown` entry per rule (exit 3), each with its
+reason:
+
+- **the baseline carries no custom-rule evidence** — an old capture, or one
+  whose policy declared no rules; re-capture the baseline;
+- **no base-side evidence exists for this rule** — the rule was added since
+  capture; re-capture;
+- **artifact digest drift**, both digests named — the law itself moved, so a
+  finding difference cannot be attributed to the code;
+- **params drift** — params ride inside the evidence bundle, so this is law
+  drift exactly as a digest change is;
+- **either side's evidence could not be assembled** — for example a stored
+  record the baseline's ownership map does not claim;
+- **either side's evaluation failed, or the rule answered `unknown`** — the
+  host's own reason is carried through;
+- **the rule answered `not_applicable` on exactly one side** — the reason
+  names the side that did not apply: base findings cannot be called resolved
+  (nor head findings introduced) by a side the rule did not judge.
+
+A rule that answers `not_applicable` on **both** sides contributes an empty
+finding list per side plus a note naming each side's reason — a judged answer,
+not a failure; a rule the baseline declares that the head no longer does is
+reported as **removed** in a coverage note, never judged. A head artifact that
+cannot be **loaded** at all (unreadable, hash mismatch against the head
+declaration) is a refusal (exit 3, no report) — the same posture `check` takes
+on the same tree.
+
 ## Refusals and notes
 
 Every condition under which `delta` cannot honestly classify is a **refusal**
@@ -160,15 +208,61 @@ report and in `coverage.notes` instead:
 
 ## Exit codes
 
-| code | meaning                                                                                                                   |
-| ---- | ------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Capture succeeded, or the comparison found no non-waived introduced violation and nothing unclassifiable.                 |
-| 1    | Compare mode only: at least one introduced violation not covered by an active waiver. Capture mode never exits 1.         |
-| 2    | Usage error: wrong positional count, `--capture` with a positional, unknown flag.                                         |
-| 3    | A refusal from the list above, or a comparison with an `unknown` entry — an unanswerable question is never a clean delta. |
+| code | meaning                                                                                                                                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | Capture succeeded, or the comparison found no non-waived introduced violation, no introduced custom finding, and nothing unclassifiable.                     |
+| 1    | Compare mode only: at least one introduced violation not covered by an active waiver, or at least one introduced custom finding. Capture mode never exits 1. |
+| 2    | Usage error: wrong positional count, `--capture` with a positional, unknown flag.                                                                            |
+| 3    | A refusal from the list above, or a comparison with an `unknown` entry — an unanswerable question is never a clean delta.                                    |
 
 The `--format json` envelope for compare mode is documented in
 [json-output.md](../reference/json-output.md).
+
+## SARIF for code scanning
+
+`delta <baseline> --format sarif` renders the same verdict as SARIF 2.1.0 for
+GitHub's `upload-sarif`, so the violations a pull request **introduces** appear
+as inline annotations on its diff. The log's shape follows the same choices
+[ci.md's SARIF section](ci.md#sarif-and-github-code-scanning) argues for `check` — same rule
+catalogue, workspace-relative percent-encoded URIs, 1-based positions, `error`
+level — with the delta-specific decisions on top:
+
+- **Results are the introduced buckets only**, one result per head site.
+  Resolved and unchanged entries are not results: the log is uploaded against
+  the head checkout, and an annotation for a violation the change resolved
+  would mark code that no longer contains it. Each result's `properties` carry
+  `delta: "introduced"` and both sides' occurrence counts; an introduced
+  **custom-rule finding** is a result too, resolving to its own descriptor at
+  the end of the catalogue.
+- **A waived-introduced entry is still a result**, tagged
+  `properties.accepted: true` (with the waiver's expiry and reason) — reported,
+  not gating, the same vocabulary `check`'s SARIF uses for a waived violation.
+- **Everything unclassifiable rides `toolExecutionNotifications`**: every
+  `unknown` entry (violations, unresolvable sites, custom-rule items), every
+  coverage note (policy drift, dirty trees, skipped or removed custom rules),
+  and every introduced unresolvable import site. A delta that exits 3 therefore
+  never uploads a log a clean run could have produced.
+
+Two steps in CI, in this order — the gate first, the presentation second, for
+the reasons [ci.md](ci.md#sarif-and-github-code-scanning) gives:
+
+```yaml
+# The gate. Fails the job — exit 1 on introduced findings, exit 3 on "no verdict".
+- name: Delta against the merge-base baseline
+  run: pnpm exec archkeep delta delta-base.json
+
+# The presentation. Runs even when the gate just failed — the annotations
+# matter most on a red run — and its own exit code decides nothing.
+- name: Render the delta as SARIF
+  if: ${{ !cancelled() }}
+  run: pnpm exec archkeep delta delta-base.json --format sarif --output delta.sarif
+  continue-on-error: true
+
+- uses: github/codeql-action/upload-sarif@v3
+  if: ${{ !cancelled() }}
+  with:
+    sarif_file: delta.sarif
+```
 
 ## Known limitations
 

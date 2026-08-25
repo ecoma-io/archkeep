@@ -155,14 +155,24 @@ const packRange = (range) => BigInt.asIntN(64, (BigInt(range.ptr) << 32n) | BigI
  *   proves reading a self-description is budgeted like every other call into a
  *   rule; `"i32-return"` declares the wrong result type, so the load half of
  *   the ABI meets the same not-a-BigInt value the evaluate half can.
- * @property {"return"|"trap"|"loop"|"once"|"i32-return"|"echo"} [evaluateBehavior]
+ * @property {"return"|"trap"|"loop"|"once"|"i32-return"|"echo"|"by-length"} [evaluateBehavior]
  *   `"loop"` never returns (the timeout fixture); `"once"` answers the full
  *   range on the first call of an instance and a zero-length one after, which
  *   is how a test can tell a fresh instance from a reused one; `"i32-return"`
  *   declares the wrong result type, which reaches JavaScript as a number
  *   instead of the BigInt the packed i64 arrives as; `"echo"` returns the
  *   range it was handed, so the verdict a host reads back IS the evidence it
- *   wrote — the only shape that proves the bytes made the round trip.
+ *   wrote — the only shape that proves the bytes made the round trip;
+ *   `"by-length"` answers `verdictJsonAlternate` when the evidence it was
+ *   handed is at least `alternateWhenLengthAtLeast` bytes long and
+ *   `verdictJson` otherwise — the one shape that lets a two-sided judgment
+ *   receive DIFFERENT verdicts per side while both run the identical bytes,
+ *   because the sides' evidence bundles differ in size and nothing else about
+ *   the module may.
+ * @property {string|Uint8Array} [verdictJsonAlternate] The `"by-length"`
+ *   behaviour's second answer.
+ * @property {number} [alternateWhenLengthAtLeast] The `"by-length"`
+ *   behaviour's threshold, in evidence bytes.
  * @property {"bump"|"out-of-bounds"|"trap"} [allocBehavior]
  *   `"out-of-bounds"` hands back a pointer past the end of memory; `"trap"`
  *   runs `unreachable`, which is what a rule whose allocator refuses a size
@@ -195,6 +205,8 @@ export function buildRuleModule(options = {}) {
   const {
     describeJson = "{}",
     verdictJson = "{}",
+    verdictJsonAlternate = "{}",
+    alternateWhenLengthAtLeast = 0,
     describeBehavior = "return",
     evaluateBehavior = "return",
     allocBehavior = "bump",
@@ -210,12 +222,15 @@ export function buildRuleModule(options = {}) {
 
   const describeBody = payloadBytes(describeJson);
   const verdictBody = payloadBytes(verdictJson);
+  const alternateBody = payloadBytes(verdictJsonAlternate);
   const describeAt = DATA_ORIGIN;
   const verdictAt = describeAt + describeBody.length;
-  const heapAt = verdictAt + verdictBody.length;
+  const alternateAt = verdictAt + verdictBody.length;
+  const heapAt = alternateAt + alternateBody.length;
 
   const describeAnswer = describeRange ?? { ptr: describeAt, len: describeBody.length };
   const verdictAnswer = verdictRange ?? { ptr: verdictAt, len: verdictBody.length };
+  const alternateAnswer = { ptr: alternateAt, len: alternateBody.length };
 
   // Five types, indexed in this order by the function and import sections.
   const types = [
@@ -283,7 +298,10 @@ export function buildRuleModule(options = {}) {
     ...(growPagesOnEvaluate === 0
       ? []
       : [0x41, ...signedLeb(growPagesOnEvaluate), 0x40, 0x00, 0x1a]),
-    ...evaluateInstructionsFor(verdictAnswer, evaluateBehavior),
+    ...evaluateInstructionsFor(verdictAnswer, evaluateBehavior, {
+      alternate: alternateAnswer,
+      threshold: alternateWhenLengthAtLeast,
+    }),
   ];
 
   const bodies = [allocInstructions, describeInstructions, evaluateInstructions];
@@ -316,7 +334,11 @@ export function buildRuleModule(options = {}) {
   declare("archkeep_describe", 0x00, definedAt + 1);
   declare("archkeep_evaluate", 0x00, definedAt + 2);
 
-  const data = [dataSegment(describeAt, describeBody), dataSegment(verdictAt, verdictBody)];
+  const data = [
+    dataSegment(describeAt, describeBody),
+    dataSegment(verdictAt, verdictBody),
+    dataSegment(alternateAt, alternateBody),
+  ];
 
   return new Uint8Array([
     ...MAGIC,
@@ -369,12 +391,38 @@ const LOOP_FOREVER = Object.freeze([
  * two evaluations that both see the full answer prove each got its own
  * instance, and no assertion about the host's internals is needed.
  *
+ * `"by-length"` compares the evidence length it was handed (local 1) against
+ * a constant threshold and answers one of two constant ranges — the smallest
+ * program whose verdict is a function of the evidence, which is what lets one
+ * module answer a two-sided judgment differently per side.
+ *
  * @param {{ptr: number, len: number}} answer The range a first call returns.
- * @param {"return"|"trap"|"loop"|"once"|"i32-return"|"echo"} behaviour
+ * @param {"return"|"trap"|"loop"|"once"|"i32-return"|"echo"|"by-length"} behaviour
+ * @param {{alternate: {ptr: number, len: number}, threshold: number}} [byLength]
+ *   The `"by-length"` behaviour's second answer and its evidence-byte
+ *   threshold.
  * @returns {number[]}
  */
-function evaluateInstructionsFor(answer, behaviour) {
+function evaluateInstructionsFor(answer, behaviour, byLength) {
   if (behaviour === "trap") return [0x00, 0x0b];
+  if (behaviour === "by-length" && byLength !== undefined) {
+    return [
+      0x20,
+      ...unsignedLeb(1), // local.get 1 — the evidence length the host wrote
+      0x41,
+      ...signedLeb(byLength.threshold), // i32.const threshold
+      0x4e, // i32.ge_s
+      0x04,
+      TYPE_I64, // if (result i64)
+      0x42,
+      ...signedLeb(packRange(byLength.alternate)),
+      0x05, // else
+      0x42,
+      ...signedLeb(packRange(answer)),
+      0x0b, // end if
+      0x0b,
+    ];
+  }
   if (behaviour === "i32-return") return [0x41, ...signedLeb(0), 0x0b];
   if (behaviour === "echo") {
     return [

@@ -1,9 +1,12 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterAll, describe, expect, it } from "vitest";
 
+import { buildRuleModule } from "../custom-rules/wasm-fixture.mjs";
 import { captureDelta, deltaCommand, evidenceGraphToProjectGraph } from "./delta.mjs";
 import { parseEvidenceSnapshot, serializeEvidenceSnapshot } from "./delta-snapshot.mjs";
 import { computePolicyFingerprint } from "./graph.mjs";
@@ -93,9 +96,16 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
  * A resolved CommandContext with everything `delta` reads.
  *
  * @param {{graph?: object, records?: object[], failures?: object[],
+ *   owned?: {file: string, project: string}[],
  *   pluginGap?: {registered: boolean, manifests: string[]}}} [input]
  */
-function contextOf({ graph = engineGraph(), records = [], failures = [], pluginGap } = {}) {
+function contextOf({
+  graph = engineGraph(),
+  records = [],
+  failures = [],
+  owned = [],
+  pluginGap,
+} = {}) {
   return {
     root,
     provider: "nx",
@@ -108,6 +118,7 @@ function contextOf({ graph = engineGraph(), records = [], failures = [], pluginG
       analyzedFiles: [],
       exemptedFiles: [],
     },
+    owned,
     pluginGap: pluginGap ?? { registered: true, manifests: [] },
   };
 }
@@ -117,8 +128,8 @@ function contextOf({ graph = engineGraph(), records = [], failures = [], pluginG
  * serializer AND parser so every compare-side test consumes exactly what a
  * file on disk would have held.
  */
-function baselineOf({ records = [], graph = engineGraph(), law = config() } = {}) {
-  const { snapshot, text } = captureDelta(contextOf({ graph, records }), { config: law });
+function baselineOf({ records = [], graph = engineGraph(), law = config(), owned = [] } = {}) {
+  const { snapshot, text } = captureDelta(contextOf({ graph, records, owned }), { config: law });
   return {
     snapshot,
     readBaseline: (path) => parseEvidenceSnapshot(text, path),
@@ -224,13 +235,13 @@ describe("captureDelta", () => {
 // ---------------------------------------------------------------------------
 
 describe("deltaCommand", () => {
-  it("re-judges a stored baseline into real violations — a base-side violation resolves, never vanishes", () => {
+  it("re-judges a stored baseline into real violations — a base-side violation resolves, never vanishes", async () => {
     // The silent-direction case this stage's design names: a baseline KNOWN to
     // contain a violating record must yield that violation when re-judged. If
     // the rebuilt graph were mis-shaped, base violations would be zero, this
     // entry would land in no bucket, and the delta would read clean.
     const { readBaseline } = baselineOf({ records: [crossingRecord()] });
-    const result = deltaCommand("/invented/base.json", contextOf({ records: [] }), {
+    const result = await deltaCommand("/invented/base.json", contextOf({ records: [] }), {
       config: config(),
       readBaseline,
       now: NOW,
@@ -248,13 +259,17 @@ describe("deltaCommand", () => {
     expect(result.status).toBe("ok");
   });
 
-  it("classifies a head-only violation as introduced and folds it into exit 1", () => {
+  it("classifies a head-only violation as introduced and folds it into exit 1", async () => {
     const { readBaseline } = baselineOf({ records: [] });
-    const result = deltaCommand("/invented/base.json", contextOf({ records: [crossingRecord()] }), {
-      config: config(),
-      readBaseline,
-      now: NOW,
-    });
+    const result = await deltaCommand(
+      "/invented/base.json",
+      contextOf({ records: [crossingRecord()] }),
+      {
+        config: config(),
+        readBaseline,
+        now: NOW,
+      },
+    );
 
     expect(result.status).toBe("findings");
     expect(result.delta.summary.introduced).toBe(1);
@@ -267,18 +282,22 @@ describe("deltaCommand", () => {
     expect(envelope.result.summary).toEqual(result.delta.summary);
   });
 
-  it("reports a waived introduced violation without failing the gate", () => {
+  it("reports a waived introduced violation without failing the gate", async () => {
     const { readBaseline } = baselineOf({ records: [] });
     const law = config({
       suppressions: [
         { path: "libs/alpha/**", reason: "accepted for the invented migration", expiresAt: FUTURE },
       ],
     });
-    const result = deltaCommand("/invented/base.json", contextOf({ records: [crossingRecord()] }), {
-      config: law,
-      readBaseline,
-      now: NOW,
-    });
+    const result = await deltaCommand(
+      "/invented/base.json",
+      contextOf({ records: [crossingRecord()] }),
+      {
+        config: law,
+        readBaseline,
+        now: NOW,
+      },
+    );
 
     expect(result.delta.summary.introduced).toBe(1);
     expect(result.delta.summary.introducedWaived).toBe(1);
@@ -289,10 +308,10 @@ describe("deltaCommand", () => {
     expect(result.report.text).toContain("[waived]");
   });
 
-  it("keeps a shrunk-but-present violation unchanged — a partial fix never reads as resolved", () => {
+  it("keeps a shrunk-but-present violation unchanged — a partial fix never reads as resolved", async () => {
     const two = [crossingRecord({ line: 5 }), crossingRecord({ line: 9 })];
     const { readBaseline } = baselineOf({ records: two });
-    const result = deltaCommand(
+    const result = await deltaCommand(
       "/invented/base.json",
       contextOf({ records: [crossingRecord({ line: 5 })] }),
       { config: config(), readBaseline, now: NOW },
@@ -304,14 +323,14 @@ describe("deltaCommand", () => {
     expect(result.status).toBe("ok");
   });
 
-  it("classifies unresolvable records as their own carried category, never as violations", () => {
+  it("classifies unresolvable records as their own carried category, never as violations", async () => {
     const phantom = crossingRecord({
       sourceFile: "libs/alpha/src/loader.ts",
       specifier: "@acme/phantom",
       resolved: null,
     });
     const { readBaseline } = baselineOf({ records: [] });
-    const result = deltaCommand("/invented/base.json", contextOf({ records: [phantom] }), {
+    const result = await deltaCommand("/invented/base.json", contextOf({ records: [phantom] }), {
       config: config(),
       readBaseline,
       now: NOW,
@@ -327,13 +346,13 @@ describe("deltaCommand", () => {
     expect(result.status).toBe("ok");
   });
 
-  it("answers no-verdict when an item cannot be classified — never a silently clean delta", () => {
+  it("answers no-verdict when an item cannot be classified — never a silently clean delta", async () => {
     // A head record with no usable specifier can state no identity; the
     // classifier refuses to guess it into a bucket, and the run must fold
     // that refusal into exit 3 rather than report a clean comparison.
     const nameless = crossingRecord({ specifier: "", resolved: null });
     const { readBaseline } = baselineOf({ records: [] });
-    const result = deltaCommand("/invented/base.json", contextOf({ records: [nameless] }), {
+    const result = await deltaCommand("/invented/base.json", contextOf({ records: [nameless] }), {
       config: config(),
       readBaseline,
       now: NOW,
@@ -347,49 +366,53 @@ describe("deltaCommand", () => {
     expect(envelope.decision.reason).toMatch(/could not be classified/u);
   });
 
-  it("refuses a baseline captured under a different provider — identity across models is not evidence", () => {
+  it("refuses a baseline captured under a different provider — identity across models is not evidence", async () => {
     const { snapshot } = baselineOf({ records: [] });
     const foreign = { ...snapshot, provider: "moon" };
-    expect(() =>
+    await expect(
       deltaCommand("/invented/base.json", contextOf(), {
         config: config(),
         readBaseline: () => foreign,
         now: NOW,
       }),
-    ).toThrow(/'moon' provider.*'nx'/su);
+    ).rejects.toThrow(/'moon' provider.*'nx'/su);
   });
 
-  it("refuses an incomplete head — a delta over a half-analyzed tree is not a verdict", () => {
+  it("refuses an incomplete head — a delta over a half-analyzed tree is not a verdict", async () => {
     const { readBaseline } = baselineOf({ records: [] });
     const failures = [
       { sourceFile: "libs/alpha/src/broken.go", line: null, column: null, reason: "unreadable" },
     ];
-    expect(() =>
+    await expect(
       deltaCommand("/invented/base.json", contextOf({ failures }), {
         config: config(),
         readBaseline,
         now: NOW,
       }),
-    ).toThrow(/could not be analyzed/u);
+    ).rejects.toThrow(/could not be analyzed/u);
   });
 
-  it("refuses to compare without a boundary config", () => {
+  it("refuses to compare without a boundary config", async () => {
     const { readBaseline } = baselineOf({ records: [] });
-    expect(() =>
+    await expect(
       deltaCommand("/invented/base.json", contextOf(), { config: null, readBaseline, now: NOW }),
-    ).toThrow(/boundary config/u);
+    ).rejects.toThrow(/boundary config/u);
   });
 
-  it("notes a policy change loudly instead of refusing — both sides answer to the current law", () => {
+  it("notes a policy change loudly instead of refusing — both sides answer to the current law", async () => {
     const capturedUnder = config({
       depConstraints: [{ sourceTag: "scope-invented", onlyDependOnLibsWithTags: ["*"] }],
     });
     const { readBaseline } = baselineOf({ records: [crossingRecord()], law: capturedUnder });
-    const result = deltaCommand("/invented/base.json", contextOf({ records: [crossingRecord()] }), {
-      config: config(),
-      readBaseline,
-      now: NOW,
-    });
+    const result = await deltaCommand(
+      "/invented/base.json",
+      contextOf({ records: [crossingRecord()] }),
+      {
+        config: config(),
+        readBaseline,
+        now: NOW,
+      },
+    );
 
     expect(result.delta.policyChanged).toBe(true);
     expect(result.coverage.notes.join("\n")).toMatch(/boundary law changed since capture/u);
@@ -401,13 +424,13 @@ describe("deltaCommand", () => {
     expect(result.delta.summary.resolved).toBe(0);
   });
 
-  it("notes dirty base provenance and a one-sided pair loudly, refusing neither", () => {
+  it("notes dirty base provenance and a one-sided pair loudly, refusing neither", async () => {
     const { snapshot } = baselineOf({ records: [] });
     const dirty = {
       ...snapshot,
       provenance: { commit: "0123456789abcdef0123456789abcdef01234567", remote: null, dirty: true },
     };
-    const result = deltaCommand("/invented/base.json", contextOf(), {
+    const result = await deltaCommand("/invented/base.json", contextOf(), {
       config: config(),
       readBaseline: () => dirty,
       now: NOW,
@@ -419,5 +442,223 @@ describe("deltaCommand", () => {
     // provenance — disclosed, never read as "same repository".
     expect(notes).toMatch(/head carries no provenance/u);
     expect(result.status).toBe("ok");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Compare: the custom-rule fold, driven end to end with a real wasm rule.
+// ---------------------------------------------------------------------------
+
+// The Go SDK's committed reference artifact, read the same way the
+// cross-SDK conformance gate reads it (`../conformance/rule-sdks.mjs`): a
+// rule that computes its findings from the evidence, so the two SIDES of a
+// delta can genuinely disagree — the emitter fixture answers a constant and
+// could never produce an introduced finding.
+const REFERENCE_WASM = fileURLToPath(
+  new URL("../../../archkeep-rule-sdk-go/examples/forbidden_tag_dependency.wasm", import.meta.url),
+);
+const referenceBytes = new Uint8Array(readFileSync(REFERENCE_WASM));
+const referenceSha256 = readFileSync(`${REFERENCE_WASM}.sha256`, "utf8").trim();
+const RULE_ARTIFACT = "tools/rules/forbidden-tag-dependency.wasm";
+const CUSTOM_FINDING_ID = "custom/forbidden-tag-dependency/dependency-on-forbidden-tag";
+
+function customRow(overrides = {}) {
+  return {
+    name: "forbidden-tag-dependency",
+    artifact: RULE_ARTIFACT,
+    sha256: referenceSha256,
+    reason: "the shared scope stays unreachable",
+    params: { exemptTags: [], forbiddenTag: "scope-shared" },
+    ...overrides,
+  };
+}
+
+/** The head-permissive boundary law plus the declared custom rule. */
+function customLaw(overrides = {}) {
+  return config({
+    depConstraints: [{ sourceTag: "scope-invented", onlyDependOnLibsWithTags: ["*"] }],
+    customRules: [customRow()],
+    ...overrides,
+  });
+}
+
+/** An engine graph WITHOUT the alpha → beta edge the reference rule condemns. */
+function edgelessGraph() {
+  const graph = engineGraph();
+  graph.dependencies["acme-alpha"] = [];
+  return graph;
+}
+
+const CUSTOM_OWNED = [{ file: "libs/alpha/src/service.go", project: "acme-alpha" }];
+const readReferenceArtifact = (artifact) => (artifact === RULE_ARTIFACT ? referenceBytes : null);
+
+describe("deltaCommand with custom rules", () => {
+  it("classifies a head-only custom finding as introduced and folds it into exit 1", async () => {
+    // Base: no alpha → beta edge, so the reference rule passes. Head: the
+    // edge exists into the scope-shared project, so the rule fails. The
+    // introduced finding must gate — the delta invisible before this feature.
+    const law = customLaw();
+    const { readBaseline } = baselineOf({ graph: edgelessGraph(), law, owned: CUSTOM_OWNED });
+    const result = await deltaCommand(
+      "/invented/base.json",
+      contextOf({ graph: engineGraph(), owned: CUSTOM_OWNED }),
+      { config: law, readBaseline, now: NOW, readArtifact: readReferenceArtifact },
+    );
+
+    expect(result.status).toBe("findings");
+    expect(result.delta.summary.customFindings).toEqual({
+      introduced: 1,
+      resolved: 0,
+      unchanged: 0,
+      unknown: 0,
+    });
+    expect(result.delta.customRules.judged).toEqual([
+      { name: "forbidden-tag-dependency", sha256: referenceSha256 },
+    ]);
+    expect(result.delta.customRules.findings.introduced[0]).toMatchObject({
+      ruleId: CUSTOM_FINDING_ID,
+      project: "acme-alpha",
+      baseCount: 0,
+      headCount: 1,
+    });
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.exitCode).toBe(1);
+    expect(envelope.decision.verdict).toBe("fail");
+    expect(result.report.text).toContain("1 introduced custom finding");
+    expect(result.report.text).toContain(CUSTOM_FINDING_ID);
+  });
+
+  it("classifies the same finding on both sides as unchanged — a clean gate", async () => {
+    const law = customLaw();
+    const { readBaseline } = baselineOf({ law, owned: CUSTOM_OWNED });
+    const result = await deltaCommand("/invented/base.json", contextOf({ owned: CUSTOM_OWNED }), {
+      config: law,
+      readBaseline,
+      now: NOW,
+      readArtifact: readReferenceArtifact,
+    });
+
+    expect(result.status).toBe("ok");
+    expect(result.delta.summary.customFindings).toEqual({
+      introduced: 0,
+      resolved: 0,
+      unchanged: 1,
+      unknown: 0,
+    });
+    expect(JSON.parse(result.report.json).exitCode).toBe(0);
+  });
+
+  it("answers no-verdict on digest drift, with the skip in the report and a coverage note", async () => {
+    const law = customLaw();
+    const { snapshot } = baselineOf({ law, owned: CUSTOM_OWNED });
+    const drifted = {
+      ...snapshot,
+      customRules: [{ ...snapshot.customRules[0], sha256: "0".repeat(64) }],
+    };
+    const result = await deltaCommand("/invented/base.json", contextOf({ owned: CUSTOM_OWNED }), {
+      config: law,
+      readBaseline: () => drifted,
+      now: NOW,
+      readArtifact: readReferenceArtifact,
+    });
+
+    // The silent direction: a drifted law reporting nothing would read as a
+    // clean delta over a rule that was never actually compared.
+    expect(result.status).toBe("no-verdict");
+    expect(result.delta.summary.customFindings.unknown).toBe(1);
+    expect(result.delta.customRules.skipped[0].reason).toContain("law itself moved");
+    expect(result.coverage.notes.join("\n")).toContain('custom rule "forbidden-tag-dependency"');
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.decision.reason).toContain("custom-rule item");
+  });
+
+  it("answers no-verdict against a baseline with no custom-rule evidence, telling the reader to re-capture", async () => {
+    const law = customLaw();
+    // Captured by a law that declared no rules: the old-baseline shape.
+    const { readBaseline } = baselineOf({ law: config() });
+    const result = await deltaCommand("/invented/base.json", contextOf({ owned: CUSTOM_OWNED }), {
+      config: law,
+      readBaseline,
+      now: NOW,
+      readArtifact: readReferenceArtifact,
+    });
+
+    expect(result.status).toBe("no-verdict");
+    expect(result.delta.customRules.skipped[0].reason).toContain("re-capture the baseline");
+    expect(result.report.text).toContain("re-capture the baseline");
+  });
+
+  it("reports a rule the head no longer declares as removed — disclosed, never judged", async () => {
+    const { readBaseline } = baselineOf({ law: customLaw(), owned: CUSTOM_OWNED });
+    const result = await deltaCommand("/invented/base.json", contextOf(), {
+      config: config(),
+      readBaseline,
+      now: NOW,
+    });
+
+    expect(result.status).toBe("ok");
+    expect(result.delta.customRules.removed).toEqual(["forbidden-tag-dependency"]);
+    expect(result.delta.customRules.judged).toEqual([]);
+    expect(result.delta.summary.customFindings).toEqual({
+      introduced: 0,
+      resolved: 0,
+      unchanged: 0,
+      unknown: 0,
+    });
+    expect(result.coverage.notes.join("\n")).toContain("not by the current policy");
+  });
+
+  it("passes the caller's timeoutMs through to the wasm host — the option's spelling is load-bearing", async () => {
+    // The silent direction of an option name: `deltaCommand` forwards its rest
+    // options to `customRulesForDelta`, so a misspelled key (the JSDoc once
+    // said `customRuleTimeoutMs`) would vanish in the spread and every rule
+    // would silently run under the 10s default. The refusal reason naming the
+    // caller's own number is the proof the value reached the host.
+    const loopBytes = buildRuleModule({
+      describeJson: JSON.stringify({
+        contract: 1,
+        name: "loop-rule",
+        needs: ["model", "graph", "imports", "policy"],
+        findings: [{ id: "spin", message: "never reported" }],
+      }),
+      evaluateBehavior: "loop",
+    });
+    const loopRow = {
+      name: "loop-rule",
+      artifact: "tools/rules/loop-rule.wasm",
+      sha256: createHash("sha256").update(loopBytes).digest("hex"),
+      reason: "the timeout fixture",
+    };
+    const law = customLaw({ customRules: [loopRow] });
+    const { readBaseline } = baselineOf({ law, owned: CUSTOM_OWNED });
+    const result = await deltaCommand("/invented/base.json", contextOf({ owned: CUSTOM_OWNED }), {
+      config: law,
+      readBaseline,
+      now: NOW,
+      readArtifact: (artifact) => (artifact === loopRow.artifact ? loopBytes : null),
+      timeoutMs: 400,
+    });
+
+    expect(result.status).toBe("no-verdict");
+    expect(result.delta.customRules.skipped[0].reason).toContain("400ms budget");
+  });
+
+  it("keeps the envelope byte-free of custom keys when neither side declares rules", async () => {
+    // The compatibility red case: a workspace that never declared custom
+    // rules must get byte-for-byte the envelope it already had — no block,
+    // no summary key, no spelling of "customRules" anywhere in the JSON.
+    const { readBaseline } = baselineOf();
+    const result = await deltaCommand("/invented/base.json", contextOf(), {
+      config: config(),
+      readBaseline,
+      now: NOW,
+    });
+
+    expect("customRules" in result.delta).toBe(false);
+    expect("customFindings" in result.delta.summary).toBe(false);
+    expect(result.report.json).not.toContain("customRules");
+    expect(result.report.json).not.toContain("customFindings");
+    expect(result.report.text).not.toContain("custom rules");
   });
 });

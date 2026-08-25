@@ -237,3 +237,133 @@ describe("formatDeltaReport", () => {
     expect(report).toContain("head      89abcdef, dirty, 4 records, 2 projects");
   });
 });
+
+// ---------------------------------------------------------------------------
+// The custom-rules block.
+// ---------------------------------------------------------------------------
+
+function customEntry(overrides = {}) {
+  return {
+    classification: "introduced",
+    rule: "no-invented-reach",
+    findingId: "reached-core",
+    ruleId: "custom/no-invented-reach/reached-core",
+    project: "acme-alpha",
+    message: "acme-alpha reached an invented core internal",
+    baseCount: 0,
+    headCount: 1,
+    baseSites: [],
+    headSites: [{ file: "libs/alpha/src/service.go", line: 5, column: 2 }],
+    ...overrides,
+  };
+}
+
+/** A payload whose delta carries the custom-rules block. */
+function customPayload({
+  findings = {},
+  judged = [],
+  skipped = [],
+  removed = [],
+  counts = {},
+} = {}) {
+  const base = payload();
+  base.delta.customRules = {
+    judged,
+    skipped,
+    removed,
+    findings: { ...EMPTY_BUCKETS, ...findings },
+  };
+  base.delta.summary.customFindings = {
+    introduced: 0,
+    resolved: 0,
+    unchanged: 0,
+    unknown: 0,
+    ...counts,
+  };
+  return base;
+}
+
+describe("formatDeltaReport — custom rules", () => {
+  it("renders NO custom section at all when the delta computed none", () => {
+    // The silent-direction compatibility case: an undeclaring workspace's
+    // report must be byte-for-byte the one it already had.
+    expect(formatDeltaReport(payload())).not.toContain("custom rules");
+  });
+
+  it("renders an introduced custom finding with its id, project, counts, site, and a gating close", () => {
+    const text = formatDeltaReport(
+      customPayload({
+        judged: [{ name: "no-invented-reach", sha256: "a".repeat(64) }],
+        findings: { introduced: [customEntry()] },
+        counts: { introduced: 1 },
+      }),
+    );
+    expect(text).toContain("custom rules (1 judged, 0 skipped, 0 removed)");
+    expect(text).toContain("⚠ 1 introduced custom finding");
+    expect(text).toContain(
+      "custom/no-invented-reach/reached-core  in acme-alpha  (0 at base, 1 at head)",
+    );
+    expect(text).toContain("acme-alpha reached an invented core internal");
+    expect(text).toContain("at libs/alpha/src/service.go:5:2");
+    // A delta whose only introduction is custom must not close clean.
+    expect(text).toContain("1 introduced custom finding — custom findings have no waiver lane");
+  });
+
+  it("prints no site line for a whole-workspace finding, and no project for an unattributed one", () => {
+    const text = formatDeltaReport(
+      customPayload({
+        findings: {
+          introduced: [
+            customEntry({
+              project: null,
+              headSites: [{ file: undefined, line: undefined, column: undefined }],
+            }),
+          ],
+        },
+        counts: { introduced: 1 },
+      }),
+    );
+    expect(text).toContain("custom/no-invented-reach/reached-core  (0 at base, 1 at head)");
+    expect(text).not.toContain("at undefined");
+  });
+
+  it("renders resolved, unchanged-with-note, and unknown custom buckets, each with its count", () => {
+    const text = formatDeltaReport(
+      customPayload({
+        findings: {
+          resolved: [customEntry({ classification: "resolved", baseCount: 1, headCount: 0 })],
+          unchanged: [
+            customEntry({
+              classification: "unchanged",
+              baseCount: 2,
+              headCount: 1,
+              note: "occurrencesReduced: 2 at base, 1 at head — the finding still exists",
+            }),
+          ],
+          unknown: [
+            {
+              classification: "unknown",
+              rule: "drifted-rule",
+              reason: "the law itself moved",
+            },
+          ],
+        },
+        skipped: [{ name: "drifted-rule", reason: "the law itself moved" }],
+        counts: { resolved: 1, unchanged: 1, unknown: 1 },
+      }),
+    );
+    expect(text).toContain("✔ 1 resolved custom finding");
+    expect(text).toContain("= 1 unchanged custom finding");
+    expect(text).toContain("occurrencesReduced: 2 at base, 1 at head — the finding still exists");
+    // The unknown line names the rule AND the reason — an unclassifiable
+    // item that rendered as nothing would be the silent direction.
+    expect(text).toContain("? 1 unclassifiable custom item");
+    expect(text).toContain("drifted-rule: the law itself moved");
+    expect(text).toContain("custom rules (0 judged, 1 skipped, 0 removed)");
+  });
+
+  it("counts removed rules in the heading", () => {
+    const text = formatDeltaReport(customPayload({ removed: ["gone-rule"] }));
+    expect(text).toContain("custom rules (0 judged, 0 skipped, 1 removed)");
+  });
+});

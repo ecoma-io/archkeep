@@ -73,6 +73,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { canonicalizeJson } from "../canonical.mjs";
 import { containmentViolation } from "../containment.mjs";
 import { buildEvidenceBundle, serializeEvidenceBundle } from "../custom-rules/evidence.mjs";
 import {
@@ -92,13 +93,14 @@ import { fitnessVerdict } from "../governance/verdict.mjs";
  * `custom/<ruleName>/<findingId>`. Built here, once, and carried on the
  * records this module hands back — so `../report/text.mjs`, `../report/sarif.mjs`
  * and `../../cli.mjs`'s JSON envelope render an id rather than compose one,
- * and three faces cannot come to spell the same finding three ways.
+ * and three faces cannot come to spell the same finding three ways. Exported
+ * for `./delta-classify.mjs`, whose classified entries name the same id.
  *
  * @param {string} ruleName
  * @param {string} findingId
  * @returns {string}
  */
-function namespacedId(ruleName, findingId) {
+export function namespacedId(ruleName, findingId) {
   return `custom/${ruleName}/${findingId}`;
 }
 
@@ -425,4 +427,286 @@ export async function customRulesForCheck(
   }
 
   return { decisions, overall: fitnessVerdictFor(decisions), catalogue, evidence };
+}
+
+/**
+ * The base side's evidence facts, rebuilt from a validated snapshot.
+ *
+ * The mirror of `observedFacts`, over stored evidence: projects and edges come
+ * from the snapshot's `graph` section (already the normalized rows
+ * `buildProjects`/`buildDependencies` wrote), imports from the stored records
+ * attributed through the stored `owned` map. Attribution is NOT re-derived
+ * from root prefixes — ownership is the workspace layer's answer and the base
+ * workspace no longer exists to ask, which is exactly why the snapshot stores
+ * the map (`./delta-snapshot.mjs`, the optional-blocks section). A record the
+ * stored map does not claim keeps `sourceProject: undefined`, and
+ * `buildEvidenceBundle` refuses it by name — the caller routes that refusal to
+ * an `unknown` rule rather than a silently thinner evidence set.
+ *
+ * @param {{graph: {projects: object[], dependencies: object[]},
+ *   records: object[], owned?: {file: string, project: string}[]}} baseline
+ *   A validated snapshot (`parseEvidenceSnapshot`).
+ * @param {object} policy The CURRENT loaded boundary policy — both sides are
+ *   judged under one law, the same bargain the boundary re-judgment strikes.
+ * @returns {{projects: object[], edges: object[], imports: object[], policy: object}}
+ */
+function baselineFacts(baseline, policy) {
+  const projectOfFile = new Map((baseline.owned ?? []).map(({ file, project }) => [file, project]));
+  return {
+    projects: baseline.graph.projects.map((project) => ({
+      name: project.name,
+      root: project.root,
+      tags: Array.isArray(project.tags) ? project.tags : [],
+    })),
+    edges: baseline.graph.dependencies,
+    imports: baseline.records.map((site) => ({
+      site,
+      sourceProject: projectOfFile.get(site.sourceFile),
+    })),
+    policy,
+  };
+}
+
+/**
+ * The reason a declared head row cannot be judged on both sides, or `null`
+ * when the baseline row pins the identical law.
+ *
+ * Digest drift and params drift are the same refusal: the artifact bytes and
+ * the declared parameters together ARE the rule's law (params ride inside the
+ * evidence bundle), and a finding difference under a law that itself moved
+ * cannot be attributed to the code — the same reasoning the policy-fingerprint
+ * note states for the boundary side, but per rule and fail-closed to
+ * `unknown` because unlike the boundary law the OLD custom law cannot be
+ * re-applied: only the head artifact exists to run.
+ *
+ * @param {{name: string, sha256: string, params?: object}} row Head-declared.
+ * @param {{sha256: string, params?: object}|undefined} baseRow The stored row.
+ * @returns {string|null}
+ */
+function unjudgeableRowReason(row, baseRow) {
+  if (baseRow === undefined) {
+    return (
+      "no base-side evidence exists for this rule — the baseline does not declare it, so its " +
+      "findings cannot be told apart from pre-existing ones; re-capture the baseline with the " +
+      "rule declared"
+    );
+  }
+  if (baseRow.sha256 !== row.sha256) {
+    return (
+      `the rule's artifact digest changed between capture (${baseRow.sha256}) and head ` +
+      `(${row.sha256}) — the law itself moved, so a finding difference cannot be attributed ` +
+      `to the code; re-capture the baseline under the current artifact`
+    );
+  }
+  if (canonicalizeJson(baseRow.params ?? null) !== canonicalizeJson(row.params ?? null)) {
+    return (
+      "the rule's declared params changed between capture and head — params ride inside the " +
+      "evidence bundle, so this is law drift exactly as a digest change is; re-capture the " +
+      "baseline under the current declaration"
+    );
+  }
+  return null;
+}
+
+/**
+ * Every custom rule the head policy declares, evaluated over BOTH sides of a
+ * delta — the current tree's facts and a baseline snapshot's stored ones —
+ * under the current declaration.
+ *
+ * Fail-closed throughout: every path that cannot produce a two-sided judgment
+ * lands the rule in `unknownRules` with a reason a reader can act on, never in
+ * `judged` with a thinner answer — with ONE exception, deliberately shared
+ * with `customRulesForCheck`: a LOAD-class failure (unreadable artifact, hash
+ * mismatch, bytes that are not the contract) THROWS, because the head law
+ * could not be read at all and `check` on the same tree would refuse the same
+ * way; a delta that soft-reported it would let a permanently unloadable rule
+ * ride every delta as one more unknown row.
+ *
+ * The routes into `unknownRules`, each with its reason:
+ * - the baseline carries no custom-rule blocks at all (`baselineAbsentReason`
+ *   below rides every rule);
+ * - the baseline never declared this rule (added since capture);
+ * - digest or params drift (`unjudgeableRowReason`);
+ * - either side's evidence bundle refuses to build (an unattributable stored
+ *   record, a graph row the bundle cannot read);
+ * - either side's evaluation fails, or the rule itself answers `unknown`;
+ * - the rule answers `not_applicable` on exactly one side (the asymmetric
+ *   case the paragraph below argues).
+ *
+ * A rule that answers `not_applicable` on BOTH sides contributes an EMPTY
+ * finding list per side plus a note naming each reason — not applicable is a
+ * judged answer, not a failure (`../governance/fitness-rules.mjs` draws the
+ * same line). A rule that answers `not_applicable` on only ONE side lands in
+ * `unknownRules` instead: an empty list for the inapplicable side beside real
+ * findings (or a judged pass) on the other would classify every base finding
+ * as resolved — or every head finding as introduced — on the strength of a
+ * side the rule never judged, which is the silent direction.
+ *
+ * Rules the baseline declares that the head no longer does are returned as
+ * `removedRules` — nothing is judged for them (the head declares no law to
+ * run), and the caller turns the list into a coverage note.
+ *
+ * @param {object} commandContext From `./context.mjs`'s `resolveCommandContext`.
+ * @param {{rows: object[], policy: object, baseline: object,
+ *   readArtifact?: (artifact: string) => Uint8Array|null, timeoutMs?: number}} run
+ *   `rows` is the head policy's validated `customRules` list, `policy` the
+ *   loaded head policy, `baseline` the validated evidence snapshot.
+ * @returns {Promise<{judged: {name: string, sha256: string,
+ *   baseFindings: object[], headFindings: object[], notes?: string[]}[],
+ *   unknownRules: {name: string, reason: string}[], removedRules: string[],
+ *   catalogue: {ruleId: string, rule: string, findingId: string, message: string}[]}>}
+ *   `judged` findings are each side's verdict-document findings verbatim
+ *   (un-namespaced ids — `./delta-classify.mjs` namespaces per entry).
+ * @throws {Error} on any load-class failure, naming the rule and the reason.
+ */
+export async function customRulesForDelta(
+  commandContext,
+  { rows, policy, baseline, readArtifact, timeoutMs = CUSTOM_RULE_TIMEOUT_MS },
+) {
+  /** @type {{name: string, reason: string}[]} */
+  const unknownRules = [];
+  /** @type {object[]} */
+  const judgeableRows = [];
+  const baseRows =
+    baseline.customRules === undefined
+      ? null
+      : new Map(baseline.customRules.map((row) => [row.name, row]));
+
+  for (const row of rows) {
+    if (baseRows === null) {
+      unknownRules.push({
+        name: row.name,
+        reason:
+          "the baseline carries no custom-rule evidence — it was captured before custom rules " +
+          "were declared, or by a version that did not store them; re-capture the baseline",
+      });
+      continue;
+    }
+    const reason = unjudgeableRowReason(row, baseRows.get(row.name));
+    if (reason !== null) {
+      unknownRules.push({ name: row.name, reason });
+      continue;
+    }
+    judgeableRows.push(row);
+  }
+
+  const removedRules =
+    baseRows === null
+      ? []
+      : baseline.customRules
+          .filter((baseRow) => !rows.some((row) => row.name === baseRow.name))
+          .map((baseRow) => baseRow.name);
+
+  // The load pass, whole-law-or-refuse, exactly as `customRulesForCheck`:
+  // every judgeable rule is loaded before any is evaluated.
+  const read = readArtifact ?? readArtifactBytes(commandContext.root);
+  /** @type {{row: object, module: WebAssembly.Module, describe: Record<string, any>}[]} */
+  const loaded = [];
+  for (const row of judgeableRows) {
+    const artifactBytes = read(row.artifact);
+    if (artifactBytes === null || artifactBytes === undefined) {
+      refuseLoad(
+        row.name,
+        `the artifact "${row.artifact}" could not be read — a path that does not exist, cannot ` +
+          `be opened, or resolves through a symlink out of the workspace all reach this run as ` +
+          `no bytes at all, and a declared law with no bytes behind it is a run that refuses ` +
+          `rather than a rule that quietly judges nothing`,
+      );
+    }
+    const outcome = await loadCustomRule({
+      name: row.name,
+      artifactBytes,
+      declaredSha256: row.sha256,
+      timeoutMs,
+    });
+    if (!outcome.ok) throw new Error(`archkeep: ${outcome.failure.reason}`);
+    loaded.push({ row, module: outcome.module, describe: outcome.describe });
+  }
+
+  const catalogue = loaded.flatMap(({ row, describe }) =>
+    describe.findings.map((entry) => ({
+      ruleId: namespacedId(row.name, entry.id),
+      rule: row.name,
+      findingId: entry.id,
+      message: entry.message,
+    })),
+  );
+
+  const sides = [
+    { side: "base", observed: baselineFacts(baseline, policy) },
+    { side: "head", observed: observedFacts(commandContext, policy) },
+  ];
+
+  /** @type {{name: string, sha256: string, baseFindings: object[], headFindings: object[], notes?: string[]}[]} */
+  const judged = [];
+  for (const { row, module, describe } of loaded) {
+    /** @type {Record<string, object[]>} */
+    const findingsBySide = {};
+    /** @type {string[]} */
+    const notes = [];
+    /** @type {string[]} */
+    const notApplicableSides = [];
+    /** @type {string|null} */
+    let unknownReason = null;
+    for (const { side, observed } of sides) {
+      let evidenceBytes;
+      try {
+        evidenceBytes = serializeEvidenceBundle(buildEvidenceBundle({ ...observed, rule: row }));
+      } catch (cause) {
+        // Fail-closed on BOTH sides, base and head alike: an evidence set the
+        // bundle refuses (an unattributable record above all) is a side this
+        // rule cannot honestly judge, and the rule says so rather than being
+        // judged over the records that survived.
+        unknownReason =
+          `the ${side}-side evidence could not be assembled: ` +
+          `${cause instanceof Error ? cause.message : String(cause)}`;
+        break;
+      }
+      const outcome = await evaluateCustomRule({ module, describe, evidenceBytes, timeoutMs });
+      if (!outcome.ok) {
+        unknownReason = `on the ${side} side, ${outcome.failure.reason}`;
+        break;
+      }
+      if (outcome.verdict.verdict === "unknown") {
+        unknownReason = `the rule could not judge the ${side} side — ${outcome.verdict.reason}`;
+        break;
+      }
+      if (outcome.verdict.verdict === "not_applicable") {
+        notes.push(`${side} side: not applicable — ${outcome.verdict.notApplicableReason}`);
+        notApplicableSides.push(side);
+        findingsBySide[side] = [];
+        continue;
+      }
+      findingsBySide[side] = outcome.verdict.findings;
+    }
+    // Applicability must be SYMMETRIC to judge a delta: a rule that did not
+    // apply on one side contributed an empty list there, and classifying real
+    // findings from the other side against that emptiness would call base
+    // findings resolved — or head findings introduced — on the strength of a
+    // side the rule never judged. Both-sides not_applicable stays a judged
+    // (empty) answer; one-sided lands in `unknownRules`, fail-closed.
+    if (unknownReason === null && notApplicableSides.length === 1) {
+      const inapplicable = notApplicableSides[0];
+      const applicable = inapplicable === "base" ? "head" : "base";
+      unknownReason =
+        `the rule did not apply at ${inapplicable} while it judged the ${applicable} side — ` +
+        (inapplicable === "head"
+          ? `base findings cannot be called resolved by a side the rule did not judge`
+          : `head findings cannot be called introduced against a side the rule did not judge`) +
+        `; ${notes.join("; ")}`;
+    }
+    if (unknownReason !== null) {
+      unknownRules.push({ name: row.name, reason: unknownReason });
+      continue;
+    }
+    judged.push({
+      name: row.name,
+      sha256: row.sha256,
+      baseFindings: findingsBySide.base,
+      headFindings: findingsBySide.head,
+      ...(notes.length === 0 ? {} : { notes }),
+    });
+  }
+
+  return { judged, unknownRules, removedRules, catalogue };
 }

@@ -6,7 +6,10 @@
  * Sections render only when they have content — introduced (with waived
  * annotations), resolved, unchanged (with the occurrences-reduced note where
  * one applies), unknown (with the reason each identity could not be stated),
- * and the unresolvable-import block — and the summary line always states what
+ * the unresolvable-import block, and the custom-rules block (only when the
+ * delta computed one — `../commands/delta.mjs` keeps it absent for a
+ * workspace where neither side declares custom rules) — and the summary line
+ * always states what
  * was compared: base and head identity, record and project counts, and the
  * bucket totals. "No introduced violations" is a claim about a comparison the
  * reader can verify, never silence (`../../../../AGENTS.md`).
@@ -57,6 +60,71 @@ function unresolvableLines(entry) {
 /** One unknown entry — the reason is the load-bearing half. */
 function unknownLines(entry) {
   return [`  ? ${entry.reason}`];
+}
+
+/** One classified custom-finding entry as its report lines. */
+function customFindingLines(entry) {
+  const where = entry.project === null ? "" : `  in ${entry.project}`;
+  const counts = `${entry.baseCount} at base, ${entry.headCount} at head`;
+  const lines = [`  ${entry.ruleId}${where}  (${counts})`];
+  if (entry.message !== undefined) lines.push(`    ${entry.message}`);
+  if (entry.note !== undefined) lines.push(`    ${entry.note}`);
+  const sites = entry.headSites.length > 0 ? entry.headSites : entry.baseSites;
+  for (const site of sites) {
+    // A custom finding states a position only when its rule stated one — a
+    // whole-workspace finding has no file, and no line is printed for it.
+    if (site.file !== undefined) lines.push(`    at ${site.file}:${site.line}:${site.column}`);
+  }
+  return lines;
+}
+
+/** One unknown custom entry — the rule name plus the mandatory reason. */
+function customUnknownLines(entry) {
+  return [`  ? ${entry.rule}: ${entry.reason}`];
+}
+
+/**
+ * The custom-rules block, rendered only when the delta computed one — a
+ * workspace where neither side declares custom rules keeps the exact report
+ * it already had.
+ *
+ * @param {{judged: object[], skipped: object[], removed: string[],
+ *   findings: object}} customRules
+ * @param {{customFindings: {introduced: number, resolved: number,
+ *   unchanged: number, unknown: number}}} summary
+ * @returns {string[]}
+ */
+function customRulesSections(customRules, summary) {
+  const { judged, skipped, removed, findings } = customRules;
+  const counts = summary.customFindings;
+  const lines = [
+    `custom rules (${judged.length} judged, ${skipped.length} skipped, ${removed.length} removed)`,
+  ];
+  lines.push(
+    ...section(
+      `  ⚠ ${counts.introduced} introduced custom finding${counts.introduced === 1 ? "" : "s"}`,
+      findings.introduced.map(customFindingLines),
+    ),
+  );
+  lines.push(
+    ...section(
+      `  ✔ ${counts.resolved} resolved custom finding${counts.resolved === 1 ? "" : "s"}`,
+      findings.resolved.map(customFindingLines),
+    ),
+  );
+  lines.push(
+    ...section(
+      `  = ${counts.unchanged} unchanged custom finding${counts.unchanged === 1 ? "" : "s"}`,
+      findings.unchanged.map(customFindingLines),
+    ),
+  );
+  lines.push(
+    ...section(
+      `  ? ${counts.unknown} unclassifiable custom item${counts.unknown === 1 ? "" : "s"}`,
+      findings.unknown.map(customUnknownLines),
+    ),
+  );
+  return lines;
 }
 
 /**
@@ -162,6 +230,10 @@ export function formatDeltaReport({ delta, coverage }) {
     );
   }
 
+  if (delta.customRules !== undefined) {
+    sections.push(...customRulesSections(delta.customRules, summary));
+  }
+
   // The closing claim always states what was compared, so an empty delta is a
   // verifiable statement rather than silence.
   const compared =
@@ -176,6 +248,15 @@ export function formatDeltaReport({ delta, coverage }) {
     sections.push(
       `${summary.introduced - summary.introducedWaived} introduced ${introducedWord} not ` +
         `waived — ${compared}`,
+    );
+  }
+  // The custom gate's own closing claim, so a delta whose only introduction is
+  // a custom finding does not end on a line reading clean.
+  if (delta.customRules !== undefined && summary.customFindings.introduced > 0) {
+    const count = summary.customFindings.introduced;
+    sections.push(
+      `⚠ ${count} introduced custom finding${count === 1 ? "" : "s"} — custom findings have ` +
+        `no waiver lane, every one gates`,
     );
   }
 
