@@ -118,7 +118,7 @@ packages/
   archkeep-rule-sdk-ts/     evidence fixtures, and a committed `.wasm` with its
   archkeep-rule-sdk-python/ digest; each README owns its build story and limits
 module-boundaries.config.mjs   this repository's own boundary law
-coverage.config.json           the coverage floor the two `.mjs` packages read
+coverage.config.json           the coverage floor every package's vitest config reads
 ```
 
 `archkeep` carries its own `AGENTS.md` for everything below this level —

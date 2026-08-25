@@ -25,6 +25,21 @@
  * structure, history, proposal — and everything else stays where a human or
  * a pipeline reads it. Growing the surface is a decision, not an
  * aggregation.
+ *
+ * Two properties every tool carries, stated here because no single
+ * registration should be the place a reader learns them:
+ *
+ * - **Every input schema is strict.** zod's default strips a key the schema
+ *   does not name, so a typo (`path` for `paths`) would silently answer the
+ *   question WITHOUT the argument the caller believed they had passed — for
+ *   `check`, a scoped run widening to the workspace (the safe direction), but
+ *   for `context`, a narrowing that leaves no trace at all. `z.strictObject`
+ *   turns every unknown key into a validation error that names it, before
+ *   the engine is reached.
+ * - **Every tool announces `readOnlyHint: true`.** All eight compose the
+ *   engine's read and propose surfaces; a host uses the hint to trim
+ *   permission prompts, and the authority boundary the propose tool's
+ *   description argues is the fact the annotation rests on.
  */
 import { createRequire } from "node:module";
 
@@ -54,15 +69,18 @@ export const SERVER_VERSION = require2("../package.json").version;
 /**
  * The `workspaceRoot` argument every tool accepts, described once — the
  * workspace a call answers for, when it is not the process's own working
- * directory.
+ * directory. Absolute by contract and refused when it is not (the adapters
+ * hold that, in one place): a relative path would resolve against the
+ * server's own start directory, a tree the caller cannot know.
  */
 const workspaceRootField = z
   .string()
   .min(1)
   .optional()
   .describe(
-    "Absolute path of the Archkeep workspace root to answer for. " +
-      "Omit when the server was started in the workspace (the default).",
+    "Absolute path of the Archkeep workspace root to answer for (a relative " +
+      "path is refused). Omit when the server was started in the workspace " +
+      "(the default).",
   );
 
 /**
@@ -140,13 +158,16 @@ export function createServer(io = {}) {
       description:
         "Deterministic architecture context to read BEFORE planning or making a change to a " +
         "project: the project's tags and the constraint rows that govern it (with the " +
-        "workspace's authored descriptions and remediation), the current architecture graph " +
-        "around it, its dependents (capped, with an overflow note), current violations scoped " +
-        "to the change, drift signals (go.work, tsconfig paths), the architecture-intent " +
-        "verdict when one is declared, and coverage with the exact files that could not be " +
-        "analyzed. Facts only — this never generates a plan; deciding the plan is the agent's " +
-        "job. Equivalent to `archkeep context <project> --plan --format json`.",
-      inputSchema: {
+        "workspace's authored descriptions and remediation), the architecture graph the plan " +
+        "is made against (all projects and edges; the plan's targets, violations and impact " +
+        "are scoped to the change), its dependents (capped, with an overflow note), current " +
+        "violations scoped to the change, drift signals (go.work, tsconfig paths), the " +
+        "architecture-intent verdict when one is declared, and coverage with the exact files " +
+        "that could not be analyzed. Facts only — this never generates a plan; deciding the " +
+        "plan is the agent's job. Equivalent to " +
+        "`archkeep context <project> --plan --format json`.",
+      annotations: { readOnlyHint: true },
+      inputSchema: z.strictObject({
         workspaceRoot: workspaceRootField,
         project: z
           .string()
@@ -162,7 +183,7 @@ export function createServer(io = {}) {
             "Workspace-relative paths the change touches, narrowing the reported violations " +
               "and impact to the projects that own them. Omit for the project alone.",
           ),
-      },
+      }),
     },
     asHandler(contextTool, io),
   );
@@ -179,19 +200,25 @@ export function createServer(io = {}) {
         "the architecture violates an applicable law), 'unknown' (the run could not look: " +
         "incomplete coverage, a law that would not load, a run that could not start). " +
         "'unknown' is never 'pass' and never 'fail' — treat it as red and investigate, not " +
-        "as clean and not as findings. Equivalent to `archkeep check --format json`. This is " +
-        "the verdict to verify a change with; `archkeep_drift` answers a different question.",
-      inputSchema: {
+        "as clean and not as findings. Read `scope` beside the verdict: " +
+        "scope.kind 'workspace' is the whole-workspace gate; scope.kind 'paths' is a fast " +
+        "pre-check of the named files ONLY — a scoped 'pass' says nothing about the files " +
+        "outside its scope and never stands in for the gate. Equivalent to " +
+        "`archkeep check --format json`. This is the verdict to verify a change with; " +
+        "`archkeep_drift` answers a different question.",
+      annotations: { readOnlyHint: true },
+      inputSchema: z.strictObject({
         workspaceRoot: workspaceRootField,
         paths: z
           .array(z.string().min(1))
           .optional()
           .describe(
             "Workspace-relative files to scope the run to (a fast pre-check). A scoped run " +
-              "says nothing about files outside its scope; an unscoped run is the gate. " +
+              "says nothing about files outside its scope — its result carries " +
+              "scope.kind 'paths' to say so; an unscoped run is the gate. " +
               "Omit for the whole workspace.",
           ),
-      },
+      }),
     },
     asHandler(checkTool, io),
   );
@@ -207,10 +234,11 @@ export function createServer(io = {}) {
         "coverage is narrower than a full check (tag constraints only); run " +
         "`archkeep_check` for the complete verdict. Equivalent to " +
         "`archkeep impact <project> --format json`.",
-      inputSchema: {
+      annotations: { readOnlyHint: true },
+      inputSchema: z.strictObject({
         workspaceRoot: workspaceRootField,
         project: z.string().min(1).describe("Name of the project whose dependents to list."),
-      },
+      }),
     },
     asHandler(impactTool, io),
   );
@@ -227,9 +255,10 @@ export function createServer(io = {}) {
         "asks whether reality has moved away from what was declared. Requires a tracked " +
         "intent; a workspace without one is refused (use `archkeep_propose` to draft one). " +
         "Equivalent to `archkeep drift --format json`.",
-      inputSchema: {
+      annotations: { readOnlyHint: true },
+      inputSchema: z.strictObject({
         workspaceRoot: workspaceRootField,
-      },
+      }),
     },
     asHandler(driftTool, io),
   );
@@ -241,12 +270,14 @@ export function createServer(io = {}) {
       description:
         "The deterministic judgment for one import site, explained: the import specifier, " +
         "source and target projects with their tags, which constraint rows matched, whether " +
-        "the site is a violation or allowed and why — with `remediation` (the workspace " +
-        "author's declared guidance, verbatim) and `allowed` (the governing row's own allow " +
-        "list) on every violation entry. Pass the `file`, `line` and `column` exactly as the " +
+        "the site is a violation or allowed and why — with `remediation` and `allowed` keys " +
+        "on every violation entry: the workspace author's declared guidance and the " +
+        "governing row's own allow list, verbatim when the row declares either, `null` when " +
+        "it declares none. Pass the `file`, `line` and `column` exactly as the " +
         "finding reported them (1-based). Equivalent to " +
         "`archkeep explain <file>:<line>:<column> --format json`.",
-      inputSchema: {
+      annotations: { readOnlyHint: true },
+      inputSchema: z.strictObject({
         workspaceRoot: workspaceRootField,
         file: z
           .string()
@@ -254,7 +285,7 @@ export function createServer(io = {}) {
           .describe("Workspace-relative source file of the finding (`sourceFile`)."),
         line: z.number().int().min(1).describe("1-based line of the import site."),
         column: z.number().int().min(1).describe("1-based column of the import site."),
-      },
+      }),
     },
     asHandler(explainTool, io),
   );
@@ -268,11 +299,13 @@ export function createServer(io = {}) {
         "targets, dependencies, workspace layout, and the policy fingerprint when the " +
         "workspace declares a law. For structural exploration — finding a project's name " +
         "for `archkeep_context`/`archkeep_impact`, seeing what exists. For assembling the " +
-        "facts a change needs, prefer `archkeep_context`, which scopes the same graph to " +
-        "the change. Equivalent to `archkeep graph --format json`.",
-      inputSchema: {
+        "facts a change needs, prefer `archkeep_context`, which adds the constraint rows, " +
+        "dependents and scoped violations a plan is made of. Equivalent to " +
+        "`archkeep graph --format json`.",
+      annotations: { readOnlyHint: true },
+      inputSchema: z.strictObject({
         workspaceRoot: workspaceRootField,
-      },
+      }),
     },
     asHandler(graphTool, io),
   );
@@ -283,32 +316,28 @@ export function createServer(io = {}) {
       title: "Architectural history and recorded decisions",
       description:
         'Two kinds of architectural evidence. `evidence: "decisions"` — the ADR registry ' +
-        "at the workspace root: every recorded decision, its status, its supersession " +
-        "chain, and the rule/fitness ids it binds (optionally one record by `decisionId`). " +
+        "at the workspace root, at registry granularity: every recorded decision's id and " +
+        "status, the rule/fitness ids each one binds, and every supersession chain, with " +
+        "references that resolve to no record named under `result.unresolved` (which makes " +
+        "the run no-verdict). For one record's prose, read the ADR file the envelope's " +
+        "registry directory names. " +
         '`evidence: "evolution"` — the transitions across a directory of graph snapshots ' +
         "(the directory `archkeep history --capture` maintains), each classified as " +
         "architecture, policy, provider or code drift; needs `directory`. Read-only — " +
         "capturing a snapshot is a workspace action the CLI owns.",
-      inputSchema: {
+      annotations: { readOnlyHint: true },
+      inputSchema: z.strictObject({
         workspaceRoot: workspaceRootField,
         evidence: z.enum(["decisions", "evolution"]).describe("Which kind of evidence to return."),
-        decisionId: z
-          .string()
-          .min(1)
-          .optional()
-          .describe(
-            "One ADR record to return (its id, e.g. '0002-custom-rules-one-contract'), " +
-              "with the reverse lookup of what binds it. Decisions evidence only.",
-          ),
         directory: z
           .string()
           .min(1)
           .optional()
           .describe(
             "The snapshot directory to read, workspace-relative or absolute. Required for " +
-              "evolution evidence.",
+              "evolution evidence; refused for decisions evidence.",
           ),
-      },
+      }),
     },
     asHandler(historyTool, io),
   );
@@ -328,7 +357,8 @@ export function createServer(io = {}) {
         "waiver is created, no authority moves. Adopting a proposal is a human decision " +
         "made in a reviewed pull request; this server exposes no tool that can write the " +
         "intent, the policy, or any authoritative file.",
-      inputSchema: {
+      annotations: { readOnlyHint: true },
+      inputSchema: z.strictObject({
         workspaceRoot: workspaceRootField,
         mode: z
           .enum(["discover", "reconcile"])
@@ -336,7 +366,7 @@ export function createServer(io = {}) {
             "'discover' proposes an architecture from what is observed; 'reconcile' " +
               "proposes edits that bring the declared intent back in line with it.",
           ),
-      },
+      }),
     },
     asHandler(proposeTool, io),
   );

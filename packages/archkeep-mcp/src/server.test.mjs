@@ -159,6 +159,42 @@ describe("input schema validation", () => {
     await client.close();
     await server.close();
   });
+
+  it("rejects an unknown key rather than stripping it — a typo'd argument is loud", async () => {
+    // zod's default strips unknown keys, so `path` for `paths` would run an
+    // UNscoped check under the caller's belief that they had scoped it — and
+    // on `archkeep_context`, a dropped narrowing leaves no trace at all. The
+    // strict schemas turn the typo into a validation error naming the key.
+    const { server, client } = await connectedSession();
+    const result = await client.callTool({
+      name: "archkeep_check",
+      arguments: { path: ["libs/ui/ui.go"] },
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("path");
+    // The field this surface no longer declares is the same class of mistake.
+    const retired = await client.callTool({
+      name: "archkeep_history",
+      arguments: { evidence: "decisions", decisionId: "0001" },
+    });
+    expect(retired.isError).toBe(true);
+    expect(retired.content[0].text).toContain("decisionId");
+    await client.close();
+    await server.close();
+  });
+
+  it("announces every tool as read-only", async () => {
+    // The authority boundary the surface argues, as a fact a host can branch
+    // on: no tool writes, so a host need not prompt for one.
+    const { server, client } = await connectedSession();
+    const { tools } = await client.listTools();
+    expect(tools.length).toBe(8);
+    for (const tool of tools) {
+      expect(tool.annotations?.readOnlyHint).toBe(true);
+    }
+    await client.close();
+    await server.close();
+  });
 });
 
 describe("tools/call over the in-memory pair", () => {
@@ -222,6 +258,45 @@ describe("tools/call over the in-memory pair", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/^Invalid input: /);
     expect(result.content[0].text).toContain("no project named 'nope'");
+    await client.close();
+    await server.close();
+  });
+
+  it("refuses a relative workspaceRoot as an input mistake, through the protocol", async () => {
+    // The schema documents the field as an absolute path and the adapter
+    // holds it; this pins the mapping a host sees — the input-mistake lane,
+    // not a workspace refusal, because the fix is to retype the argument.
+    const w = fixture();
+    created.push(w.root);
+    const { server, client } = await connectedSession(w.io);
+    const result = await client.callTool({
+      name: "archkeep_graph",
+      arguments: { workspaceRoot: "libs" },
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/^Invalid input: /);
+    expect(result.content[0].text).toContain("workspaceRoot must be an absolute path");
+    await client.close();
+    await server.close();
+  });
+
+  it("carries the scope of a check beside its verdict, for the host that reads structure", async () => {
+    const w = fixture();
+    created.push(w.root);
+    const { server, client } = await connectedSession(w.io);
+    const scoped = await client.callTool({
+      name: "archkeep_check",
+      arguments: { workspaceRoot: w.root, paths: ["libs/ui/ui.go"] },
+    });
+    expect(/** @type {any} */ (scoped.structuredContent).scope).toEqual({
+      kind: "paths",
+      paths: ["libs/ui/ui.go"],
+    });
+    const unscoped = await client.callTool({
+      name: "archkeep_check",
+      arguments: { workspaceRoot: w.root },
+    });
+    expect(/** @type {any} */ (unscoped.structuredContent).scope).toEqual({ kind: "workspace" });
     await client.close();
     await server.close();
   });

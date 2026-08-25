@@ -68,11 +68,30 @@ import { findWorkspaceRoot, listTrackedFiles } from "@ecoma-io/archkeep";
  * `workspaceRoot` argument wins, else the process's own. Kept as one function
  * so the default has one spelling.
  *
+ * An explicit `workspaceRoot` must be ABSOLUTE, and this is the one place that
+ * holds it. The schema describes the field as an absolute path, and a relative
+ * one would resolve against this process's own start directory — an anchor the
+ * caller cannot see and could not have meant, and the one direction that can
+ * answer for a VALID BUT WRONG tree in silence (a refusal names the tree it
+ * walked from; a wrong-but-real workspace root answers confidently about the
+ * wrong workspace). The caller that means "where the server was started"
+ * omits the field — that is the documented default.
+ *
  * @param {string|undefined} workspaceRoot
  * @returns {string}
+ * @throws {UsageError} when an explicit `workspaceRoot` is not an absolute
+ *   path — a retypable input mistake, not a workspace fact.
  */
 function cwdOf(workspaceRoot) {
-  return workspaceRoot ?? process.cwd();
+  if (workspaceRoot === undefined) return process.cwd();
+  if (typeof workspaceRoot !== "string" || !isAbsolute(workspaceRoot)) {
+    throw new UsageError(
+      `archkeep: workspaceRoot must be an absolute path; got ${JSON.stringify(workspaceRoot)} ` +
+        `(a relative path would resolve against this server's own start directory — omit ` +
+        `workspaceRoot to answer for that, or pass the workspace's absolute path)`,
+    );
+  }
+  return workspaceRoot;
 }
 
 /**
@@ -125,6 +144,15 @@ export async function contextTool({ workspaceRoot, project, paths = [] }, io = {
 }
 
 /**
+ * What a check result's verdict speaks for — the whole workspace (the gate)
+ * or the named files only (a fast pre-check). Stated as a typedef because
+ * plain object literals in a ternary widen their `kind` to `string`, and
+ * this union is the contract an agent branches on.
+ *
+ * @typedef {{kind: "workspace"}|{kind: "paths", paths: string[]}} CheckScope
+ */
+
+/**
  * `archkeep_check`: the authoritative compliance gate, as a three-state
  * verdict.
  *
@@ -133,39 +161,58 @@ export async function contextTool({ workspaceRoot, project, paths = [] }, io = {
  * `no-verdict`) — derived by the engine's one `verdictFor`, never
  * re-worded here. The separation this function holds:
  *
- * - a COMPLETED run returns `{runCompleted: true, verdict, envelope}` — the
- *   verdict is whatever the engine decided, including `unknown` for a run
+ * - a COMPLETED run returns `{runCompleted: true, verdict, scope, envelope}` —
+ *   the verdict is whatever the engine decided, including `unknown` for a run
  *   that could not fully look;
  * - a run that could NOT START (no workspace root, a malformed law, a git or
  *   provider failure — everything `check` throws) returns
- *   `{runCompleted: false, verdict: "unknown", reason}` with the engine's
- *   message — an infrastructure failure is never a `fail`, because `fail`
- *   names a finding and no finding was reached;
+ *   `{runCompleted: false, verdict: "unknown", scope, reason}` with the
+ *   engine's message — an infrastructure failure is never a `fail`, because
+ *   `fail` names a finding and no finding was reached;
  * - a `UsageError` (the caller's own input — a path argument that matches no
  *   tracked file) propagates for the tool-error lane: it is a mistake to
  *   retype, not a fact about the workspace.
  *
+ * The two catch lanes mirror the CLI's own exit-code taxonomy one for one,
+ * and that includes what they do with a programming bug: the engine knows
+ * exactly two thrown classes (`src/errors.mjs`) — `UsageError` (CLI exit 2)
+ * and everything else (CLI exit 3, "the run could not look") — so a
+ * `TypeError` raised inside the engine is an exit-3 refusal on the CLI and a
+ * structured `unknown` with its message here, never a third class invented
+ * in this layer. This face holds no opinion about errors the engine has not
+ * already stated.
+ *
  * `paths` narrows the run to specific files, exactly as the CLI's positional
- * arguments do — including the CLI's own caveat that a scoped run is a fast
- * filter, never the whole-workspace gate.
+ * arguments do. A scoped run is a fast filter, never the whole-workspace
+ * gate, and the `scope` key states which of the two a result is —
+ * `{kind: "workspace"}` or `{kind: "paths", paths}` — because a scoped
+ * `pass` and an unscoped one are the same three fields otherwise, and only
+ * the scope tells an agent that the first says nothing about the files it
+ * left out.
  *
  * @param {{workspaceRoot?: string, paths?: string[]}} input
  * @param {{readGraph?: Function, listFiles?: Function}} [io]
  * @returns {Promise<{runCompleted: boolean, verdict: "pass"|"fail"|"unknown",
+ *   scope: {kind: "workspace"}|{kind: "paths", paths: string[]},
  *   envelope?: object, reason?: string}>}
  */
 export async function checkTool({ workspaceRoot, paths = [] }, io = {}) {
+  const cwd = cwdOf(workspaceRoot);
+  const scope = /** @type {CheckScope} */ (
+    paths.length > 0 ? { kind: "paths", paths } : { kind: "workspace" }
+  );
   let result;
   try {
     result = await check(
       { format: "json", config: null, paths, evidenceOut: null },
-      { cwd: cwdOf(workspaceRoot), ...ioOf(io) },
+      { cwd, ...ioOf(io) },
     );
   } catch (error) {
     if (error instanceof UsageError) throw error;
     return {
       runCompleted: false,
       verdict: "unknown",
+      scope,
       reason: error instanceof Error ? error.message : String(error),
     };
   }
@@ -173,6 +220,7 @@ export async function checkTool({ workspaceRoot, paths = [] }, io = {}) {
   return {
     runCompleted: true,
     verdict: envelope.decision.verdict,
+    scope,
     envelope,
   };
 }
@@ -296,34 +344,37 @@ export async function graphTool({ workspaceRoot }, io = {}) {
  *   provider, or code drift (`history <dir>`). Read-only: the capture that
  *   writes a snapshot is a workspace action the CLI owns, never a tool call.
  * - `evidence: "decisions"` — the ADR registry at the workspace root, whole
- *   or one record (`adr`, `adr <id>`): every decision, its status, its
- *   supersession chain, and the rule/fitness ids it binds. ADRs are one kind
- *   of architectural evidence here, not a separate tool.
+ *   (`adr`): every decision's id and status, the rule/fitness ids each one
+ *   binds, and every supersession chain, with unresolvable references named
+ *   under `result.unresolved` (which flips the run to `no-verdict`). ADRs
+ *   are one kind of architectural evidence here, not a separate tool.
+ *
+ * There is deliberately no single-record narrowing. The engine's JSON
+ * envelope answers at registry granularity — the CLI's `adr <id>` narrows
+ * its TEXT rendering, not the envelope — so an argument that promised one
+ * record would return the whole registry under a narrower promise, and a
+ * caller that wants one record filters `result.statuses`/`result.bindings`
+ * by the id it already holds, or reads the ADR file itself (the envelope
+ * names the registry directory).
  *
  * Adds no key beside the envelope; the `command` field inside each envelope
  * names which of the two faces answered.
  *
  * @param {{workspaceRoot?: string, evidence: "evolution"|"decisions",
- *   directory?: string, decisionId?: string}} input
+ *   directory?: string}} input
  * @param {{readGraph?: Function, listFiles?: Function}} [io]
  * @returns {Promise<object>} The `history` or `adr` envelope.
  * @throws {Error} when `evidence` is `"evolution"` and `directory` is absent
  *   (an input requirement this adapter states itself, before the engine is
  *   reached), and on the engine's refusals — an empty or unreadable snapshot
- *   directory, an unreadable registry, an unknown ADR id — message verbatim.
+ *   directory, an unreadable registry — message verbatim.
  */
-export async function historyTool({ workspaceRoot, evidence, directory, decisionId }, io = {}) {
-  // Cross-field input rules, stated here rather than in the schema so the
+export async function historyTool({ workspaceRoot, evidence, directory }, io = {}) {
+  // Cross-field input rule, stated here rather than in the schema so the
   // refusal can name both fields: a narrowing argument that belongs to the
   // OTHER evidence kind is a caller mistake, and dropping it silently would
   // answer a narrower question than the one asked without saying so.
   if (evidence === "evolution") {
-    if (decisionId !== undefined) {
-      throw new UsageError(
-        "archkeep: decisionId is decisions evidence; evidence 'evolution' does not read it " +
-          "(pass evidence 'decisions' for one ADR record)",
-      );
-    }
     if (typeof directory !== "string" || directory === "") {
       throw new UsageError(
         "archkeep: history evidence 'evolution' needs the snapshot directory " +
@@ -352,7 +403,7 @@ export async function historyTool({ workspaceRoot, evidence, directory, decision
     );
   }
   const listFiles = io.listFiles ?? listTrackedFiles;
-  return envelopeOf(adrCommand(root, { id: decisionId }, { tracked: listFiles(root) }));
+  return envelopeOf(adrCommand(root, {}, { tracked: listFiles(root) }));
 }
 
 /**

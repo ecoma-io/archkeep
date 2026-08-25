@@ -24,7 +24,8 @@ npm install @ecoma-io/archkeep-mcp
 ```
 
 The server answers for the workspace it is started in; start it from the
-workspace root (or pass `workspaceRoot` on any call). One registry-published
+workspace root (or pass an absolute `workspaceRoot` on any call — a relative
+path is refused). One registry-published
 package is all a consumer needs — it depends on `@ecoma-io/archkeep` itself,
 version-locked to this package's own version.
 

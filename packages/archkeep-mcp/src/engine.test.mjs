@@ -5,9 +5,10 @@
 // allowed. Every assertion reads fields the engine computed (a finding's own
 // `sourceFile`/`line`/`column` feed the `explain` call, not literals), so a
 // fixture edit moves both sides together.
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -213,6 +214,89 @@ describe("archkeep_check — the three-state verdict", () => {
       checkTool({ workspaceRoot: w.root, paths: ["no/such/file.go"] }, w.io),
     ).rejects.toBeInstanceOf(UsageError);
   });
+
+  it("carries the run's scope beside the verdict — a scoped pass is never the gate", async () => {
+    // The one confusion this field exists to prevent: on a tree the
+    // whole-workspace gate FAILS, a run scoped to the clean file passes, and
+    // without `scope` the two results are the same three fields. An agent
+    // that read only `verdict: "pass"` would believe the workspace compliant.
+    const w = workspace({ violating: true });
+    const scoped = await checkTool(
+      { workspaceRoot: w.root, paths: ["libs/adapter/adapter.go"] },
+      w.io,
+    );
+    const unscoped = await checkTool({ workspaceRoot: w.root }, w.io);
+    expect(scoped.runCompleted).toBe(true);
+    expect(scoped.verdict).toBe("pass");
+    expect(scoped.scope).toEqual({
+      kind: "paths",
+      paths: ["libs/adapter/adapter.go"],
+    });
+    expect(unscoped.verdict).toBe("fail");
+    expect(unscoped.scope).toEqual({ kind: "workspace" });
+  });
+
+  it("states the scope on a run that could not start too", async () => {
+    const nowhere = mkdtempSync(join(tmpdir(), "archkeep-mcp-nowhere-scope-"));
+    created.push(nowhere);
+    const result = await checkTool(
+      { workspaceRoot: nowhere, paths: ["libs/x/a.go"] },
+      { listFiles: () => [] },
+    );
+    expect(result.runCompleted).toBe(false);
+    expect(result.scope).toEqual({ kind: "paths", paths: ["libs/x/a.go"] });
+  });
+
+  it("answers an engine bug as a structured unknown with its message, like the CLI's exit 3", async () => {
+    // The taxonomy is the engine's own, mirrored one for one: a non-Usage
+    // throw is exit 3 on the CLI whatever raised it — a provider failure or a
+    // TypeError — and the structured `unknown` here is that same class, not a
+    // third one invented in this layer. The message rides verbatim so nothing
+    // is lost; the mapping is pinned so a future "improvement" that silently
+    // swallowed it or reshaped the verdict cannot land unremarked.
+    const w = workspace({ violating: false });
+    const bugIo = {
+      ...w.io,
+      readGraph: () => {
+        throw new TypeError("Cannot read properties of undefined (reading 'nodes')");
+      },
+    };
+    const bug = await checkTool({ workspaceRoot: w.root }, bugIo);
+    expect(bug.runCompleted).toBe(false);
+    expect(bug.verdict).toBe("unknown");
+    expect(bug.reason).toBe("Cannot read properties of undefined (reading 'nodes')");
+    expect(bug.envelope).toBeUndefined();
+  });
+
+  it("stringifies a non-Error throw rather than losing it", async () => {
+    const w = workspace({ violating: false });
+    const stringIo = {
+      ...w.io,
+      readGraph: () => {
+        throw "a bare string failure";
+      },
+    };
+    const result = await checkTool({ workspaceRoot: w.root }, stringIo);
+    expect(result).toMatchObject({
+      runCompleted: false,
+      verdict: "unknown",
+      reason: "a bare string failure",
+    });
+  });
+
+  it("refuses a workspaceRoot that is not an absolute path", async () => {
+    // The schema calls the field an absolute path; the adapter holds it, so
+    // the contract reaches programmatic callers too. A relative path would
+    // resolve against the server's own start directory — an anchor the caller
+    // cannot know, and the one direction that can answer for a valid but
+    // WRONG tree in silence.
+    const w = workspace();
+    for (const bad of ["libs", ".", "", null]) {
+      await expect(checkTool({ workspaceRoot: bad }, w.io)).rejects.toThrow(
+        /workspaceRoot must be an absolute path/,
+      );
+    }
+  });
 });
 
 describe("archkeep_context", () => {
@@ -395,15 +479,12 @@ A decision this workspace recorded.
   });
 
   it("refuses a narrowing argument that belongs to the other evidence kind", async () => {
-    // Both directions: an argument silently dropped would answer a narrower
-    // question than the one asked, without saying so.
+    // An argument silently dropped would answer a narrower question than the
+    // one asked, without saying so.
     const w = workspace({ violating: false });
     await expect(
       historyTool({ workspaceRoot: w.root, evidence: "decisions", directory: "history" }, w.io),
     ).rejects.toThrow(/directory is evolution evidence/);
-    await expect(
-      historyTool({ workspaceRoot: w.root, evidence: "evolution", decisionId: "0001" }, w.io),
-    ).rejects.toThrow(/decisionId is decisions evidence/);
   });
 
   it("reads the transitions across graph snapshots", async () => {
@@ -445,10 +526,70 @@ A decision this workspace recorded.
 });
 
 describe("archkeep_propose", () => {
+  /**
+   * A recursive snapshot of a fixture tree — every file, nested and hidden
+   * included, keyed by path with its content hashed — because the authority
+   * claim `written: false` makes is about the whole tree, not the root
+   * directory's own entries. A proposal that planted `.archkeep/state.json`
+   * or rewrote an ADR two levels down would pass a flat `readdirSync`
+   * comparison unnoticed; this is the comparison that would not.
+   *
+   * @param {string} root
+   * @returns {Map<string, string>}
+   */
+  function treeSnapshot(root) {
+    const files = new Map();
+    const walk = (dir) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.isFile()) {
+          files.set(
+            relative(root, full),
+            createHash("sha256").update(readFileSync(full)).digest("hex"),
+          );
+        } else {
+          files.set(relative(root, full), `other:${entry.name}`);
+        }
+      }
+    };
+    walk(root);
+    return files;
+  }
+
+  /**
+   * The snapshot difference, asserted loudly in both directions: a file
+   * created, deleted, or modified anywhere under the root is a failure naming
+   * it, never a count.
+   *
+   * @param {Map<string, string>} before
+   * @param {Map<string, string>} after
+   */
+  function expectTreeUnchanged(before, after) {
+    const created = [...after.keys()].filter((path) => !before.has(path));
+    const deleted = [...before.keys()].filter((path) => !after.has(path));
+    const modified = [...before.keys()].filter(
+      (path) => after.has(path) && before.get(path) !== after.get(path),
+    );
+    expect(
+      `created=${JSON.stringify(created)} deleted=${JSON.stringify(deleted)} ` +
+        `modified=${JSON.stringify(modified)}`,
+    ).toBe("created=[] deleted=[] modified=[]");
+  }
+
   it("proposes from observations, non-authoritative, writing nothing", async () => {
     const w = workspace({ violating: false });
-    const before = readdirSync(w.root).sort();
-    const result = await proposeTool({ workspaceRoot: w.root, mode: "discover" }, w.io);
+    // Seed the tree with the shapes a stray write would hide in — a hidden
+    // directory, a nested ADR — so the snapshot below walks more than the
+    // root's own entries and the assertion has something to be wrong about.
+    w.writeAt(".archkeep/seed", "already here");
+    w.writeAt("docs/adr/0001-existing.md", "---\nid: 0001\nstatus: accepted\n---\n\n# One\n");
+    const io = {
+      ...w.io,
+      listFiles: () => [...w.io.listFiles(), ".archkeep/seed", "docs/adr/0001-existing.md"],
+    };
+    const before = treeSnapshot(w.root);
+    const result = await proposeTool({ workspaceRoot: w.root, mode: "discover" }, io);
     expect(result.mode).toBe("discover");
     expect(result.requiresApproval).toBe(true);
     expect(result.authoritative).toBe(false);
@@ -458,15 +599,16 @@ describe("archkeep_propose", () => {
     expect(
       result.result.proposal.components.total + result.result.proposal.boundaryAssertions.total,
     ).toBeGreaterThan(0);
-    // The whole point: no file appeared. A proposal that wrote the intent it
-    // proposes would be authority wearing a suggestion's name.
-    expect(readdirSync(w.root).sort()).toEqual(before);
+    // The whole point: no file appeared, anywhere in the tree. A proposal
+    // that wrote the intent it proposes would be authority wearing a
+    // suggestion's name.
+    expectTreeUnchanged(before, treeSnapshot(w.root));
     expect(() => w.read("architecture-intent.json")).toThrow();
   });
 
   it("proposes ranked intent edits with their evidence, changing no byte", async () => {
     const w = workspace({ violating: true, intent: INTENT });
-    const intentBefore = w.read("architecture-intent.json");
+    const before = treeSnapshot(w.root);
     const result = await proposeTool({ workspaceRoot: w.root, mode: "reconcile" }, w.io);
     expect(result.mode).toBe("reconcile");
     expect(result.requiresApproval).toBe(true);
@@ -474,7 +616,7 @@ describe("archkeep_propose", () => {
     expect(result.result.proposed).toBe(true);
     expect(result.result.notAuthoritative).toBe(true);
     expect(Array.isArray(result.result.candidates)).toBe(true);
-    expect(w.read("architecture-intent.json")).toBe(intentBefore);
+    expectTreeUnchanged(before, treeSnapshot(w.root));
   });
 
   it("refuses reconcile on a workspace with no declared intent", async () => {

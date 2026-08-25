@@ -110,11 +110,50 @@ Every completed call returns the engine's versioned JSON envelope
 ([json-output.md](../reference/json-output.md) owns its fields) — `schemaVersion`,
 `command`, `workspace`, `status`, `coverage`, `result` — as both
 `structuredContent` and one JSON text block, so a host reads whichever it
-speaks. A refusal is a tool error carrying the engine's message verbatim:
+speaks. Two tools add keys BESIDE the envelope (never inside it), and the
+additions are part of the tool contract:
+
+- `archkeep_check` returns `{runCompleted, verdict, scope, envelope}` (and
+  `reason` when the run could not start). `scope` states what the verdict
+  speaks for — `{kind: "workspace"}` for the whole-workspace gate,
+  `{kind: "paths", paths}` for a run scoped with `paths`. A scoped `pass`
+  says nothing about the files outside its scope; an agent that means to
+  verify the workspace runs the check unscoped, and the scope field is how a
+  caller (or a reviewer reading a transcript) tells the two apart without
+  remembering which arguments were passed.
+- `archkeep_propose` returns the proposal envelope with `mode`,
+  `requiresApproval: true`, `authoritative: false` and `written: false`
+  beside it — the authority contract stated at the top level, where a host
+  that never descends into `result` still reads it.
+
+A refusal is a tool error carrying the engine's message verbatim:
 the deterministic sentence that names the cause, the same one the CLI prints
-on exit 3. A `UsageError` — the caller's own input being wrong — is framed as
+on exit 3. A `UsageError` — the caller's own input being wrong, including a
+`workspaceRoot` that is not an absolute path — is framed as
 an input mistake so an agent can tell a retypable error from a workspace
-refusal.
+refusal. The two lanes mirror the CLI's exit codes one for one: `UsageError`
+is exit 2, every other refusal is exit 3 — including a bug inside the engine
+itself, which the CLI answers with exit 3 and this face answers with a
+structured `unknown` whose `reason` carries the message verbatim. The face
+invents no third class, because it holds no opinion about errors the engine
+has not already classified.
+
+## The trust boundary
+
+The MCP server is a **local, same-user process** — stdio, started by the
+agent host beside the workspace, with the invoking user's filesystem
+authority. It reads what the CLI reads (tracked files, the boundary law,
+ADRs, intent, git metadata) and spawns the same helpers (`git`, `nx` or
+`moon`) with argument arrays and no shell; it adds no read primitive, no
+config override, and no write path the CLI does not have. `workspaceRoot`
+answers for any tree the user can read, exactly as running the CLI in that
+tree would — there is deliberately no containment, because the CLI this
+server composes has none, and a second security policy held only in the MCP
+face would be a second opinion about the same act.
+
+Register it only for hosts you would trust with the user's shell in the same
+directory. It is not a boundary for a remote or multi-tenant client: anyone
+who can speak to the server can point it at any readable tree.
 
 ## The authority boundary
 
