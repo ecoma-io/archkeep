@@ -24,7 +24,7 @@
     "helpers:pinGitHubActionDigests",
     ":enableVulnerabilityAlertsWithLabel(security)",
   ],
-  dashboard: true,
+  dependencyDashboard: true,
   timezone: "Asia/Ho_Chi_Minh",
   // Weekly, not continuous. This is a small, single-maintainer repository; a
   // drip of pull requests through the day would be noise rather than signal.
