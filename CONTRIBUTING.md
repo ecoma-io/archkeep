@@ -105,6 +105,7 @@ As with Claude Code, no gate depends on any of this — the editor-time hooks in
 | `node scripts/check-skills.mjs`               | The skills gate: shape, citations, and the plugin-manifest version chain                                     |
 | `node scripts/check-docs-links.mjs`           | Fails on any doc reference that cannot resolve — a gone target, a dead anchor                                |
 | `node scripts/check-cli-docs-roster.mjs`      | Holds every documented command count and roster to `COMMAND_NAMES` in cli.mjs                                |
+| `node scripts/check-docs-claims-parity.mjs`   | Validates factual claims in docs against actual code: violations, presets, MCP tools, and skills counts      |
 | `node scripts/check-installation-prereqs.mjs` | Holds installation.md's prerequisites to `packages/archkeep/package.json`                                    |
 | `node scripts/check-contributing-parity.mjs`  | Holds this document's roster and hooks to ci.yml and lefthook.yml — this row is part of what it checks       |
 | `node scripts/check-artifact-hygiene.mjs`     | Fails on a committed `.wasm` carrying its build machine — a home directory, a credential, a tooling variable |
