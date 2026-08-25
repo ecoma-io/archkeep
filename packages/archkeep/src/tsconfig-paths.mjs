@@ -77,6 +77,7 @@
  * says (`tsconfigPathsFacts` there).
  */
 import { posix } from "node:path";
+import { stripTrailingSlashes } from "./path-util.mjs";
 
 /**
  * What a hygiene finding means — one entry per `messageId`, the arrangement
@@ -116,7 +117,7 @@ function probeDirectory(target, base, root) {
   // candidates live in its parent.
   const dir =
     prefix === "" || prefix.endsWith("/")
-      ? joined.replace(/\/+$/u, "") || "/"
+      ? stripTrailingSlashes(joined) || "/"
       : posix.dirname(joined);
   if (dir === root) return "";
   return dir.startsWith(`${root}/`) ? dir.slice(root.length + 1) : null;
@@ -144,7 +145,7 @@ function probeDirectory(target, base, root) {
  *   verdict; `malformed` is for `../cli.mjs` to refuse loudly, never to skip.
  */
 export function judgeTsconfigPaths({ paths, base, workspaceRoot, tsConfig, directoryExists }) {
-  const root = workspaceRoot.replace(/\/+$/u, "");
+  const root = stripTrailingSlashes(workspaceRoot);
   const findings = [];
   const malformed = [];
   let aliases = 0;

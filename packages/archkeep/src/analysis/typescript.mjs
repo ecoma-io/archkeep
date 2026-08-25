@@ -83,6 +83,7 @@ import { isBuiltin } from "node:module";
 import ts from "typescript";
 
 import { DEFAULT_OPTIONS } from "../options.mjs";
+import { stripTrailingSlashes } from "../path-util.mjs";
 import { normalizePath } from "./manifest-util.mjs";
 import { emptyResult, fileFailure, perWorkspace, projectOwning } from "./source-util.mjs";
 
@@ -378,7 +379,7 @@ function scriptKindFor(sourceFile, lang) {
  * translation to the workspace-relative reader happens here and once.
  */
 function resolutionHostFor(workspace) {
-  const root = workspace.root.replace(/\/+$/, "");
+  const root = stripTrailingSlashes(workspace.root);
   const prefix = `${root}/`;
   const contents = new Map();
   const read = (absolute) => {

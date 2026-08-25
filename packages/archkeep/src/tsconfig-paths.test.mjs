@@ -97,6 +97,25 @@ describe("judging the alias table", () => {
     expect(aliases).toBe(1);
   });
 
+  it("normalizes a workspaceRoot with trailing slashes — if unstripped, the startswith check would fail", () => {
+    // The regression guard for the ReDoS fix: `probeDirectory` tests
+    // `dir.startsWith(root + "/")`, so `root` must not end in `/`. Without
+    // stripping, a root of "/repo/acme/" would fail to match "/repo/acme/libs"
+    // and a live alias would be reported dead — the silent direction.
+    const withRoot = (root) =>
+      judgeTsconfigPaths({
+        paths: { "@acme/lib": ["libs/src/index.ts"] },
+        base: "/repo/acme",
+        workspaceRoot: root,
+        tsConfig: "tsconfig.base.json",
+        directoryExists: (dir) => new Set(["", "libs", "libs/src"]).has(dir),
+      });
+    // All three spellings must reach the same verdict: alive, because the directory exists.
+    expect(withRoot("/repo/acme").findings).toEqual([]);
+    expect(withRoot("/repo/acme/").findings).toEqual([]);
+    expect(withRoot("/repo/acme//").findings).toEqual([]);
+  });
+
   it("judges a bare-root target ('*' or a file at the root) against the root itself", () => {
     const { findings, aliases } = judge({ "@acme/*": ["*"], shim: ["shim.d.ts"] }, []);
     // "" — the workspace root — always exists here, so both stay alive.
