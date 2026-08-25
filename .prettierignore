@@ -21,3 +21,12 @@ LICENSE
 # file in the repository no human wrote, and the only way to make it pass would
 # be to hand-edit a generated document that regenerates on the next release.
 CHANGELOG.md
+
+# Archkeep test fixtures — temporary directories created inside
+# packages/archkeep/ to test boundary config loading and differential
+# analysis. These contain incomplete configs and unformatted files that
+# must not be picked up by prettier when interrupted test runs leave
+# fixtures behind for later format:check to fail on.
+.eslint-config-fixture-*/
+.cli-eslint-config-fixture-*/
+.oracle-simple-*/
