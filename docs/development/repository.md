@@ -2,12 +2,13 @@
 
 The workspace that holds Archkeep, and how its moving parts relate.
 
-## The six packages
+## The seven packages
 
 | package                             | what it ships            | where it goes       | has its own AGENTS.md |
 | ----------------------------------- | ------------------------ | ------------------- | --------------------- |
 | `packages/archkeep`                 | the engine               | npm                 | yes                   |
 | `packages/archkeep-vscode`          | the VS Code client       | VS Code marketplace | no                    |
+| `packages/archkeep-mcp`             | the MCP server           | npm                 | no                    |
 | `packages/archkeep-rule-sdk-rust`   | the Rust custom-rule SDK | crates.io           | no                    |
 | `packages/archkeep-rule-sdk-ts`     | the AssemblyScript SDK   | npm                 | no                    |
 | `packages/archkeep-rule-sdk-python` | the Python SDK           | PyPI                | no                    |
@@ -30,9 +31,9 @@ those limits are the reason to read one before choosing an SDK.
 
 Everything else in this repository is the apparatus that keeps them honest.
 
-## Plain ESM, no build — for the two packages that ship JavaScript
+## Plain ESM, no build — for the three packages that ship JavaScript
 
-`archkeep` and `archkeep-vscode` ship as `.mjs` with JSDoc. Nx loads a plugin's
+`archkeep`, `archkeep-vscode`, and `archkeep-mcp` ship as `.mjs` with JSDoc. Nx loads a plugin's
 entry point directly in the process that runs every `nx` invocation, and Moon's
 integration reads the project graph via `moon project-graph --json`, so the
 shipped artefact has to be loadable with no build step in the way. That is why

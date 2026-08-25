@@ -64,7 +64,7 @@ around them changes:
 
 ## The ES module dialect (`.mjs` / `.js`)
 
-The default. A plain ES module exporting up to four names:
+The default. A plain ES module exporting up to five names:
 
 ```js
 export const depConstraints = [
@@ -81,29 +81,27 @@ export const moduleBoundaryOptions = {
   checkNestedExternalImports: false,
 };
 export const boundarySuppressions = [];
-export const fitness = [];
 ```
 
-Exactly five top-level names are recognized — `depConstraints`,
-`moduleBoundaryOptions`, `boundarySuppressions`, `fitness`, `customRules`.
-Anything else is **rejected by name**, for the same reason the `.json` dialect
-rejects an unknown key: a misspelled export (`moduleBoundaryOption` for
-`moduleBoundaryOptions`) used to load exit-0 and disappear — a typo'd law is a
-law that is not enforced. Build the table from shared constants in the same file
-if you need one: the file is still a real ES module, it just may not state a
-sixth top-level law.
+Exactly six top-level names are recognized — `depConstraints`,
+`moduleBoundaryOptions`, `boundarySuppressions`, `fitness`, `customRules`, and
+`coverage`. Anything else is **rejected by name**, for the same reason the
+`.json` dialect rejects an unknown key: a misspelled export
+(`moduleBoundaryOption` for `moduleBoundaryOptions`) used to load exit-0 and
+disappear — a typo'd law is a law that is not enforced. Build the table from
+shared constants in the same file if you need one: the file is still a real
+ES module, it just may not state a seventh top-level law.
 
 ## The JSON dialect (`.json`)
 
 A plain JSON object, read with `JSON.parse` — never JSONC, never `import()`.
 No comments, no trailing commas.
 
-Exactly five top-level keys are recognized — `depConstraints`,
-`moduleBoundaryOptions`, `boundarySuppressions`, `fitness`, `customRules` —
-plus `$schema`,
-which is accepted for editor validation but must be a non-empty string: a value
-an editor cannot validate against reads as a false green. Any other top-level
-key is **rejected by name.**
+Exactly six top-level keys are recognized — `depConstraints`,
+`moduleBoundaryOptions`, `boundarySuppressions`, `fitness`, `customRules`, and
+`coverage` — plus `$schema`, which is accepted for editor validation but must
+be a non-empty string: a value an editor cannot validate against reads as a false
+green. Any other top-level key is **rejected by name.**
 
 The two data dialects share the same top-level key law: a key (or export) the
 loader does not read is refused by name wherever it appears.

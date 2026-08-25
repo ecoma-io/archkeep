@@ -117,7 +117,7 @@ above:
 moon run ...:lint ...:test ...:typecheck
 ```
 
-**This one needs more than Node.** Four of the six packages are custom-rule
+**This one needs more than Node.** Four of the seven packages are custom-rule
 SDKs, and each runs its targets in its own language's tooling: `cargo` with the
 `clippy` and `rustfmt` components (Rust), `go` with `gofmt` (Go), and `python3`
 (Python). CI installs the Rust components explicitly and gets the rest from the
