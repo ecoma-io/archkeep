@@ -194,7 +194,7 @@ describe("the numbers README.md states about the labeled corpus", () => {
     // file, and the file's extension says which language it is. So the whole
     // table is checked rather than only its row set — a cell that drifts is a
     // claim about coverage that nothing else in this repository would catch.
-    const LANGUAGES = ["go", "rust", "python", "typescript", "java"];
+    const LANGUAGES = ["go", "rust", "python", "typescript", "java", "kotlin"];
     const derived = new Map();
     // A probe in a language this table has no column for would otherwise be
     // counted into `row[-1]` — a property, not a cell — and the finding would
@@ -221,7 +221,9 @@ describe("the numbers README.md states about the labeled corpus", () => {
 
     const stated = new Map(
       [
-        ...README.matchAll(/^\| `(\w+)` +\| +(\d+) \| +(\d+) \| +(\d+) \| +(\d+) \| +(\d+) \|$/gmu),
+        ...README.matchAll(
+          /^\| `(\w+)` +\| +(\d+) \| +(\d+) \| +(\d+) \| +(\d+) \| +(\d+) \| +(\d+) \|$/gmu,
+        ),
       ].map((match) => [match[1], match.slice(2).map(Number)]),
     );
 
