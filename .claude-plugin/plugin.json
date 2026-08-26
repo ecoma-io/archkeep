@@ -34,7 +34,9 @@
         ".rs": "rust",
         ".py": "python",
         ".vue": "vue",
-        ".java": "java"
+        ".java": "java",
+        ".kt": "kotlin",
+        ".kts": "kotlin"
       },
       "transport": "stdio",
       "workspaceFolder": "${CLAUDE_PROJECT_DIR}"
