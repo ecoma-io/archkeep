@@ -324,6 +324,7 @@ function argvForEveryCommand() {
     waivers: ["waivers", "--format", "json"],
     fitness: ["fitness", "--format", "json"],
     history: ["history", historyDir, "--format", "json"],
+    trajectory: ["trajectory", historyDir, "--format", "json"],
     health: ["health", historyDir, "--format", "json"],
     report: ["report", historyDir, "--format", "json"],
     debt: ["debt", historyDir, "--format", "json"],

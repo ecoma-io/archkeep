@@ -217,12 +217,28 @@ function buildHeadSnapshot(commandContext) {
 }
 
 /**
+ * The identity key of one dependency record: the `(source, target, type)`
+ * triple joined with `\0`. Extracted from `computeDiff`'s index maps so a
+ * second consumer (`./trajectory.mjs`'s persistence sets) keys edges the SAME
+ * way the diff does — a second spelling of this string would be a second
+ * definition of "same edge", and two definitions drift.
+ *
+ * A `static` edge becoming `dynamic` is therefore a removed edge under the
+ * old type and an added edge under the new one, which is exactly what a
+ * consumer wants to see: it is a real architectural event, not an
+ * implementation detail.
+ *
+ * @param {{source: string, target: string, type: string}} edge
+ * @returns {string}
+ */
+export function edgeIdentityKey({ source, target, type }) {
+  return `${source}\0${target}\0${type}`;
+}
+
+/**
  * Computes the diff between two graph snapshots.
  *
- * Edge identity is `(source, target, type)` — a `static` edge becoming
- * `dynamic` is an added edge under the new type and a removed edge under the
- * old one, which is exactly what a consumer wants to see: it is a real
- * architectural event, not an implementation detail.
+ * Edge identity is `(source, target, type)` — see `edgeIdentityKey` above.
  *
  * @param {{projects: object[], dependencies: object[]}} baseline
  * @param {{projects: object[], dependencies: object[]}} head
@@ -282,13 +298,9 @@ export function computeDiff(baseline, head) {
   removedProjects.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   changedProjects.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
-  // Index edges by the (source, target, type) triple — the identity key.
-  const baselineEdges = new Map(
-    baseline.dependencies.map((e) => [`${e.source}\0${e.target}\0${e.type}`, e]),
-  );
-  const headEdges = new Map(
-    head.dependencies.map((e) => [`${e.source}\0${e.target}\0${e.type}`, e]),
-  );
+  // Index edges by the identity key — `edgeIdentityKey` above owns the triple.
+  const baselineEdges = new Map(baseline.dependencies.map((e) => [edgeIdentityKey(e), e]));
+  const headEdges = new Map(head.dependencies.map((e) => [edgeIdentityKey(e), e]));
 
   const addedEdges = [];
   const removedEdges = [];

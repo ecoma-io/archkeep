@@ -4,6 +4,7 @@
 `delta --format json`,
 `discover --format json`, `drift --format json`, `reconcile --format json`,
 `waivers --format json`, `fitness --format json`, `history --format json`,
+`trajectory --format json`,
 `health --format json`, `report --format json`, `debt --format json`,
 `impact --format json`,
 `explain --format json`, `context --format json`, `provenance --format
@@ -26,6 +27,8 @@ archkeep waivers --format json
 archkeep waivers --format json --output waivers.json
 archkeep history .archkeep/history --format json
 archkeep history .archkeep/history --format json --output evolution.json
+archkeep trajectory .archkeep/history --format json
+archkeep trajectory .archkeep/history --format json --output trajectory.json
 archkeep debt .archkeep/history --format json
 archkeep debt .archkeep/history --format json --output debt.json
 archkeep impact billing-core --format json
@@ -80,7 +83,8 @@ two envelopes to detect real drift knows what to strip first.
 
 `command` is the one field that varies by which command produced the envelope —
 `"check"`, `"graph"`, `"diff"`, `"delta"`, `"discover"`, `"drift"`, `"reconcile"`,
-`"waivers"`, `"fitness"`, `"history"`, `"health"`, `"report"`, `"debt"`,
+`"waivers"`, `"fitness"`, `"history"`, `"trajectory"`, `"health"`, `"report"`,
+`"debt"`,
 `"impact"`, `"explain"`, `"context"`, `"provenance"`, or `"adr"`. `src/report/json.mjs`
 (the module that builds the envelope) and `src/commands/README.md` (the
 module layout it follows) are both written for each command to reuse the same
@@ -92,7 +96,7 @@ wrapper.
 | --------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/archkeep"`; `version` is the installed package's own `package.json` version.                                                                                                                                                                                                                                                                                                                                                      |
-| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"delta"`, `"discover"`, `"drift"`, `"reconcile"`, `"waivers"`, `"fitness"`, `"history"`, `"health"`, `"report"`, `"debt"`, `"impact"`, `"explain"`, `"context"`, `"provenance"`, or `"adr"`.                                                                                                                                                                                            |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"delta"`, `"discover"`, `"drift"`, `"reconcile"`, `"waivers"`, `"fitness"`, `"history"`, `"trajectory"`, `"health"`, `"report"`, `"debt"`, `"impact"`, `"explain"`, `"context"`, `"provenance"`, or `"adr"`.                                                                                                                                                                            |
 | `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"archkeep.json"`, `".moon"`, or `".config/moon"`) — except on an `adr` envelope, which reads no project model and carries `provider: "native"`, `marker: "docs/adr"` ([adr.md](adr.md)). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                                                                                                                                                                                                                                                 |
@@ -483,6 +487,59 @@ run (exit 3) that produces no envelope, not a record of an empty history.
 `history` never recomputes rule-impact from stored snapshots — a snapshot
 carries the graph and the policy fingerprint, not the constraint table or
 import sites — so `coverage.notes` states that limit on every record.
+
+## `result` (for `command: "trajectory"`)
+
+`trajectory` reads the same history directory `history` reads and aggregates
+it: which deterministic signals fired how often across ALL observations, what
+the graph gained and lost in total versus net, and what persisted through
+every observation. It is descriptive: it never exits `1`. An empty, unreadable,
+or malformed history directory is a no-verdict run (exit 3) that produces no
+envelope.
+
+**A trend here is a fact that moved, not a judgment.** No field weights a
+signal, scores the architecture, or implies "healthier" or "worse" — every
+number is read off stored bytes or derived from them by the stated rules
+below, and deciding what the movement means belongs to the consumer.
+
+One observation is ONE stored `graph --format json` snapshot — a capture
+point, not a commit, a day, or a capture attempted (`observations.basis`
+names it). Identities are `diff`'s own: a project IS its `name`; an edge IS
+its `(source, target, type)` triple, so an edge type flip counts as one
+removal plus one addition.
+
+| field               | type           | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`               | string         | The history directory that was read.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `observations`      | object         | `{count, basis, first, last, withProvenance, dirtyProvenance}`. `count` is the number of stored snapshots aggregated; `basis` is `"graph_snapshots"`; `first`/`last` name the boundary snapshot files. `withProvenance` counts observations carrying git provenance — the denominator the code-drift signal actually needs — and `dirtyProvenance` counts those captured from uncommitted trees.                                                                                                                                                                                            |
+| `available`         | boolean        | Whether a trajectory could be derived at all. `false` only when the directory holds fewer than two snapshots: there is no consecutive pair to classify.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `unavailableReason` | string \| null | `"insufficient_history"` when `available` is `false`, else `null`. A named value, so a consumer branches on a documented constant rather than on prose.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `transitions`       | object         | `{count, architecture, policy, provider, codeDrift, incomparable, unchanged}` — independent signal counts over the consecutive pairs, NOT a partition (a pair moving architecture, policy, and provider at once counts under all three, and the counters can sum above `count`). The classification is the same single law `history` applies (`classifyTransition`). `unchanged` is stricter than `history`'s per-transition label: a pair whose fingerprint or provenance was one-sided does **not** count as unchanged here, because an aggregate has no notes line to carry that caveat. |
+| `disclosures`       | object         | `{policyOneSided, provenanceOneSided, crossRepo}` — how many pairs carried each asymmetric-evidence caveat. Counted from the metadata comparison itself, never parsed out of prose. `policyOneSided + provenanceOneSided ≥ transitions.incomparable` need not be tight because one pair can carry both caveats.                                                                                                                                                                                                                                                                             |
+| `projects`          | object         | The project axis: `{first, current, delta, addedEvents, removedEvents, changedEvents, introduced, resolved, persistent}` — see the field rules below.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `edges`             | object         | The edge axis, same fields except `changedEvents`, which is always `null`: under the triple identity an edge type change IS a removal plus an addition, so there is no third kind of edge event to count.                                                                                                                                                                                                                                                                                                                                                                                   |
+
+The axis-field rules (identical for `projects` and `edges`):
+
+- Fields ending in `Events` count transition EVENTS, cumulatively — an entity
+  that churns (add → remove → add) contributes two additions and one removal
+  even though its first and last observation sets agree.
+- `introduced` / `resolved` compare ENDPOINT sets only: present in the last
+  but not the first observation (`introduced`), or present in the first but
+  not the last (`resolved`). An entity missing from a MIDDLE observation is
+  visible in the events and in `persistent`, never in these.
+- `persistent` counts entities present in EVERY observation, first through
+  last — the sweep that keeps an add-remove-add pattern from reading as
+  stable.
+- `delta` is `current − first`.
+- When `available` is `false`, every derived field (`delta`, the three event
+  counts, `introduced`, `resolved`, `persistent`) is `null` — explicitly
+  unavailable, never zero. `first`/`current` stay factual counts of the one
+  observation.
+
+No violation-level trajectory exists here by design: stored snapshots carry
+no findings, so no finding identity can persist across them. `coverage.notes`
+states both that limit and the observation basis on every envelope.
 
 ## `result` (for `command: "health"`)
 

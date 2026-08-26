@@ -111,6 +111,7 @@ import { fitnessCommand } from "./src/commands/fitness.mjs";
 import { reconcileCommand } from "./src/commands/reconcile.mjs";
 import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
 import { historyCommand } from "./src/commands/history.mjs";
+import { trajectoryCommand } from "./src/commands/trajectory.mjs";
 import { healthCommand } from "./src/commands/health.mjs";
 import { reportCommand } from "./src/commands/report.mjs";
 import { debtCommand } from "./src/commands/debt.mjs";
@@ -1691,6 +1692,81 @@ async function runHistory(options, { cwd, env }) {
 }
 
 /**
+ * `trajectory`'s run: resolves the command context, drives
+ * `trajectoryCommand`, writes the report, and returns the exit code.
+ *
+ * The history directory is the single positional argument — the same
+ * consumer-managed directory `history` and `debt` read. No boundary law is
+ * loaded and no snapshot is captured: the fingerprints compared travel inside
+ * the stored snapshots (`src/commands/trajectory.mjs`'s header owns both
+ * halves of that posture).
+ *
+ * @param {{format: string, output: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runTrajectory(options, { cwd, env }) {
+  if (options.paths.length !== 1) {
+    env.err(
+      `archkeep: trajectory takes exactly one positional argument (the history directory); ` +
+        `got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  const dir = isAbsolute(options.paths[0])
+    ? resolve(options.paths[0])
+    : resolve(cwd, options.paths[0]);
+
+  // The same self-footgun guard `runHistory` applies: a report written into
+  // the directory being read would be read back as a snapshot on the next run
+  // (the envelope is not a `graph` snapshot, which `parseBaseline` refuses) —
+  // poison the record loudly refused rather than quietly planted.
+  if (options.output) {
+    const outputAbs = isAbsolute(options.output)
+      ? resolve(options.output)
+      : resolve(cwd, options.output);
+    if (dirname(outputAbs) === dir) {
+      env.err(
+        `archkeep: --output '${options.output}' is inside the history directory '${dir}' — ` +
+          `writing the report there would be read back as a snapshot on the next run. ` +
+          `Write it somewhere else.`,
+      );
+      return EXIT.usage;
+    }
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+    result = trajectoryCommand(dir, commandContext);
+  } catch (error) {
+    const usageError = error instanceof UsageError;
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    // No `--config` flag (`TRAJECTORY_FLAG_HELP`) — there is no override to pass.
+    if (!writeOutputReport(options.output, reportText, env, cwd, null)) return EXIT.error;
+    env.err(`archkeep: trajectory complete → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // Trajectory is descriptive: 0 when the aggregation completes, never 1.
+  return EXIT.ok;
+}
+
+/**
  * `debt`'s `run`: resolves the command context, drives `debtCommand`, writes
  * the ledger report, and returns the exit code.
  *
@@ -2425,6 +2501,35 @@ const REPORT_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `trajectory`'s flags: text or JSON envelope and optional file output — and
+ * deliberately no `--config` and no `--capture`. There is no current-law
+ * input to override: the fingerprints being compared travel inside the
+ * snapshots, so the law each observation is judged under is the one it was
+ * captured under. And the command writes nothing into the history directory —
+ * capture stays `history --capture`'s job, so there is exactly one way a
+ * snapshot enters the record.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const TRAJECTORY_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+]);
+
+/**
  * `debt`'s flags: text or JSON envelope, optional file output, and the same
  * `--config` the other descriptive commands take, so a ledger ages the
  * suppressions of the exact law it was run under.
@@ -2721,6 +2826,16 @@ const COMMANDS = Object.freeze({
     formats: DESCRIBABLE_FORMATS,
     booleans: Object.freeze(["capture"]),
     run: runHistory,
+  }),
+  trajectory: Object.freeze({
+    name: "trajectory",
+    args: "<dir>",
+    summary: "Aggregate the deterministic drift trajectory across snapshots",
+    flagHelp: TRAJECTORY_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(TRAJECTORY_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runTrajectory,
   }),
   health: Object.freeze({
     name: "health",

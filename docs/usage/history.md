@@ -15,7 +15,8 @@ record: the snapshots in history order and the transition between each
 consecutive pair, each transition classified by the signals the snapshots
 actually carry. It answers, over time, the question `diff` answers across a
 single change: _how did the architecture here evolve, and which of those
-changes were real?_
+changes were real?_ For the aggregate over the whole series — signal counts,
+churn, persistence — see [`trajectory`](trajectory.md).
 
 ## What a transition classifies
 

@@ -114,6 +114,19 @@ the resolution order.
   head coverage. Refuses an empty or unreadable directory, and a snapshot that
   parses as an incomplete envelope. Descriptive: never exits 1.
 
+- **`trajectory`** (`./trajectory.mjs`'s `trajectoryCommand`) — the aggregate
+  over the same directory `history` reads: signal counts, structural churn
+  and persistence, derived through `./history.mjs`'s own `readSnapshots` and
+  `classifyTransition` so the two commands cannot disagree about a single
+  classification. One observation is one stored graph snapshot — never a
+  commit or a day. Identities are `./diff.mjs`'s (`edgeIdentityKey`); no
+  violation-level trajectory exists because stored snapshots carry no
+  findings. A one-snapshot directory answers `insufficient_history` with null
+  derived fields, never zeros; an empty or malformed one refuses (exit 3).
+  No boundary law is loaded and nothing is captured here — the fingerprints
+  compared travel inside the snapshots, and exactly one command writes them.
+  Descriptive: never exits 1.
+
 - **`provenance`** (`./provenance-command.mjs`'s `provenanceCommand`) — where
   this run's facts came from and which governance rows carry an origin.
   Two surfaces: repository provenance (the git commit, remote and dirty state

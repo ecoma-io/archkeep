@@ -108,6 +108,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [drift.md](usage/drift.md)                     | The `drift` command: observed architecture against the declared intent                   |
 | [fitness.md](usage/fitness.md)                 | The `fitness` command: every declared quality gate judged, as a verdict table            |
 | [history.md](usage/history.md)                 | The `history` command: the architecture's evolution across snapshots                     |
+| [trajectory.md](usage/trajectory.md)           | The `trajectory` command: signals, churn and persistence aggregated across snapshots     |
 | [health.md](usage/health.md)                   | The `health` command: per-metric verdicts, trends, and the status contract               |
 | [report.md](usage/report.md)                   | The `report` command: one governance document — how healthy the architecture is, and why |
 | [debt.md](usage/debt.md)                       | The `debt` command: the architecture-debt ledger across snapshots                        |

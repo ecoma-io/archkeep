@@ -121,7 +121,7 @@ that looked and found nothing — and that holds for a declared gate exactly as
 it holds for a file: a rule that trapped, or whose artifact would not load, is
 never a rule that found nothing.
 
-## The eighteen commands
+## The nineteen commands
 
 | command      | what it does                                                                          | finds violations |
 | ------------ | ------------------------------------------------------------------------------------- | ---------------- |
@@ -135,6 +135,7 @@ never a rule that found nothing.
 | `waivers`    | Lists term-bound suppressions; a waived violation stays a finding in `check`          | no               |
 | `fitness`    | Judges the workspace's named quality gates (folded into `check` by presence)          | no               |
 | `history`    | Describes how the architecture evolved across a directory of snapshots                | no               |
+| `trajectory` | Aggregates the drift trajectory across snapshots — signals, churn, persistence        | no               |
 | `health`     | Per-metric verdicts; an unmeasured metric is `unknown`/`not_applicable`, never zero   | no               |
 | `report`     | Composes health, waivers, fitness, decisions and provenance under one resolved law    | no               |
 | `debt`       | Ages waivers, gaps and drift across snapshots — a ledger, not a gate                  | no               |

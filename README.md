@@ -43,7 +43,7 @@ everywhere. The measurement behind the claim is in
   never from a build, in any repository: plain, Nx or Moon.
 - **Boundaries enforced as law** — the `@nx/enforce-module-boundaries` model,
   extended to every supported language, where _could not look_ is never _clean_.
-- **Deterministic evidence** — eighteen commands with versioned, byte-stable
+- **Deterministic evidence** — nineteen commands with versioned, byte-stable
   JSON an agent or a script consumes without parsing prose.
 - **Drift, history and debt** — what diverged from intent, how the architecture
   evolved, and how long each accepted violation has been waiting.
