@@ -18,6 +18,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/archkeep/
 | `waivers`    | (none)                           | List the boundary waivers and permanent suppressions on the table                                  | no               |
 | `history`    | `<dir>`                          | Describe how the architecture evolved across snapshots                                             | no               |
 | `trajectory` | `<dir>`                          | Aggregate the deterministic drift trajectory across snapshots                                      | no               |
+| `evolution`  | (none)                           | Describe how the architecture evolved across a Git revision range                                  | no               |
 | `health`     | `[<snapshot-dir>]`               | Describe architecture health metrics and trends                                                    | no               |
 | `report`     | `[<snapshot-dir>]`               | One governance document: how healthy the architecture is, and why                                  | no               |
 | `debt`       | `<dir>`                          | Print the architecture-debt ledger across snapshots                                                | no               |
@@ -306,6 +307,28 @@ An empty, unreadable, or malformed history directory is a no-verdict run
 with an explicit `insufficient_history` at exit 0 — derived values are
 unavailable, never zero (see `docs/usage/trajectory.md`).
 
+### `evolution`
+
+| flag       | argument       | default | meaning                                                                                                |
+| ---------- | -------------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope.                                                        |
+| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.                                                          |
+| `--base`   | `<rev>`        | (none)  | Required. The baseline revision — a commit SHA, branch, tag, or `HEAD~n`; the first revision analyzed. |
+| `--head`   | `<rev>`        | `HEAD`  | The tip revision; must be a linear descendant of `--base`, with no merge commits between the two.      |
+
+No positional arguments and no `--config` — each analyzed revision is judged
+under the boundary law its own tree declares, so a policy change can be
+attributed to the revision that made it rather than to whichever law the
+caller handed in. Git answers only which trees to read: both endpoints are
+resolved with `git rev-parse --verify <rev>^{commit}`, base must be an
+ancestor of head, every commit in between must have exactly one parent, and
+each selected commit is analyzed in a temporary detached worktree (`git
+worktree add --detach`) that is removed before the run reports — the caller's
+working tree is never touched. Any unusable selection (unknown revision,
+coincident endpoints, non-ancestor base, a merge inside the range) or any
+revision that cannot be fully analyzed is a no-verdict run (exit 3), never a
+shorter history.
+
 ### `debt`
 
 | flag       | argument       | default                  | meaning                                                                     |
@@ -375,11 +398,12 @@ analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
 A descriptive command (`graph`, `diff`, `drift`, `discover`, `reconcile`,
-`waivers`, `history`, `trajectory`, `health`, `report`, `debt`, `impact`,
-`explain`, `context`, `provenance`, `adr`) exits 0 when it completes, 3 when
-coverage is incomplete or a metric is `unknown`, and 2 on usage error. None
-exits 1, because a descriptive result is never a finding. `fitness`, `delta`
-and `change` are the verdicts — a failing fitness function exits 1 (the `check`
+`waivers`, `history`, `trajectory`, `evolution`, `health`, `report`, `debt`,
+`impact`, `explain`, `context`, `provenance`, `adr`) exits 0 when it completes,
+3 when coverage is incomplete or a metric is `unknown`, and 2 on usage error.
+None exits 1, because a descriptive result is never a finding. `fitness`,
+`delta` and `change` are the verdicts — a failing fitness function exits 1 (the
+`check`
 lane) and an undetermined one exits 3; a `delta` comparison exits 1 on a
 non-waived introduced violation and 3 on a refusal or an unclassifiable item,
 while its `--capture` mode stays descriptive (0 or 3, never 1); a `change`
@@ -510,6 +534,18 @@ reported because stored snapshots carry no findings. A trend here is a fact
 that moved, never a score: nothing weights the signals, and no aggregate
 reads as "healthier" or "worse". Descriptive -- aggregation never makes it
 exit 1. See [../usage/trajectory.md](../usage/trajectory.md).
+
+### `evolution --base <rev> [--head <rev>]`
+
+Resolves both revisions in the workspace's own repository, materializes every
+selected commit into a temporary detached worktree, analyzes each through the
+ordinary pipeline, and describes the transitions between consecutive
+revisions — classified by exactly the same signals and code `history` uses,
+with the commit SHA standing in for the snapshot filename. A change is
+attributed to the first analyzed revision where it is observable — a fact
+about where history shows it, never about why it was made. Linear ranges only:
+a merge commit inside the range refuses the run rather than pinning a whole
+branch's changes on one commit. Descriptive -- it never exits 1.
 
 ### `health [<snapshot-dir>]`
 

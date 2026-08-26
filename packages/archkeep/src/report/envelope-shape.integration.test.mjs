@@ -156,6 +156,7 @@ let historyDir;
 let baseline;
 let deltaBaseline;
 let changeIntent;
+let firstCommit;
 
 /** A git command in the fixture, with an identity that does not read the machine's. */
 const git = (...args) =>
@@ -234,6 +235,29 @@ beforeAll(async () => {
   expect(git("init", "-q", "-b", "main")).toBe(0);
   expect(git("add", "-A")).toBe(0);
   expect(git("commit", "-q", "-m", "fixture")).toBe(0);
+  firstCommit = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: SPAWN_BUDGET_MS,
+    killSignal: "SIGKILL",
+  }).stdout.trim();
+  // A second (empty) commit, so `evolution` has a range to describe. The
+  // injected graph and file list are static, so both revisions analyze
+  // identically — the transition is code drift, and what the roster records
+  // is the shape under contract (base, head, revisions, transitions).
+  expect(
+    git(
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "fixture 2",
+    ),
+  ).toBe(0);
 
   // `diff` needs a baseline and `history`/`debt` need a captured snapshot;
   // both are produced by the commands that own them rather than hand-written,
@@ -349,6 +373,7 @@ function argvForEveryCommand() {
     fitness: ["fitness", "--format", "json"],
     history: ["history", historyDir, "--format", "json"],
     trajectory: ["trajectory", historyDir, "--format", "json"],
+    evolution: ["evolution", "--base", firstCommit, "--format", "json"],
     health: ["health", historyDir, "--format", "json"],
     report: ["report", historyDir, "--format", "json"],
     debt: ["debt", historyDir, "--format", "json"],
@@ -391,9 +416,9 @@ describe("the JSON envelope's field roster", () => {
         // the field `docs/reference/json-output.md` now has to describe.
         expect({ command, added, removed }).toEqual({ command, added: [], removed: [] });
       }
-      // One full run per declared command — nineteen today — under the shared
-      // spawn-test ceiling (`../../spawn-budget.mjs`), not vitest's 5 s default,
-      // which the roster outgrew when the nineteenth verb landed.
+      // One full run per declared command under the shared spawn-test ceiling
+      // (`../../spawn-budget.mjs`), not vitest's 5 s default, which the roster
+      // outgrew as verbs landed.
     },
     SPAWN_TEST_BUDGET_MS,
   );

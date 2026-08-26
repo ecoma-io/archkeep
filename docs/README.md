@@ -95,35 +95,36 @@ is, what it is not, and the line its neighbours may not cross — and
 
 ## Usage
 
-| page                                           | what it answers                                                                          |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| [configuration.md](usage/configuration.md)     | Every surface Archkeep reads, and where each option lives                                |
-| [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                                      |
-| [profiles.md](usage/profiles.md)               | Enforcing a named profile: the option, `--config`, loud failures                         |
-| [presets.md](usage/presets.md)                 | The six shipped policy packs, the tags each expects, and how to adopt one                |
-| [provenance.md](usage/provenance.md)           | The `provenance` command: governance row schema and run origin                           |
-| [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph                         |
-| [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis              |
-| [delta.md](usage/delta.md)                     | The `delta` command: violations classified between a captured baseline and head          |
-| [change.md](usage/change.md)                   | The `change` command: a declared change intent reconciled against the actual delta       |
-| [drift.md](usage/drift.md)                     | The `drift` command: observed architecture against the declared intent                   |
-| [fitness.md](usage/fitness.md)                 | The `fitness` command: every declared quality gate judged, as a verdict table            |
-| [history.md](usage/history.md)                 | The `history` command: the architecture's evolution across snapshots                     |
-| [trajectory.md](usage/trajectory.md)           | The `trajectory` command: signals, churn and persistence aggregated across snapshots     |
-| [health.md](usage/health.md)                   | The `health` command: per-metric verdicts, trends, and the status contract               |
-| [report.md](usage/report.md)                   | The `report` command: one governance document — how healthy the architecture is, and why |
-| [debt.md](usage/debt.md)                       | The `debt` command: the architecture-debt ledger across snapshots                        |
-| [discover.md](usage/discover.md)               | The `discover` command: observed architecture and candidate proposals                    |
-| [reconcile.md](usage/reconcile.md)             | The `reconcile` command: the model scored element by element, with proposed edits        |
-| [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context                            |
-| [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained                       |
-| [context.md](usage/context.md)                 | The `context` command: architecture constraints for one project                          |
-| [adr.md](usage/adr.md)                         | The `adr` command: recorded decisions, what each binds, and the reverse lookup           |
-| [custom-rules.md](usage/custom-rules.md)       | Writing, building, declaring, running and debugging a rule of your own                   |
-| [migration.md](usage/migration.md)             | Bringing an existing repository under governance, step by step                           |
-| [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning                            |
-| [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look                                 |
-| [waivers.md](usage/waivers.md)                 | The `waivers` command: term-bound suppressions and permanent suppressions                |
+| page                                           | what it answers                                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [configuration.md](usage/configuration.md)     | Every surface Archkeep reads, and where each option lives                                  |
+| [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                                        |
+| [profiles.md](usage/profiles.md)               | Enforcing a named profile: the option, `--config`, loud failures                           |
+| [presets.md](usage/presets.md)                 | The six shipped policy packs, the tags each expects, and how to adopt one                  |
+| [provenance.md](usage/provenance.md)           | The `provenance` command: governance row schema and run origin                             |
+| [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph                           |
+| [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis                |
+| [delta.md](usage/delta.md)                     | The `delta` command: violations classified between a captured baseline and head            |
+| [change.md](usage/change.md)                   | The `change` command: a declared change intent reconciled against the actual delta         |
+| [drift.md](usage/drift.md)                     | The `drift` command: observed architecture against the declared intent                     |
+| [fitness.md](usage/fitness.md)                 | The `fitness` command: every declared quality gate judged, as a verdict table              |
+| [history.md](usage/history.md)                 | The `history` command: the architecture's evolution across snapshots                       |
+| [trajectory.md](usage/trajectory.md)           | The `trajectory` command: signals, churn and persistence aggregated across snapshots       |
+| [evolution.md](usage/evolution.md)             | The `evolution` command: the architecture's evolution across a selected Git revision range |
+| [health.md](usage/health.md)                   | The `health` command: per-metric verdicts, trends, and the status contract                 |
+| [report.md](usage/report.md)                   | The `report` command: one governance document — how healthy the architecture is, and why   |
+| [debt.md](usage/debt.md)                       | The `debt` command: the architecture-debt ledger across snapshots                          |
+| [discover.md](usage/discover.md)               | The `discover` command: observed architecture and candidate proposals                      |
+| [reconcile.md](usage/reconcile.md)             | The `reconcile` command: the model scored element by element, with proposed edits          |
+| [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context                              |
+| [explain.md](usage/explain.md)                 | The `explain` command: the judgment for one import site, explained                         |
+| [context.md](usage/context.md)                 | The `context` command: architecture constraints for one project                            |
+| [adr.md](usage/adr.md)                         | The `adr` command: recorded decisions, what each binds, and the reverse lookup             |
+| [custom-rules.md](usage/custom-rules.md)       | Writing, building, declaring, running and debugging a rule of your own                     |
+| [migration.md](usage/migration.md)             | Bringing an existing repository under governance, step by step                             |
+| [ci.md](usage/ci.md)                           | The exit codes in a pipeline, SARIF into GitHub code scanning                              |
+| [troubleshooting.md](usage/troubleshooting.md) | It found nothing · it found too much · it could not look                                   |
+| [waivers.md](usage/waivers.md)                 | The `waivers` command: term-bound suppressions and permanent suppressions                  |
 
 ## Integrations
 

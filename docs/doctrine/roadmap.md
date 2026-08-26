@@ -61,20 +61,24 @@ A new reader should find these capabilities described as present, not promised.
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer. ([reference/exit-codes.md](../reference/exit-codes.md))
-- **Nineteen commands — `check`, `graph`, `diff`, `delta`, `discover`,
+- **21 commands — `check`, `graph`, `diff`, `delta`, `discover`,
   `drift`, `reconcile`, `waivers`, `fitness`, `history`, `trajectory`,
+  `evolution`,
   `health`, `report`, `debt`, `impact`, `explain`, `context`, `provenance`,
   `adr`** — each with
   output a script or an agent can consume without parsing prose. `history` records the
   architecture's evolution across captured snapshots — the deterministic half
   of "how it got here" — `trajectory` aggregates that same record into
-  signal counts, churn and persistence (facts that moved, never a score),
-  `debt` ages the workspace's waivers, gaps and
+  signal counts, churn and persistence (facts that moved, never a score), and
+  `evolution` reads it across a selected range of Git revisions, so "at which
+  commit did this first appear" is answered from analyzed trees rather than
+  from commit messages; `debt` ages the workspace's waivers, gaps and
   drift across it, and `report` composes health, waivers,
   fitness, the decision registry and provenance into one governance document
   under a single resolved law, so no two sections can answer from two.
   ([reference/cli.md](../reference/cli.md), [usage/history.md](../usage/history.md),
   [usage/trajectory.md](../usage/trajectory.md),
+  [usage/evolution.md](../usage/evolution.md),
   [usage/debt.md](../usage/debt.md), [usage/report.md](../usage/report.md))
 - **Nx and Moon as first-class integrations, not dependencies.** A workspace
   that has Nx or Moon gets graph reuse and `affected` integration; a repository

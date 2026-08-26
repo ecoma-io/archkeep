@@ -802,8 +802,7 @@ export function resolveCommandContext(
   // can name it correctly.
   return {
     root,
-    provider: hasMoon ? "moon" : hasNative ? "native" : "nx",
-    marker: hasMoon ? moonMarker : hasNative ? ARCHKEEP_MODEL_FILE : NX_CONFIG_FILE,
+    ...workspaceNames(hasMoon, hasNative, moonMarker),
     graph,
     workspace,
     tracked,
@@ -819,6 +818,45 @@ export function resolveCommandContext(
     // ownership a second way. Not part of any existing command's consumption.
     owned,
   };
+}
+
+/**
+ * The provider/marker pair a workspace root carries, derived from marker
+ * presence through the one mapping every envelope header must agree on.
+ * `resolveCommandContext` reads it for its own context; a caller that needs
+ * the identity WITHOUT judging the tree — an envelope header over a run whose
+ * analyzed revisions each carry their own contexts (`./evolution.mjs`) —
+ * calls `describeWorkspaceRoot`, so the vocabulary ("nx"/"native"/"moon" and
+ * the marker that decided it) has exactly one home.
+ *
+ * @param {boolean} hasMoon Whether a Moon directory marks the root.
+ * @param {boolean} hasNative Whether `archkeep.json` marks the root.
+ * @param {string|null} moonMarker Which Moon directory is present.
+ * @returns {{provider: "nx" | "moon" | "native", marker: string}}
+ */
+function workspaceNames(hasMoon, hasNative, moonMarker) {
+  return {
+    provider: hasMoon ? "moon" : hasNative ? "native" : "nx",
+    marker: hasMoon ? moonMarker : hasNative ? ARCHKEEP_MODEL_FILE : NX_CONFIG_FILE,
+  };
+}
+
+/**
+ * The workspace identity of `root` — which project model governs it and which
+ * marker decided that — without reading one source file or building one graph.
+ * The single-project-model gate runs here exactly as it does in
+ * `resolveCommandContext`: both markers present is refused here for the same
+ * reason it is refused there, because a caller about to describe this
+ * workspace must not name a model the full read would have refused.
+ *
+ * @param {string} root Absolute path to the workspace root.
+ * @returns {{provider: "nx" | "moon" | "native", marker: string}}
+ * @throws {Error} when more than one project-model marker is present
+ *   (`requireSingleProjectModel`).
+ */
+export function describeWorkspaceRoot(root) {
+  const { hasNative, moonMarker } = requireSingleProjectModel(root);
+  return workspaceNames(moonMarker !== null, hasNative, moonMarker);
 }
 
 // Re-exported so a caller that only needs "does this tree look like a

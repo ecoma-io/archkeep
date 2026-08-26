@@ -121,7 +121,7 @@ that looked and found nothing — and that holds for a declared gate exactly as
 it holds for a file: a rule that trapped, or whose artifact would not load, is
 never a rule that found nothing.
 
-## The twenty commands
+## The 21 commands
 
 | command      | what it does                                                                          | finds violations |
 | ------------ | ------------------------------------------------------------------------------------- | ---------------- |
@@ -137,6 +137,7 @@ never a rule that found nothing.
 | `fitness`    | Judges the workspace's named quality gates (folded into `check` by presence)          | no               |
 | `history`    | Describes how the architecture evolved across a directory of snapshots                | no               |
 | `trajectory` | Aggregates the drift trajectory across snapshots — signals, churn, persistence        | no               |
+| `evolution`  | Describes how the architecture evolved across a selected range of Git revisions       | no               |
 | `health`     | Per-metric verdicts; an unmeasured metric is `unknown`/`not_applicable`, never zero   | no               |
 | `report`     | Composes health, waivers, fitness, decisions and provenance under one resolved law    | no               |
 | `debt`       | Ages waivers, gaps and drift across snapshots — a ledger, not a gate                  | no               |
@@ -151,7 +152,7 @@ companions: `fitness` exits 1 when a declared function fails (a failing fitness
 function is a finding, not a print job), `delta` exits 1 when the compared
 change introduced a violation no active waiver covers, and `change` exits 1
 when the change produced architectural consequences its declaration did not
-cover (or skipped ones it did). The other sixteen are
+cover (or skipped ones it did). The other seventeen are
 descriptive or
 proposal-only: they answer questions about the architecture without claiming a
 violation. `context` answers the question an agent asks _before_ editing (what
@@ -165,8 +166,10 @@ law — [../usage/delta.md](../usage/delta.md)); `change` answers its
 declaration half as a gate too (did the delta match what the change declared?
 — [../usage/change.md](../usage/change.md)); `history` answers it across time (how did the architecture
 evolve, and which of those changes were architectural, policy, or provider?);
-`drift` answers it in the present tense (does the code that exists agree with
-the architecture that was declared?); `reconcile --propose` and
+`evolution` answers it across Git revisions (at which analyzed commit was an
+architectural change first observable — read from each revision's own tree,
+never from commit messages); `drift` answers it in the present tense (does the code that exists agree with the
+architecture that was declared?); `reconcile --propose` and
 `discover --propose` answer it in the future tense (what would the declared
 model need to look like for the two sides to agree?) — as proposals, never
 written. `fitness` and `waivers` sit between: their verdicts fold into

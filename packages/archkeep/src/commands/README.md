@@ -149,6 +149,22 @@ the resolution order.
   compared travel inside the snapshots, and exactly one command writes them.
   Descriptive: never exits 1.
 
+- **`evolution`** (`./evolution.mjs`'s `evolutionCommand`) — the same
+  evolution record across a selected range of Git revisions instead of a
+  snapshot directory. Git answers only which trees to read: both endpoints are
+  resolved with `rev-parse`, base must be an ancestor of head, every commit in
+  `base..head` must be single-parent (a merge refuses loudly rather than being
+  flattened), and each selected commit is materialized into a temporary
+  detached worktree that is released before the run reports — the caller's
+  working tree is never touched. Each materialized tree runs through the
+  ordinary context and policy ladders, and the transitions are classified by
+  `./history.mjs`'s own `computeEvolution`, so the two commands cannot
+  disagree about what a transition means. A change is attributed to the first
+  analyzed revision where it is observable — where history shows it, never why
+  it was made. Refuses every unusable selection and every revision that cannot
+  be fully analyzed, so no failure can read as a shorter history. Descriptive:
+  never exits 1.
+
 - **`provenance`** (`./provenance-command.mjs`'s `provenanceCommand`) — where
   this run's facts came from and which governance rows carry an origin.
   Two surfaces: repository provenance (the git commit, remote and dirty state

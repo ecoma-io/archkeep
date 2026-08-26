@@ -150,6 +150,7 @@ const changeRoot = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-change-"));
 const artifactsDir = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-artifacts-"));
 const histDir = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-hist-"));
 const emptyHistDir = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-hist-empty-"));
+const evolutionRoot = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-evolution-"));
 afterAll(() => {
   for (const dir of [
     world,
@@ -160,6 +161,7 @@ afterAll(() => {
     artifactsDir,
     histDir,
     emptyHistDir,
+    evolutionRoot,
   ]) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -234,6 +236,39 @@ spawnSync(
   ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "base"],
   { cwd: changeRoot, encoding: "utf8", timeout: SPAWN_BUDGET_MS, killSignal: "SIGKILL" },
 );
+// The evolution world: a REAL repository carrying the healthy world's files,
+// committed twice, because `evolution` materializes revisions through real
+// `git worktree add` — the one row whose graph and file seams are threaded
+// into trees that must actually exist in git. Both commits hold identical
+// content (the second is empty), so the range is valid while every analyzed
+// revision reads the same static fixtures.
+writeTree(evolutionRoot, {
+  "nx.json": NX_JSON,
+  "module-boundaries.config.mjs": PERMISSIVE_LAW,
+  "libs/domain/go.mod": "module example.com/domain\n\ngo 1.24\n",
+  "libs/domain/doc.go": DOC_GO,
+  "libs/adapter/go.mod": "module example.com/adapter\n\ngo 1.24\n",
+  "libs/adapter/adapter.go": 'package adapter\n\nconst Name = "adapter"\n',
+});
+const evolutionGit = (...args) =>
+  spawnSync("git", args, {
+    cwd: evolutionRoot,
+    encoding: "utf8",
+    timeout: SPAWN_BUDGET_MS,
+    killSignal: "SIGKILL",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "t",
+      GIT_AUTHOR_EMAIL: "t@t",
+      GIT_COMMITTER_NAME: "t",
+      GIT_COMMITTER_EMAIL: "t@t",
+    },
+  });
+evolutionGit("init", "-q", "-b", "main");
+evolutionGit("add", "-A");
+evolutionGit("commit", "-q", "-m", "first");
+const evolutionBase = evolutionGit("rev-parse", "HEAD").stdout.trim();
+evolutionGit("commit", "-q", "--allow-empty", "-m", "second");
 
 /**
  * Each world's injected outside: cwd plus the two seams. Real git is NOT
@@ -278,6 +313,11 @@ const seamFor = {
     cwd: changeRoot,
     readGraph: () => GRAPH,
     listFiles: () => ["nx.json", "module-boundaries.config.mjs"],
+  }),
+  evolution: () => ({
+    cwd: evolutionRoot,
+    readGraph: () => GRAPH,
+    listFiles: () => WORLD_FILES,
   }),
 };
 
@@ -436,6 +476,10 @@ const MATRIX = {
     // is descriptive aggregation, exit 0.
     ok: { world: "world", argv: ["trajectory", histDir], exit: EXIT.ok },
     refused: { world: "world", argv: ["trajectory", emptyHistDir], exit: EXIT.error },
+  },
+  evolution: {
+    ok: { world: "evolution", argv: () => ["evolution", "--base", evolutionBase], exit: EXIT.ok },
+    refused: { world: "world", argv: ["evolution"], exit: EXIT.usage },
   },
   health: {
     ok: { world: "world", argv: ["health", histDir], exit: EXIT.ok },

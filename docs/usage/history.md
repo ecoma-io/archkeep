@@ -2,6 +2,11 @@
 
 Describe how the architecture evolved across a directory of graph snapshots.
 
+For the same question asked across a range of Git revisions — "at which commit
+did an architectural change first become observable?" — see
+[evolution.md](evolution.md), which reuses this command's classification over
+trees materialized from the commits you name.
+
 ```shell
 archkeep history .archkeep/history
 archkeep history .archkeep/history --format json
