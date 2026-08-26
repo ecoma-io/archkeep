@@ -1,0 +1,66 @@
+{
+  "contract": 1,
+  "graph": {
+    "edges": [
+      {
+        "source": "alpha",
+        "target": "beta",
+        "type": "static",
+        "sourceFile": "packages/alpha/src/lib.rs"
+      }
+    ]
+  },
+  "imports": [
+    {
+      "column": 5,
+      "kind": "static",
+      "line": 3,
+      "resolved": {
+        "external": false,
+        "file": null,
+        "packageName": null,
+        "target": "beta"
+      },
+      "sourceFile": "packages/alpha/src/lib.rs",
+      "sourceProject": "alpha",
+      "specifier": "beta",
+      "spelling": {
+        "path": true,
+        "relative": false
+      }
+    }
+  ],
+  "model": {
+    "projects": [
+      {
+        "name": "alpha",
+        "root": "packages/alpha",
+        "tags": ["scope:shared"]
+      },
+      {
+        "name": "beta",
+        "root": "packages/beta",
+        "tags": ["type:library"]
+      }
+    ]
+  },
+  "policy": {
+    "depConstraints": [],
+    "moduleBoundaryOptions": {
+      "allow": [],
+      "allowCircularSelfDependency": false,
+      "banTransitiveDependencies": false,
+      "buildTargets": ["build"],
+      "checkDynamicDependenciesExceptions": [],
+      "checkNestedExternalImports": false,
+      "enforceBuildableLibDependency": false,
+      "ignoredCircularDependencies": []
+    }
+  },
+  "rule": {
+    "name": "max-fan-in",
+    "params": {
+      "budget": 2
+    }
+  }
+}

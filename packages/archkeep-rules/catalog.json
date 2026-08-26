@@ -64,7 +64,27 @@
         }
       },
       "artifact": "rules/max-fan-out.wasm",
-      "sha256": "4575936c2bbf388e5f1dd0a935a58f4d22b8585d2fb2ec22e5bba5012a5626c9"
+      "sha256": "d1aa94733d03a54a2712c2e08b3173a7a9d7e58d7bcd10d7bc2ca43d9af0e924"
+    },
+    {
+      "name": "max-fan-in",
+      "description": "A project may not be depended on by more distinct projects than a declared budget",
+      "contract": 1,
+      "needs": ["model", "graph"],
+      "params": {
+        "max": {
+          "type": "number",
+          "required": true,
+          "description": "The most distinct projects that may depend on an in-scope project (integer >= 0)"
+        },
+        "match": {
+          "type": "array",
+          "required": false,
+          "description": "Tags an in-scope project must carry all of; absent means every project; an empty array is malformed"
+        }
+      },
+      "artifact": "rules/max-fan-in.wasm",
+      "sha256": "188bc95ba2f1bcf097965c8f956a285df44c59c5b406e4b3afdd32185fc3a2a7"
     }
   ]
 }
