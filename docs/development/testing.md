@@ -74,6 +74,37 @@ Two rules specific to this codebase:
 Property-based cases use fast-check, with the seed pinned on CI —
 `vitest.property-seed.mjs` says why.
 
+### Examples, relations, properties — three ways a test can be true
+
+Most tests here are **examples**: this input produces this verdict. Two rarer
+shapes earn their place when an example per case would enumerate forever:
+
+- **Metamorphic / invariant** — a _relation_ between inputs: transform the
+  input in a way that is not an architecture fact, require the same answer.
+  `src/rules/invariants.test.mjs` holds the rule engine's (site order and
+  repetition change nothing but the documented output order);
+  `src/analysis/metamorphic.test.mjs` holds the analyzers' (comments, blank
+  lines and local renames are not dependencies). These catch ordering leaks,
+  comment-mask drift and duplicate handling without a fixture per spelling.
+- **Property-based** — generated inputs over a stated total relation
+  (totality, determinism, round-trip). Fast-check where a generator earns its
+  keep; seeded sweeps where a dependency would not.
+
+A relation needs the same guard an example needs, plus one more: prove the
+comparison can see a change at all. Every family above carries a negative
+control (one real added crossing must move the records) and refuses an empty
+baseline before comparing — `[]` "equal" to `[]` is the vacuous pass this
+repository exists to prevent, and it satisfies every equality silently.
+
+**Whether an order is semantic is decided where it is pinned, not assumed.**
+Import-site order survives `evaluateWithSuppressions` deliberately (documented
+there) and becomes canonical only at `sortViolations`, which the CLI-level
+tests pin; graph snapshots sort projects, edges and tags so no provider's
+discovery order can leak; but a project's `tags` array is semantic — reordering
+it changes the snapshot identity `history` keys transitions on — and so is
+array element order in the intent fingerprint. Before asserting
+order-invariance on any sequence, check which kind it is.
+
 ### Integration — `*.integration.test.mjs`
 
 Real seams, over throwaway fixture trees. Each one exists for a failure the unit
