@@ -1,15 +1,21 @@
-# The official rules catalog — documentation-as-data and integrity gate for shipped
-# rule artifacts.
+# The official rules catalog — documentation-as-data and integrity gate for
+# shipped rule artifacts, and the crate their wasm is built from.
 #
 # Tags use dash separators (type-package, scope-sdk) because Moon tags cannot
 # contain colons, the same reason every project beside it does
 # (`../../module-boundaries.config.mjs` argues it once, for the whole tree).
 # `scope-sdk` is shared with `../archkeep-rule-sdk-rust` and the other SDKs:
-# this package ships artifacts that contract defines, and once rule sources
-# land here it carries a Cargo path-dependency on archkeep-rule-sdk-rust — so
-# like them it must never reach the engine from JavaScript. The engine reads
-# the catalog as data, if it ever reads it at all; the SDK builds the
-# artifacts; neither may depend on the other's code.
+# this package ships artifacts that contract defines and carries a Cargo
+# path-dependency on archkeep-rule-sdk-rust — so like them it must never reach
+# the engine from JavaScript. The engine reads the catalog as data, if it ever
+# reads it at all; the SDK builds the artifacts; neither may depend on the
+# other's code.
+#
+# `language: javascript` is the honest of the two halves this package holds:
+# the sources under `src/` and `test/` are plain ESM the way every other
+# package's are, and the Rust half is covered by the cargo legs of the targets
+# below, each named for what it reads — the same arrangement
+# `../archkeep-rule-sdk-ts/moon.yml` argues for its two languages.
 id: archkeep-rules
 language: javascript
 layer: library
@@ -18,16 +24,26 @@ tags:
   - type-package
   - scope-sdk
 tasks:
-  # ESLint over the validator and test harness — the only JavaScript this package
-  # holds. It reads src/ and test/ and nothing else.
+  # Two linters, one per language: rustfmt over the crate, clippy over
+  # everything cargo can see (`--all-targets`, so the examples and both test
+  # files are included), then ESLint over the validator and the node test
+  # harness — the only JavaScript this package holds. `script` because that
+  # is four commands, and `--locked` everywhere so a Cargo.lock that drifted
+  # from Cargo.toml refuses here, at PR time, rather than at publish time.
   lint:
-    command: eslint . --max-warnings 0
-  # The catalog validator tests, and an integration case that walks the real tree
-  # and validates the committed catalog.json — node --test, because this package
-  # needs no test framework and vitest belongs to the engine.
+    script: cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && eslint . --max-warnings 0
+  # The golden fixtures replayed natively, the committed artifacts held to
+  # their digests, and the catalog validator's own suite. Cargo runs the
+  # first two from `tests/`; node runs the third from `test/` — two
+  # directories, two tools, no collision, and each half would fail its own
+  # way if the other's toolchain were missing, which is the point of a
+  # package declaring both.
   test:
-    command: node --test test/*.test.mjs
-  # JSDoc type-checking over src/ and test/ — tsc with noEmit and checkJs,
-  # the same arrangement every other package's `typecheck` target uses.
+    script: cargo test --locked && node --test test/*.test.mjs
+  # Three compilers for three audiences: `cargo check --all-targets` for the
+  # host-compiled half, the same again for `wasm32-unknown-unknown` (the only
+  # pass that reads the `#[cfg(target_arch = "wasm32")]` half of the SDK's
+  # ABI), and `tsc` for the harness's JSDoc — the same arrangement every
+  # other package's `typecheck` target uses.
   typecheck:
-    command: pnpm exec tsc -p tsconfig.json
+    script: cargo check --locked --all-targets && cargo check --locked --target wasm32-unknown-unknown && pnpm exec tsc -p tsconfig.json

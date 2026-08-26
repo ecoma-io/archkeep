@@ -1,4 +1,50 @@
 {
   "version": 1,
-  "rules": []
+  "rules": [
+    {
+      "name": "tag-cardinality",
+      "description": "Every project in scope must carry a number of distinct tag values on one axis inside a declared range",
+      "contract": 1,
+      "needs": ["model"],
+      "params": {
+        "axis": {
+          "type": "string",
+          "required": true,
+          "description": "The tag axis counted — the segment before the first \":\" of a tag"
+        },
+        "min": {
+          "type": "number",
+          "required": false,
+          "description": "The fewest distinct axis values an in-scope project may carry (integer >= 0); at least one of min or max must be present"
+        },
+        "max": {
+          "type": "number",
+          "required": false,
+          "description": "The most distinct axis values an in-scope project may carry (integer >= min)"
+        },
+        "match": {
+          "type": "array",
+          "required": false,
+          "description": "Tags an in-scope project must carry all of; absent means every project; an empty array is malformed"
+        }
+      },
+      "artifact": "rules/tag-cardinality.wasm",
+      "sha256": "5754b74b11094a5979780e879d32439ea7f0695748bbc927f4b6b0f5ab83a867"
+    },
+    {
+      "name": "forbidden-tag-combination",
+      "description": "A project carrying one declared set of tags together is a violation, whatever else it carries",
+      "contract": 1,
+      "needs": ["model"],
+      "params": {
+        "tags": {
+          "type": "array",
+          "required": true,
+          "description": "The forbidden combination: a project carrying ALL of these tags violates"
+        }
+      },
+      "artifact": "rules/forbidden-tag-combination.wasm",
+      "sha256": "a5e1b8e7afff870bd9256dab91dc65a29e1b65f54cc11381f7fdb05c6c01685b"
+    }
+  ]
 }

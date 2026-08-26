@@ -5,9 +5,10 @@ integrity gate for shipped rule artifacts.
 
 ## Status
 
-**This package is the foundation only.** The catalog is empty (`rules: []`), and
-no rules are shipped yet. This change establishes the schema and validator; rules
-arrive in subsequent changes. The package is not yet published to npm.
+The catalog holds the first two rules — `tag-cardinality` and
+`forbidden-tag-combination` — with their committed artifacts, digests, and
+fixture suites. More rules arrive in subsequent changes. The package is not
+yet published to npm.
 
 ## What this package is
 
@@ -109,12 +110,126 @@ Run the validator against the committed tree:
 node packages/archkeep-rules/src/fs-wrapper.mjs
 ```
 
-Run the test suite:
+Run the test suites (the node half; the Rust half is `cargo test`):
 
 ```bash
 node --test packages/archkeep-rules/test/*.test.mjs
 ```
 
 The catalog is validated on every commit by CI. Adding a rule means adding an
-entry to `catalog.json`, committing the artifact, and running the validator to
-prove the digest matches.
+entry to `catalog.json`, committing the artifact beside its `.wasm.sha256`, and
+running the validator to prove the digest matches — `./rebuild-rules.sh` is the
+command that rebuilds the artifacts (in a container, never on a host machine —
+its header says why) and re-records both digest files.
+
+## The rules
+
+Each rule below states its intent, its parameters, the evidence it depends on,
+what each of the four verdicts means for it, and what it does **not** claim.
+None of them establishes a design pattern or an architecture style: a rule is a
+machine-checkable predicate over the evidence the engine already computed, and
+the moment it passes says exactly one thing — this predicate held.
+
+### tag-cardinality
+
+**Intent.** Constrain how many distinct tag values a project may carry on one
+axis — most often "exactly one", the shape a workspace's convention needs
+before any direction rule is writable (a project tagged both `layer:domain`
+and `layer:adapter` is invisible to every constraint written against
+`sourceTag`).
+
+**Parameters.**
+
+| name    | type   | required | meaning                                                                                                                                                |
+| ------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `axis`  | string | yes      | The axis counted — the segment before the first `:` of a tag (`layer:domain` carries the value `domain` on `layer`).                                   |
+| `min`   | number | no       | The fewest distinct axis values an in-scope project may carry (integer ≥ 0). At least one of `min`/`max` must be present.                              |
+| `max`   | number | no       | The most distinct axis values an in-scope project may carry (integer ≥ `min`).                                                                         |
+| `match` | array  | no       | Tags an in-scope project must carry ALL of; absent means every project. An empty array is malformed, not "every project" — absent is how you say that. |
+
+**Evidence.** `model` only. The rule never reads the graph: it judges how a
+project is tagged, not what it depends on.
+
+**Verdicts.**
+
+- `fail` — an in-scope project carries fewer than `min` or more than `max`
+  distinct values on the axis. One finding per project per bound, naming the
+  project, the count, and the bound.
+- `pass` — every in-scope project's count is within range.
+- `not_applicable` — no project is in scope (no project carries all the
+  `match` tags, or the workspace has no projects at all).
+- `unknown` — the parameters cannot be read as declared: an unknown key (a
+  typo judged with defaults is the quiet direction this refuses), a missing or
+  non-string `axis`, a non-integer or negative bound, `min` above `max`, or a
+  malformed `match`.
+
+**Limitations.** A tag with no `:` carries no axis value, so a workspace whose
+tags are entirely dash-form (this repository's own Moon vocabulary included)
+counts zero per project for every axis — which with `min ≥ 1` fails loudly
+rather than silently, and with only `max` passes trivially. The rule counts
+distinct VALUES: two tags with the same axis value count once, and duplicate
+tag entries count once. It says nothing about which value a project should
+carry — that is a direction question, and the constraint table already owns it.
+
+**Usage example.**
+
+```jsonc
+{
+  "name": "tag-cardinality",
+  "artifact": "tools/rules/tag-cardinality.wasm",
+  "sha256": "<copy from catalog.json — it equals rules/tag-cardinality.wasm.sha256>",
+  "params": { "axis": "layer", "min": 1, "max": 1 },
+  "reason": "every project states exactly one layer; direction rules are written against it",
+}
+```
+
+### forbidden-tag-combination
+
+**Intent.** Forbid one declared set of tags from co-existing on the same
+project — the shape of "a domain project is not a database runtime", stated
+once instead of as one row per consequence.
+
+**Parameters.**
+
+| name   | type  | required | meaning                                                                                                  |
+| ------ | ----- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `tags` | array | yes      | The combination: every entry a non-empty string, no duplicates. A project carrying ALL of them violates. |
+
+**Evidence.** `model` only — a judgment about how a project is tagged.
+
+**Verdicts.**
+
+- `fail` — a project carries the whole combination. One finding per project,
+  naming the project and the combination.
+- `pass` — projects carry at most partial combinations.
+- `not_applicable` — no project in the workspace carries any of the tags at
+  all: the vocabulary the rule speaks about is absent, which is the reference
+  rule's own reading of the same state.
+- `unknown` — malformed parameters: `tags` not an array, empty, carrying a
+  non-string or empty entry, a duplicate entry, or an unknown key beside it.
+
+**Limitations.** The rule is set-membership over exact tag strings — no
+patterns, no exclusions, no "unless it also carries X" (declare a second
+combination instead, or exempt via `match`-style scoping in a rule of your
+own). A single entry in `tags` is legal and means "no project may carry this
+tag"; nothing else in the policy vocabulary forbids BEARING a tag, but if that
+is what you mean, say it in the `reason` where a reviewer reads it.
+
+**Usage example.**
+
+```jsonc
+{
+  "name": "forbidden-tag-combination",
+  "artifact": "tools/rules/forbidden-tag-combination.wasm",
+  "sha256": "<copy from catalog.json — it equals rules/forbidden-tag-combination.wasm.sha256>",
+  "params": { "tags": ["layer:domain", "runtime:database"] },
+  "reason": "a domain project is not a database runtime; the two roles never share a project",
+}
+```
+
+Both rules answer `unknown` — never `pass` — when their parameters cannot be
+read as declared, and both hold fixture suites under `fixtures/` whose
+recorded verdicts the engine's conformance gate replays through the real host
+(`../archkeep/src/conformance/official-rules.integration.test.mjs`), so a
+committed artifact that stopped answering its recorded verdicts fails the
+build rather than a consumer's Tuesday.

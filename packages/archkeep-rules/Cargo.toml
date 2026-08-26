@@ -1,0 +1,67 @@
+# The official generic rules — published artifacts that any workspace can declare.
+#
+# This crate is unpublished: it builds and commits the rule artifacts that
+# `packages/archkeep-rules/` ships as data, and its only external author is the
+# repository itself rebuilding from source. The version is the repository's
+# single version (`../../.release-please-manifest.json`), because the releasable
+# unit is the repository rather than any one package.
+[package]
+name = "archkeep-rules"
+version = "0.15.0"
+edition = "2024"
+# Edition 2024 stabilized in Rust 1.85.0 (the edition guide's own release note),
+# which is what makes this the floor rather than a number someone remembered.
+rust-version = "1.85"
+description = "Official generic architecture rules for Archkeep, compiled to WebAssembly."
+license = "Apache-2.0"
+repository = "https://github.com/ecoma-io/archkeep"
+readme = "README.md"
+keywords = ["architecture", "webassembly", "monorepo", "archkeep", "lint"]
+categories = ["development-tools", "wasm"]
+publish = false
+
+# Two dependencies, the same as the SDK: serde for the evidence bundle, serde_json
+# for the params object and tag extraction. A rule loaded by the host has NO
+# imports, so the dependency list must stay minimal — anything pulling in a
+# crate that reaches for a clock, socket or random number cannot load at all.
+[dependencies]
+archkeep-rule-sdk = { path = "../archkeep-rule-sdk-rust" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lib]
+# An rlib, so `tests/` and `examples/` in this crate link against the same code.
+crate-type = ["rlib"]
+
+# tag-cardinality: constrains how many distinct axis values a project may carry.
+[[example]]
+name = "tag_cardinality"
+path = "examples/tag_cardinality.rs"
+crate-type = ["cdylib"]
+
+# forbidden-tag-combination: forbids projects from carrying a set of tags together.
+[[example]]
+name = "forbidden_tag_combination"
+path = "examples/forbidden_tag_combination.rs"
+crate-type = ["cdylib"]
+
+# The profile the committed artifacts are built with, stated here rather than in
+# the build command so the artifact a contributor rebuilds is the artifact CI
+# would have.
+#
+# `panic = "abort"` is the load-bearing one: unwinding across the `extern "C"`
+# boundary the ABI fixes is undefined behaviour, so a rule that panics must
+# trap instead — and a trap is a failure the host NAMES rather than a verdict it
+# invents. Abort is what turns a panic into that trap.
+#
+# `opt-level = "z"`, `lto` and `codegen-units = 1` are size, and size matters
+# here for a reason it usually does not: the artifact is COMMITTED to the
+# workspace that declares the rule, reviewed as bytes, and pinned by a sha256 in
+# the policy row. `strip = true` removes the symbol names, which are the largest
+# single contributor and which no reader of a wasm rule uses.
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

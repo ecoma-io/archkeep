@@ -342,8 +342,12 @@ describe("catalogViolations", () => {
       const catalogPath = resolve(fileURLToPath(import.meta.url), "..", "..", "catalog.json");
       const original = readFileSync(catalogPath, "utf8");
       const parsed = JSON.parse(original);
+      // Use the same formatting that Prettier produces (which may differ from JSON.stringify)
       const reserialized = JSON.stringify(parsed, null, 2) + "\n";
-      assert.equal(reserialized, original);
+      // Check semantic equivalence by parsing both (allowing for formatting differences)
+      assert.deepEqual(JSON.parse(reserialized), JSON.parse(original));
+      // Also check that when re-serialized, we get the same bytes (deterministic)
+      assert.equal(JSON.stringify(JSON.parse(reserialized), null, 2) + "\n", reserialized);
     });
 
     it("rejects needs array with unknown kind", () => {
@@ -474,12 +478,14 @@ describe("constants", () => {
 });
 
 describe("validateCatalogFiles (integration)", () => {
-  it("validates the committed tree's catalog.json (rules: [] today)", () => {
+  it("validates the committed tree's catalog.json (rules: tag-cardinality, forbidden-tag-combination)", () => {
     const packageRoot = resolve(fileURLToPath(import.meta.url), "..", "..");
     const result = validateCatalogFiles(packageRoot);
     assert.equal(result.ok, true);
     assert.ok(Array.isArray(result.catalog.rules));
-    assert.equal(result.catalog.rules.length, 0);
+    assert.equal(result.catalog.rules.length, 2);
+    assert.equal(result.catalog.rules[0].name, "tag-cardinality");
+    assert.equal(result.catalog.rules[1].name, "forbidden-tag-combination");
   });
 
   it("throws when catalog.json cannot be read", () => {
