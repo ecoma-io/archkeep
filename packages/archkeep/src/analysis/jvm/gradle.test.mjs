@@ -316,6 +316,40 @@ rootProject.name = "my-app" // inline comment
       assert.strictEqual(deps[0].source, "my-app");
       assert.strictEqual(deps[0].target, "core");
     });
+
+    it('reads the root project\'s own spelling, project(":"), as an edge', () => {
+      // `":"` is how a subproject names the reactor root in real Gradle. The
+      // empty path resolves through the root claim every settings file
+      // registers; a reader that missed it dropped the edge silently.
+      const rootReferencing = {
+        projects: [
+          { name: "my-app", root: "" },
+          { name: "core", root: "core" },
+        ],
+        filesOf: (projectName) => {
+          const map = {
+            "my-app": ["settings.gradle", "core/build.gradle"],
+            core: ["core/build.gradle"],
+          };
+          return map[projectName] || [];
+        },
+        readFile: (path) => {
+          const fixtures = {
+            "settings.gradle": 'rootProject.name = "my-app"\ninclude("core")\n',
+            "core/build.gradle": 'dependencies { implementation(project(":")) }\n',
+          };
+          return fixtures[path] || null;
+        },
+      };
+      const deps = resolveGradleDependencies(
+        rootReferencing.projects,
+        rootReferencing.filesOf,
+        rootReferencing.readFile,
+      );
+      assert.strictEqual(deps.length, 1);
+      assert.strictEqual(deps[0].source, "core");
+      assert.strictEqual(deps[0].target, "my-app");
+    });
   });
 
   describe("gradleManifestFailures", () => {
