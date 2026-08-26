@@ -117,6 +117,7 @@ import { changeCommand } from "./src/commands/change.mjs";
 import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
 import { historyCommand } from "./src/commands/history.mjs";
 import { trajectoryCommand } from "./src/commands/trajectory.mjs";
+import { evolutionCommand } from "./src/commands/evolution.mjs";
 import { healthCommand } from "./src/commands/health.mjs";
 import { reportCommand } from "./src/commands/report.mjs";
 import { debtCommand } from "./src/commands/debt.mjs";
@@ -1874,6 +1875,82 @@ async function runTrajectory(options, { cwd, env }) {
 }
 
 /**
+ * `evolution`'s `run`: resolves the workspace root the way `adr` does (a light
+ * marker walk — this command describes OTHER trees, so it must not fail
+ * because the caller's own working tree does not fully analyze right now),
+ * drives `evolutionCommand`, writes the report, and returns the exit code.
+ *
+ * The range is `--base` plus optional `--head`; there are no positional
+ * arguments. The Nx and git seams in `env` thread into EVERY analyzed
+ * revision's context, the same way they thread into one tree elsewhere — in
+ * production both are undefined and every revision is read for real.
+ *
+ * @param {{format: string, output: string|null, base: string|null, head: string|null,
+ *   paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runEvolution(options, { cwd, env }) {
+  if (!options.base) {
+    env.err(
+      `archkeep: evolution needs --base <rev> — a commit, branch, or tag the range starts at ` +
+        `(--head defaults to HEAD).`,
+    );
+    return EXIT.usage;
+  }
+  if (options.paths.length > 0) {
+    env.err(
+      `archkeep: evolution takes no positional arguments; the range is --base plus --head. ` +
+        `Got '${options.paths.join("', '")}'`,
+    );
+    return EXIT.usage;
+  }
+
+  const root = findWorkspaceRoot(cwd, WORKSPACE_MARKERS);
+  if (root === null) {
+    env.err(
+      `archkeep: evolution needs a workspace root — no nx.json, archkeep.json, or .moon marker found ` +
+        `walking up from ${cwd}`,
+    );
+    return EXIT.error;
+  }
+
+  let result;
+  try {
+    result = await evolutionCommand(
+      root,
+      { base: options.base, head: options.head },
+      {
+        readGraph: env.readGraph,
+        listFiles: env.listFiles,
+      },
+    );
+  } catch (error) {
+    const usageError = error instanceof UsageError;
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    // No `--config` flag exists here (`EVOLUTION_FLAG_HELP`) — there is no
+    // override to pass, only the workspace's un-overridden default to guard.
+    if (!writeOutputReport(options.output, reportText, env, cwd, null)) return EXIT.error;
+    env.err(`archkeep: evolution complete → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // Descriptive: where the architecture changed is a fact about history,
+  // never a finding.
+  return EXIT.ok;
+}
+
+/**
  * `debt`'s `run`: resolves the command context, drives `debtCommand`, writes
  * the ledger report, and returns the exit code.
  *
@@ -2580,6 +2657,51 @@ const HISTORY_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `evolution`'s flags: text or JSON envelope, optional file output, and the
+ * two revisions that bound the range. There is no `--config` — each analyzed
+ * revision is judged under the law its own tree declares (`src/commands/evolution.mjs`),
+ * and a law carried from outside would misattribute policy changes to
+ * revisions that never made them.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const EVOLUTION_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--base",
+    key: "base",
+    arg: "<rev>",
+    describe: Object.freeze([
+      "The baseline revision — a commit, branch, tag,",
+      "or HEAD~n; the first revision analyzed",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--head",
+    key: "head",
+    arg: "<rev>",
+    describe: Object.freeze([
+      "The tip revision (default HEAD); must be a",
+      "linear descendant of --base with no merges between",
+    ]),
+  }),
+]);
+
+/**
  * `health`'s flags: text or JSON envelope, optional file output. The optional
  * positional argument is the snapshot directory for trends, the same directory
  * `history` reads.
@@ -3001,6 +3123,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runTrajectory,
+  }),
+  evolution: Object.freeze({
+    name: "evolution",
+    args: "",
+    summary: "Describe how the architecture evolved across a Git revision range",
+    flagHelp: EVOLUTION_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(EVOLUTION_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, base: null, head: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runEvolution,
   }),
   health: Object.freeze({
     name: "health",
