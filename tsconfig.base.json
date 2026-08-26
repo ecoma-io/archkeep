@@ -2,19 +2,40 @@
 // TypeScript here, and why"). This file's first duty is the boundary checker's
 // import resolution — it is what lets that resolution read modern
 // packages: archkeep resolves every specifier through
-// `ts.resolveModuleName`, and with no tsconfig that call runs under default
-// (pre-Node16) settings that cannot read a package `exports` map. Measured on
-// this tree with typescript 5.9.3: without this file the checker reported six
-// unresolvable imports (`vscode-languageclient/node`, `@fast-check/vitest` ×4,
-// `nx/package.json`), all exports-map-only entry points; with
-// `module: "nodenext"` all six resolve and only the two non-literal dynamic
-// imports remain, which no compiler option can fix. `allowJs` and
+// `ts.resolveModuleName`, and under typescript 5.x that call with no tsconfig
+// runs under default (pre-Node16) settings that cannot read a package
+// `exports` map. Measured on this tree with typescript 5.9.3: without this
+// file the checker reported six unresolvable imports
+// (`vscode-languageclient/node`, `@fast-check/vitest` ×4, `nx/package.json`),
+// all exports-map-only entry points; with `module: "nodenext"` all six
+// resolve and only the two non-literal dynamic imports remain, which no
+// compiler option can fix. Re-measured under typescript 6.0.3 the same probes
+// resolve even without these options — 6.0 widened its default resolution —
+// but the engine's peer range is `>=5 <7`, so the file earns its keep on the
+// 5.x half and stays inert on the 6.x half. `allowJs` and
 // `resolveJsonModule` were probed too and changed nothing, so they are absent.
+//
+// Two further options are stated explicitly because typescript 6.0 flipped
+// their defaults to values this workspace never asked for:
+//
+// - `"strict": false` — 6.0 defaults it to `true`. The programs extending
+//   this file were written against the old default on purpose
+//   (packages/archkeep/tsconfig.json argues why there is no strict here);
+//   leaving the option unstated now means its opposite, and a bump alone
+//   turned a green typecheck into ~2,900 strict-mode errors across five
+//   programs — measured on this tree. Stating it keeps that decision owned
+//   by the workspace rather than inherited from a compiler release.
+// - `"types": ["node"]` — 6.0 defaults `types` to `[]`, ending automatic
+//   `@types/*` inclusion from node_modules. Every `node:`-prefixed import in
+//   a checkJs program then fails as TS2591 — 453 of them across the same
+//   run. This names the one type package TS 5 auto-included, restoring the
+//   previous program shape exactly.
 //
 // The engine reads this file through `ts.parseConfigFileTextToJson`
 // (packages/archkeep/src/analysis/typescript.mjs), which accepts these
-// comments; it uses `compilerOptions` only and ignores include/files globs.
-// The filename is the default value of the plugin's `tsConfig` option
+// comments; it uses `compilerOptions` only and ignores include/files globs,
+// so neither addition reaches module resolution. The filename is the default
+// value of the plugin's `tsConfig` option
 // (packages/archkeep/src/options.mjs), so no nx.json change is needed.
 //
 // The `typecheck` programs — packages/*/tsconfig.json and scripts/tsconfig.json
@@ -23,6 +44,8 @@
 {
   "compilerOptions": {
     "module": "nodenext",
-    "moduleResolution": "nodenext"
+    "moduleResolution": "nodenext",
+    "strict": false,
+    "types": ["node"]
   }
 }
