@@ -38,6 +38,14 @@ let sequence = 0;
 /**
  * One stored `graph --format json` snapshot in the exact shape `readSnapshots`
  * produces (the parsed envelope reduced to what the classifiers read).
+ *
+ * @param {{
+ *   projects?: {name: string, root: string, type: string, tags: string[]}[],
+ *   dependencies?: {source: string, target: string, type: string}[],
+ *   provider?: string,
+ *   provenance?: {commit: string, remote: string, dirty: boolean} | null,
+ *   fingerprint?: string | null,
+ * }} [fields]
  */
 function snapshot({
   projects = [
