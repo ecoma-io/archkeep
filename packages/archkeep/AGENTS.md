@@ -301,7 +301,9 @@ Anything beyond these three is the second resolver this package must not grow.
   uniform path toward the crate, and a renamed `package = "…"` dependency is
   followed by the manifest resolver alone; Python matches per line, so a
   continued line or a triple-quoted string that looks like an import is
-  misread. The worst case of every one is a spurious record naming text the
+  misread; Java and Kotlin both require imports on a single line, and both
+  treat fully-qualified names without imports as invisible; Kotlin backtick-quoted
+  package segments do not resolve. The worst case of every one is a spurious record naming text the
   file really contains — never a missed project.
 - **Graph edges and source records answer different questions, and both stay.**
   A Python manifest edge requires an explicit workspace wiring under the

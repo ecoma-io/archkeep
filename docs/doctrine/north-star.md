@@ -97,7 +97,7 @@ registry disagree.
 ## How the next language earns its place
 
 Breadth is the goal, and breadth is also the way this project could quietly stop
-being trustworthy: six analyzers that each half-read their language would report
+being trustworthy: seven analyzers that each half-read their language would report
 clean far more often than they report correctly, and every one of those clean
 reports would look exactly like the enforcement working.
 
@@ -193,11 +193,11 @@ These are load-bearing. Each is already enforced somewhere in the code or the
 tests; this list exists so that a proposal to remove one is recognised as a
 change of direction rather than a cleanup.
 
-**Static reading only.** Nothing invokes `go`, `cargo` or `uv` to answer a
+**Static reading only.** Nothing invokes `go`, `cargo`, `uv`, `mvn` or `gradle` to answer a
 question about imports. Nx computes the graph on _every_ invocation, so a graph
-that needs four toolchains installed is a graph that fails on the machine that
+that needs seven language toolchains installed is a graph that fails on the machine that
 does not have them — a lint-only CI job, or a contributor who touches none of the
-four languages.
+seven languages.
 
 **Edges only — never nodes, never targets.** Projects stay declared by
 hand-written `project.json`, and no target is ever inferred. The community
@@ -242,7 +242,7 @@ the imports — breadth is safe, because coverage is something the run reports
 rather than something the reader assumes.
 
 That is the whole reason this project can aim at being a platform rather than
-three analyzers. Not the layering, and not the test count.
+seven analyzers. Not the layering, and not the test count.
 
 ## How to tell this is drifting
 
