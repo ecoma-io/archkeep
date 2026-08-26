@@ -65,8 +65,11 @@ The alternatives were considered and rejected with reasons:
    Decision 3, extended verbatim).
 3. **Edges keep the two-track split, path-based.** `<ProjectReference>` draws
    a declared edge by resolving the written path (Windows separators
-   normalized) to the project whose root contains it; containment escapes and
-   placeholders that do not statically resolve become positioned failures.
+   normalized) to the project owning the csproj the path lands on; a path
+   landing on no tracked project, and a placeholder that does not statically
+   resolve, surface as whole-file manifest failures funneled to the
+   could-not-complete class — the go.work/Maven precedent, not a positioned
+   diagnostic, because a manifest reader emits no position.
    `using` sites produce source records independently. Conditions on
    references are taken loudly — including a conditionally-absent reference
    draws a possibly-spurious edge, which is the self-correcting direction;

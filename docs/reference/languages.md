@@ -599,68 +599,79 @@ declaration, not a use site the report points a reader at.
 
 ## C# / .NET
 
-**Identity is the `.csproj` manifest**, with edges from `<ProjectReference>`
-elements resolved through the project-name identity map. The manifest is parsed
-as XML (`fast-xml-parser`), and a `<ProjectReference Include="…">` path is
-resolved relative to the declaring `.csproj`'s directory, then matched to the
-project whose root contains it. Unresolved references are silently skipped —
-same posture as Maven — because a reference pointing at nothing is a build
-error the tool is not trying to catch, and a reference pointing at a project
-outside the workspace is no edge, the same answer a Rust or Python manifest
-gives.
+**Identity is the `.csproj` manifest.** The manifest is parsed as XML
+(`fast-xml-parser`), and a `<ProjectReference Include="…">` path — written
+relative to the declaring `.csproj`'s directory, Windows separators
+normalized — is resolved to the project owning the exact `.csproj` the path
+lands on. A reference that lands on no tracked project, one with no readable
+`Include` attribute, and one whose `Include` holds an MSBuild placeholder
+(`$(…)`/`%(…)`) surface as whole-file failures through
+`dotnetManifestFailures` and refuse the verdict (exit 3) — the same posture
+Maven's reader holds for unresolvable placeholder coordinates, because a
+dangling declared reference read as "no edge" erases a dependency silently.
+References are collected at any depth under `<Project>` — including
+`<Choose>`/`<When>` — and conditions are taken loudly: a conditionally
+present reference draws its possibly-spurious edge, the self-correcting
+direction. `<Using Include="…">` items ride the reader and draw the edge
+their `using` spelling would; when a ProjectReference and a Using name the
+same target from one csproj, the declared reference is the one edge kept.
 
 **Analysis is `using` directive extraction from `.cs` files.** The analyzer
-reads five forms: `using Namespace;`, `using static ClassName;`,
-`using Alias = FullyQualified;`, `global using …;`, and
-`extern alias Alias;`. `using` _statements_ (inside methods, constructors, or
-`using` blocks) are deliberately ignored — they are scoped to a block and
-never cross a project boundary.
+reads five forms — `using Namespace;`, `using static ClassName;`,
+`using Alias = FullyQualified;`, `global using …;`, and `extern alias X;` —
+each with or without the `global::` qualifier on its subject. `using`
+_statements_ (inside methods, constructors, or `using` blocks) are
+deliberately ignored — they are scoped to a block and never cross a project
+boundary — and a directive may sit wherever a fresh declaration may,
+including the same line as a brace: `namespace N { using A.B; }` is read.
 
 **The specifier is the subject of `imp===packageName`,** not the full body
 text. A dotted `using` like `using Shop.Domain;` produces a site whose
-`specifier` is `Shop.Domain`, with `specifierStartInBody` pointing at the
-first character after `using ` — the same shape `findBoundaryViolations`
-decides against. An alias (`using Alias = Foo.Bar;`) classifies by its
-right-hand side, and the alias is kept out of the specifier position so a
-constraint table matching on `Shop.*` never sees `MyAlias`.
+`specifier` is `Shop.Domain`, with the offset pointing at the first
+character of the name — the same shape `findBoundaryViolations` decides
+against. An alias (`using Alias = Foo.Bar;`) classifies by its right-hand
+side, the `global::` qualifier is stripped with the alias's own name, and an
+`extern alias X;` site carries `X` alone — every form word stays out of the
+specifier so a constraint table matching on `Shop.*` never sees `MyAlias`,
+`global::` or `extern alias`.
 
 **Namespace resolution follows longest-prefix walk.** The analyzer builds an
 index of all declared `namespace` directives across tracked `.cs` files and
 matches an incoming `using` by its longest matching prefix. A namespace owned
 by exactly one project resolves to it; one claimed by more than one project
-(possibly because C# allows partial namespace declarations) is reported as an
+(possibly because C# allows a namespace to span assemblies) is reported as an
 ambiguity. A namespace with no declared owner classifies as external — the
 same posture as a Go or Rust import hitting no project.
 
-**UTF-8 BOM is stripped** before any regex runs. Visual Studio and several
-.NET tools prepend `\ufeff` to `.cs` files; the leading byte would otherwise
-silently break every directive regex, dropping the first `using` in the file.
+**A UTF-8 BOM is matched, not stripped.** Visual Studio and several .NET
+tools prepend `\uFEFF` to `.cs` files; the directive regexes and the
+namespace declaration both tolerate the byte the way the JVM package
+declaration does, so a first-line directive behind one is read and every
+reported offset stays an offset into the bytes on disk.
 
 ### Limits
 
 - **A multi-line `using` is not read.** The directive must sit on one line.
   Every formatter formats imports onto one line, so a formatted tree never meets
-  this limit.
+  this limit; the miss is compensated by the manifest track's independent
+  ProjectReference edges.
 - **`using` _statements_ (block-scoped) are invisible.** They appear inside
   methods, constructors, and `using` blocks; they are scoped to their block
   and never cross a project boundary, so missing them has no false-negative
-  consequence. A `using` that appears on the same line as an opening brace
-  — `namespace N { using A.B; }` — is also missed.
+  consequence.
 - **Fully-qualified names used without a `using` are invisible.** Same as
   Java and Kotlin: an inline FQN needs no directive, so import-only
-  extraction cannot see it.
-- **The same-line-after-brace form is missed.** `namespace N { using A.B; }`
-  produces zero sites because the regex matches `using` only at the start of
-  a line (after optional whitespace), matching the Java/Kotlin convention.
-  `dotnet format` and Visual Studio never write this form.
-- **`extern alias` specifiers carry form words** — `extern alias Foo;`
-  classifies as external and `Foo` is the specifier, which is technically a
-  form keyword rather than a real namespace. This has no consequence because
-  no constraint table would match the alias name, but it is worth knowing.
-- **Manifest parse failures surface as exit 3** through `dotnetManifestFailures`,
-  the same posture as a malformed `go.work` or a broken tsconfig. Missing
-  `Include` attributes and unresolved `ProjectReference` paths are silently
-  skipped, matching Maven's precedent.
+  extraction cannot see it. Attribute references and reflection are the same
+  class of limit.
+- **Verbatim identifiers** (`@class`) inside a directive are not read.
+- **`<Using Remove>` and `.props` imports are outside static scope** — the
+  csproj's own text is everything the reader sees, so a `<Using>` item an
+  imported `Directory.Build.props` adds draws no edge.
+- **Manifest failures surface as exit 3** through `dotnetManifestFailures`,
+  the same posture as a malformed `go.work` or a broken tsconfig: XML that
+  does not parse, a missing `Include`, a placeholder path, a reference to no
+  tracked project, and an ambiguous `<Using>` namespace all refuse the
+  verdict rather than reading as "no dependencies".
 
 **What the record leaves null:** `file` is always null — a `using` names a
 namespace, not a file, and which source file supplies a type is a compiler
@@ -668,7 +679,6 @@ question this static reader does not answer. `kind` is always `"static"`; C#
 has no dynamic or type-only import form. `spelling.path` is always false;
 `spelling.relative` is true exactly when the directive resolved into its own
 project.
-
 ---
 
 ## What "not supported" would look like
