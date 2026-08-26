@@ -270,7 +270,7 @@ describe("resolveCsharpDependencies", () => {
       "libs/shop/domain/Deep.cs": WORKSPACE.readFile("libs/shop/domain/Deep.cs"),
       "libs/shared/kernel/Clock.cs": WORKSPACE.readFile("libs/shared/kernel/Clock.cs"),
     });
-    const edges = resolveCsharpDependencies(ws.projects, ws.filesOf, ws.readFile);
+    const edges = resolveCsharpDependencies(ws);
     expect(edges.sort((a, b) => a.target.localeCompare(b.target))).toEqual([
       {
         source: "shop-app",
@@ -296,11 +296,7 @@ describe("resolveCsharpDependencies", () => {
       "libs/shop/app/Service.cs": "namespace Shop.App;\n",
       "libs/shop/domain/Policy.cs": WORKSPACE.readFile("libs/shop/domain/Policy.cs"),
     });
-    expect(
-      resolveCsharpDependencies(withEdge.projects, withEdge.filesOf, withEdge.readFile),
-    ).toHaveLength(1);
-    expect(
-      resolveCsharpDependencies(without.projects, without.filesOf, without.readFile),
-    ).toHaveLength(0);
+    expect(resolveCsharpDependencies(withEdge)).toHaveLength(1);
+    expect(resolveCsharpDependencies(without)).toHaveLength(0);
   });
 });

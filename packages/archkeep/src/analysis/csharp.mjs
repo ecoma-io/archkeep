@@ -313,28 +313,25 @@ export function analyzeCSharp({ sourceFile, text, workspace }) {
  * Static edges between .NET projects derived from written directives — the
  * source-truth half of the two-track principle. `../dotnet/csproj.mjs`'s
  * ProjectReference resolver owns the manifest half; neither replaces the
- * other.
+ * other. Takes the SAME workspace-shaped object that resolver receives: the
+ * namespace index both halves read is `perWorkspace`-cached on the object,
+ * so a graph computation builds it once no matter which half runs first.
  *
- * `projects`: [{ name, root }]; `filesOf(name)`: workspace-relative paths of
- * a project's tracked files; `readFile(path)`: contents or null. Returns raw
- * Nx dependencies ({ source, target, sourceFile, type: "static" }). Ambiguous
- * namespaces draw no edge — analysis reports them loudly instead, and an edge
- * against a guess would be worse than the missing one.
+ * Returns raw Nx dependencies ({ source, target, sourceFile, type: "static" }).
+ * Ambiguous namespaces draw no edge — analysis reports them loudly instead,
+ * and an edge against a guess would be worse than the missing one.
  *
- * @param {{ name: string, root: string }[]} projects
- * @param {(name: string) => string[]} filesOf
- * @param {(path: string) => string|null} readFile
+ * @param {{ projects: {name: string, root: string}[], filesOf: (name: string) => string[],
+ *           readFile: (path: string) => string|null }} workspace
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
  */
-export function resolveCsharpDependencies(projects, filesOf, readFile) {
-  // One workspace-shaped object so the index builds once for this run; a
-  // fresh object per call simply gets no reuse, never a stale answer.
-  const index = csharpNamespaceIndex({ projects, filesOf, readFile });
+export function resolveCsharpDependencies(workspace) {
+  const index = csharpNamespaceIndex(workspace);
   const dependencies = [];
-  for (const project of projects) {
-    for (const file of filesOf(project.name)) {
+  for (const project of workspace.projects) {
+    for (const file of workspace.filesOf(project.name)) {
       if (!file.endsWith(".cs")) continue;
-      const text = readFile(file);
+      const text = workspace.readFile(file);
       if (text === null) continue;
       for (const site of parseCSharpDirectiveSites(text)) {
         if (site.importableName === null) continue;

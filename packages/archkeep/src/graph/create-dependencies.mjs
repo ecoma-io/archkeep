@@ -43,16 +43,29 @@ import { resolveOptions } from "../options.mjs";
 
 /** Pure core over an abstract workspace; injectable for tests. */
 export function resolvePolyglotDependencies(projects, filesOf, readFile) {
+  // Both C# halves read the same tree through ONE workspace-shaped object:
+  // the directive sweep and the csproj model share the namespace index, and
+  // the memoized read behind the object means no file's content is fetched
+  // twice on one graph computation.
+  const reads = new Map();
+  const csharpWorkspace = {
+    projects,
+    filesOf,
+    readFile: (path) => {
+      if (!reads.has(path)) reads.set(path, readFile(path));
+      return reads.get(path);
+    },
+  };
   const deps = [
     ...resolveGoDependencies(projects, filesOf, readFile),
     ...resolveRustDependencies(projects, filesOf, readFile),
     ...resolvePythonDependencies(projects, filesOf, readFile),
     ...resolveJavaDependencies(projects, filesOf, readFile),
     ...resolveKotlinDependencies(projects, filesOf, readFile),
-    ...resolveCsharpDependencies(projects, filesOf, readFile),
+    ...resolveCsharpDependencies(csharpWorkspace),
     // Manifest edges for .csproj trees: ProjectReference resolution,
     // independent of (and complementary to) the source-track edges above.
-    ...resolveCsprojDependencies({ projects, filesOf, readFile }),
+    ...resolveCsprojDependencies(csharpWorkspace),
     // Manifest edges for Maven/Gradle trees: the identity-anchor half of JVM
     // support, independent of (and complementary to) the import edges above
     // — a declared-but-unused dependency and an undeclared-but-imported one
