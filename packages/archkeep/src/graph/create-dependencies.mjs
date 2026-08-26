@@ -1,5 +1,5 @@
 /**
- * The graph layer: cross-project EDGES for Go, Rust, Python, Java, and C#, in the shape
+ * The graph layer: cross-project EDGES for Go, Rust, Python, Java, and C#/\.NET, in the shape
  * Nx's `createDependencies` hook returns. Nothing else — nodes still come from
  * each project's hand-written `project.json`, and targets are never inferred
  * (`packages/archkeep/AGENTS.md`).
@@ -30,7 +30,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
-import { resolveCsharpDependencies } from "../analysis/dotnet/csproj.mjs";
+import { resolveCsharpDependencies } from "../analysis/csharp.mjs";
+import { resolveCsprojDependencies } from "../analysis/dotnet/csproj.mjs";
 import { resolveGoDependencies } from "../analysis/go.mjs";
 import { resolveJavaDependencies } from "../analysis/java.mjs";
 import { resolveKotlinDependencies } from "../analysis/kotlin.mjs";
@@ -48,7 +49,10 @@ export function resolvePolyglotDependencies(projects, filesOf, readFile) {
     ...resolvePythonDependencies(projects, filesOf, readFile),
     ...resolveJavaDependencies(projects, filesOf, readFile),
     ...resolveKotlinDependencies(projects, filesOf, readFile),
-    ...resolveCsharpDependencies({ projects, filesOf, readFile }),
+    ...resolveCsharpDependencies(projects, filesOf, readFile),
+    // Manifest edges for .csproj trees: ProjectReference resolution,
+    // independent of (and complementary to) the source-track edges above.
+    ...resolveCsprojDependencies({ projects, filesOf, readFile }),
     // Manifest edges for Maven/Gradle trees: the identity-anchor half of JVM
     // support, independent of (and complementary to) the import edges above
     // — a declared-but-unused dependency and an undeclared-but-imported one

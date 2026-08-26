@@ -4,7 +4,7 @@ import {
   parseCsproj,
   projectReferencePaths,
   csprojEntryOf,
-  resolveCsharpDependencies,
+  resolveCsprojDependencies,
   dotnetManifestFailures,
 } from "./csproj.mjs";
 
@@ -80,7 +80,7 @@ describe("csprojEntryOf", () => {
   });
 });
 
-describe("resolveCsharpDependencies", () => {
+describe("resolveCsprojDependencies", () => {
   it("resolves ProjectReference to graph edge", () => {
     const workspace = {
       projects: [
@@ -104,7 +104,7 @@ describe("resolveCsharpDependencies", () => {
         return null;
       },
     };
-    const deps = resolveCsharpDependencies(workspace);
+    const deps = resolveCsprojDependencies(workspace);
     expect(deps).toHaveLength(1);
     expect(deps[0].source).toBe("MyApp");
     expect(deps[0].target).toBe("Domain");
@@ -122,7 +122,7 @@ describe("resolveCsharpDependencies", () => {
   </ItemGroup>
 </Project>`,
     };
-    const deps = resolveCsharpDependencies(workspace);
+    const deps = resolveCsprojDependencies(workspace);
     expect(deps).toHaveLength(0);
   });
 
@@ -136,7 +136,7 @@ describe("resolveCsharpDependencies", () => {
   </ItemGroup>
 </Project>`,
     };
-    const deps = resolveCsharpDependencies(workspace);
+    const deps = resolveCsprojDependencies(workspace);
     expect(deps).toHaveLength(0);
   });
 
@@ -146,7 +146,7 @@ describe("resolveCsharpDependencies", () => {
       filesOf: () => ["bad/Bad.csproj"],
       readFile: () => null,
     };
-    const deps = resolveCsharpDependencies(workspace);
+    const deps = resolveCsprojDependencies(workspace);
     expect(deps).toHaveLength(0);
   });
 });

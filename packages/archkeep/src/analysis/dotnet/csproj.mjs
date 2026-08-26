@@ -186,7 +186,7 @@ export const csprojModelOf = perWorkspace(({ projects, filesOf, readFile }) => {
  *           readFile: (path: string) => string|null }} workspace
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
  */
-export function resolveCsharpDependencies(workspace) {
+export function resolveCsprojDependencies(workspace) {
   const model = csprojModelOf(workspace);
   const deps = [];
   for (const entry of model.entries) {
