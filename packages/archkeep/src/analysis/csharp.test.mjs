@@ -73,8 +73,41 @@ describe("parseCSharpDirectiveSites", () => {
 
   it("records an extern alias as a site that resolves to nothing", () => {
     const sites = parseCSharpDirectiveSites("extern alias LegacyLib;\n");
-    expect(sites[0].specifier).toBe("extern alias LegacyLib");
+    expect(sites[0].specifier).toBe("LegacyLib");
     expect(sites[0].importableName).toBeNull();
+  });
+
+  it("reads the global:: qualifier in every form and keeps it out of the specifier", () => {
+    const sites = parseCSharpDirectiveSites(
+      "using global::Shop.Domain;\nusing static global::Shop.Domain.Policy;\nusing Alias = global::Shop.Domain.Rules;\n",
+    );
+    expect(sites.map((site) => site.specifier)).toEqual([
+      "Shop.Domain",
+      "Shop.Domain.Policy",
+      "Shop.Domain.Rules",
+    ]);
+    expect(sites.map((site) => site.importableName)).toEqual([
+      "Shop.Domain",
+      "Shop.Domain.Policy",
+      "Shop.Domain.Rules",
+    ]);
+  });
+
+  it("reads a directive on the same line as a brace", () => {
+    const source = "namespace N { using A.B; }\n";
+    const sites = parseCSharpDirectiveSites(source);
+    expect(sites.map((site) => site.specifier)).toEqual(["A.B"]);
+    expect(source.slice(sites[0].offset, sites[0].offset + 3)).toBe("A.B");
+  });
+
+  it("matches a first-line directive through a UTF-8 BOM at its disk offset", () => {
+    // The BOM is matched, not stripped: the offset indexes the bytes on disk,
+    // so the reported column counts the BOM itself — the same answer the JVM
+    // package declaration gives behind that byte (#221's lesson).
+    const source = "﻿using Shop.Domain;\n";
+    const sites = parseCSharpDirectiveSites(source);
+    expect(sites.map((site) => site.specifier)).toEqual(["Shop.Domain"]);
+    expect(source.slice(sites[0].offset, sites[0].offset + "Shop".length)).toBe("Shop");
   });
 
   it("never reads a using STATEMENT as a directive — all three shapes stay unread", () => {
@@ -207,7 +240,7 @@ describe("analyzeCSharp", () => {
     expect(result.imports[0].resolved.external).toBe(true);
   });
 
-  it("strips UTF-8 BOM before parsing — VS default does not drop the first directive", () => {
+  it("reads a BOM-prefixed first-line directive — matched, not stripped", () => {
     const ws = workspaceOf({
       "libs/shop/app/Service.cs": "\ufeffusing Shop.Domain;\n",
       "libs/shop/domain/Policy.cs": WORKSPACE.readFile("libs/shop/domain/Policy.cs"),
@@ -220,6 +253,11 @@ describe("analyzeCSharp", () => {
     expect(result.failures).toEqual([]);
     expect(result.imports).toHaveLength(1);
     expect(result.imports[0].specifier).toBe("Shop.Domain");
+    // The column counts the BOM, because the offset indexes the bytes on
+    // disk — `../contract.md`'s byte-tolerance law, the same answer the JVM
+    // declaration parse gives behind the same byte.
+    expect(result.imports[0].line).toBe(1);
+    expect(result.imports[0].column).toBe(8);
   });
 });
 

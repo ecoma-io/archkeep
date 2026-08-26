@@ -14,6 +14,21 @@
  *     global using X.Y.Z;                   file-set-wide (C# 10+)
  *     extern alias X;                       externally supplied root alias
  *
+ * Every dotted subject may carry the `global::` qualifier — `using
+ * global::X.Y;`, `using static global::X.Y.T;`, `using A = global::X.Y;` —
+ * legal wherever a local name shadows a namespace, and common in generated
+ * code. The qualifier is syntax around the subject, so it is stripped before
+ * classification and stays out of the specifier, the same way an alias's own
+ * name does: `imp` must equal `packageName` for an external ban to fire.
+ *
+ * A UTF-8 BOM is matched, never stripped — the same byte
+ * `./dotnet/namespaces.mjs` and the JVM package declaration tolerate (#221's
+ * lesson, `../jvm/packages.mjs`): a first-line directive behind one is read,
+ * and every offset this parse returns stays an offset into the bytes on disk
+ * (`../contract.md`'s byte-tolerance law). A directive may sit wherever a
+ * fresh declaration may — after `;`, `{` or `}` on the same line, so
+ * `namespace N { using A.B; }` is read — besides the line head.
+ *
  * There is no wildcard form (a plain `using` already imports a whole
  * namespace), no dynamic form, no re-export syntax: `kind` is always
  * `"static"`, and `spelling.path` is always `false` because no C# directive is
@@ -44,8 +59,8 @@
  *
  * - A **multi-line directive** (`using A.B.\n    C;`) is not read: the body
  *   must sit on its own line, terminated by `;`. Every formatter writes one
- *   line; the miss is compensated by the manifest resolvers' independent
- *   edges once `<ProjectReference>` support lands.
+ *   line; the miss is compensated by the manifest resolver's independent
+ *   edges (`./dotnet/csproj.mjs`).
  * - **Attribute references, inline fully-qualified names and reflection**
  *   reach types without any directive; extraction cannot see them. Documented
  *   limits whose compensation is the manifest track and tag law.
@@ -72,23 +87,31 @@ import {
 const SEG = String.raw`[\p{L}_][\p{L}\p{Nd}_]*`;
 const DOTTED_NAME = `${SEG}(?:\\.${SEG})*`;
 
-/** The body of a using directive, captured up to its terminating semicolon. */
+/**
+ * The body of a using directive, captured up to its terminating semicolon.
+ * The anchor accepts a fresh declaration's every legal predecessor — line
+ * head (through a UTF-8 BOM), `;`, `{`, `}` — so `namespace N { using A.B; }`
+ * on one line is read like any formatted tree.
+ */
 const CS_USING_BODY = new RegExp(
-  String.raw`(?:^|[\n;])[ \t]*(?:global[ \t]+)?using[ \t]+([^;\n]+?)[ \t]*;`,
+  String.raw`(?:^\uFEFF?|[\n;{}])[ \t]*(?:global[ \t]+)?using[ \t]+([^;\n]+?)[ \t]*;`,
   "gu",
 );
 
 /** The extern-alias directive: `extern alias X;` — recorded, resolved as external. */
 const CS_EXTERN_ALIAS = new RegExp(
-  String.raw`(?:^|[\n;])[ \t]*extern[ \t]+alias[ \t]+(${SEG})[ \t]*;`,
+  String.raw`(?:^\uFEFF?|[\n;{}])[ \t]*extern[ \t]+alias[ \t]+(${SEG})[ \t]*;`,
   "gu",
 );
 
 /** Exactly one identifier followed by `=`: the alias form. */
 const ALIAS_FORM = new RegExp(String.raw`^(${SEG})[ \t]*=[ \t]*(.+)$`, "su");
 
-/** `static` plus a dotted name: the static-members form. */
-const STATIC_FORM = new RegExp(String.raw`^static[ \t]+(${DOTTED_NAME})$`, "u");
+/** A dotted name, optionally behind the `global::` qualifier: the plain form. */
+const PLAIN_FORM = new RegExp(String.raw`^(?:global::)?(${DOTTED_NAME})$`, "u");
+
+/** `static` plus an optionally qualified dotted name: the static-members form. */
+const STATIC_FORM = new RegExp(String.raw`^static[ \t]+(?:global::)?(${DOTTED_NAME})$`, "u");
 
 /**
  * Strips one balanced trailing generic argument list from an alias's
@@ -141,8 +164,13 @@ export function classifyUsingBody(body) {
       specifierStartInBody: trimmed.indexOf(staticForm[1]),
     };
   }
-  if (new RegExp(`^${DOTTED_NAME}$`, "u").test(trimmed)) {
-    return { specifier: trimmed, importableName: trimmed, specifierStartInBody: 0 };
+  const plainForm = PLAIN_FORM.exec(trimmed);
+  if (plainForm) {
+    return {
+      specifier: plainForm[1],
+      importableName: plainForm[1],
+      specifierStartInBody: trimmed.indexOf(plainForm[1]),
+    };
   }
   const aliasForm = ALIAS_FORM.exec(trimmed);
   if (aliasForm) {
@@ -150,8 +178,10 @@ export function classifyUsingBody(body) {
     // boundary, so the right-hand side IS the specifier. A constructed
     // generic keeps its generic-free base as both specifier and importable,
     // because `imp` (the specifier the rule matches against globs) must
-    // equal `packageName` for `isConstraintBanningProject` to fire.
-    const rhs = aliasForm[2].trim();
+    // equal `packageName` for `isConstraintBanningProject` to fire. The
+    // `global::` qualifier is stripped with the alias name for the same
+    // reason — it is syntax around the subject, not part of it.
+    const rhs = aliasForm[2].trim().replace(/^global::/, "");
     const base = withoutGenericArguments(rhs);
     const importableName = new RegExp(`^${DOTTED_NAME}$`, "u").test(base) ? base : null;
     const specifier = importableName ?? rhs;
@@ -184,12 +214,14 @@ export function parseCSharpDirectiveSites(csharpText) {
   }
   for (const match of source.matchAll(CS_EXTERN_ALIAS)) {
     sites.push({
-      specifier: `extern alias ${match[1]}`,
+      specifier: match[1],
       // Extern aliases supply a ROOT name from outside the compilation's
       // sources — resolution against the tracked tree cannot mean anything,
-      // so the site records and classifies external (documented limit).
+      // so the site records the alias's own name and classifies external
+      // (documented limit). The name, not `extern alias X`, is the specifier:
+      // form words would silently exempt the site from every external ban.
       importableName: null,
-      offset: match.index + match[0].indexOf("extern"),
+      offset: match.index + match[0].indexOf(match[1]),
     });
   }
   return sites.sort((a, b) => a.offset - b.offset);
@@ -218,14 +250,10 @@ const csharpIndexOf = perWorkspace(csharpNamespaceIndex);
 export function analyzeCSharp({ sourceFile, text, workspace }) {
   const result = emptyResult();
   try {
-    // Strip UTF-8 BOM (\ufeff) that Visual Studio and some .NET tools prepend.
-    // Left in place, it silently breaks every regex in the directive parser,
-    // dropping the first directive in the file — the silent direction.
-    const normalized = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
     const index = csharpIndexOf(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
-    for (const site of parseCSharpDirectiveSites(normalized)) {
-      const { line, column } = positionAt(normalized, site.offset);
+    for (const site of parseCSharpDirectiveSites(text)) {
+      const { line, column } = positionAt(text, site.offset);
       let resolution;
       if (site.importableName === null) {
         resolution = {
@@ -308,8 +336,7 @@ export function resolveCsharpDependencies(projects, filesOf, readFile) {
       if (!file.endsWith(".cs")) continue;
       const text = readFile(file);
       if (text === null) continue;
-      const normalized = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-      for (const site of parseCSharpDirectiveSites(normalized)) {
+      for (const site of parseCSharpDirectiveSites(text)) {
         if (site.importableName === null) continue;
         const resolved = resolveCsharpSpecifier(site.importableName, index);
         if (resolved.external || resolved.ambiguous) continue;
