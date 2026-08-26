@@ -182,7 +182,7 @@ a file it cannot edit ([overview.md](https://github.com/ecoma-io/archkeep/blob/m
 
 ## Support
 
-- **Languages** — Go, Rust, Python, TypeScript and JavaScript, Vue, and Java. Analysis
+- **Languages** — Go, Rust, Python, TypeScript and JavaScript, Vue, Java and Kotlin. Analysis
   from source, never a build: nothing shells out to `go`, `cargo`, `uv` or `tsc`
   ([languages.md](https://github.com/ecoma-io/archkeep/blob/main/docs/reference/languages.md)).
 - **Workspaces** — any repository: Nx registers the plugin in `nx.json` and

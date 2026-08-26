@@ -1,7 +1,7 @@
 {
   "name": "@ecoma-io/archkeep",
   "version": "0.15.0",
-  "description": "Architecture enforcement for polyglot repositories — dependency graphs and module boundaries for Go, Rust, Python, TypeScript, JavaScript, Vue and Java",
+  "description": "Architecture enforcement for polyglot repositories — dependency graphs and module boundaries for Go, Rust, Python, TypeScript, JavaScript, Vue, Java and Kotlin",
   "keywords": [
     "architecture",
     "enforcement",

@@ -1,7 +1,7 @@
 {
   "name": "archkeep",
   "version": "0.15.0",
-  "description": "Module-boundary diagnostics at edit time, and architecture agent skills, for Go, Rust, Python, Vue and Java",
+  "description": "Module-boundary diagnostics at edit time, and architecture agent skills, for Go, Rust, Python, Vue, Java and Kotlin",
   "skills": "./skills/",
   "author": {
     "name": "Mai Ngọc Hóa (John Martin)",
