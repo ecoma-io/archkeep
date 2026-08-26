@@ -1256,4 +1256,168 @@ export const ARCHITECTURE_CORPUS = [
       },
     ],
   },
+
+  // ------------------------------------------------------------- layered (Java)
+  {
+    id: "layered-architecture-in-java",
+    style: "layered (relaxed)",
+    languages: ["java"],
+    intent:
+      "The relaxed layering of `layered-architecture-in-go`, restated in Java so the JVM shapes are labeled too: packages resolve through a content-derived index rather than a module path, an untagged project is the importer, and the external ban carries a dotted glob. The transport project imports nothing, for the same cycle-avoidance reason its Go twin does.",
+    projects: [
+      { name: "j-domain", root: "libs/j-domain", tags: ["layer:domain"] },
+      { name: "j-usecase", root: "libs/j-usecase", tags: ["layer:usecase"] },
+      { name: "j-adapter", root: "libs/j-adapter", tags: ["layer:adapter"] },
+      { name: "j-util", root: "libs/j-util", tags: [] },
+    ],
+    depConstraints: [
+      { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+      { sourceTag: "layer:usecase", onlyDependOnLibsWithTags: ["layer:domain", "layer:usecase"] },
+      {
+        sourceTag: "layer:adapter",
+        onlyDependOnLibsWithTags: ["layer:domain", "layer:usecase", "layer:adapter"],
+        bannedExternalImports: ["vendor.test.shellsdk*"],
+      },
+    ],
+    files: {
+      "libs/j-domain/src/main/java/test/corpus/jvm/domain/Policy.java":
+        "package test.corpus.jvm.domain;\n\nclass Policy {}\n",
+      "libs/j-usecase/src/main/java/test/corpus/jvm/usecase/Service.java":
+        "package test.corpus.jvm.usecase;\n\nimport test.corpus.jvm.domain.Policy;\nimport test.corpus.jvm.adapter.Repo;\n\nclass Service { Policy p; Repo r; }\n",
+      "libs/j-usecase/src/main/java/test/corpus/jvm/usecase/Sdk.java":
+        "package test.corpus.jvm.usecase;\n\nimport vendor.test.shellsdk.Shell;\n\nclass Sdk { Shell shell; }\n",
+      "libs/j-adapter/src/main/java/test/corpus/jvm/adapter/Repo.java":
+        "package test.corpus.jvm.adapter;\n\nimport test.corpus.jvm.domain.Policy;\nimport test.corpus.jvm.adapter.internal.Store;\n\nclass Repo { Policy p; Store store; }\n",
+      "libs/j-adapter/src/main/java/test/corpus/jvm/adapter/internal/Store.java":
+        "package test.corpus.jvm.adapter.internal;\n\nclass Store {}\n",
+      "libs/j-adapter/src/main/java/test/corpus/jvm/adapter/Gateway.java":
+        "package test.corpus.jvm.adapter;\n\nimport test.corpus.jvm.adapter.internal.Store;\nimport vendor.test.shellsdk.Shell;\n\nclass Gateway { Store store; Shell shell; }\n",
+      "libs/j-util/src/main/java/test/corpus/jvm/util/Clock.java":
+        "package test.corpus.jvm.util;\n\nimport test.corpus.jvm.domain.Policy;\n\nclass Clock { Policy p; }\n",
+    },
+    probes: [
+      {
+        file: "libs/j-domain/src/main/java/test/corpus/jvm/domain/Policy.java",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why: "The innermost layer importing nothing — recorded so the case's zero-finding claim about this file is a measurement, not an omission.",
+      },
+      {
+        file: "libs/j-usecase/src/main/java/test/corpus/jvm/usecase/Service.java",
+        imports: 2,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "test.corpus.jvm.adapter.Repo",
+            target: "j-adapter",
+          },
+        ],
+        denyAll: 2,
+        why: "One crossing the layering permits beside one it forbids, in one import list — the domain import must stay silent while the outward adapter import reports.",
+      },
+      {
+        file: "libs/j-usecase/src/main/java/test/corpus/jvm/usecase/Sdk.java",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The same external SDK the adapter layer is banned from, imported by a layer no ban row names — a dotted external ban binds the tag that carries it and nothing else.",
+      },
+      {
+        file: "libs/j-adapter/src/main/java/test/corpus/jvm/adapter/Repo.java",
+        imports: 2,
+        reports: [],
+        denyAll: 1,
+        why: "Both imports are what the layering permits — reporting either would invert the axis. Under the forbid-everything law exactly one reports: the domain crossing; the other resolves into this very project, which no law can reach.",
+      },
+      {
+        file: "libs/j-adapter/src/main/java/test/corpus/jvm/adapter/Gateway.java",
+        imports: 2,
+        reports: [
+          {
+            messageId: "bannedExternalImportsViolation",
+            specifier: "vendor.test.shellsdk.Shell",
+            target: "npm:vendor.test.shellsdk.Shell",
+          },
+        ],
+        denyAll: 1,
+        why: "An own-project import stays silent under both laws while the dotted-glob ban fires on the line below it — the two answers in one file come from different rules, and only one of them can ever report.",
+      },
+      {
+        file: "libs/j-util/src/main/java/test/corpus/jvm/util/Clock.java",
+        imports: 1,
+        reports: [
+          {
+            messageId: "projectWithoutTagsCannotHaveDependencies",
+            specifier: "test.corpus.jvm.domain.Policy",
+            target: "j-domain",
+          },
+        ],
+        denyAll: 1,
+        why: "A project no constraint row matches is an error, not a permission — Java's content-derived package index attributes the file first, then the rule judges it like any other language's.",
+      },
+    ],
+  },
+
+  // ------------------------------------------------ peer cycles (Java)
+  {
+    id: "peer-cycles-in-java",
+    style: "modular monolith",
+    languages: ["java"],
+    intent:
+      "A two-project cycle whose tag rows permit every pair outright, in Java: only the graph shape shows it closes. The near-miss is the same-package reference spelled as an own-project import, which resolves back to its source and must stay silent under the deny-all law too.",
+    projects: [
+      { name: "p-alpha", root: "libs/p-alpha", tags: ["ring:alpha"] },
+      { name: "p-beta", root: "libs/p-beta", tags: ["ring:beta"] },
+    ],
+    depConstraints: [
+      { sourceTag: "ring:alpha", onlyDependOnLibsWithTags: ["ring:alpha", "ring:beta"] },
+      { sourceTag: "ring:beta", onlyDependOnLibsWithTags: ["ring:alpha", "ring:beta"] },
+    ],
+    files: {
+      "libs/p-alpha/src/main/java/test/corpus/peer/alpha/Ping.java":
+        "package test.corpus.peer.alpha;\n\nimport test.corpus.peer.beta.Pong;\n\nclass Ping { Pong pong; }\n",
+      "libs/p-beta/src/main/java/test/corpus/peer/beta/Pong.java":
+        "package test.corpus.peer.beta;\n\nimport test.corpus.peer.alpha.Ping;\n\nclass Pong { Ping ping; }\n",
+      "libs/p-alpha/src/main/java/test/corpus/peer/alpha/internal/Keeper.java":
+        "package test.corpus.peer.alpha.internal;\n\nclass Keeper {}\n",
+      "libs/p-alpha/src/main/java/test/corpus/peer/alpha/Local.java":
+        "package test.corpus.peer.alpha;\n\nimport test.corpus.peer.alpha.internal.Keeper;\n\nclass Local { Keeper keeper; }\n",
+    },
+    probes: [
+      {
+        file: "libs/p-alpha/src/main/java/test/corpus/peer/alpha/Ping.java",
+        imports: 1,
+        reports: [
+          {
+            messageId: "noCircularDependencies",
+            specifier: "test.corpus.peer.beta.Pong",
+            target: "p-beta",
+          },
+        ],
+        denyAll: 1,
+        why: "Half of a cycle the tags permit outright — both rows allow the pair, and only the graph shows it closes.",
+      },
+      {
+        file: "libs/p-beta/src/main/java/test/corpus/peer/beta/Pong.java",
+        imports: 1,
+        reports: [
+          {
+            messageId: "noCircularDependencies",
+            specifier: "test.corpus.peer.alpha.Ping",
+            target: "p-alpha",
+          },
+        ],
+        denyAll: 1,
+        why: "The other half, reported at its own site: reading a cycle from one end would leave the other file looking clean.",
+      },
+      {
+        file: "libs/p-alpha/src/main/java/test/corpus/peer/alpha/Local.java",
+        imports: 1,
+        reports: [],
+        denyAll: 0,
+        why: "An import resolving into its own project reaches no second project, so nothing can report it — Java has no relative import form, so spelling.relative reads what the import reached, and the deny-all silence is honest.",
+      },
+    ],
+  },
 ];

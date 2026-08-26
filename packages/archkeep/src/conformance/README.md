@@ -306,7 +306,7 @@ together and agree.
 
 `corpus.mjs` is the answer to that: architecture styles — relaxed and strict
 layering, onion, clean architecture, hexagonal, DDD bounded contexts, modular
-monolith, vertical slices, a microservice repository — built in the three
+monolith, vertical slices, a microservice repository — built in the four
 languages ESLint cannot read, with the verdict decided from the policy and the
 import BEFORE the tool was run. There is no oracle, so the labels are the
 oracle, and the suite's whole design is about stopping them from becoming a
@@ -336,8 +336,8 @@ disposition:
   partition axis rather than a layer axis, where the violation is between peers
   and no layer ordering exists to decide it.
 
-**12 fixture workspaces, 50 probes, 52 projects**, carrying 33 labeled findings
-and 23 near-miss probes that must produce nothing.
+**14 fixture workspaces, 59 probes, 58 projects**, carrying 38 labeled findings
+and 27 near-miss probes that must produce nothing.
 
 ### How it runs, and why it runs the whole command
 
@@ -380,24 +380,24 @@ start where the diagnostic points.
 
 ### What the corpus reaches
 
-**12 of the 15 message ids, over 4 languages.** The table is derived from the
+**12 of the 15 message ids, over 5 languages.** The table is derived from the
 catalogue by `stated-counts.integration.test.mjs`, which fails when a cell
 moves:
 
-| messageId                                    |  Go | Rust | Python | TypeScript |
-| -------------------------------------------- | --: | ---: | -----: | ---------: |
-| `onlyTagsConstraintViolation`                |   8 |    3 |      4 |          1 |
-| `notTagsConstraintViolation`                 |   0 |    2 |      0 |          0 |
-| `emptyOnlyTagsConstraintViolation`           |   0 |    0 |      1 |          0 |
-| `projectWithoutTagsCannotHaveDependencies`   |   1 |    0 |      2 |          0 |
-| `bannedExternalImportsViolation`             |   1 |    1 |      0 |          0 |
-| `noTransitiveDependencies`                   |   2 |    0 |      0 |          0 |
-| `noCircularDependencies`                     |   0 |    0 |      2 |          0 |
-| `noSelfCircularDependencies`                 |   0 |    0 |      1 |          0 |
-| `noImportsOfApps`                            |   1 |    0 |      0 |          0 |
-| `noImportsOfE2e`                             |   1 |    0 |      0 |          0 |
-| `noImportOfNonBuildableLibraries`            |   1 |    0 |      0 |          0 |
-| `noRelativeOrAbsoluteImportsAcrossLibraries` |   0 |    0 |      0 |          1 |
+| messageId                                    |  Go | Rust | Python | TypeScript | Java |
+| -------------------------------------------- | --: | ---: | -----: | ---------: | ---: |
+| `onlyTagsConstraintViolation`                |   8 |    3 |      4 |          1 |    1 |
+| `notTagsConstraintViolation`                 |   0 |    2 |      0 |          0 |    0 |
+| `emptyOnlyTagsConstraintViolation`           |   0 |    0 |      1 |          0 |    0 |
+| `projectWithoutTagsCannotHaveDependencies`   |   1 |    0 |      2 |          0 |    1 |
+| `bannedExternalImportsViolation`             |   1 |    1 |      0 |          0 |    1 |
+| `noTransitiveDependencies`                   |   2 |    0 |      0 |          0 |    0 |
+| `noCircularDependencies`                     |   0 |    0 |      2 |          0 |    2 |
+| `noSelfCircularDependencies`                 |   0 |    0 |      1 |          0 |    0 |
+| `noImportsOfApps`                            |   1 |    0 |      0 |          0 |    0 |
+| `noImportsOfE2e`                             |   1 |    0 |      0 |          0 |    0 |
+| `noImportOfNonBuildableLibraries`            |   1 |    0 |      0 |          0 |    0 |
+| `noRelativeOrAbsoluteImportsAcrossLibraries` |   0 |    0 |      0 |          1 |    0 |
 
 TypeScript appears in one case only, and only where it sharpens the point: the
 modular monolith is one constraint table over a tree whose modules are written
