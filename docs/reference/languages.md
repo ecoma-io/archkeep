@@ -582,6 +582,12 @@ belong to the external node synthesis layer when a rule needs a name.
   workspace root is no declared project, a root `build.gradle` is unread —
   its `project(":x")` references claim nothing. Declare the root as a project
   if its dependencies must be judged.
+- **A `settings.gradle.kts` at an undeclared root needs a coverage row.** The
+  Kotlin DSL settings file carries the analyzable `.kts` extension, so a
+  workspace root no project owns must name it in `coverage.exempt` with a
+  reason — the run refuses (exit 3) with that instruction otherwise. The
+  Groovy `settings.gradle` needs nothing: no analyzer claims the `.gradle`
+  extension.
 - **Malformed reactors are loud, not empty.** An `include` onto an untracked
   directory, a `project(":x")` no settings file defines, a reference whose
   directory no declared project owns, a settings-less build file that declares

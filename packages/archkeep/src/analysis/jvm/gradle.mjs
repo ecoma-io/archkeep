@@ -220,15 +220,20 @@ export function parseGradleBuild(text) {
       // Match project(":name") in various forms:
       // - project(":name") - quoted
       // - project(':name') - single quoted
+      // - project(":") - the root project, an empty path
       // - project(":name") with configuration
       // In Kotlin DSL: project(":name") (always quoted)
       // In Groovy DSL: project(":name") or project(':name') or project :name (no quotes)
 
-      // Pattern 1: project(":xyz") or project(':xyz')
-      const quotedMatch = /project\s*\(\s*['"]:([^'"]+)['"]\s*\)/.exec(trimmed);
+      // Pattern 1: project(":xyz") or project(':xyz') — `[^'"]*` rather than
+      // `+` so the root project's own spelling, `":"`, is read too. An empty
+      // dep path resolves through the reactor map's root claim (`""`), the
+      // same key every settings file registers; missing it would drop the
+      // edge silently, which is the one failure this reader must not make.
+      const quotedMatch = /project\s*\(\s*['"]:([^'"]*)['"]\s*\)/.exec(trimmed);
       if (quotedMatch) {
         const depName = quotedMatch[1];
-        if (depName && !projectDependencies.includes(depName)) {
+        if (!projectDependencies.includes(depName)) {
           projectDependencies.push(depName);
         }
       }
