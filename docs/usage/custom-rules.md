@@ -155,3 +155,19 @@ its row carries, and the bundle above.
   suppressions and waivers ([waivers.md](../concepts/waivers.md)), and a rule
   that could see them could launder them into its own verdict — which is why
   the bundle carries neither.
+
+## 8. Rules you do not have to write
+
+Some predicates recur in every workspace — cardinality of a tag axis, tag
+combinations that never share a project, dependency budgets. The repository
+ships a small, growing set of these as **official rules**
+(`packages/archkeep-rules/`, its README holds the catalogue): committed wasm
+artifacts pinned by sha256, with fixture suites the engine's own conformance
+gate replays through the real host.
+
+An official rule is not a new mechanism. You declare it exactly like a rule
+you wrote — the same `customRules` row, the same `reason`, the same exit codes
+— copying the artifact and its digest out of the catalog into your workspace,
+so the law your CI runs is the bytes a reviewer can hash. The catalog adds no
+authority layer: the engine never reads it, and a workspace that declares
+nothing from it is unaffected.

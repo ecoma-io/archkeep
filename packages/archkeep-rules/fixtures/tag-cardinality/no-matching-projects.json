@@ -1,0 +1,93 @@
+{
+  "contract": 1,
+  "graph": {
+    "edges": [
+      {
+        "source": "beta",
+        "target": "alpha",
+        "type": "static",
+        "sourceFile": "packages/beta/src/service.ts"
+      },
+      {
+        "source": "gamma",
+        "target": "delta",
+        "type": "static",
+        "sourceFile": "packages/gamma/src/store.ts"
+      }
+    ]
+  },
+  "imports": [
+    {
+      "column": 22,
+      "kind": "static",
+      "line": 1,
+      "resolved": {
+        "external": false,
+        "file": null,
+        "packageName": null,
+        "target": "alpha"
+      },
+      "sourceFile": "packages/beta/src/service.ts",
+      "sourceProject": "beta",
+      "specifier": "@acme/alpha/model",
+      "spelling": {
+        "path": false,
+        "relative": false
+      }
+    }
+  ],
+  "model": {
+    "projects": [
+      {
+        "name": "alpha",
+        "root": "packages/alpha",
+        "tags": ["layer:domain", "type:library"]
+      },
+      {
+        "name": "beta",
+        "root": "packages/beta",
+        "tags": ["layer:application", "type:library", "type:service"]
+      },
+      {
+        "name": "delta",
+        "root": "packages/delta",
+        "tags": ["layer:domain"]
+      },
+      {
+        "name": "gamma",
+        "root": "packages/gamma",
+        "tags": ["layer:infrastructure", "type:library"]
+      }
+    ]
+  },
+  "policy": {
+    "depConstraints": [
+      {
+        "onlyDependOnLibsWithTags": ["layer:domain"],
+        "sourceTag": "layer:domain"
+      },
+      {
+        "onlyDependOnLibsWithTags": ["layer:application", "layer:domain"],
+        "sourceTag": "layer:application"
+      }
+    ],
+    "moduleBoundaryOptions": {
+      "allow": [],
+      "allowCircularSelfDependency": false,
+      "banTransitiveDependencies": false,
+      "buildTargets": ["build"],
+      "checkDynamicDependenciesExceptions": [],
+      "checkNestedExternalImports": false,
+      "enforceBuildableLibDependency": false,
+      "ignoredCircularDependencies": []
+    }
+  },
+  "rule": {
+    "name": "tag-cardinality",
+    "params": {
+      "axis": "layer",
+      "max": 1,
+      "match": ["scope:shared"]
+    }
+  }
+}

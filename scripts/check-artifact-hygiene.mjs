@@ -39,6 +39,7 @@ export const ARTIFACT_ROOTS = [
   "packages/archkeep-rule-sdk-go/examples",
   "packages/archkeep-rule-sdk-ts/examples",
   "packages/archkeep-rule-sdk-python/examples",
+  "packages/archkeep-rules/rules",
 ];
 
 /**

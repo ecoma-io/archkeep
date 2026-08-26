@@ -1,0 +1,76 @@
+{
+  "contract": 1,
+  "graph": {
+    "edges": [
+      {
+        "source": "beta",
+        "target": "alpha",
+        "type": "static",
+        "sourceFile": "packages/beta/src/service.ts"
+      }
+    ]
+  },
+  "imports": [
+    {
+      "column": 1,
+      "kind": "static",
+      "line": 3,
+      "resolved": {
+        "external": false,
+        "file": null,
+        "packageName": null,
+        "target": "alpha"
+      },
+      "sourceFile": "packages/beta/src/service.ts",
+      "sourceProject": "beta",
+      "specifier": "@acme/alpha/model",
+      "spelling": {
+        "path": false,
+        "relative": false
+      }
+    }
+  ],
+  "model": {
+    "projects": [
+      {
+        "name": "alpha",
+        "root": "packages/alpha",
+        "tags": ["layer:domain", "type:library"]
+      },
+      {
+        "name": "beta",
+        "root": "packages/beta",
+        "tags": ["layer:infrastructure", "type:library"]
+      },
+      {
+        "name": "gamma",
+        "root": "packages/gamma",
+        "tags": ["layer:infrastructure", "type:application"]
+      }
+    ]
+  },
+  "policy": {
+    "depConstraints": [
+      {
+        "onlyDependOnLibsWithTags": ["layer:domain"],
+        "sourceTag": "layer:domain"
+      }
+    ],
+    "moduleBoundaryOptions": {
+      "allow": [],
+      "allowCircularSelfDependency": false,
+      "banTransitiveDependencies": false,
+      "buildTargets": ["build"],
+      "checkDynamicDependenciesExceptions": [],
+      "checkNestedExternalImports": false,
+      "enforceBuildableLibDependency": false,
+      "ignoredCircularDependencies": []
+    }
+  },
+  "rule": {
+    "name": "forbidden-tag-combination",
+    "params": {
+      "tags": ["scope:shared"]
+    }
+  }
+}
