@@ -544,6 +544,7 @@ const POLYGLOT_MANIFEST_NAMES = [
   "pom.xml",
   "settings.gradle",
   "settings.gradle.kts",
+  "*.csproj",
 ];
 
 /**
@@ -579,7 +580,7 @@ export function polyglotManifests(tracked, projects) {
   const roots = projects.map((project) => project.root);
   return tracked.filter((file) => {
     const base = file.slice(file.lastIndexOf("/") + 1);
-    if (!POLYGLOT_MANIFEST_NAMES.includes(base)) return false;
+    if (!POLYGLOT_MANIFEST_NAMES.some((pattern) => posix.matchesGlob(base, pattern))) return false;
     return roots.some(
       (root) => root === "" || root === "." || file === root || file.startsWith(`${root}/`),
     );

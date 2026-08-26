@@ -204,7 +204,7 @@ function inferProjectRoots({ files, infer }) {
   const roots = new Set();
   for (const file of files) {
     const base = file.slice(file.lastIndexOf("/") + 1);
-    if (!infer.manifests.includes(base)) continue;
+    if (!infer.manifests.some((pattern) => matchesGlob(base, pattern))) continue;
     if (!infer.include.some((pattern) => matchesGlob(file, pattern))) continue;
     if (infer.exclude.some((pattern) => matchesGlob(file, pattern))) continue;
     roots.add(directoryOf(file));

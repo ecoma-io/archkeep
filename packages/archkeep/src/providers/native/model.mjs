@@ -209,6 +209,12 @@ export const DEFAULT_MANIFEST_NAMES = Object.freeze([
   // the build files hold the dependency declarations.
   "settings.gradle",
   "settings.gradle.kts",
+  // .NET/C#: every tracked root .csproj anchors a project (ADR 0006). Identity
+  // is the project name read by `../../analysis/dotnet/csproj.mjs`; the
+  // name follows the same precedence as every other inferred manifest, so
+  // csproj-discovered projects land on their directory basename unless a
+  // declared row names them.
+  "*.csproj",
 ]);
 
 const PROJECT_TYPES = ["app", "lib", "e2e"];
