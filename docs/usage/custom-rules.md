@@ -175,3 +175,6 @@ nothing from it is unaffected.
 Official rules compose with shipped presets: a workspace selects a pack profile
 and declares official rules as its own `customRules` rows — see
 [presets.md](presets.md#adding-official-rules-beside-a-pack) for recipes.
+Graph-consuming official rules (the fan rules) inherit the run's graph coverage
+— read the coverage notes beside their verdicts, as a run reporting
+unregistered-plugin coverage has a graph without polyglot edges.

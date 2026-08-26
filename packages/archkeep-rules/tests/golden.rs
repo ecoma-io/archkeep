@@ -212,6 +212,24 @@ fn a_workspace_with_no_projects_at_all_is_not_applicable() {
     assert_eq!(parsed["verdict"], "not_applicable");
 }
 
+#[test]
+fn every_project_with_exactly_one_tag_on_min_equals_max_passes() {
+    expect_verdict(
+        fixture!("tag-cardinality", "exactly-min-and-max.json"),
+        tag_cardinality::archkeep_evaluate_json,
+        r#"{ "contract": 1, "verdict": "pass", "findings": [] }"#,
+    );
+}
+
+#[test]
+fn zero_scope_values_at_zero_minimum_passes() {
+    expect_verdict(
+        fixture!("tag-cardinality", "zero-values-at-zero-minimum.json"),
+        tag_cardinality::archkeep_evaluate_json,
+        r#"{ "contract": 1, "verdict": "pass", "findings": [] }"#,
+    );
+}
+
 // --- forbidden-tag-combination ---------------------------------------------
 
 #[test]

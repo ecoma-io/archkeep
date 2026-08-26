@@ -273,7 +273,13 @@ might carry one. A budget is user policy — the rule says a number was exceeded
 nothing about whether the architecture is "good" or "bad". This rule judges HOW
 MANY dependencies a project has, not WHICH targets it may depend on; `depConstraints`
 already judges WHICH targets are allowed edge by edge. Zero dependencies is a valid
-budget state.
+budget state. The count is exactly as complete as the graph the run's provider
+computed: when the Nx plugin is unregistered but polyglot manifests are present,
+`check` reports a degraded-coverage note and keeps exit 0, and the provider graph
+then lacks the polyglot edges the boundary rules still see through the engine's
+own analysis. A fan-out verdict should be read beside the run's coverage notes —
+a run reporting unregistered-plugin coverage has a graph without polyglot edges,
+so fan-out counts under-report.
 
 **Usage example.**
 
@@ -325,7 +331,14 @@ MANY projects depend on a project, not WHICH projects may depend on it;
 dependents is a valid budget state. **High fan-in does not mean a highly reused
 dependency is bad** — the rule expresses an explicit architectural budget the
 workspace declared (shared-kernel budget, gravity-well control, platform-module
-limits are the use cases), and passing says only "within budget".
+limits are the use cases), and passing says only "within budget". The count is
+exactly as complete as the graph the run's provider computed: when the Nx plugin
+is unregistered but polyglot manifests are present, `check` reports a
+degraded-coverage note and keeps exit 0, and the provider graph then lacks the
+polyglot edges the boundary rules still see through the engine's own analysis.
+A fan-in verdict should be read beside the run's coverage notes — a run reporting
+unregistered-plugin coverage has a graph without polyglot edges, so fan-in counts
+under-report.
 
 **Usage example.**
 
