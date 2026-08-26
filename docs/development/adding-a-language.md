@@ -44,7 +44,10 @@ language looks supported and is not.
 
 ### 1. Register the extension
 
-`src/analysis/analyze.mjs`:
+`src/analysis/registry.mjs` — the table's definition home, held apart from
+`analyze.mjs` so that asking "what language is this file" never pays for
+loading every analyzer (`analyze.mjs` re-exports both names, so existing
+imports keep working):
 
 ```js
 export const LANGUAGE_BY_EXTENSION = Object.freeze({

@@ -208,9 +208,10 @@ rule cares about, and the pressure to fix it would be an ignore list that
 someone has to keep in sync with reality. An extension with no analyzer simply
 has no imports this tool can see, which is the truth.
 
-The registry is `LANGUAGE_BY_EXTENSION` in `analyze.mjs`, and it is the one
-place an extension is mapped. A language whose analyzer arrives adds itself
-there and nowhere else.
+The registry is `LANGUAGE_BY_EXTENSION` in `registry.mjs` (re-exported by
+`analyze.mjs`, so nothing that imports it from there has to change), and it is
+the one place an extension is mapped. A language whose analyzer arrives adds
+itself there and nowhere else.
 
 ## What an analyzer is handed
 
