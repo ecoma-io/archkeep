@@ -422,8 +422,11 @@ export function diffCommand(
   // classifies as changes, compared here through the shared
   // `./snapshot-meta.mjs` so the two commands cannot disagree about them.
   // Each mismatch becomes a `coverage.notes` warning rather than a refusal:
-  // a provider migration, a cross-repository diff, or a policy change between
-  // baseline and head are all legitimate states a consumer must be told about.
+  // a provider migration, a cross-repository diff, a dirty-tree side, or a
+  // policy change between baseline and head are all legitimate states a
+  // consumer must be told about. The dirty-tree wording is the one `delta` and
+  // `change` emit over the same metadata — three commands, one sentence each,
+  // so a consumer reading any report reads the same caveat.
   const headProvenance = resolveProvenance(root);
   const headFingerprint = config ? computePolicyFingerprint(config) : null;
   const meta = compareSnapshotMetadata({
@@ -454,6 +457,19 @@ export function diffCommand(
   } else if (!baseline.provenance && headProvenance) {
     coverage.notes.push(
       `head carries provenance but the baseline does not — the consumer cannot verify the diff is between revisions of the same repository`,
+    );
+  }
+
+  if (meta.dirtyBaseline) {
+    coverage.notes.push(
+      "the baseline was captured from a dirty working tree — its evidence is not a reproducible " +
+        "claim about the commit it names",
+    );
+  }
+  if (meta.dirtyHead) {
+    coverage.notes.push(
+      "this run's working tree is dirty — the head side describes uncommitted state, not the " +
+        "commit HEAD names",
     );
   }
 

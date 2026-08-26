@@ -1211,4 +1211,50 @@ describe("diffCommand", () => {
       "head carries provenance but the baseline does not — the consumer cannot verify the diff is between revisions of the same repository",
     );
   });
+
+  it("notes when the baseline was captured from a dirty tree", () => {
+    const baseline = baselineEnvelope({
+      provenance: { commit: "wxyz", remote: "https://github.com/head/repo.git", dirty: true },
+    });
+    resolveProvenance.mockReturnValue({
+      commit: "abcd",
+      remote: "https://github.com/head/repo.git",
+      dirty: false,
+    });
+    const result = diffCommand("/baseline.json", commandContext(), {
+      readBaseline: () => baseline,
+    });
+    expect(result.coverage.notes).toContain(
+      "the baseline was captured from a dirty working tree — its evidence is not a reproducible claim about the commit it names",
+    );
+  });
+
+  it("notes when this run's working tree is dirty", () => {
+    resolveProvenance.mockReturnValue({
+      commit: "abcd",
+      remote: "https://github.com/head/repo.git",
+      dirty: true,
+    });
+    const result = diffCommand("/baseline.json", commandContext(), {
+      readBaseline: () => baselineEnvelope(),
+    });
+    expect(result.coverage.notes).toContain(
+      "this run's working tree is dirty — the head side describes uncommitted state, not the commit HEAD names",
+    );
+  });
+
+  it("notes no dirtiness when both sides were captured clean", () => {
+    const baseline = baselineEnvelope({
+      provenance: { commit: "wxyz", remote: "https://github.com/head/repo.git", dirty: false },
+    });
+    resolveProvenance.mockReturnValue({
+      commit: "abcd",
+      remote: "https://github.com/head/repo.git",
+      dirty: false,
+    });
+    const result = diffCommand("/baseline.json", commandContext(), {
+      readBaseline: () => baseline,
+    });
+    expect(result.coverage.notes).not.toContain(expect.stringMatching(/dirty/));
+  });
 });
