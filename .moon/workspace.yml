@@ -9,6 +9,7 @@
 projects:
   archkeep: "packages/archkeep"
   archkeep-mcp: "packages/archkeep-mcp"
+  archkeep-rules: "packages/archkeep-rules"
   archkeep-rule-sdk-go: "packages/archkeep-rule-sdk-go"
   archkeep-rule-sdk-python: "packages/archkeep-rule-sdk-python"
   archkeep-rule-sdk-rust: "packages/archkeep-rule-sdk-rust"

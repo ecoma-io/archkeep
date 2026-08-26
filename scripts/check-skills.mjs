@@ -61,8 +61,9 @@ export const RUST_SDK_CRATE_NAME = "archkeep-rule-sdk";
 export const TS_SDK_PACKAGE_JSON = "packages/archkeep-rule-sdk-ts/package.json";
 export const MCP_PACKAGE_JSON = "packages/archkeep-mcp/package.json";
 export const PYTHON_SDK_PYPROJECT = "packages/archkeep-rule-sdk-python/pyproject.toml";
+export const RULES_PACKAGE_JSON = "packages/archkeep-rules/package.json";
 
-// Every version-bearing path the chain compares — the ten files
+// Every version-bearing path the chain compares — the eleven files
 // docs/skills/versioning.md enumerates, aggregated from the constants above
 // rather than restated. release-please's `extra-files` list must name no file
 // outside it: a manifest bumped on every release but verified by no chain
@@ -80,6 +81,7 @@ export const VERSION_CHAIN_PATHS = [
   RUST_SDK_CARGO_TOML,
   TS_SDK_PACKAGE_JSON,
   PYTHON_SDK_PYPROJECT,
+  RULES_PACKAGE_JSON,
 ];
 
 // Host-specific frontmatter fields that must NOT appear in canonical skills.

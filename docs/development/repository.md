@@ -2,17 +2,18 @@
 
 The workspace that holds Archkeep, and how its moving parts relate.
 
-## The seven packages
+## The eight packages
 
-| package                             | what it ships            | where it goes       | has its own AGENTS.md |
-| ----------------------------------- | ------------------------ | ------------------- | --------------------- |
-| `packages/archkeep`                 | the engine               | npm                 | yes                   |
-| `packages/archkeep-vscode`          | the VS Code client       | VS Code marketplace | no                    |
-| `packages/archkeep-mcp`             | the MCP server           | npm                 | no                    |
-| `packages/archkeep-rule-sdk-rust`   | the Rust custom-rule SDK | crates.io           | no                    |
-| `packages/archkeep-rule-sdk-ts`     | the AssemblyScript SDK   | npm                 | no                    |
-| `packages/archkeep-rule-sdk-python` | the Python SDK           | PyPI                | no                    |
-| `packages/archkeep-rule-sdk-go`     | the Go SDK               | the Go module proxy | no                    |
+| package                             | what it ships              | where it goes       | has its own AGENTS.md |
+| ----------------------------------- | -------------------------- | ------------------- | --------------------- |
+| `packages/archkeep`                 | the engine                 | npm                 | yes                   |
+| `packages/archkeep-vscode`          | the VS Code client         | VS Code marketplace | no                    |
+| `packages/archkeep-mcp`             | the MCP server             | npm                 | no                    |
+| `packages/archkeep-rules`           | the official rules catalog | npm, once published | no                    |
+| `packages/archkeep-rule-sdk-rust`   | the Rust custom-rule SDK   | crates.io           | no                    |
+| `packages/archkeep-rule-sdk-ts`     | the AssemblyScript SDK     | npm                 | no                    |
+| `packages/archkeep-rule-sdk-python` | the Python SDK             | PyPI                | no                    |
+| `packages/archkeep-rule-sdk-go`     | the Go SDK                 | the Go module proxy | no                    |
 
 `archkeep` is the engine — the Nx and Moon integrations, the boundary checker,
 and the language server behind one analysis. `archkeep-vscode` is a client of it

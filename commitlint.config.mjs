@@ -21,6 +21,8 @@ export default {
         // The MCP server package — its own scope, the same arrangement every
         // package under `packages/` gets.
         "archkeep-mcp",
+        // The official rules catalog — ships the catalog.json and validator.
+        "rules",
         "vscode",
         // The rule SDKs — the language, not the directory, because the SDK
         // per language is what a reader routes on and every registry name is

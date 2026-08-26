@@ -14,14 +14,15 @@ package.json (repository root — what release-please bumps directly)
   = .codex-plugin/plugin.json
   = packages/archkeep-mcp/package.json
   = packages/archkeep-vscode/package.json
+  = packages/archkeep-rules/package.json
   = packages/archkeep-rule-sdk-rust/Cargo.toml ([package] version)
   = packages/archkeep-rule-sdk-ts/package.json
   = packages/archkeep-rule-sdk-python/pyproject.toml ([project] version)
       └ packages/archkeep-rule-sdk-rust/Cargo.lock (the archkeep-rule-sdk entry)
 ```
 
-All ten must agree. The root `package.json` is the release-please `"."`
-component — the one file it bumps directly; the other nine are copies of it
+All eleven must agree. The root `package.json` is the release-please `"."`
+component — the one file it bumps directly; the other ten are copies of it
 written by `extra-files`.
 
 `Cargo.lock` hangs off the Cargo manifest rather than sitting on the line
@@ -43,6 +44,12 @@ The MCP package is on the chain for the same reason the extension is: it
 composes the engine's own command layer in-process (the `./commands` subpath),
 so one version is what makes the pairing real — "the MCP face for engine 0.x"
 is a fact a consumer reads off the number, not a compatibility matrix.
+
+The rules catalog is on the chain for the same reason the SDKs are: every
+artifact it ships speaks contract 1 of the engine it is paired with, so "the
+official rules for engine 0.x" is read off the number rather than guessed from
+a compatibility matrix — and a catalog that claims a version it was never
+bumped to is exactly the drift this chain exists to refuse.
 
 The `arch-*` skills carry **no version** by decision. A consumer's skills are
 installed with the plugin that ships them, so the version that matters is the

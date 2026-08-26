@@ -200,7 +200,7 @@ decided rather than summarized into them.
 | [architecture.md](development/architecture.md)             | One check, end to end, and why the layers are cut where they are    |
 | [adding-a-language.md](development/adding-a-language.md)   | The full path for a new language, in the order that keeps it honest |
 | [adding-integration.md](development/adding-integration.md) | How a new integration extends the core, and the contract it holds   |
-| [repository.md](development/repository.md)                 | The seven packages, plain ESM, gate scripts, CI                     |
+| [repository.md](development/repository.md)                 | The eight packages, plain ESM, gate scripts, CI                     |
 | [release.md](development/release.md)                       | How a version reaches the people who use it                         |
 | [testing.md](development/testing.md)                       | Which suite proves what, and which failure each tier is for         |
 
@@ -240,6 +240,7 @@ allowed to say it". That table:
 | `packages/archkeep/README.md`                                                   | The package's own reference — it is the npm landing page and must stand alone                                                                                                                                                                    |
 | `packages/archkeep-vscode/README.md`                                            | The VS Code client: what it requires, the two settings it has, and the two it refuses                                                                                                                                                            |
 | `packages/archkeep-mcp/README.md`                                               | The MCP server: the eight tools, how they map to CLI commands, and the authority boundary                                                                                                                                                        |
+| `packages/archkeep-rules/README.md`                                             | The official rules catalog: what the catalog is, official vs workspace rules, artifact identity, checksum pinning, and why this is not a new authority layer                                                                                     |
 | `packages/archkeep-rule-sdk-*/README.md`                                        | One per SDK: that language's build story for a custom rule, and its own MEASURED limits. The limits are why an SDK is chosen by reading these rather than from the table in [`docs/usage/custom-rules.md`](usage/custom-rules.md)                |
 | `docs/adr/`                                                                     | The numbered decision records: what was decided, against which alternatives, and what it cost. Immutable once accepted — a decision that changed is a NEW record, never an edit to the old one                                                   |
 | `packages/archkeep/AGENTS.md`                                                   | Layer mechanics: what each layer may know                                                                                                                                                                                                        |
