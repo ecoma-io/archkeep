@@ -37,8 +37,10 @@ A new reader should find these capabilities described as present, not promised.
   Single-repo, monorepo and polyrepo layouts are first-class.
   ([concepts/integrations.md](../concepts/integrations.md))
 - **A multi-language dependency graph read from source.** Go, Rust, Python,
-  TypeScript, JavaScript, Vue, Java and Kotlin imports and manifests, statically — nothing
-  invokes a toolchain to answer a question about imports.
+  TypeScript, JavaScript, Vue, and JVM languages — Java and Kotlin imports read
+  from source, Maven and Gradle manifests for project identity and static
+  dependency edges. All analysis is static — nothing invokes a toolchain to answer
+  a question about imports.
   ([reference/languages.md](../reference/languages.md))
 - **Architecture as code.** Layers, boundaries, dependency constraints and
   ownership declared in a machine-readable model that is reviewed like code, in

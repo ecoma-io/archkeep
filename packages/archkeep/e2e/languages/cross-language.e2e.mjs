@@ -1,7 +1,7 @@
 // Cross-language parity E2E scenarios.
 //
 // Proves that Archkeep's architecture model is language-independent: all
-// eight language fixtures express the same three-layer architecture
+// nine language fixtures express the same three-layer architecture
 // (domain, application, api) and must produce the same normalized graph
 // — same project names, same edge source/target/type — even though each
 // language's dependency extraction is different.
@@ -9,13 +9,23 @@
 // This is the most important invariant the multi-language E2E suite
 // defends: a parser regression in one language that silently drops edges
 // would be caught here, because the normalized graph would differ from
-// the other seven.
+// the other eight.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { packArtifact } from "../helpers/artifact.mjs";
 import { createNativeLanguageConsumer } from "../helpers/consumer.mjs";
 import { archkeep } from "../helpers/run.mjs";
 
-const LANGUAGES = ["go", "typescript", "javascript", "vue", "rust", "python", "java", "kotlin"];
+const LANGUAGES = [
+  "go",
+  "typescript",
+  "javascript",
+  "vue",
+  "rust",
+  "python",
+  "java",
+  "kotlin",
+  "gradle",
+];
 
 let artifact;
 const consumers = {};
@@ -35,7 +45,7 @@ afterAll(() => {
 });
 
 describe("Cross-language parity", () => {
-  it("all eight languages agree on project names", () => {
+  it("all nine languages agree on project names", () => {
     const results = {};
     for (const lang of LANGUAGES) {
       const result = archkeep(consumers[lang].root, ["graph", "--format", "json"]);
@@ -49,7 +59,7 @@ describe("Cross-language parity", () => {
     }
   });
 
-  it("all eight languages agree on normalized dependency edges", () => {
+  it("all nine languages agree on normalized dependency edges", () => {
     const results = {};
     for (const lang of LANGUAGES) {
       const result = archkeep(consumers[lang].root, ["graph", "--format", "json"]);
@@ -73,7 +83,7 @@ describe("Cross-language parity", () => {
     }
   });
 
-  it("all eight languages agree on check JSON envelope structure", () => {
+  it("all nine languages agree on check JSON envelope structure", () => {
     for (const lang of LANGUAGES) {
       const result = archkeep(consumers[lang].root, ["check", "--format", "json"]);
       expect(result.exitCode, `${lang} check exit code`).toBe(0);

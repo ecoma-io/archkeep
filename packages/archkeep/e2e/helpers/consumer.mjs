@@ -35,6 +35,7 @@ import { rustLanguageFiles } from "../fixtures/languages/rust.mjs";
 import { pythonLanguageFiles } from "../fixtures/languages/python.mjs";
 import { javaLanguageFiles } from "../fixtures/languages/java.mjs";
 import { kotlinLanguageFiles } from "../fixtures/languages/kotlin.mjs";
+import { gradleLanguageFiles } from "../fixtures/languages/gradle.mjs";
 
 /**
  * Writes a file map into a base directory, creating intermediate directories.
@@ -334,6 +335,7 @@ const LANGUAGE_FIXTURES = {
   python: pythonLanguageFiles,
   java: javaLanguageFiles,
   kotlin: kotlinLanguageFiles,
+  gradle: gradleLanguageFiles,
 };
 
 /**

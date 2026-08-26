@@ -537,7 +537,14 @@ export function analyzeWorkspace(workspace, files, { analyze = analyzeFile } = {
 }
 
 /** The polyglot manifests `polyglotManifests` looks for. */
-const POLYGLOT_MANIFEST_NAMES = ["go.mod", "Cargo.toml", "pyproject.toml", "pom.xml"];
+const POLYGLOT_MANIFEST_NAMES = [
+  "go.mod",
+  "Cargo.toml",
+  "pyproject.toml",
+  "pom.xml",
+  "settings.gradle",
+  "settings.gradle.kts",
+];
 
 /**
  * Tracked Go, Rust, Python and Maven manifests that sit under some project's

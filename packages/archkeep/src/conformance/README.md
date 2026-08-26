@@ -336,8 +336,8 @@ disposition:
   partition axis rather than a layer axis, where the violation is between peers
   and no layer ordering exists to decide it.
 
-**17 fixture workspaces, 71 probes, 67 projects**, carrying 44 labeled findings
-and 33 near-miss probes that must produce nothing.
+**18 fixture workspaces, 77 probes, 71 projects**, carrying 47 labeled findings
+and 36 near-miss probes that must produce nothing.
 
 ### How it runs, and why it runs the whole command
 
@@ -386,11 +386,11 @@ moves:
 
 | messageId                                    |  Go | Rust | Python | TypeScript | Java | Kotlin |
 | -------------------------------------------- | --: | ---: | -----: | ---------: | ---: | -----: |
-| `onlyTagsConstraintViolation`                |   8 |    3 |      4 |          1 |    2 |      1 |
+| `onlyTagsConstraintViolation`                |   8 |    3 |      4 |          1 |    2 |      2 |
 | `notTagsConstraintViolation`                 |   0 |    2 |      0 |          0 |    0 |      0 |
 | `emptyOnlyTagsConstraintViolation`           |   0 |    0 |      1 |          0 |    0 |      0 |
-| `projectWithoutTagsCannotHaveDependencies`   |   1 |    0 |      2 |          0 |    1 |      1 |
-| `bannedExternalImportsViolation`             |   1 |    1 |      0 |          0 |    1 |      1 |
+| `projectWithoutTagsCannotHaveDependencies`   |   1 |    0 |      2 |          0 |    1 |      2 |
+| `bannedExternalImportsViolation`             |   1 |    1 |      0 |          0 |    1 |      2 |
 | `noTransitiveDependencies`                   |   2 |    0 |      0 |          0 |    0 |      0 |
 | `noCircularDependencies`                     |   0 |    0 |      2 |          0 |    2 |      2 |
 | `noSelfCircularDependencies`                 |   0 |    0 |      1 |          0 |    0 |      0 |
