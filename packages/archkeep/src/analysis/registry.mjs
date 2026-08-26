@@ -58,6 +58,11 @@ export const LANGUAGE_BY_EXTENSION = Object.freeze({
   ".java": "java",
   ".kt": "kotlin",
   ".kts": "kotlin",
+  // C# joins the dotted-name family through the dotnet core (`src/analysis/
+  // dotnet/`, ADR 0006): one namespace index over `.cs` sources, one lexical
+  // mask, one manifest reader for the csproj family — with F# and VB.NET as
+  // later frontends of the same core rather than new stacks.
+  ".cs": "csharp",
 });
 
 /**

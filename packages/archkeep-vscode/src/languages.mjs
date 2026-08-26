@@ -33,6 +33,7 @@ export const ROUTED_EXTENSIONS = Object.freeze([
   ".java",
   ".kt",
   ".kts",
+  ".cs",
 ]);
 
 /**

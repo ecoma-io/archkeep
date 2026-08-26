@@ -22,6 +22,7 @@
  * exists. Every other import site keeps naming them from this module.
  */
 
+import { analyzeCSharp } from "./csharp.mjs";
 import { analyzeGo } from "./go.mjs";
 import { analyzeJava } from "./java.mjs";
 import { analyzeKotlin } from "./kotlin.mjs";
@@ -174,6 +175,7 @@ const ANALYZER_BY_LANGUAGE = Object.freeze({
   python: analyzePython,
   java: analyzeJava,
   kotlin: analyzeKotlin,
+  csharp: analyzeCSharp,
 });
 
 /**
