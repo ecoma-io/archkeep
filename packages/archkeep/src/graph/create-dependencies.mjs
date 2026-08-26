@@ -1,5 +1,5 @@
 /**
- * The graph layer: cross-project EDGES for Go, Rust, Python, and Java, in the shape
+ * The graph layer: cross-project EDGES for Go, Rust, Python, Java, and C#/\.NET, in the shape
  * Nx's `createDependencies` hook returns. Nothing else — nodes still come from
  * each project's hand-written `project.json`, and targets are never inferred
  * (`packages/archkeep/AGENTS.md`).
@@ -15,7 +15,7 @@
  * Each resolver reads tracked manifests and sources statically (regex for Go
  * imports, smol-toml for Cargo/pyproject manifests) so the graph computes
  * without any language toolchain installed. A workspace with no Go/Rust/Python/
- * Java projects pays nothing: every resolver keys off what it reads existing in
+ * Java/C# projects pays nothing: every resolver keys off what it reads existing in
  * the project's tracked files. A resolver may THROW instead of returning — the
  * Python one does, for a declared path dependency it cannot attribute to any
  * project (`../analysis/python.mjs` header) — and the throw is deliberate:
@@ -30,6 +30,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
+import { resolveCsharpDependencies } from "../analysis/csharp.mjs";
+import { resolveCsprojDependencies } from "../analysis/dotnet/csproj.mjs";
 import { resolveGoDependencies } from "../analysis/go.mjs";
 import { resolveJavaDependencies } from "../analysis/java.mjs";
 import { resolveKotlinDependencies } from "../analysis/kotlin.mjs";
@@ -41,12 +43,29 @@ import { resolveOptions } from "../options.mjs";
 
 /** Pure core over an abstract workspace; injectable for tests. */
 export function resolvePolyglotDependencies(projects, filesOf, readFile) {
+  // Both C# halves read the same tree through ONE workspace-shaped object:
+  // the directive sweep and the csproj model share the namespace index, and
+  // the memoized read behind the object means no file's content is fetched
+  // twice on one graph computation.
+  const reads = new Map();
+  const csharpWorkspace = {
+    projects,
+    filesOf,
+    readFile: (path) => {
+      if (!reads.has(path)) reads.set(path, readFile(path));
+      return reads.get(path);
+    },
+  };
   const deps = [
     ...resolveGoDependencies(projects, filesOf, readFile),
     ...resolveRustDependencies(projects, filesOf, readFile),
     ...resolvePythonDependencies(projects, filesOf, readFile),
     ...resolveJavaDependencies(projects, filesOf, readFile),
     ...resolveKotlinDependencies(projects, filesOf, readFile),
+    ...resolveCsharpDependencies(csharpWorkspace),
+    // Manifest edges for .csproj trees: ProjectReference resolution,
+    // independent of (and complementary to) the source-track edges above.
+    ...resolveCsprojDependencies(csharpWorkspace),
     // Manifest edges for Maven/Gradle trees: the identity-anchor half of JVM
     // support, independent of (and complementary to) the import edges above
     // — a declared-but-unused dependency and an undeclared-but-imported one

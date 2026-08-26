@@ -95,15 +95,16 @@
 export const OUT_OF_REACH = Object.freeze({
   noRelativeOrAbsoluteExternals:
     "needs a specifier that IS a filesystem path; `spelling.path` is false for every Go import, " +
-    "Rust `use` path and Python dotted module (`../analysis/contract.md`)",
+    "Rust `use` path, Python dotted module, JVM dotted import and C# using directive " +
+    "(`../analysis/contract.md`)",
   noImportsOfLazyLoadedLibraries:
-    "needs a dynamic import, a form none of these three languages has — Go's `kind` is always " +
-    "static, and neither Rust's `use` nor Python's `import` has a lazy counterpart the analyzer " +
-    "records as one",
+    "needs a dynamic import, a form none of these five languages has — Go's `kind` is always " +
+    "static, neither Rust's `use` nor Python's `import` has a lazy counterpart the analyzer " +
+    "records as one, and the JVM's and C#'s imports are compile-time directives only",
   nestedBannedExternalImportsViolation:
     "needs a project's import alias to collide with the name of a package reachable transitively " +
-    "through the npm graph, which is an npm-shaped coincidence no Go module path, crate name or " +
-    "Python distribution can produce here",
+    "through the npm graph, which is an npm-shaped coincidence no Go module path, crate name, " +
+    "Python distribution, Kotlin package or NuGet package id can produce here",
 });
 
 export const ARCHITECTURE_CORPUS = [
@@ -1762,6 +1763,96 @@ export const ARCHITECTURE_CORPUS = [
         reports: [],
         denyAll: 0,
         why: "An import resolving into its own project reaches no second project, so nothing can report it — Kotlin has no relative import form, so spelling.relative reads what the import reached, and the deny-all silence is honest.",
+      },
+    ],
+  },
+  // ------------------------------------------------------- layered (C#)
+  {
+    id: "layered-architecture-in-csharp",
+    style: "layered (relaxed)",
+    languages: ["csharp"],
+    intent:
+      "The relaxed layering of `layered-architecture-in-java`, restated in C# so the dotnet shapes are labeled too: file-scoped namespaces resolve through a content-derived index, a `static` and an aliased directive both carry crossings, an untagged project is the importer, and the external ban carries a dotted glob against a NuGet-shaped name.",
+    projects: [
+      { name: "cs-domain", root: "libs/cs-domain", tags: ["layer:domain"] },
+      { name: "cs-usecase", root: "libs/cs-usecase", tags: ["layer:usecase"] },
+      { name: "cs-adapter", root: "libs/cs-adapter", tags: ["layer:adapter"] },
+      { name: "cs-util", root: "libs/cs-util", tags: [] },
+    ],
+    depConstraints: [
+      { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+      { sourceTag: "layer:usecase", onlyDependOnLibsWithTags: ["layer:domain", "layer:usecase"] },
+      {
+        sourceTag: "layer:adapter",
+        onlyDependOnLibsWithTags: ["layer:domain", "layer:usecase", "layer:adapter"],
+        bannedExternalImports: ["Vendor.Test.ShellSdk*"],
+      },
+    ],
+    files: {
+      "libs/cs-domain/Policy.cs":
+        "namespace Test.Corpus.Domain;\n\npublic sealed class Policy { }\n",
+      "libs/cs-usecase/Service.cs":
+        "using Test.Corpus.Domain;\nusing Test.Corpus.Adapter;\n\npublic sealed class Service\n{\n    public Service(Policy policy, Repo repo) { }\n}\n",
+      "libs/cs-usecase/Sdk.cs":
+        "using static Vendor.Test.ShellSdk.Shell.Factory;\n\npublic sealed class Sdk { }\n",
+      "libs/cs-adapter/Repo.cs": "namespace Test.Corpus.Adapter;\n\npublic interface Repo { }\n",
+      "libs/cs-adapter/Gateway.cs":
+        "using static Test.Corpus.Adapter.Repo;\nusing Gateway = Vendor.Test.ShellSdk.Shell;\n\npublic sealed class Gateway<T> { }\n",
+      "libs/cs-util/Clock.cs": "using Test.Corpus.Domain.Policy;\n\npublic class Clock { }\n",
+    },
+    probes: [
+      {
+        file: "libs/cs-domain/Policy.cs",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why: "The innermost layer importing nothing — recorded so the case's zero-finding claim about this file is a measurement, not an omission.",
+      },
+      {
+        file: "libs/cs-usecase/Service.cs",
+        imports: 2,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "Test.Corpus.Adapter",
+            target: "cs-adapter",
+          },
+        ],
+        denyAll: 2,
+        why: "One crossing the layering permits beside one it forbids, in one using list — the domain import must stay silent while the outward adapter import reports.",
+      },
+      {
+        file: "libs/cs-usecase/Sdk.cs",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The same external SDK the adapter layer is banned from, imported through a static-members directive by a layer no ban row names — a dotted external ban binds the tag that carries it and nothing else.",
+      },
+      {
+        file: "libs/cs-adapter/Gateway.cs",
+        imports: 2,
+        reports: [
+          {
+            messageId: "bannedExternalImportsViolation",
+            specifier: "Vendor.Test.ShellSdk.Shell",
+            target: "npm:Vendor.Test.ShellSdk.Shell",
+          },
+        ],
+        denyAll: 1,
+        why: "An own-project static import stays silent under both laws while the aliased NuGet namespace below it fires the dotted-glob ban — the alias's right-hand side is what crosses, so that is what the record names.",
+      },
+      {
+        file: "libs/cs-util/Clock.cs",
+        imports: 1,
+        reports: [
+          {
+            messageId: "projectWithoutTagsCannotHaveDependencies",
+            specifier: "Test.Corpus.Domain.Policy",
+            target: "cs-domain",
+          },
+        ],
+        denyAll: 1,
+        why: "A project no constraint row matches is an error, not a permission — C#'s content-derived namespace index attributes the file first, then the rule judges it like any other language's.",
       },
     ],
   },

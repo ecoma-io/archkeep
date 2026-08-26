@@ -33,6 +33,7 @@ import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
 
 import { containmentViolation } from "./containment.mjs";
 import { analyzeFile, languageOf } from "./analysis/analyze.mjs";
+import { basenameMatches } from "./analysis/manifest-util.mjs";
 import { fileFailure, projectOwning } from "./analysis/source-util.mjs";
 import { UsageError } from "./errors.mjs";
 import { parseNxJson } from "./nx-json.mjs";
@@ -544,10 +545,11 @@ const POLYGLOT_MANIFEST_NAMES = [
   "pom.xml",
   "settings.gradle",
   "settings.gradle.kts",
+  "*.csproj",
 ];
 
 /**
- * Tracked Go, Rust, Python and Maven manifests that sit under some project's
+ * Tracked Go, Rust, Python, Maven and .NET manifests that sit under some project's
  * root — the fact the unregistered-Nx-plugin gap turns on
  * (`./commands/context.mjs`'s `pluginGap.manifests` is where a caller reads
  * it, and `./options.mjs`'s `pluginIsRegistered` is the other half of that
@@ -579,7 +581,10 @@ export function polyglotManifests(tracked, projects) {
   const roots = projects.map((project) => project.root);
   return tracked.filter((file) => {
     const base = file.slice(file.lastIndexOf("/") + 1);
-    if (!POLYGLOT_MANIFEST_NAMES.includes(base)) return false;
+    // Literal-first: four of the five names answer by equality, and only
+    // `*.csproj` reaches the glob — this filter runs once per tracked file
+    // (`./analysis/manifest-util.mjs`'s `basenameMatches` owns why).
+    if (!basenameMatches(base, POLYGLOT_MANIFEST_NAMES, posix.matchesGlob)) return false;
     return roots.some(
       (root) => root === "" || root === "." || file === root || file.startsWith(`${root}/`),
     );

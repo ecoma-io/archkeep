@@ -689,3 +689,83 @@ describe("maven inference (pom.xml in the default manifest list)", () => {
     expect(projects.map((project) => project.root)).toEqual(["apps/api"]);
   });
 });
+
+describe("dotnet inference (*.csproj in the default manifest list)", () => {
+  const tree = {
+    "apps/api/Api.csproj": '<Project Sdk="Microsoft.NET.Sdk"></Project>',
+    "libs/core/Core.csproj": '<Project Sdk="Microsoft.NET.Sdk"></Project>',
+  };
+
+  it("discovers a project per tracked .csproj, named by directory basename", () => {
+    // The same rule go.mod and pom.xml follow: the manifest anchors the
+    // project, but never NAMES it — basename unless declared otherwise.
+    const model = modelOf({ projects: { declared: [], infer: {} } });
+    const { projects } = discoverNativeProjects({
+      root: "/repo",
+      files: Object.keys(tree),
+      readFile: filesOf(tree),
+      model,
+    });
+    expect(projects.map((project) => project.name).sort()).toEqual(["api", "core"]);
+  });
+
+  it("never anchors a project on generated obj/ output, even when tracked", () => {
+    // ADR 0006, Decision 2: build output is not a project. Without the
+    // guard this tree would grow a phantom rooted at apps/api/obj.
+    const model = modelOf({ projects: { declared: [], infer: {} } });
+    const { projects } = discoverNativeProjects({
+      root: "/repo",
+      files: [...Object.keys(tree), "apps/api/obj/Api.generated.csproj"],
+      readFile: filesOf({ ...tree, "apps/api/obj/Api.generated.csproj": "<Project />" }),
+      model,
+    });
+    expect(projects.map((project) => project.root).sort()).toEqual(["apps/api", "libs/core"]);
+  });
+
+  it("refuses rather than modeling a tree whose only manifest is generated output", () => {
+    const model = modelOf({ projects: { declared: [], infer: {} } });
+    expect(() =>
+      discoverNativeProjects({
+        root: "/repo",
+        files: ["apps/api/bin/Api.generated.csproj"],
+        readFile: filesOf({ "apps/api/bin/Api.generated.csproj": "<Project />" }),
+        model,
+      }),
+    ).toThrow(/zero projects/);
+  });
+
+  it("fails loudly when two .csproj files share one directory, naming both", () => {
+    // ADR 0006, Decision 2: both files claim the name inference would
+    // derive from that directory, and picking one silently would read the
+    // other's references onto it.
+    const model = modelOf({ projects: { declared: [], infer: {} } });
+    expect(() =>
+      discoverNativeProjects({
+        root: "/repo",
+        files: ["apps/api/Api.csproj", "apps/api/Api.Tests.csproj"],
+        readFile: filesOf({
+          "apps/api/Api.csproj": "<Project />",
+          "apps/api/Api.Tests.csproj": "<Project />",
+        }),
+        model,
+      }),
+    ).toThrow(
+      /two \.csproj files anchor the same root 'apps\/api'.*Api\.csproj.*Api\.Tests\.csproj/s,
+    );
+  });
+
+  it("does not flag a pair inference is restricted away from", () => {
+    // The guard judges exactly the files inference would anchor: a pair
+    // under a manifest list without *.csproj is the declared list's
+    // business, not an ambiguity.
+    const model = modelOf({ projects: { declared: [], infer: { manifests: ["go.mod"] } } });
+    expect(() =>
+      discoverNativeProjects({
+        root: "/repo",
+        files: ["apps/api/Api.csproj", "apps/api/Api.Tests.csproj"],
+        readFile: filesOf({}),
+        model,
+      }),
+    ).toThrow(/zero projects/);
+  });
+});

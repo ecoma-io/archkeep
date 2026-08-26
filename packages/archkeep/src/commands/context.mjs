@@ -26,6 +26,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
+import { dotnetIndexFailures } from "../analysis/dotnet/namespaces.mjs";
+import { dotnetManifestFailures } from "../analysis/dotnet/csproj.mjs";
 import { mavenManifestFailures } from "../analysis/jvm/maven.mjs";
 import { gradleManifestFailures } from "../analysis/jvm/gradle.mjs";
 import { languageOf } from "../analysis/registry.mjs";
@@ -617,6 +619,8 @@ export function resolveCommandContext(
       ...pythonUnmodelledFailures(workspace),
       ...mavenManifestFailures(workspace),
       ...gradleManifestFailures(workspace),
+      ...dotnetManifestFailures(workspace),
+      ...dotnetIndexFailures(workspace),
     ];
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
     analyzed = analyzedFiles.length;
@@ -727,6 +731,8 @@ export function resolveCommandContext(
       ...pythonUnmodelledFailures(workspace),
       ...mavenManifestFailures(workspace),
       ...gradleManifestFailures(workspace),
+      ...dotnetManifestFailures(workspace),
+      ...dotnetIndexFailures(workspace),
     ];
     unclaimedGap = { files: unclaimedFiles };
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
@@ -790,6 +796,8 @@ export function resolveCommandContext(
       ...pythonUnmodelledFailures(workspace),
       ...mavenManifestFailures(workspace),
       ...gradleManifestFailures(workspace),
+      ...dotnetManifestFailures(workspace),
+      ...dotnetIndexFailures(workspace),
     ];
     unclaimedGap = { files: unclaimedFiles };
     // Same reason as the Moon branch above: `coverage.exempt` is a native-only

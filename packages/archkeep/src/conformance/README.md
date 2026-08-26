@@ -336,8 +336,8 @@ disposition:
   partition axis rather than a layer axis, where the violation is between peers
   and no layer ordering exists to decide it.
 
-**18 fixture workspaces, 77 probes, 71 projects**, carrying 47 labeled findings
-and 36 near-miss probes that must produce nothing.
+**19 fixture workspaces, 82 probes, 75 projects**, carrying 50 labeled findings
+and 38 near-miss probes that must produce nothing.
 
 ### How it runs, and why it runs the whole command
 
@@ -380,24 +380,24 @@ start where the diagnostic points.
 
 ### What the corpus reaches
 
-**12 of the 15 message ids, over 6 languages.** The table is derived from the
+**12 of the 15 message ids, over 7 languages.** The table is derived from the
 catalogue by `stated-counts.integration.test.mjs`, which fails when a cell
 moves:
 
-| messageId                                    |  Go | Rust | Python | TypeScript | Java | Kotlin |
-| -------------------------------------------- | --: | ---: | -----: | ---------: | ---: | -----: |
-| `onlyTagsConstraintViolation`                |   8 |    3 |      4 |          1 |    2 |      2 |
-| `notTagsConstraintViolation`                 |   0 |    2 |      0 |          0 |    0 |      0 |
-| `emptyOnlyTagsConstraintViolation`           |   0 |    0 |      1 |          0 |    0 |      0 |
-| `projectWithoutTagsCannotHaveDependencies`   |   1 |    0 |      2 |          0 |    1 |      2 |
-| `bannedExternalImportsViolation`             |   1 |    1 |      0 |          0 |    1 |      2 |
-| `noTransitiveDependencies`                   |   2 |    0 |      0 |          0 |    0 |      0 |
-| `noCircularDependencies`                     |   0 |    0 |      2 |          0 |    2 |      2 |
-| `noSelfCircularDependencies`                 |   0 |    0 |      1 |          0 |    0 |      0 |
-| `noImportsOfApps`                            |   1 |    0 |      0 |          0 |    0 |      0 |
-| `noImportsOfE2e`                             |   1 |    0 |      0 |          0 |    0 |      0 |
-| `noImportOfNonBuildableLibraries`            |   1 |    0 |      0 |          0 |    0 |      0 |
-| `noRelativeOrAbsoluteImportsAcrossLibraries` |   0 |    0 |      0 |          1 |    0 |      0 |
+| messageId                                    |  Go | Rust | Python | TypeScript | Java | Kotlin |  C# |
+| -------------------------------------------- | --: | ---: | -----: | ---------: | ---: | -----: | --: |
+| `onlyTagsConstraintViolation`                |   8 |    3 |      4 |          1 |    2 |      2 |   1 |
+| `notTagsConstraintViolation`                 |   0 |    2 |      0 |          0 |    0 |      0 |   0 |
+| `emptyOnlyTagsConstraintViolation`           |   0 |    0 |      1 |          0 |    0 |      0 |   0 |
+| `projectWithoutTagsCannotHaveDependencies`   |   1 |    0 |      2 |          0 |    1 |      2 |   1 |
+| `bannedExternalImportsViolation`             |   1 |    1 |      0 |          0 |    1 |      2 |   1 |
+| `noTransitiveDependencies`                   |   2 |    0 |      0 |          0 |    0 |      0 |   0 |
+| `noCircularDependencies`                     |   0 |    0 |      2 |          0 |    2 |      2 |   0 |
+| `noSelfCircularDependencies`                 |   0 |    0 |      1 |          0 |    0 |      0 |   0 |
+| `noImportsOfApps`                            |   1 |    0 |      0 |          0 |    0 |      0 |   0 |
+| `noImportsOfE2e`                             |   1 |    0 |      0 |          0 |    0 |      0 |   0 |
+| `noImportOfNonBuildableLibraries`            |   1 |    0 |      0 |          0 |    0 |      0 |   0 |
+| `noRelativeOrAbsoluteImportsAcrossLibraries` |   0 |    0 |      0 |          1 |    0 |      0 |   0 |
 
 TypeScript appears in one case only, and only where it sharpens the point: the
 modular monolith is one constraint table over a tree whose modules are written
@@ -406,9 +406,9 @@ cannot break — the target project is one the module is allowed to reach, and
 the spelling is the violation.
 
 The three ids no probe reaches are named rather than left to be noticed, and
-each needs a mechanism these three languages do not have:
+each needs a mechanism these languages do not have:
 `noRelativeOrAbsoluteExternals` needs a specifier that IS a filesystem path,
-which `spelling.path` is false for in all three (`../analysis/contract.md`);
+which `spelling.path` is false for in all of them (`../analysis/contract.md`);
 `noImportsOfLazyLoadedLibraries` needs a dynamic import; and
 `nestedBannedExternalImportsViolation` needs a project alias colliding with a
 nested npm package name. `corpus.mjs`'s `OUT_OF_REACH` states them with those

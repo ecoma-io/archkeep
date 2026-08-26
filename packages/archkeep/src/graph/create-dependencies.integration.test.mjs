@@ -80,6 +80,22 @@ describe("createDependencies over a real workspace fixture", () => {
     "jvm/app/src/main/java/com/acme/app/App.java",
     "package com.acme.app;\nimport com.acme.lib.Lib;\nclass App { Lib lib; }\n",
   );
+  // C# pair, declared through a ProjectReference AND imported at source
+  // level: like the JVM pair, both tracks draw their own edge, attributed to
+  // different source files.
+  write("cs/lib/Lib.csproj", '<Project Sdk="Microsoft.NET.Sdk"></Project>');
+  write("cs/lib/Lib.cs", "namespace Acme.Lib;\npublic class L { }\n");
+  write(
+    "cs/app/App.csproj",
+    [
+      '<Project Sdk="Microsoft.NET.Sdk">',
+      "  <ItemGroup>",
+      '    <ProjectReference Include="../../cs/lib/Lib.csproj" />',
+      "  </ItemGroup>",
+      "</Project>",
+    ].join("\n"),
+  );
+  write("cs/app/App.cs", "using Acme.Lib;\nclass App { L l; }\n");
 
   const context = {
     workspaceRoot: root,
@@ -96,6 +112,8 @@ describe("createDependencies over a real workspace fixture", () => {
       "py-u": { root: "py/u" },
       "jvm-lib": { root: "jvm/lib" },
       "jvm-app": { root: "jvm/app" },
+      "cs-lib": { root: "cs/lib" },
+      "cs-app": { root: "cs/app" },
     },
     fileMap: {
       projectFileMap: {
@@ -117,6 +135,8 @@ describe("createDependencies over a real workspace fixture", () => {
           { file: "jvm/app/pom.xml" },
           { file: "jvm/app/src/main/java/com/acme/app/App.java" },
         ],
+        "cs-lib": [{ file: "cs/lib/Lib.csproj" }, { file: "cs/lib/Lib.cs" }],
+        "cs-app": [{ file: "cs/app/App.csproj" }, { file: "cs/app/App.cs" }],
       },
     },
   };
@@ -138,6 +158,11 @@ describe("createDependencies over a real workspace fixture", () => {
         sourceFile: "jvm/app/src/main/java/com/acme/app/App.java",
         type: "static",
       },
+      // The two C# tracks over one pair, same shape as the JVM's: the
+      // written using AND the csproj's declared reference each draw their
+      // own edge.
+      { source: "cs-app", target: "cs-lib", sourceFile: "cs/app/App.cs", type: "static" },
+      { source: "cs-app", target: "cs-lib", sourceFile: "cs/app/App.csproj", type: "static" },
       { source: "jvm-app", target: "jvm-lib", sourceFile: "jvm/app/pom.xml", type: "static" },
     ]);
   });
@@ -212,6 +237,11 @@ describe("createDependencies over a real workspace fixture", () => {
         sourceFile: "jvm/app/src/main/java/com/acme/app/App.java",
         type: "static",
       },
+      // The two C# tracks over one pair, same shape as the JVM's: the
+      // written using AND the csproj's declared reference each draw their
+      // own edge.
+      { source: "cs-app", target: "cs-lib", sourceFile: "cs/app/App.cs", type: "static" },
+      { source: "cs-app", target: "cs-lib", sourceFile: "cs/app/App.csproj", type: "static" },
       { source: "jvm-app", target: "jvm-lib", sourceFile: "jvm/app/pom.xml", type: "static" },
     ]);
   });

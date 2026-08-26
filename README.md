@@ -7,7 +7,7 @@
 <p align="center">
   <strong>The contract between the architecture you intended and the code you actually have.</strong><br />
   Declare your architecture once — layers, scopes, allowed dependencies — and Archkeep judges
-  every import in Go, Rust, Python, TypeScript, JavaScript, Vue, Java and Kotlin against it: deterministic
+  every import in Go, Rust, Python, TypeScript, JavaScript, Vue, Java, Kotlin and C# against it: deterministic
   verdicts with evidence attached, in any repository, with or without Nx or Moon.<br />
   <em>An empty result is a claim, not a shrug.</em>
 </p>
@@ -107,8 +107,8 @@ That layer is what Archkeep implements.
 
 Archkeep is a deterministic architecture governance system for humans and
 coding agents. You declare the architecture you intend; Archkeep reads what
-your repository actually imports — statically, without needing Go, Rust or
-Python toolchains installed — and answers one question with a machine-computed
+your repository actually imports — statically, with none of those
+languages' toolchains needed — and answers one question with a machine-computed
 verdict:
 
 > Does the code that exists agree with the architecture that was declared?
@@ -270,9 +270,11 @@ Python worker — and it still has one architecture: domain boundaries, ownershi
 boundaries, dependency policies. Those should not need four enforcement
 mechanisms that silently disagree.
 
-Archkeep contributes Go, Rust and Python edges into your project graph — in an
-Nx workspace, `nx affected` finally sees polyglot dependents — and judges
-source-level imports in all six languages against one constraint table.
+Archkeep contributes polyglot edges into your project graph — Go, Rust,
+Python, JVM and .NET manifests, plus the import sites every language writes —
+so in an Nx workspace, `nx affected` finally sees polyglot dependents — and
+judges source-level imports in all eight languages against one constraint
+table.
 Analysis is static
 and self-contained: your lint-only CI job needs no Go, Cargo or uv installed.
 Every analyzer's known parse limits are documented, and every limit errs toward

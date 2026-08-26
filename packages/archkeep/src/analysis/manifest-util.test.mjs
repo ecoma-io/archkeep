@@ -1,7 +1,14 @@
 import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
 
-import { normalizePath, parseManifest, resolveWithinWorkspace } from "./manifest-util.mjs";
+import { posix } from "node:path";
+
+import {
+  basenameMatches,
+  normalizePath,
+  parseManifest,
+  resolveWithinWorkspace,
+} from "./manifest-util.mjs";
 
 const segment = fc
   .array(fc.constantFrom(..."abcdefgh"), { minLength: 1, maxLength: 6 })
@@ -123,4 +130,40 @@ describe("resolveWithinWorkspace", () => {
       for (const part of segments) expect([".", "..", ""]).not.toContain(part);
     },
   );
+});
+
+describe("basenameMatches", () => {
+  const patterns = ["go.mod", "Cargo.toml", "pyproject.toml", "pom.xml", "*.csproj"];
+  // A stand-in with the one behavior that matters: it must never be called
+  // for a metacharacter-free pattern — that is the fast path under test.
+  const calls = [];
+  const matchesGlob = (value, pattern) => {
+    calls.push(pattern);
+    return value.endsWith(".csproj") && pattern === "*.csproj";
+  };
+
+  it("answers literal patterns by equality without compiling them", () => {
+    calls.length = 0;
+    expect(basenameMatches("Cargo.toml", patterns, matchesGlob)).toBe(true);
+    // A hit by equality stops the scan before any glob is consulted.
+    expect(calls).toEqual([]);
+  });
+
+  it("hands only glob patterns to the injected matcher", () => {
+    calls.length = 0;
+    expect(basenameMatches("My.App.csproj", patterns, matchesGlob)).toBe(true);
+    expect(calls).toEqual(["*.csproj"]);
+    calls.length = 0;
+    expect(basenameMatches("My.App.fsproj", patterns, matchesGlob)).toBe(false);
+    expect(calls).toEqual(["*.csproj"]);
+  });
+
+  it("keeps glob semantics for a pattern the fast path could answer literally", () => {
+    // A file literally named `foo[1]` and a pattern `foo[1]`: the pattern is
+    // a character class, so the glob answer is false and the fast path must
+    // not pre-empt it with string equality. The real matcher, because the
+    // stand-in above does not implement classes.
+    expect(basenameMatches("foo[1]", ["foo[1]"], posix.matchesGlob)).toBe(false);
+    expect(basenameMatches("foo1", ["foo[1]"], posix.matchesGlob)).toBe(true);
+  });
 });

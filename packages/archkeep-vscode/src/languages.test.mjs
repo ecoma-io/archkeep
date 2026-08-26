@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { documentSelector, ROUTED_EXTENSIONS } from "./languages.mjs";
 
 describe("ROUTED_EXTENSIONS", () => {
-  it("covers the seven extensions ESLint cannot read", () => {
+  it("covers the eight extensions ESLint cannot read", () => {
     expect([...ROUTED_EXTENSIONS]).toStrictEqual([
       ".go",
       ".rs",
@@ -12,6 +12,7 @@ describe("ROUTED_EXTENSIONS", () => {
       ".java",
       ".kt",
       ".kts",
+      ".cs",
     ]);
   });
 
@@ -49,6 +50,7 @@ describe("documentSelector", () => {
       { scheme: "file", pattern: "**/*.java" },
       { scheme: "file", pattern: "**/*.kt" },
       { scheme: "file", pattern: "**/*.kts" },
+      { scheme: "file", pattern: "**/*.cs" },
     ]);
   });
 

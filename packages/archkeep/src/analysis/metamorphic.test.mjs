@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { analyzeCSharp } from "./csharp.mjs";
 import { analyzeGo } from "./go.mjs";
 import { analyzeJava } from "./java.mjs";
 import { analyzeKotlin } from "./kotlin.mjs";
@@ -343,7 +344,78 @@ describe("Kotlin — comments and renames are not dependencies", () => {
   });
 });
 
+describe("C# — comments and renames are not dependencies", () => {
+  const workspace = csharpWorkspace();
+  const analyze = (text) =>
+    analyzeCSharp({
+      sourceFile: "acme/apps/api/Handler.cs",
+      text,
+      workspace,
+    });
+
+  const original = [
+    "using Acme.Core;",
+    "using static Acme.Util.Strings;",
+    "",
+    "namespace Acme.Api;",
+    "",
+    "class Handler { string Render() => Strings.Shout(Kernel.Name); }",
+    "",
+  ].join("\n");
+
+  it("a comment appended at the end of the file changes nothing, byte for byte", () => {
+    expectRecordsUnchanged(analyze, original, `${original}// TODO: split api off core\n`);
+  });
+
+  it("renaming a local identifier changes nothing — the directive is the fact", () => {
+    const renamed = original.replace("Render", "Produce");
+    expect(renamed).not.toBe(original); // the transform happened
+    expectRecordsUnchanged(analyze, original, renamed);
+  });
+
+  it("comment lines inserted above the block shift every line by exactly that many", () => {
+    const header = ["// Handler is the api entry point.", "// It may import core."];
+    expectOnlyShifted(analyze, original, [...header, original].join("\n"), header.length);
+  });
+
+  it("negative control: one added crossing moves the records the transforms must not", () => {
+    const violated = original.replace(
+      "using static Acme.Util.Strings;",
+      "using static Acme.Storage.Store;",
+    );
+    const result = analyze(violated);
+    expect(result.failures).toEqual([]);
+    expect(result.imports.some((record) => record.specifier === "Acme.Storage.Store")).toBe(true);
+  });
+});
+
 /** --- fixture workspaces ------------------------------------------------- */
+
+function csharpWorkspace() {
+  const files = {
+    "acme/apps/api/Handler.cs": "",
+    "acme/libs/core/Kernel.cs": "namespace Acme.Core;\npublic class Kernel { }\n",
+    "acme/libs/util/Strings.cs": "namespace Acme.Util;\npublic static class Strings { }\n",
+    "acme/libs/storage/Store.cs": "namespace Acme.Storage;\npublic class Store { }\n",
+  };
+  return {
+    root: "/w",
+    projects: [
+      { name: "api", root: "acme/apps/api" },
+      { name: "core", root: "acme/libs/core" },
+      { name: "util", root: "acme/libs/util" },
+      { name: "storage", root: "acme/libs/storage" },
+    ],
+    filesOf: (name) =>
+      ({
+        api: Object.keys(files).filter((file) => file.startsWith("acme/apps/api/")),
+        core: Object.keys(files).filter((file) => file.startsWith("acme/libs/core/")),
+        util: Object.keys(files).filter((file) => file.startsWith("acme/libs/util/")),
+        storage: Object.keys(files).filter((file) => file.startsWith("acme/libs/storage/")),
+      })[name] ?? [],
+    readFile: (path) => files[path] ?? null,
+  };
+}
 
 function kotlinWorkspace() {
   const files = {
