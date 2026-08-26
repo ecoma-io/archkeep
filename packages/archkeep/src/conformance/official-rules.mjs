@@ -71,6 +71,8 @@ export const EXPECTED_VERDICTS = Object.freeze({
     "no-matching-projects": "not_applicable",
     "malformed-params": "unknown",
     "unknown-param-key": "unknown",
+    "exactly-min-and-max": "pass",
+    "zero-values-at-zero-minimum": "pass",
   }),
   "forbidden-tag-combination": Object.freeze({
     "project-carries-the-combination": "fail",

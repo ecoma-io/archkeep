@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 // A feature-sliced Nx workspace with official generic rule composition.
 //
 // This fixture proves that shipped presets, official custom rules, and fitness
@@ -19,9 +23,14 @@
 // Why tag-cardinality: It's the simplest official rule to demonstrate composition,
 // with clear semantics (one feature: per slice) that complement the preset.
 
-/** Copy the sha256 from the catalog (verified to match the sidecar elsewhere). */
-export const TAG_CARDINALITY_SHA256 =
-  "56c907346f8b8eca6abc5b399419b7fbb1f1ecea1d61b26d917500968efb4ee4";
+/** Read the sha256 from the rule's sidecar file at fixture load time. */
+export const TAG_CARDINALITY_SHA256 = readFileSync(
+  resolve(
+    fileURLToPath(import.meta.url),
+    "../../../../archkeep-rules/rules/tag-cardinality.wasm.sha256",
+  ),
+  "utf-8",
+).trim();
 
 /** Nx project graph: load profile + declare custom rules in same boundary config. */
 export const NX_JSON = `{
