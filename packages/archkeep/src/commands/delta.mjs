@@ -19,8 +19,9 @@
  * Unlike `diff` — which compares two GRAPH snapshots edge by edge and never
  * exits 1 — `delta` is a gate: a non-waived introduced violation is a finding
  * (exit 1), which is the whole point of carrying re-judgeable evidence rather
- * than a graph. That makes `delta` the third verb whose verdict carries
- * exit 1, beside `check` and `fitness`.
+ * than a graph. That made `delta` the third verb whose verdict carries
+ * exit 1, beside `check` and `fitness`; `./change.mjs` later became the
+ * fourth, over a different question — declared intent versus observed delta.
  *
  * Refusals (each a throw, exit 3 upstream — a delta that could not honestly
  * classify must never read as "no change"):
@@ -75,11 +76,17 @@ const { name: TOOL_NAME, version: TOOL_VERSION } = require("../../package.json")
  * Refuses the two head states no delta side may be built over, shared by both
  * modes: the unregistered-plugin graph and incomplete analysis coverage.
  *
+ * Exported since `change` arrived because that command builds its comparison
+ * over the same two head states — a graph that under-represents the tree and
+ * an analysis with holes would reconcile a declaration against architecture
+ * nobody observed — and a second copy of the refusal is where the two
+ * commands would drift into answering "may this head be judged?" differently.
+ *
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {string} activity Which mode is refusing, for the message.
  * @throws {Error} on either condition.
  */
-function refuseUnjudgeableHead(commandContext, activity) {
+export function refuseUnjudgeableHead(commandContext, activity) {
   const { provider, pluginGap } = commandContext;
   if (provider === "nx" && !pluginGap.registered && pluginGap.manifests.length > 0) {
     throw new Error(
@@ -232,11 +239,16 @@ export function evidenceGraphToProjectGraph(storedGraph) {
  * head does not already claim — so a base-side record living in a directory
  * the head no longer has still attributes to the project that owned it.
  *
+ * Exported for `./change.mjs`, which classifies the same two evidence sets
+ * through `./delta-classify.mjs` and must attribute unresolvable records the
+ * same way a delta does — a second attribution rule beside this one is how
+ * the two commands would disagree about which project carried a site.
+ *
  * @param {object} headGraph The current run's graph (`nodes` map).
  * @param {object[]} baselineProjects The snapshot's stored project rows.
  * @returns {(record: object) => string|null}
  */
-function sourceProjectAttributor(headGraph, baselineProjects) {
+export function sourceProjectAttributor(headGraph, baselineProjects) {
   /** @type {Map<string, string>} root → project name, head winning ties. */
   const byRoot = new Map();
   for (const node of Object.values(headGraph.nodes ?? {})) {

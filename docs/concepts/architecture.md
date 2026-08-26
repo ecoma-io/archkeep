@@ -121,7 +121,7 @@ that looked and found nothing — and that holds for a declared gate exactly as
 it holds for a file: a rule that trapped, or whose artifact would not load, is
 never a rule that found nothing.
 
-## The nineteen commands
+## The twenty commands
 
 | command      | what it does                                                                          | finds violations |
 | ------------ | ------------------------------------------------------------------------------------- | ---------------- |
@@ -129,6 +129,7 @@ never a rule that found nothing.
 | `graph`      | Prints the project graph as a deterministic snapshot                                  | no               |
 | `diff`       | Compares two graph snapshots, with optional rule-impact analysis                      | no               |
 | `delta`      | Classifies violations between a captured evidence baseline and head                   | yes — exits 1    |
+| `change`     | Reconciles a declared change intent against the architectural delta                   | yes — exits 1    |
 | `drift`      | Compares the observed architecture against the declared intent                        | no               |
 | `discover`   | Reports observed facts; `--propose` derives candidate architecture, never written     | no               |
 | `reconcile`  | Scores the observed side against the declared model; `--propose` derives repair edits | no               |
@@ -145,10 +146,12 @@ never a rule that found nothing.
 | `provenance` | Reports the governance row schema and the run's origin                                | no               |
 | `adr`        | Lists recorded architecture decisions and what each binds (`docs/adr/`)               | no               |
 
-`check` is the only command that exits 1 on boundary findings — with two
+`check` is the only command that exits 1 on boundary findings — with three
 companions: `fitness` exits 1 when a declared function fails (a failing fitness
-function is a finding, not a print job), and `delta` exits 1 when the compared
-change introduced a violation no active waiver covers. The other fifteen are
+function is a finding, not a print job), `delta` exits 1 when the compared
+change introduced a violation no active waiver covers, and `change` exits 1
+when the change produced architectural consequences its declaration did not
+cover (or skipped ones it did). The other sixteen are
 descriptive or
 proposal-only: they answer questions about the architecture without claiming a
 violation. `context` answers the question an agent asks _before_ editing (what
@@ -158,7 +161,9 @@ violation is reported (why did this one fail?). `diff` answers the question
 across a single change (what changed, and what boundary implications did the
 change carry?), and `delta` answers its violation half as a gate (which
 violations did this change introduce or resolve, judged under the current
-law — [../usage/delta.md](../usage/delta.md)); `history` answers it across time (how did the architecture
+law — [../usage/delta.md](../usage/delta.md)); `change` answers its
+declaration half as a gate too (did the delta match what the change declared?
+— [../usage/change.md](../usage/change.md)); `history` answers it across time (how did the architecture
 evolve, and which of those changes were architectural, policy, or provider?);
 `drift` answers it in the present tense (does the code that exists agree with
 the architecture that was declared?); `reconcile --propose` and

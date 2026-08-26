@@ -22,7 +22,7 @@
  * completed-and-descriptive, 1 findings, 2 usage, 3 could-not-look.
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -146,6 +146,7 @@ const world = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-"));
 const brokenRoot = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-broken-"));
 const incompleteRoot = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-incomplete-"));
 const commitlessRoot = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-commitless-"));
+const changeRoot = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-change-"));
 const artifactsDir = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-artifacts-"));
 const histDir = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-hist-"));
 const emptyHistDir = mkdtempSync(join(tmpdir(), "archkeep-exit-matrix-hist-empty-"));
@@ -155,6 +156,7 @@ afterAll(() => {
     brokenRoot,
     incompleteRoot,
     commitlessRoot,
+    changeRoot,
     artifactsDir,
     histDir,
     emptyHistDir,
@@ -213,6 +215,26 @@ spawnSync(
   { cwd: commitlessRoot, encoding: "utf8", timeout: SPAWN_BUDGET_MS, killSignal: "SIGKILL" },
 );
 
+// The change world: a REAL repository with one commit, because the `change`
+// contract pins its base by provenance commit — the one verb whose happy path
+// cannot run without git being able to name the tree. Same identity hygiene
+// as every fixture: the commit's author is not this machine.
+writeTree(changeRoot, {
+  "nx.json": NX_JSON,
+  "module-boundaries.config.mjs": PERMISSIVE_LAW,
+});
+spawnSync("git", ["init", "-q", "-b", "main"], {
+  cwd: changeRoot,
+  encoding: "utf8",
+  timeout: SPAWN_BUDGET_MS,
+  killSignal: "SIGKILL",
+});
+spawnSync(
+  "git",
+  ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "base"],
+  { cwd: changeRoot, encoding: "utf8", timeout: SPAWN_BUDGET_MS, killSignal: "SIGKILL" },
+);
+
 /**
  * Each world's injected outside: cwd plus the two seams. Real git is NOT
  * among them — the healthy worlds are not repositories, so provenance is
@@ -252,6 +274,11 @@ const seamFor = {
     readGraph: () => ({ nodes: {}, dependencies: {} }),
     listFiles: () => ["nx.json"],
   }),
+  change: () => ({
+    cwd: changeRoot,
+    readGraph: () => GRAPH,
+    listFiles: () => ["nx.json", "module-boundaries.config.mjs"],
+  }),
 };
 
 /** Capturing streams for one in-process run. */
@@ -263,6 +290,9 @@ const streams = () => {
 
 let baseline;
 let deltaBaseline;
+let changeBaseline;
+let changeIntent;
+let changeIntentWrongBase;
 beforeAll(async () => {
   // `diff` compares against a snapshot the tool itself wrote, and
   // `health`/`report`/`debt` read a history the tool itself captured — both
@@ -279,6 +309,34 @@ beforeAll(async () => {
   expect(await runCli(["delta", "--capture", "--output", deltaBaseline], deltaCaptureRun)).toBe(
     EXIT.ok,
   );
+
+  // `change` reads an evidence baseline captured in its own committed world
+  // (its manifest pins the provenance commit) plus two manifests written from
+  // that snapshot's own provenance: the correct pin for the ok row, and a
+  // deliberately wrong one for the refused row — the quiet-direction case,
+  // which must exit 3 rather than reconcile against a base nobody declared.
+  changeBaseline = join(artifactsDir, "change-baseline.json");
+  const changeCaptureRun = { ...streams(), ...seamFor.change() };
+  expect(await runCli(["delta", "--capture", "--output", changeBaseline], changeCaptureRun)).toBe(
+    EXIT.ok,
+  );
+  const capturedCommit = JSON.parse(readFileSync(changeBaseline, "utf8")).provenance.commit;
+  const manifestFor = (commit) =>
+    `${JSON.stringify(
+      {
+        version: "1",
+        base: { commit },
+        projects: { add: [], remove: [] },
+        edges: { add: [], remove: [] },
+        constraints: {},
+      },
+      null,
+      2,
+    )}\n`;
+  changeIntent = join(artifactsDir, "change-intent.json");
+  writeFileSync(changeIntent, manifestFor(capturedCommit));
+  changeIntentWrongBase = join(artifactsDir, "change-intent-wrong-base.json");
+  writeFileSync(changeIntentWrongBase, manifestFor("0".repeat(40)));
 });
 
 /**
@@ -322,6 +380,22 @@ const MATRIX = {
     refused: {
       world: "world",
       argv: () => ["delta", join(artifactsDir, "no-such-evidence.json")],
+      exit: EXIT.error,
+    },
+  },
+  change: {
+    // The committed change world, its own baseline captured there, and a
+    // manifest pinning that snapshot's real provenance commit: matched, 0.
+    ok: {
+      world: "change",
+      argv: () => ["change", changeBaseline, "--intent", changeIntent],
+      exit: EXIT.ok,
+    },
+    refused: {
+      // The same everything, pinned to a commit the snapshot was never
+      // captured at — unproven (3), never a quiet match.
+      world: "change",
+      argv: () => ["change", changeBaseline, "--intent", changeIntentWrongBase],
       exit: EXIT.error,
     },
   },

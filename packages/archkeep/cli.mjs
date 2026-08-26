@@ -51,15 +51,19 @@
  * tree is dirty" from "you typed it wrong" from "the checker itself broke":
  *   0  no violations, and every selected file was analyzed
  *   1  findings — boundary violations, go.work drift, dead tsconfig path
- *      aliases, or architecture-intent findings. `check` is the only command
- *      that can produce this exit code — every other verb this table might grow
+ *      aliases, architecture-intent findings, a non-waived violation `delta`
+ *      classifies as introduced, or a change-intent reconciliation that found
+ *      undeclared material changes, unfulfilled declarations, or a failed
+ *      declared constraint. `check`, `fitness`, `delta` and `change` are the
+ *      verbs whose verdicts carry this code — every other verb in this table
  *      only ever reads.
  *   2  usage error — unknown command, unknown flag, missing argument, path
  *      outside the tree
  *   3  no verdict — no workspace, malformed config, the graph provider or git
  *      failed, a selected file could not be analyzed, an architecture-intent
- *      boundary matched no observed project, or a `boundarySuppressions` row
- *      accepts nothing this run judged. Distinct from
+ *      boundary matched no observed project, a `boundarySuppressions` row
+ *      accepts nothing this run judged, or a change intent could not be
+ *      verified against its declared base. Distinct from
  *      1 on purpose: a checker that could not look must never be mistaken for
  *      one that looked and found nothing.
  *
@@ -109,6 +113,7 @@ import { discoverCommand } from "./src/commands/discover.mjs";
 import { driftCommand } from "./src/commands/drift.mjs";
 import { fitnessCommand } from "./src/commands/fitness.mjs";
 import { reconcileCommand } from "./src/commands/reconcile.mjs";
+import { changeCommand } from "./src/commands/change.mjs";
 import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
 import { historyCommand } from "./src/commands/history.mjs";
 import { trajectoryCommand } from "./src/commands/trajectory.mjs";
@@ -1189,6 +1194,108 @@ async function runReconcile(options, { cwd, env }) {
 }
 
 /**
+ * `change`'s `run`: resolves the command context and the boundary law, drives
+ * `changeCommand` over the baseline evidence snapshot and the intent manifest,
+ * writes the report where it belongs, and returns the process's exit code.
+ *
+ * The fourth verb whose verdict carries exit 1, beside `check`, `fitness` and
+ * `delta`: an undeclared material change, an unfulfilled declaration, or a
+ * failed declared constraint is a finding; an unproven base identity or an
+ * undeterminable constraint is a no-verdict. The workspace-law axis the
+ * envelope reports is informational — it never moves this exit code, because
+ * `check` remains the authority on the law.
+ *
+ * @param {{format: string, output: string|null, config: string|null,
+ *   intent: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function,
+ *   listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runChange(options, { cwd, env }) {
+  if (options.paths.length !== 1) {
+    env.err(
+      `archkeep: change takes exactly one positional argument (the baseline evidence snapshot ` +
+        `from 'delta --capture'); got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+  if (!options.intent) {
+    env.err(
+      "archkeep: change needs '--intent <file>' naming the change-intent manifest — without a " +
+        "declaration there is nothing to reconcile against",
+    );
+    return EXIT.usage;
+  }
+
+  const baselinePath = isAbsolute(options.paths[0])
+    ? options.paths[0]
+    : resolve(cwd, options.paths[0]);
+  const intentPath = isAbsolute(options.intent) ? options.intent : resolve(cwd, options.intent);
+
+  // A self-footgun guard, the same shape `history`'s holds: writing the
+  // reconciliation report over the very manifest this run just read would
+  // destroy the declaration it verified, with the loss surfacing only later —
+  // the first time someone tries to re-run the verification.
+  if (options.output) {
+    const outputAbs = isAbsolute(options.output)
+      ? resolve(options.output)
+      : resolve(cwd, options.output);
+    if (outputAbs === intentPath) {
+      env.err(
+        `archkeep: --output '${options.output}' resolves to the change-intent manifest itself — ` +
+          `overwriting the declaration with its own reconciliation report would destroy it. ` +
+          `Write the report somewhere else.`,
+      );
+      return EXIT.usage;
+    }
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    // Declared constraints are judged under whichever law THIS run resolves,
+    // and the envelope records that law's fingerprint beside the baseline's —
+    // the same loading every judging command does (`resolvePolicy`),
+    // profile-aware the same way `check` is.
+    const { config } = await resolvePolicy(options, commandContext, cwd);
+
+    result = await changeCommand(baselinePath, intentPath, commandContext, { config });
+  } catch (error) {
+    const usageError = error instanceof UsageError;
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
+    env.err(
+      `archkeep: change ${result.changeIntent.reconciliation.verdict} ` +
+        `(+${result.changeIntent.reconciliation.matched.length} matched, ` +
+        `!${result.changeIntent.reconciliation.unexpected.length} undeclared, ` +
+        `?${result.changeIntent.reconciliation.missingExpected.length} unfulfilled) → ${options.output}`,
+    );
+  } else {
+    env.out(report);
+  }
+
+  // The verdict fold `changeCommand` computed, mapped here the way `delta`'s
+  // and `fitness`' are.
+  return (
+    { ok: EXIT.ok, findings: EXIT.violations, "no-verdict": EXIT.error }[result.status] ??
+    EXIT.error
+  );
+}
+
+/**
  * `waivers`' `run`: resolves the command context, drives `waiversCommand`,
  * writes the report where it belongs, and returns the process's exit code.
  *
@@ -2209,6 +2316,54 @@ const DELTA_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `change`'s flags: text or JSON envelope, optional file output, and the
+ * required `--intent` naming the change-intent manifest. `--config` joins for
+ * the same reason `delta`'s does: declared constraints are re-judged under
+ * whichever law this run resolves.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const CHANGE_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--intent",
+    key: "intent",
+    arg: "<file>",
+    describe: Object.freeze([
+      "The change-intent manifest declaring the material",
+      "architectural consequences this change expects",
+      "(required; see docs/usage/change.md)",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: ({ boundaryConfig, inline }) =>
+      Object.freeze([
+        "Read the boundary law from here instead of",
+        inline
+          ? "the inline boundaryConfig in archkeep.json"
+          : `<workspace root>/${boundaryConfig}`,
+      ]),
+  }),
+]);
+
+/**
  * `drift`'s flags: text or JSON envelope, optional file output. The intent is
  * always read from the tracked root `architecture-intent.json` — the same one
  * `check` judges — so there is no `--config` flag: a descriptive comparison
@@ -2763,6 +2918,16 @@ const COMMANDS = Object.freeze({
     formats: DELTA_FORMATS,
     booleans: Object.freeze(["capture"]),
     run: runDelta,
+  }),
+  change: Object.freeze({
+    name: "change",
+    args: "<baseline> --intent <file>",
+    summary: "Reconcile a declared change intent against the architectural delta",
+    flagHelp: CHANGE_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(CHANGE_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, config: null, intent: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runChange,
   }),
   discover: Object.freeze({
     name: "discover",
