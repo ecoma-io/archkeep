@@ -525,6 +525,82 @@ const VIOLATING_FILES_MAVEN = {
     "package com.example.test.app\n\nclass Api\n",
 };
 
+/**
+ * The Gradle consumer fixture: an `archkeep.json` root whose projects are
+ * anchored by tracked `settings.gradle` files — the same contract the Maven
+ * face tests, but for Gradle manifests instead of Maven poms. The packed
+ * artifact must discover projects from settings files alone (native inference
+ * over the default manifest list), draw BOTH track kinds for one pair —
+ * the Gradle project's declared dependency and a written Kotlin import —
+ * and the graph must include edges from both sources.
+ */
+function fixtureFilesGradle(packageName, peers, packageManager) {
+  return {
+    "package.json": `${JSON.stringify(
+      {
+        name: "consumer-gradle",
+        private: true,
+        type: "module",
+        packageManager,
+        devDependencies: {
+          [packageName]: "*",
+          typescript: peers.typescript,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "archkeep.json": `${JSON.stringify(
+      {
+        boundaryConfig: "module-boundaries.config.mjs",
+        projects: {
+          declared: [
+            { root: "libs/gradle-core", name: "gradle-core", tags: ["layer:core"] },
+            { root: "libs/gradle-app", name: "gradle-app", tags: ["layer:app"] },
+          ],
+        },
+        coverage: {
+          exempt: [
+            {
+              path: "module-boundaries.config.mjs",
+              reason: "workspace tooling config at the root, not itself a project",
+            },
+          ],
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "module-boundaries.config.mjs": BOUNDARY_CONFIG,
+    ".gitignore": "node_modules/\nbuild/\n",
+    // Gradle settings file at the root — no declared project owns it, which is
+    // the reactor shape the reader must handle (path-style includes under libs/)
+    "settings.gradle":
+      'rootProject.name = "gradle-consumer"\ninclude("libs:gradle-core", "libs:gradle-app")\n',
+    // Core project - Gradle build and Kotlin source
+    "libs/gradle-core/build.gradle": "dependencies { }\n",
+    "libs/gradle-core/src/main/kotlin/com/example/test/core/Name.kt":
+      "package com.example.test.core\n\nclass Name {}\n",
+    // App project - Gradle build with dependency and Kotlin source
+    "libs/gradle-app/build.gradle":
+      'dependencies { implementation project(":libs:gradle-core") }\n',
+    "libs/gradle-app/src/main/kotlin/com/example/test/app/App.kt":
+      "package com.example.test.app\n\nimport com.example.test.core.Name\n\nclass App { val name: Name = Name() }\n",
+  };
+}
+
+/** The file that makes the Gradle tree dirty: `gradle-core` reaching up into
+ *  `gradle-app`, the same layer inversion the other faces pin — written in
+ *  Kotlin, so only the packed artifact's JVM analyzer can see it. The app side
+ *  drops its core import so the single violation cannot read as a cycle. */
+const VIOLATING_FILES_GRADLE = {
+  "libs/gradle-core/build.gradle": 'dependencies { implementation project(":libs:gradle-app") }\n',
+  "libs/gradle-core/src/main/kotlin/com/example/test/core/Violate.kt":
+    "package com.example.test.core\n\nimport com.example.test.app.App\n\nclass Violate { val app: App = App() }\n",
+  "libs/gradle-app/src/main/kotlin/com/example/test/app/App.kt":
+    "package com.example.test.app\n\nclass App {}\n",
+};
+
 const failures = [];
 const note = (text) => console.log(text);
 
@@ -1374,6 +1450,68 @@ try {
       /Violate\.java:\d+:\d+/.test(dirtyMavenOutput) &&
       /ViolateKotlin\.kt:\d+:\d+/.test(dirtyMavenOutput),
     dirtyMavenOutput || "(no output)",
+  );
+
+  // --- the Gradle consumer: an `archkeep.json` root whose projects are
+  // anchored by tracked `settings.gradle` files. Discovery here is inference
+  // over the default manifest list — no declared row names a manifest — and
+  // the graph carries both track kinds for one pair: the Gradle project's
+  // declared dependency AND a written Kotlin import, each attributed to its
+  // own source file. This proves the Gradle reader works end-to-end.
+  const consumerGradle = join(workdir, "consumer-gradle");
+  mkdirSync(consumerGradle);
+
+  const filesGradle = fixtureFilesGradle(packageName, peers, packageManager);
+  filesGradle["package.json"] = filesGradle["package.json"].replace('"*"', tarballRef);
+  write(consumerGradle, filesGradle);
+  writeFileSync(
+    join(consumerGradle, "pnpm-workspace.yaml"),
+    "packages: []\nallowBuilds:\n  lefthook: false\n",
+    "utf8",
+  );
+  commitTree(consumerGradle, "the clean tree", true);
+
+  const installedGradle = run("pnpm", ["install", "--no-frozen-lockfile"], consumerGradle);
+  if (installedGradle.status !== 0) {
+    console.error(installedGradle.stdout ?? "");
+    console.error(installedGradle.stderr ?? "");
+    console.error(
+      "the packed tarball could not be installed into a fresh workspace (gradle path).",
+    );
+    process.exit(1);
+  }
+  note(`installed into ${consumerGradle}`);
+
+  // Clean reactor: both tracks draw edges, so the verdict must state real
+  // coverage — imports from the .kt files, projects from the settings files.
+  const cleanGradle = run("pnpm", ["exec", "archkeep", "check"], consumerGradle);
+  check(
+    "the checker exits 0 on a clean gradle reactor",
+    cleanGradle.status === 0,
+    `exit ${cleanGradle.status}\n${cleanGradle.stdout ?? ""}${cleanGradle.stderr ?? ""}`,
+  );
+  check(
+    "the clean gradle verdict states it inspected something",
+    /[1-9]\d* import/.test(cleanGradle.stdout ?? "") &&
+      /[1-9]\d* project/.test(cleanGradle.stdout ?? ""),
+    `stdout: ${cleanGradle.stdout ?? "(empty)"}`,
+  );
+
+  // Violating reactor: gradle-domain reaching up into gradle-app, written in Kotlin.
+  write(consumerGradle, VIOLATING_FILES_GRADLE);
+  commitTree(consumerGradle, "domain reaches up into app", false);
+  const dirtyGradle = run("pnpm", ["exec", "archkeep", "check"], consumerGradle);
+  const dirtyGradleOutput = `${dirtyGradle.stdout ?? ""}${dirtyGradle.stderr ?? ""}`;
+  check(
+    "the checker exits 1 on a violating gradle reactor",
+    dirtyGradle.status === 1,
+    `exit ${dirtyGradle.status}\n${dirtyGradleOutput}`,
+  );
+  check(
+    "the gradle violation names its rule and its kotlin file:line:column",
+    dirtyGradleOutput.includes("onlyTagsConstraintViolation") &&
+      /Violate\.kt:\d+:\d+/.test(dirtyGradleOutput),
+    dirtyGradleOutput || "(no output)",
   );
 } finally {
   rmSync(workdir, { recursive: true, force: true });

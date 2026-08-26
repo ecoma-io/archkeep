@@ -201,6 +201,14 @@ export const DEFAULT_MANIFEST_NAMES = Object.freeze([
   // pom-discovered projects land on their directory basename unless a
   // declared row names them.
   "pom.xml",
+  // Gradle: settings.gradle / settings.gradle.kts anchors a Gradle build
+  // (ADR 0005 Decision 2). Identity is the root project name and included
+  // projects from the settings file; edges are read from build.gradle /
+  // build.gradle.kts by `../../analysis/jvm/gradle.mjs`. The settings file
+  // is the discovery manifest — it defines the reactor structure — while
+  // the build files hold the dependency declarations.
+  "settings.gradle",
+  "settings.gradle.kts",
 ]);
 
 const PROJECT_TYPES = ["app", "lib", "e2e"];

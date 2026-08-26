@@ -1421,6 +1421,120 @@ export const ARCHITECTURE_CORPUS = [
     ],
   },
 
+  // ------------------------------------------------ layered architecture (Gradle, Kotlin)
+  {
+    id: "layered-architecture-in-gradle-kotlin",
+    style: "layered (relaxed)",
+    languages: ["kotlin"],
+    intent:
+      "The relaxed layering of `layered-architecture-in-java`, restated with Gradle manifests and Kotlin sources to prove the Gradle reader works alongside the JVM analyzer: settings.gradle defines the reactor, build.gradle files declare project dependencies, and the same layering rules apply with Kotlin sources instead of Java.",
+    projects: [
+      { name: "g-domain", root: "libs/g-domain", tags: ["layer:domain"] },
+      { name: "g-usecase", root: "libs/g-usecase", tags: ["layer:usecase"] },
+      { name: "g-adapter", root: "libs/g-adapter", tags: ["layer:adapter"] },
+      { name: "g-util", root: "libs/g-util", tags: [] },
+    ],
+    depConstraints: [
+      { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+      { sourceTag: "layer:usecase", onlyDependOnLibsWithTags: ["layer:domain", "layer:usecase"] },
+      {
+        sourceTag: "layer:adapter",
+        onlyDependOnLibsWithTags: ["layer:domain", "layer:usecase", "layer:adapter"],
+        bannedExternalImports: ["vendor.test.shellsdk*"],
+      },
+    ],
+    files: {
+      // Gradle settings file at the root — no declared project owns it
+      "settings.gradle":
+        'rootProject.name = "gradle-layers"\ninclude("libs:g-domain", "libs:g-usecase", "libs:g-adapter", "libs:g-util")\n',
+      // Domain layer - Gradle build and Kotlin source
+      "libs/g-domain/build.gradle": "dependencies { }\n",
+      "libs/g-domain/src/main/kotlin/test/corpus/gradle/domain/Policy.kt":
+        "package test.corpus.gradle.domain\n\nclass Policy {}\n",
+      // Use case layer - Gradle build with violations
+      "libs/g-usecase/build.gradle":
+        'dependencies {\n  implementation project(":libs:g-domain")\n}\n',
+      "libs/g-usecase/src/main/kotlin/test/corpus/gradle/usecase/Service.kt":
+        "package test.corpus.gradle.usecase\n\nimport test.corpus.gradle.domain.Policy\nimport test.corpus.gradle.adapter.Repo\n\nclass Service { val p: Policy = Policy(); val r: Repo = Repo() }\n",
+      "libs/g-usecase/src/main/kotlin/test/corpus/gradle/usecase/Sdk.kt":
+        "package test.corpus.gradle.usecase\n\nimport vendor.test.shellsdk.Shell\n\nclass Sdk { val shell: Shell = Shell() }\n",
+      // Adapter layer - Gradle build with violations
+      "libs/g-adapter/build.gradle": 'dependencies { implementation project(":libs:g-domain") }\n',
+      "libs/g-adapter/src/main/kotlin/test/corpus/gradle/adapter/Repo.kt":
+        "package test.corpus.gradle.adapter\n\nimport test.corpus.gradle.domain.Policy\nimport test.corpus.gradle.adapter.internal.Store\n\nclass Repo { val p: Policy = Policy(); val store: Store = Store() }\n",
+      "libs/g-adapter/src/main/kotlin/test/corpus/gradle/adapter/internal/Store.kt":
+        "package test.corpus.gradle.adapter.internal\n\nclass Store {}\n",
+      "libs/g-adapter/src/main/kotlin/test/corpus/gradle/adapter/Gateway.kt":
+        "package test.corpus.gradle.adapter\n\nimport test.corpus.gradle.adapter.internal.Store\nimport vendor.test.shellsdk.Shell\n\nclass Gateway { val store: Store = Store(); val shell: Shell = Shell() }\n",
+      // Util layer - Gradle build and Kotlin source
+      "libs/g-util/build.gradle": "dependencies { }\n",
+      "libs/g-util/src/main/kotlin/test/corpus/gradle/util/Clock.kt":
+        "package test.corpus.gradle.util\n\nimport test.corpus.gradle.domain.Policy\n\nclass Clock { val p: Policy = Policy() }\n",
+    },
+    probes: [
+      {
+        file: "libs/g-domain/src/main/kotlin/test/corpus/gradle/domain/Policy.kt",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why: "The innermost layer importing nothing — recorded so the case's zero-finding claim about this file is a measurement, not an omission.",
+      },
+      {
+        file: "libs/g-usecase/src/main/kotlin/test/corpus/gradle/usecase/Service.kt",
+        imports: 2,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "test.corpus.gradle.adapter.Repo",
+            target: "g-adapter",
+          },
+        ],
+        denyAll: 2,
+        why: "One crossing the layering permits beside one it forbids, in one import list — the domain import must stay silent while the outward adapter import reports.",
+      },
+      {
+        file: "libs/g-usecase/src/main/kotlin/test/corpus/gradle/usecase/Sdk.kt",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The same external SDK the adapter layer is banned from, imported by a layer no ban row names — a dotted external ban binds the tag that carries it and nothing else.",
+      },
+      {
+        file: "libs/g-adapter/src/main/kotlin/test/corpus/gradle/adapter/Repo.kt",
+        imports: 2,
+        reports: [],
+        denyAll: 1,
+        why: "Both imports point inward (domain and internal store), so the adapter's own tag row permits every edge here — the domain import is expected; the internal one resolves to its own project and stays invisible even under deny-all.",
+      },
+      {
+        file: "libs/g-adapter/src/main/kotlin/test/corpus/gradle/adapter/Gateway.kt",
+        imports: 2,
+        reports: [
+          {
+            messageId: "bannedExternalImportsViolation",
+            specifier: "vendor.test.shellsdk.Shell",
+            target: "npm:vendor.test.shellsdk.Shell",
+          },
+        ],
+        denyAll: 1,
+        why: "The adapter layer's external ban fires here: the shell SDK is prohibited for layer:adapter, while the internal store import resolves to its own project and stays silent.",
+      },
+      {
+        file: "libs/g-util/src/main/kotlin/test/corpus/gradle/util/Clock.kt",
+        imports: 1,
+        reports: [
+          {
+            messageId: "projectWithoutTagsCannotHaveDependencies",
+            specifier: "test.corpus.gradle.domain.Policy",
+            target: "g-domain",
+          },
+        ],
+        denyAll: 1,
+        why: "A project no constraint row matches is an error, not a permission — Kotlin's content-derived package index attributes the file first, then the rule judges it like any other language's.",
+      },
+    ],
+  },
+
   // --------------------------------------- joint namespace (Java + Kotlin)
   {
     id: "joint-namespace-across-java-and-kotlin",

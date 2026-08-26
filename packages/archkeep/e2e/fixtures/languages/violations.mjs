@@ -115,3 +115,18 @@ export const KOTLIN_VIOLATION = {
   "libs/application/src/main/kotlin/com/example/application/App.kt":
     "package com.example.application\n\nclass App\n",
 };
+
+/**
+ * Gradle violation: `domain` project depends on `:application`.
+ * Replaces `libs/domain/build.gradle` to add the forbidden upward dependency,
+ * and adds a Domain.kt importing upward alongside it. Also replaces
+ * `libs/application/src/main/kotlin/com/example/application/Application.kt` to
+ * remove the domain import and prevent a circular dependency.
+ */
+export const GRADLE_VIOLATION = {
+  "libs/domain/build.gradle": 'dependencies { implementation project(":libs:application") }\n',
+  "libs/domain/src/main/kotlin/com/example/domain/Violate.kt":
+    "package com.example.domain\n\nimport com.example.application.Application\n\nclass Violate { val app: Application = Application() }\n",
+  "libs/application/src/main/kotlin/com/example/application/Application.kt":
+    "package com.example.application\n\nclass Application\n",
+};

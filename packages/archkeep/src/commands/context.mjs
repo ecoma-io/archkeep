@@ -27,6 +27,7 @@ import { join } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
 import { mavenManifestFailures } from "../analysis/jvm/maven.mjs";
+import { gradleManifestFailures } from "../analysis/jvm/gradle.mjs";
 import { languageOf } from "../analysis/registry.mjs";
 import { pythonUnmodelledFailures } from "../analysis/python.mjs";
 import { fileFailure } from "../analysis/source-util.mjs";
@@ -615,6 +616,7 @@ export function resolveCommandContext(
       // it (`../analysis/python.mjs`'s `pythonUnmodelledFailures`).
       ...pythonUnmodelledFailures(workspace),
       ...mavenManifestFailures(workspace),
+      ...gradleManifestFailures(workspace),
     ];
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
     analyzed = analyzedFiles.length;
@@ -724,6 +726,7 @@ export function resolveCommandContext(
       ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Moon project graph" }),
       ...pythonUnmodelledFailures(workspace),
       ...mavenManifestFailures(workspace),
+      ...gradleManifestFailures(workspace),
     ];
     unclaimedGap = { files: unclaimedFiles };
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
@@ -786,6 +789,7 @@ export function resolveCommandContext(
       ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Nx project graph" }),
       ...pythonUnmodelledFailures(workspace),
       ...mavenManifestFailures(workspace),
+      ...gradleManifestFailures(workspace),
     ];
     unclaimedGap = { files: unclaimedFiles };
     // Same reason as the Moon branch above: `coverage.exempt` is a native-only

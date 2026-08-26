@@ -12,15 +12,15 @@ never says a boundary _was crossed_, and `Cargo.toml:1` is not a location anyone
 can act on. The two disagreeing is itself information: a declared-but-unused
 dependency and an undeclared-but-imported one are both findings.
 
-| extension                                             | language                  | edges from                                      | analysis |
-| ----------------------------------------------------- | ------------------------- | ----------------------------------------------- | -------- |
-| `.go`                                                 | Go                        | `go.mod`                                        | ✅       |
-| `.rs`                                                 | Rust                      | `Cargo.toml`                                    | ✅       |
-| `.py`                                                 | Python                    | `pyproject.toml` (uv, Poetry, PDM)              | ✅       |
-| `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` | TypeScript and JavaScript | Nx's own inference                              | ✅       |
-| `.vue`                                                | Vue                       | Nx's own inference                              | ✅       |
-| `.java`                                               | Java                      | root `pom.xml` (coordinates), plus import sites | ✅       |
-| `.kt` `.kts`                                          | Kotlin                    | shared with Java                                | ✅       |
+| extension                                             | language                  | edges from                                                    | analysis |
+| ----------------------------------------------------- | ------------------------- | ------------------------------------------------------------- | -------- |
+| `.go`                                                 | Go                        | `go.mod`                                                      | ✅       |
+| `.rs`                                                 | Rust                      | `Cargo.toml`                                                  | ✅       |
+| `.py`                                                 | Python                    | `pyproject.toml` (uv, Poetry, PDM)                            | ✅       |
+| `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` | TypeScript and JavaScript | Nx's own inference                                            | ✅       |
+| `.vue`                                                | Vue                       | Nx's own inference                                            | ✅       |
+| `.java`                                               | Java                      | root `pom.xml` or Gradle `settings.gradle`, plus import sites | ✅       |
+| `.kt` `.kts`                                          | Kotlin                    | shared with Java                                              | ✅       |
 
 Anything else is a no-op: the dispatcher is pointed at every tracked file, and
 `README.md` is not an error. A file whose extension _is_ on this list but whose
@@ -529,6 +529,71 @@ Java's do.
 **What the record leaves null:** exactly what Java's record leaves null —
 `file` always null, `kind` always `"static"`, `spelling.path` always false,
 `spelling.relative` true when the import resolved into its own project.
+
+---
+
+## Gradle
+
+**Identity and reactor structure come from the settings file.** A Gradle
+workspace is anchored by `settings.gradle` or `settings.gradle.kts`: the
+`rootProject.name` and `include(...)` declarations define which directory
+corresponds to which project (ADR 0005 Decision 2). The settings file is
+looked for at the workspace root and at each declared project's root — the
+two locations a reactor root takes — so a settings file sitting at a root no
+declared project owns still anchors the whole reactor; a settings file
+anywhere else is unread. Every declared project whose directory a settings
+file covers gets its own build file read; a nested second build file inside
+one project directory draws no graph edge.
+
+**Edges come from build file dependency declarations.** `build.gradle` /
+`build.gradle.kts` `project(":x")` references in ANY configuration draw
+edges — `implementation`, `api`, `testImplementation`, `compileOnly`,
+`runtimeOnly`, `annotationProcessor`, and custom configurations are all read.
+Both Groovy DSL (quotes optional, parentheses optional) and Kotlin DSL (strings
+required) are supported. Every scope, including test, draws the same edge — the
+same project-granularity rule Maven's reader follows.
+
+**Version catalogs are not read in v1.** `libs.catalog.reference` forms are not
+resolved; a catalog entry that cannot be resolved to a workspace project stays
+silent (it may be an external Maven coordinate, a version reference, or a bundle).
+External `implementation "group:artifact:version"` dependencies are also not read
+— they resolve to artifacts from repositories, not to workspace projects, and
+belong to the external node synthesis layer when a rule needs a name.
+
+### Limits
+
+- **A multi-line include statement must have its arguments quoted.** The
+  settings-file reader handles multi-line `include("a", "b")` but not every
+  Groovy DSL variant — the v1 parser expects quoted strings in include calls.
+- **`includeBuild` is discovery-only in v1.** Composite builds are detected
+  but edges from included builds are not modeled — the reactor reads the
+  directory mapping, but project dependencies across composite boundaries draw
+  no edge.
+- **Block comments in settings files must be well-formed.** The reader strips
+  `/* ... */` comments before processing; a malformed block comment that
+  doesn't close is treated as malformed input.
+- **Version catalog references are not resolved.** `libs.bundles.testing` or
+  `libs.versions.lib` are not read in v1 — a catalog entry that cannot be
+  resolved to a workspace project stays silent.
+- **External dependency coordinates are not read.** `implementation
+"group:artifact:version"` forms are not modeled — they belong to the external
+  node synthesis layer when a rule needs a name.
+- **The root project's own build file needs a declared root.** When the
+  workspace root is no declared project, a root `build.gradle` is unread —
+  its `project(":x")` references claim nothing. Declare the root as a project
+  if its dependencies must be judged.
+- **Malformed reactors are loud, not empty.** An `include` onto an untracked
+  directory, a `project(":x")` no settings file defines, a reference whose
+  directory no declared project owns, a settings-less build file that declares
+  project references, and two settings files claiming the same directory all
+  fail the whole run (exit 3) naming the file — the go.work precedent. A
+  broken reactor read as "no dependencies" would mean "no drift" exactly
+  where the tree is most broken.
+
+A Gradle manifest edge is a graph fact, not an import record: it carries
+`source`, `target`, `sourceFile` (the declaring build file) and
+`type: "static"` — no positions, because a `project(":x")` line is a
+declaration, not a use site the report points a reader at.
 
 ---
 
