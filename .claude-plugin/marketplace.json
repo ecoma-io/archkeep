@@ -12,7 +12,7 @@
       "name": "archkeep",
       "source": "./",
       "version": "0.15.0",
-      "description": "Module-boundary diagnostics at edit time, and architecture agent skills, for Go, Rust, Python and Vue",
+      "description": "Module-boundary diagnostics at edit time, and architecture agent skills, for Go, Rust, Python, Vue and Java",
       "category": "productivity",
       "tags": [
         "nx",

@@ -64,17 +64,18 @@ out loud rather than implying with a checkmark.
 
 Against that bar, the state today:
 
-| language                  |  edges   | enforcement |          editor          | limits declared |
-| ------------------------- | :------: | :---------: | :----------------------: | :-------------: |
-| Go                        |    ✅    |     ✅      |      LSP · VS Code       |       ✅        |
-| Rust                      |    ✅    |     ✅      |      LSP · VS Code       |       ✅        |
-| Python                    |    ✅    |     ✅      |      LSP · VS Code       |       ✅        |
-| TypeScript and JavaScript | Nx's own |     ✅      | deliberately not claimed |       ✅        |
-| Vue                       | Nx's own |     ✅      |      LSP · VS Code       |       ✅        |
+| language                  |        edges        | enforcement |          editor          | limits declared |
+| ------------------------- | :-----------------: | :---------: | :----------------------: | :-------------: |
+| Go                        |         ✅          |     ✅      |      LSP · VS Code       |       ✅        |
+| Rust                      |         ✅          |     ✅      |      LSP · VS Code       |       ✅        |
+| Python                    |         ✅          |     ✅      |      LSP · VS Code       |       ✅        |
+| TypeScript and JavaScript |      Nx's own       |     ✅      | deliberately not claimed |       ✅        |
+| Vue                       |      Nx's own       |     ✅      |      LSP · VS Code       |       ✅        |
+| Java                      | `pom.xml` + imports |     ✅      |      LSP · VS Code       |       ✅        |
 
 _LSP_ means any LSP client reaches the diagnostics; Claude Code does, from this
 repository's own marketplace. _VS Code_ means `packages/archkeep-vscode`, which
-routes the same four extensions and starts the server the workspace has
+routes the same five extensions and starts the server the workspace has
 installed. The cell is not a checkmark because that client is not on the
 marketplace yet: it runs from a development host or the `.vsix` CI builds,
 verifies and attaches to each of its releases, so a developer who does not
@@ -95,7 +96,7 @@ registry disagree.
 ## How the next language earns its place
 
 Breadth is the goal, and breadth is also the way this project could quietly stop
-being trustworthy: five analyzers that each half-read their language would report
+being trustworthy: six analyzers that each half-read their language would report
 clean far more often than they report correctly, and every one of those clean
 reports would look exactly like the enforcement working.
 

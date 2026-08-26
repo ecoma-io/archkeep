@@ -12,13 +12,14 @@ never says a boundary _was crossed_, and `Cargo.toml:1` is not a location anyone
 can act on. The two disagreeing is itself information: a declared-but-unused
 dependency and an undeclared-but-imported one are both findings.
 
-| extension                                             | language                  | edges from                         | analysis |
-| ----------------------------------------------------- | ------------------------- | ---------------------------------- | -------- |
-| `.go`                                                 | Go                        | `go.mod`                           | ✅       |
-| `.rs`                                                 | Rust                      | `Cargo.toml`                       | ✅       |
-| `.py`                                                 | Python                    | `pyproject.toml` (uv, Poetry, PDM) | ✅       |
-| `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` | TypeScript and JavaScript | Nx's own inference                 | ✅       |
-| `.vue`                                                | Vue                       | Nx's own inference                 | ✅       |
+| extension                                             | language                  | edges from                                      | analysis |
+| ----------------------------------------------------- | ------------------------- | ----------------------------------------------- | -------- |
+| `.go`                                                 | Go                        | `go.mod`                                        | ✅       |
+| `.rs`                                                 | Rust                      | `Cargo.toml`                                    | ✅       |
+| `.py`                                                 | Python                    | `pyproject.toml` (uv, Poetry, PDM)              | ✅       |
+| `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` | TypeScript and JavaScript | Nx's own inference                              | ✅       |
+| `.vue`                                                | Vue                       | Nx's own inference                              | ✅       |
+| `.java`                                               | Java                      | root `pom.xml` (coordinates), plus import sites | ✅       |
 
 Anything else is a no-op: the dispatcher is pointed at every tracked file, and
 `README.md` is not an error. A file whose extension _is_ on this list but whose
@@ -27,13 +28,13 @@ language stays loud before its analyzer lands.
 
 ## Everything here is read statically
 
-No `go`, no `cargo`, no `uv`, no `python`, no `tsc` process. Manifests are parsed
-as data, sources are read as text.
+No `go`, no `cargo`, no `uv`, no `python`, no `tsc`, no `mvn`, no `gradle`, no
+JDK process. Manifests are parsed as data, sources are read as text.
 
 That is not minimalism. Nx computes the project graph on _every_ `nx`
-invocation, so a graph that needs four toolchains installed is a graph that fails
+invocation, so a graph that needs every toolchain installed is a graph that fails
 on the machine that does not have them — a lint-only CI job, or a contributor who
-touches none of the four languages. The cost of that choice is a set of parse
+touches none of them. The cost of that choice is a set of parse
 limits, and every one of them is listed below.
 
 **Every limit errs the same way.** The worst case of each is a _spurious record
@@ -415,6 +416,71 @@ do.
 too — measured, both engines report the same `messageId` and message on the same
 violation, differing only in column. This tool checks it anyway, as a second
 opinion the conformance suite holds to the same verdict.
+
+---
+
+## Java
+
+**Identity is the root `pom.xml`'s `(groupId, artifactId)`, on an
+`archkeep.json` workspace.** Every tracked root pom anchors a project, named by
+the same precedence as every other inferred manifest (declared row first,
+directory basename otherwise). groupId inherits along a parent chain found
+inside the tracked tree; a parent that is not a tracked pom leaves the child's
+coordinates unresolved, which draws its outbound edges but records the pom as a
+failure — nobody can name an edge TO it while its coordinates are unknown. On
+an Nx tree, nodes come from whatever inference plugins the workspace registers;
+this plugin adds import-derived and pom-coordinate edges beside them.
+
+**Versions are read for nothing.** Boundary edges need coordinate matching only,
+so `<dependencyManagement>`, BOM imports, version ranges, mediation and profile
+activation are out of scope by construction: no code reads a `<version>`
+element. `<profiles>` are not read either — reading them would fabricate edges
+from configurations that never activate.
+
+**Packages resolve through a content-derived index, because Java does not
+require directory = package.** The index reads every tracked `.java` file's
+`package` line (masked first, so commented-out declarations cannot claim
+ownership) and maps longest declared prefix to project. A `.kt` file's packages
+are in the SAME index — a mixed module compiles into one namespace — though
+`.kt` sources are analyzed only once the Kotlin language lands.
+
+**Extraction covers the four JLS §7.5 import forms** — single type, on-demand
+(`a.b.*`), static single member, static on-demand — over comment-and-literal-
+masked text. Comments are blanked, and so are string literals and text blocks:
+unlike Go, where the import path IS a string literal, nothing inside a JVM
+literal can contribute an import. Java block comments do not nest, and the mask
+scans them that way on purpose — treating one as nesting would swallow real
+imports below javadoc that quotes a code snippet.
+
+### Limits
+
+- **A multi-line import statement is not read.** The name must sit on the
+  declaration's own line. Every formatter formats imports onto one line, so a
+  formatted tree never meets this limit; the miss is silent for that import.
+- **Fully-qualified names used without an import are invisible.** Same-package
+  references and inline FQNs need no import statement, so import-only
+  extraction cannot see them. Source-level findings compensate only for what
+  manifests miss, not for this.
+- **Same-package cross-project references need no import** — the split-package
+  shape. Where two tracked projects declare the same deepest package prefix,
+  resolution refuses instead of picking: the site reports `resolved: null` with
+  a positioned failure naming every claimant, and no edge is drawn against a
+  guess.
+- **Kotlin backtick-quoted package segments do not resolve** — they match no
+  index entry, so imports of such a package classify as external.
+- **`.mvn/maven.config` is read at two locations only** — beside the workspace
+  root and beside the declaring pom. A deeper `.mvn` directory's properties
+  fail loudly wherever a placeholder needed them.
+- **A reactor drift is loud**: a `<module>` whose pom.xml is not a tracked file
+  fails discovery naming the aggregator — exit 3, never clean-over-a-hole.
+
+**What the record leaves null:** `resolved.file` is always null — an import
+names a package, not a file, and which source file supplies a type is a
+compiler question this static reader does not answer. `kind` is always
+`"static"`; there is no dynamic or type-only import form. `spelling.path` is
+always false; `spelling.relative` is true exactly when the import resolved into
+its own project — Java has no relative import form, so the bit reads what an
+import reached rather than how it was written.
 
 ---
 
