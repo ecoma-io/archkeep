@@ -12,8 +12,8 @@
  */
 
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, realpathSync } from "node:fs";
+import { resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { catalogViolations } from "./validator.mjs";
 
@@ -54,6 +54,17 @@ export function validateCatalogFiles(packageRoot) {
   // sha256 of the actual bytes on disk (or null if the file is missing)
   const artifactDigests = new Map();
 
+  // Resolve the package root to its real path once (symlinks resolved)
+  let rootReal;
+  try {
+    rootReal = realpathSync(packageRoot);
+  } catch (/** @type {unknown} */ error) {
+    throw new Error(
+      `package root at ${packageRoot} could not be resolved: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+
   if (Array.isArray(catalog.rules)) {
     for (const rule of catalog.rules) {
       if (rule && typeof rule.artifact === "string") {
@@ -61,11 +72,47 @@ export function validateCatalogFiles(packageRoot) {
         let digest = null;
 
         try {
+          // Prove containment BEFORE hashing: the resolved artifact must live
+          // inside the package root. Symlinks inside the package are allowed to
+          // point anywhere, but their realpath must still be under the root.
+          let artifactReal;
+          try {
+            artifactReal = realpathSync(artifactPath);
+          } catch (/** @type {unknown} */ error) {
+            // ENOENT is handled as "missing artifact" (null digest). Other errors
+            // (permission denied, not a file, etc.) are real problems and throw.
+            const code = /** @type {Error & { code?: string }} */ (error).code;
+            if (code === "ENOENT") {
+              // File missing — digest stays null, validator will report it
+            } else {
+              throw new Error(
+                `artifact at ${artifactPath} could not be read: ${error instanceof Error ? error.message : String(error)}`,
+                { cause: error },
+              );
+            }
+          }
+
+          // If we got a real path, prove containment
+          if (artifactReal) {
+            const isContained =
+              artifactReal === rootReal || artifactReal.startsWith(rootReal + sep);
+            if (!isContained) {
+              throw new Error(
+                `artifact "${rule.artifact}" declared in catalog resolves outside the package: ` +
+                  `resolved to ${artifactReal}, which is not under package root ${rootReal}`,
+              );
+            }
+          }
+
+          // Containment proven — hash the bytes
           const bytes = readFileSync(artifactPath);
           digest = createHash("sha256").update(bytes).digest("hex");
-        } catch {
-          // File missing or unreadable — digest stays null, the validator will
-          // report this as a violation
+        } catch (/** @type {unknown} */ error) {
+          // If this is our own containment error, re-throw it as-is
+          if (error instanceof Error && error.message.includes("resolves outside the package")) {
+            throw error;
+          }
+          // Other errors leave digest as null (already set above)
         }
 
         artifactDigests.set(rule.artifact, digest);

@@ -67,16 +67,24 @@ when the digests match.
 
 The sha256 digest in the catalog is the claim about the artifact. The validator
 reads the catalog, computes the actual sha256 of each artifact file on disk, and
-refuses the catalog if they differ. This is the integrity gate: a rule artifact
-is committed and published, and any change to those bytes would change the digest.
-A catalog that validated a changed digest would ship a lie.
+refuses the catalog if they differ. This is the integrity gate inside this package:
+it proves shape (the catalog schema is valid) and digest agreement (the hash on
+disk matches what the catalog declares).
 
-This is why the artifact path in the catalog is package-relative (`rules/<name>.wasm`).
-The same catalog entry resolves to the same bytes on every machine, and CI and
-reviewers stay in sync because they both verify against the same catalog.json.
-Because the crate builds every rule under one LTO unit, a change to shared code
-rotates every rule's digest together — the conformance suite is what proves the
-rebuilt bytes still answer the recorded verdicts.
+What the validator does NOT prove is that the artifact is runnable as the catalog
+claims — that the bytes load and self-describe with the name, contract, and needs
+the entry states. That proof lives in `packages/archkeep/src/conformance/official-rules.integration.test.mjs`,
+which loads every catalog artifact through the engine's REAL host at the catalog's
+digest and requires the describe document to match the catalog entry. That conformance
+suite runs in this repository's CI on every change, driving the actual host so a
+rebuilt artifact that stopped answering its recorded verdicts fails the build
+rather than a consumer's Tuesday.
+
+A consumer copying a catalog entry into their `customRules` row does not need the
+validator at all: their `check` refuses a mismatched artifact at load time, both
+by hash and by self-description. The validator's job is to hold the published
+catalog honest; the conformance suite's job is to hold the artifact itself honest.
+Two different claims, two different gates, two different packages.
 
 ## Contract version
 
