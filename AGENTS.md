@@ -22,7 +22,10 @@ the server. `packages/archkeep-mcp/` is the agent capability client: it exposes
 the engine's own command layer (`./commands` subpath, in-process) as eight MCP
 tools, read-only beside a `propose` that never decides — a client of the
 engine the way the VS Code one is, never a second implementation of it.
-The four `packages/archkeep-rule-sdk-*/` are bindings rather than
+`packages/archkeep-rules/` is the official rules catalog — documentation-as-data
+and an integrity gate for shipped rule artifacts (`catalog.json` plus a
+validator that verifies digests against actual bytes). The four
+`packages/archkeep-rule-sdk-*/` are bindings rather than
 engines: each is one language's typed way to author a custom rule and build it
 to the wasm the engine already runs, so none of them holds analysis either and
 none may grow a second opinion about what a verdict means — one contract, four

@@ -14,6 +14,12 @@
         "tags": ["type-package", "scope-nx", "layer:library", "stack:backend"]
       },
       {
+        "root": "packages/archkeep-rules",
+        "name": "archkeep-rules",
+        "type": "lib",
+        "tags": ["type-package", "scope-sdk", "layer:library", "stack:backend"]
+      },
+      {
         "root": "packages/archkeep-rule-sdk-go",
         "name": "archkeep-rule-sdk-go",
         "type": "lib",

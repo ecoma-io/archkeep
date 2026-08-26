@@ -55,6 +55,11 @@
           "type": "toml",
           "path": "packages/archkeep-rule-sdk-python/pyproject.toml",
           "jsonpath": "$.project.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/archkeep-rules/package.json",
+          "jsonpath": "$.version"
         }
       ],
       "changelog-sections": [

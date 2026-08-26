@@ -1,0 +1,33 @@
+# The official rules catalog — documentation-as-data and integrity gate for shipped
+# rule artifacts.
+#
+# Tags use dash separators (type-package, scope-sdk) because Moon tags cannot
+# contain colons, the same reason every project beside it does
+# (`../../module-boundaries.config.mjs` argues it once, for the whole tree).
+# `scope-sdk` is shared with `../archkeep-rule-sdk-rust` and the other SDKs:
+# this package ships artifacts that contract defines, and once rule sources
+# land here it carries a Cargo path-dependency on archkeep-rule-sdk-rust — so
+# like them it must never reach the engine from JavaScript. The engine reads
+# the catalog as data, if it ever reads it at all; the SDK builds the
+# artifacts; neither may depend on the other's code.
+id: archkeep-rules
+language: javascript
+layer: library
+stack: backend
+tags:
+  - type-package
+  - scope-sdk
+tasks:
+  # ESLint over the validator and test harness — the only JavaScript this package
+  # holds. It reads src/ and test/ and nothing else.
+  lint:
+    command: eslint . --max-warnings 0
+  # The catalog validator tests, and an integration case that walks the real tree
+  # and validates the committed catalog.json — node --test, because this package
+  # needs no test framework and vitest belongs to the engine.
+  test:
+    command: node --test test/*.test.mjs
+  # JSDoc type-checking over src/ and test/ — tsc with noEmit and checkJs,
+  # the same arrangement every other package's `typecheck` target uses.
+  typecheck:
+    command: pnpm exec tsc -p tsconfig.json

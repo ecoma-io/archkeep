@@ -1,0 +1,33 @@
+{
+  "name": "@ecoma-io/archkeep-rules",
+  "version": "0.15.0",
+  "private": true,
+  "description": "Official generic rules catalog for Archkeep — documentation-as-data and integrity gate for shipped rule artifacts",
+  "keywords": [
+    "architecture",
+    "module-boundaries",
+    "custom-rules",
+    "webassembly",
+    "archkeep"
+  ],
+  "homepage": "https://github.com/ecoma-io/archkeep/tree/main/packages/archkeep-rules#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ecoma-io/archkeep.git",
+    "directory": "packages/archkeep-rules"
+  },
+  "bugs": {
+    "url": "https://github.com/ecoma-io/archkeep/issues"
+  },
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": [
+    "catalog.json",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  }
+}
