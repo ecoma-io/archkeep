@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.15.0](https://github.com/ecoma-io/archkeep/compare/v0.14.0...v0.15.0) (2026-08-26)
+
+
+### Features
+
+* **archkeep-mcp:** the engine's commands as MCP agent tools ([#307](https://github.com/ecoma-io/archkeep/issues/307)) ([2878183](https://github.com/ecoma-io/archkeep/commit/287818393a434b13cfa29a4d4b11f2a99b58990a))
+* **archkeep:** add deterministic trajectory analysis across snapshot history ([#326](https://github.com/ecoma-io/archkeep/issues/326)) ([c1f1199](https://github.com/ecoma-io/archkeep/commit/c1f11991c469dfa9b7f46c1d6d61b3a987ed8312))
+* **archkeep:** delta classification for custom-rule findings and SARIF rendering ([#305](https://github.com/ecoma-io/archkeep/issues/305)) ([b933103](https://github.com/ecoma-io/archkeep/commit/b9331039f0349ca002a6127ec32f18f4150b54ac))
+* **archkeep:** describe architecture evolution across Git revisions ([#329](https://github.com/ecoma-io/archkeep/issues/329)) ([3b50c26](https://github.com/ecoma-io/archkeep/commit/3b50c26f1136d98f91a35274db2644dba1a4ea00))
+* **archkeep:** reconcile declared change intents against architectural deltas ([#325](https://github.com/ecoma-io/archkeep/issues/325)) ([f6b3407](https://github.com/ecoma-io/archkeep/commit/f6b34075294ec59ea68cf8df710f644b3fea5879))
+
+
+### Bug Fixes
+
+* **archkeep:** disclose a dirty-tree side in diff coverage notes ([#334](https://github.com/ecoma-io/archkeep/issues/334)) ([0d6e561](https://github.com/ecoma-io/archkeep/commit/0d6e5611e87eff6e7351cd6a69f28bc0f8df2041)), closes [#332](https://github.com/ecoma-io/archkeep/issues/332)
+* **archkeep:** eslint and prettier ignores for test fixtures ([#310](https://github.com/ecoma-io/archkeep/issues/310)) ([26054a2](https://github.com/ecoma-io/archkeep/commit/26054a273914faf53add73b885b6ae5ac5677160)), closes [#308](https://github.com/ecoma-io/archkeep/issues/308)
+* **archkeep:** replace ReDoS-vulnerable slash-trimming regex with linear scan ([#324](https://github.com/ecoma-io/archkeep/issues/324)) ([67109d0](https://github.com/ecoma-io/archkeep/commit/67109d063fd958434fe9c37b3fbfd896721096b0))
+* **ci:** rename dashboard to dependencyDashboard in renovate config ([#312](https://github.com/ecoma-io/archkeep/issues/312)) ([3731fbb](https://github.com/ecoma-io/archkeep/commit/3731fbb9185c2fde63fbe6473f69527bd531a358))
+* **deps:** update dependency typescript to v6 ([#328](https://github.com/ecoma-io/archkeep/issues/328)) ([7beec16](https://github.com/ecoma-io/archkeep/commit/7beec163a653b327c8e63d79c150f9fbce5c2e96))
+
+
+### Documentation
+
+* comprehensive documentation UX and governance refinement ([#313](https://github.com/ecoma-io/archkeep/issues/313)) ([d829492](https://github.com/ecoma-io/archkeep/commit/d82949204b232fdfc7567fe7bf7e313d1f43a8e7))
+* rewrite README as a problem-first entry point ([#335](https://github.com/ecoma-io/archkeep/issues/335)) ([4ff6b27](https://github.com/ecoma-io/archkeep/commit/4ff6b27fd7a126f8dcecac68b0db1cd4767fe353))
+
 ## [0.14.0](https://github.com/ecoma-io/archkeep/compare/v0.13.0...v0.14.0) (2026-08-24)
 
 
