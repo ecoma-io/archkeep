@@ -178,6 +178,7 @@ decided rather than summarized into them.
 | [0002-custom-rules-one-contract.md](adr/0002-custom-rules-one-contract.md)                           | Custom rules are one contract, not one system per language — and four SDKs       |
 | [0003-rename-lattice-to-archkeep.md](adr/0003-rename-lattice-to-archkeep.md)                         | Archkeep replaces Lattice as the project's public identity, and what that costs  |
 | [0004-correct-old-name-deprecation-mechanics.md](adr/0004-correct-old-name-deprecation-mechanics.md) | Corrects ADR 0003's crates.io and Go deprecation mechanics, and records what ran |
+| [0005-jvm-language-integration.md](adr/0005-jvm-language-integration.md)                             | Java and Kotlin enter through the existing seams, behind one shared JVM core     |
 
 ## Doctrine
 
