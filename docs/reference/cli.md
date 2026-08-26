@@ -16,6 +16,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/archkeep/
 | `fitness`    | (none)                           | Judge every declared fitness function against the workspace; exits 1 on a failing function         | no*              |
 | `waivers`    | (none)                           | List the boundary waivers and permanent suppressions on the table                                  | no               |
 | `history`    | `<dir>`                          | Describe how the architecture evolved across snapshots                                             | no               |
+| `trajectory` | `<dir>`                          | Aggregate the deterministic drift trajectory across snapshots                                      | no               |
 | `health`     | `[<snapshot-dir>]`               | Describe architecture health metrics and trends                                                    | no               |
 | `report`     | `[<snapshot-dir>]`               | One governance document: how healthy the architecture is, and why                                  | no               |
 | `debt`       | `<dir>`                          | Print the architecture-debt ledger across snapshots                                                | no               |
@@ -270,6 +271,24 @@ as a transition rather than being swallowed by the identity match. An empty
 directory, an unreadable snapshot, or a malformed snapshot is a no-verdict run
 (exit 3), never a record of nothing.
 
+### `trajectory`
+
+| flag       | argument       | default | meaning                                         |
+| ---------- | -------------- | ------- | ----------------------------------------------- |
+| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope. |
+| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.   |
+
+The directory is a single positional argument — the same consumer-managed
+history directory `history` and `debt` read. There is deliberately no
+`--config`: the policy fingerprints being compared travel inside the stored
+snapshots, so each observation is judged under the law it was captured under,
+never under today's law. And there is no `--capture`: exactly one command
+writes snapshots, so exactly one way exists for a record to enter the history.
+An empty, unreadable, or malformed history directory is a no-verdict run
+(exit 3), never a clean trajectory; a directory holding ONE snapshot answers
+with an explicit `insufficient_history` at exit 0 — derived values are
+unavailable, never zero (see `docs/usage/trajectory.md`).
+
 ### `debt`
 
 | flag       | argument       | default                  | meaning                                                                     |
@@ -339,10 +358,10 @@ analyzer, or a `tsconfig` that will not load each leaves a file the summary
 counts but no rule ever judged, and that is enough to withhold the verdict.
 
 A descriptive command (`graph`, `diff`, `drift`, `discover`, `reconcile`,
-`waivers`, `history`, `health`, `report`, `debt`, `impact`, `explain`,
-`context`, `provenance`, `adr`) exits 0 when it completes, 3 when coverage is
-incomplete or a metric is `unknown`, and 2 on usage error. None exits 1,
-because a descriptive result is never a finding. `fitness` and `delta` are the
+`waivers`, `history`, `trajectory`, `health`, `report`, `debt`, `impact`,
+`explain`, `context`, `provenance`, `adr`) exits 0 when it completes, 3 when
+coverage is incomplete or a metric is `unknown`, and 2 on usage error. None
+exits 1, because a descriptive result is never a finding. `fitness` and `delta` are the
 exceptions — each is a verdict: a failing fitness function exits 1 (the `check`
 lane) and an undetermined one exits 3; a `delta` comparison exits 1 on a
 non-waived introduced violation and 3 on a refusal or an unclassifiable item,
@@ -438,6 +457,21 @@ while neither architecture nor policy changed is disclosed as code drift. What
 a snapshot does not carry is disclosed, never asserted. `--capture` appends a
 snapshot of the current workspace before describing the record.
 Descriptive -- evolution never makes it exit 1.
+
+### `trajectory <dir>`
+
+Reads the same history directory `history` reads and aggregates it: over ALL
+observations, how often each transition signal fired (architecture, policy,
+provider, code drift), what the graph gained and lost in total versus net
+(events against endpoint deltas, so churn and movement stay distinguishable),
+and which projects and edges persisted through every observation. One
+observation is one stored graph snapshot — a capture point, not a commit or a
+day — and the result names that basis. Identities are `diff`'s own (project
+name; edge `(source, target, type)` triple); no violation-level trajectory is
+reported because stored snapshots carry no findings. A trend here is a fact
+that moved, never a score: nothing weights the signals, and no aggregate
+reads as "healthier" or "worse". Descriptive -- aggregation never makes it
+exit 1. See [../usage/trajectory.md](../usage/trajectory.md).
 
 ### `health [<snapshot-dir>]`
 

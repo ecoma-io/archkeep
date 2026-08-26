@@ -252,6 +252,135 @@ export function nextSequence(read) {
 }
 
 /**
+ * Classifies ONE transition — the record `computeEvolution` pushes for the
+ * consecutive pair `(from, to)` — together with the raw metadata comparison it
+ * was decided over. Split out of `computeEvolution` so a second consumer
+ * (`./trajectory.mjs`) aggregates the SAME classification instead of growing a
+ * second copy of it: the signals, the disclosure notes and the three-state
+ * metadata facts are decided here once (`../README.md`'s single-home rule),
+ * and both commands read them from this one place.
+ *
+ * The returned `record` is exactly what lands in `history`'s envelope. The
+ * returned `meta` is the untouched `compareSnapshotMetadata` result — the
+ * per-side facts (`policyOneSided`, `provenanceOneSided`, `crossRepo`,
+ * `dirtyBaseline`, `dirtyHead`) that the record's `notes[]` render as prose.
+ * An aggregator that needs to COUNT those facts rather than print them reads
+ * `meta`; parsing `notes` strings would be a second copy of the decision
+ * wearing a parser's name.
+ *
+ * @param {{name: string, path: string, envelope: object, id: string}} from
+ * @param {{name: string, path: string, envelope: object, id: string}} to
+ * @returns {{record: {from: string, to: string, architectureChanged: boolean,
+ *     changes: object|null, policyChanged: boolean|null, providerChanged: boolean,
+ *     codeDrift: boolean, notes: string[]},
+ *   meta: object}} `meta` is `compareSnapshotMetadata`'s result.
+ */
+export function classifyTransition(from, to) {
+  const meta = compareSnapshotMetadata({
+    baselineProvider: from.envelope.workspace.provider,
+    headProvider: to.envelope.workspace.provider,
+    baselineProvenance: from.envelope.workspace.provenance,
+    headProvenance: to.envelope.workspace.provenance,
+    baselineFingerprint: from.envelope.result.policy?.fingerprint ?? null,
+    headFingerprint: to.envelope.result.policy?.fingerprint ?? null,
+  });
+
+  const notes = [];
+  if (meta.policyChanged === true) {
+    // A policy change is disclosed the way `diff` discloses it — a fact
+    // about how the transition must be interpreted, not a structural
+    // change and not a refusal.
+    notes.push(
+      "policy (the declared architectural intent) changed between these snapshots — " +
+        "the boundary law differs even though the graph may not",
+    );
+  }
+  if (meta.providerChanged) {
+    notes.push(
+      `provider changed (${from.envelope.workspace.provider} → ${to.envelope.workspace.provider}) — ` +
+        "structural differences may be provider-artefacts rather than real architectural changes",
+    );
+  }
+  if (meta.crossRepo) {
+    notes.push("provenance remotes differ — these snapshots may be from unrelated repositories");
+  }
+  // The one-sided cases are the silent direction: a fingerprint or
+  // provenance on one snapshot and not the other cannot be asserted "the
+  // same", so it is disclosed rather than read as unchanged.
+  if (meta.policyOneSided) {
+    notes.push(
+      "policy (the declared architectural intent) could not be compared — one snapshot " +
+        "records the boundary law and the other does not",
+    );
+  }
+  if (meta.provenanceOneSided) {
+    notes.push(
+      "repository provenance could not be compared — one snapshot records its origin and the other does not",
+    );
+  }
+  // A snapshot taken from a dirty tree is not a reproducible claim about the
+  // commit it names, so the transition says which side came from one rather
+  // than reading it as a claim about committed history.
+  if (meta.dirtyBaseline) {
+    const commit = from.envelope.workspace.provenance?.commit;
+    notes.push(
+      "the baseline snapshot was captured from an uncommitted (dirty) tree — its architecture " +
+        `is a claim about uncommitted state${typeof commit === "string" ? `, not about commit '${commit}'` : ""}`,
+    );
+  }
+  if (meta.dirtyHead) {
+    const commit = to.envelope.workspace.provenance?.commit;
+    notes.push(
+      "the head snapshot was captured from an uncommitted (dirty) tree — its architecture " +
+        `is a claim about uncommitted state${typeof commit === "string" ? `, not about commit '${commit}'` : ""}`,
+    );
+  }
+
+  const diff = computeDiff(
+    {
+      projects: from.envelope.result.projects,
+      dependencies: from.envelope.result.dependencies,
+    },
+    {
+      projects: to.envelope.result.projects,
+      dependencies: to.envelope.result.dependencies,
+    },
+  );
+  const architectureChanged =
+    diff.addedProjects.length > 0 ||
+    diff.removedProjects.length > 0 ||
+    diff.changedProjects.length > 0 ||
+    diff.addedEdges.length > 0 ||
+    diff.removedEdges.length > 0;
+
+  // Code drift is a disclosure, so it is only asserted when every signal
+  // that could refute it is verifiable and unchanged: the architecture did
+  // not move, the policy was actually compared and did not change, and
+  // provenance advanced. A `null` policyChanged (one-sided, or neither
+  // snapshot carries a fingerprint) is "could not be compared", not "the
+  // same" — asserting code drift on an unverifiable policy would report a
+  // clean transition where the tool cannot look.
+  const codeDrift =
+    !architectureChanged && meta.policyChanged === false && meta.provenanceChanged === true;
+
+  const record = {
+    from: from.name,
+    to: to.name,
+    architectureChanged,
+    // A provider change is rendered with an empty diff (no graph change on
+    // top of a carrier change), a policy-only transition with null — so a
+    // consumer can tell "the carrier changed" from "only the record's
+    // interpretation changed".
+    changes: architectureChanged || meta.providerChanged ? diff : null,
+    policyChanged: meta.policyChanged,
+    providerChanged: meta.providerChanged,
+    codeDrift,
+    notes,
+  };
+  return { record, meta };
+}
+
+/**
  * Computes the evolution record from a list of snapshots: history order,
  * each snapshot's identity, and the classified transition from each to the
  * next.
@@ -274,109 +403,7 @@ export function computeEvolution(files) {
   const transitions = [];
 
   for (let i = 0; i + 1 < files.length; i++) {
-    const from = files[i];
-    const to = files[i + 1];
-    const meta = compareSnapshotMetadata({
-      baselineProvider: from.envelope.workspace.provider,
-      headProvider: to.envelope.workspace.provider,
-      baselineProvenance: from.envelope.workspace.provenance,
-      headProvenance: to.envelope.workspace.provenance,
-      baselineFingerprint: from.envelope.result.policy?.fingerprint ?? null,
-      headFingerprint: to.envelope.result.policy?.fingerprint ?? null,
-    });
-
-    const notes = [];
-    if (meta.policyChanged === true) {
-      // A policy change is disclosed the way `diff` discloses it — a fact
-      // about how the transition must be interpreted, not a structural
-      // change and not a refusal.
-      notes.push(
-        "policy (the declared architectural intent) changed between these snapshots — " +
-          "the boundary law differs even though the graph may not",
-      );
-    }
-    if (meta.providerChanged) {
-      notes.push(
-        `provider changed (${from.envelope.workspace.provider} → ${to.envelope.workspace.provider}) — ` +
-          "structural differences may be provider-artefacts rather than real architectural changes",
-      );
-    }
-    if (meta.crossRepo) {
-      notes.push("provenance remotes differ — these snapshots may be from unrelated repositories");
-    }
-    // The one-sided cases are the silent direction: a fingerprint or
-    // provenance on one snapshot and not the other cannot be asserted "the
-    // same", so it is disclosed rather than read as unchanged.
-    if (meta.policyOneSided) {
-      notes.push(
-        "policy (the declared architectural intent) could not be compared — one snapshot " +
-          "records the boundary law and the other does not",
-      );
-    }
-    if (meta.provenanceOneSided) {
-      notes.push(
-        "repository provenance could not be compared — one snapshot records its origin and the other does not",
-      );
-    }
-    // A snapshot taken from a dirty tree is not a reproducible claim about the
-    // commit it names, so the transition says which side came from one rather
-    // than reading it as a claim about committed history.
-    if (meta.dirtyBaseline) {
-      const commit = from.envelope.workspace.provenance?.commit;
-      notes.push(
-        "the baseline snapshot was captured from an uncommitted (dirty) tree — its architecture " +
-          `is a claim about uncommitted state${typeof commit === "string" ? `, not about commit '${commit}'` : ""}`,
-      );
-    }
-    if (meta.dirtyHead) {
-      const commit = to.envelope.workspace.provenance?.commit;
-      notes.push(
-        "the head snapshot was captured from an uncommitted (dirty) tree — its architecture " +
-          `is a claim about uncommitted state${typeof commit === "string" ? `, not about commit '${commit}'` : ""}`,
-      );
-    }
-
-    const diff = computeDiff(
-      {
-        projects: from.envelope.result.projects,
-        dependencies: from.envelope.result.dependencies,
-      },
-      {
-        projects: to.envelope.result.projects,
-        dependencies: to.envelope.result.dependencies,
-      },
-    );
-    const architectureChanged =
-      diff.addedProjects.length > 0 ||
-      diff.removedProjects.length > 0 ||
-      diff.changedProjects.length > 0 ||
-      diff.addedEdges.length > 0 ||
-      diff.removedEdges.length > 0;
-
-    // Code drift is a disclosure, so it is only asserted when every signal
-    // that could refute it is verifiable and unchanged: the architecture did
-    // not move, the policy was actually compared and did not change, and
-    // provenance advanced. A `null` policyChanged (one-sided, or neither
-    // snapshot carries a fingerprint) is "could not be compared", not "the
-    // same" — asserting code drift on an unverifiable policy would report a
-    // clean transition where the tool cannot look.
-    const codeDrift =
-      !architectureChanged && meta.policyChanged === false && meta.provenanceChanged === true;
-
-    transitions.push({
-      from: from.name,
-      to: to.name,
-      architectureChanged,
-      // A provider change is rendered with an empty diff (no graph change on
-      // top of a carrier change), a policy-only transition with null — so a
-      // consumer can tell "the carrier changed" from "only the record's
-      // interpretation changed".
-      changes: architectureChanged || meta.providerChanged ? diff : null,
-      policyChanged: meta.policyChanged,
-      providerChanged: meta.providerChanged,
-      codeDrift,
-      notes,
-    });
+    transitions.push(classifyTransition(files[i], files[i + 1]).record);
   }
 
   return { snapshots, transitions };

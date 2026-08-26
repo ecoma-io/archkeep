@@ -357,6 +357,12 @@ const MATRIX = {
     ok: { world: "world", argv: ["history", histDir, "--capture"], exit: EXIT.ok },
     refused: { world: "world", argv: ["history", emptyHistDir], exit: EXIT.error },
   },
+  trajectory: {
+    // The same captured history `history`/`debt` read — a trajectory over it
+    // is descriptive aggregation, exit 0.
+    ok: { world: "world", argv: ["trajectory", histDir], exit: EXIT.ok },
+    refused: { world: "world", argv: ["trajectory", emptyHistDir], exit: EXIT.error },
+  },
   health: {
     ok: { world: "world", argv: ["health", histDir], exit: EXIT.ok },
     refused: { world: "broken", argv: ["health"], exit: EXIT.error },
