@@ -72,6 +72,25 @@
       matchPackageNames: ["prettier", "eslint", "eslint-config-prettier", "@eslint/js"],
       groupName: "lint and format toolchain",
     },
+    {
+      // vsce refuses to package an extension whose @types/vscode sits above the
+      // engines.vscode floor declared in packages/archkeep-vscode/package.json,
+      // so an automated bump here can never merge on its own — the two versions
+      // move together or not at all. Raising that floor cuts off every VS Code
+      // below it, which is a product decision made by hand: both lines in that
+      // file, in one commit.
+      matchPackageNames: ["@types/vscode"],
+      enabled: false,
+    },
+    {
+      // TypeScript 7's entry point exports none of the compiler API the
+      // analysis delegates to (`ts.resolveModuleName`), which is why the
+      // peerDependencies range and docs/getting-started/installation.md both
+      // hold the upper bound < 7. 6.x stays open; revisit <7 only together with
+      // those two documents, when the API returns.
+      matchPackageNames: ["typescript"],
+      allowedVersions: "<7",
+    },
   ],
   customManagers: [
     {
