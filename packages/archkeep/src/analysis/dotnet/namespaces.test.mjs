@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { csharpNamespaceIndex, parseCSharpNamespaceDeclarations } from "./namespaces.mjs";
+import {
+  csharpNamespaceIndex,
+  dotnetIndexFailures,
+  parseCSharpNamespaceDeclarations,
+} from "./namespaces.mjs";
 
 describe("parseCSharpNamespaceDeclarations", () => {
   it("reads the block form at a line head", () => {
@@ -88,7 +92,7 @@ describe("csharpNamespaceIndex", () => {
       "libs/alpha/One.cs": "namespace Alpha.Core;\n",
       "libs/beta/Two.cs": "namespace Beta.Things;\n",
     });
-    const index = csharpNamespaceIndex(workspace);
+    const index = csharpNamespaceIndex(workspace).byName;
     expect(index.get("Alpha.Core")).toEqual([{ project: "alpha", file: "libs/alpha/One.cs" }]);
     expect(index.get("Beta.Things")).toEqual([{ project: "beta", file: "libs/beta/Two.cs" }]);
   });
@@ -98,7 +102,7 @@ describe("csharpNamespaceIndex", () => {
       "libs/alpha/Shared.cs": "namespace Common.Util;\n",
       "libs/beta/Shared.cs": "namespace Common.Util;\n",
     });
-    const owners = csharpNamespaceIndex(workspace).get("Common.Util");
+    const owners = csharpNamespaceIndex(workspace).byName.get("Common.Util");
     expect(owners.map((owner) => owner.project).sort()).toEqual(["alpha", "beta"]);
   });
 
@@ -106,16 +110,25 @@ describe("csharpNamespaceIndex", () => {
     const workspace = workspaceOf({
       "libs/alpha/Parts.cs": "namespace Alpha.Core; class A {}\nnamespace Alpha.Core { }\n",
     });
-    const owners = csharpNamespaceIndex(workspace).get("Alpha.Core");
+    const owners = csharpNamespaceIndex(workspace).byName.get("Alpha.Core");
     expect(owners).toEqual([{ project: "alpha", file: "libs/alpha/Parts.cs" }]);
   });
 
-  it("ignores non-C# files and unreadable paths instead of guessing ownership", () => {
+  it("ignores non-C# files and records an unreadable .cs as a whole-file failure", () => {
+    // A file dropped from the index silently would make every importer of
+    // its namespaces classify external — a first-party crossing wearing an
+    // external face. The failure funnels through dotnetIndexFailures into
+    // the could-not-complete class instead.
     const workspace = workspaceOf({
       "libs/alpha/readme.md": "namespace Not.Really;\n",
       "libs/beta/gone.cs": null,
     });
-    expect(csharpNamespaceIndex(workspace).size).toBe(0);
+    const { byName, failures } = csharpNamespaceIndex(workspace);
+    expect(byName.size).toBe(0);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].sourceFile).toBe("libs/beta/gone.cs");
+    expect(failures[0].reason).toMatch(/could not be read/);
+    expect(dotnetIndexFailures(workspace)).toEqual(failures);
   });
 
   it("moves the answer when a declaration moves — resolution is content-derived", () => {
@@ -127,7 +140,7 @@ describe("csharpNamespaceIndex", () => {
     const after = workspaceOf({
       "libs/beta/Core.cs": "namespace Alpha.Core;\n",
     });
-    expect(csharpNamespaceIndex(before).get("Alpha.Core")[0].project).toBe("alpha");
-    expect(csharpNamespaceIndex(after).get("Alpha.Core")[0].project).toBe("beta");
+    expect(csharpNamespaceIndex(before).byName.get("Alpha.Core")[0].project).toBe("alpha");
+    expect(csharpNamespaceIndex(after).byName.get("Alpha.Core")[0].project).toBe("beta");
   });
 });

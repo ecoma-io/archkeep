@@ -286,7 +286,7 @@ export const csprojModelOf = perWorkspace(({ projects, filesOf, readFile }) => {
   // so one map answers who owns a name at every layer. An ambiguous owner
   // fails loudly like a directive's ambiguity would; an external namespace
   // (the SDK-fixed set and every NuGet default) draws nothing.
-  const index = csharpNamespaceIndex({ projects, filesOf, readFile });
+  const { byName: index } = csharpNamespaceIndex({ projects, filesOf, readFile });
   const usingEdges = [];
   for (const entry of entries) {
     for (const namespace of entry.usingNamespaces) {

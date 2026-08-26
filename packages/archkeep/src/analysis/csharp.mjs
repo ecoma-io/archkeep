@@ -250,7 +250,7 @@ const csharpIndexOf = perWorkspace(csharpNamespaceIndex);
 export function analyzeCSharp({ sourceFile, text, workspace }) {
   const result = emptyResult();
   try {
-    const index = csharpIndexOf(workspace);
+    const { byName: index } = csharpIndexOf(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
     for (const site of parseCSharpDirectiveSites(text)) {
       const { line, column } = positionAt(text, site.offset);
@@ -326,7 +326,7 @@ export function analyzeCSharp({ sourceFile, text, workspace }) {
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
  */
 export function resolveCsharpDependencies(workspace) {
-  const index = csharpNamespaceIndex(workspace);
+  const { byName: index } = csharpNamespaceIndex(workspace);
   const dependencies = [];
   for (const project of workspace.projects) {
     for (const file of workspace.filesOf(project.name)) {

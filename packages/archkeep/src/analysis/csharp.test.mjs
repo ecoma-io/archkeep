@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { dotnetIndexFailures } from "./dotnet/namespaces.mjs";
+
 import { analyzeCSharp, parseCSharpDirectiveSites, resolveCsharpDependencies } from "./csharp.mjs";
 
 /**
@@ -227,17 +229,23 @@ describe("analyzeCSharp", () => {
     expect(after.spelling.relative).toBe(true);
   });
 
-  it("degrades a broken read into a failure record instead of throwing", () => {
+  it("answers external rather than throwing when the index cannot read — loudly at the funnel", () => {
     const broken = { ...WORKSPACE, readFile: () => null };
     const result = analyzeCSharp({
       sourceFile: "libs/shop/app/Service.cs",
       text: "using Shop.Domain;\n",
-      // A workspace whose index build cannot read anything still answers:
-      // every name falls to external, never a throw.
+      // The analyzer itself still answers — external, never a throw — while
+      // the unreadable sources surface as whole-file failures through
+      // dotnetIndexFailures, which the command context funnels into the
+      // could-not-complete class: the run never mistakes this workspace for
+      // a checked, clean one.
       workspace: broken,
     });
     expect(result.failures).toEqual([]);
     expect(result.imports[0].resolved.external).toBe(true);
+    const indexFailures = dotnetIndexFailures(broken);
+    expect(indexFailures.length).toBeGreaterThan(0);
+    expect(indexFailures.every((failure) => failure.reason.match(/could not be read/))).toBe(true);
   });
 
   it("reads a BOM-prefixed first-line directive — matched, not stripped", () => {

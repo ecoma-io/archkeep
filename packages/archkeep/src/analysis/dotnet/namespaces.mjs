@@ -27,7 +27,7 @@
  * per workspace object through `perWorkspace`, so a whole-tree run builds the
  * index once no matter how many files ask.
  */
-import { perWorkspace } from "../source-util.mjs";
+import { fileFailure, perWorkspace } from "../source-util.mjs";
 import { maskCSharpComments } from "./mask.mjs";
 
 /**
@@ -85,28 +85,37 @@ const maskFor = (file) => MASK_BY_EXTENSION[file.slice(file.lastIndexOf("."))];
  * longest project root. Returns the map keyed by exact declared dotted name,
  * each entry listing `{ project, file }` pairs in project order — one pair
  * per FILE even when a file declares the same namespace twice, because a
- * reopened block is one declaration's worth of ownership, not two.
+ * reopened block is one declaration's worth of ownership, not two — beside
+ * one whole-file failure per `.cs` source that could not be read: a file
+ * dropped from the index silently would make every import of its namespaces
+ * classify external, a first-party crossing wearing an external face, with
+ * nothing anywhere naming why (`../contract.md`'s I/O law).
  *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
- * @returns {Map<string, { project: string, file: string }[]>}
+ * @returns {{ byName: Map<string, { project: string, file: string }[]>,
+ *            failures: { sourceFile: string, line: null, column: null, reason: string }[] }}
  */
 function buildCsharpNamespaceIndex(workspace) {
-  const index = new Map();
+  const byName = new Map();
+  const failures = [];
   for (const project of workspace.projects) {
     for (const file of workspace.filesOf(project.name)) {
       if (!maskFor(file)) continue;
       const text = workspace.readFile(file);
-      if (text === null || text === undefined) continue;
+      if (text === null || text === undefined) {
+        failures.push(fileFailure(file, "C# source could not be read for the namespace index"));
+        continue;
+      }
       for (const declared of parseCSharpNamespaceDeclarations(maskCSharpComments(text))) {
-        const owners = index.get(declared.name) ?? [];
+        const owners = byName.get(declared.name) ?? [];
         if (!owners.some((owner) => owner.file === file)) {
           owners.push({ project: project.name, file });
-          index.set(declared.name, owners);
+          byName.set(declared.name, owners);
         }
       }
     }
   }
-  return index;
+  return { byName, failures };
 }
 
 /**
@@ -115,6 +124,19 @@ function buildCsharpNamespaceIndex(workspace) {
  * this one map, so the layers can never disagree about who owns a name.
  */
 export const csharpNamespaceIndex = perWorkspace(buildCsharpNamespaceIndex);
+
+/**
+ * Whole-file failures for every `.cs` source the index could not read — the
+ * funnel `../../commands/context.mjs` merges beside the manifest failures, so
+ * an unreadable source refuses the verdict (exit 3) instead of quietly
+ * degrading every importer of its namespaces to external.
+ *
+ * @param {object} workspace
+ * @returns {{ sourceFile: string, line: null, column: null, reason: string }[]}
+ */
+export function dotnetIndexFailures(workspace) {
+  return csharpNamespaceIndex(workspace).failures;
+}
 
 /**
  * Longest-prefix resolution over the index — the single answer both layers
