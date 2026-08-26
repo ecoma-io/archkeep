@@ -82,8 +82,11 @@ test("one green differential run is not a run of them", () => {
 
 test("an empty adopter list is not met — supplying nothing is not the same as unmeasured", () => {
   assert.equal(stateOf(evaluate({ ...nothing, externalAdopters: [] }), CONDITIONS[1]), "not met");
+  // The entries are `verifiedAdopters`' output — an owner/name@version pair
+  // that only a validated attestation (`./verify-gate-attestation.mjs`) can
+  // produce, never a bare name typed on a command line.
   assert.equal(
-    stateOf(evaluate({ ...nothing, externalAdopters: ["acme/tree"] }), CONDITIONS[1]),
+    stateOf(evaluate({ ...nothing, externalAdopters: ["acme/tree@0.15.0"] }), CONDITIONS[1]),
     "met",
   );
 });
@@ -161,13 +164,13 @@ test("the release row never claims to have read the vsix half", () => {
 });
 
 test("parseArgs takes --flag value pairs and refuses anything else", () => {
-  assert.deepEqual(parseArgs(["--adopters", "a/b", "--differential", "3,green"]), {
-    adopters: "a/b",
+  assert.deepEqual(parseArgs(["--attestations", "a.json", "--differential", "3,green"]), {
+    attestations: "a.json",
     differential: "3,green",
   });
   assert.throws(() => parseArgs(["positional"]), /unexpected argument/u);
-  assert.throws(() => parseArgs(["--adopters"]), /needs a value/u);
-  assert.throws(() => parseArgs(["--adopters", "--differential"]), /needs a value/u);
+  assert.throws(() => parseArgs(["--attestations"]), /needs a value/u);
+  assert.throws(() => parseArgs(["--attestations", "--differential"]), /needs a value/u);
 });
 
 test("parseDifferential refuses a shape it cannot read rather than rounding it", () => {

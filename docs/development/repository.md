@@ -82,10 +82,18 @@ gap. Those targets need the toolchains CONTRIBUTING.md lists.
   from 1.0, each read off something rather than remembered, in three states:
   `met`, `not met`, and `unmeasured` — the last for the conditions whose
   evidence lives outside this tree (a workflow's run history, another
-  repository's CI), which it names rather than guessing at. `pnpm readiness`.
+  repository's CI), which it names rather than guessing at. The external-gate
+  condition reads validated attestations (`--attestations`,
+  [gate-attestation.md](../reference/gate-attestation.md) owns the schema and
+  `verify-gate-attestation.mjs` its refusals) — a bare repository name proves
+  nothing, so none is accepted. `pnpm readiness`.
   It is not a gate because a gate that fails until 1.0 fails every build for
   months and gets deleted long before it is satisfied; what keeps it honest is
   being run and read.
+- `verify-gate-attestation.mjs` — the external attestation's shape check:
+  both exit directions demanded, unknown fields refused, nothing executed. It
+  validates claims precisely; it never decides them — that is readiness's
+  report and a reviewer's to make.
 - `verify-package.mjs` — packs the real tarball, installs it into a throwaway
   workspace, and drives what a consumer actually buys. Also runs against a
   second workspace with no Moon at all, proving the native provider works from a

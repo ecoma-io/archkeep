@@ -285,3 +285,11 @@ hook that passes is not a promise CI will — and neither does a fitness functio
 that needs the whole tree (`coverage-minimum` today): the hook reports it
 `not_applicable`, not evaluated, so a workspace that declares one still needs
 an unscoped `check` in CI to actually enforce it.
+
+## Proving your gate counts toward Archkeep's own readiness
+
+A repository whose build genuinely blocks on `archkeep check` — both
+directions demonstrated: a controlled violation failing with exit 1, removing
+it restoring green — can publish that fact as a
+[gate attestation](../reference/gate-attestation.md), the evidence shape
+Archkeep's readiness report accepts for its external-adopting condition.

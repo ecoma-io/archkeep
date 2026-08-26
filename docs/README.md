@@ -57,6 +57,7 @@ is, what it is not, and the line its neighbours may not cross — and
 - [Policy schema](reference/policy-schema.md) — every table key
 - [Exit codes](reference/exit-codes.md) — 0/1/2/3 contract
 - [JSON output](reference/json-output.md) — schemaVersion 2 envelope
+- [Gate attestation](reference/gate-attestation.md) — the external blocking-gate evidence shape
 - [Languages](reference/languages.md) — parse limits per language
 - [Violations](reference/violations.md) — fifteen violation types
 
@@ -158,6 +159,7 @@ is, what it is not, and the line its neighbours may not cross — and
 | [discovery.md](reference/discovery.md)                     | The `discover` command: flags, exit codes, the additive JSON envelope                                                                         |
 | [exit-codes.md](reference/exit-codes.md)                   | The four exit codes with exact meaning                                                                                                        |
 | [json-output.md](reference/json-output.md)                 | `--format json`'s versioned envelope: every field, and the stability promise                                                                  |
+| [gate-attestation.md](reference/gate-attestation.md)       | The external blocking-gate attestation: the schema, what the verifier refuses, and what only a reviewer can decide                            |
 | [evidence.md](reference/evidence.md)                       | The four-state verdict vocabulary, the five invariants, and the `decision` shape                                                              |
 | [architecture-intent.md](reference/architecture-intent.md) | The `architecture-intent.json` schema, the five sections, and the four verdict states                                                         |
 | [debt.md](reference/debt.md)                               | The architecture-debt ledger: entry kinds, age model, severity, and the refusals                                                              |
@@ -228,6 +230,7 @@ allowed to say it". That table:
 | `docs/integrations/`                                                            | The provider and editor integrations at the edge — Nx, Moon, the VS Code extension, and the MCP server                                                                                                                                           |
 | `docs/reference/`                                                               | Schemas, exit codes, command reference, language limits, violation catalogue, the profile registry schema, the custom-rule contract                                                                                                              |
 | `docs/reference/discovery.md`                                                   | The `discover` command: flags, exit codes, the additive JSON envelope, the proposal never written                                                                                                                                                |
+| `docs/reference/gate-attestation.md`                                            | The external blocking-gate evidence: the schema an outside repository publishes, what `verify-gate-attestation.mjs` refuses, and why a fixture is not adoption                                                                                   |
 | `docs/development/`                                                             | How it works inside, and how to extend it                                                                                                                                                                                                        |
 | `docs/skills/`                                                                  | Agent architecture skills: overview, installation, hosts, the Claude Code and Codex plugins, authoring, versioning                                                                                                                               |
 | `CONTRIBUTING.md`                                                               | The contribution bar, the commands, hooks, commits, review, release                                                                                                                                                                              |

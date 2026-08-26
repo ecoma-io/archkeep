@@ -195,6 +195,8 @@ over a stretch of time in which it had the chance to.
    prove what a tree nobody here designed does to it. Until some other
    repository has failed a build on a Archkeep verdict and been right to, the
    parse limits are a list of shapes that were imagined rather than met.
+   [gate-attestation.md](../reference/gate-attestation.md) is the evidence
+   shape such a repository publishes, and what readiness accepts for this row.
 3. **A quiet stretch in what an unchanged workspace is told.** `AGENTS.md`
    makes a change to what is reported on an unchanged workspace a breaking
    change; 1.0 is the version where that promise starts costing something. So
