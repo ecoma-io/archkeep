@@ -88,6 +88,15 @@ const TEST_ONLY_PACKAGES = [
 const SHIPPED_PACKAGES = new Map([
   ["typescript", "module resolution, delegated rather than reimplemented"],
   ["smol-toml", "Cargo.toml and pyproject.toml, which have no stdlib parser"],
+  [
+    "fast-xml-parser",
+    "pom.xml parsing, which has no stdlib parser either. Reached lazily via createRequire on " +
+      "first pom encounter and declared an optional peer pinned to the exact version, so trees " +
+      "with no Maven pay nothing and a missing install is a failure record naming what is absent — " +
+      "the same lazy-and-optional shape `vue/compiler-sfc` has below. Parsed with entity " +
+      "processing off, which removes the XXE/entity-expansion advisory class outright rather than " +
+      "bounding it; bumps re-review this entry",
+  ],
   ["vue/compiler-sfc", "SFC parsing, reached through the root `vue` dependency's own subpath"],
   ["nx/package.json", "resolved for the CLI's path"],
   [

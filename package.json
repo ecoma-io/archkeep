@@ -66,6 +66,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^10.9.0",
     "eslint-config-prettier": "^10.1.8",
+    "fast-xml-parser": "5.11.0",
     "globals": "^17.11.0",
     "lefthook": "^2.1.10",
     "nx": "^23.1.1",

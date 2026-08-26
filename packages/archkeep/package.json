@@ -53,12 +53,16 @@
   },
   "peerDependencies": {
     "@nx/eslint-plugin": ">=21",
+    "fast-xml-parser": "5.11.0",
     "nx": ">=21",
     "typescript": ">=5 <7",
     "vue": ">=3"
   },
   "peerDependenciesMeta": {
     "@nx/eslint-plugin": {
+      "optional": true
+    },
+    "fast-xml-parser": {
       "optional": true
     },
     "nx": {

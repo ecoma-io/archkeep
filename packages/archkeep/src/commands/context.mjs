@@ -26,6 +26,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
+import { mavenManifestFailures } from "../analysis/jvm/maven.mjs";
 import { languageOf } from "../analysis/registry.mjs";
 import { pythonUnmodelledFailures } from "../analysis/python.mjs";
 import { fileFailure } from "../analysis/source-util.mjs";
@@ -613,6 +614,7 @@ export function resolveCommandContext(
       // project whose manifest it cannot read by naming a path that excludes
       // it (`../analysis/python.mjs`'s `pythonUnmodelledFailures`).
       ...pythonUnmodelledFailures(workspace),
+      ...mavenManifestFailures(workspace),
     ];
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
     analyzed = analyzedFiles.length;
@@ -721,6 +723,7 @@ export function resolveCommandContext(
       ...wholeTreeAnalysis.failures.filter((failure) => selectedFiles.has(failure.sourceFile)),
       ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Moon project graph" }),
       ...pythonUnmodelledFailures(workspace),
+      ...mavenManifestFailures(workspace),
     ];
     unclaimedGap = { files: unclaimedFiles };
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
@@ -782,6 +785,7 @@ export function resolveCommandContext(
       ...failures,
       ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Nx project graph" }),
       ...pythonUnmodelledFailures(workspace),
+      ...mavenManifestFailures(workspace),
     ];
     unclaimedGap = { files: unclaimedFiles };
     // Same reason as the Moon branch above: `coverage.exempt` is a native-only
