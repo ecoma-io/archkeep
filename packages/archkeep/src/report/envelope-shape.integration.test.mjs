@@ -34,8 +34,8 @@
 // ## Why in-process rather than through the packed artifact
 //
 // `runCli` takes its whole outside world as an argument — two streams, a
-// working directory, and the Nx and git seams — so eighteen commands cost
-// eighteen function calls instead of eighteen installs
+// working directory, and the Nx and git seams — so nineteen commands cost
+// nineteen function calls instead of nineteen installs
 // (`../cli.integration.test.mjs` establishes the harness). What this cannot
 // see is the bin shim, and nothing here needs to: the shape under contract is
 // built by `./json.mjs`, which the E2E suite already proves is what reaches a
@@ -155,6 +155,7 @@ let root;
 let historyDir;
 let baseline;
 let deltaBaseline;
+let changeIntent;
 
 /** A git command in the fixture, with an identity that does not read the machine's. */
 const git = (...args) =>
@@ -254,6 +255,28 @@ beforeAll(async () => {
   expect(deltaCapture.exitCode).toBe(0);
   deltaBaseline = join(root, "delta-baseline.json");
   writeFileSync(deltaBaseline, `${deltaCapture.out}\n`);
+
+  // `change` consumes the same evidence snapshot `delta` compares against,
+  // plus a manifest pinning the commit the snapshot was captured at — read
+  // off the snapshot's own provenance rather than assumed, the same way a
+  // real manifest is written from `git rev-parse HEAD`.
+  const capturedCommit = JSON.parse(deltaCapture.out).provenance.commit;
+  changeIntent = join(root, "change-intent.json");
+  writeFileSync(
+    changeIntent,
+    `${JSON.stringify(
+      {
+        version: "1",
+        base: { commit: capturedCommit },
+        summary: "roster fixture — no material change declared",
+        projects: { add: [], remove: [] },
+        edges: { add: [], remove: [] },
+        constraints: { noNewViolations: true, noNewCycles: true },
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }, SPAWN_TEST_BUDGET_MS);
 
 afterAll(() => {
@@ -318,6 +341,7 @@ function argvForEveryCommand() {
     graph: ["graph", "--format", "json"],
     diff: ["diff", baseline, "--format", "json"],
     delta: ["delta", deltaBaseline, "--format", "json"],
+    change: ["change", deltaBaseline, "--intent", changeIntent, "--format", "json"],
     discover: ["discover", "--format", "json"],
     drift: ["drift", "--format", "json"],
     reconcile: ["reconcile", "--format", "json"],
@@ -343,40 +367,51 @@ describe("the JSON envelope's field roster", () => {
     expect(Object.keys(argvForEveryCommand()).sort()).toEqual([...COMMAND_NAMES].sort());
   });
 
-  it("holds every command's shape against the recorded snapshot", async () => {
-    const recorded = JSON.parse(readFileSync(SNAPSHOT, "utf8"));
-    /** @type {Record<string, string[]>} */
-    const observed = {};
-    for (const [command, argv] of Object.entries(argvForEveryCommand())) {
-      const { envelope } = await envelopeFor(argv);
-      observed[command] = envelopeFieldPaths(envelope);
-    }
+  it(
+    "holds every command's shape against the recorded snapshot",
+    async () => {
+      const recorded = JSON.parse(readFileSync(SNAPSHOT, "utf8"));
+      /** @type {Record<string, string[]>} */
+      const observed = {};
+      for (const [command, argv] of Object.entries(argvForEveryCommand())) {
+        const { envelope } = await envelopeFor(argv);
+        observed[command] = envelopeFieldPaths(envelope);
+      }
 
-    if (UPDATING) {
-      writeFileSync(SNAPSHOT, `${JSON.stringify(observed, null, 2)}\n`);
-    }
+      if (UPDATING) {
+        writeFileSync(SNAPSHOT, `${JSON.stringify(observed, null, 2)}\n`);
+      }
 
-    const snapshot = UPDATING ? observed : recorded;
-    expect(Object.keys(snapshot).sort()).toEqual(Object.keys(observed).sort());
-    for (const [command, paths] of Object.entries(observed)) {
-      const { added, removed } = compareFieldPaths(snapshot[command] ?? [], paths);
-      // Asserted as one object per command so a failure names the command and
-      // both directions at once: `removed` is the broken promise, `added` is
-      // the field `docs/reference/json-output.md` now has to describe.
-      expect({ command, added, removed }).toEqual({ command, added: [], removed: [] });
-    }
-  });
+      const snapshot = UPDATING ? observed : recorded;
+      expect(Object.keys(snapshot).sort()).toEqual(Object.keys(observed).sort());
+      for (const [command, paths] of Object.entries(observed)) {
+        const { added, removed } = compareFieldPaths(snapshot[command] ?? [], paths);
+        // Asserted as one object per command so a failure names the command and
+        // both directions at once: `removed` is the broken promise, `added` is
+        // the field `docs/reference/json-output.md` now has to describe.
+        expect({ command, added, removed }).toEqual({ command, added: [], removed: [] });
+      }
+      // One full run per declared command — nineteen today — under the shared
+      // spawn-test ceiling (`../../spawn-budget.mjs`), not vitest's 5 s default,
+      // which the roster outgrew when the nineteenth verb landed.
+    },
+    SPAWN_TEST_BUDGET_MS,
+  );
 
-  it("pins schemaVersion, so a bump is a decision rather than a drift", async () => {
-    // The version is the one field a consumer branches on before reading
-    // anything else, and the promise says it moves only for a break. A test
-    // that merely read it back from the envelope would pin nothing.
-    for (const argv of Object.values(argvForEveryCommand())) {
-      const { envelope } = await envelopeFor(argv);
-      expect({ argv: argv[0], schemaVersion: envelope.schemaVersion }).toEqual({
-        argv: argv[0],
-        schemaVersion: 2,
-      });
-    }
-  });
+  it(
+    "pins schemaVersion, so a bump is a decision rather than a drift",
+    async () => {
+      // The version is the one field a consumer branches on before reading
+      // anything else, and the promise says it moves only for a break. A test
+      // that merely read it back from the envelope would pin nothing.
+      for (const argv of Object.values(argvForEveryCommand())) {
+        const { envelope } = await envelopeFor(argv);
+        expect({ argv: argv[0], schemaVersion: envelope.schemaVersion }).toEqual({
+          argv: argv[0],
+          schemaVersion: 2,
+        });
+      }
+    },
+    SPAWN_TEST_BUDGET_MS,
+  );
 });

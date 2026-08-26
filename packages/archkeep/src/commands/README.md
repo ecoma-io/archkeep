@@ -56,9 +56,31 @@ the resolution order.
   incomplete head coverage, and an Nx workspace with polyglot manifests but no
   plugin registration; a policy-fingerprint change is a loud coverage note, not
   a refusal. A verdict, not a description: a non-waived introduced violation is
-  a finding (exit 1 — the third verb beside `check` and `fitness`), an
+  a finding (exit 1 — then the third verb beside `check` and `fitness`; `change`
+  and its declared-intent question arrived later as the fourth), an
   unclassifiable item is a no-verdict (exit 3), and a waived-introduced entry
   is reported without gating. Capture stays descriptive: never exits 1.
+
+- **`change`** (`./change.mjs`'s `changeCommand`, with the manifest grammar in
+  `./change-intent.mjs`) — a declared change-intent contract reconciled
+  against the actual architectural delta: did the change produce exactly the
+  material consequences its declaration named? The material delta is
+  `./diff.mjs`'s own `computeDiff` over the baseline evidence snapshot's
+  stored graph and this run's graph — never a second opinion about which edits
+  count; declared constraints re-judge BOTH sides under ONE current law and
+  instant through the same engine `./delta.mjs` uses (`../rules/index.mjs`,
+  `./delta-classify.mjs`, and `../governance/fitness-rules.mjs`'s
+  `cyclicProjects`). Verdicts `matched | undeclared | unfulfilled | unproven`
+  stay separate: an undeclared consequence is a review signal, not a law
+  verdict, and the workspace-law axis it reports is informational — computed,
+  labeled as evidence, never folded into the exit code, because `check`
+  remains the authority on the law. Undeclared, unfulfilled, or a failed
+  declared constraint is a finding (exit 1 — the fourth verb beside `check`,
+  `fitness`, `delta`); an unproven base identity or an undeterminable
+  constraint is exit 3, and constraints are left unevaluated over a base the
+  run cannot vouch for. Refuses a manifest that fails shape or reference
+  validation, an unreadable/malformed/incomplete baseline, a provider
+  mismatch, incomplete head coverage, and the unregistered-plugin graph.
 
 - **`impact`** (`./impact.mjs`'s `impactCommand`) — reverse reachability from
   the project graph: given a project name, lists every project that transitively

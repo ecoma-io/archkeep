@@ -10,6 +10,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/archkeep/
 | `graph`      | (none)                           | Print the project graph as a deterministic snapshot                                                | no               |
 | `diff`       | `<baseline>`                     | Compare two graph snapshots edge by edge                                                           | no               |
 | `delta`      | `<baseline>` \| `--capture`      | Classify how boundary violations moved between a captured baseline and head                        | yes -- exits 1   |
+| `change`     | `<baseline> --intent <file>`     | Reconcile a declared change intent against the architectural delta                                 | yes -- exits 1   |
 | `drift`      | (none)                           | Compare the observed architecture to the declared intent                                           | no               |
 | `discover`   | (none)                           | Report observed facts, and optionally propose candidates                                           | no               |
 | `reconcile`  | (none)                           | Score the declared intent against the observed architecture, with proposed edits under `--propose` | no               |
@@ -101,6 +102,22 @@ argument (a file, not a git ref); with `--capture` there are no positionals.
 Unlike every other descriptive-family verb, `delta`'s compare mode is a gate:
 a non-waived introduced violation exits 1 — see the prose below and
 [../usage/delta.md](../usage/delta.md).
+
+### `change`
+
+| flag       | argument       | default                  | meaning                                                                                                                                               |
+| ---------- | -------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--intent` | `<file>`       | (required)               | The change-intent manifest declaring the material architectural consequences this change expects ([../usage/change.md](../usage/change.md)).          |
+| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                                                                                                       |
+| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout. Refused when it resolves to the manifest itself.                                                        |
+| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Declared constraints are re-judged under whichever law this run resolves. |
+
+The baseline evidence snapshot (`delta --capture` output) is the single
+positional argument. A verdict, not a description: an undeclared material
+change, an unfulfilled declaration, or a failed declared constraint exits 1;
+an unproven base identity or an undeterminable constraint exits 3. The
+workspace-law axis it reports is informational — `check` remains the
+authority on the law.
 
 ### `drift`
 
@@ -342,12 +359,12 @@ No `--config` flag — a description of what is recorded needs no boundary law.
 
 ## Exit codes
 
-| code | meaning                                                                                                                                                                                                                  | when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | clean -- and every selected file was analyzed                                                                                                                                                                            | No findings and no coverage gaps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| 1    | findings -- boundary violations, declared-edge violations, go.work drift, dead tsconfig path aliases, intent findings, a failing fitness gate or custom rule, or a non-waived violation `delta` classifies as introduced | `check`, `fitness`, and `delta`. A failing fitness function is a finding (D-09), so is a custom rule's `fail`, and so is a violation this change introduced; every other command that finds something reports it but exits 0.                                                                                                                                                                                                                                                                                                                                                            |
-| 2    | usage error                                                                                                                                                                                                              | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| 3    | no verdict -- the run could not start, a selected file could not be read, or the law itself could not be established                                                                                                     | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load, a tracked `architecture-intent.json` that will not parse or whose boundaries match no project, a declared custom rule whose artifact will not load or that answered `unknown` ([custom-rules.md](custom-rules.md)), or -- in a profile-selected workspace, on any command that reads a boundary law -- a profile that could not be resolved: an unknown profile name, an unknown `base`, a `base` cycle, or an unreadable registry. |
+| code | meaning                                                                                                                                                                                                                                                                                                                                                    | when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | clean -- and every selected file was analyzed                                                                                                                                                                                                                                                                                                              | No findings and no coverage gaps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 1    | findings -- boundary violations, declared-edge violations, go.work drift, dead tsconfig path aliases, intent findings, a failing fitness gate or custom rule, a non-waived violation `delta` classifies as introduced, or a change-intent reconciliation that found undeclared material changes, unfulfilled declarations, or a failed declared constraint | `check`, `fitness`, `delta`, and `change`. A failing fitness function is a finding (D-09), so is a custom rule's `fail`, so is a violation this change introduced, and so is an architectural consequence the change did not declare; every other command that finds something reports it but exits 0.                                                                                                                                                                                                                                                                                                                                                      |
+| 2    | usage error                                                                                                                                                                                                                                                                                                                                                | Unknown command, unknown flag, missing argument, path outside the tree, wrong positional count.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 3    | no verdict -- the run could not start, a selected file could not be read, or the law itself could not be established                                                                                                                                                                                                                                       | No workspace, malformed config, `moon project-graph`/`nx graph`/`git` failed, unreadable file, file with no analyzer, `tsconfig` that will not load, a tracked `architecture-intent.json` that will not parse or whose boundaries match no project, a declared custom rule whose artifact will not load or that answered `unknown` ([custom-rules.md](custom-rules.md)), a change intent that cannot be verified against its declared base, or -- in a profile-selected workspace, on any command that reads a boundary law -- a profile that could not be resolved: an unknown profile name, an unknown `base`, a `base` cycle, or an unreadable registry. |
 
 **Do not collapse 3 into 0.** A checker that could not look must never be
 mistaken for one that looked and found nothing. Both 1 and 3 must fail a CI
@@ -361,11 +378,14 @@ A descriptive command (`graph`, `diff`, `drift`, `discover`, `reconcile`,
 `waivers`, `history`, `trajectory`, `health`, `report`, `debt`, `impact`,
 `explain`, `context`, `provenance`, `adr`) exits 0 when it completes, 3 when
 coverage is incomplete or a metric is `unknown`, and 2 on usage error. None
-exits 1, because a descriptive result is never a finding. `fitness` and `delta` are the
-exceptions — each is a verdict: a failing fitness function exits 1 (the `check`
+exits 1, because a descriptive result is never a finding. `fitness`, `delta`
+and `change` are the verdicts — a failing fitness function exits 1 (the `check`
 lane) and an undetermined one exits 3; a `delta` comparison exits 1 on a
 non-waived introduced violation and 3 on a refusal or an unclassifiable item,
-while its `--capture` mode stays descriptive (0 or 3, never 1).
+while its `--capture` mode stays descriptive (0 or 3, never 1); a `change`
+reconciliation exits 1 on undeclared material changes, unfulfilled
+declarations, or a failed declared constraint, and 3 on an unproven base
+identity or an undeterminable constraint.
 
 ## What each command does
 
@@ -425,6 +445,24 @@ foreign-schema baseline, a baseline captured under a different provider, an
 incomplete side, and the unregistered-plugin graph; a policy change between
 capture and now is a loud note, not a refusal, because both sides are judged
 under the current law. [../usage/delta.md](../usage/delta.md) owns the model.
+
+### `change <baseline> --intent <file>`
+
+Reconciles a declared change-intent contract against the architectural delta
+actually observed between the captured evidence baseline and this tree — "did
+this change do exactly what it declared, architecturally?". The material delta
+is `diff`'s own computation over both graphs; declared constraints are judged
+by re-running both sides through the rule engine under the current law (the
+`delta` arrangement). Verdicts: `matched` | `undeclared` (observed material
+changes no declaration covers) | `unfulfilled` (declared changes that never
+happened) | `unproven` (the manifest's `base.commit` does not match the
+baseline's provenance, or the baseline carries none). Undeclared,
+unfulfilled, or a failed declared constraint exits 1; unproven or an
+undeterminable constraint exits 3; matched with every declared constraint
+passing exits 0. The workspace-law axis it reports is informational and never
+moves its exit code — a change can be policy-compliant but undeclared,
+policy-invalid but intent-matched, both, or neither, and each combination is
+reported separately. [../usage/change.md](../usage/change.md) owns the model.
 
 ### `waivers`
 

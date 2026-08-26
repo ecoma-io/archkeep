@@ -54,6 +54,32 @@ violations themselves, by `delta`, which classifies what one change introduced
 or resolved against a captured evidence baseline
 ([usage/delta.md](../usage/delta.md)).
 
+## Closing the loop — "did the change do what it declared?"
+
+The questions above run before and around an edit. The `change` command closes
+the loop after it. An agent (or developer) first declares the change's expected
+material architectural consequences in a small manifest — this project appears,
+that dependency is allowed, no new boundary violation — then edits code, then
+runs:
+
+```shell
+archkeep change .archkeep/change-base.json --intent change-intent.json --format json
+```
+
+The verdict is one of four: `matched`, `undeclared` (the delta contains
+material changes nothing declared — a review signal, not a law verdict),
+`unfulfilled` (a declared change never happened), or `unproven` (the manifest's
+base pin does not match the baseline's provenance — never read as matched).
+Each outcome is structured, so the loop is mechanical: fix the code or update
+the declaration, and verify again. Archkeep stays the deterministic observer;
+the agent stays the decision-maker — there is no command that rewrites the
+manifest from observed reality.
+
+This is distinct from the workspace law: a change can be policy-compliant but
+undeclared, policy-invalid but intent-matched, both, or neither — every
+combination renders on independent axes, and `check` remains the authority on
+whether the law holds ([usage/change.md](../usage/change.md) owns the model).
+
 ## Why machine-readable output matters
 
 The `--format json` flag exists on every command because the consumer is not
