@@ -193,6 +193,33 @@ function readPackageName(projectRoot, readFile, isTracked) {
 }
 
 /**
+ * Generated .NET build output (ADR 0006, Decision 2): a tracked `.csproj`
+ * under `obj/` or `bin/` never anchors a project, because inference over it
+ * would model a phantom inside the build directory.
+ */
+const isDotnetGeneratedOutput = (file) => /(?:^|\/)(?:obj|bin)\//.test(file);
+
+/**
+ * Whether a tracked file's own directory is a root `projects.infer` would
+ * anchor: its basename is an inferred manifest, its path passes `include`,
+ * and it fails no `exclude`. Split out of `inferProjectRoots` so the
+ * two-csproj guard in `discoverNativeProjects` judges exactly the files
+ * inference would anchor, no more.
+ *
+ * @param {string} file Workspace-relative path.
+ * @param {{manifests: string[], include: string[], exclude: string[]}} infer
+ * @returns {boolean}
+ */
+function manifestAnchorsRoot(file, infer) {
+  const base = file.slice(file.lastIndexOf("/") + 1);
+  return (
+    infer.manifests.some((pattern) => matchesGlob(base, pattern)) &&
+    infer.include.some((pattern) => matchesGlob(file, pattern)) &&
+    !infer.exclude.some((pattern) => matchesGlob(file, pattern))
+  );
+}
+
+/**
  * Every workspace-relative directory `projects.infer` covers: a tracked
  * manifest's own directory, when its basename is in `infer.manifests` and its
  * path matches `infer.include` and none of `infer.exclude`.
@@ -203,10 +230,8 @@ function readPackageName(projectRoot, readFile, isTracked) {
 function inferProjectRoots({ files, infer }) {
   const roots = new Set();
   for (const file of files) {
-    const base = file.slice(file.lastIndexOf("/") + 1);
-    if (!infer.manifests.some((pattern) => matchesGlob(base, pattern))) continue;
-    if (!infer.include.some((pattern) => matchesGlob(file, pattern))) continue;
-    if (infer.exclude.some((pattern) => matchesGlob(file, pattern))) continue;
+    if (!manifestAnchorsRoot(file, infer)) continue;
+    if (file.endsWith(".csproj") && isDotnetGeneratedOutput(file)) continue;
     roots.add(directoryOf(file));
   }
   return roots;
@@ -261,6 +286,32 @@ export function discoverNativeProjects({ root, files, readFile, model }) {
   const inferredRoots = model.projects.infer
     ? inferProjectRoots({ files, infer: model.projects.infer })
     : new Set();
+
+  // Two `.csproj` files in one directory are an ambiguous model, not a
+  // first-come anchor (ADR 0006, Decision 2): both claim the name inference
+  // would derive from that directory, and silently picking one reads the
+  // other's references onto it. Judged only over files inference would
+  // anchor — an excluded or non-inferred pair is the declared list's
+  // business, not this guard's.
+  if (model.projects.infer) {
+    const csprojByDir = new Map();
+    for (const file of files) {
+      if (!file.endsWith(".csproj")) continue;
+      if (isDotnetGeneratedOutput(file)) continue;
+      if (!manifestAnchorsRoot(file, model.projects.infer)) continue;
+      const dir = directoryOf(file);
+      csprojByDir.set(dir, [...(csprojByDir.get(dir) ?? []), file]);
+    }
+    for (const [dir, manifests] of csprojByDir) {
+      if (manifests.length > 1) {
+        violations.push(
+          `projects.infer: two .csproj files anchor the same root '${dir}' ` +
+            `(${manifests.join(", ")}) — the model cannot pick one; split them ` +
+            `into their own directories or declare the projects`,
+        );
+      }
+    }
+  }
 
   const allRoots = new Set([...declaredByRoot.keys(), ...inferredRoots]);
 
