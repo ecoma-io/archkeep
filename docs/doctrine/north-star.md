@@ -72,6 +72,7 @@ Against that bar, the state today:
 | TypeScript and JavaScript |      Nx's own       |     ✅      | deliberately not claimed |       ✅        |
 | Vue                       |      Nx's own       |     ✅      |      LSP · VS Code       |       ✅        |
 | Java                      | `pom.xml` + imports |     ✅      |      LSP · VS Code       |       ✅        |
+| Kotlin                    |  shared with Java   |     ✅      |      LSP · VS Code       |       ✅        |
 
 _LSP_ means any LSP client reaches the diagnostics; Claude Code does, from this
 repository's own marketplace. _VS Code_ means `packages/archkeep-vscode`, which

@@ -32,6 +32,7 @@ import { join } from "node:path";
 import { containmentViolation } from "../containment.mjs";
 import { resolveGoDependencies } from "../analysis/go.mjs";
 import { resolveJavaDependencies } from "../analysis/java.mjs";
+import { resolveKotlinDependencies } from "../analysis/kotlin.mjs";
 import { resolveMavenDependencies } from "../analysis/jvm/maven.mjs";
 import { resolvePythonDependencies } from "../analysis/python.mjs";
 import { resolveRustDependencies } from "../analysis/rust.mjs";
@@ -44,6 +45,7 @@ export function resolvePolyglotDependencies(projects, filesOf, readFile) {
     ...resolveRustDependencies(projects, filesOf, readFile),
     ...resolvePythonDependencies(projects, filesOf, readFile),
     ...resolveJavaDependencies(projects, filesOf, readFile),
+    ...resolveKotlinDependencies(projects, filesOf, readFile),
     // Manifest edges for Maven trees: the identity-anchor half of JVM
     // support, independent of (and complementary to) the import edges above
     // — a declared-but-unused dependency and an undeclared-but-imported one

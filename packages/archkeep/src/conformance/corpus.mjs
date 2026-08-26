@@ -1420,4 +1420,71 @@ export const ARCHITECTURE_CORPUS = [
       },
     ],
   },
+
+  // --------------------------------------- joint namespace (Java + Kotlin)
+  {
+    id: "joint-namespace-across-java-and-kotlin",
+    style: "modular monolith",
+    languages: ["java", "kotlin"],
+    intent:
+      "One Gradle-style module compiles .java and .kt sources into ONE package namespace, so a boundary must hold whichever language reaches across it: the violating import is written in JAVA toward a package only KOTLIN declares, and the permitted near-miss is written in KOTLIN toward a package only JAVA declares. The third probe is an own-project import through the same shared namespace, which resolves back to its source under either language and stays silent under every law.",
+    projects: [
+      { name: "jx-core", root: "libs/jx-core", tags: ["layer:core"] },
+      { name: "jx-app", root: "libs/jx-app", tags: ["layer:app"] },
+      { name: "jx-legacy", root: "libs/jx-legacy", tags: ["layer:legacy"] },
+    ],
+    depConstraints: [
+      { sourceTag: "layer:core", onlyDependOnLibsWithTags: ["layer:core"] },
+      { sourceTag: "layer:app", onlyDependOnLibsWithTags: ["layer:app", "layer:core"] },
+      { sourceTag: "layer:legacy", onlyDependOnLibsWithTags: ["layer:legacy"] },
+    ],
+    files: {
+      // The model lives in jx-core, declared by KOTLIN...
+      "libs/jx-core/src/main/kotlin/test/corpus/joint/model/Model.kt":
+        "package test.corpus.joint.model\n\nclass Model { val total = 1 }\n",
+      // ...and the persistence face of the SAME module by JAVA.
+      "libs/jx-core/src/main/java/test/corpus/joint/store/Repo.java":
+        "package test.corpus.joint.store;\n\nclass Repo {}\n",
+      // Permitted: KOTLIN in app reaching the JAVA-declared store package.
+      "libs/jx-app/src/main/kotlin/test/corpus/joint/app/Viewer.kt":
+        "package test.corpus.joint.app\n\nimport test.corpus.joint.store.Repo\n\nclass Viewer { val repo = Repo() }\n",
+      // Violating: JAVA in legacy reaching the KOTLIN-declared model package.
+      "libs/jx-legacy/src/main/java/test/corpus/joint/legacy/Migrator.java":
+        "package test.corpus.joint.legacy;\n\nimport test.corpus.joint.model.Model;\n\nclass Migrator { Model model; }\n",
+      // Near-miss: own-project import through the shared namespace.
+      "libs/jx-core/src/main/kotlin/test/corpus/joint/model/internal/Ids.kt":
+        "package test.corpus.joint.model.internal\n\nclass Ids\n",
+      "libs/jx-core/src/main/java/test/corpus/joint/model/Batches.java":
+        "package test.corpus.joint.model;\n\nimport test.corpus.joint.model.internal.Ids;\n\nclass Batches { Ids ids; }\n",
+    },
+    probes: [
+      {
+        file: "libs/jx-legacy/src/main/java/test/corpus/joint/legacy/Migrator.java",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "test.corpus.joint.model.Model",
+            target: "jx-core",
+          },
+        ],
+        denyAll: 1,
+        why: "A JAVA source importing a package only a KOTLIN file declares — the index resolves it, and the rule judges it like any other crossing.",
+      },
+      {
+        file: "libs/jx-app/src/main/kotlin/test/corpus/joint/app/Viewer.kt",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The permitted mirror image: KOTLIN reaching a package only a JAVA source declares, allowed by the table. Silent here, reported under deny-all — proof the analyzer saw it.",
+      },
+      {
+        file: "libs/jx-core/src/main/java/test/corpus/joint/model/Batches.java",
+        imports: 1,
+        reports: [],
+        denyAll: 0,
+        why: "An own-project import through the shared namespace resolves back to its source whichever language wrote it, so nothing can report it under any law.",
+      },
+    ],
+  },
 ];

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { analyzeGo } from "./go.mjs";
 import { analyzeJava } from "./java.mjs";
+import { analyzeKotlin } from "./kotlin.mjs";
 import { analyzePython } from "./python.mjs";
 import { analyzeRust } from "./rust.mjs";
 import { analyzeTypeScript } from "./typescript.mjs";
@@ -295,7 +296,83 @@ describe("Java — comments and renames are not dependencies", () => {
   });
 });
 
+describe("Kotlin — comments and renames are not dependencies", () => {
+  const workspace = kotlinWorkspace();
+  const analyze = (text) =>
+    analyzeKotlin({
+      sourceFile: "acme/apps/api/src/main/kotlin/com/acme/api/Handler.kt",
+      text,
+      workspace,
+    });
+
+  const original = [
+    "package com.acme.api",
+    "",
+    "import com.acme.core.Kernel",
+    "import com.acme.util.Strings",
+    "",
+    "class Handler { fun render(): String = Strings.shout(Kernel.name()) }",
+    "",
+  ].join("\n");
+
+  it("a comment appended at the end of the file changes nothing, byte for byte", () => {
+    expectRecordsUnchanged(analyze, original, `${original}// TODO: split api off core\n`);
+  });
+
+  it("renaming a local identifier changes nothing — the import is the fact", () => {
+    const renamed = original.replace("render", "produce");
+    expect(renamed).not.toBe(original); // the transform happened
+    expectRecordsUnchanged(analyze, original, renamed);
+  });
+
+  it("comment lines inserted above the block shift every line by exactly that many", () => {
+    const header = ["// Handler is the api entry point.", "// It may import core."];
+    expectOnlyShifted(analyze, original, [...header, original].join("\n"), header.length);
+  });
+
+  it("negative control: one added crossing moves the records the transforms must not", () => {
+    const violated = original.replace(
+      "import com.acme.util.Strings",
+      "import com.acme.storage.Store",
+    );
+    const result = analyze(violated);
+    expect(result.failures).toEqual([]);
+    expect(result.imports.some((record) => record.specifier === "com.acme.storage.Store")).toBe(
+      true,
+    );
+  });
+});
+
 /** --- fixture workspaces ------------------------------------------------- */
+
+function kotlinWorkspace() {
+  const files = {
+    "acme/apps/api/src/main/kotlin/com/acme/api/Handler.kt": "",
+    "acme/libs/core/src/main/java/com/acme/core/Kernel.java":
+      "package com.acme.core;\nclass Kernel {}\n",
+    "acme/libs/util/src/main/kotlin/com/acme/util/Strings.kt":
+      "package com.acme.util\nfun shout(s: String) = s\n",
+    "acme/libs/storage/src/main/kotlin/com/acme/storage/Store.kt":
+      "package com.acme.storage\nclass Store\n",
+  };
+  return {
+    root: "/w",
+    projects: [
+      { name: "api", root: "acme/apps/api" },
+      { name: "core", root: "acme/libs/core" },
+      { name: "util", root: "acme/libs/util" },
+      { name: "storage", root: "acme/libs/storage" },
+    ],
+    filesOf: (name) =>
+      ({
+        api: Object.keys(files).filter((file) => file.startsWith("acme/apps/api/")),
+        core: Object.keys(files).filter((file) => file.startsWith("acme/libs/core/")),
+        util: Object.keys(files).filter((file) => file.startsWith("acme/libs/util/")),
+        storage: Object.keys(files).filter((file) => file.startsWith("acme/libs/storage/")),
+      })[name] ?? [],
+    readFile: (path) => files[path] ?? null,
+  };
+}
 
 function javaWorkspace() {
   const files = {

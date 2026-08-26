@@ -484,6 +484,53 @@ import reached rather than how it was written.
 
 ---
 
+## Kotlin
+
+**Identity and edges are the JVM core's, shared with Java.** A mixed module
+compiles `.kt` and `.java` sources into one package namespace on one classpath,
+so there is ONE package index over BOTH extensions: a Kotlin import resolves
+into a package only a Java source declares, and the reverse. Maven coordinates
+anchor edges the same way — nothing about the manifest reader knows which
+language wrote the sources.
+
+**Extraction covers Kotlin's three import forms** — single, on-demand
+(`a.b.*`), aliased (`import a.b.C as D`; the alias is local syntax and changes
+no resolution) — with backtick-quoted segments read as identifiers. The match
+is newline-terminated because Kotlin omits the semicolon; the imported name must
+still start on the import's own line.
+
+**Kotlin block comments NEST**, and the mask scans them by depth — the exact
+opposite of Java's rule, which is why one scanner is parameterized per dialect
+rather than averaged into a wrong-everywhere middle. Raw strings (`"""…"""`)
+take no escapes, so their terminator search is pure; ordinary strings escape as
+Java's do.
+
+### Limits
+
+- **A multi-line import statement is not read** — the same pinned limit Java
+  states, for the same formatter reason.
+- **Fully-qualified names without an import are invisible** — identical gap to
+  Java's.
+- **Backtick-quoted PACKAGE segments are not indexed** — ``package `odd`.x``
+  contributes no index entry, so imports through such a prefix classify as
+  external rather than to their project. Backticks in an import's TAIL still
+  parse (they resolve by plain prefix or classify external).
+- **Directory = package is convention, not law** — which is why the index is
+  content-derived in the first place; a file whose `package` line contradicts
+  its path is attributed by the line.
+- **Default imports are classified by table**: nine stdlib roots plus
+  `kotlin.jvm`/`kotlin.js`, cited in `src/analysis/jvm/resolve.mjs`; they change
+  only across Kotlin releases.
+- **`.kts` build scripts are analyzed as sources**: their imports are real
+  dependencies (buildSrc, plugins), and text that only looks like an import
+  inside a script string is masked like any literal.
+
+**What the record leaves null:** exactly what Java's record leaves null —
+`file` always null, `kind` always `"static"`, `spelling.path` always false,
+`spelling.relative` true when the import resolved into its own project.
+
+---
+
 ## What "not supported" would look like
 
 There is **no option to switch a language off**, and that absence is the design.

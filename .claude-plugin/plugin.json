@@ -4,7 +4,7 @@
   "name": "archkeep",
   "displayName": "Archkeep",
   "version": "0.15.0",
-  "description": "Module-boundary diagnostics at edit time, and architecture agent skills, for Go, Rust, Python, Vue and Java",
+  "description": "Module-boundary diagnostics at edit time, and architecture agent skills, for Go, Rust, Python, Vue, Java and Kotlin",
   "author": {
     "name": "Mai Ngọc Hóa (John Martin)",
     "email": "john.itvn@gmail.com",
@@ -34,7 +34,9 @@
         ".rs": "rust",
         ".py": "python",
         ".vue": "vue",
-        ".java": "java"
+        ".java": "java",
+        ".kt": "kotlin",
+        ".kts": "kotlin"
       },
       "transport": "stdio",
       "workspaceFolder": "${CLAUDE_PROJECT_DIR}"

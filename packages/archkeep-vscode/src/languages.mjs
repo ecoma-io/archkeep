@@ -25,7 +25,15 @@
  *
  * @type {readonly string[]}
  */
-export const ROUTED_EXTENSIONS = Object.freeze([".go", ".rs", ".py", ".vue", ".java"]);
+export const ROUTED_EXTENSIONS = Object.freeze([
+  ".go",
+  ".rs",
+  ".py",
+  ".vue",
+  ".java",
+  ".kt",
+  ".kts",
+]);
 
 /**
  * Build the document selector the language client matches documents against.
