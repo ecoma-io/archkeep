@@ -1255,4 +1255,40 @@ describe("analyzePython", () => {
     expect(result.imports).toEqual([]);
     expect(result.failures[0].reason).toMatch(/graph unavailable/);
   });
+
+  it("keeps returning an envelope when the workspace throws something that is not an Error", () => {
+    // A thrown string carries no `message`; the fallback must still land in a
+    // failure record rather than a crash — a file with no verdict must never
+    // look like a file with nothing to say.
+    const hostile = {
+      ...workspace,
+      filesOf: () => {
+        throw "graph unavailable";
+      },
+    };
+    const result = analyzePython({ sourceFile: "a/b.py", text: "import os", workspace: hostile });
+    expect(result.imports).toEqual([]);
+    expect(result.failures[0].reason).toBe("Python analysis failed: graph unavailable");
+  });
+
+  it("reads inside a triple-quoted string as an import — the documented per-line limit", () => {
+    // The known worst case of matching import statements per line (the
+    // analyzer header's own list): prose inside a docstring that looks like
+    // one is misread as a real import site. The limit is pinned, not fixed —
+    // its direction is the safe one, a spurious record naming text the file
+    // really contains, and this fixture turns red if a rewrite silently moves
+    // which shapes it misreads.
+    const docstring = [
+      "def usage():",
+      '    """Example:',
+      "",
+      "    import beta.store",
+      "",
+      '    Do not run this."""',
+      "    return None",
+      "",
+    ].join("\n");
+    const { imports } = analyze(docstring);
+    expect(imports.map((record) => record.specifier)).toContain("beta.store");
+  });
 });

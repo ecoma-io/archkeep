@@ -734,4 +734,46 @@ describe("compareSnapshotMetadata", () => {
       }).providerChanged,
     ).toBe(false);
   });
+
+  it("reports each dirty side directly, and clean sides as no dirtiness", () => {
+    // `dirtyBaseline`/`dirtyHead` are what `diff`, `delta` and `change` turn
+    // into their disclosure notes — pinned here at the unit so a consumer
+    // reading them from the shared comparator cannot be silently dropped by
+    // one command while the others keep the note.
+    const dirty = (c) => ({ commit: c, remote: "https://example.test/repo.git", dirty: true });
+    const clean = (c) => ({ commit: c, remote: "https://example.test/repo.git", dirty: false });
+
+    expect(
+      compareSnapshotMetadata({
+        baselineProvider: "native",
+        headProvider: "native",
+        baselineProvenance: dirty("aaa"),
+        headProvenance: clean("aaa"),
+        baselineFingerprint: null,
+        headFingerprint: null,
+      }),
+    ).toMatchObject({ dirtyBaseline: true, dirtyHead: false });
+
+    expect(
+      compareSnapshotMetadata({
+        baselineProvider: "native",
+        headProvider: "native",
+        baselineProvenance: clean("aaa"),
+        headProvenance: dirty("bbb"),
+        baselineFingerprint: null,
+        headFingerprint: null,
+      }),
+    ).toMatchObject({ dirtyBaseline: false, dirtyHead: true });
+
+    expect(
+      compareSnapshotMetadata({
+        baselineProvider: "native",
+        headProvider: "native",
+        baselineProvenance: clean("aaa"),
+        headProvenance: clean("aaa"),
+        baselineFingerprint: null,
+        headFingerprint: null,
+      }),
+    ).toMatchObject({ dirtyBaseline: false, dirtyHead: false });
+  });
 });
