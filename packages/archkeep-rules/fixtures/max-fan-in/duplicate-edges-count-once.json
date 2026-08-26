@@ -1,0 +1,73 @@
+{
+  "contract": 1,
+  "graph": {
+    "edges": [
+      {
+        "source": "source",
+        "target": "target",
+        "type": "static",
+        "sourceFile": "packages/source/src/lib.rs"
+      },
+      {
+        "source": "source",
+        "target": "target",
+        "type": "dynamic",
+        "sourceFile": "packages/source/src/lib.rs"
+      }
+    ]
+  },
+  "imports": [
+    {
+      "column": 5,
+      "kind": "static",
+      "line": 3,
+      "resolved": {
+        "external": false,
+        "file": null,
+        "packageName": null,
+        "target": "target"
+      },
+      "sourceFile": "packages/source/src/lib.rs",
+      "sourceProject": "source",
+      "specifier": "target",
+      "spelling": {
+        "path": true,
+        "relative": false
+      }
+    }
+  ],
+  "model": {
+    "projects": [
+      {
+        "name": "source",
+        "root": "packages/source",
+        "tags": ["scope:shared"]
+      },
+      {
+        "name": "target",
+        "root": "packages/target",
+        "tags": ["type:library"]
+      }
+    ]
+  },
+  "policy": {
+    "depConstraints": [],
+    "moduleBoundaryOptions": {
+      "allow": [],
+      "allowCircularSelfDependency": false,
+      "banTransitiveDependencies": false,
+      "buildTargets": ["build"],
+      "checkDynamicDependenciesExceptions": [],
+      "checkNestedExternalImports": false,
+      "enforceBuildableLibDependency": false,
+      "ignoredCircularDependencies": []
+    }
+  },
+  "rule": {
+    "name": "max-fan-in",
+    "params": {
+      "max": 1,
+      "match": ["scope:shared"]
+    }
+  }
+}

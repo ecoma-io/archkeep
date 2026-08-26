@@ -1,0 +1,99 @@
+{
+  "contract": 1,
+  "graph": {
+    "edges": [
+      {
+        "source": "alpha",
+        "target": "at-max",
+        "type": "static",
+        "sourceFile": "packages/alpha/src/lib.rs"
+      },
+      {
+        "source": "beta",
+        "target": "at-max",
+        "type": "static",
+        "sourceFile": "packages/beta/src/lib.rs"
+      },
+      {
+        "source": "gamma",
+        "target": "other",
+        "type": "static",
+        "sourceFile": "packages/gamma/src/lib.rs"
+      }
+    ]
+  },
+  "imports": [
+    {
+      "column": 5,
+      "kind": "static",
+      "line": 3,
+      "resolved": {
+        "external": false,
+        "file": null,
+        "packageName": null,
+        "target": "at-max"
+      },
+      "sourceFile": "packages/alpha/src/lib.rs",
+      "sourceProject": "alpha",
+      "specifier": "at-max",
+      "spelling": {
+        "path": true,
+        "relative": false
+      }
+    }
+  ],
+  "model": {
+    "projects": [
+      {
+        "name": "alpha",
+        "root": "packages/alpha",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "beta",
+        "root": "packages/beta",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "gamma",
+        "root": "packages/gamma",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "at-max",
+        "root": "packages/at-max",
+        "tags": ["scope:shared"]
+      },
+      {
+        "name": "other",
+        "root": "packages/other",
+        "tags": ["scope:shared"]
+      },
+      {
+        "name": "zero",
+        "root": "packages/zero",
+        "tags": ["scope:shared"]
+      }
+    ]
+  },
+  "policy": {
+    "depConstraints": [],
+    "moduleBoundaryOptions": {
+      "allow": [],
+      "allowCircularSelfDependency": false,
+      "banTransitiveDependencies": false,
+      "buildTargets": ["build"],
+      "checkDynamicDependenciesExceptions": [],
+      "checkNestedExternalImports": false,
+      "enforceBuildableLibDependency": false,
+      "ignoredCircularDependencies": []
+    }
+  },
+  "rule": {
+    "name": "max-fan-in",
+    "params": {
+      "max": 2,
+      "match": ["scope:shared"]
+    }
+  }
+}

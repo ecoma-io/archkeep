@@ -17,6 +17,8 @@
 
 #[path = "../examples/forbidden_tag_combination.rs"]
 mod forbidden_tag_combination;
+#[path = "../examples/max_fan_in.rs"]
+mod max_fan_in;
 #[path = "../examples/max_fan_out.rs"]
 mod max_fan_out;
 #[path = "../examples/tag_cardinality.rs"]
@@ -48,6 +50,10 @@ fn the_declaration_is_the_document_the_host_reads() {
     assert_eq!(
         max_fan_out::archkeep_describe_json(),
         r#"{"contract":1,"name":"max-fan-out","needs":["model","graph"],"findings":[{"id":"fan-out-budget-exceeded","message":"a project depends on more distinct projects than the declared budget"}]}"#
+    );
+    assert_eq!(
+        max_fan_in::archkeep_describe_json(),
+        r#"{"contract":1,"name":"max-fan-in","needs":["model","graph"],"findings":[{"id":"fan-in-budget-exceeded","message":"a project is depended on by more distinct projects than the declared budget"}]}"#
     );
 }
 
@@ -303,6 +309,104 @@ fn the_verdict_bytes_are_the_ones_that_cross_the_abi() {
     assert_eq!(
         max_fan_out::archkeep_evaluate_json(&bundle),
         r#"{"contract":1,"verdict":"fail","findings":[{"id":"fan-out-budget-exceeded","message":"over declares 3 distinct dependencies, above the budget of 2","project":"over"}]}"#
+    );
+    let bundle = std::fs::read(fixture!("max-fan-in", "over-the-budget.json")).expect("a fixture");
+    assert_eq!(
+        max_fan_in::archkeep_evaluate_json(&bundle),
+        r#"{"contract":1,"verdict":"fail","findings":[{"id":"fan-in-budget-exceeded","message":"popular is depended on by 3 distinct projects, above the budget of 2","project":"popular"}]}"#
+    );
+}
+
+// --- max-fan-in -----------------------------------------------------------
+
+#[test]
+fn a_project_over_the_fan_in_budget_fails() {
+    expect_verdict(
+        fixture!("max-fan-in", "over-the-budget.json"),
+        max_fan_in::archkeep_evaluate_json,
+        r#"{
+            "contract": 1,
+            "verdict": "fail",
+            "findings": [{
+                "id": "fan-in-budget-exceeded",
+                "message": "popular is depended on by 3 distinct projects, above the budget of 2",
+                "project": "popular"
+            }]
+        }"#,
+    );
+}
+
+#[test]
+fn fan_in_all_projects_at_or_under_budget_pass() {
+    expect_verdict(
+        fixture!("max-fan-in", "exactly-at-the-budget.json"),
+        max_fan_in::archkeep_evaluate_json,
+        r#"{ "contract": 1, "verdict": "pass", "findings": [] }"#,
+    );
+}
+
+#[test]
+fn fan_in_duplicate_edges_from_same_source_count_once() {
+    expect_verdict(
+        fixture!("max-fan-in", "duplicate-edges-count-once.json"),
+        max_fan_in::archkeep_evaluate_json,
+        r#"{ "contract": 1, "verdict": "pass", "findings": [] }"#,
+    );
+}
+
+#[test]
+fn fan_in_no_project_carries_match_tags_is_not_applicable() {
+    expect_verdict(
+        fixture!("max-fan-in", "no-matching-projects.json"),
+        max_fan_in::archkeep_evaluate_json,
+        r#"{
+            "contract": 1,
+            "verdict": "not_applicable",
+            "findings": [],
+            "notApplicableReason": "no project carries all of the match tags [scope:shared], so the rule constrains nothing"
+        }"#,
+    );
+}
+
+#[test]
+fn fan_in_an_edge_from_an_undeclared_project_is_unknown() {
+    expect_verdict(
+        fixture!("max-fan-in", "edge-into-undeclared-project.json"),
+        max_fan_in::archkeep_evaluate_json,
+        r#"{
+            "contract": 1,
+            "verdict": "unknown",
+            "findings": [],
+            "reason": "the graph carries an edge into \"ghost\", which the model does not declare"
+        }"#,
+    );
+}
+
+#[test]
+fn fan_in_missing_max_param_is_unknown() {
+    expect_verdict(
+        fixture!("max-fan-in", "malformed-params.json"),
+        max_fan_in::archkeep_evaluate_json,
+        r#"{
+            "contract": 1,
+            "verdict": "unknown",
+            "findings": [],
+            "reason": "params.max is required"
+        }"#,
+    );
+}
+
+#[test]
+fn fan_in_a_typoed_param_key_is_unknown() {
+    expect_verdict(
+        fixture!("max-fan-in", "unknown-param-key.json"),
+        max_fan_in::archkeep_evaluate_json,
+        r#"{
+            "contract": 1,
+            "verdict": "unknown",
+            "findings": [],
+            "reason": "unknown key: budget"
+        }"#,
     );
 }
 

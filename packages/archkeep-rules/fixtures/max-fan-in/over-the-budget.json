@@ -1,0 +1,116 @@
+{
+  "contract": 1,
+  "graph": {
+    "edges": [
+      {
+        "source": "alpha",
+        "target": "popular",
+        "type": "static",
+        "sourceFile": "packages/alpha/src/lib.rs"
+      },
+      {
+        "source": "beta",
+        "target": "popular",
+        "type": "static",
+        "sourceFile": "packages/beta/src/lib.rs"
+      },
+      {
+        "source": "gamma",
+        "target": "popular",
+        "type": "static",
+        "sourceFile": "packages/gamma/src/lib.rs"
+      },
+      {
+        "source": "delta",
+        "target": "at-max",
+        "type": "static",
+        "sourceFile": "packages/delta/src/lib.rs"
+      },
+      {
+        "source": "epsilon",
+        "target": "at-max",
+        "type": "static",
+        "sourceFile": "packages/epsilon/src/lib.rs"
+      }
+    ]
+  },
+  "imports": [
+    {
+      "column": 5,
+      "kind": "static",
+      "line": 3,
+      "resolved": {
+        "external": false,
+        "file": null,
+        "packageName": null,
+        "target": "popular"
+      },
+      "sourceFile": "packages/alpha/src/lib.rs",
+      "sourceProject": "alpha",
+      "specifier": "popular",
+      "spelling": {
+        "path": true,
+        "relative": false
+      }
+    }
+  ],
+  "model": {
+    "projects": [
+      {
+        "name": "alpha",
+        "root": "packages/alpha",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "beta",
+        "root": "packages/beta",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "gamma",
+        "root": "packages/gamma",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "delta",
+        "root": "packages/delta",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "epsilon",
+        "root": "packages/epsilon",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "popular",
+        "root": "packages/popular",
+        "tags": ["scope:shared"]
+      },
+      {
+        "name": "at-max",
+        "root": "packages/at-max",
+        "tags": ["scope:shared"]
+      }
+    ]
+  },
+  "policy": {
+    "depConstraints": [],
+    "moduleBoundaryOptions": {
+      "allow": [],
+      "allowCircularSelfDependency": false,
+      "banTransitiveDependencies": false,
+      "buildTargets": ["build"],
+      "checkDynamicDependenciesExceptions": [],
+      "checkNestedExternalImports": false,
+      "enforceBuildableLibDependency": false,
+      "ignoredCircularDependencies": []
+    }
+  },
+  "rule": {
+    "name": "max-fan-in",
+    "params": {
+      "max": 2,
+      "match": ["scope:shared"]
+    }
+  }
+}

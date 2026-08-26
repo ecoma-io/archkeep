@@ -72,19 +72,20 @@ docker run --rm \
   cd /work/packages/archkeep-rules
   rustup target add wasm32-unknown-unknown
   cargo build --release --locked --target wasm32-unknown-unknown \
-    --example tag_cardinality --example forbidden_tag_combination --example max_fan_out
+    --example tag_cardinality --example forbidden_tag_combination --example max_fan_out --example max_fan_in
   tar -C target/wasm32-unknown-unknown/release/examples -cf - \
-    tag_cardinality.wasm forbidden_tag_combination.wasm max_fan_out.wasm
+    tag_cardinality.wasm forbidden_tag_combination.wasm max_fan_out.wasm max_fan_in.wasm
 ' > "$archive"
 
 tar -xOf "$archive" tag_cardinality.wasm > rules/tag-cardinality.wasm
 tar -xOf "$archive" forbidden_tag_combination.wasm > rules/forbidden-tag-combination.wasm
 tar -xOf "$archive" max_fan_out.wasm > rules/max-fan-out.wasm
+tar -xOf "$archive" max_fan_in.wasm > rules/max-fan-in.wasm
 
 # Bare lowercase hex and nothing else: this string is pasted verbatim into a
 # `customRules` row's `sha256` field, which is 64 hex characters with no
 # filename beside it (`../archkeep/src/config.mjs`).
-for name in tag-cardinality forbidden-tag-combination max-fan-out; do
+for name in tag-cardinality forbidden-tag-combination max-fan-out max-fan-in; do
   if command -v sha256sum >/dev/null 2>&1; then
     digest="$(sha256sum "rules/$name.wasm" | cut -d' ' -f1)"
   else

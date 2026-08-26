@@ -118,10 +118,11 @@ fn package_path(relative: impl AsRef<Path>) -> PathBuf {
 /// `../catalog.json` uses. A loop over one list, because a rule added without
 /// an entry here is a rule none of these tests notice — the same argument the
 /// catalog validator makes from the other side.
-const RULES: [&str; 3] = [
+const RULES: [&str; 4] = [
     "tag-cardinality",
     "forbidden-tag-combination",
     "max-fan-out",
+    "max-fan-in",
 ];
 
 #[test]
