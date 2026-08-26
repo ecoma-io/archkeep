@@ -1,0 +1,61 @@
+{
+  "contract": 1,
+  "graph": {
+    "edges": [
+      {
+        "source": "known",
+        "target": "ghost",
+        "type": "static",
+        "sourceFile": "packages/known/src/lib.rs"
+      }
+    ]
+  },
+  "imports": [
+    {
+      "column": 5,
+      "kind": "static",
+      "line": 3,
+      "resolved": {
+        "external": false,
+        "file": null,
+        "packageName": null,
+        "target": "ghost"
+      },
+      "sourceFile": "packages/known/src/lib.rs",
+      "sourceProject": "known",
+      "specifier": "ghost",
+      "spelling": {
+        "path": true,
+        "relative": false
+      }
+    }
+  ],
+  "model": {
+    "projects": [
+      {
+        "name": "known",
+        "root": "packages/known",
+        "tags": ["scope:shared"]
+      }
+    ]
+  },
+  "policy": {
+    "depConstraints": [],
+    "moduleBoundaryOptions": {
+      "allow": [],
+      "allowCircularSelfDependency": false,
+      "banTransitiveDependencies": false,
+      "buildTargets": ["build"],
+      "checkDynamicDependenciesExceptions": [],
+      "checkNestedExternalImports": false,
+      "enforceBuildableLibDependency": false,
+      "ignoredCircularDependencies": []
+    }
+  },
+  "rule": {
+    "name": "max-fan-out",
+    "params": {
+      "max": 2
+    }
+  }
+}

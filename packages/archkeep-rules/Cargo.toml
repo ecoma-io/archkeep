@@ -45,6 +45,12 @@ name = "forbidden_tag_combination"
 path = "examples/forbidden_tag_combination.rs"
 crate-type = ["cdylib"]
 
+# max-fan-out: a project may not depend on more distinct projects than a declared budget.
+[[example]]
+name = "max_fan_out"
+path = "examples/max_fan_out.rs"
+crate-type = ["cdylib"]
+
 # The profile the committed artifacts are built with, stated here rather than in
 # the build command so the artifact a contributor rebuilds is the artifact CI
 # would have.

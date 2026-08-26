@@ -42,6 +42,26 @@ pub fn require_non_empty_str(params: &Value, key: &str) -> Result<String, String
         .ok_or_else(|| format!("params.{key} is not a non-empty string"))
 }
 
+/// Validates a required numeric field ≥ 0.
+///
+/// Returns `Ok(value)` if present and valid, `Err` if malformed, negative,
+/// or missing.
+pub fn require_non_negative_number(params: &Value, key: &str) -> Result<u64, String> {
+    match params.get(key) {
+        None => Err(format!("params.{key} is required")),
+        Some(Value::Null) => Err(format!("params.{key} is required")),
+        Some(Value::Number(n)) => {
+            if n.is_u64() || (n.is_i64() && n.as_i64() >= Some(0)) {
+                n.as_u64()
+                    .ok_or_else(|| format!("params.{key} is a number that does not fit in u64"))
+            } else {
+                Err(format!("params.{key} is not a non-negative integer"))
+            }
+        }
+        Some(_) => Err(format!("params.{key} is not a number")),
+    }
+}
+
 /// Validates an optional numeric field ≥ 0.
 ///
 /// Returns `Ok(Some(value))` if present and valid, `Ok(None)` if absent/null,
@@ -146,6 +166,23 @@ mod tests {
         );
         assert!(require_non_empty_str(&json!({"axis": ""}), "axis").is_err());
         assert!(require_non_empty_str(&json!({}), "axis").is_err());
+    }
+
+    #[test]
+    fn require_non_negative_number_works() {
+        assert_eq!(
+            require_non_negative_number(&json!({"max": 5}), "max").unwrap(),
+            5
+        );
+        assert_eq!(
+            require_non_negative_number(&json!({"max": 0}), "max").unwrap(),
+            0
+        );
+        assert!(require_non_negative_number(&json!({}), "max").is_err());
+        assert!(require_non_negative_number(&json!({"max": null}), "max").is_err());
+        assert!(require_non_negative_number(&json!({"max": -1}), "max").is_err());
+        assert!(require_non_negative_number(&json!({"max": 1.5}), "max").is_err());
+        assert!(require_non_negative_number(&json!({"max": "1"}), "max").is_err());
     }
 
     #[test]

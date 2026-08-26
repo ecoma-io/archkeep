@@ -1,0 +1,94 @@
+{
+  "contract": 1,
+  "graph": {
+    "edges": [
+      {
+        "source": "at-max",
+        "target": "alpha",
+        "type": "static",
+        "sourceFile": "packages/at-max/src/lib.rs"
+      },
+      {
+        "source": "at-max",
+        "target": "beta",
+        "type": "static",
+        "sourceFile": "packages/at-max/src/lib.rs"
+      },
+      {
+        "source": "other",
+        "target": "alpha",
+        "type": "static",
+        "sourceFile": "packages/other/src/lib.rs"
+      }
+    ]
+  },
+  "imports": [
+    {
+      "column": 5,
+      "kind": "static",
+      "line": 3,
+      "resolved": {
+        "external": false,
+        "file": null,
+        "packageName": null,
+        "target": "alpha"
+      },
+      "sourceFile": "packages/at-max/src/lib.rs",
+      "sourceProject": "at-max",
+      "specifier": "alpha",
+      "spelling": {
+        "path": true,
+        "relative": false
+      }
+    }
+  ],
+  "model": {
+    "projects": [
+      {
+        "name": "alpha",
+        "root": "packages/alpha",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "beta",
+        "root": "packages/beta",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "at-max",
+        "root": "packages/at-max",
+        "tags": ["scope:shared"]
+      },
+      {
+        "name": "other",
+        "root": "packages/other",
+        "tags": ["scope:shared"]
+      },
+      {
+        "name": "zero",
+        "root": "packages/zero",
+        "tags": ["scope:shared"]
+      }
+    ]
+  },
+  "policy": {
+    "depConstraints": [],
+    "moduleBoundaryOptions": {
+      "allow": [],
+      "allowCircularSelfDependency": false,
+      "banTransitiveDependencies": false,
+      "buildTargets": ["build"],
+      "checkDynamicDependenciesExceptions": [],
+      "checkNestedExternalImports": false,
+      "enforceBuildableLibDependency": false,
+      "ignoredCircularDependencies": []
+    }
+  },
+  "rule": {
+    "name": "max-fan-out",
+    "params": {
+      "max": 2,
+      "match": ["scope:shared"]
+    }
+  }
+}
