@@ -478,15 +478,16 @@ describe("constants", () => {
 });
 
 describe("validateCatalogFiles (integration)", () => {
-  it("validates the committed tree's catalog.json (rules: tag-cardinality, forbidden-tag-combination, max-fan-out)", () => {
+  it("validates the committed tree's catalog.json (rules: tag-cardinality, forbidden-tag-combination, max-fan-out, max-fan-in)", () => {
     const packageRoot = resolve(fileURLToPath(import.meta.url), "..", "..");
     const result = validateCatalogFiles(packageRoot);
     assert.equal(result.ok, true);
     assert.ok(Array.isArray(result.catalog.rules));
-    assert.equal(result.catalog.rules.length, 3);
+    assert.equal(result.catalog.rules.length, 4);
     assert.equal(result.catalog.rules[0].name, "tag-cardinality");
     assert.equal(result.catalog.rules[1].name, "forbidden-tag-combination");
     assert.equal(result.catalog.rules[2].name, "max-fan-out");
+    assert.equal(result.catalog.rules[3].name, "max-fan-in");
   });
 
   it("throws when catalog.json cannot be read", () => {

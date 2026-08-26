@@ -51,6 +51,12 @@ name = "max_fan_out"
 path = "examples/max_fan_out.rs"
 crate-type = ["cdylib"]
 
+# max-fan-in: a project may not be depended on by more distinct projects than a declared budget.
+[[example]]
+name = "max_fan_in"
+path = "examples/max_fan_in.rs"
+crate-type = ["cdylib"]
+
 # The profile the committed artifacts are built with, stated here rather than in
 # the build command so the artifact a contributor rebuilds is the artifact CI
 # would have.

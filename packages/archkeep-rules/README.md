@@ -5,10 +5,10 @@ integrity gate for shipped rule artifacts.
 
 ## Status
 
-The catalog holds the first three rules — `tag-cardinality`,
-`forbidden-tag-combination`, and `max-fan-out` — with their committed artifacts,
-digests, and fixture suites. More rules arrive in subsequent changes. The
-package is not yet published to npm.
+The catalog holds the first four rules — `tag-cardinality`,
+`forbidden-tag-combination`, `max-fan-out`, and `max-fan-in` — with their
+committed artifacts, digests, and fixture suites. More rules arrive in subsequent
+changes. The package is not yet published to npm.
 
 ## What this package is
 
@@ -276,6 +276,58 @@ budget state.
   "sha256": "<copy from catalog.json — it equals rules/max-fan-out.wasm.sha256>",
   "params": { "max": 2, "match": ["scope:shared"] },
   "reason": "a shared project may depend on at most two other projects — anything more is a coupling violation",
+}
+```
+
+### max-fan-in
+
+**Intent.** Constrain how many distinct projects may depend on a project — a
+budget on architectural popularity, measured by the number of unique upstream
+dependents.
+
+**Parameters.**
+
+| name    | type   | required | meaning                                                                                                                                                |
+| ------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `max`   | number | yes      | The most distinct projects that may depend on an in-scope project (integer ≥ 0).                                                                       |
+| `match` | array  | no       | Tags an in-scope project must carry ALL of; absent means every project. An empty array is malformed, not "every project" — absent is how you say that. |
+
+**Evidence.** `model` and `graph`. The rule reads the dependency graph and counts
+distinct sources per project.
+
+**Verdicts.**
+
+- `fail` — an in-scope project is depended on by more than `max` distinct
+  projects. One finding per project, naming the project, the count, and the budget.
+- `pass` — every in-scope project's distinct dependent count is at or under the
+  budget.
+- `not_applicable` — no project is in scope (no project carries all the `match`
+  tags, or the workspace has no projects at all).
+- `unknown` — the parameters cannot be read as declared: an unknown key, a
+  missing or malformed `max` (negative, fractional, or a string), or the graph
+  names a project the model does not declare.
+
+**Limitations.** The budget counts DISTINCT sources regardless of edge type:
+static and dynamic edges from the same source count once. Self-edges (source
+equals target) are skipped — providers never emit them, but a replayed bundle
+might carry one. A budget is user policy — the rule says a number was exceeded,
+nothing about whether the architecture is "good" or "bad". This rule judges HOW
+MANY projects depend on a project, not WHICH projects may depend on it;
+`depConstraints` already judges WHICH sources are allowed edge by edge. Zero
+dependents is a valid budget state. **High fan-in does not mean a highly reused
+dependency is bad** — the rule expresses an explicit architectural budget the
+workspace declared (shared-kernel budget, gravity-well control, platform-module
+limits are the use cases), and passing says only "within budget".
+
+**Usage example.**
+
+```jsonc
+{
+  "name": "max-fan-in",
+  "artifact": "tools/rules/max-fan-in.wasm",
+  "sha256": "<copy from catalog.json — it equals rules/max-fan-in.wasm.sha256>",
+  "params": { "max": 5, "match": ["scope:shared"] },
+  "reason": "a shared project may be depended on by at most five other projects — anything more is a gravity-well violation",
 }
 ```
 
