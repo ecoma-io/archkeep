@@ -21,7 +21,7 @@ dependency and an undeclared-but-imported one are both findings.
 | `.vue`                                                | Vue                       | Nx's own inference                                            | ✅       |
 | `.java`                                               | Java                      | root `pom.xml` or Gradle `settings.gradle`, plus import sites | ✅       |
 | `.kt` `.kts`                                          | Kotlin                    | shared with Java                                              | ✅       |
-| `.cs`                                                 | C# / .NET                 | `*.csproj` (`ProjectReference`)                 | ✅       |
+| `.cs`                                                 | C# / .NET                 | `*.csproj` (`ProjectReference`)                               | ✅       |
 
 Anything else is a no-op: the dispatcher is pointed at every tracked file, and
 `README.md` is not an error. A file whose extension _is_ on this list but whose

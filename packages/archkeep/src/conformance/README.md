@@ -386,18 +386,18 @@ moves:
 
 | messageId                                    |  Go | Rust | Python | TypeScript | Java | Kotlin |  C# |
 | -------------------------------------------- | --: | ---: | -----: | ---------: | ---: | -----: | --: |
-| `onlyTagsConstraintViolation`              |   8 |    3 |      4 |          1 |    2 |      2 |   1 |
-| `notTagsConstraintViolation`               |   0 |    2 |      0 |          0 |    0 |      0 |   0 |
-| `emptyOnlyTagsConstraintViolation`         |   0 |    0 |      1 |          0 |    0 |      0 |   0 |
-| `projectWithoutTagsCannotHaveDependencies` |   1 |    0 |      2 |          0 |    1 |      2 |   1 |
-| `bannedExternalImportsViolation`           |   1 |    1 |      0 |          0 |    1 |      2 |   1 |
-| `noTransitiveDependencies`                 |   2 |    0 |      0 |          0 |    0 |      0 |   0 |
-| `noCircularDependencies`                   |   0 |    0 |      2 |          0 |    2 |      2 |   0 |
-| `noSelfCircularDependencies`               |   0 |    0 |      1 |          0 |    0 |      0 |   0 |
-| `noImportsOfApps`                          |   1 |    0 |      0 |          0 |    0 |      0 |   0 |
-| `noImportsOfE2e`                           |   1 |    0 |      0 |          0 |    0 |      0 |   0 |
-| `noImportOfNonBuildableLibraries`          |   1 |    0 |      0 |          0 |    0 |      0 |   0 |
-| `noRelativeOrAbsoluteImportsAcrossLibraries`|   0 |    0 |      0 |          1 |    0 |      0 |   0 |
+| `onlyTagsConstraintViolation`                |   8 |    3 |      4 |          1 |    2 |      2 |   1 |
+| `notTagsConstraintViolation`                 |   0 |    2 |      0 |          0 |    0 |      0 |   0 |
+| `emptyOnlyTagsConstraintViolation`           |   0 |    0 |      1 |          0 |    0 |      0 |   0 |
+| `projectWithoutTagsCannotHaveDependencies`   |   1 |    0 |      2 |          0 |    1 |      2 |   1 |
+| `bannedExternalImportsViolation`             |   1 |    1 |      0 |          0 |    1 |      2 |   1 |
+| `noTransitiveDependencies`                   |   2 |    0 |      0 |          0 |    0 |      0 |   0 |
+| `noCircularDependencies`                     |   0 |    0 |      2 |          0 |    2 |      2 |   0 |
+| `noSelfCircularDependencies`                 |   0 |    0 |      1 |          0 |    0 |      0 |   0 |
+| `noImportsOfApps`                            |   1 |    0 |      0 |          0 |    0 |      0 |   0 |
+| `noImportsOfE2e`                             |   1 |    0 |      0 |          0 |    0 |      0 |   0 |
+| `noImportOfNonBuildableLibraries`            |   1 |    0 |      0 |          0 |    0 |      0 |   0 |
+| `noRelativeOrAbsoluteImportsAcrossLibraries` |   0 |    0 |      0 |          1 |    0 |      0 |   0 |
 
 TypeScript appears in one case only, and only where it sharpens the point: the
 modular monolith is one constraint table over a tree whose modules are written

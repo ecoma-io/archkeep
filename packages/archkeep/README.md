@@ -3,7 +3,7 @@
 **Architecture governance for polyglot repositories** — a deterministic
 authority that keeps the architecture your team declared aligned with the code
 your team keeps changing. Dependency graphs and module boundaries for Go, Rust,
-Python, TypeScript, JavaScript, Vue, Java and Kotlin, with Nx and Moon as first-class
+Python, TypeScript, JavaScript, Vue, Java, Kotlin and C#, with Nx and Moon as first-class
 integrations. Coding agents read the same verdicts, machine-readably, through
 the `arch-*` skills. The system boundary — what Archkeep is and what it is not —
 is owned by [architecture-authority.md](https://github.com/ecoma-io/archkeep/blob/main/docs/doctrine/architecture-authority.md).
@@ -182,7 +182,7 @@ a file it cannot edit ([overview.md](https://github.com/ecoma-io/archkeep/blob/m
 
 ## Support
 
-- **Languages** — Go, Rust, Python, TypeScript and JavaScript, Vue, Java and Kotlin. Analysis
+- **Languages** — Go, Rust, Python, TypeScript and JavaScript, Vue, Java, Kotlin and C#. Analysis
   from source, never a build: nothing shells out to `go`, `cargo`, `uv` or `tsc`
   ([languages.md](https://github.com/ecoma-io/archkeep/blob/main/docs/reference/languages.md)).
 - **Workspaces** — any repository: Nx registers the plugin in `nx.json` and
