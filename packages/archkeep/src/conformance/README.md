@@ -336,8 +336,8 @@ disposition:
   partition axis rather than a layer axis, where the violation is between peers
   and no layer ordering exists to decide it.
 
-**14 fixture workspaces, 59 probes, 58 projects**, carrying 38 labeled findings
-and 27 near-miss probes that must produce nothing.
+**15 fixture workspaces, 62 probes, 61 projects**, carrying 39 labeled findings
+and 29 near-miss probes that must produce nothing.
 
 ### How it runs, and why it runs the whole command
 
@@ -386,7 +386,7 @@ moves:
 
 | messageId                                    |  Go | Rust | Python | TypeScript | Java |
 | -------------------------------------------- | --: | ---: | -----: | ---------: | ---: |
-| `onlyTagsConstraintViolation`                |   8 |    3 |      4 |          1 |    1 |
+| `onlyTagsConstraintViolation`                |   8 |    3 |      4 |          1 |    2 |
 | `notTagsConstraintViolation`                 |   0 |    2 |      0 |          0 |    0 |
 | `emptyOnlyTagsConstraintViolation`           |   0 |    0 |      1 |          0 |    0 |
 | `projectWithoutTagsCannotHaveDependencies`   |   1 |    0 |      2 |          0 |    1 |
