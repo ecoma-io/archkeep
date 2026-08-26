@@ -5,6 +5,7 @@
 //! helpers PR2's two rules establish.
 
 pub mod params;
+pub mod topology;
 
 /// Extracts the axis value from a colon-form tag if present.
 ///

@@ -5,10 +5,10 @@ integrity gate for shipped rule artifacts.
 
 ## Status
 
-The catalog holds the first two rules — `tag-cardinality` and
-`forbidden-tag-combination` — with their committed artifacts, digests, and
-fixture suites. More rules arrive in subsequent changes. The package is not
-yet published to npm.
+The catalog holds the first three rules — `tag-cardinality`,
+`forbidden-tag-combination`, and `max-fan-out` — with their committed artifacts,
+digests, and fixture suites. More rules arrive in subsequent changes. The
+package is not yet published to npm.
 
 ## What this package is
 
@@ -74,6 +74,9 @@ A catalog that validated a changed digest would ship a lie.
 This is why the artifact path in the catalog is package-relative (`rules/<name>.wasm`).
 The same catalog entry resolves to the same bytes on every machine, and CI and
 reviewers stay in sync because they both verify against the same catalog.json.
+Because the crate builds every rule under one LTO unit, a change to shared code
+rotates every rule's digest together — the conformance suite is what proves the
+rebuilt bytes still answer the recorded verdicts.
 
 ## Contract version
 
@@ -224,6 +227,55 @@ is what you mean, say it in the `reason` where a reviewer reads it.
   "sha256": "<copy from catalog.json — it equals rules/forbidden-tag-combination.wasm.sha256>",
   "params": { "tags": ["layer:domain", "runtime:database"] },
   "reason": "a domain project is not a database runtime; the two roles never share a project",
+}
+```
+
+### max-fan-out
+
+**Intent.** Constrain how many distinct projects a project may depend on — a
+budget on architectural coupling, measured by the number of unique downstream
+dependencies.
+
+**Parameters.**
+
+| name    | type   | required | meaning                                                                                                                                                |
+| ------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `max`   | number | yes      | The most distinct projects an in-scope project may depend on (integer ≥ 0).                                                                            |
+| `match` | array  | no       | Tags an in-scope project must carry ALL of; absent means every project. An empty array is malformed, not "every project" — absent is how you say that. |
+
+**Evidence.** `model` and `graph`. The rule reads the dependency graph and counts
+distinct targets per project.
+
+**Verdicts.**
+
+- `fail` — an in-scope project depends on more than `max` distinct projects.
+  One finding per project, naming the project, the count, and the budget.
+- `pass` — every in-scope project's distinct dependency count is at or under the
+  budget.
+- `not_applicable` — no project is in scope (no project carries all the `match`
+  tags, or the workspace has no projects at all).
+- `unknown` — the parameters cannot be read as declared: an unknown key, a
+  missing or malformed `max` (negative, fractional, or a string), or the graph
+  names a project the model does not declare.
+
+**Limitations.** The budget counts DISTINCT targets regardless of edge type:
+static and dynamic edges to the same project count once. Self-edges (source
+equals target) are skipped — providers never emit them, but a replayed bundle
+might carry one. A budget is user policy — the rule says a number was exceeded,
+nothing about whether the architecture is "good" or "bad". This rule judges HOW
+MANY dependencies a project has, not WHICH targets it may depend on; `depConstraints`
+already judges WHICH targets are allowed edge by edge. Zero dependencies is a valid
+budget state.
+
+**Usage example.**
+
+```jsonc
+{
+  "name": "max-fan-out",
+  "artifact": "tools/rules/max-fan-out.wasm",
+  "sha256": "<copy from catalog.json — it equals rules/max-fan-out.wasm.sha256>",
+  "params": { "max": 2, "match": ["scope:shared"] },
+  "reason": "a shared project may depend on at most two other projects — anything more is a coupling violation",
 }
 ```
 

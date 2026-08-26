@@ -1,0 +1,106 @@
+{
+  "contract": 1,
+  "graph": {
+    "edges": [
+      {
+        "source": "hub",
+        "target": "alpha",
+        "type": "static",
+        "sourceFile": "packages/hub/src/lib.rs"
+      },
+      {
+        "source": "hub",
+        "target": "beta",
+        "type": "static",
+        "sourceFile": "packages/hub/src/lib.rs"
+      },
+      {
+        "source": "over",
+        "target": "alpha",
+        "type": "static",
+        "sourceFile": "packages/over/src/lib.rs"
+      },
+      {
+        "source": "over",
+        "target": "beta",
+        "type": "static",
+        "sourceFile": "packages/over/src/lib.rs"
+      },
+      {
+        "source": "over",
+        "target": "gamma",
+        "type": "static",
+        "sourceFile": "packages/over/src/lib.rs"
+      }
+    ]
+  },
+  "imports": [
+    {
+      "column": 5,
+      "kind": "static",
+      "line": 3,
+      "resolved": {
+        "external": false,
+        "file": null,
+        "packageName": null,
+        "target": "alpha"
+      },
+      "sourceFile": "packages/hub/src/lib.rs",
+      "sourceProject": "hub",
+      "specifier": "alpha",
+      "spelling": {
+        "path": true,
+        "relative": false
+      }
+    }
+  ],
+  "model": {
+    "projects": [
+      {
+        "name": "alpha",
+        "root": "packages/alpha",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "beta",
+        "root": "packages/beta",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "gamma",
+        "root": "packages/gamma",
+        "tags": ["type:library"]
+      },
+      {
+        "name": "hub",
+        "root": "packages/hub",
+        "tags": ["scope:shared"]
+      },
+      {
+        "name": "over",
+        "root": "packages/over",
+        "tags": ["scope:shared"]
+      }
+    ]
+  },
+  "policy": {
+    "depConstraints": [],
+    "moduleBoundaryOptions": {
+      "allow": [],
+      "allowCircularSelfDependency": false,
+      "banTransitiveDependencies": false,
+      "buildTargets": ["build"],
+      "checkDynamicDependenciesExceptions": [],
+      "checkNestedExternalImports": false,
+      "enforceBuildableLibDependency": false,
+      "ignoredCircularDependencies": []
+    }
+  },
+  "rule": {
+    "name": "max-fan-out",
+    "params": {
+      "max": 2,
+      "match": ["scope:shared"]
+    }
+  }
+}

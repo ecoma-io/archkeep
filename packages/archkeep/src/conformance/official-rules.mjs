@@ -79,6 +79,15 @@ export const EXPECTED_VERDICTS = Object.freeze({
     "malformed-params": "unknown",
     "duplicate-tags-in-params": "unknown",
   }),
+  "max-fan-out": Object.freeze({
+    "over-the-budget": "fail",
+    "exactly-at-the-budget": "pass",
+    "duplicate-edges-count-once": "pass",
+    "no-matching-projects": "not_applicable",
+    "edge-into-undeclared-project": "unknown",
+    "malformed-params": "unknown",
+    "unknown-param-key": "unknown",
+  }),
 });
 
 /**
