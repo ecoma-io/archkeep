@@ -152,7 +152,10 @@ function describe(value) {
 
 /**
  * Validates one rule entry's artifact path — package-relative, no escaping,
- * must end .wasm.
+ * must end .wasm. Backslash is never legitimate: the catalog uses forward
+ * slashes only, and on Windows a backslash is both a path separator and an
+ * escape vector (drive letters, UNC paths, or `rules\..\..\x.wasm` bypassing
+ * the `..` segment check).
  */
 function artifactPathProblem(artifact) {
   if (typeof artifact !== "string" || artifact === "") {
@@ -163,6 +166,9 @@ function artifactPathProblem(artifact) {
   }
   if (artifact.startsWith("/")) {
     return `artifact is absolute (starts with /) — must be package-relative like "rules/<name>.wasm"`;
+  }
+  if (artifact.includes("\\")) {
+    return `artifact contains a backslash — catalog paths use forward slashes only and must be package-relative (on Windows a backslash is also an escape vector: drive letters, UNC paths, or disguised parent-directory escapes)`;
   }
   // Segment check, not a substring one: a filename like `tag..cardinality.wasm`
   // contains ".." without escaping anything, while `rules/../../x.wasm` is an

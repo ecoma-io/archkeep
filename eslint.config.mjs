@@ -43,6 +43,11 @@ export default [
       "**/.eslint-config-fixture-*/**",
       "**/.cli-eslint-config-fixture-*/**",
       "**/.oracle-simple-*/**",
+      // Cargo build output — a parallel cargo task mutates this directory mid-walk
+      // during `moon run`, causing ESLint to hit ENOENT when a temp rmeta dir
+      // vanishes mid-scan. Measured in merge-queue run of #377 for the first
+      // package combining eslint and cargo (archkeep-rules).
+      "**/target/**",
     ],
   },
 

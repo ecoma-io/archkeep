@@ -9,7 +9,7 @@
  * - Adversarial cases ensure a malformed catalog never validates as empty.
  */
 
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
@@ -215,6 +215,90 @@ describe("catalogViolations", () => {
       };
       const violations = catalogViolations(catalog, new Map());
       assert.ok(violations.some((v) => v.includes("rules[0].artifact: artifact is absolute")));
+    });
+
+    it("rejects invalid artifact path (backslash)", () => {
+      const catalog = {
+        version: 1,
+        rules: [
+          {
+            name: "backslash-path",
+            description: "Rule with backslash path",
+            contract: 1,
+            needs: ["model"],
+            params: {},
+            artifact: "rules\\test.wasm",
+            sha256: "a".repeat(64),
+          },
+        ],
+      };
+      const violations = catalogViolations(catalog, new Map());
+      assert.ok(
+        violations.some((v) => v.includes("rules[0].artifact: artifact contains a backslash")),
+      );
+    });
+
+    it("rejects invalid artifact path (backslash .. escape)", () => {
+      const catalog = {
+        version: 1,
+        rules: [
+          {
+            name: "backslash-escape",
+            description: "Rule with backslash .. escape",
+            contract: 1,
+            needs: ["model"],
+            params: {},
+            artifact: "rules\\..\\..\\x.wasm",
+            sha256: "a".repeat(64),
+          },
+        ],
+      };
+      const violations = catalogViolations(catalog, new Map());
+      assert.ok(
+        violations.some((v) => v.includes("rules[0].artifact: artifact contains a backslash")),
+      );
+    });
+
+    it("rejects invalid artifact path (Windows drive-letter)", () => {
+      const catalog = {
+        version: 1,
+        rules: [
+          {
+            name: "drive-letter",
+            description: "Rule with drive letter path",
+            contract: 1,
+            needs: ["model"],
+            params: {},
+            artifact: "C:\\somewhere\\rule.wasm",
+            sha256: "a".repeat(64),
+          },
+        ],
+      };
+      const violations = catalogViolations(catalog, new Map());
+      assert.ok(
+        violations.some((v) => v.includes("rules[0].artifact: artifact contains a backslash")),
+      );
+    });
+
+    it("rejects invalid artifact path (Windows UNC)", () => {
+      const catalog = {
+        version: 1,
+        rules: [
+          {
+            name: "unc-path",
+            description: "Rule with UNC path",
+            contract: 1,
+            needs: ["model"],
+            params: {},
+            artifact: "\\\\server\\share\\rule.wasm",
+            sha256: "a".repeat(64),
+          },
+        ],
+      };
+      const violations = catalogViolations(catalog, new Map());
+      assert.ok(
+        violations.some((v) => v.includes("rules[0].artifact: artifact contains a backslash")),
+      );
     });
 
     it("rejects invalid artifact path (escaping with ..)", () => {
@@ -557,6 +641,93 @@ describe("validateCatalogFiles (integration)", () => {
               needs: ["model"],
               params: {},
               artifact: "rules/test.wasm",
+              sha256: expectedDigest,
+            },
+          ],
+        }),
+      );
+
+      const result = validateCatalogFiles(tmpdir);
+      assert.equal(result.ok, true);
+    } finally {
+      rmSync(tmpdir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects symlink inside package pointing to file outside package", () => {
+    const tmpdir = mkdtempSync("archkeep-test-");
+    try {
+      // Create a file OUTSIDE the package (in parent directory)
+      const parentDir = resolve(tmpdir, "..");
+      const outsideFile = resolve(parentDir, "outside.wasm");
+      const wasmBytes = Buffer.from([0x00, 0x61, 0x73, 0x6d]); // WASM magic
+      writeFileSync(outsideFile, wasmBytes);
+
+      // Create a symlink INSIDE the package pointing to the outside file
+      const rulesDir = resolve(tmpdir, "rules");
+      mkdirSync(rulesDir, { recursive: true });
+      const symlinkPath = resolve(rulesDir, "outside.wasm");
+      symlinkSync(outsideFile, symlinkPath);
+
+      // Compute the sha256 of the outside file
+      const expectedDigest = createHash("sha256").update(wasmBytes).digest("hex");
+
+      // Create a catalog declaring the symlinked artifact with the matching digest
+      writeFileSync(
+        resolve(tmpdir, "catalog.json"),
+        JSON.stringify({
+          version: 1,
+          rules: [
+            {
+              name: "symlink-escape",
+              description: "Rule with symlink escaping the package",
+              contract: 1,
+              needs: ["model"],
+              params: {},
+              artifact: "rules/outside.wasm",
+              sha256: expectedDigest,
+            },
+          ],
+        }),
+      );
+
+      // Should throw: containment check fires before the hash can bless it
+      assert.throws(() => validateCatalogFiles(tmpdir), /resolves outside the package/);
+    } finally {
+      rmSync(tmpdir, { recursive: true, force: true });
+      // Clean up the outside file too
+      try {
+        const parentDir = resolve(tmpdir, "..");
+        const outsideFile = resolve(parentDir, "outside.wasm");
+        rmSync(outsideFile, { force: true });
+      } catch {
+        // Parent cleanup is best-effort
+      }
+    }
+  });
+
+  it("validates legitimate nested path inside package", () => {
+    const tmpdir = mkdtempSync("archkeep-test-");
+    try {
+      const wasmBytes = Buffer.from([0x00, 0x61, 0x73, 0x6d]); // WASM magic
+      const nestedDir = resolve(tmpdir, "rules", "nested");
+      mkdirSync(nestedDir, { recursive: true });
+      writeFileSync(resolve(nestedDir, "deep.wasm"), wasmBytes);
+
+      const expectedDigest = createHash("sha256").update(wasmBytes).digest("hex");
+
+      writeFileSync(
+        resolve(tmpdir, "catalog.json"),
+        JSON.stringify({
+          version: 1,
+          rules: [
+            {
+              name: "nested-path",
+              description: "Rule with legitimate nested path",
+              contract: 1,
+              needs: ["model"],
+              params: {},
+              artifact: "rules/nested/deep.wasm",
               sha256: expectedDigest,
             },
           ],
