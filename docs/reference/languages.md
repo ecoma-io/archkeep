@@ -20,6 +20,7 @@ dependency and an undeclared-but-imported one are both findings.
 | `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` | TypeScript and JavaScript | Nx's own inference                              | ✅       |
 | `.vue`                                                | Vue                       | Nx's own inference                              | ✅       |
 | `.java`                                               | Java                      | root `pom.xml` (coordinates), plus import sites | ✅       |
+| `.kt` `.kts`                                          | Kotlin                    | shared with Java                                | ✅       |
 
 Anything else is a no-op: the dispatcher is pointed at every tracked file, and
 `README.md` is not an error. A file whose extension _is_ on this list but whose
@@ -441,8 +442,8 @@ from configurations that never activate.
 require directory = package.** The index reads every tracked `.java` file's
 `package` line (masked first, so commented-out declarations cannot claim
 ownership) and maps longest declared prefix to project. A `.kt` file's packages
-are in the SAME index — a mixed module compiles into one namespace — though
-`.kt` sources are analyzed only once the Kotlin language lands.
+are in the SAME index — a mixed module compiles into one namespace, and both
+languages share the same JVM package index.
 
 **Extraction covers the four JLS §7.5 import forms** — single type, on-demand
 (`a.b.*`), static single member, static on-demand — over comment-and-literal-

@@ -79,6 +79,8 @@ body:
         - Go
         - Rust
         - Python
+        - Java
+        - Kotlin
         - None — this is not language-specific
     validations:
       required: true
