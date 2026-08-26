@@ -17,13 +17,14 @@
  *
  * ## Malformed input degrades loudly
  *
- * XML that does not parse, missing `Include` attributes, and
- * `<ProjectReference>` paths that resolve to no known project all surface
- * through `dotnetManifestFailures` as whole-file failures naming the
- * `.csproj` — the `go.work` precedent. A broken manifest read as "no
- * dependencies" would mean "no drift" exactly where the tree is most
- * broken, so the CLI funnels these into the could-not-complete class
- * (exit 3).
+ * XML that does not parse surfaces through `dotnetManifestFailures` as
+ * a whole-file failure naming the `.csproj` — the `go.work` precedent.
+ * A broken manifest read as "no dependencies" would mean "no drift"
+ * exactly where the tree is most broken, so the CLI funnels these into
+ * the could-not-complete class (exit 3). Missing `Include` attributes
+ * and `<ProjectReference>` paths that resolve to no known project are
+ * silently skipped (the same posture Maven's `resolveMavenDependencies`
+ * holds for unresolved artifact coordinates).
  */
 import { createRequire } from "node:module";
 

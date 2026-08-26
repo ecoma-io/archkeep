@@ -206,6 +206,21 @@ describe("analyzeCSharp", () => {
     expect(result.failures).toEqual([]);
     expect(result.imports[0].resolved.external).toBe(true);
   });
+
+  it("strips UTF-8 BOM before parsing — VS default does not drop the first directive", () => {
+    const ws = workspaceOf({
+      "libs/shop/app/Service.cs": "\ufeffusing Shop.Domain;\n",
+      "libs/shop/domain/Policy.cs": WORKSPACE.readFile("libs/shop/domain/Policy.cs"),
+    });
+    const result = analyzeCSharp({
+      sourceFile: "libs/shop/app/Service.cs",
+      text: "\ufeffusing Shop.Domain;\n",
+      workspace: ws,
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.imports).toHaveLength(1);
+    expect(result.imports[0].specifier).toBe("Shop.Domain");
+  });
 });
 
 describe("resolveCsharpDependencies", () => {

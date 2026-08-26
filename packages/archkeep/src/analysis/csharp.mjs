@@ -218,10 +218,14 @@ const csharpIndexOf = perWorkspace(csharpNamespaceIndex);
 export function analyzeCSharp({ sourceFile, text, workspace }) {
   const result = emptyResult();
   try {
+    // Strip UTF-8 BOM (\ufeff) that Visual Studio and some .NET tools prepend.
+    // Left in place, it silently breaks every regex in the directive parser,
+    // dropping the first directive in the file — the silent direction.
+    const normalized = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
     const index = csharpIndexOf(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
-    for (const site of parseCSharpDirectiveSites(text)) {
-      const { line, column } = positionAt(text, site.offset);
+    for (const site of parseCSharpDirectiveSites(normalized)) {
+      const { line, column } = positionAt(normalized, site.offset);
       let resolution;
       if (site.importableName === null) {
         resolution = {
@@ -304,7 +308,8 @@ export function resolveCsharpDependencies(projects, filesOf, readFile) {
       if (!file.endsWith(".cs")) continue;
       const text = readFile(file);
       if (text === null) continue;
-      for (const site of parseCSharpDirectiveSites(text)) {
+      const normalized = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+      for (const site of parseCSharpDirectiveSites(normalized)) {
         if (site.importableName === null) continue;
         const resolved = resolveCsharpSpecifier(site.importableName, index);
         if (resolved.external || resolved.ambiguous) continue;
