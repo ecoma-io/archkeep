@@ -4,7 +4,7 @@
  * one thing a scanner has to know (whether block comments nest) and agree
  * about everything else that matters here.
  *
- * Like `../go.mjs`'s `maskGoComments`, the mask BLANKS rather than deletes:
+ * Like `../../go.mjs`'s `maskGoComments`, the mask BLANKS rather than deletes:
  * the result is byte-for-byte the same length with every line break in
  * place, so an offset into the mask is the same offset into the original
  * and `positionAt` reports the line the reader sees. A regex over the mask

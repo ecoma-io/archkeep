@@ -1,5 +1,5 @@
 /**
- * The graph layer: cross-project EDGES for Go, Rust, and Python, in the shape
+ * The graph layer: cross-project EDGES for Go, Rust, Python, and Java, in the shape
  * Nx's `createDependencies` hook returns. Nothing else — nodes still come from
  * each project's hand-written `project.json`, and targets are never inferred
  * (`packages/archkeep/AGENTS.md`).
@@ -14,14 +14,14 @@
  *
  * Each resolver reads tracked manifests and sources statically (regex for Go
  * imports, smol-toml for Cargo/pyproject manifests) so the graph computes
- * without any language toolchain installed. A workspace with no Go/Rust/Python
- * projects pays nothing: every resolver keys off `<projectRoot>/<manifest>`
- * existing in the project's tracked files. A resolver may THROW instead of
- * returning — the Python one does, for a declared path dependency it cannot
- * attribute to any project (`../analysis/python.mjs` header) — and the throw
- * is deliberate: edges and an error are the only two outputs this hook has,
- * and an edge quietly missing from the graph is the failure mode this plugin
- * exists to close.
+ * without any language toolchain installed. A workspace with no Go/Rust/Python/
+ * Java projects pays nothing: every resolver keys off what it reads existing in
+ * the project's tracked files. A resolver may THROW instead of returning — the
+ * Python one does, for a declared path dependency it cannot attribute to any
+ * project (`../analysis/python.mjs` header) — and the throw is deliberate:
+ * edges and an error are the only two outputs this hook has, and an edge
+ * quietly missing from the graph is the failure mode this plugin exists to
+ * close.
  *
  * Resolver contract (kept identical across languages, see `../analysis/*.mjs`):
  *   resolve(projects, filesOf, readFile) -> [{ source, target, sourceFile, type }]
@@ -31,6 +31,7 @@ import { join } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
 import { resolveGoDependencies } from "../analysis/go.mjs";
+import { resolveJavaDependencies } from "../analysis/java.mjs";
 import { resolvePythonDependencies } from "../analysis/python.mjs";
 import { resolveRustDependencies } from "../analysis/rust.mjs";
 import { resolveOptions } from "../options.mjs";
@@ -41,6 +42,7 @@ export function resolvePolyglotDependencies(projects, filesOf, readFile) {
     ...resolveGoDependencies(projects, filesOf, readFile),
     ...resolveRustDependencies(projects, filesOf, readFile),
     ...resolvePythonDependencies(projects, filesOf, readFile),
+    ...resolveJavaDependencies(projects, filesOf, readFile),
   ];
   // One edge per (source, target, sourceFile) — a Go project importing a
   // sibling from ten files yields ten sourceFile-attributed edges upstream

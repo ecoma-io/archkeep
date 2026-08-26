@@ -52,6 +52,11 @@ export const LANGUAGE_BY_EXTENSION = Object.freeze({
   ".go": "go",
   ".rs": "rust",
   ".py": "python",
+  // Java only: Kotlin's `.kt`/`.kts` register when the Kotlin analyzer lands
+  // (ADR 0005, `docs/adr/`, owns the sequencing). The shared JVM core under
+  // `src/analysis/jvm/` already reads both extensions, but a language key is
+  // claimed here exactly when its analyzer ships.
+  ".java": "java",
 });
 
 /**

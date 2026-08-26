@@ -23,6 +23,7 @@
  */
 
 import { analyzeGo } from "./go.mjs";
+import { analyzeJava } from "./java.mjs";
 import { analyzePython } from "./python.mjs";
 import { LANGUAGE_BY_EXTENSION, languageOf } from "./registry.mjs";
 import { analyzeRust } from "./rust.mjs";
@@ -170,6 +171,7 @@ const ANALYZER_BY_LANGUAGE = Object.freeze({
   go: analyzeGo,
   rust: analyzeRust,
   python: analyzePython,
+  java: analyzeJava,
 });
 
 /**

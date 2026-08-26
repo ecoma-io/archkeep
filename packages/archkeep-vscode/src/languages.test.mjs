@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { documentSelector, ROUTED_EXTENSIONS } from "./languages.mjs";
 
 describe("ROUTED_EXTENSIONS", () => {
-  it("covers the four languages ESLint cannot read", () => {
-    expect([...ROUTED_EXTENSIONS]).toStrictEqual([".go", ".rs", ".py", ".vue"]);
+  it("covers the five languages ESLint cannot read", () => {
+    expect([...ROUTED_EXTENSIONS]).toStrictEqual([".go", ".rs", ".py", ".vue", ".java"]);
   });
 
   it("routes no TypeScript or JavaScript file", () => {
@@ -38,6 +38,7 @@ describe("documentSelector", () => {
       { scheme: "file", pattern: "**/*.rs" },
       { scheme: "file", pattern: "**/*.py" },
       { scheme: "file", pattern: "**/*.vue" },
+      { scheme: "file", pattern: "**/*.java" },
     ]);
   });
 

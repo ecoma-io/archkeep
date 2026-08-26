@@ -33,7 +33,8 @@
         ".go": "go",
         ".rs": "rust",
         ".py": "python",
-        ".vue": "vue"
+        ".vue": "vue",
+        ".java": "java"
       },
       "transport": "stdio",
       "workspaceFolder": "${CLAUDE_PROJECT_DIR}"
