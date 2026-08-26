@@ -369,3 +369,44 @@ describe("resolveMavenDependencies", () => {
     expect(model.failures).toEqual([]);
   });
 });
+
+describe("reactor drift (declared <module> with no tracked pom)", () => {
+  it("fails the aggregator loudly when a declared module is untracked", () => {
+    const ws = workspaceOf({
+      "pom.xml": [
+        "<project>",
+        "  <groupId>com.acme</groupId>",
+        "  <artifactId>parent</artifactId>",
+        "  <packaging>pom</packaging>",
+        "  <modules><module>core</module><module>ghost</module></modules>",
+        "</project>",
+      ].join("\n"),
+      "core/pom.xml":
+        "<project><parent><groupId>com.acme</groupId><artifactId>parent</artifactId></parent><artifactId>core</artifactId></project>",
+    });
+    const failures = mavenManifestFailures(ws);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].sourceFile).toBe("pom.xml");
+    expect(failures[0].reason).toContain("'ghost'");
+    expect(failures[0].reason).toContain("not a tracked file");
+  });
+
+  it("stays silent when every declared module's pom is tracked, even upward", () => {
+    // Maven allows a module entry to climb (`../shared`); the tracked-tree
+    // check follows the same path resolution, so an upward module that IS
+    // tracked draws no finding.
+    const ws = workspaceOf({
+      "group/parent/pom.xml": [
+        "<project>",
+        "  <groupId>com.acme</groupId>",
+        "  <artifactId>parent</artifactId>",
+        "  <packaging>pom</packaging>",
+        "  <modules><module>../sibling</module></modules>",
+        "</project>",
+      ].join("\n"),
+      "group/sibling/pom.xml":
+        "<project><groupId>com.acme</groupId><artifactId>sibling</artifactId></project>",
+    });
+    expect(mavenManifestFailures(ws)).toEqual([]);
+  });
+});

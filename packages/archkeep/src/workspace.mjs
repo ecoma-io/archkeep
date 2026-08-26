@@ -536,26 +536,26 @@ export function analyzeWorkspace(workspace, files, { analyze = analyzeFile } = {
   return { imports, failures, analyzed: analyzedFiles.length, analyzedFiles };
 }
 
-/** The three polyglot manifests `polyglotManifests` looks for. */
-const POLYGLOT_MANIFEST_NAMES = ["go.mod", "Cargo.toml", "pyproject.toml"];
+/** The polyglot manifests `polyglotManifests` looks for. */
+const POLYGLOT_MANIFEST_NAMES = ["go.mod", "Cargo.toml", "pyproject.toml", "pom.xml"];
 
 /**
- * Tracked Go, Rust and Python manifests that sit under some project's root —
- * the fact the unregistered-Nx-plugin gap turns on
+ * Tracked Go, Rust, Python and Maven manifests that sit under some project's
+ * root — the fact the unregistered-Nx-plugin gap turns on
  * (`./commands/context.mjs`'s `pluginGap.manifests` is where a caller reads
  * it, and `./options.mjs`'s `pluginIsRegistered` is the other half of that
- * gap). A workspace running under Nx draws no edge for any of these three
- * languages unless this plugin is registered in `nx.json` — Nx parses only
- * TypeScript and JavaScript imports natively (`../../../AGENTS.md`, "for the
- * other three both go quiet") — so a tracked manifest with no registered
- * plugin is exactly the silent hole that invariant refuses. This function
- * only names the manifests; it does not decide whether the plugin is
- * registered. The pair the gap turns on is wired in twice today:
- * `resolveCommandContext` reads both into its `pluginGap`, which every
- * descriptive command refuses on, while `check` renders the same fact as a
- * `coverageGaps` degraded-coverage note rather than a refusal
- * (`../cli.mjs`) — the checker's own analysis covers what the graph does
- * not, so a note is the right level there.
+ * gap). A workspace running under Nx draws no edge for any of these languages
+ * unless this plugin is registered in `nx.json` — Nx parses only TypeScript
+ * and JavaScript imports natively (`../../../AGENTS.md`, "for the other
+ * three both go quiet") — so a tracked manifest with no registered plugin is
+ * exactly the silent hole that invariant refuses. This function only names
+ * the manifests; it does not decide whether the plugin is registered. The
+ * pair the gap turns on is wired in twice today: `resolveCommandContext`
+ * reads both into its `pluginGap`, which every descriptive command refuses
+ * on, while `check` renders the same fact as a `coverageGaps`
+ * degraded-coverage note rather than a refusal (`../cli.mjs`) — the checker's
+ * own analysis covers what the graph does not, so a note is the right level
+ * there.
  *
  * Root matching mirrors `projectOwning`'s longest-prefix attribution of a
  * source file: a project rooted at the workspace root (`root: ""` or `"."`)

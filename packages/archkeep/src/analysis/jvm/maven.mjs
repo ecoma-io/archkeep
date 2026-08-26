@@ -157,6 +157,7 @@ export function parsePomProject(text) {
  *   relativePath: string|null, explicitRemote: boolean }|null} parent
  * @property {Record<string, string>} ownProperties
  * @property {{ groupIdRaw: string, artifactIdRaw: string }[]} declaredDependencies
+ * @property {string[]} declaredModules `<modules><module>` entries as written.
  * @property {string|null} effectiveGroupId
  * @property {Record<string, string>} properties Effective property table.
  * @property {{ groupId: string, artifactId: string }[]} resolvedDependencies
@@ -204,6 +205,19 @@ export function pomEntryOf(projectName, pomPath, text) {
     }))
     .filter((dep) => dep.groupIdRaw !== "" && dep.artifactIdRaw !== "");
 
+  // <module> children are TEXT elements, so fast-xml-parser hands them over
+  // as strings (a bare string when there is one) — unlike <dependency>,
+  // whose children are objects.
+  const rawModules = elementsOf(project.modules)[0]?.module;
+  const moduleValues = Array.isArray(rawModules)
+    ? rawModules
+    : rawModules === undefined
+      ? []
+      : [rawModules];
+  const declaredModules = moduleValues
+    .map((moduleName) => textOf(moduleName) ?? "")
+    .filter((moduleName) => moduleName !== "");
+
   return {
     entry: {
       pomPath,
@@ -213,6 +227,7 @@ export function pomEntryOf(projectName, pomPath, text) {
       parent,
       ownProperties,
       declaredDependencies,
+      declaredModules,
       effectiveGroupId: null,
       properties: /** @type {Record<string, string>} */ ({}),
       resolvedDependencies: [],
@@ -304,6 +319,11 @@ export function interpolateCoordinate(value, props, builtins) {
 function buildMavenModel(workspace) {
   const readFile = workspace.readFile;
   const failures = [];
+  /** Every tracked file, for the module-drift check below. */
+  const tracked = new Set();
+  for (const project of workspace.projects) {
+    for (const file of workspace.filesOf(project.name)) tracked.add(file);
+  }
   /** @type {PomEntry[]} */
   const entries = [];
 
@@ -417,6 +437,28 @@ function buildMavenModel(workspace) {
         reason:
           `${holders.map((holder) => holder.pomPath).join(", ")} all declare the ` +
           `Maven identity ${key} — an edge toward either would be a guess`,
+      });
+    }
+  }
+
+  // Pass 3b — reactor drift: a <module> whose pom.xml the tree does not
+  // track means the reactor model is incomplete — the subtree's identity
+  // cannot be established and no rule can judge it. Recorded as a failure
+  // naming the AGGREGATOR's pom (the go.work precedent: incompleteness here
+  // is could-not-judge, not judged-and-violating), so `check` exits 3
+  // instead of reporting clean over a hole.
+  for (const entry of entries) {
+    for (const moduleName of entry.declaredModules) {
+      const dir = entry.pomPath.includes("/")
+        ? entry.pomPath.slice(0, entry.pomPath.lastIndexOf("/"))
+        : "";
+      const childPom = resolveWithinWorkspace(dir, `${moduleName}/pom.xml`);
+      if (childPom !== null && tracked.has(childPom)) continue;
+      failures.push({
+        sourceFile: entry.pomPath,
+        reason:
+          `declares module '${moduleName}' but ${childPom ?? "its pom.xml"} is not a ` +
+          `tracked file — that subtree's projects cannot be discovered`,
       });
     }
   }
