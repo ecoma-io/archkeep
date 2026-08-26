@@ -79,3 +79,39 @@ export const PYTHON_VIOLATION = {
   "libs/domain/src/domain/violate.py": "from application import APP\n\nUPWARD = APP\n",
   "libs/application/src/application/__init__.py": 'APP = "application"\n',
 };
+
+/**
+ * Java violation: `domain` imports `application`.
+ * Replaces `libs/domain/pom.xml` and adds `libs/domain/src/main/java/com/example/domain/Violate.java`.
+ * Also replaces `libs/application/src/main/java/com/example/application/App.java` to remove the
+ * domain import and prevent a circular dependency.
+ */
+export const JAVA_VIOLATION = {
+  "libs/domain/pom.xml":
+    "<project><groupId>com.example</groupId><artifactId>domain</artifactId>" +
+    "<version>1.0.0</version><dependencies><dependency>" +
+    "<groupId>com.example</groupId><artifactId>application</artifactId>" +
+    "</dependency></dependencies></project>",
+  "libs/domain/src/main/java/com/example/domain/Violate.java":
+    "package com.example.domain;\n\nimport com.example.application.App;\n\nclass Violate { App app; }\n",
+  "libs/application/src/main/java/com/example/application/App.java":
+    "package com.example.application;\n\nclass App {}\n",
+};
+
+/**
+ * Kotlin violation: `domain` imports `application`.
+ * Replaces `libs/domain/pom.xml` and adds `libs/domain/src/main/kotlin/com/example/domain/Violate.kt`.
+ * Also replaces `libs/application/src/main/kotlin/com/example/application/App.kt` to remove the
+ * domain import and prevent a circular dependency.
+ */
+export const KOTLIN_VIOLATION = {
+  "libs/domain/pom.xml":
+    "<project><groupId>com.example</groupId><artifactId>domain</artifactId>" +
+    "<version>1.0.0</version><dependencies><dependency>" +
+    "<groupId>com.example</groupId><artifactId>application</artifactId>" +
+    "</dependency></dependencies></project>",
+  "libs/domain/src/main/kotlin/com/example/domain/Violate.kt":
+    "package com.example.domain\n\nimport com.example.application.App\n\nclass Violate(val app: App)\n",
+  "libs/application/src/main/kotlin/com/example/application/App.kt":
+    "package com.example.application\n\nclass App\n",
+};

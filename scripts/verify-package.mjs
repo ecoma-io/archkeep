@@ -500,6 +500,8 @@ function fixtureFilesMaven(packageName, peers, packageManager) {
       "</dependency></dependencies></project>",
     "libs/mvn-app/src/main/java/com/example/test/app/App.java":
       "package com.example.test.app;\n\nimport com.example.test.core.Name;\n\nclass App { Name name; }\n",
+    "libs/mvn-app/src/main/kotlin/com/example/test/app/Api.kt":
+      "package com.example.test.app\n\nimport com.example.test.core.Name\n\nclass Api(val name: Name)\n",
   };
 }
 
@@ -515,8 +517,12 @@ const VIOLATING_FILES_MAVEN = {
     "</dependency></dependencies></project>",
   "libs/mvn-core/src/main/java/com/example/test/core/Violate.java":
     "package com.example.test.core;\n\nimport com.example.test.app.App;\n\nclass Violate { App app; }\n",
+  "libs/mvn-core/src/main/kotlin/com/example/test/core/ViolateKotlin.kt":
+    "package com.example.test.core\n\nimport com.example.test.app.App\n\nclass ViolateKotlin(val app: App)\n",
   "libs/mvn-app/src/main/java/com/example/test/app/App.java":
     "package com.example.test.app;\n\nclass App {}\n",
+  "libs/mvn-app/src/main/kotlin/com/example/test/app/Api.kt":
+    "package com.example.test.app\n\nclass Api\n",
 };
 
 const failures = [];
@@ -1352,7 +1358,7 @@ try {
     `stdout: ${cleanMaven.stdout ?? "(empty)"}`,
   );
 
-  // Violating reactor: mvn-core reaching up into mvn-app, written in Java.
+  // Violating reactor: mvn-core reaching up into mvn-app, written in both Java and Kotlin.
   write(consumerMaven, VIOLATING_FILES_MAVEN);
   commitTree(consumerMaven, "core reaches up into app", false);
   const dirtyMaven = run("pnpm", ["exec", "archkeep", "check"], consumerMaven);
@@ -1363,9 +1369,10 @@ try {
     `exit ${dirtyMaven.status}\n${dirtyMavenOutput}`,
   );
   check(
-    "the maven violation names its rule and its java file:line:column",
+    "the maven violation names its rule and reports both java and kotlin file:line:column",
     dirtyMavenOutput.includes("onlyTagsConstraintViolation") &&
-      /Violate\.java:\d+:\d+/.test(dirtyMavenOutput),
+      /Violate\.java:\d+:\d+/.test(dirtyMavenOutput) &&
+      /ViolateKotlin\.kt:\d+:\d+/.test(dirtyMavenOutput),
     dirtyMavenOutput || "(no output)",
   );
 } finally {

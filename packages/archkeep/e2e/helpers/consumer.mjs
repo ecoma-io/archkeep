@@ -33,6 +33,8 @@ import { javascriptLanguageFiles } from "../fixtures/languages/javascript.mjs";
 import { vueLanguageFiles } from "../fixtures/languages/vue.mjs";
 import { rustLanguageFiles } from "../fixtures/languages/rust.mjs";
 import { pythonLanguageFiles } from "../fixtures/languages/python.mjs";
+import { javaLanguageFiles } from "../fixtures/languages/java.mjs";
+import { kotlinLanguageFiles } from "../fixtures/languages/kotlin.mjs";
 
 /**
  * Writes a file map into a base directory, creating intermediate directories.
@@ -330,6 +332,8 @@ const LANGUAGE_FIXTURES = {
   vue: vueLanguageFiles,
   rust: rustLanguageFiles,
   python: pythonLanguageFiles,
+  java: javaLanguageFiles,
+  kotlin: kotlinLanguageFiles,
 };
 
 /**
