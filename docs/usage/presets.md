@@ -299,6 +299,104 @@ The packs are versioned with the package; there is no separate pack version. A
 workspace that copied a pack in is unaffected by any of this, which is the
 second reason to prefer that form.
 
+## Adding official rules beside a pack
+
+A pack fills the constraint table through its profile's `depConstraints` rows.
+What it cannot express — counts, combinations, conditions a tag list cannot
+spell — is where the official generic rules live. A workspace selects a pack
+AND declares official rules as its own `customRules` rows beside its own
+`fitness` rows. The workspace's boundary config (`archkeep.json` or the file
+`boundaryConfig` names) remains the single declaration surface.
+
+Why this works, and why the rule belongs in the workspace: a `customRules` row
+names a wasm artifact by workspace-relative path and hash, which does not travel
+with a shareable profile. Profile blocks deliberately refuse `customRules` by
+name (see `profile-registry.mjs`), so composition happens at the workspace level,
+not in the pack. All three layers — preset constraints, official rules, and
+fitness functions — merge through the existing policy resolution and reach the
+verdict through the same enforcement run.
+
+### Step one: copy the bytes
+
+The official rules live in `@ecoma-io/archkeep-rules/rules/*.wasm`. Copy the
+artifact you need into your workspace — the row pins a workspace-relative path
+the workspace owns, and a registry update must never silently change what your
+CI executes.
+
+```shell
+mkdir -p tools/rules
+cp node_modules/@ecoma-io/archkeep-rules/rules/tag-cardinality.wasm tools/rules/
+```
+
+### Recipe: Vertical Slice + Tag Cardinality
+
+What it enforces: every slice owns exactly one feature context.
+
+```json
+{
+  "customRules": [
+    {
+      "name": "tag-cardinality",
+      "artifact": "tools/rules/tag-cardinality.wasm",
+      "sha256": "<copy from catalog.json — the entry and rules/tag-cardinality.wasm.sha256 agree>",
+      "params": {
+        "axis": "feature",
+        "max": 1
+      },
+      "reason": "Every slice owns exactly one feature context. A slice carrying multiple feature: tags is either miscategorized or represents a boundary violation the constraint rows cannot see."
+    }
+  ]
+}
+```
+
+**Why it belongs beside this pack:** The vertical-slice pack's own isolation rows
+assume each project has ONE `feature:` value. A project with `feature:orders
+feature:catalog` is ambiguous — which slice does it belong to? The constraint
+rows cannot see that problem: both slices carry the same `layer:slice` tag, so
+"exactly one feature: value per project" is not expressible as a `depConstraints`
+row.
+
+**What remains unproven:** The number `1` is policy, not proof. A different
+architecture might allow `max: 2` for transitional slices.
+
+### Recipe: Modular Monolith + Max Fan-In
+
+What it enforces: a shared module may not be depended on by more distinct
+projects than a declared budget.
+
+```json
+{
+  "customRules": [
+    {
+      "name": "max-fan-in",
+      "artifact": "tools/rules/max-fan-in.wasm",
+      "sha256": "<copy from catalog.json — the entry and rules/max-fan-in.wasm.sha256 agree>",
+      "params": {
+        "max": 3
+      },
+      "reason": "A shared module with too many dependents becomes a de facto central hub, violating the modular-monolith principle that modules integrate through their published surfaces rather than through a shared core."
+    }
+  ]
+}
+```
+
+**Why it belongs beside this pack:** The modular-monolith pack's sealed-modules
+profile ensures modules don't reach each other's internals, but it does not limit
+HOW MANY modules can depend on a shared module. A module with 20 dependents is a
+coupling hotspot the pack's rows cannot see.
+
+**What remains unproven:** The number `3` is policy, not proof. The right
+threshold depends on your team size and domain complexity.
+
+### What this does not prove
+
+These recipes state the machine-checkable invariants this composition enforces.
+They make no claim about "DDD-compliant" or pattern compliance — that language
+belongs in architecture decision records, not in tool configuration. What the
+tool guarantees is that the stated invariants hold: one feature per slice, or
+a fan-in budget, or whatever rule you declared. Whether those invariants are
+the right ones for your architecture is a decision for you, not a finding.
+
 ## What fails loudly
 
 Nothing about a pack changes the four conditions a profile registry refuses on —

@@ -171,3 +171,7 @@ you wrote — the same `customRules` row, the same `reason`, the same exit codes
 so the law your CI runs is the bytes a reviewer can hash. The catalog adds no
 authority layer: the engine never reads it, and a workspace that declares
 nothing from it is unaffected.
+
+Official rules compose with shipped presets: a workspace selects a pack profile
+and declares official rules as its own `customRules` rows — see
+[presets.md](presets.md#adding-official-rules-beside-a-pack) for recipes.
