@@ -78,6 +78,12 @@
 // works because this workspace's own tree happens to have already provided
 // what a fresh install would not.
 //
+// A third consumer (Moon) and a fourth (Maven) repeat the pattern for their
+// provider faces: Moon proves the `moon project-graph` passthrough from an
+// install, and Maven proves pom.xml discovery plus both JVM track kinds from
+// an install — where `fast-xml-parser` must resolve as the optional peer it
+// declares, the positive of the native face's negative-`nx` check.
+//
 // Run from CI on every pull request, so a manifest that stops resolving fails
 // the change that broke it; run again in the release lane before `npm publish`,
 // because a version that resolves nothing cannot be unpublished away.
@@ -427,6 +433,90 @@ const VIOLATING_FILES = {
     "replace example.test/app => ../app\n",
   "libs/core/violate.go": 'package core\n\nimport "example.test/app"\n\nvar _ = app.Thing\n',
   "libs/app/app.go": 'package app\n\nconst Thing = "app"\n',
+};
+
+/**
+ * The fourth consumer face: a Maven reactor on an `archkeep.json` root — no
+ * Nx, no Moon, and the JVM identity anchor doing discovery's work. This face
+ * proves what none of the other three can: that the packed artifact discovers
+ * projects from tracked `pom.xml` files alone (native inference over the
+ * default manifest list), draws BOTH track kinds for one pair — the pom's
+ * declared dependency and a written Java import — and that the optional
+ * `fast-xml-parser` peer resolves when present, the positive of the native
+ * face's negative-`nx` check.
+ */
+function fixtureFilesMaven(packageName, peers, packageManager) {
+  return {
+    "package.json": `${JSON.stringify(
+      {
+        name: "consumer-maven",
+        private: true,
+        type: "module",
+        packageManager,
+        devDependencies: {
+          [packageName]: "*",
+          typescript: peers.typescript,
+          // Present on purpose, at the exact pinned version the optional
+          // peer declares — the pom reader must resolve it from a consumer
+          // install, not only from this workspace's own node_modules.
+          "fast-xml-parser": "5.11.0",
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "archkeep.json": `${JSON.stringify(
+      {
+        boundaryConfig: "module-boundaries.config.mjs",
+        projects: {
+          declared: [
+            { root: "libs/mvn-core", name: "mvn-core", tags: ["layer:core"] },
+            { root: "libs/mvn-app", name: "mvn-app", tags: ["layer:app"] },
+          ],
+        },
+        coverage: {
+          exempt: [
+            {
+              path: "module-boundaries.config.mjs",
+              reason: "workspace tooling config at the root, not itself a project",
+            },
+          ],
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "module-boundaries.config.mjs": BOUNDARY_CONFIG,
+    ".gitignore": "node_modules/\ntarget/\n",
+    "libs/mvn-core/pom.xml":
+      "<project><groupId>com.example.test</groupId><artifactId>mvn-core</artifactId>" +
+      "<version>1.0.0</version></project>",
+    "libs/mvn-core/src/main/java/com/example/test/core/Name.java":
+      "package com.example.test.core;\n\nclass Name {}\n",
+    "libs/mvn-app/pom.xml":
+      "<project><groupId>com.example.test</groupId><artifactId>mvn-app</artifactId>" +
+      "<version>1.0.0</version><dependencies><dependency>" +
+      "<groupId>com.example.test</groupId><artifactId>mvn-core</artifactId>" +
+      "</dependency></dependencies></project>",
+    "libs/mvn-app/src/main/java/com/example/test/app/App.java":
+      "package com.example.test.app;\n\nimport com.example.test.core.Name;\n\nclass App { Name name; }\n",
+  };
+}
+
+/** The file that makes the Maven tree dirty: `mvn-core` reaching up into
+ *  `mvn-app`, the same layer inversion the other faces pin — written in
+ *  Java, so only the packed artifact's JVM analyzer can see it. The app side
+ *  drops its core import so the single violation cannot read as a cycle. */
+const VIOLATING_FILES_MAVEN = {
+  "libs/mvn-core/pom.xml":
+    "<project><groupId>com.example.test</groupId><artifactId>mvn-core</artifactId>" +
+    "<version>1.0.0</version><dependencies><dependency>" +
+    "<groupId>com.example.test</groupId><artifactId>mvn-app</artifactId>" +
+    "</dependency></dependencies></project>",
+  "libs/mvn-core/src/main/java/com/example/test/core/Violate.java":
+    "package com.example.test.core;\n\nimport com.example.test.app.App;\n\nclass Violate { App app; }\n",
+  "libs/mvn-app/src/main/java/com/example/test/app/App.java":
+    "package com.example.test.app;\n\nclass App {}\n",
 };
 
 const failures = [];
@@ -1207,6 +1297,77 @@ try {
   // The checker exits 1 on a violating Moon tree, using the Moon-violating
   // files (which include a TypeScript violation the Nx/native files lack).
   verifyViolatingCheck(consumerMoon, "Moon path", undefined, VIOLATING_FILES_MOON);
+
+  // --- the Maven consumer: an `archkeep.json` root whose projects are
+  // anchored by tracked `pom.xml` files. Discovery here is inference over
+  // the default manifest list — no declared row names a manifest — and the
+  // graph carries both track kinds for one pair: the pom's declared
+  // dependency AND a written Java import, each attributed to its own source
+  // file. This is also where the optional-peer claim about
+  // `fast-xml-parser` is checked against an actual install, the positive of
+  // the native face's negative-`nx` check above.
+  const consumerMaven = join(workdir, "consumer-maven");
+  mkdirSync(consumerMaven);
+
+  const filesMaven = fixtureFilesMaven(packageName, peers, packageManager);
+  filesMaven["package.json"] = filesMaven["package.json"].replace('"*"', tarballRef);
+  write(consumerMaven, filesMaven);
+  writeFileSync(
+    join(consumerMaven, "pnpm-workspace.yaml"),
+    "packages: []\nallowBuilds:\n  lefthook: false\n",
+    "utf8",
+  );
+  commitTree(consumerMaven, "the clean tree", true);
+
+  const installedMaven = run("pnpm", ["install", "--no-frozen-lockfile"], consumerMaven);
+  if (installedMaven.status !== 0) {
+    console.error(installedMaven.stdout ?? "");
+    console.error(installedMaven.stderr ?? "");
+    console.error("the packed tarball could not be installed into a fresh workspace (maven path).");
+    process.exit(1);
+  }
+  note(`installed into ${consumerMaven}`);
+
+  const xmlParserPresent = existsSync(join(consumerMaven, "node_modules", "fast-xml-parser"));
+  check(
+    "fast-xml-parser resolves in the maven consumer — the optional peer works in fact",
+    xmlParserPresent,
+    xmlParserPresent
+      ? "node_modules/fast-xml-parser exists"
+      : "node_modules/fast-xml-parser missing",
+  );
+
+  // Clean reactor: both tracks draw edges, so the verdict must state real
+  // coverage — imports from the .java files, projects from the poms.
+  const cleanMaven = run("pnpm", ["exec", "archkeep", "check"], consumerMaven);
+  check(
+    "the checker exits 0 on a clean maven reactor",
+    cleanMaven.status === 0,
+    `exit ${cleanMaven.status}\n${cleanMaven.stdout ?? ""}${cleanMaven.stderr ?? ""}`,
+  );
+  check(
+    "the clean maven verdict states it inspected something",
+    /[1-9]\d* import/.test(cleanMaven.stdout ?? "") &&
+      /[1-9]\d* project/.test(cleanMaven.stdout ?? ""),
+    `stdout: ${cleanMaven.stdout ?? "(empty)"}`,
+  );
+
+  // Violating reactor: mvn-core reaching up into mvn-app, written in Java.
+  write(consumerMaven, VIOLATING_FILES_MAVEN);
+  commitTree(consumerMaven, "core reaches up into app", false);
+  const dirtyMaven = run("pnpm", ["exec", "archkeep", "check"], consumerMaven);
+  const dirtyMavenOutput = `${dirtyMaven.stdout ?? ""}${dirtyMaven.stderr ?? ""}`;
+  check(
+    "the checker exits 1 on a violating maven reactor",
+    dirtyMaven.status === 1,
+    `exit ${dirtyMaven.status}\n${dirtyMavenOutput}`,
+  );
+  check(
+    "the maven violation names its rule and its java file:line:column",
+    dirtyMavenOutput.includes("onlyTagsConstraintViolation") &&
+      /Violate\.java:\d+:\d+/.test(dirtyMavenOutput),
+    dirtyMavenOutput || "(no output)",
+  );
 } finally {
   rmSync(workdir, { recursive: true, force: true });
 }

@@ -628,3 +628,64 @@ describe("discoverNativeProjects", () => {
     expect(projects[0].targets).toEqual([]);
   });
 });
+
+describe("maven inference (pom.xml in the default manifest list)", () => {
+  const reactor = {
+    "apps/api/pom.xml": "<project><artifactId>api</artifactId></project>",
+    "libs/core/pom.xml": "<project><artifactId>core</artifactId></project>",
+  };
+
+  it("discovers a project per tracked pom.xml, named by directory basename", () => {
+    // The same rule go.mod and Cargo.toml follow: the manifest anchors the
+    // project, but never NAMES it — basename unless declared otherwise.
+    const model = modelOf({ projects: { declared: [], infer: {} } });
+    const { projects } = discoverNativeProjects({
+      root: "/repo",
+      files: Object.keys(reactor),
+      readFile: filesOf(reactor),
+      model,
+    });
+    expect(projects.map((project) => project.name).sort()).toEqual(["api", "core"]);
+  });
+
+  it("lets a declared row rename a pom-anchored project", () => {
+    const model = modelOf({
+      projects: { declared: [{ root: "apps/api", name: "http-api", tags: ["scope:public"] }] },
+    });
+    const { projects } = discoverNativeProjects({
+      root: "/repo",
+      files: Object.keys(reactor),
+      readFile: filesOf(reactor),
+      model,
+    });
+    const api = projects.find((project) => project.name === "http-api");
+    expect(api.root).toBe("apps/api");
+    expect(api.tags).toEqual(["scope:public"]);
+  });
+
+  it("infers no pom project when inference is restricted to another manifest", () => {
+    // Restricting `manifests` to go.mod leaves the reactor unmodeled, which
+    // is the designed loud zero-project state — discovery refuses rather
+    // than describing a workspace it found nothing in.
+    const model = modelOf({ projects: { declared: [], infer: { manifests: ["go.mod"] } } });
+    expect(() =>
+      discoverNativeProjects({
+        root: "/repo",
+        files: Object.keys(reactor),
+        readFile: filesOf(reactor),
+        model,
+      }),
+    ).toThrow(/zero projects/);
+  });
+
+  it("ignores target/ build output because it is untracked, like every manifest", () => {
+    const model = modelOf({ projects: { declared: [], infer: {} } });
+    const { projects } = discoverNativeProjects({
+      root: "/repo",
+      files: ["apps/api/pom.xml"],
+      readFile: filesOf(reactor),
+      model,
+    });
+    expect(projects.map((project) => project.root)).toEqual(["apps/api"]);
+  });
+});

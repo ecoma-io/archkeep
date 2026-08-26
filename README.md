@@ -7,7 +7,7 @@
 <p align="center">
   <strong>The contract between the architecture you intended and the code you actually have.</strong><br />
   Declare your architecture once — layers, scopes, allowed dependencies — and Archkeep judges
-  every import in Go, Rust, Python, TypeScript, JavaScript and Vue against it: deterministic
+  every import in Go, Rust, Python, TypeScript, JavaScript, Vue and Java against it: deterministic
   verdicts with evidence attached, in any repository, with or without Nx or Moon.<br />
   <em>An empty result is a claim, not a shrug.</em>
 </p>

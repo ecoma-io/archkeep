@@ -195,6 +195,12 @@ export const DEFAULT_MANIFEST_NAMES = Object.freeze([
   "go.mod",
   "Cargo.toml",
   "pyproject.toml",
+  // Maven: every tracked root pom.xml anchors a project (ADR 0005). Identity
+  // is `(groupId, artifactId)` read by `../../analysis/jvm/maven.mjs`; the
+  // name follows the same precedence as every other inferred manifest, so
+  // pom-discovered projects land on their directory basename unless a
+  // declared row names them.
+  "pom.xml",
 ]);
 
 const PROJECT_TYPES = ["app", "lib", "e2e"];

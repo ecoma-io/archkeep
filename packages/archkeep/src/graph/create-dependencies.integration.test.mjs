@@ -57,6 +57,29 @@ describe("createDependencies over a real workspace fixture", () => {
     '[project]\nname = "t"\nversion = "0"\ndependencies = ["u @ file:///${PROJECT_ROOT}/../u"]\n',
   );
   write("py/u/pyproject.toml", '[project]\nname = "u"\nversion = "0"\n');
+  // Java pair, declared through Maven AND imported at source level: both
+  // tracks draw their own edge, attributed to different source files.
+  write(
+    "jvm/lib/pom.xml",
+    "<project><groupId>com.acme</groupId><artifactId>lib</artifactId><version>1</version></project>",
+  );
+  write("jvm/lib/src/main/java/com/acme/lib/Lib.java", "package com.acme.lib;\nclass Lib {}\n");
+  write(
+    "jvm/app/pom.xml",
+    [
+      "<project>",
+      "  <groupId>com.acme</groupId>",
+      "  <artifactId>app</artifactId>",
+      "  <dependencies>",
+      "    <dependency><groupId>com.acme</groupId><artifactId>lib</artifactId></dependency>",
+      "  </dependencies>",
+      "</project>",
+    ].join("\n"),
+  );
+  write(
+    "jvm/app/src/main/java/com/acme/app/App.java",
+    "package com.acme.app;\nimport com.acme.lib.Lib;\nclass App { Lib lib; }\n",
+  );
 
   const context = {
     workspaceRoot: root,
@@ -71,6 +94,8 @@ describe("createDependencies over a real workspace fixture", () => {
       "py-s": { root: "py/s" },
       "py-t": { root: "py/t" },
       "py-u": { root: "py/u" },
+      "jvm-lib": { root: "jvm/lib" },
+      "jvm-app": { root: "jvm/app" },
     },
     fileMap: {
       projectFileMap: {
@@ -84,6 +109,14 @@ describe("createDependencies over a real workspace fixture", () => {
         "py-s": [{ file: "py/s/pyproject.toml" }],
         "py-t": [{ file: "py/t/pyproject.toml" }],
         "py-u": [{ file: "py/u/pyproject.toml" }],
+        "jvm-lib": [
+          { file: "jvm/lib/pom.xml" },
+          { file: "jvm/lib/src/main/java/com/acme/lib/Lib.java" },
+        ],
+        "jvm-app": [
+          { file: "jvm/app/pom.xml" },
+          { file: "jvm/app/src/main/java/com/acme/app/App.java" },
+        ],
       },
     },
   };
@@ -96,6 +129,16 @@ describe("createDependencies over a real workspace fixture", () => {
       { source: "py-p", target: "py-q", sourceFile: "py/p/pyproject.toml", type: "static" },
       { source: "py-r", target: "py-s", sourceFile: "py/r/pyproject.toml", type: "static" },
       { source: "py-t", target: "py-u", sourceFile: "py/t/pyproject.toml", type: "static" },
+      // The two JVM tracks over one pair: the written import AND the pom's
+      // declared dependency each draw their own edge — a declared-but-unused
+      // dependency and an undeclared-but-imported one are both findings.
+      {
+        source: "jvm-app",
+        target: "jvm-lib",
+        sourceFile: "jvm/app/src/main/java/com/acme/app/App.java",
+        type: "static",
+      },
+      { source: "jvm-app", target: "jvm-lib", sourceFile: "jvm/app/pom.xml", type: "static" },
     ]);
   });
 
@@ -157,12 +200,19 @@ describe("createDependencies over a real workspace fixture", () => {
       fileMap: { projectFileMap: rest },
     });
     // The rs-b manifest is unlisted, so the Rust project contributes nothing;
-    // the Go and Python edges are drawn from the projects that ARE listed.
+    // the Go, Python and JVM edges are drawn from the projects that ARE listed.
     expect(deps).toEqual([
       { source: "go-one", target: "go-two", sourceFile: "go/one/main.go", type: "static" },
       { source: "py-p", target: "py-q", sourceFile: "py/p/pyproject.toml", type: "static" },
       { source: "py-r", target: "py-s", sourceFile: "py/r/pyproject.toml", type: "static" },
       { source: "py-t", target: "py-u", sourceFile: "py/t/pyproject.toml", type: "static" },
+      {
+        source: "jvm-app",
+        target: "jvm-lib",
+        sourceFile: "jvm/app/src/main/java/com/acme/app/App.java",
+        type: "static",
+      },
+      { source: "jvm-app", target: "jvm-lib", sourceFile: "jvm/app/pom.xml", type: "static" },
     ]);
   });
 

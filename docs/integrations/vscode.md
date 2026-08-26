@@ -95,6 +95,7 @@ extension installed:
 | `.rs`     | Rust     |
 | `.py`     | Python   |
 | `.vue`    | Vue      |
+| `.java`   | Java     |
 
 TypeScript and JavaScript are not on that list. An editor gives one language
 server per file extension — the first registered wins — so claiming `.ts`

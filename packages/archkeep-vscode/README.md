@@ -2,7 +2,7 @@
 
 Module-boundary diagnostics in the buffer, for the languages ESLint cannot read.
 
-Open a `.go`, `.rs`, `.py` or `.vue` file in an Nx workspace and an import that
+Open a `.go`, `.rs`, `.py`, `.vue` or `.java` file in an Nx workspace and an import that
 crosses a boundary your tags forbid is underlined where you wrote it — judged by
 the same `module-boundaries.config.mjs` your pipeline reads, by the same engine.
 
@@ -80,7 +80,7 @@ available and, unlike a setting, is visible.
 
 ## Which files it routes
 
-`.go`, `.rs`, `.py`, `.vue` — matched by filename pattern rather than by
+`.go`, `.rs`, `.py`, `.vue`, `.java` — matched by filename pattern rather than by
 language id, so a `.go` file is routed on a machine with no Go extension
 installed. TypeScript and JavaScript are left to
 `@nx/enforce-module-boundaries`, which already reports them through ESLint;

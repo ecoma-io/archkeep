@@ -134,7 +134,9 @@ describe("the numbers README.md states about this catalogue", () => {
     // rule; this holds the copy in the README to the same set of ids without
     // needing ESLint, so it fails in seconds rather than in two minutes.
     const rows = [
-      ...README.matchAll(/^\| `(\w+)` +\| +\d+ \| +\d+ \| +\d+ \| +\d+ \| [^|]+\|$/gmu),
+      ...README.matchAll(
+        /^\| `(\w+)` +\| +\d+ \| +\d+ \| +\d+ \| +\d+ \| (?=[^|]*[A-Za-z(])[^|]+\|$/gmu,
+      ),
     ].map((match) => match[1]);
 
     // Zero rows means the pattern stopped matching the table, not that the
@@ -192,7 +194,7 @@ describe("the numbers README.md states about the labeled corpus", () => {
     // file, and the file's extension says which language it is. So the whole
     // table is checked rather than only its row set — a cell that drifts is a
     // claim about coverage that nothing else in this repository would catch.
-    const LANGUAGES = ["go", "rust", "python", "typescript"];
+    const LANGUAGES = ["go", "rust", "python", "typescript", "java"];
     const derived = new Map();
     // A probe in a language this table has no column for would otherwise be
     // counted into `row[-1]` — a property, not a cell — and the finding would
@@ -218,9 +220,9 @@ describe("the numbers README.md states about the labeled corpus", () => {
     expect(uncolumned, "findings in a language the stated table has no column for").toEqual([]);
 
     const stated = new Map(
-      [...README.matchAll(/^\| `(\w+)` +\| +(\d+) \| +(\d+) \| +(\d+) \| +(\d+) \|$/gmu)].map(
-        (match) => [match[1], match.slice(2).map(Number)],
-      ),
+      [
+        ...README.matchAll(/^\| `(\w+)` +\| +(\d+) \| +(\d+) \| +(\d+) \| +(\d+) \| +(\d+) \|$/gmu),
+      ].map((match) => [match[1], match.slice(2).map(Number)]),
     );
 
     // Zero rows means the pattern stopped matching the table rather than the

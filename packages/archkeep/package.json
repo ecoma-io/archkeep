@@ -1,7 +1,7 @@
 {
   "name": "@ecoma-io/archkeep",
   "version": "0.15.0",
-  "description": "Architecture enforcement for polyglot repositories — dependency graphs and module boundaries for Go, Rust, Python, TypeScript, JavaScript and Vue",
+  "description": "Architecture enforcement for polyglot repositories — dependency graphs and module boundaries for Go, Rust, Python, TypeScript, JavaScript, Vue and Java",
   "keywords": [
     "architecture",
     "enforcement",
@@ -53,12 +53,16 @@
   },
   "peerDependencies": {
     "@nx/eslint-plugin": ">=21",
+    "fast-xml-parser": "5.11.0",
     "nx": ">=21",
     "typescript": ">=5 <7",
     "vue": ">=3"
   },
   "peerDependenciesMeta": {
     "@nx/eslint-plugin": {
+      "optional": true
+    },
+    "fast-xml-parser": {
       "optional": true
     },
     "nx": {
