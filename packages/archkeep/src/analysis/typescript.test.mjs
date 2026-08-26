@@ -557,6 +557,27 @@ describe("analyzeTypeScript — a bad file must not blank a run", () => {
     expect(result.failures[0].reason).toMatch(/disk on fire/);
   });
 
+  it("keeps returning an envelope when the workspace throws something that is not an Error", () => {
+    // A thrown string carries no `message`; the catch-all must still land it
+    // in a failure record — a file with no verdict must never look like a
+    // file with nothing to say.
+    const hostile = {
+      root: "/w",
+      projects: PROJECTS,
+      filesOf: () => [],
+      readFile: () => {
+        throw "disk on fire";
+      },
+    };
+    const result = analyzeTypeScript({
+      sourceFile: "apps/web/src/main.ts",
+      text: 'import "@acme/ui";',
+      workspace: hostile,
+    });
+    expect(result.imports).toEqual([]);
+    expect(result.failures[0].reason).toBe("TypeScript analysis failed: disk on fire");
+  });
+
   it("reports a malformed tsconfig once per file, loudly, instead of silently losing every alias", () => {
     // A broken config drops every path alias, which would turn a whole
     // workspace's aliased imports into "unresolvable" with nothing naming the

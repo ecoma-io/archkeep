@@ -286,3 +286,30 @@ fixture rather than just a fix. Which tier depends on what was silent:
 | a rule that should have fired        | `src/conformance/` — `cases.mjs` in a language ESLint reads, so its verdict is the check; `corpus.mjs` in Go, Rust or Python, where the label is |
 | an edge that never reached the graph | `graph/create-dependencies.integration.test.mjs`                                                                                                 |
 | a file the editor never received     | `lsp/editor-config.integration.test.mjs`                                                                                                         |
+
+## The incomplete-evidence matrix
+
+`docs/reference/evidence.md` owns the verdict vocabulary and its invariants;
+this table audits where each incomplete-evidence state is held to them. The
+invariant every row answers to is the same: **insufficient evidence never reads
+as clean, unchanged, zero, or pass.** Each row names the modules whose tests pin
+the behavior — a state missing from this table, or a row whose tests have
+vanished, is exactly the silent hole the matrix exists to prevent.
+
+| evidence failure                         | what must surface                                                                        | pinned at                                                                                                       |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| baseline missing or invalid              | refusal naming the file (exit 3) — never an empty diff                                   | each reader's own tests; `src/exit-matrix.integration.test.mjs` drives every verb against shared fixture worlds |
+| provenance one-sided or cross-repository | a disclosure note — or, where the command claims identity (`change`), a refusal          | `diff.test.mjs`, `delta.test.mjs`, `change.test.mjs`, `history.test.mjs`                                        |
+| a side captured from a dirty tree        | a disclosure note from every command over that metadata                                  | same files; the comparator's own booleans pinned in `history.test.mjs`                                          |
+| incomplete graph coverage                | refusal (`no-verdict`, exit 3) from every judging verb; a named index gap in the editor  | analyzer/refusal suites beside each command; `lsp/workspace-index.test.mjs`                                     |
+| file the analyzer could not read         | a whole-file failure record (line/column null) — never silence                           | each analyzer's "misbehaves" tests, Error and non-Error throws alike                                            |
+| boundary law malformed                   | exit 3 naming the law — a broken table must not read as "no constraints"                 | `config.test.mjs` and the broken world of the exit matrix                                                       |
+| manifest unreadable or unparseable       | the skip disclosed where coverage is claimed; at CLI level, a not-analyzed file (exit 3) | the Go/Rust/Python analyzer and resolver suites                                                                 |
+| a documented parse limit fires           | a spurious record naming text the file really contains — never a missed project          | the analyzer's limits header plus the fixture that pins it (`python.test.mjs`)                                  |
+| decisionRef unresolved                   | `unknown` — no-verdict, exit 3, never pass                                               | `adr.test.mjs`, `governance/adr-registry.test.mjs`, `provenance-command.test.mjs`                               |
+| historical observation missing           | `incomparable`, derived numbers null — never folded into `unchanged`                     | `history.test.mjs`, `trajectory.test.mjs`                                                                       |
+| external readiness evidence absent       | `unmeasured`, naming what would measure it — neither met nor not met                     | `scripts/check-readiness.test.mjs`                                                                              |
+
+A new incomplete-evidence state gets a row here in the same change that makes it
+behave — the table is the audit trail of what "unknown" means across the
+surface, and prose without a test behind it does not belong in it.
