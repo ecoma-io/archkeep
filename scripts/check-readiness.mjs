@@ -43,6 +43,8 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
+import { readGateAttestation, verifiedAdopters } from "./verify-gate-attestation.mjs";
+
 /** The conditions, in the roadmap's own order and wording. */
 export const CONDITIONS = Object.freeze([
   "the real-tree differential green, run after run",
@@ -98,8 +100,9 @@ const BREAKING_FOOTER = /^BREAKING[ -]CHANGE:/mu;
  *   holds, or `null` when the registry could not be reached.
  * @property {{red: boolean, runs: number} | null} differential The real-tree
  *   differential's recent history, or `null` when it was not supplied.
- * @property {string[] | null} externalAdopters Repositories known to run
- *   `check` as a blocking gate, or `null` when nothing was supplied.
+ * @property {string[] | null} externalAdopters `owner/name@version` entries
+ *   derived from validated gate attestations, or `null` when none was
+ *   supplied — never an unvalidated name.
  */
 
 /**
@@ -158,7 +161,13 @@ function differentialRow(differential) {
 /**
  * Condition 2. Somebody else's CI, which nothing in this tree can see.
  *
- * @param {string[] | null} adopters
+ * The evidence arrives as validated gate attestations
+ * (`./verify-gate-attestation.mjs` owns the schema and the refusals) — never a
+ * bare name, because "a repository is known to us" is not the condition; the
+ * condition is that its build fails on an archkeep verdict and is right to.
+ *
+ * @param {string[] | null} adopters `owner/name@version` entries from
+ *   `verifiedAdopters`, or `null` when no attestation was supplied.
  * @returns {ReadinessRow}
  */
 function adoptionRow(adopters) {
@@ -167,14 +176,14 @@ function adoptionRow(adopters) {
       condition: CONDITIONS[1],
       state: "unmeasured",
       evidence:
-        "an external repository's own CI — pass --adopters '<owner/repo>,...' once one has failed " +
-        "a build on a Archkeep verdict and been right to",
+        "an external repository's own CI — pass --attestations '<file.json>,...' once one has " +
+        "published one (docs/reference/gate-attestation.md)",
     };
   }
   return {
     condition: CONDITIONS[1],
     state: adopters.length > 0 ? "met" : "not met",
-    evidence: adopters.length > 0 ? adopters.join(", ") : "no external repository named",
+    evidence: adopters.length > 0 ? adopters.join(", ") : "no attested repository",
   };
 }
 
@@ -360,16 +369,23 @@ export function parseDifferential(value) {
 /** The report, one row per condition. */
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  const publishedVersions = args["registry-json"]
+    ? versionsFromRegistry(args["registry-json"])
+    : null;
   const rows = evaluate({
     commits: readCommits(QUIET_STRETCH_COMMITS),
     taggedVersions: readTaggedVersions(),
-    publishedVersions: args["registry-json"] ? versionsFromRegistry(args["registry-json"]) : null,
+    publishedVersions,
     differential: parseDifferential(args.differential),
-    externalAdopters: args.adopters
-      ? args.adopters
-          .split(",")
-          .map((entry) => entry.trim())
-          .filter((entry) => entry !== "")
+    externalAdopters: args.attestations
+      ? verifiedAdopters(
+          args.attestations
+            .split(",")
+            .map((path) => path.trim())
+            .filter((path) => path !== "")
+            .map((path) => readGateAttestation(path)),
+          publishedVersions,
+        )
       : null,
   });
 
