@@ -31,6 +31,7 @@
  * (`../../process.mjs`'s header) — for two functions that need nothing beyond
  * a string.
  */
+import { basenameMatches } from "../../analysis/manifest-util.mjs";
 import { fileFailure } from "../../analysis/source-util.mjs";
 import { parseNxJson } from "../../nx-json.mjs";
 import { projectPatternError } from "../../rules/match.mjs";
@@ -213,7 +214,7 @@ const isDotnetGeneratedOutput = (file) => /(?:^|\/)(?:obj|bin)\//.test(file);
 function manifestAnchorsRoot(file, infer) {
   const base = file.slice(file.lastIndexOf("/") + 1);
   return (
-    infer.manifests.some((pattern) => matchesGlob(base, pattern)) &&
+    basenameMatches(base, infer.manifests, matchesGlob) &&
     infer.include.some((pattern) => matchesGlob(file, pattern)) &&
     !infer.exclude.some((pattern) => matchesGlob(file, pattern))
   );

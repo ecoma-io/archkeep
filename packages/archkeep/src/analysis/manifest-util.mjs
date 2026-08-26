@@ -66,3 +66,33 @@ export function resolveWithinWorkspace(baseDir, relative) {
   }
   return segments.join("/");
 }
+
+/** A pattern carrying any of these is a glob; anything else is a literal. */
+const GLOB_METACHARACTERS = /[*?[{\\]/;
+
+/**
+ * Does a file's basename match any of a manifest-name pattern list — the
+ * literal patterns by equality, only the glob patterns through `matchesGlob`.
+ *
+ * Why the split: the lists this serves (the polyglot manifest names, a
+ * workspace's `projects.infer.manifests`) are mostly literals — `go.mod`,
+ * `Cargo.toml`, `pom.xml` — with a wildcard like `*.csproj` riding beside
+ * them, and the filters run once per tracked file. Measured, handing every
+ * pattern to `path.posix.matchesGlob` costs seconds past ~100k files where
+ * the equality scan it replaced was nanoseconds, because each call compiles
+ * its pattern again. The matcher is injected so `../../providers/native/
+ * model.mjs`'s validated one and raw `path.posix.matchesGlob` ride the same
+ * fast path without this module reaching for either; semantics are
+ * unchanged, because a metacharacter-free pattern answers identically
+ * either way and every other pattern still reaches the glob.
+ *
+ * @param {string} base The basename under test.
+ * @param {readonly string[]} patterns
+ * @param {(value: string, pattern: string) => boolean} matchesGlob
+ * @returns {boolean}
+ */
+export function basenameMatches(base, patterns, matchesGlob) {
+  return patterns.some((pattern) =>
+    GLOB_METACHARACTERS.test(pattern) ? matchesGlob(base, pattern) : pattern === base,
+  );
+}
