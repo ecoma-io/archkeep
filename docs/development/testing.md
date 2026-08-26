@@ -105,6 +105,30 @@ it changes the snapshot identity `history` keys transitions on — and so is
 array element order in the intent fingerprint. Before asserting
 order-invariance on any sequence, check which kind it is.
 
+### Cross-command consistency — protecting the shared authority boundary
+
+Several commands answer overlapping questions over the same facts, and most of
+them already share one implementation (`trajectory` reads `history`'s own
+snapshots and classifier; `report` calls `health`/`waivers`/`fitness`
+verbatim; `delta` and `change` re-judge through the same engine `check` uses).
+Each command's own suite would stay green if a future edit quietly grew a
+second, slightly different implementation — two commands answering differently
+about the same tree while nothing fails. The consistency suites exist for that
+defect: `src/commands/cross-command-history.integration.test.mjs` drives
+`history`, `trajectory`, `classifyTransition` and the raw `computeDiff` over
+ONE synthetic snapshot set with known transitions and requires the counts to
+reconcile exactly; `src/commands/cross-command-gates.integration.test.mjs`
+requires `diff`'s edge-constraint impact and `delta`'s full-engine
+classification to agree on introduced tag violations (including pinning the
+documented narrowing between them as a subset relation), requires every number
+in `report` to be the number its section's command returns over the same
+context, law and clock, and requires plan mode's impact to equal `impact`'s.
+
+These prove composition, not equivalence: no claim is made that any two
+commands are interchangeable, only that the relationships stated above hold —
+and where they deliberately do not (`diff`'s narrower rule impact), the
+divergence itself is pinned as a fact rather than left to drift silently.
+
 ### Integration — `*.integration.test.mjs`
 
 Real seams, over throwaway fixture trees. Each one exists for a failure the unit
