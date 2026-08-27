@@ -105,6 +105,7 @@ test("the reformat list is every file the lane repairs", () => {
     "packages/archkeep-vscode/package.json",
     "packages/archkeep-rule-sdk-ts/package.json",
     "packages/archkeep-rule-sdk-rust/Cargo.lock",
+    "packages/archkeep-rules/Cargo.lock",
   ]);
 });
 

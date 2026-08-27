@@ -58,6 +58,7 @@ export const VSCODE_PACKAGE_JSON = "packages/archkeep-vscode/package.json";
 export const RUST_SDK_CARGO_TOML = "packages/archkeep-rule-sdk-rust/Cargo.toml";
 export const RUST_SDK_CARGO_LOCK = "packages/archkeep-rule-sdk-rust/Cargo.lock";
 export const RUST_SDK_CRATE_NAME = "archkeep-rule-sdk";
+export const ARCHKEEP_RULES_CARGO_LOCK = "packages/archkeep-rules/Cargo.lock";
 export const TS_SDK_PACKAGE_JSON = "packages/archkeep-rule-sdk-ts/package.json";
 export const MCP_PACKAGE_JSON = "packages/archkeep-mcp/package.json";
 export const PYTHON_SDK_PYPROJECT = "packages/archkeep-rule-sdk-python/pyproject.toml";

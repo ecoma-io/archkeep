@@ -28,6 +28,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  ARCHKEEP_RULES_CARGO_LOCK,
   RUST_SDK_CARGO_LOCK,
   RUST_SDK_CARGO_TOML,
   RUST_SDK_CRATE_NAME,
@@ -101,18 +102,45 @@ export function main() {
     process.exit(1);
   }
 
-  const lockPath = join(root, RUST_SDK_CARGO_LOCK);
-  const { text, changed } = syncCargoLockVersion(
-    readFileSync(lockPath, "utf8"),
+  // Sync the Rust SDK's own lockfile.
+  const sdkLockPath = join(root, RUST_SDK_CARGO_LOCK);
+  const { text: sdkLockText, changed: sdkLockChanged } = syncCargoLockVersion(
+    readFileSync(sdkLockPath, "utf8"),
     RUST_SDK_CRATE_NAME,
     version,
   );
-  if (!changed) {
+  if (sdkLockChanged) {
+    writeFileSync(sdkLockPath, sdkLockText);
+    console.log(`${RUST_SDK_CARGO_LOCK} now records ${version}, matching ${RUST_SDK_CARGO_TOML}`);
+  } else {
     console.log(`${RUST_SDK_CARGO_LOCK} already records ${version}; nothing to write`);
-    return;
   }
-  writeFileSync(lockPath, text);
-  console.log(`${RUST_SDK_CARGO_LOCK} now records ${version}, matching ${RUST_SDK_CARGO_TOML}`);
+
+  // Sync the rules catalog's lockfile, which has a path dependency on the SDK.
+  // When the SDK bumps, the lock that records it as a dependency must bump too,
+  // or `cargo check --locked` fails with the exact error measured in PR #344.
+  const rulesLockPath = join(root, ARCHKEEP_RULES_CARGO_LOCK);
+  const { text: rulesLockText, changed: rulesLockChanged } = syncCargoLockVersion(
+    readFileSync(rulesLockPath, "utf8"),
+    RUST_SDK_CRATE_NAME,
+    version,
+  );
+  if (rulesLockChanged) {
+    writeFileSync(rulesLockPath, rulesLockText);
+    console.log(
+      `${ARCHKEEP_RULES_CARGO_LOCK} now records ${version} for ${RUST_SDK_CRATE_NAME}, ` +
+        `matching the SDK it path-depends on`,
+    );
+  } else {
+    console.log(
+      `${ARCHKEEP_RULES_CARGO_LOCK} already records ${version} for ${RUST_SDK_CRATE_NAME}; ` +
+        `nothing to write`,
+    );
+  }
+
+  if (!sdkLockChanged && !rulesLockChanged) {
+    process.exit(0);
+  }
 }
 
 /**
