@@ -194,11 +194,38 @@ function readPackageName(projectRoot, readFile, isTracked) {
 }
 
 /**
- * Generated .NET build output (ADR 0006, Decision 2): a tracked `.csproj`
- * under `obj/` or `bin/` never anchors a project, because inference over it
- * would model a phantom inside the build directory.
+ * Generated .NET build output (ADR 0006, Decision 2), judged by ROLE and not
+ * by name: a tracked `.csproj` is generated output exactly when it sits under
+ * an `obj`/`bin` directory whose parent directory carries the tracked
+ * `.csproj` whose build produced it — the layout `dotnet build` itself writes,
+ * `Api.csproj` beside the `obj/` and `bin/` it fills. That owning manifest is
+ * the cheap, reliable signal: restore and build always write output under the
+ * project that ran them, so an `obj`/`bin` segment with a `.csproj` beside it
+ * is build output by construction, while a source project that merely lives
+ * under a directory NAMED `obj` or `bin` (no manifest above the segment) is a
+ * project like any other — excluding it by name alone silently dropped a real
+ * project from the model, the direction this repository treats as the worse
+ * error. `dotnet build` offers no marker file this reader could trust more:
+ * `project.assets.json` only exists after a restore, and verdicts may not
+ * depend on whether someone ran restore before committing (ADR 0006, Decision
+ * 4), so the owning manifest is the one signal that is both always present and
+ * static.
+ *
+ * @param {string} file Workspace-relative path of a tracked `.csproj`.
+ * @param {string[]} files Every tracked file, to find the owning manifest.
+ * @returns {boolean}
  */
-const isDotnetGeneratedOutput = (file) => /(?:^|\/)(?:obj|bin)\//.test(file);
+const isDotnetGeneratedOutput = (file, files) => {
+  const segments = file.split("/");
+  for (let i = 0; i < segments.length - 1; i++) {
+    if (segments[i] !== "obj" && segments[i] !== "bin") continue;
+    const owner = segments.slice(0, i).join("/");
+    if (files.some((tracked) => tracked.endsWith(".csproj") && directoryOf(tracked) === owner)) {
+      return true;
+    }
+  }
+  return false;
+};
 
 /**
  * Whether a tracked file's own directory is a root `projects.infer` would
@@ -232,7 +259,7 @@ function inferProjectRoots({ files, infer }) {
   const roots = new Set();
   for (const file of files) {
     if (!manifestAnchorsRoot(file, infer)) continue;
-    if (file.endsWith(".csproj") && isDotnetGeneratedOutput(file)) continue;
+    if (file.endsWith(".csproj") && isDotnetGeneratedOutput(file, files)) continue;
     roots.add(directoryOf(file));
   }
   return roots;
@@ -298,7 +325,7 @@ export function discoverNativeProjects({ root, files, readFile, model }) {
     const csprojByDir = new Map();
     for (const file of files) {
       if (!file.endsWith(".csproj")) continue;
-      if (isDotnetGeneratedOutput(file)) continue;
+      if (isDotnetGeneratedOutput(file, files)) continue;
       if (!manifestAnchorsRoot(file, model.projects.infer)) continue;
       const dir = directoryOf(file);
       csprojByDir.set(dir, [...(csprojByDir.get(dir) ?? []), file]);

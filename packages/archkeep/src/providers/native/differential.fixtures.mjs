@@ -1069,7 +1069,9 @@ export function buildCompositeNativeTree(
         // `projects.infer` key means "the declared list is exhaustive, no
         // inference" (`./model.mjs`'s own comment on the key), and this
         // fixture needs the opposite of that. `{}` takes every default:
-        // `DEFAULT_MANIFEST_NAMES`, `include: ["**"]`, `exclude: []`.
+        // `DEFAULT_MANIFEST_NAMES`, `include: ["**"]`, and
+        // `DEFAULT_INFER_EXCLUDE` — none of whose paths this tree touches,
+        // every manifest here sitting at the root or under `libs/`.
         infer: {},
       },
       projectRules: [
