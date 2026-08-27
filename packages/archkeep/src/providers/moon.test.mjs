@@ -234,6 +234,26 @@ describe("transformMoonGraph — error paths", () => {
   it("throws when the raw output is null", () => {
     expect(() => transformMoonGraph(null)).toThrow(/produced no `data` map/);
   });
+
+  it("names every anomaly in one refusal, not one per run", () => {
+    // `./native/discover.mjs`'s collect-and-throw posture: a payload
+    // carrying several defects names them all in a single refusal, so the
+    // consumer fixes the whole shape in one pass instead of one per run.
+    const raw = twoProjectGraph();
+    raw.graph.nodes.push(2);
+    raw.data["2"] = { ...raw.data["1"], id: "web", source: "apps/web-2" };
+    raw.data["0"].dependencies = [{ id: "ghost", scope: "production", source: "explicit" }];
+    // One invocation, one throw: both patterns must come from the SAME
+    // error, which is what pins collect-and-throw against one-per-run.
+    let message = "";
+    try {
+      transformMoonGraph(raw);
+    } catch (error) {
+      message = String(/** @type {Error} */ (error).message);
+    }
+    expect(message).toMatch(/both declare project 'web'/u);
+    expect(message).toMatch(/dependency on 'ghost'/u);
+  });
 });
 
 describe("transformMoonGraph — node construction", () => {
@@ -260,6 +280,11 @@ describe("transformMoonGraph — node construction", () => {
     raw.data["1"].layer = "automation";
     raw.data["1"].id = "e2e-tests";
     raw.data["1"].source = "e2e/tests";
+    // Renaming the project renames it in its dependents too — a `moon.yml`
+    // `dependsOn` names the id. Left pointing at the old id, this fixture
+    // carried exactly the dangling dependency #365's refusal exists to name
+    // (and the pre-#365 silent drop used to hide).
+    raw.data["0"].dependencies = [{ id: "e2e-tests", scope: "production", source: "implicit" }];
     const result = transformMoonGraph(raw);
     expect(result.nodes["e2e-tests"].type).toBe("e2e");
   });
@@ -282,6 +307,21 @@ describe("transformMoonGraph — node construction", () => {
     const result = transformMoonGraph(twoProjectGraph());
     expect(Object.getPrototypeOf(result.nodes)).toBe(null);
     expect(Object.getPrototypeOf(result.dependencies)).toBe(null);
+  });
+
+  it("refuses a payload that declares one project id twice, naming both sources", () => {
+    // Red in the silent direction until #365: the second `nodes[id] = …`
+    // overwrote the first, the first project vanished from the graph, and
+    // nothing anywhere named either — a graph byte-identical to a workspace
+    // without that project. Moon's own graph is keyed by id, so a duplicate
+    // cannot come from well-formed output; `./native/discover.mjs` refuses
+    // the same class for the native provider, and this is its Moon twin.
+    const raw = twoProjectGraph();
+    raw.graph.nodes.push(2);
+    raw.data["2"] = { ...raw.data["1"], id: "web", source: "apps/web-2" };
+    expect(() => transformMoonGraph(raw)).toThrow(
+      /data entries 0 and 2 both declare project 'web'[\s\S]*'apps\/web'[\s\S]*'apps\/web-2'/u,
+    );
   });
 });
 
@@ -390,16 +430,33 @@ describe("transformMoonGraph — edge type from scope", () => {
     expect(result.dependencies.web[0].type).toBe("static");
   });
 
-  it("skips an edge whose index names no node in the data map", () => {
+  it("refuses an edge whose index names no node in the data map, naming the edge", () => {
+    // Red in the silent direction until #365: both edges below used to
+    // vanish — a bare `continue` on the unresolvable index — with nothing
+    // anywhere naming them, so the graph claimed a completeness it never had.
+    // Both appear in the ONE refusal, not one per run.
     const raw = twoProjectGraph();
     raw.graph.edges = [
       [9, 1, "production"],
       [0, 9, "production"],
     ];
     raw.data["0"].dependencies = [];
+    expect(() => transformMoonGraph(raw)).toThrow(
+      /\[9, 1, production\][\s\S]*\[0, 9, production\]/u,
+    );
+  });
+
+  it("still skips a root-scope edge whose endpoint names nothing — it judges nothing", () => {
+    // The scope check runs before endpoint resolution: a root-scoped edge is
+    // Moon-internal bookkeeping this provider never judges (see
+    // `edgeTypeFromScope`), so what it names at either end cannot be a
+    // dropped boundary. Pinning the order keeps a future reorder from turning
+    // Moon's root bookkeeping into refusals.
+    const raw = twoProjectGraph();
+    raw.graph.edges = [[9, 1, "root"]];
+    raw.data["0"].dependencies = [];
     const result = transformMoonGraph(raw);
     expect(result.dependencies.web).toBeUndefined();
-    expect(result.dependencies.api).toBeUndefined();
   });
 
   it("skips an edge whose two ends are the same project", () => {
@@ -419,13 +476,35 @@ describe("transformMoonGraph — edge type from scope", () => {
     expect(result.dependencies.web).toBeUndefined();
   });
 
-  it("skips a project node that carries no id or no source", () => {
+  it("refuses a project node that carries no id or no source path, naming the entry", () => {
+    // Flips the pinned skip of #365's second class. Every `Project` Moon
+    // serializes carries a non-optional `id` and `source`, so an entry
+    // without either did not come from a well-formed `moon project-graph` —
+    // and skipping it, the old pinned behaviour, judged the graph over one
+    // project fewer: the silent direction. The one falsy-looking spelling
+    // that IS well-formed — a root-level project's `source: ""` — has its
+    // own acceptance test below.
     const raw = twoProjectGraph();
     raw.data["2"] = { layer: "library", source: "libs/ghost" };
     raw.data["3"] = { id: "ghost", layer: "library" };
+    expect(() => transformMoonGraph(raw)).toThrow(
+      /data entry 2 carries no id[\s\S]*data entry 3 \('ghost'\) carries no source/u,
+    );
+  });
+
+  it("keys a root-level project whose source is the empty string, the other root spelling", () => {
+    // Moon spells a root-level project's source `"."` on some versions and
+    // `""` on others — its own `is_root_level_source` accepts both — so `""`
+    // is a project root, not a missing one. Until #365 the falsy spelling
+    // hit the same skip as an entry with no source at all, vanishing the
+    // root project from the graph on the versions that spell it that way.
+    // Only the node's PRESENCE is pinned here; how its root is spelled in
+    // the output is root-normalization's subject, not this one's.
+    const raw = twoProjectGraph();
+    raw.graph.nodes.push(2);
+    raw.data["2"] = { id: "workspace-root", layer: "configuration", source: "", dependencies: [] };
     const result = transformMoonGraph(raw);
-    expect(result.nodes.ghost).toBeUndefined();
-    expect(Object.keys(result.nodes).sort()).toEqual(["api", "web"]);
+    expect(Object.keys(result.nodes)).toContain("workspace-root");
   });
 
   it("reads a node whose dependencies are not an array as having none", () => {
@@ -447,6 +526,32 @@ describe("transformMoonGraph — edge type from scope", () => {
     const raw = twoProjectGraph();
     raw.graph.edges = [];
     /** @type {any} */ (raw.data["0"]).dependencies = [{ scope: "production", source: "explicit" }];
+    const result = transformMoonGraph(raw);
+    expect(result.dependencies.web).toBeUndefined();
+  });
+
+  it("refuses a declared dependency naming a project the graph does not contain, naming both", () => {
+    // Measured on @moonrepo/cli 2.5.3: a moon.yml `dependsOn: [ghost]`
+    // naming no real project exits 0, keeps the record in the node's own
+    // `dependencies[]` while `graph.edges` drops it — the exact payload
+    // below. This provider used to drop it too (`!nodes[target]`), vanishing
+    // a hand-declared edge: the #262 defect shape, reached through a typo'd
+    // id (#365).
+    const raw = twoProjectGraph();
+    raw.graph.edges = [];
+    raw.data["0"].dependencies = [{ id: "ghost", scope: "production", source: "explicit" }];
+    expect(() => transformMoonGraph(raw)).toThrow(
+      /project 'web' declares a dependency on 'ghost'/u,
+    );
+  });
+
+  it("still skips a root-scoped dependency naming an absent project — it judges nothing", () => {
+    // The mirror of the root-scope edge test above, on the second loop:
+    // `edgeTypeFromScope` refuses "root" before the target is ever looked
+    // up, so Moon's root bookkeeping can never turn into a refusal.
+    const raw = twoProjectGraph();
+    raw.graph.edges = [];
+    raw.data["0"].dependencies = [{ id: "ghost", scope: "root", source: "explicit" }];
     const result = transformMoonGraph(raw);
     expect(result.dependencies.web).toBeUndefined();
   });

@@ -155,6 +155,19 @@ neither place names the install command that fixes it; every other failure keeps
 Moon's own stderr, because a Moon that ran and failed is a different problem
 from a Moon that is not there.
 
+Output that parses but is anomalous gets the same refusal rather than a
+smaller graph: a `data` entry that is not a project node, one project `id`
+declared twice, and an edge or a `dependsOn` naming a project the graph does
+not contain all fail the run, naming every instance in one error — each would
+otherwise drop a project or an edge silently, and a graph judged over less
+than the tree is indistinguishable from one that never had them. One such
+shape reaches this from ordinary configuration rather than malformed output:
+a `moon.yml` `dependsOn` naming a project that does not exist exits 0 on
+Moon's side (measured on 2.5.3), so this refusal is where that typo surfaces.
+A root-level project whose `source` is the empty string is **not** anomalous —
+Moon itself accepts `""` and `"."` as the same root — and is read as a
+project.
+
 ## Tag format
 
 Moon tags cannot contain colons — its validation rejects them. Use dash
