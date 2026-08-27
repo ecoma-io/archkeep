@@ -5,6 +5,7 @@ import {
   emptyResult,
   fileFailure,
   lineStartsOf,
+  ownershipRootComparisons,
   perWorkspace,
   positionAt,
   projectOwning,
@@ -143,6 +144,27 @@ describe("positionAt costs a lookup, not a scan", () => {
   });
 });
 
+/**
+ * The ownership answer as the linear scan stated it before the sorted-roots
+ * walk replaced it (cf. #369) — kept here as the executable spec the walk is
+ * held to, property-wise, below. This copy is the TEST's reference, not a
+ * second implementation the engine runs: the engine's answer is the one under
+ * test, and this one is frozen to the semantics the scan shipped.
+ *
+ * @param {{ name: string, root: string }[]} projects
+ * @param {string} path
+ * @returns {{ name: string, root: string }|null}
+ */
+function linearScan(projects, path) {
+  let owner = null;
+  for (const project of projects) {
+    const root = project.root ?? "";
+    if (root !== "" && path !== root && !path.startsWith(`${root}/`)) continue;
+    if (owner === null || root.length > owner.root.length) owner = project;
+  }
+  return owner;
+}
+
 describe("projectOwning", () => {
   const projects = [
     { name: "outer", root: "area/libs" },
@@ -179,6 +201,89 @@ describe("projectOwning", () => {
 
   it("claims nothing for a path outside every project", () => {
     expect(projectOwning(projects, "package.json")).toBeNull();
+  });
+
+  it("requires a separator before a same-prefix sibling: libs/aux owns nothing of libs/auxiliary", () => {
+    const projects = [
+      { name: "aux", root: "libs/aux" },
+      { name: "auxiliary", root: "libs/auxiliary" },
+    ];
+    expect(projectOwning(projects, "libs/auxiliary/src/a.ts").name).toBe("auxiliary");
+    expect(projectOwning(projects, "libs/aux/src/a.ts").name).toBe("aux");
+  });
+
+  it("answers by the longest root at mixed depths, in whatever order the graph delivered them", () => {
+    const projects = [
+      { name: "web", root: "apps/web" },
+      { name: "routes", root: "apps/web/src/routes" },
+      { name: "libs", root: "libs" },
+      { name: "deep", root: "libs/team-a/feature/src/pkg" },
+    ];
+    expect(projectOwning(projects, "apps/web/src/routes/ui/a.ts").name).toBe("routes");
+    expect(projectOwning(projects, "apps/web/src/app.ts").name).toBe("web");
+    expect(projectOwning(projects, "libs/team-a/feature/src/pkg/lib.rs").name).toBe("deep");
+    expect(projectOwning(projects, "libs/other/go.mod").name).toBe("libs");
+  });
+
+  it("keeps the first of two projects that spell the same root", () => {
+    const first = { name: "first", root: "libs/shared" };
+    const second = { name: "second", root: "libs/shared" };
+    expect(projectOwning([first, second], "libs/shared/a.ts")).toBe(first);
+    expect(projectOwning([second, first], "libs/shared/a.ts")).toBe(second);
+  });
+
+  it("takes a root as the opaque string its provider normalized: './apps/web' and '.' own nothing spelled another way", () => {
+    // Providers normalize root spellings at their own boundaries (Nx's '.' in
+    // `../../workspace.mjs`, Moon's './x' in `../../providers/moon.mjs`); the
+    // predicate itself matches strings, and this pins that it does — a root
+    // the providers have not normalized is unmatched here, exactly as the
+    // linear scan left it.
+    const projects = [
+      { name: "moonish", root: "./apps/web" },
+      { name: "nxish", root: "." },
+    ];
+    expect(projectOwning(projects, "apps/web/src/main.ts")).toBeNull();
+    expect(projectOwning(projects, "./apps/web/src/main.ts").name).toBe("moonish");
+    expect(projectOwning(projects, "./README.md").name).toBe("nxish");
+    expect(projectOwning(projects, "README.md")).toBeNull();
+  });
+
+  it("looks an owner up in comparisons that scale with the path's depth and log(projects), not projects", () => {
+    // The linear scan this replaced tested every project's root per lookup.
+    // The sorted-roots walk holds, per ancestor candidate of the path, one
+    // lower bound of at most ceil(log2(n + 1)) binary-search steps plus one
+    // equality probe — for 1,024 projects and a file at depth 8 that is under
+    // 9 × 14 = 126, where the scan paid 1,024. The count is deterministic
+    // (same input, same count — no clock involved; cf. #359), so a walk that
+    // regressed toward scanning would blow the bound loudly, not flakily.
+    const projects = Array.from({ length: 1024 }, (_, i) => ({
+      name: `pkg-${i}`,
+      root: `libs/team-${Math.floor(i / 8)}/area-${i % 8}/pkg-${i}`,
+    }));
+    const before = ownershipRootComparisons();
+    const owner = projectOwning(projects, "libs/team-5/area-2/pkg-42/src/deep/mod/file.go");
+    const used = ownershipRootComparisons() - before;
+    expect(owner.name).toBe("pkg-42");
+    expect(used).toBeGreaterThan(0);
+    expect(used).toBeLessThan(9 * 14);
+  });
+
+  test.prop([
+    fc.array(
+      fc
+        .array(fc.constantFrom("apps", "libs", "a", "b", "aux", "auxiliary"), { maxLength: 3 })
+        .map((segments) => segments.join("/")),
+      { maxLength: 8 },
+    ),
+    fc
+      .array(fc.constantFrom("apps", "libs", "a", "b", "aux", "auxiliary"), {
+        minLength: 1,
+        maxLength: 5,
+      })
+      .map((segments) => segments.join("/")),
+  ])("answers exactly what the linear scan answered, over generated workspaces", (roots, path) => {
+    const projects = roots.map((root, i) => ({ name: `p${i}`, root }));
+    expect(projectOwning(projects, path)?.name).toBe(linearScan(projects, path)?.name);
   });
 });
 
