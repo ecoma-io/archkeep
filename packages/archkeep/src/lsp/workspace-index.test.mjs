@@ -197,7 +197,7 @@ describe("the node type a project gets", () => {
   });
 
   it("guarantees a tags array, because the tag rules read it unguarded", () => {
-    const nodes = buildNodes([
+    const { nodes } = buildNodes([
       { name: "untagged", root: "libs/untagged", config: {} },
       { name: "tagged", root: "libs/tagged", config: { tags: ["zone:inner"] } },
     ]);
@@ -206,10 +206,73 @@ describe("the node type a project gets", () => {
     expect(nodes.tagged.data.tags).toEqual(["zone:inner"]);
     expect(nodes.untagged.data.root).toBe("libs/untagged");
   });
+
+  it("detects duplicate project names and records them for loud reporting", () => {
+    // Two projects resolving to the same name — the trigger for issue #375.
+    // The first project wins; the second is shadowed and its files will match
+    // no root, so they must be surfaced loudly rather than silently dropped.
+    const { nodes, duplicateProjects } = buildNodes([
+      { name: "billing", root: "libs/billing", config: { tags: ["scope:billing"] } },
+      { name: "billing", root: "libs/billing-service", config: { tags: ["scope:billing"] } },
+      { name: "domain", root: "libs/domain", config: { tags: ["scope:domain"] } },
+    ]);
+
+    // Only the first "billing" project is indexed — the duplicate is skipped
+    expect(Object.keys(nodes)).toEqual(["billing", "domain"]);
+    expect(nodes.billing.data.root).toBe("libs/billing");
+
+    // Both colliding roots are recorded for the diagnostic
+    expect(duplicateProjects).toEqual([
+      { name: "billing", roots: ["libs/billing", "libs/billing-service"] },
+    ]);
+  });
+
+  it("handles multiple duplicate name groups separately", () => {
+    // Three pairs of projects with duplicate names
+    const { nodes, duplicateProjects } = buildNodes([
+      { name: "shared-a", root: "libs/a1", config: {} },
+      { name: "shared-b", root: "libs/b1", config: {} },
+      { name: "shared-a", root: "libs/a2", config: {} },
+      { name: "shared-b", root: "libs/b2", config: {} },
+      { name: "shared-c", root: "libs/c1", config: {} },
+      { name: "shared-c", root: "libs/c2", config: {} },
+    ]);
+
+    // First of each group wins
+    expect(Object.keys(nodes)).toEqual(["shared-a", "shared-b", "shared-c"]);
+    expect(nodes["shared-a"].data.root).toBe("libs/a1");
+    expect(nodes["shared-b"].data.root).toBe("libs/b1");
+    expect(nodes["shared-c"].data.root).toBe("libs/c1");
+
+    // All three duplicate groups are recorded
+    expect(duplicateProjects).toHaveLength(3);
+    expect(duplicateProjects).toContainEqual({
+      name: "shared-a",
+      roots: ["libs/a1", "libs/a2"],
+    });
+    expect(duplicateProjects).toContainEqual({
+      name: "shared-b",
+      roots: ["libs/b1", "libs/b2"],
+    });
+    expect(duplicateProjects).toContainEqual({
+      name: "shared-c",
+      roots: ["libs/c1", "libs/c2"],
+    });
+  });
+
+  it("returns empty duplicateProjects when all names are unique", () => {
+    const { duplicateProjects } = buildNodes([
+      { name: "alpha", root: "libs/alpha", config: {} },
+      { name: "beta", root: "libs/beta", config: {} },
+      { name: "gamma", root: "libs/gamma", config: {} },
+    ]);
+
+    expect(duplicateProjects).toEqual([]);
+  });
 });
 
 describe("the dependency edges the graph carries", () => {
-  const nodes = buildNodes([
+  const { nodes } = buildNodes([
     { name: "inner", root: "libs/inner", config: { implicitDependencies: ["outer", "!ghost"] } },
     { name: "outer", root: "libs/outer", config: {} },
   ]);
@@ -870,6 +933,39 @@ describe("what the index could not read, as something a caller can publish", () 
 
     expect(gaps[0]).not.toContain("\n");
     expect(gaps[0]).toContain("InvalidSymbol in JSON at 1:3");
+  });
+
+  it("names the projects and roots that collided on the same name", () => {
+    // A duplicate project name means one project silently shadows the other.
+    // The shadowed project's files match no root and show no diagnostics,
+    // so this must be surfaced loudly — exactly the invariant the fix for
+    // issue #375 exists to hold.
+    const gaps = indexGaps({
+      duplicateProjects: [{ name: "billing", roots: ["libs/billing", "libs/billing-service"] }],
+    });
+
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]).toContain("'billing'");
+    expect(gaps[0]).toContain("'libs/billing'");
+    expect(gaps[0]).toContain("'libs/billing-service'");
+    expect(gaps[0]).toContain("only the first is indexed");
+    expect(gaps[0]).toContain("shadowed projects");
+  });
+
+  it("reports multiple duplicate name groups separately", () => {
+    // When several name collisions exist in the same tree, each is named.
+    const gaps = indexGaps({
+      duplicateProjects: [
+        { name: "shared-a", roots: ["libs/a1", "libs/a2"] },
+        { name: "shared-b", roots: ["libs/b1", "libs/b2", "libs/b3"] },
+      ],
+    });
+
+    expect(gaps).toHaveLength(2);
+    expect(gaps[0]).toContain("'shared-a'");
+    expect(gaps[0]).toContain("'libs/a1' and 'libs/a2'");
+    expect(gaps[1]).toContain("'shared-b'");
+    expect(gaps[1]).toContain("'libs/b1' and 'libs/b2' and 'libs/b3'");
   });
 
   // S12: a `archkeep.json` root is driven through `../providers/native/`'s own

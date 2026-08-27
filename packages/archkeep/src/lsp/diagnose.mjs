@@ -63,7 +63,7 @@ import { indexGaps } from "./workspace-index.mjs";
  * @param {string} request.text Its current contents — the editor's buffer, not
  *   what is on disk. Diagnosing the saved file would answer a question nobody
  *   asked while the developer is looking at their unsaved edit.
- * @param {{workspace: object, graph: object, skippedProjects?: object[], fileFailures?: object[], importSites?: object[], nativeMarker?: boolean, nativeModelFailure?: string|null, moonModelFailure?: string|null, nxModelFailure?: string|null, workspaceLayoutFailure?: string|null}} request.index
+ * @param {{workspace: object, graph: object, skippedProjects?: object[], fileFailures?: object[], importSites?: object[], duplicateProjects?: object[], nativeMarker?: boolean, nativeModelFailure?: string|null, moonModelFailure?: string|null, nxModelFailure?: string|null, workspaceLayoutFailure?: string|null}} request.index
  *   From `./workspace-index.mjs`. `importSites` is the whole tree's retained
  *   analysis output — the evidence half of the run below; absent (an index
  *   built before it existed) reads as none, which degrades evidence, never a
