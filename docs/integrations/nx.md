@@ -170,6 +170,18 @@ a Rust crate with a `path` dependency, a Python package wired through
 `[tool.uv.sources]` — each becomes a graph edge at computation time, and
 `nx affected` works the same way it does for TypeScript and JavaScript.
 
+The hook's failure posture matches the CLI's. Every manifest reader and name
+index throws for the states the CLI funnel classifies as could-not-complete —
+the same failure lists `archkeep check` exits 3 on: a Maven parent nobody can
+attribute, a Gradle reference no settings file defines, a dangling
+`<ProjectReference>`, an unreadable `.java`/`.kt`/`.cs` source feeding a name
+index. Nx fails the whole graph computation on such a throw, so `nx graph` and
+`nx affected` report a broken reactor loudly instead of silently
+under-selecting over it — the two faces agree about whether the tree could be
+read. Green trees see no change; Python's malformed-manifest tolerance mid-edit
+stays the documented exception ([languages.md](../reference/languages.md) owns
+the per-language detail).
+
 The boundary check catches violations that `nx affected` never will: an
 undeclared Python import that works at runtime, for example, crosses the
 boundary while drawing no graph edge. Edges and analysis answer different

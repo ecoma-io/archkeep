@@ -209,6 +209,36 @@ export const fileFailure = (sourceFile, reason) => ({
 });
 
 /**
+ * The hook-boundary posture every manifest reader and name index holds (#364):
+ * a graph resolver whose model reports could-not-complete failures throws
+ * rather than returning the edges it managed to draw. The CLI funnel turns the
+ * same failure list into exit 3; the Nx hook has exactly one loud output — a
+ * throw, which Nx wraps and turns into a failed graph computation — so the
+ * throw is what keeps `nx affected` from under-selecting on a broken reactor.
+ * The rule and its boundary (manifests and indexes throw; per-source import
+ * reads keep the null-read posture) are argued once, in
+ * `../../graph/create-dependencies.mjs`'s header.
+ *
+ * @param {string} reader The reader the failures came from, for the message's
+ *   first sentence ("the Maven model", "the JVM package index", …).
+ * @param {{ sourceFile: string, reason: string }[]} failures Whole-reader
+ *   could-not-complete failures, as the models and indexes record them.
+ * @returns {void} Nothing when the list is empty — a clean reader never calls
+ *   attention to itself.
+ * @throws {Error} naming every failing file and its reason.
+ */
+export const refuseUnreadTree = (reader, failures) => {
+  if (failures.length === 0) return;
+  const listed = failures.map(({ sourceFile, reason }) => `${sourceFile} (${reason})`);
+  throw new Error(
+    `archkeep: ${reader} could not fully read this tree — refusing to compute a ` +
+      `graph over it: ${listed.join("; ")}. Fix or remove the files above: an edge ` +
+      `quietly omitted for an unreadable manifest is the under-selection this ` +
+      `plugin exists to close.`,
+  );
+};
+
+/**
  * Whether a failure means the file has NO verdict at all, rather than one
  * import site inside it having none.
  *

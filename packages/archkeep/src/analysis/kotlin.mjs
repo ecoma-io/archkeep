@@ -29,9 +29,15 @@
  * type-only form, and no re-export syntax to model.
  */
 import { maskKotlinComments } from "./jvm/mask.mjs";
-import { jvmPackageIndex } from "./jvm/packages.mjs";
+import { jvmIndexFacts, jvmPackageIndex } from "./jvm/packages.mjs";
 import { resolveJvmSpecifier } from "./jvm/resolve.mjs";
-import { emptyResult, fileFailure, positionAt, projectOwning } from "./source-util.mjs";
+import {
+  emptyResult,
+  fileFailure,
+  positionAt,
+  projectOwning,
+  refuseUnreadTree,
+} from "./source-util.mjs";
 
 /** One identifier segment: backtick-quoted (any non-backtick content) or a plain identifier. */
 const KOTLIN_SEGMENT = String.raw`(?:` + "`[^`\\n]*`" + String.raw`|[\p{L}_$][\p{L}\p{Nd}_$]*)`;
@@ -156,12 +162,21 @@ export function analyzeKotlin({ sourceFile, text, workspace }) {
  * shared with `analyzeKotlin`, the Java resolver and the manifest resolvers —
  * is what makes the index build once per run (#363).
  *
+ * An unreadable `.java`/`.kt` source refuses the whole graph (#364's posture
+ * — the index state corrupts every importer of its packages, so the failure
+ * cannot be attributed to the file's own edges), through the same
+ * `refuseUnreadTree` the manifest resolvers hold; this resolver and the Java
+ * one hold the identical check over the one shared index.
+ *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
+ * @throws {Error} when `jvmIndexFacts` recorded any failure, naming each
+ *   unreadable JVM source.
  */
 export function resolveKotlinDependencies(workspace) {
   const { projects, filesOf, readFile } = workspace;
-  const index = jvmPackageIndex(workspace);
+  const { byName: index, failures: indexFailures } = jvmIndexFacts(workspace);
+  refuseUnreadTree("the JVM package index", indexFailures);
   const dependencies = [];
   for (const project of projects) {
     for (const file of filesOf(project.name)) {

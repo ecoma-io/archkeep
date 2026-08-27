@@ -63,11 +63,14 @@
  * go.work precedent. A
  * broken reactor read as "no dependencies" would mean "no drift" exactly where
  * the tree is most broken, so the CLI funnels these into the could-not-complete
- * class (exit 3) beside Python's unmodelled manifests.
+ * class (exit 3) beside Python's unmodelled manifests — and the graph resolver
+ * below THROWS on the same list (#364's posture, `../source-util.mjs`'s
+ * `refuseUnreadTree`), so `nx affected` fails loudly instead of
+ * under-selecting on it.
  */
 
 import { normalizePath } from "../manifest-util.mjs";
-import { fileFailure, perWorkspace } from "../source-util.mjs";
+import { fileFailure, perWorkspace, refuseUnreadTree } from "../source-util.mjs";
 
 /**
  * Parse one Gradle settings file's text to extract project information.
@@ -442,9 +445,12 @@ export const gradleModelOf = perWorkspace(buildGradleModel);
 
 /**
  * Manifest-edge resolver: one edge per declared project dependency whose
- * reference resolves onto another declared project's directory. References
- * that fail to resolve draw nothing here — the failure list has already
- * named them loudly, and the CLI turns that into exit 3.
+ * reference resolves onto another declared project's directory. A reactor
+ * whose model records any could-not-complete failure refuses the whole graph
+ * (#364's posture, `../source-util.mjs`'s `refuseUnreadTree`) — silently
+ * omitting the affected edges is the under-selecting `nx affected` this
+ * plugin exists to close — so the loop's skips below are the second line of
+ * defense, not the refusal itself.
  *
  * Takes ONE workspace-shaped object (`{ projects, filesOf, readFile }`) rather
  * than the positional triple, because the model is memoized on that object:
@@ -454,9 +460,12 @@ export const gradleModelOf = perWorkspace(buildGradleModel);
  *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path), root? }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
+ * @throws {Error} when `gradleModelOf` recorded any failure, naming each
+ *   settings or build file.
  */
 export function resolveGradleDependencies(workspace) {
   const model = gradleModelOf(workspace);
+  refuseUnreadTree("the Gradle model", model.failures);
   const projectByDirectory = new Map(
     workspace.projects.map((project) => [normalizePath(project.root ?? "", ""), project]),
   );
@@ -465,9 +474,9 @@ export function resolveGradleDependencies(workspace) {
   for (const entry of model.entries) {
     for (const depRef of entry.declaredDependencies) {
       const directory = model.pathToDirectory.get(depRef);
-      if (directory === undefined) continue; // already a loud failure
+      if (directory === undefined) continue; // unreachable while the refusal above holds; kept as the belt beneath it
       const targetProject = projectByDirectory.get(directory);
-      if (targetProject === undefined) continue; // already a loud failure
+      if (targetProject === undefined) continue; // unreachable while the refusal above holds; kept as the belt beneath it
       if (targetProject.name === entry.projectName) continue; // a self-reference claims no boundary
 
       dependencies.push({

@@ -30,6 +30,7 @@ import { dotnetIndexFailures } from "../analysis/dotnet/namespaces.mjs";
 import { dotnetManifestFailures } from "../analysis/dotnet/csproj.mjs";
 import { mavenManifestFailures } from "../analysis/jvm/maven.mjs";
 import { gradleManifestFailures } from "../analysis/jvm/gradle.mjs";
+import { jvmIndexFailures } from "../analysis/jvm/packages.mjs";
 import { languageOf } from "../analysis/registry.mjs";
 import { pythonUnmodelledFailures } from "../analysis/python.mjs";
 import { fileFailure } from "../analysis/source-util.mjs";
@@ -619,6 +620,7 @@ export function resolveCommandContext(
       ...pythonUnmodelledFailures(workspace),
       ...mavenManifestFailures(workspace),
       ...gradleManifestFailures(workspace),
+      ...jvmIndexFailures(workspace),
       ...dotnetManifestFailures(workspace),
       ...dotnetIndexFailures(workspace),
     ];
@@ -731,6 +733,7 @@ export function resolveCommandContext(
       ...pythonUnmodelledFailures(workspace),
       ...mavenManifestFailures(workspace),
       ...gradleManifestFailures(workspace),
+      ...jvmIndexFailures(workspace),
       ...dotnetManifestFailures(workspace),
       ...dotnetIndexFailures(workspace),
     ];
@@ -796,6 +799,7 @@ export function resolveCommandContext(
       ...pythonUnmodelledFailures(workspace),
       ...mavenManifestFailures(workspace),
       ...gradleManifestFailures(workspace),
+      ...jvmIndexFailures(workspace),
       ...dotnetManifestFailures(workspace),
       ...dotnetIndexFailures(workspace),
     ];

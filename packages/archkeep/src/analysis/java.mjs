@@ -44,9 +44,15 @@
  *   other; backtick-quoted segments are not Java and are not read.
  */
 import { maskJavaComments } from "./jvm/mask.mjs";
-import { jvmPackageIndex } from "./jvm/packages.mjs";
+import { jvmIndexFacts, jvmPackageIndex } from "./jvm/packages.mjs";
 import { resolveJvmSpecifier } from "./jvm/resolve.mjs";
-import { emptyResult, fileFailure, positionAt, projectOwning } from "./source-util.mjs";
+import {
+  emptyResult,
+  fileFailure,
+  positionAt,
+  projectOwning,
+  refuseUnreadTree,
+} from "./source-util.mjs";
 
 /**
  * Every import in a `.java` file, in source order and WITHOUT deduplication —
@@ -202,14 +208,21 @@ export function analyzeJava({ sourceFile, text, workspace }) {
  * instead of once per call site (#363). Returns raw Nx dependencies
  * ({ source, target, sourceFile, type: "static" }). Ambiguous names draw no
  * edge — analysis reports them loudly instead, and an edge against a guess
- * would be worse than the missing one.
+ * would be worse than the missing one. An unreadable `.java`/`.kt` source
+ * refuses the whole graph (#364's posture — the index state corrupts every
+ * importer of its packages, so the failure cannot be attributed to the
+ * file's own edges), through the same `refuseUnreadTree` the manifest
+ * resolvers hold.
  *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
+ * @throws {Error} when `jvmIndexFacts` recorded any failure, naming each
+ *   unreadable JVM source.
  */
 export function resolveJavaDependencies(workspace) {
   const { projects, filesOf, readFile } = workspace;
-  const index = jvmPackageIndex(workspace);
+  const { byName: index, failures: indexFailures } = jvmIndexFacts(workspace);
+  refuseUnreadTree("the JVM package index", indexFailures);
   const dependencies = [];
   for (const project of projects) {
     for (const file of filesOf(project.name)) {

@@ -30,8 +30,17 @@
  * Reads are injected (`workspace.filesOf` / `workspace.readFile`) and memoized
  * per workspace object through `perWorkspace`, so a whole-tree run builds the
  * index once no matter how many files ask.
+ *
+ * An unreadable `.java`/`.kt` source is recorded as a whole-file failure
+ * rather than dropped: a file that silently left the index would make every
+ * import of a package only it declares classify external — a first-party
+ * crossing wearing an external face, with nothing anywhere naming why (the
+ * `../dotnet/namespaces.mjs` precedent one family over). The failure list is
+ * what the graph resolvers refuse the tree on (#364's posture,
+ * `../source-util.mjs`'s `refuseUnreadTree`) and what the CLI funnel merges
+ * beside the analyzers' own read failures.
  */
-import { perWorkspace } from "../source-util.mjs";
+import { fileFailure, perWorkspace } from "../source-util.mjs";
 import { maskJavaComments, maskKotlinComments } from "./mask.mjs";
 
 /**
@@ -101,35 +110,68 @@ const maskFor = (file) => MASK_BY_EXTENSION[file.slice(file.lastIndexOf("."))];
 /**
  * Build the index: every tracked JVM source's package, attributed by longest
  * project root. Returns the map keyed by exact declared dotted name, each
- * entry listing `{ project, file }` pairs in project order.
+ * entry listing `{ project, file }` pairs in project order, beside one
+ * whole-file failure per JVM source that could not be read.
  *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
- * @returns {Map<string, { project: string, file: string }[]>}
+ * @returns {{ byName: Map<string, { project: string, file: string }[]>,
+ *            failures: { sourceFile: string, line: null, column: null, reason: string }[] }}
  */
 function buildJvmPackageIndex(workspace) {
-  const index = new Map();
+  const byName = new Map();
+  const failures = [];
   for (const project of workspace.projects) {
     for (const file of workspace.filesOf(project.name)) {
       const mask = maskFor(file);
       if (!mask) continue;
       const text = workspace.readFile(file);
-      if (text === null || text === undefined) continue;
+      if (text === null || text === undefined) {
+        failures.push(fileFailure(file, "JVM source could not be read for the package index"));
+        continue;
+      }
       const declared = parseJvmPackageDeclaration(mask(text));
       if (!declared) continue;
-      const owners = index.get(declared.name) ?? [];
+      const owners = byName.get(declared.name) ?? [];
       owners.push({ project: project.name, file });
-      index.set(declared.name, owners);
+      byName.set(declared.name, owners);
     }
   }
-  return index;
+  return { byName, failures };
 }
 
 /**
- * The workspace's package index, built once per workspace object. Every JVM
+ * The index's facts — the map and the failure list — built once per workspace
+ * object. Both views below read through this one memoized build, so a run
+ * that asks for the map and the failures pays a single index build, whatever
+ * order it asks in.
+ */
+export const jvmIndexFacts = perWorkspace(buildJvmPackageIndex);
+
+/**
+ * The workspace's package index — the map view of `jvmIndexFacts`. Every JVM
  * consumer — the analyzers, the graph resolvers — reads resolution through
  * this one map, so the layers can never disagree about who owns a name.
+ *
+ * @param {object} workspace
+ * @returns {Map<string, { project: string, file: string }[]>}
  */
-export const jvmPackageIndex = perWorkspace(buildJvmPackageIndex);
+export function jvmPackageIndex(workspace) {
+  return jvmIndexFacts(workspace).byName;
+}
+
+/**
+ * Whole-file failures for every JVM source the index could not read — the
+ * funnel `../../commands/context.mjs` merges beside the manifest failures, so
+ * an unreadable source refuses the verdict (exit 3) instead of quietly
+ * degrading every importer of its packages to external, and the graph
+ * resolvers' refusal input (`refuseUnreadTree`).
+ *
+ * @param {object} workspace
+ * @returns {{ sourceFile: string, line: null, column: null, reason: string }[]}
+ */
+export function jvmIndexFailures(workspace) {
+  return jvmIndexFacts(workspace).failures;
+}
 
 /**
  * Longest-prefix resolution over the index — the single answer both layers

@@ -307,4 +307,17 @@ describe("resolveCsharpDependencies", () => {
     expect(resolveCsharpDependencies(withEdge)).toHaveLength(1);
     expect(resolveCsharpDependencies(without)).toHaveLength(0);
   });
+
+  it("refuses the graph on a C# source the namespace index could not read", () => {
+    // #364: the index failure — already a funnel failure via
+    // `dotnetIndexFailures` — now refuses the graph face too, so an
+    // unreadable source cannot silently degrade every importer of its
+    // namespaces to external at `nx affected` time.
+    const ws = {
+      projects: [{ name: "shop-app", root: "libs/shop/app" }],
+      filesOf: () => ["libs/shop/app/Service.cs"],
+      readFile: () => null,
+    };
+    expect(() => resolveCsharpDependencies(ws)).toThrow(/libs\/shop\/app\/Service\.cs/);
+  });
 });

@@ -208,14 +208,16 @@ describe("resolveCsprojDependencies", () => {
     expect(deps).toHaveLength(0);
   });
 
-  it("skips unreadable csproj", () => {
+  it("refuses the graph on an unreadable csproj", () => {
     const workspace = {
       projects: [{ name: "Bad", root: "bad" }],
       filesOf: () => ["bad/Bad.csproj"],
       readFile: () => null,
     };
-    const deps = resolveCsprojDependencies(workspace);
-    expect(deps).toHaveLength(0);
+    // #364's posture: an unreadable manifest is a could-not-complete state
+    // the funnel exits 3 on, and the graph face refuses the same tree instead
+    // of returning the edges it could draw without this one's.
+    expect(() => resolveCsprojDependencies(workspace)).toThrow(/bad\/Bad\.csproj/);
   });
 
   it("draws a <Using Include> edge to the project owning the namespace", () => {

@@ -339,3 +339,112 @@ describe("createDependencies over a real workspace fixture", () => {
     ]);
   });
 });
+
+describe("createDependencies refuses a tree its readers could not fully read (#364)", () => {
+  // Each fixture below is a state the CLI funnel classifies as
+  // could-not-complete (exit 3). Before #364, the hook face of every one drew
+  // its edges — or none — and exited clean, so a broken reactor was
+  // indistinguishable from "no dependency": the under-selecting `nx affected`
+  // this plugin exists to close. Every test here is red in exactly that
+  // silent direction on the pre-#364 code: the call returned without error.
+  const brokenFixture = (label) => {
+    const dir = mkdtempSync(join(tmpdir(), label));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+    const write = (rel, text) => {
+      mkdirSync(join(dir, rel, ".."), { recursive: true });
+      writeFileSync(join(dir, rel), text, "utf8");
+    };
+    return { dir, write };
+  };
+
+  it("throws for a Maven child whose parent matches no tracked pom and declares no groupId", () => {
+    const { dir, write } = brokenFixture("polyglot-graph-maven-broken-");
+    write(
+      "jvm/lib/pom.xml",
+      "<project><groupId>com.acme</groupId><artifactId>lib</artifactId><version>1</version></project>",
+    );
+    write(
+      "jvm/app/pom.xml",
+      [
+        "<project>",
+        "  <parent><groupId>org.example</groupId><artifactId>missing-parent</artifactId></parent>",
+        "  <artifactId>app</artifactId>",
+        "  <dependencies>",
+        "    <dependency><groupId>com.acme</groupId><artifactId>lib</artifactId></dependency>",
+        "  </dependencies>",
+        "</project>",
+      ].join("\n"),
+    );
+    expect(() =>
+      createDependencies(undefined, {
+        workspaceRoot: dir,
+        projects: { "jvm-lib": { root: "jvm/lib" }, "jvm-app": { root: "jvm/app" } },
+        fileMap: {
+          projectFileMap: {
+            "jvm-lib": [{ file: "jvm/lib/pom.xml" }],
+            "jvm-app": [{ file: "jvm/app/pom.xml" }],
+          },
+        },
+      }),
+    ).toThrow(/jvm\/app\/pom\.xml.*org\.example:missing-parent/s);
+  });
+
+  it("throws for a Gradle build file whose references no settings file covers", () => {
+    const { dir, write } = brokenFixture("polyglot-graph-gradle-broken-");
+    write("app/build.gradle", 'dependencies { implementation project(":core") }\n');
+    write("core/build.gradle", "dependencies { }\n");
+    expect(() =>
+      createDependencies(undefined, {
+        workspaceRoot: dir,
+        projects: { app: { root: "app" }, core: { root: "core" } },
+        fileMap: {
+          projectFileMap: {
+            app: [{ file: "app/build.gradle" }],
+            core: [{ file: "core/build.gradle" }],
+          },
+        },
+      }),
+    ).toThrow(/app\/build\.gradle.*no Gradle settings file/s);
+  });
+
+  it("throws for a dangling <ProjectReference> no tracked project owns", () => {
+    const { dir, write } = brokenFixture("polyglot-graph-csproj-broken-");
+    write(
+      "cs/app/App.csproj",
+      [
+        '<Project Sdk="Microsoft.NET.Sdk">',
+        "  <ItemGroup>",
+        '    <ProjectReference Include="../../cs/lib/Lib.csproj" />',
+        "  </ItemGroup>",
+        "</Project>",
+      ].join("\n"),
+    );
+    expect(() =>
+      createDependencies(undefined, {
+        workspaceRoot: dir,
+        projects: { "cs-app": { root: "cs/app" } },
+        fileMap: { projectFileMap: { "cs-app": [{ file: "cs/app/App.csproj" }] } },
+      }),
+    ).toThrow(/cs\/app\/App\.csproj.*Lib\.csproj.*no tracked project owns/s);
+  });
+
+  it("throws for a JVM source the package index could not read", () => {
+    const { dir, write } = brokenFixture("polyglot-graph-jvm-index-broken-");
+    // `lib` is a healthy project; `app` owns a tracked source the disk has
+    // lost (listed in the file map, absent beneath it) — the read is null and
+    // the index, not the import walk, is the face that can see why.
+    write("jvm/lib/src/main/java/com/acme/lib/Lib.java", "package com.acme.lib;\nclass Lib {}\n");
+    expect(() =>
+      createDependencies(undefined, {
+        workspaceRoot: dir,
+        projects: { "jvm-lib": { root: "jvm/lib" }, "jvm-app": { root: "jvm/app" } },
+        fileMap: {
+          projectFileMap: {
+            "jvm-lib": [{ file: "jvm/lib/src/main/java/com/acme/lib/Lib.java" }],
+            "jvm-app": [{ file: "jvm/app/src/main/java/com/acme/app/App.java" }],
+          },
+        },
+      }),
+    ).toThrow(/jvm\/app\/src\/main\/java\/com\/acme\/app\/App\.java.*package index/s);
+  });
+});

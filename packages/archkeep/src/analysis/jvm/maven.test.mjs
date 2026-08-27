@@ -235,7 +235,7 @@ describe("resolveMavenDependencies", () => {
     ]);
   });
 
-  it("fails loudly on a duplicate identity instead of picking a target", () => {
+  it("refuses the graph on a duplicate identity instead of picking a target", () => {
     const ws = workspaceOf({
       "a/pom.xml": "<project><groupId>com.acme</groupId><artifactId>twin</artifactId></project>",
       "b/pom.xml": "<project><groupId>com.acme</groupId><artifactId>twin</artifactId></project>",
@@ -247,7 +247,10 @@ describe("resolveMavenDependencies", () => {
         "</project>",
       ].join("\n"),
     });
-    expect(resolveMavenDependencies(ws)).toEqual([]);
+    // The hook face of the same posture the funnel holds: an edge toward
+    // either twin would be a guess, so the resolver refuses the whole graph
+    // (#364) rather than returning the edges it could draw without them.
+    expect(() => resolveMavenDependencies(ws)).toThrow(/com\.acme:twin/);
     const failures = mavenManifestFailures(ws);
     expect(failures).toHaveLength(1);
     expect(failures[0].reason).toContain("com.acme:twin");
@@ -255,11 +258,17 @@ describe("resolveMavenDependencies", () => {
     expect(failures[0].reason).toContain("b/pom.xml");
   });
 
-  it("records a remote parent loudly while outbound edges still draw", () => {
+  it("draws outbound edges past a remote parent when the child keeps its own identity", () => {
+    // A remote parent is ordinary Maven — every Spring Boot reactor has one —
+    // and a child declaring its OWN groupId keeps a known identity, so its
+    // outbound edges draw and nothing fails. The refusal is reserved for the
+    // child whose identity the remote parent leaves genuinely unknown: the
+    // next case.
     const ws = workspaceOf({
       "app/pom.xml": [
         "<project>",
         "  <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId></parent>",
+        "  <groupId>com.app</groupId>",
         "  <artifactId>app</artifactId>",
         "  <dependencies><dependency><groupId>com.sibling</groupId><artifactId>sib</artifactId></dependency></dependencies>",
         "</project>",
@@ -271,11 +280,31 @@ describe("resolveMavenDependencies", () => {
     expect(edges).toEqual([
       { source: "app", target: "sib", sourceFile: "app/pom.xml", type: "static" },
     ]);
+    expect(mavenManifestFailures(ws)).toEqual([]);
+  });
+
+  it("refuses the graph on a remote parent that leaves the child's identity unknown", () => {
+    const ws = workspaceOf({
+      "app/pom.xml": [
+        "<project>",
+        "  <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId></parent>",
+        "  <artifactId>app</artifactId>",
+        "  <dependencies><dependency><groupId>com.sibling</groupId><artifactId>sib</artifactId></dependency></dependencies>",
+        "</project>",
+      ].join("\n"),
+      "sib/pom.xml":
+        "<project><groupId>com.sibling</groupId><artifactId>sib</artifactId></project>",
+    });
+    // The issue's repro shape: today this drew sib's edge and exited clean
+    // while `check` refused the same tree with exit 3 — the two faces
+    // disagreeing about whether the tree could be read. Under #364's posture
+    // the resolver throws, naming the parent nobody could attribute.
+    expect(() => resolveMavenDependencies(ws)).toThrow(/spring-boot-starter-parent/);
     const failures = mavenManifestFailures(ws);
     expect(failures.some((f) => f.reason.includes("spring-boot-starter-parent"))).toBe(true);
   });
 
-  it("fails an unresolvable placeholder coordinate by name, never dropping silently", () => {
+  it("refuses the graph on an unresolvable placeholder coordinate, never dropping silently", () => {
     const ws = workspaceOf({
       "app/pom.xml": [
         "<project>",
@@ -285,7 +314,7 @@ describe("resolveMavenDependencies", () => {
         "</project>",
       ].join("\n"),
     });
-    expect(resolveMavenDependencies(ws)).toEqual([]);
+    expect(() => resolveMavenDependencies(ws)).toThrow(/\$\{missing\.prop\}/);
     const failures = mavenManifestFailures(ws);
     expect(failures.some((f) => f.reason.includes("${missing.prop}"))).toBe(true);
   });

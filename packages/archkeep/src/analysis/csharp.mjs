@@ -78,6 +78,7 @@ import {
   perWorkspace,
   positionAt,
   projectOwning,
+  refuseUnreadTree,
 } from "./source-util.mjs";
 
 /**
@@ -319,14 +320,21 @@ export function analyzeCSharp({ sourceFile, text, workspace }) {
  *
  * Returns raw Nx dependencies ({ source, target, sourceFile, type: "static" }).
  * Ambiguous namespaces draw no edge — analysis reports them loudly instead,
- * and an edge against a guess would be worse than the missing one.
+ * and an edge against a guess would be worse than the missing one. An
+ * unreadable `.cs` source refuses the whole graph (#364's posture — the
+ * index state corrupts every importer of its namespaces, so the failure
+ * cannot be attributed to the file's own edges), through the same
+ * `refuseUnreadTree` the manifest resolvers hold.
  *
  * @param {{ projects: {name: string, root: string}[], filesOf: (name: string) => string[],
  *           readFile: (path: string) => string|null }} workspace
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
+ * @throws {Error} when `csharpNamespaceIndex` recorded any failure, naming
+ *   each unreadable `.cs` source.
  */
 export function resolveCsharpDependencies(workspace) {
-  const { byName: index } = csharpNamespaceIndex(workspace);
+  const { byName: index, failures: indexFailures } = csharpNamespaceIndex(workspace);
+  refuseUnreadTree("the C# namespace index", indexFailures);
   const dependencies = [];
   for (const project of workspace.projects) {
     for (const file of workspace.filesOf(project.name)) {

@@ -534,5 +534,31 @@ rootProject.name = "my-app" // inline comment
       assert.strictEqual(deps[0].source, "my-app");
       assert.strictEqual(deps[0].target, "core");
     });
+
+    it("refuses the graph on a build file whose references no settings file covers", () => {
+      // #364: this shape — a build file declaring project references with no
+      // settings file covering its directory — drew no edge and raised
+      // nothing at the hook while the CLI funnel exited 3 on the same tree.
+      // The resolver now refuses, naming the build file.
+      const settingsLess = {
+        projects: [
+          { name: "app", root: "app" },
+          { name: "core", root: "core" },
+        ],
+        filesOf: (projectName) => {
+          const map = { app: ["app/build.gradle"], core: ["core/build.gradle"] };
+          return map[projectName] || [];
+        },
+        readFile: (path) => {
+          const fixtures = {
+            "app/build.gradle": `dependencies { implementation project(":core") }`,
+            "core/build.gradle": `dependencies { }`,
+          };
+          return fixtures[path] || null;
+        },
+      };
+
+      assert.throws(() => resolveGradleDependencies(settingsLess), /app\/build\.gradle/);
+    });
   });
 });
