@@ -304,4 +304,8 @@ function isProgramEntry(moduleUrl, argv1 = process.argv[1]) {
   return real(argv1) === real(fileURLToPath(moduleUrl));
 }
 
-if (isProgramEntry(import.meta.url)) main();
+// `main` is async, and a floating promise at the entry point is the exact
+// defect the type-aware lint exists for: an unexpected rejection would be an
+// unhandled rejection, not a reported failure. Top-level await makes the
+// process wait for the verdict and exit with it.
+if (isProgramEntry(import.meta.url)) await main();

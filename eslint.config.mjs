@@ -2,17 +2,28 @@
 // last so it switches off every stylistic rule the two would otherwise fight
 // over, leaving ESLint to judge correctness only.
 //
-// There is no TypeScript configuration here, and its absence is a decision
-// rather than an omission: what this repository will hold is an Nx plugin, and
-// Nx loads a plugin's entry point directly in the process that runs every `nx`
-// invocation. A plugin written in plain ESM is loaded as-is; one written in
-// TypeScript needs a transpiler resolved and run before the graph can be
-// computed at all. So the source here is `.mjs`, and `typescript-eslint` would
-// have no program to consult. JSDoc carries the types instead.
+// The repository is `.mjs` with JSDoc — no TypeScript is compiled (root
+// `AGENTS.md`, "No TypeScript here, and why") — but `typescript-eslint` is
+// still the right ruleset, because its non-type-checked recommended set is a
+// strict superset of `eslint-js.recommended` that carries the
+// correctness-and-safety rules a gate script and a shipped plugin both need
+// (`no-require-imports`, `no-unsafe-function-type`, `no-unused-expressions`,
+// prefer-namespace-free spelling) without demanding type information the
+// JSDoc program only gets from `tsc`. The type-aware rules live in the block
+// below with `projectService`, which hands every file to the nearest
+// `tsconfig.json` — the same programs `moon run ...:typecheck` already
+// builds, so nothing here invents a second TypeScript view of the tree.
+//
+// What is deliberately absent: a `**/*.ts` block. The only tracked `.ts`
+// files are AssemblyScript sources in `packages/archkeep-rule-sdk-ts/assembly/`
+// and its example — TypeScript SYNTAX, a different language — and they are
+// compiled and type-checked by `asc` in that package's `typecheck` target
+// (`packages/archkeep-rule-sdk-ts/moon.yml` argues it). ESLint touching them
+// would be a second, weaker compiler pretending to be a linter.
 import js from "@eslint/js";
 import globals from "globals";
 import prettier from "eslint-config-prettier";
-
+import tseslint from "typescript-eslint";
 export default [
   {
     ignores: [
@@ -42,16 +53,27 @@ export default [
       // - .oracle-simple-* (providers/native/differential.integration.test.mjs)
       "**/.eslint-config-fixture-*/**",
       "**/.cli-eslint-config-fixture-*/**",
-      "**/.oracle-simple-*/**",
+      // The oracle fixtures share the same lifecycle as the two families
+      // above (created under the package root by integration tests, left
+      // behind only by an interrupted run); `.oracle-*` covers every
+      // spelling, the simple and the composite ones alike.
+      "**/.oracle-*/**",
       // Cargo build output — a parallel cargo task mutates this directory mid-walk
       // during `moon run`, causing ESLint to hit ENOENT when a temp rmeta dir
       // vanishes mid-scan. Measured in merge-queue run of #377 for the first
       // package combining eslint and cargo (archkeep-rules).
       "**/target/**",
+      // Vitest coverage output: third-party instrumentation runtime
+      // (block-navigation.js and friends), regenerated per run, gitignored —
+      // never source.
+      "**/coverage/**",
     ],
   },
 
   js.configs.recommended,
+  // The non-type-checked recommended set: every `js.configs.recommended`
+  // rule with TypeScript-aware spelling and correctness, on plain syntax.
+  ...tseslint.configs.recommended,
 
   {
     files: ["**/*.mjs", "**/*.js"],
@@ -64,10 +86,18 @@ export default [
       globals: { ...globals.node, ...globals.es2024 },
     },
     rules: {
-      "no-unused-vars": [
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
       ],
+      // This repository is ESM-only, and the one spelling of `require` it
+      // carries is the documented lazy-import seam —
+      // `createRequire(import.meta.url)` reached for optional peers and
+      // fixtures (`packages/archkeep/AGENTS.md`, "No sibling package may be
+      // imported from here"). The rule cannot tell that seam from CommonJS,
+      // so it fires only on architecture.
+      "@typescript-eslint/no-require-imports": "off",
       // A gate script's whole output is what it prints, so `console.log` is its
       // interface rather than a leftover debug line. The rule that matters for
       // library code returns with the first package that has any.
@@ -79,6 +109,40 @@ export default [
       // which is the one defect a gate script must not have.
       "require-atomic-updates": "error",
       "no-return-await": "off",
+    },
+  },
+
+  {
+    // Type-aware rules, on the same programs `moon run ...:typecheck`
+    // builds. `projectService` hands each file to its nearest tsconfig
+    // program; a file outside every program is a hard error here rather
+    // than a silent untyped pass, which is why the four root-level configs
+    // sit in this block's `ignores`: `scripts/tsconfig.json` now includes
+    // them (they were a verification-free zone before), so `tsc` judges
+    // their types, but they belong to no project directory the service can
+    // map — and no test file gets the typed rules, because the typed
+    // programs exist for shipped code and the tests already answer to
+    // `tsc` through the same configs.
+    files: ["**/*.mjs", "**/*.js"],
+    ignores: [
+      "**/*.test.mjs",
+      "eslint.config.mjs",
+      "commitlint.config.mjs",
+      "module-boundaries.config.mjs",
+      ".opencode/**/*.js",
+    ],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+      },
+    },
+    rules: {
+      // The two promises rules are this repository's whole threat model in
+      // rule form: a gate that does not await its check reports green over a
+      // violation, and a handler that passes a promise where a boolean is
+      // read turns every result true.
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
     },
   },
 

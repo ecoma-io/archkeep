@@ -68,11 +68,24 @@ export function serve(input = process.stdin, output = process.stdout, onExit = n
       return;
     }
     pending = framed.rest;
-    for (const message of framed.messages) server.handle(message);
+    for (const message of framed.messages) {
+      // `handle` is async and owns its own error envelope — a rejection here
+      // is a wiring defect, not a diagnostic. The catch reports it on stderr
+      // (the channel a client surfaces as its server log) instead of letting
+      // it become an unhandled rejection that kills the connection, or
+      // nothing at all, which would read as a clean frame.
+      server
+        .handle(message)
+        .catch((error) => process.stderr.write(`archkeep-lsp: ${error?.message ?? error}\n`));
+    }
   });
   // A client that closed the pipe without saying `exit` did not shut the server
   // down; reporting that as a clean stop would hide a crashed editor.
-  input.on("end", () => server.handle({ jsonrpc: "2.0", method: "exit" }));
+  input.on("end", () => {
+    server
+      .handle({ jsonrpc: "2.0", method: "exit" })
+      .catch((error) => process.stderr.write(`archkeep-lsp: ${error?.message ?? error}\n`));
+  });
   return server;
 }
 

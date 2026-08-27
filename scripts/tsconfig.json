@@ -11,5 +11,17 @@
     "target": "es2022",
     "skipLibCheck": true
   },
-  "include": ["**/*.mjs"]
+  "include": [
+    "**/*.mjs",
+    // The four root-level JavaScript files no project directory contains —
+    // the two tool configs this package's own gate reads, the boundary law,
+    // and the opencode editor gate. They were type-checked by nothing before
+    // (the include below was scripts-only while the old root `eslint .`
+    // linted them), which made them a verification-free zone; the
+    // gate-scripts lint target already owns them, so its typecheck does too.
+    "../eslint.config.mjs",
+    "../commitlint.config.mjs",
+    "../module-boundaries.config.mjs",
+    "../.opencode/plugins/editor-gates.js"
+  ]
 }
