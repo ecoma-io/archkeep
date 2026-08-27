@@ -424,6 +424,56 @@ describe("readPluginOptions", () => {
       /unknown plugin option 'tsconfigBase'/,
     );
   });
+
+  it("does NOT claim a third-party plugin whose specifier ends with /archkeep/nx", () => {
+    // Issue #366: a third-party plugin like `vendor-archkeep/nx` or
+    // `@scope/archkeep/nx` must not have its options claimed by this plugin.
+    // Such a package has its own options schema and this plugin must neither
+    // validate it nor read it.
+    const thirdPartySpecifiers = [
+      "vendor-archkeep/nx",
+      "@other-scope/archkeep/nx",
+      "@company/vendor-archkeep/nx",
+    ];
+    for (const specifier of thirdPartySpecifiers) {
+      const nxJson = JSON.stringify({
+        plugins: [
+          { plugin: specifier, options: { unknownKey: "some-value" } },
+          { plugin: "@ecoma-io/archkeep/nx", options: { tsConfig: "tsconfig.base.json" } },
+        ],
+      });
+      // The third-party plugin should be ignored, so only the official plugin's
+      // options should be read. The unknown key in the third-party entry must
+      // NOT cause this plugin to throw.
+      expect(readPluginOptions("/w", treeWith({ "/w/nx.json": nxJson })).tsConfig).toBe(
+        "tsconfig.base.json",
+      );
+    }
+  });
+
+  it("claims relative and aliased spellings of the real package", () => {
+    // Regression test: over-tightening the match would drop legitimate relative
+    // spellings of this package, producing an empty options read where config
+    // should have been carried. The fallback must still accept paths that are
+    // clearly relative references to this package.
+    const relativeSpellings = [
+      "./packages/archkeep/nx.mjs",
+      "./packages/archkeep/nx",
+      "../../node_modules/@ecoma-io/archkeep/nx",
+      "../archkeep/nx.mjs",
+      "./vendor/archkeep/nx.mjs",
+    ];
+    for (const specifier of relativeSpellings) {
+      const nxJson = JSON.stringify({
+        plugins: [{ plugin: specifier, options: { boundaryConfig: "custom-law.mjs" } }],
+      });
+      expect(readPluginOptions("/w", treeWith({ "/w/nx.json": nxJson })), specifier).toEqual({
+        boundaryConfig: "custom-law.mjs",
+        tsConfig: "tsconfig.base.json",
+        boundaryConfigDeclared: true,
+      });
+    }
+  });
 });
 
 describe("readWorkspaceLayout", () => {

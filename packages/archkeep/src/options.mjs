@@ -182,12 +182,20 @@ export function resolveOptions(rawOptions) {
  * This plugin's own entry in an `nx.json` `plugins` array, in either form Nx
  * accepts: a bare string, or `{plugin, options}`.
  *
- * Matched on the specifier's TAIL rather than by equality, because the same
- * plugin is named three legitimate ways — `@ecoma-io/archkeep/nx` once it
- * resolves from the registry, `./packages/archkeep/nx.mjs` inside this
- * repository, and a path with or without the `.mjs` in a workspace that
- * vendored it. Requiring one spelling would make the options invisible in the
- * other two, and invisible options mean the defaults — silently.
+ * Matched by exact package specifier or relative/aliased path, never by bare
+ * suffix. The three legitimate spellings this plugin recognizes are:
+ *
+ * - `@ecoma-io/archkeep/nx` — the full package specifier from npm
+ * - `archkeep/nx` — the bare shorthand (accepted for backward compatibility)
+ * - `./packages/archkeep/nx.mjs`, `../../node_modules/@ecoma-io/archkeep/nx`,
+ *   or other relative/aliased spellings of the same package
+ *
+ * A third-party plugin whose specifier happens to end with `/archkeep/nx`
+ * (e.g., `vendor-archkeep/nx`, `@other-scope/archkeep/nx`) is NOT claimed:
+ * such a package has its own options schema and this plugin must neither
+ * validate it nor read it. The suffix-only match that existed before would
+ * claim those options, validate them against this plugin's schema, and throw
+ * on any unknown key — a false violation on a stranger's configuration.
  *
  * The bare package specifier (`@ecoma-io/archkeep`, with no `/nx`) does NOT
  * match: that resolves to the engine entry, which exports neither `name` nor
@@ -202,7 +210,22 @@ function namesThisPlugin(entry) {
     typeof entry === "string" ? entry : /** @type {{ plugin?: unknown }} */ (entry)?.plugin;
   if (typeof specifier !== "string") return false;
   const withoutExt = specifier.replace(/\.mjs$/u, "");
-  return withoutExt === "archkeep/nx" || withoutExt.endsWith("/archkeep/nx");
+
+  // Exact match against this package's own specifier
+  if (withoutExt === "@ecoma-io/archkeep/nx" || withoutExt === "archkeep/nx") {
+    return true;
+  }
+
+  // Match relative/aliased spellings of the same package (e.g.,
+  // `./packages/archkeep/nx.mjs`, `../../node_modules/@ecoma-io/archkeep/nx`).
+  // These paths start with `./` or `../` and end with `/archkeep/nx`,
+  // which distinguishes them from third-party packages like `vendor-archkeep/nx`.
+  const isRelativePath = withoutExt.startsWith("./") || withoutExt.startsWith("../");
+  if (isRelativePath && withoutExt.endsWith("/archkeep/nx")) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
