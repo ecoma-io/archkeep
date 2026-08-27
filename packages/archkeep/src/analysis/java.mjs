@@ -137,7 +137,7 @@ function importableNameOf(staticKeyword, name) {
 export function analyzeJava({ sourceFile, text, workspace }) {
   const result = emptyResult();
   try {
-    const index = jvmPackageIndex(workspace);
+    const { byName: index } = jvmPackageIndex(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
     for (const site of parseJavaImportSites(text)) {
       const { line, column } = positionAt(text, site.offset);
@@ -212,7 +212,12 @@ export function analyzeJava({ sourceFile, text, workspace }) {
  */
 export function resolveJavaDependencies(workspace) {
   const { projects, filesOf, readFile } = workspace;
-  const index = jvmPackageIndex(workspace);
+  // The index's read failures are deliberately NOT consumed here: this
+  // resolver is the Nx-hook path, which has no failure channel of its own —
+  // the hook-side posture is #364, and this function must not grow a second
+  // opinion about it. The CLI path funnels them through
+  // `./jvm/packages.mjs`'s `jvmIndexFailures` instead.
+  const { byName: index } = jvmPackageIndex(workspace);
   const dependencies = [];
   for (const project of projects) {
     for (const file of filesOf(project.name)) {

@@ -9213,3 +9213,139 @@ export const customRules = [
     expect(compare.lines.out.join("\n")).toContain("re-capture the baseline");
   });
 });
+
+describe("an unreadable JVM source refuses the run (#374)", () => {
+  // The issue's own tree: `app` imports `com.example.domain.Policy` across a
+  // law that forbids it, and the ONE tracked file declaring that package is
+  // unreadable — a dangling symlink, one of #374's named causes, which the
+  // containment check passes because its deepest existing ancestor is inside
+  // the root while the read itself returns null. Only Nx and git are
+  // injected; the unreadable bytes are real files on disk, so what is pinned
+  // here is the whole path a consumer's `check` takes.
+  const jvmRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-jvm-unreadable-"));
+  afterAll(() => rmSync(jvmRoot, { recursive: true, force: true }));
+
+  const writeJvm = (relativePath, text) => {
+    mkdirSync(join(jvmRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(jvmRoot, relativePath), text);
+  };
+
+  writeJvm(
+    "nx.json",
+    `${JSON.stringify({
+      plugins: [
+        {
+          plugin: "@ecoma-io/archkeep/nx",
+          options: { boundaryConfig: "module-boundaries.config.mjs" },
+        },
+      ],
+    })}\n`,
+  );
+  // The law forbids exactly what the fixture imports: layer:app reaching
+  // layer:domain. With the declaration READABLE this tree is a finding
+  // (exit 1) — the readable twin of this fixture is what makes the refusal
+  // below provably about the read, not about the law.
+  writeJvm(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:app", onlyDependOnLibsWithTags: ["layer:app"] },
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: [],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeJvm(
+    "libs/app/src/main/java/com/example/app/Service.java",
+    "package com.example.app;\n\nimport com.example.domain.Policy;\n\nclass Service {\n  Policy policy;\n}\n",
+  );
+  // The tracked-but-unreadable declaration: Policy.java -> nowhere.java.
+  mkdirSync(join(jvmRoot, "libs/domain/src/main/java/com/example/domain"), { recursive: true });
+  symlinkSync(
+    join(jvmRoot, "libs/domain/src/main/java/com/example/domain/nowhere.java"),
+    join(jvmRoot, "libs/domain/src/main/java/com/example/domain/Policy.java"),
+  );
+
+  const jvmContext = {
+    cwd: jvmRoot,
+    readGraph: () => ({
+      nodes: {
+        app: { name: "app", type: "lib", data: { root: "libs/app", tags: ["layer:app"] } },
+        domain: {
+          name: "domain",
+          type: "lib",
+          data: { root: "libs/domain", tags: ["layer:domain"] },
+        },
+      },
+      dependencies: { app: [], domain: [] },
+    }),
+    listFiles: () => [
+      "nx.json",
+      "module-boundaries.config.mjs",
+      "libs/app/src/main/java/com/example/app/Service.java",
+      "libs/domain/src/main/java/com/example/domain/Policy.java",
+    ],
+  };
+
+  const jvmEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      ...jvmContext,
+    };
+  };
+
+  it("refuses a scoped run that excludes the unreadable file, naming it", async () => {
+    // The silent direction, held end to end. Before the funnel this exact
+    // run exited 0: the analyzer track never saw the file (out of the
+    // requested scope), the package index dropped it without a word, every
+    // import of com.example.domain classified external, and no verdict named
+    // the crossing — byte-for-byte indistinguishable from a clean tree.
+    const streams = jvmEnv();
+    expect(await runCli(["check", "libs/app"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("libs/domain/src/main/java/com/example/domain/Policy.java");
+    expect(report).toContain("JVM source could not be read for the package index");
+  });
+
+  it("composes with the analyzer track's own whole-file failure, as the .NET twin does", async () => {
+    // Unscoped, the same tree already refused through the analyzer track's
+    // "could not be read" — the partial coverage #374 names. The index
+    // funnel adds its own record for the same file — two tracks, two
+    // sentences, one refusal — the exact composition the .NET twin holds
+    // for its namespace index, so a consumer who has seen one recognizes
+    // the other.
+    const streams = jvmEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("could not be read");
+    expect(report).toContain("JVM source could not be read for the package index");
+  });
+
+  it("reports the crossing itself once the declaration is readable — the refusal is about the read", async () => {
+    // The control: the SAME tree with the symlink replaced by the bytes it
+    // stood for turns the run into the finding it always should have been,
+    // proving the two refusals above name the unreadable declaration, not a
+    // broken fixture.
+    rmSync(join(jvmRoot, "libs/domain/src/main/java/com/example/domain/Policy.java"));
+    writeJvm(
+      "libs/domain/src/main/java/com/example/domain/Policy.java",
+      "package com.example.domain;\n\npublic class Policy {}\n",
+    );
+    const streams = jvmEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("libs/app/src/main/java/com/example/app/Service.java");
+  });
+});

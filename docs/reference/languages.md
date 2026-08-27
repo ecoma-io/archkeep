@@ -445,7 +445,11 @@ require directory = package.** The index reads every tracked `.java` file's
 `package` line (masked first, so commented-out declarations cannot claim
 ownership) and maps longest declared prefix to project. A `.kt` file's packages
 are in the SAME index — a mixed module compiles into one namespace, and both
-languages share the same JVM package index.
+languages share the same JVM package index. A tracked `.java`/`.kt` source the
+index cannot read is a whole-file failure that refuses the run (exit 3) naming
+the file — dropped silently, every import of the package it declared would
+classify external, a first-party crossing wearing an external face. The same
+posture the .NET namespace index holds for an unreadable `.cs`.
 
 **Extraction covers the four JLS §7.5 import forms** — single type, on-demand
 (`a.b.*`), static single member, static on-demand — over comment-and-literal-
