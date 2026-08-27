@@ -884,7 +884,7 @@ describe("Contract J — Check is enforcement authority", () => {
         column: 1,
         specifier: "@beta",
         kind: "static",
-        spelling: { path: false, relative: false },
+        spelling: { path: false, relative: false, namesOnly: false },
         resolved: { target: "beta", file: null, external: false, packageName: null },
       },
     ];
@@ -946,7 +946,7 @@ describe("Contract J — Check is enforcement authority", () => {
       column: 1,
       specifier: "@beta",
       kind: "static",
-      spelling: { path: false, relative: false },
+      spelling: { path: false, relative: false, namesOnly: false },
       resolved: { target: "beta", file: null, external: false, packageName: null },
     };
 

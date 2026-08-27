@@ -71,23 +71,40 @@ beats every consumer remembering which convention this tool chose.
 ### How the specifier is spelled is a per-language fact, so the analyzer states it
 
 `specifier` is the raw text; `spelling` is what that text IS in the language it
-was written in. Two bits, because the rules ask two independent questions:
+was written in. Three bits, because the rules ask three independent questions —
+the first two per specifier, the third per language and therefore constant on
+every record one analyzer produces:
 
-|                                   | `path` | `relative` |
-| --------------------------------- | :----: | :--------: |
-| `./x`, `../x`, `.`, `..` (JS)     |  yes   |    yes     |
-| `/x` (JS)                         |  yes   |     no     |
-| `crate::x`, `self::x`, `super::x` |   no   |    yes     |
-| `rba_desktop_lib::run` from a bin |   no   |    yes     |
-| `.mod`, `..pkg.sub` (Python)      |   no   |    yes     |
-| `react`, `serde`, `example.com/m` |   no   |     no     |
+|                                   | `path` | `relative` | `namesOnly` |
+| --------------------------------- | :----: | :--------: | :---------: |
+| `./x`, `../x`, `.`, `..` (JS)     |  yes   |    yes     |     no      |
+| `/x` (JS)                         |  yes   |     no     |     no      |
+| `react` (JS, bare)                |   no   |     no     |     no      |
+| `crate::x`, `self::x`, `super::x` |   no   |    yes     |     yes     |
+| `rba_desktop_lib::run` from a bin |   no   |    yes     |     yes     |
+| `.mod`, `..pkg.sub` (Python)      |   no   |    yes     |     yes     |
+| `react`, `serde`, `example.com/m` |   no   |     no     |    yes*     |
+
+\* the last row holds for `serde` and `example.com/m`; a JavaScript `react` is
+`namesOnly: no` — the same text is a package name in one language and a name
+that IS the only spelling in another, which is exactly why the bit rides on the
+record instead of being derived from the text.
 
 `path` says the specifier is a **filesystem path**: resolvable by path
 arithmetic against the importing file, and naming no package. It decides
 whether a specifier may receive a synthesized external node, and which message
 an unresolvable one gets. `relative` says the specifier **reaches inside its
 own project without going out through the project's public name** — the
-counter-evidence `noSelfCircularDependencies` looks for.
+counter-evidence `noSelfCircularDependencies` looks for. `namesOnly` says the
+**language has no path spelling at all** — every specifier it produces is a
+name, so no path-text rule applies to any of them. It gates
+`isAbsoluteImportIntoAnotherProject`, which judges the JavaScript-family
+spellings a bare `libs/x` deep import and a `/libs/x` absolute path: applied to
+a language whose only spelling is the name, it read a Go `module libs/foo`'s
+legal `import "libs/foo/bar"` as an absolute path into a project — an
+unfixable verdict, because the name is the only spelling the language has
+(#376). The edge such an import resolves to is still judged by every rule
+below the spelling check; only the spelling check itself stands down.
 
 **Why the analyzer answers and not the rules.** The rules layer used to derive
 both from the text with one predicate — `.`, `..`, `./`, `../` — which is
@@ -101,10 +118,10 @@ import; the rules layer knows neither, and a language table there would be a
 second registry drifting from `LANGUAGE_BY_EXTENSION`. So the record carries the
 fact and the rule reads it.
 
-The field is **mandatory**, and `evaluate()` throws on a record that omits it
-rather than falling back to the JavaScript shape. A default is how the next
-analyzer inherits this bug silently; a throw is how it is told, once, at the
-first record it produces.
+The field is **mandatory**, and `evaluate()` throws on a record that omits any
+bit of it rather than falling back to the JavaScript shape. A default is how
+the next analyzer inherits this bug silently; a throw is how it is told, once,
+at the first record it produces.
 
 ### Intra-project imports are emitted too
 

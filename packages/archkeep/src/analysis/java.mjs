@@ -17,7 +17,9 @@
  *
  * No dynamic import, no type-only form, no re-export syntax, no aliasing:
  * `kind` is always `"static"` here, and `spelling.path` is always `false`
- * because no Java import is spelled as a filesystem path. `spelling.relative`
+ * because no Java import is spelled as a filesystem path — `spelling.namesOnly`
+ * is always `true`, a package name being a name and never a path (#376).
+ * `spelling.relative`
  * takes Go's argued answer — true exactly when the import resolved into its
  * own project — because Java offers no relative spelling either, so the bit
  * reads what an import REACHED rather than how it was written.
@@ -178,6 +180,7 @@ export function analyzeJava({ sourceFile, text, workspace }) {
         spelling: {
           path: false,
           relative: target !== null && owner !== null && target === owner.name,
+          namesOnly: true,
         },
         resolved: resolution,
       });

@@ -498,7 +498,8 @@ export function resolvePythonDependencies(projects, filesOf, readFile) {
  *
  * They are not filesystem paths, which is the other half: a dotted module name
  * is resolved on `sys.path`, never by path arithmetic against the source file,
- * so `spelling.path` is always false for Python. That distinction is what stops
+ * so `spelling.path` is always false for Python and `spelling.namesOnly` always
+ * true. That distinction is what stops
  * an unresolvable `from . import x` from being reported as
  * `noRelativeOrAbsoluteExternals` — a message about a path, aimed at a name.
  *
@@ -1177,7 +1178,7 @@ export function analyzePython({ sourceFile, text, workspace }) {
         column,
         specifier: site.specifier,
         kind: site.kind,
-        spelling: { path: false, relative: isRelativeImport(site.specifier) },
+        spelling: { path: false, relative: isRelativeImport(site.specifier), namesOnly: true },
         resolved: null,
       };
       result.imports.push(record);

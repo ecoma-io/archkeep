@@ -25,6 +25,7 @@
       "sourceProject": "app",
       "specifier": "example.test/core",
       "spelling": {
+        "namesOnly": true,
         "path": false,
         "relative": false
       }
@@ -43,6 +44,7 @@
       "sourceProject": "app",
       "specifier": "example.test/nowhere",
       "spelling": {
+        "namesOnly": true,
         "path": false,
         "relative": false
       }

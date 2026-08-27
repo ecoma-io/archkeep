@@ -727,7 +727,7 @@ describe("mergeImportEdges — a real dynamic import survives alongside a develo
     line: 3,
     column: 1,
     specifier: "@api/client",
-    spelling: { path: false, relative: false },
+    spelling: { path: false, relative: false, namesOnly: false },
     kind: "dynamic",
     resolved: { target: "api", file: null, external: false, packageName: null },
   });

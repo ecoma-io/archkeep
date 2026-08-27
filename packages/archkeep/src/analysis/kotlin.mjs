@@ -22,7 +22,8 @@
  *   header; neither matches the anchored forms.
  *
  * Everything downstream is the shared answer: `kind` always `"static"`,
- * `spelling.path` always false, `spelling.relative` true exactly when the
+ * `spelling.path` always false and `spelling.namesOnly` always true (a package
+ * name is a name, never a path — #376), `spelling.relative` true exactly when the
  * import resolved into its own project, resolution through
  * `./jvm/resolve.mjs` with Kotlin's default-import table, and graph edges via
  * the same contract as every other language. There is no dynamic import, no
@@ -136,6 +137,7 @@ export function analyzeKotlin({ sourceFile, text, workspace }) {
         spelling: {
           path: false,
           relative: target !== null && owner !== null && target === owner.name,
+          namesOnly: true,
         },
         resolved: resolution,
       });

@@ -75,7 +75,7 @@ const site = ({ specifier = "@fixture/beta", relative = false } = {}) => ({
   line: 3,
   column: 1,
   kind: "static",
-  spelling: { path: relative, relative },
+  spelling: { path: relative, relative, namesOnly: false },
   resolved: { target: "beta", file: "libs/beta/src/index.ts", external: false, packageName: null },
   specifier,
 });

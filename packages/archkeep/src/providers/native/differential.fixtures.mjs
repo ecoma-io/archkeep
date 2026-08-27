@@ -1187,18 +1187,36 @@ export const moduleBoundaryOptions = {
 };
 `;
 
-const LAYOUT_GO_FILES = {
+/**
+ * The layout pair's sources. The `workspaceLayout` proof has to be written in
+ * a language whose imports can BE paths: a bare `packages/…` deep import is
+ * one in the JavaScript family — resolved through `tsconfig.base.json`
+ * `paths`, exactly the convention the absolute-import check judges — while a
+ * Go module path of the same shape is a NAME that check must not read as a
+ * path (#376). So the crossing demonstrating the custom `libsDir` reaching
+ * `isAbsoluteImportIntoAnotherProject` lives in `thing.ts`, and the `.go`
+ * file carries only the tag-violation control. The deep import resolves (the
+ * harness refuses to compare partial scans), which changes nothing: the
+ * check fires on the specifier's text before any resolution.
+ */
+const LAYOUT_FILES = {
+  "tsconfig.base.json": `${JSON.stringify(
+    { compilerOptions: { baseUrl: ".", paths: { "packages/*": ["packages/*"] } } },
+    null,
+    2,
+  )}\n`,
   "packages/thing/go.mod": "module example.com/thing\n\ngo 1.24\n",
   "packages/thing/thing.go": `package thing
 
 import (
 	"example.com/blocked"
-	"packages/elsewhere"
 )
 
 var _ = blocked.Name
-var _ = elsewhere.Name
 `,
+  "packages/thing/thing.ts":
+    'import { Name } from "packages/blocked/value";\n\nexport const name = Name;\n',
+  "packages/blocked/value.ts": 'export const Name = "value";\n',
   "packages/blocked/go.mod": "module example.com/blocked\n\ngo 1.24\n",
   "packages/blocked/blocked.go": 'package blocked\n\nvar Name = "blocked"\n',
 };
@@ -1223,13 +1241,16 @@ export function buildLayoutNxTree(root, { boundaryConfig = "module-boundaries.co
     "packages/blocked/project.json",
     JSON.stringify({ name: "blocked", tags: ["layer:blocked"] }),
   );
-  writeAll(write, LAYOUT_GO_FILES);
+  writeAll(write, LAYOUT_FILES);
   return [
     "nx.json",
     boundaryConfig,
+    "tsconfig.base.json",
     "packages/thing/project.json",
     "packages/thing/go.mod",
     "packages/thing/thing.go",
+    "packages/thing/thing.ts",
+    "packages/blocked/value.ts",
     "packages/blocked/project.json",
     "packages/blocked/go.mod",
     "packages/blocked/blocked.go",
@@ -1267,12 +1288,15 @@ export function buildLayoutNativeTree(
     }),
   );
   write(boundaryConfig, LAYOUT_BOUNDARY_CONFIG);
-  writeAll(write, LAYOUT_GO_FILES);
+  writeAll(write, LAYOUT_FILES);
   return [
     "archkeep.json",
     boundaryConfig,
+    "tsconfig.base.json",
     "packages/thing/go.mod",
     "packages/thing/thing.go",
+    "packages/thing/thing.ts",
+    "packages/blocked/value.ts",
     "packages/blocked/go.mod",
     "packages/blocked/blocked.go",
   ];

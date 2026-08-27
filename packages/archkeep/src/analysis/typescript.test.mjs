@@ -115,7 +115,7 @@ describe("analyzeTypeScript — resolution through TypeScript's own resolver", (
         column: 24, // the opening quote of `"@acme/ui"`
         specifier: "@acme/ui",
         kind: "static",
-        spelling: { path: false, relative: false },
+        spelling: { path: false, relative: false, namesOnly: false },
         resolved: {
           target: "ui",
           file: "libs/ui/src/index.ts",
@@ -363,9 +363,9 @@ describe("analyzeTypeScript — the record every rule reads", () => {
       'import c from "/rooted";',
     ].join("\n");
     expect(analyze(text).imports.map((record) => record.spelling)).toEqual([
-      { path: true, relative: true },
-      { path: false, relative: false },
-      { path: true, relative: false },
+      { path: true, relative: true, namesOnly: false },
+      { path: false, relative: false, namesOnly: false },
+      { path: true, relative: false, namesOnly: false },
     ]);
   });
 });
@@ -376,17 +376,29 @@ describe("specifierSpelling", () => {
   // predicate downstream looked general enough to serve every language.
   it("calls a relative path both a path and relative, bare dots included", () => {
     for (const specifier of ["./a", "../a", ".", ".."]) {
-      expect(specifierSpelling(specifier)).toEqual({ path: true, relative: true });
+      expect(specifierSpelling(specifier)).toEqual({
+        path: true,
+        relative: true,
+        namesOnly: false,
+      });
     }
   });
 
   it("calls a rooted path a path and not relative", () => {
-    expect(specifierSpelling("/outside/present")).toEqual({ path: true, relative: false });
+    expect(specifierSpelling("/outside/present")).toEqual({
+      path: true,
+      relative: false,
+      namesOnly: false,
+    });
   });
 
   it("calls a package name neither, scoped or not", () => {
     for (const specifier of ["@scope/pkg", "pkg", "@scope/pkg/deep/path"]) {
-      expect(specifierSpelling(specifier)).toEqual({ path: false, relative: false });
+      expect(specifierSpelling(specifier)).toEqual({
+        path: false,
+        relative: false,
+        namesOnly: false,
+      });
     }
   });
 
@@ -395,12 +407,20 @@ describe("specifierSpelling", () => {
     // languages and their own analyzers say so; this classifier answering for
     // them would be the JavaScript-shaped predicate rebuilt one layer down.
     for (const specifier of ["super::product_name", "..pkg.sub", "example.com/mod/pkg"]) {
-      expect(specifierSpelling(specifier)).toEqual({ path: false, relative: false });
+      expect(specifierSpelling(specifier)).toEqual({
+        path: false,
+        relative: false,
+        namesOnly: false,
+      });
     }
   });
 
   it("calls a non-literal argument's source text neither", () => {
-    expect(specifierSpelling("`./${dir}/x`")).toEqual({ path: false, relative: false });
+    expect(specifierSpelling("`./${dir}/x`")).toEqual({
+      path: false,
+      relative: false,
+      namesOnly: false,
+    });
   });
 });
 

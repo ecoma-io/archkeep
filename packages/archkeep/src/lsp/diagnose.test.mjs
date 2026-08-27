@@ -326,7 +326,7 @@ describe("the evidence the engine renders comes from the sites it was handed", (
     line: bufferLine,
     column: bufferColumn,
     specifier: "@fixture/beta",
-    spelling: { path: false, relative: false },
+    spelling: { path: false, relative: false, namesOnly: false },
     kind: "static",
     resolved: {
       target: "beta",
