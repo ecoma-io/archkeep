@@ -47,5 +47,11 @@ export { historyCommand } from "./src/commands/history.mjs";
 export { adrCommand } from "./src/commands/adr.mjs";
 export { discoverCommand } from "./src/commands/discover.mjs";
 export { reconcileCommand } from "./src/commands/reconcile.mjs";
+export {
+  rulesAddCommand,
+  rulesInfoCommand,
+  rulesListCommand,
+  rulesVerifyCommand,
+} from "./src/commands/rules.mjs";
 
 export { UsageError } from "./src/errors.mjs";

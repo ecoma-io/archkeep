@@ -124,6 +124,12 @@ import { debtCommand } from "./src/commands/debt.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
 import { provenanceCommand } from "./src/commands/provenance-command.mjs";
+import {
+  rulesAddCommand,
+  rulesInfoCommand,
+  rulesListCommand,
+  rulesVerifyCommand,
+} from "./src/commands/rules.mjs";
 import { waiversCommand } from "./src/commands/waivers.mjs";
 import { INTENT_FILE, loadIntent } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
@@ -1708,6 +1714,72 @@ async function runAdr(options, { cwd, env }) {
 }
 
 /**
+ * `rules`'s `run`: dispatches to the appropriate subcommand (list/info/verify/add),
+ * drives it, writes the report, and returns the exit code.
+ *
+ * @param {{format: string, output: string|null, catalog: string|null, to: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runRules(options, { cwd, env }) {
+  if (options.paths.length === 0) {
+    env.err(`archkeep: rules requires a subcommand (list, info, verify, or add)`);
+    return EXIT.usage;
+  }
+
+  const subcommand = options.paths[0];
+  const ruleName = options.paths[1];
+
+  const dispatch = {
+    list: rulesListCommand,
+    info: rulesInfoCommand,
+    verify: rulesVerifyCommand,
+    add: rulesAddCommand,
+  }[subcommand];
+
+  if (!dispatch) {
+    env.err(
+      `archkeep: unknown rules subcommand '${subcommand}' — must be list, info, verify, or add`,
+    );
+    return EXIT.usage;
+  }
+
+  if (subcommand === "info" && !ruleName) {
+    env.err(`archkeep: rules info requires a rule name`);
+    return EXIT.usage;
+  }
+
+  if (subcommand === "add" && !ruleName) {
+    env.err(`archkeep: rules add requires a rule name`);
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandOptions = { catalog: options.catalog, to: options.to };
+    result = await dispatch(commandOptions, { cwd, ruleName });
+  } catch (error) {
+    env.err(String(error?.message ?? error));
+    return EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env, cwd, null)) return EXIT.error;
+    env.err(`archkeep: rules ${subcommand} complete → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // Exit codes: 0 for ok, 1 for findings (verify only), 3 for no-verdict
+  if (result.status === "ok") return EXIT.ok;
+  if (result.status === "findings") return EXIT.violations;
+  return EXIT.error;
+}
+
+/**
  * `history`'s `run`: resolves the command context, optionally captures a
  * snapshot of the current workspace, drives `historyCommand`, writes the
  * report, and returns the exit code.
@@ -2992,6 +3064,46 @@ const ADR_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `rules`'s flags: catalog path, format, output, and target directory for add.
+ * The first positional is the subcommand (list/info/verify/add), the second is
+ * the rule name for info and add.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const RULES_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--catalog",
+    key: "catalog",
+    arg: "<path>",
+    describe: Object.freeze([
+      "Path to the catalog file",
+      "(default: node_modules/@ecoma-io/archkeep-rules/catalog.json)",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--to",
+    key: "to",
+    arg: "<dir>",
+    describe: Object.freeze(["Target directory for the .wasm file", "(default: tools/rules/)"]),
+  }),
+]);
+
+/**
  * The command table `usage()` and `runCli` both read from — a command added
  * later is a new entry here, not a new branch in either. `args` is the
  * placeholder `usage()` prints after the command name; `flagHelp` is the
@@ -3214,6 +3326,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runAdr,
+  }),
+  rules: Object.freeze({
+    name: "rules",
+    args: "<list|info|verify|add> [<rule-name>]",
+    summary: "List official rules, show details, verify catalog integrity, or add a rule",
+    flagHelp: RULES_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(RULES_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, catalog: null, to: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runRules,
   }),
 });
 

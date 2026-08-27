@@ -216,7 +216,7 @@ jobs:
           # on every pull request from now on.
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
         if: steps.release.outputs.pr != ''
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -359,7 +359,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -443,7 +443,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
 
       # `registry-url` is what writes the .npmrc that reads NODE_AUTH_TOKEN
       # below. Without it the token is set and silently unused, and the publish
@@ -542,7 +542,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
 
       # `registry-url` is what writes the .npmrc that reads NODE_AUTH_TOKEN
       # below. Without it the token is set and silently unused, and the publish
@@ -595,6 +595,72 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
         run: npm publish ecoma-io-archkeep-mcp-*.tgz --provenance --access public
 
+  publish-rules:
+    name: Publish the official rules catalog to npm
+    # The fourth npm package this repository ships — the catalog of official
+    # rules as an installable package. A SEPARATE job for the reason every
+    # destination is its own job: it fails independently, and a step appended
+    # to another job would bury its failure behind a package that already shipped.
+    #
+    # The gate expression is the npm job's, verbatim — see the comment there;
+    # a divergence between the publish jobs is a release that ships to one
+    # destination and not another. Like the MCP and TS SDK jobs it carries no
+    # token guard: it publishes with the same secret the engine's job just
+    # used in this same run.
+    #
+    # The rules package versions with the engine by decision: the catalog
+    # is the input surface for the `rules` CLI commands, and those commands
+    # are versioned with the engine. Its pre-publish proof is the package's
+    # own verification script (`verify-rules-package.mjs`), which proves the
+    # catalog loads, the artifacts verify through the REAL host, and the CLI
+    # commands render correctly — a catalog that cannot be loaded cannot be
+    # unpublished away.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Same provenance attestation the engine's publish mints, for the same
+      # reason: the registry records which workflow, at which commit, built it.
+      id-token: write
+    steps:
+      # The tag, not the branch, for the same reason every publish job states:
+      # `main` may have moved, and the tarball must hold the tagged bytes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
+
+      # `registry-url` is what writes the .npmrc that reads NODE_AUTH_TOKEN
+      # below. Without it the token is set and silently unused, and the publish
+      # fails as unauthenticated.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+
+      # Prove the packed rules package works after install: catalog loads,
+      # artifacts verify through REAL host, CLI commands render correctly.
+      # The script's header argues each check. It runs before publish, not after,
+      # because an npm version cannot be unpublished away.
+      - name: Prove the packed rules package works after install
+        run: node scripts/verify-rules-package.mjs
+
+      # `npm publish`, not `pnpm publish`, and `--access public` because the
+      # package is scoped: the engine's own Publish step argues both, and the
+      # license consequence it names is why this package carries its own LICENSE.
+      - name: Publish
+        working-directory: packages/archkeep-rules
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
+        run: npm publish --provenance --access public
+
   publish-ts-sdk:
     name: Publish the TypeScript rule SDK to npm
     # The second package this repository publishes to npm, on the same token as
@@ -635,7 +701,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
 
       # `registry-url` is what writes the .npmrc that reads NODE_AUTH_TOKEN
       # below. Without it the token is set and silently unused, and the publish
@@ -697,7 +763,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

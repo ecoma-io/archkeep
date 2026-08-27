@@ -520,6 +520,10 @@ const MATRIX = {
     ok: { world: "world", argv: ["adr"], exit: EXIT.ok },
     refused: { world: "world", argv: ["adr", "one", "two"], exit: EXIT.usage },
   },
+  rules: {
+    ok: { world: "world", argv: ["rules", "list", "--format", "json"], exit: EXIT.error },
+    refused: { world: "world", argv: ["rules"], exit: EXIT.usage },
+  },
 };
 
 // The rows spawn transitively — `resolveProvenance` runs git inside every
