@@ -637,7 +637,10 @@ export function transformMoonGraph(raw) {
   // here where it could only drop it namelessly — the exact silent `return`
   // this function used to carry, and the shape #365 exists to remove.
   const add = (source, target, type) => {
-    if (source === target) return;
+    if (source === target) {
+      anomalies.push(`self-edge [${source}, ${target}] is not a dependency between projects`);
+      return;
+    }
     const key = JSON.stringify([source, target]);
     const existing = edgesByPair.get(key);
     if (existing) {
@@ -786,7 +789,10 @@ export function transformMoonGraph(raw) {
     if (typeof node?.id !== "string" || node.id === "" || !Array.isArray(node.dependencies))
       continue;
     for (const dep of node.dependencies) {
-      if (!dep?.id) continue;
+      if (!dep?.id) {
+        anomalies.push(`project '${node.id}' has a dependency record with no id`);
+        continue;
+      }
       const type = edgeTypeFromScope(dep.scope, dep.source);
       if (type === undefined) continue;
       if (!nodes[dep.id]) {
