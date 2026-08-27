@@ -33,6 +33,8 @@ tasks:
     command: eslint . --max-warnings 0
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/eslint.config.mjs"
   # The golden fixtures, the committed artifact, and both driven through the
   # engine's real host — `node --test`, because this package needs no test
@@ -45,6 +47,10 @@ tasks:
   # (`./rebuild-example.sh` says the rest).
   test:
     command: node --test test/*.test.mjs
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
   # Two compilers, because this package holds two languages. `asc --noEmit` is
   # the real AssemblyScript compiler type-checking `assembly/` and the reference
   # rule under exactly the flags `./asconfig.json` fixes for the build — so a
@@ -66,4 +72,6 @@ tasks:
     script: pnpm exec asc assembly/index.ts --config asconfig.json --noEmit --disableWarning 235 && pnpm exec asc examples/forbidden-tag-dependency.ts --config asconfig.json --noEmit && pnpm exec tsc -p tsconfig.json
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/tsconfig.base.json"

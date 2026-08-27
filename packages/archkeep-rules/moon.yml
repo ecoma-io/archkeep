@@ -34,6 +34,8 @@ tasks:
     script: cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && eslint . --max-warnings 0
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/eslint.config.mjs"
   # The golden fixtures replayed natively, the committed artifacts held to
   # their digests, and the catalog validator's own suite. Cargo runs the
@@ -45,6 +47,8 @@ tasks:
     script: cargo test --locked && node --test test/*.test.mjs
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/packages/archkeep-rule-sdk-rust/**"
   # Three compilers for three audiences: `cargo check --all-targets` for the
   # host-compiled half, the same again for `wasm32-unknown-unknown` (the only
@@ -55,6 +59,8 @@ tasks:
     script: cargo check --locked --all-targets && cargo check --locked --target wasm32-unknown-unknown && pnpm exec tsc -p tsconfig.json
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/tsconfig.base.json"
       - "/packages/archkeep-rule-sdk-rust/**"
 

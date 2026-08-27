@@ -21,16 +21,22 @@ tasks:
     command: eslint . --max-warnings 0
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/eslint.config.mjs"
   test:
     command: vitest run
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/packages/archkeep/**"
   typecheck:
     command: tsc -p tsconfig.json
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/tsconfig.base.json"
       - "/packages/archkeep/**"
 
@@ -42,9 +48,9 @@ tasks:
 #   this package's suite, and only this package's. `vscode` carries no such
 #   edge on purpose: it talks to the engine over LSP with the engine installed
 #   in a consumer's workspace, and its own suite drives none of it.
-# - The implicit bootstrap inputs (root `package.json` + `pnpm-lock.yaml`) come
-#   from `.moon/tasks/all.yml` — every task here runs a tool that install step
-#   provides.
+# - The bootstrap pair (root `package.json` + `pnpm-lock.yaml`) is declared on
+#   every task here — each runs a tool the pnpm install provides, so a lockfile
+#   bump can move any of them.
 #
 # Task `inputs`: the default when none are declared is the whole project
 # (`**/*`) plus `.moon/**`, and root-level files are NOT included — declared

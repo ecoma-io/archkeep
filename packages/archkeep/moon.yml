@@ -15,11 +15,15 @@ tasks:
     command: eslint . --max-warnings 0
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/eslint.config.mjs"
   test:
     command: vitest run
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/packages/archkeep-rules/**"
       - "/packages/archkeep-rule-sdk-go/**"
       - "/packages/archkeep-rule-sdk-python/**"
@@ -29,6 +33,8 @@ tasks:
     command: tsc -p tsconfig.json
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/tsconfig.base.json"
 
 # Verification dependencies, not npm ones. The engine imports no sibling
@@ -43,9 +49,12 @@ tasks:
 # Task `inputs`: declaring any replaces the whole-project default (`**/*` —
 # measured with `moon query tasks --affected`), so each task that declares
 # any restates the bare `**/*` first. Root `/eslint.config.mjs` and
-# `/tsconfig.base.json` ride on exactly the tasks that read them; the
-# bootstrap pair (`/package.json`, `/pnpm-lock.yaml`) arrives implicitly for
-# every task via `.moon/tasks/all.yml`; and `test` additionally hashes the
+# `/tsconfig.base.json` ride on exactly the tasks that read them, and the
+# bootstrap pair (`/package.json`, `/pnpm-lock.yaml`) rides on every task —
+# each runs a tool the pnpm install provides, and a lockfile bump can move
+# any of them. `sdk-go`, `sdk-rust` and `sdk-python` declare none of this:
+# their toolchains are system-level and their defaults suffice. In addition,
+# every task that runs a Node tool; and `test` additionally hashes the
 # whole sibling trees its conformance suite reads — a deliberate
 # coarse-grained ceiling (an SDK README edit re-runs `test` here) that buys
 # the strong direction: a warm cache can never replay a verdict over bytes

@@ -14,13 +14,21 @@ tasks:
     command: eslint . --max-warnings 0
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/eslint.config.mjs"
   test:
     command: vitest run
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
   typecheck:
     command: tsc -p tsconfig.json
     inputs:
       - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
       - "/tsconfig.base.json"
 
 # No `dependsOn`, deliberately. The extension is a pure client: it launches
@@ -32,7 +40,9 @@ tasks:
 # server) is proven end-to-end by `packages/archkeep/e2e/` and
 # `scripts/verify-package.mjs`, both of which drive the real artifact.
 #
-# Task `inputs` follow the house shape (`.moon/tasks/all.yml` carries the
-# bootstrap pair; explicit `**/*` first because declaring inputs replaces the
-# implicit whole-project default — measured with
-# `moon query tasks --affected`).
+# Task `inputs` follow the house shape: the bare `**/*` first, because
+# declaring inputs replaces the implicit whole-project default — measured with
+# `moon query tasks --affected`; then exactly the root files that task's
+# verdict depends on (`/eslint.config.mjs`, `/tsconfig.base.json`) and the
+# bootstrap pair (`/package.json`, `/pnpm-lock.yaml`) every Node-tooling task
+# here runs through.
