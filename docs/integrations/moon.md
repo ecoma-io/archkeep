@@ -151,7 +151,14 @@ The command emits a JSON object with an integer-indexed graph:
 
 Archkeep normalises this into the same project-model shape the Nx and native
 providers produce: project records with `id`, `root`, `tags`, and
-`dependencies`. The language server builds its editor index through this same
+`dependencies`. Each project's `root` is its `source` in canonical
+workspace-relative form: `.` and a `./` prefix or trailing `/` are normalised
+away (`./apps/web` → `apps/web`), and a spelling that cannot name a workspace
+directory — backslashes, a leading `/`, a `.`/`..` or empty segment — refuses
+the run, naming the project and the spelling. A root that matched no tracked
+path would make its project own nothing with no diagnostic naming why, which
+is the one outcome this tool refuses to produce (#367). The language server
+builds its editor index through this same
 `readProjectGraph` call — one dispatch for both faces, so an attached editor
 judges exactly the graph `archkeep check` judges. When the invocation fails —
 `moon` missing from `node_modules/.bin`, a nonzero exit, output that will not
@@ -273,15 +280,15 @@ integration.
 - **It infers `workspaceLayout` from project source paths.** Moon does not
   declare an `appsDir`/`libsDir` convention the way `nx.json` does, so the
   provider infers one from the common directory prefix shared by each layer's
-  project roots (`application`-layer sources → `appsDir`, `library`-layer
-  sources → `libsDir`), falling back to the default
+  project roots (`application`-layer roots → `appsDir`, `library`-layer
+  roots → `libsDir`), falling back to the default
   `{libsDir: "libs", appsDir: "apps"}` when no consistent prefix exists. A
-  project at the workspace root contributes to neither prefix: whatever its
-  `source` is spelled as, its top path segment names no directory below the
-  root — which is the test the provider applies, rather than a list of the
-  spellings that land there — and inferring `appsDir: "."` from one would make
-  every ordinary relative import in the workspace an absolute-import
-  violation.
+  project at the workspace root contributes to neither prefix: its canonical
+  root is `""`, which names no directory below the workspace root — and
+  inferring `appsDir: "."` from one would make every ordinary relative import
+  in the workspace an absolute-import violation. Roots are canonicalised
+  before this inference runs, so a `./`-prefixed spelling infers the layout of
+  the directory it names rather than being silently skipped (#367).
   `workspaceLayout` is carried on the graph output exactly as the Nx and
   native providers carry theirs.
 
