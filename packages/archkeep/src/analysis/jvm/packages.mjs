@@ -31,7 +31,7 @@
  * per workspace object through `perWorkspace`, so a whole-tree run builds the
  * index once no matter how many files ask.
  */
-import { perWorkspace } from "../source-util.mjs";
+import { fileFailure, perWorkspace } from "../source-util.mjs";
 import { maskJavaComments, maskKotlinComments } from "./mask.mjs";
 
 /**
@@ -101,27 +101,37 @@ const maskFor = (file) => MASK_BY_EXTENSION[file.slice(file.lastIndexOf("."))];
 /**
  * Build the index: every tracked JVM source's package, attributed by longest
  * project root. Returns the map keyed by exact declared dotted name, each
- * entry listing `{ project, file }` pairs in project order.
+ * entry listing `{ project, file }` pairs in project order — beside one
+ * whole-file failure per JVM source that could not be read: a file dropped
+ * from the index silently would make every import of its package classify
+ * external, a first-party crossing wearing an external face, with nothing
+ * anywhere naming why (`../contract.md`'s I/O law). The same discipline the
+ * .NET twin holds for its namespace index (`../dotnet/namespaces.mjs`).
  *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
- * @returns {Map<string, { project: string, file: string }[]>}
+ * @returns {{ byName: Map<string, { project: string, file: string }[]>,
+ *            failures: { sourceFile: string, line: null, column: null, reason: string }[] }}
  */
 function buildJvmPackageIndex(workspace) {
-  const index = new Map();
+  const byName = new Map();
+  const failures = [];
   for (const project of workspace.projects) {
     for (const file of workspace.filesOf(project.name)) {
       const mask = maskFor(file);
       if (!mask) continue;
       const text = workspace.readFile(file);
-      if (text === null || text === undefined) continue;
+      if (text === null || text === undefined) {
+        failures.push(fileFailure(file, "JVM source could not be read for the package index"));
+        continue;
+      }
       const declared = parseJvmPackageDeclaration(mask(text));
       if (!declared) continue;
-      const owners = index.get(declared.name) ?? [];
+      const owners = byName.get(declared.name) ?? [];
       owners.push({ project: project.name, file });
-      index.set(declared.name, owners);
+      byName.set(declared.name, owners);
     }
   }
-  return index;
+  return { byName, failures };
 }
 
 /**
@@ -130,6 +140,19 @@ function buildJvmPackageIndex(workspace) {
  * this one map, so the layers can never disagree about who owns a name.
  */
 export const jvmPackageIndex = perWorkspace(buildJvmPackageIndex);
+
+/**
+ * Whole-file failures for every JVM source the index could not read — the
+ * funnel `../../commands/context.mjs` merges beside the manifest failures, so
+ * an unreadable source refuses the verdict (exit 3) instead of quietly
+ * degrading every importer of its packages to external.
+ *
+ * @param {object} workspace
+ * @returns {{ sourceFile: string, line: null, column: null, reason: string }[]}
+ */
+export function jvmIndexFailures(workspace) {
+  return jvmPackageIndex(workspace).failures;
+}
 
 /**
  * Longest-prefix resolution over the index — the single answer both layers

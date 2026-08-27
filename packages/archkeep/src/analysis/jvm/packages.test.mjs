@@ -2,6 +2,7 @@ import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
 
 import {
+  jvmIndexFailures,
   jvmPackageIndex,
   parseJvmPackageDeclaration,
   resolveJvmPackagePrefix,
@@ -95,7 +96,7 @@ describe("jvmPackageIndex", () => {
     const workspace = workspaceOf({
       "app/src/main/java/com/acme/A.java": "package other.place;\nclass A {}\n",
     });
-    expect([...jvmPackageIndex(workspace).keys()]).toEqual(["other.place"]);
+    expect([...jvmPackageIndex(workspace).byName.keys()]).toEqual(["other.place"]);
   });
 
   it("indexes Kotlin sources into the SAME map as Java ones", () => {
@@ -103,7 +104,7 @@ describe("jvmPackageIndex", () => {
       "lib/src/main/kotlin/com/acme/K.kt": '@file:JvmName("K")\npackage com.acme.shared\n',
       "lib/src/main/java/com/acme/J.java": "package com.acme.other;\nclass J {}\n",
     });
-    const index = jvmPackageIndex(workspace);
+    const { byName: index } = jvmPackageIndex(workspace);
     expect(index.get("com.acme.shared")[0].file).toContain(".kt");
     expect(index.get("com.acme.other")[0].file).toContain(".java");
   });
@@ -115,18 +116,37 @@ describe("jvmPackageIndex", () => {
     });
     expect(
       jvmPackageIndex(workspace)
-        .get("shared.pkg")
+        .byName.get("shared.pkg")
         .map((o) => o.project),
     ).toEqual(["a", "b"]);
   });
 
-  it("skips unreadable and default-package files without dropping others", () => {
+  it("records an unreadable .java or .kt as a whole-file failure instead of dropping it", () => {
+    // A file dropped from the index silently would make every import of its
+    // package classify external — a first-party crossing wearing an external
+    // face, the silent direction #374 names. Both extensions, because one
+    // index spans them: a mixed Java/Kotlin module compiles into one package
+    // namespace, so the drop is the same defect whichever half declares the
+    // package. The failure funnels through jvmIndexFailures into the
+    // could-not-complete class instead — the .NET twin's discipline
+    // (`../dotnet/namespaces.test.mjs`).
     const workspace = workspaceOf({
-      "a/Missing.java": null,
+      "a/gone.java": null,
+      "b/vanished.kt": null,
       "a/Default.java": "class D {}\n",
       "a/Known.java": "package a.known;\nclass K {}\n",
     });
-    expect([...jvmPackageIndex(workspace).keys()]).toEqual(["a.known"]);
+    const { byName, failures } = jvmPackageIndex(workspace);
+    // A default-package file still contributes nothing — that skip is a fact
+    // about the file, not a hole in the read.
+    expect([...byName.keys()]).toEqual(["a.known"]);
+    expect(failures).toHaveLength(2);
+    expect(failures.map((failure) => failure.sourceFile).sort()).toEqual([
+      "a/gone.java",
+      "b/vanished.kt",
+    ]);
+    expect(failures.every((failure) => failure.reason.match(/could not be read/))).toBe(true);
+    expect(jvmIndexFailures(workspace)).toEqual(failures);
   });
 });
 

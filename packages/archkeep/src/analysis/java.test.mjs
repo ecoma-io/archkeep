@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { analyzeJava, parseJavaImportSites, resolveJavaDependencies } from "./java.mjs";
+import { jvmIndexFailures } from "./jvm/packages.mjs";
 import { maskJavaComments } from "./jvm/mask.mjs";
 
 /**
@@ -222,6 +223,24 @@ describe("analyzeJava", () => {
     expect(result.failures).toHaveLength(1);
     expect(result.failures[0].line).toBeNull(); // whole-file failure shape
     expect(result.failures[0].reason).toContain("disk exploded");
+  });
+
+  it("answers external rather than throwing when the index cannot read — loudly at the funnel", () => {
+    // #374's shape: a read that returns null (permissions, a broken symlink,
+    // an I/O error) rather than one that throws. The analyzer itself still
+    // answers — external, never a throw — while the unreadable sources
+    // surface as whole-file failures through jvmIndexFailures, which the
+    // command context funnels into the could-not-complete class: the run
+    // never mistakes this workspace for a checked, clean one. The .NET twin
+    // holds the same discipline (`./csharp.test.mjs`).
+    const broken = { ...baseWorkspace(), readFile: () => null };
+    const caller = "package com.acme.app;\nimport com.acme.core.Kernel;\nclass A {}\n";
+    const result = analyzeIn(broken, "packages/acme/src/main/java/com/acme/app/A.java", caller);
+    expect(result.failures).toEqual([]);
+    expect(result.imports[0].resolved.external).toBe(true);
+    const indexFailures = jvmIndexFailures(broken);
+    expect(indexFailures.length).toBeGreaterThan(0);
+    expect(indexFailures.every((failure) => failure.reason.match(/could not be read/))).toBe(true);
   });
 
   it("leaves fully-qualified inline uses unseen — the documented silence", () => {

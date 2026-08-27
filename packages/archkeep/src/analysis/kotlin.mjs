@@ -100,7 +100,7 @@ const importableNameOf = (name) => (name.endsWith(".*") ? name.slice(0, -2) : na
 export function analyzeKotlin({ sourceFile, text, workspace }) {
   const result = emptyResult();
   try {
-    const index = jvmPackageIndex(workspace);
+    const { byName: index } = jvmPackageIndex(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
     for (const site of parseKotlinImportSites(text)) {
       const { line, column } = positionAt(text, site.offset);
@@ -163,7 +163,11 @@ export function analyzeKotlin({ sourceFile, text, workspace }) {
  */
 export function resolveKotlinDependencies(workspace) {
   const { projects, filesOf, readFile } = workspace;
-  const index = jvmPackageIndex(workspace);
+  // The index's read failures are deliberately NOT consumed here, for the
+  // reason `./java.mjs`'s `resolveJavaDependencies` states: this is the
+  // Nx-hook path, which has no failure channel of its own (#364). The CLI
+  // path funnels them through `./jvm/packages.mjs`'s `jvmIndexFailures`.
+  const { byName: index } = jvmPackageIndex(workspace);
   const dependencies = [];
   for (const project of projects) {
     for (const file of filesOf(project.name)) {
