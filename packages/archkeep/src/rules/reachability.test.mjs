@@ -264,3 +264,61 @@ describe("expandIgnoredCircularDependencies", () => {
     expect(ignored.get("a")).toEqual(new Set(["a"]));
   });
 });
+
+describe("getPath canonical iteration", () => {
+  it("returns the same path regardless of edge insertion order", () => {
+    // Build a graph with multiple possible paths, where the choice depends
+    // on iteration order. Test that the path is canonical regardless of
+    // adjacency list construction order.
+    const projectNames = ["zebra", "apple", "middle", "target"];
+
+    // Build graph with one edge insertion order
+    const graph1 = graphOf(projectNames, {
+      zebra: [edge("zebra", "apple"), edge("zebra", "middle")],
+      apple: [edge("apple", "target")],
+      middle: [edge("middle", "target")],
+    });
+    const reach1 = buildReachability(graph1);
+
+    // Build graph with reverse edge insertion order
+    const graph2 = graphOf(projectNames, {
+      zebra: [edge("zebra", "middle"), edge("zebra", "apple")],
+      apple: [edge("apple", "target")],
+      middle: [edge("middle", "target")],
+    });
+    const reach2 = buildReachability(graph2);
+
+    // Get paths from zebra to target
+    const path1 = getPath(reach1, graph1, "zebra", "target");
+    const path2 = getPath(reach2, graph2, "zebra", "target");
+
+    // Both should return the same path (sorted adjacency makes it deterministic)
+    const names1 = path1.map((n) => n.name);
+    const names2 = path2.map((n) => n.name);
+
+    expect(names1).toEqual(names2);
+    // Verify the path is deterministic (both construction orders agree)
+    // The actual path chosen depends on the depth-first search with sorted neighbors
+    // Since queue.pop() is LIFO, the last sorted neighbor gets processed first
+    expect(names1).toEqual(["zebra", "middle", "target"]);
+  });
+
+  it("handles multiple equally valid paths with canonical choice", () => {
+    // When multiple paths of equal length exist, the sorted iteration
+    // chooses deterministically based on neighbor names.
+    const projectNames = ["a", "b", "c", "d"];
+
+    const graph = graphOf(projectNames, {
+      a: [edge("a", "b"), edge("a", "c")],
+      b: [edge("b", "d")],
+      c: [edge("c", "d")],
+    });
+    const reach = buildReachability(graph);
+
+    const path = getPath(reach, graph, "a", "d");
+
+    // With sorted neighbors ['b', 'c'] and LIFO queue.pop(),
+    // 'c' (last) gets processed first, giving path through c
+    expect(path.map((n) => n.name)).toEqual(["a", "c", "d"]);
+  });
+});

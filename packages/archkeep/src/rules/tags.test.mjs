@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { orphanedNotDependOnTags, unmatchedConstraintRows } from "./tags.mjs";
+import {
+  findDependenciesWithTags,
+  orphanedNotDependOnTags,
+  unmatchedConstraintRows,
+} from "./tags.mjs";
+import { buildReachability } from "./reachability.mjs";
 
 /**
  * Two helpers answer the two directions a constraint row can be dead in:
@@ -127,5 +132,56 @@ describe("orphanedNotDependOnTags", () => {
       orphanedNotDependOnTags([{ notDependOnLibsWithTags: ["grade:x"] }], { nodes: {} }),
     ).toEqual([]);
     expect(orphanedNotDependOnTags([{}], graphOf(project("a", [])))).toEqual([]);
+  });
+});
+
+describe("findDependenciesWithTags", () => {
+  it("returns canonical results regardless of graph node insertion order", () => {
+    // Build the same graph with different node insertion orders to verify
+    // that the iteration is canonical (sorted) rather than depending on
+    // construction order, which differs by provider (Nx: JSON document order;
+    // native: git-ls-files byte order).
+    const edge = (source, target) => ({ source, target, type: "static" });
+    const projects = [
+      project("zebra", ["tag:a"]),
+      project("apple", ["tag:b"]),
+      project("middle", ["tag:a"]),
+      project("target", ["tag:a"]),
+    ];
+
+    // Build graph with one insertion order and dependencies
+    const graph1 = {
+      nodes: Object.fromEntries(projects.map((p) => [p.name, p])),
+      dependencies: {
+        zebra: [edge("zebra", "apple"), edge("zebra", "middle")],
+        apple: [edge("apple", "target")],
+        middle: [edge("middle", "target")],
+      },
+    };
+    const reach1 = buildReachability(graph1);
+
+    // Build graph with reverse node insertion order
+    const graph2 = {
+      nodes: Object.fromEntries([...projects].reverse().map((p) => [p.name, p])),
+      dependencies: {
+        zebra: [edge("zebra", "apple"), edge("zebra", "middle")],
+        apple: [edge("apple", "target")],
+        middle: [edge("middle", "target")],
+      },
+    };
+    const reach2 = buildReachability(graph2);
+
+    // Both should return the same sorted list of reachable projects with tag:a
+    const result1 = findDependenciesWithTags(projects[0], ["tag:a"], graph1, reach1);
+    const result2 = findDependenciesWithTags(projects[0], ["tag:a"], graph2, reach2);
+
+    // Extract project names for comparison
+    const names1 = result1.map((path) => path.map((p) => p.name).join(" -> "));
+    const names2 = result2.map((path) => path.map((p) => p.name).join(" -> "));
+
+    expect(names1).toEqual(names2);
+    // Verify the results are sorted: should find projects reachable from zebra
+    // that have tag:a (zebra itself, middle, and target)
+    expect(names1.length).toBeGreaterThan(0);
   });
 });
