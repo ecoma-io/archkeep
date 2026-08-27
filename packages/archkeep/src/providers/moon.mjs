@@ -392,19 +392,92 @@ function deriveTags(projectNode) {
 }
 
 /**
+ * A Moon project `source`'s canonical workspace-relative root, or the reason
+ * it cannot have one.
+ *
+ * `node.source` is the only spelling of a project's location this provider
+ * gets, and every consumer downstream answers by comparing it against
+ * workspace-relative tracked paths — `../analysis/source-util.mjs`'s
+ * `projectOwning` matches `path.startsWith(`${root}/`)`, byte for byte. The
+ * other two providers already hold that discipline: `../workspace.mjs`
+ * normalises Nx's `"."` to `""` at ingestion, and
+ * `./native/model.mjs`'s `declaredProjectViolations` refuses `\`,
+ * leading/trailing slashes and `.`/`..` segments at config load. This
+ * function is the Moon provider's copy of it, applied where Moon's output is
+ * ingested:
+ *
+ * - **normalised** — spellings that provably name the same directory a
+ *   canonical one would: `""` and `"."` (the root project, which Moon has
+ *   spelled both ways) become `""`; a leading `./` and any trailing `/` are
+ *   dropped, so `"./apps/web/"` reads as `"apps/web"`.
+ * - **refused** — everything else, returned as a named problem rather than
+ *   rewritten or kept: a backslash (paths are matched posix-style regardless
+ *   of platform), a leading `/` (absolute — a directory outside the
+ *   workspace), a `.`/`..` segment, an empty `//` segment, or a non-string.
+ *   A root that matches no tracked path's spelling makes its project own
+ *   nothing, silently — `projectOwning` cannot report a miss it structurally
+ *   cannot see (#367) — so the spelling is refused loudly instead.
+ *
+ * @param {unknown} source A project node's `source` from
+ *   `moon project-graph --json`.
+ * @returns {{root: string, problem: null}|{root: null, problem: string}}
+ */
+function canonicalMoonRoot(source) {
+  if (typeof source !== "string") {
+    return {
+      root: null,
+      problem: `must be a string, got ${typeof source} (${JSON.stringify(source) ?? String(source)})`,
+    };
+  }
+  let spelling = source;
+  while (spelling.startsWith("./")) spelling = spelling.slice(2);
+  while (spelling.endsWith("/")) spelling = spelling.slice(0, -1);
+  if (spelling === "" || spelling === ".") return { root: "", problem: null };
+  if (spelling.includes("\\")) {
+    return {
+      root: null,
+      problem:
+        `'${source}' must use forward slashes — this tool matches paths posix-style ` +
+        "regardless of the platform the tree is checked out on",
+    };
+  }
+  if (spelling.startsWith("/")) {
+    return {
+      root: null,
+      problem: `'${source}' must be workspace-relative — a leading slash names a directory outside the workspace`,
+    };
+  }
+  for (const segment of spelling.split("/")) {
+    if (segment === "." || segment === "..") {
+      return {
+        root: null,
+        problem: `'${source}' must be a canonical path — no '.' or '..' segment`,
+      };
+    }
+    if (segment === "") {
+      return {
+        root: null,
+        problem: `'${source}' must be a canonical path — no empty '//' segment`,
+      };
+    }
+  }
+  return { root: spelling, problem: null };
+}
+
+/**
  * Infers `workspaceLayout` from the source paths of Moon's projects.
  *
  * Moon does not declare `appsDir`/`libsDir` — there is no `nx.json`-style
- * `workspaceLayout` key. This function examines each project's `source`
- * (workspace-relative root) and checks for a common directory prefix shared
- * by all projects of the same `layer`:
- * - `application`-layer projects whose sources all share a prefix → `appsDir`
- * - `library`-layer projects whose sources all share a prefix → `libsDir`
+ * `workspaceLayout` key. This function examines each project's canonical
+ * root (`canonicalMoonRoot`'s answer, not Moon's raw spelling) and checks for
+ * a common directory prefix shared by all projects of the same `layer`:
+ * - `application`-layer projects whose roots all share a prefix → `appsDir`
+ * - `library`-layer projects whose roots all share a prefix → `libsDir`
  *
- * A project at the workspace ROOT contributes to neither. Its `source` is
- * `"."` (or, on some Moon versions, `""`), whose top segment names no
- * directory the workspace keeps apps or libs in — see the guard in the loop
- * below for what inferring one from it would do.
+ * A project at the workspace ROOT contributes to neither: its canonical root
+ * is `""` (whatever spelling Moon used for it), which names no directory the
+ * workspace keeps apps or libs in — see the guard in the loop below for what
+ * inferring one from it would do.
  *
  * A prefix is "shared" when every project of that layer starts with the same
  * top-level directory. If no consistent prefix exists, that key is omitted
@@ -419,27 +492,31 @@ function deriveTags(projectNode) {
  * is returned for the same reason.
  *
  * @param {object[]} projectNodes Project nodes from Moon's `data` map values.
+ * @param {Map<string, string>} rootById Each accepted project's canonical
+ *   root, the map `transformMoonGraph` builds — the same spelling the built
+ *   node carries in `data.root`, so the layout this infers and the graph it
+ *   ships cannot disagree about where a project lives.
  * @returns {{appsDir: string, libsDir: string}|null}
  */
-function inferWorkspaceLayout(projectNodes) {
+function inferWorkspaceLayout(projectNodes, rootById) {
   const appDirs = new Set();
   const libDirs = new Set();
   for (const node of projectNodes) {
-    if (!node.source) continue;
-    const topDir = node.source.split("/")[0];
-    // A source that names no directory BELOW the workspace root contributes no
-    // prefix. Moon spells the root project's source `"."`, and
-    // `".".split("/")[0]` is `"."` — which infers `appsDir: "."` and makes
+    const root = rootById.get(node.id);
+    // `undefined` is a node the transform did not accept; `""` is the
+    // workspace root itself. Either way it names no directory BELOW the
+    // workspace root, and inferring `appsDir: "."` from one would make
     // `../rules/specifiers.mjs`'s `isAbsoluteImportIntoAnotherProject` test
     // `imp.startsWith("./")`: EVERY ordinary relative import in the workspace
     // reported as an absolute import into another project, from one
-    // root-level `moon.yml`. The guard is on the resolved top SEGMENT rather
-    // than on `source` itself, so every spelling that lands there — `"."`,
-    // `"./"`, `"./apps/web"`, a leading `/` — is covered by one test instead
-    // of a list the next spelling escapes. Excluding a root project can only
-    // leave a prefix set empty, which returns the incomplete layout `null`
-    // above and falls back to the complete default: the loud direction.
-    if (topDir === "" || topDir === "." || topDir === "..") continue;
+    // root-level `moon.yml`. Every other spelling has been refused by
+    // `canonicalMoonRoot` before it reaches here, so no `.`/`..`/empty top
+    // segment can land in a prefix — one test on the canonical root covers
+    // the whole vocabulary. Excluding a root project can only leave a prefix
+    // set empty, which returns the incomplete layout `null` below and falls
+    // back to the complete default: the loud direction.
+    if (root === undefined || root === "") continue;
+    const topDir = root.split("/")[0];
     if (node.layer === "application") appDirs.add(topDir);
     else if (node.layer === "library") libDirs.add(topDir);
   }
@@ -479,10 +556,12 @@ function inferWorkspaceLayout(projectNodes) {
  * prototype rather than adding an entry — silent, and exactly the shape
  * `../../../AGENTS.md`'s invariant refuses.
  *
+ * **Two disciplines meet here, and both must refuse rather than drop.**
+ *
  * **Anomalous output is refused loudly, never skipped** (#365) — the same
  * posture `./native/discover.mjs` holds for the native provider's graph:
  * collect every anomaly, throw once naming each. A `data` entry that is not a
- * project node (no `id`, or no `source` string), one project `id` claimed by
+ * project node (no `id`, or no `source` at all), one project `id` claimed by
  * two entries, and an edge or declared dependency naming a project the graph
  * does not contain, would each drop a project or an edge from the graph
  * silently — a graph judged over less than the tree, byte-for-byte identical
@@ -508,9 +587,20 @@ function inferWorkspaceLayout(projectNodes) {
  * vanishing a hand-declared edge — the #262 defect shape, reached through a
  * typo'd id.
  *
+ * On top of that, each node's `data.root` is the `source`'s CANONICAL
+ * spelling (`canonicalMoonRoot`, #367), never Moon's raw one — and a `source`
+ * with no canonical spelling (a backslash, a leading `/`, a `.`/`..`/empty
+ * `//` segment, a non-string) refuses the transform before any graph is
+ * built, because a root that matches no tracked path's spelling makes its
+ * project own nothing silently. Unlike an anomaly, which is collected and
+ * thrown with the rest at the end, this refusal is its own throw naming every
+ * offending project and spelling — a distinct failure class.
+ *
  * @param {object} raw The parsed JSON from `moon project-graph --json`.
  * @returns {{nodes: Record<string, object>, dependencies: Record<string, object[]>, workspaceLayout?: object}}
- * @throws {Error} naming every anomaly at once when the payload carries any.
+ * @throws {Error} naming every anomaly at once when the payload carries any,
+ *   and separately when any project's `source` cannot be read as a
+ *   workspace-relative root, naming every offending project and spelling.
  */
 export function transformMoonGraph(raw) {
   if (!raw?.data) {
@@ -576,12 +666,22 @@ export function transformMoonGraph(raw) {
   /** @type {Map<string, {key: string, source: string}>} */
   const firstClaimOf = new Map();
   const projectNodes = Object.values(raw.data);
+  /**
+   * Each accepted project's canonical workspace-relative root — the one
+   * spelling the built node, `inferWorkspaceLayout` and every consumer after
+   * them judge by (`canonicalMoonRoot`'s answer, never Moon's raw spelling).
+   *
+   * @type {Map<string, string>}
+   */
+  const rootById = new Map();
+  /** @type {string[]} */
+  const rootProblems = [];
   for (const [key, node] of Object.entries(raw.data)) {
     if (typeof node?.id !== "string" || node.id === "") {
       anomalies.push(`data entry ${key} carries no id — it names no project`);
       continue;
     }
-    if (typeof node?.source !== "string") {
+    if (node?.source == null) {
       anomalies.push(`data entry ${key} ('${node.id}') carries no source path`);
       continue;
     }
@@ -594,6 +694,15 @@ export function transformMoonGraph(raw) {
       continue;
     }
     firstClaimOf.set(node.id, { key, source: node.source });
+    // #367 — the source is now a confirmed string: canonicalise it to the
+    // workspace-relative root, and refuse (as a rootProblem) any spelling
+    // that has no canonical form rather than let the project own nothing.
+    const canonical = canonicalMoonRoot(node.source);
+    if (canonical.problem !== null) {
+      rootProblems.push(`  ${node.id}: ${canonical.problem}`);
+      continue;
+    }
+    rootById.set(node.id, canonical.root);
     const tags = deriveTags(node);
     // Nx's `implicitDependencies` is the hand-declared list — so it is Moon's
     // `"explicit"` dependencies that belong here, not its `"implicit"` ones.
@@ -606,7 +715,7 @@ export function transformMoonGraph(raw) {
       name: node.id,
       type: nodeTypeFromLayer(node.layer),
       data: {
-        root: node.source,
+        root: canonical.root,
         tags,
         implicitDependencies: implicitDeps,
         ...(taskTargets.length > 0
@@ -624,6 +733,21 @@ export function transformMoonGraph(raw) {
           : {}),
       },
     };
+  }
+
+  // A source with no canonical spelling refuses the whole transform, naming
+  // every project and every spelling: a root that matches no tracked path's
+  // spelling makes its project own nothing, silently (#367) — the forbidden
+  // direction. Downstream, this throw is the CLI's exit 3 and the language
+  // server's named index gap, never an empty-looking graph.
+  if (rootProblems.length > 0) {
+    throw new Error(
+      "archkeep: `moon project-graph --json` emitted project sources this tool " +
+        "cannot read as workspace-relative roots:\n" +
+        rootProblems.join("\n") +
+        "\nA project whose root matches no tracked path owns nothing, with nothing " +
+        "naming why — refusing instead.",
+    );
   }
 
   // Build dependencies from Moon's graph edges. The scope check runs FIRST:
@@ -684,7 +808,7 @@ export function transformMoonGraph(raw) {
     );
   }
 
-  const workspaceLayout = inferWorkspaceLayout(projectNodes);
+  const workspaceLayout = inferWorkspaceLayout(projectNodes, rootById);
   return workspaceLayout === null
     ? { nodes, dependencies }
     : { nodes, dependencies, workspaceLayout };

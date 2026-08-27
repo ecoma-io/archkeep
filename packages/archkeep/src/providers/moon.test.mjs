@@ -343,6 +343,131 @@ describe("transformMoonGraph — node construction", () => {
   });
 });
 
+// #367 — `node.source` used to become `data.root` verbatim. Every consumer
+// answers by comparing that root against workspace-relative tracked paths
+// (`projectOwning`'s `path.startsWith(`${root}/`)`, byte for byte), so a
+// spelling like `./apps/web` made the project own NOTHING — a hole
+// byte-for-byte identical to a clean workspace, the forbidden direction. The
+// two disciplines pinned below are the ones the other two providers already
+// apply (`../workspace.mjs` normalises Nx's `.` to `""`;
+// `./native/model.mjs` refuses bad spellings at config load): normalise the
+// normalisable, refuse the rest loudly, and let #369's `projectOwning`
+// rewrite assume canonical roots.
+describe("transformMoonGraph — root spelling discipline (#367)", () => {
+  it("normalises './apps/web' to 'apps/web', so the project OWNS its files", () => {
+    const raw = twoProjectGraph();
+    raw.data["0"].source = "./apps/web";
+    const graph = transformMoonGraph(raw);
+    expect(graph.nodes.web.data.root).toBe("apps/web");
+    // The half that makes this a fix rather than a cosmetic rewrite: files
+    // under apps/web/ are attributed to web. Before the fix the root stayed
+    // './apps/web', no tracked path starts with that spelling, and
+    // `createWorkspace` dropped every web file as unowned — silently.
+    const { filesByProject, owned } = createWorkspace({
+      root: "/ws",
+      graph,
+      files: ["apps/web/src/main.ts", "libs/api/src/index.ts", "README.md"],
+    });
+    expect(filesByProject.get("web")).toEqual(["apps/web/src/main.ts"]);
+    expect(owned).toEqual([
+      { file: "apps/web/src/main.ts", project: "web" },
+      { file: "libs/api/src/index.ts", project: "api" },
+    ]);
+  });
+
+  it('normalises the root project\'s "." and "./" spellings to ""', () => {
+    for (const source of [".", "./", "././"]) {
+      const raw = twoProjectGraph();
+      raw.data["0"].source = source;
+      expect(transformMoonGraph(raw).nodes.web.data.root).toBe("");
+    }
+  });
+
+  it("normalises a trailing slash", () => {
+    const raw = twoProjectGraph();
+    raw.data["0"].source = "./apps/web/";
+    expect(transformMoonGraph(raw).nodes.web.data.root).toBe("apps/web");
+  });
+
+  it("reads workspaceLayout from the canonical root, not Moon's spelling", () => {
+    // Before the fix, './services/web' was skipped by the layout guard (its
+    // raw top segment was '.'), the app axis fell back to the DEFAULT 'apps',
+    // and a services/ workspace was silently judged against the wrong layout.
+    // Canonicalising first makes the inferred layout the real one.
+    const raw = twoProjectGraph();
+    raw.data["0"].source = "./services/web";
+    raw.data["1"].source = "packages/api";
+    expect(transformMoonGraph(raw).workspaceLayout).toEqual({
+      appsDir: "services",
+      libsDir: "packages",
+    });
+  });
+
+  it("refuses a backslash spelling, naming the project and the source", () => {
+    const raw = twoProjectGraph();
+    raw.data["0"].source = "apps\\web";
+    expect(() => transformMoonGraph(raw)).toThrow(/web: 'apps\\web' must use forward slashes/u);
+  });
+
+  it("refuses an absolute source", () => {
+    const raw = twoProjectGraph();
+    raw.data["0"].source = "/apps/web";
+    expect(() => transformMoonGraph(raw)).toThrow(/web: '\/apps\/web' must be workspace-relative/u);
+  });
+
+  it("refuses a '..' segment", () => {
+    const raw = twoProjectGraph();
+    raw.data["0"].source = "../apps/web";
+    expect(() => transformMoonGraph(raw)).toThrow(
+      /web: '\.\.\/apps\/web' must be a canonical path — no '\.' or '\.\.' segment/u,
+    );
+  });
+
+  it("refuses an empty '//' segment", () => {
+    const raw = twoProjectGraph();
+    raw.data["0"].source = "apps//web";
+    expect(() => transformMoonGraph(raw)).toThrow(
+      /web: 'apps\/\/web' must be a canonical path — no empty '\/\/' segment/u,
+    );
+  });
+
+  it("refuses a non-string source, naming what arrived", () => {
+    const raw = twoProjectGraph();
+    /** @type {any} */ (raw.data["0"]).source = 42;
+    expect(() => transformMoonGraph(raw)).toThrow(/web: must be a string, got number/u);
+  });
+
+  it("names every offending project in one refusal", () => {
+    const raw = twoProjectGraph();
+    raw.data["0"].source = "/apps/web";
+    raw.data["1"].source = "libs\\api";
+    /** @type {unknown} */ let thrown;
+    try {
+      transformMoonGraph(raw);
+    } catch (error) {
+      thrown = error;
+    }
+    const message = String(/** @type {Error} */ (thrown).message);
+    expect(message).toContain("web: '/apps/web'");
+    expect(message).toContain("api: 'libs\\api'");
+    // The reason a consumer is being stopped, not just the spellings.
+    expect(message).toContain("owns nothing");
+  });
+
+  it("still refuses when the offending project is the only one", () => {
+    // The minimum silent-hole case: one project, one bad root — refusing must
+    // not depend on a well-formed project being present too.
+    const raw = twoProjectGraph();
+    delete raw.data["1"];
+    raw.graph.nodes = [0];
+    raw.graph.edges = [];
+    raw.data["0"].source = "././../web";
+    // The refusal names Moon's ORIGINAL spelling, not the half-stripped one —
+    // what a consumer greps their output for is what Moon actually emitted.
+    expect(() => transformMoonGraph(raw)).toThrow(/web: '\.\/\.\/\.\.\/web'/u);
+  });
+});
+
 describe("transformMoonGraph — tag derivation", () => {
   it("merges config.tags, layer, and stack into sorted tags", () => {
     const result = transformMoonGraph(twoProjectGraph());
@@ -903,9 +1028,12 @@ describe("transformMoonGraph — workspaceLayout inference", () => {
   it("never carries `.` as a directory, whichever way a project spells a root-level source", () => {
     // The property, not one string: any spelling whose top segment is not a
     // real directory below the root must be unable to reach the layout. A
-    // future spelling that slips through has to go red here.
+    // future spelling that slips through has to go red here. Spellings with
+    // no canonical form at all ('/apps/web', 'apps//web', …) never get this
+    // far — the transform refuses them, pinned in the root-spelling describe
+    // above — so this loop covers exactly the spellings that normalise.
     for (const layer of ["application", "library"]) {
-      for (const source of [".", "./", "./apps/web", "/apps/web"]) {
+      for (const source of [".", "./", "././", "./apps/web"]) {
         const layout = transformMoonGraph(withRootProject(layer, source)).workspaceLayout;
         expect(Object.values(layout ?? {})).not.toContain(".");
         expect(Object.values(layout ?? {})).not.toContain("");
