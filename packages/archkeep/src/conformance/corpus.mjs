@@ -1360,6 +1360,153 @@ export const ARCHITECTURE_CORPUS = [
     ],
   },
 
+  // ------------------------------------------- layered architecture (Maven reactor)
+  {
+    id: "layered-architecture-in-maven",
+    style: "layered (relaxed)",
+    languages: ["java"],
+    intent:
+      "The relaxed layering of `layered-architecture-in-java`, restated over a root-parent Maven reactor: the parent pom sits at the workspace root while the children sit two levels deep, so the default ../pom.xml holds nothing and the parent resolves by coordinates across the tracked poms — the exact shape that refused the whole run before that fallback existed (#372). No child declares a groupId of its own; every identity below the reactor inherits through that root parent, and the manifest edges between children draw through the same inherited coordinates.",
+    projects: [
+      { name: "reactor", root: "", tags: [] },
+      { name: "m-domain", root: "libs/m-domain", tags: ["layer:domain"] },
+      { name: "m-usecase", root: "libs/m-usecase", tags: ["layer:usecase"] },
+      { name: "m-adapter", root: "libs/m-adapter", tags: ["layer:adapter"] },
+      { name: "m-util", root: "libs/m-util", tags: [] },
+    ],
+    depConstraints: [
+      { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+      { sourceTag: "layer:usecase", onlyDependOnLibsWithTags: ["layer:domain", "layer:usecase"] },
+      {
+        sourceTag: "layer:adapter",
+        onlyDependOnLibsWithTags: ["layer:domain", "layer:usecase", "layer:adapter"],
+        bannedExternalImports: ["vendor.test.shellsdk*"],
+      },
+    ],
+    files: {
+      "pom.xml": [
+        "<project>",
+        "  <groupId>com.corpus</groupId>",
+        "  <artifactId>reactor</artifactId>",
+        "  <version>1.0.0</version>",
+        "  <packaging>pom</packaging>",
+        "  <modules>",
+        "    <module>libs/m-domain</module>",
+        "    <module>libs/m-usecase</module>",
+        "    <module>libs/m-adapter</module>",
+        "    <module>libs/m-util</module>",
+        "  </modules>",
+        "</project>",
+      ].join("\n"),
+      "libs/m-domain/pom.xml": [
+        "<project>",
+        "  <parent><groupId>com.corpus</groupId><artifactId>reactor</artifactId></parent>",
+        "  <artifactId>m-domain</artifactId>",
+        "</project>",
+      ].join("\n"),
+      "libs/m-usecase/pom.xml": [
+        "<project>",
+        "  <parent><groupId>com.corpus</groupId><artifactId>reactor</artifactId></parent>",
+        "  <artifactId>m-usecase</artifactId>",
+        "  <dependencies>",
+        "    <dependency><groupId>com.corpus</groupId><artifactId>m-domain</artifactId></dependency>",
+        "  </dependencies>",
+        "</project>",
+      ].join("\n"),
+      "libs/m-adapter/pom.xml": [
+        "<project>",
+        "  <parent><groupId>com.corpus</groupId><artifactId>reactor</artifactId></parent>",
+        "  <artifactId>m-adapter</artifactId>",
+        "  <dependencies>",
+        "    <dependency><groupId>com.corpus</groupId><artifactId>m-domain</artifactId></dependency>",
+        "  </dependencies>",
+        "</project>",
+      ].join("\n"),
+      "libs/m-util/pom.xml": [
+        "<project>",
+        "  <parent><groupId>com.corpus</groupId><artifactId>reactor</artifactId></parent>",
+        "  <artifactId>m-util</artifactId>",
+        "</project>",
+      ].join("\n"),
+      "libs/m-domain/src/main/java/test/corpus/maven/domain/Policy.java":
+        "package test.corpus.maven.domain;\n\nclass Policy {}\n",
+      "libs/m-usecase/src/main/java/test/corpus/maven/usecase/Service.java":
+        "package test.corpus.maven.usecase;\n\nimport test.corpus.maven.domain.Policy;\nimport test.corpus.maven.adapter.Repo;\n\nclass Service { Policy p; Repo r; }\n",
+      "libs/m-usecase/src/main/java/test/corpus/maven/usecase/Sdk.java":
+        "package test.corpus.maven.usecase;\n\nimport vendor.test.shellsdk.Shell;\n\nclass Sdk { Shell shell; }\n",
+      "libs/m-adapter/src/main/java/test/corpus/maven/adapter/Repo.java":
+        "package test.corpus.maven.adapter;\n\nimport test.corpus.maven.domain.Policy;\nimport test.corpus.maven.adapter.internal.Store;\n\nclass Repo { Policy p; Store store; }\n",
+      "libs/m-adapter/src/main/java/test/corpus/maven/adapter/internal/Store.java":
+        "package test.corpus.maven.adapter.internal;\n\nclass Store {}\n",
+      "libs/m-adapter/src/main/java/test/corpus/maven/adapter/Gateway.java":
+        "package test.corpus.maven.adapter;\n\nimport test.corpus.maven.adapter.internal.Store;\nimport vendor.test.shellsdk.Shell;\n\nclass Gateway { Store store; Shell shell; }\n",
+      "libs/m-util/src/main/java/test/corpus/maven/util/Clock.java":
+        "package test.corpus.maven.util;\n\nimport test.corpus.maven.domain.Policy;\n\nclass Clock { Policy p; }\n",
+    },
+    probes: [
+      {
+        file: "libs/m-domain/src/main/java/test/corpus/maven/domain/Policy.java",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why: "The innermost layer importing nothing — recorded so the case's zero-finding claim about this file is a measurement, not an omission.",
+      },
+      {
+        file: "libs/m-usecase/src/main/java/test/corpus/maven/usecase/Service.java",
+        imports: 2,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "test.corpus.maven.adapter.Repo",
+            target: "m-adapter",
+          },
+        ],
+        denyAll: 2,
+        why: "One crossing the layering permits beside one it forbids, in one import list — the domain import must stay silent while the outward adapter import reports.",
+      },
+      {
+        file: "libs/m-usecase/src/main/java/test/corpus/maven/usecase/Sdk.java",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The same external SDK the adapter layer is banned from, imported by a layer no ban row names — a dotted external ban binds the tag that carries it and nothing else.",
+      },
+      {
+        file: "libs/m-adapter/src/main/java/test/corpus/maven/adapter/Repo.java",
+        imports: 2,
+        reports: [],
+        denyAll: 1,
+        why: "Both imports point inward (domain and internal store), so the adapter's own tag row permits every edge here — the internal one resolves to its own project and stays invisible even under deny-all.",
+      },
+      {
+        file: "libs/m-adapter/src/main/java/test/corpus/maven/adapter/Gateway.java",
+        imports: 2,
+        reports: [
+          {
+            messageId: "bannedExternalImportsViolation",
+            specifier: "vendor.test.shellsdk.Shell",
+            target: "npm:vendor.test.shellsdk.Shell",
+          },
+        ],
+        denyAll: 1,
+        why: "The adapter layer's external ban fires here: the shell SDK is prohibited for layer:adapter, while the internal store import resolves to its own project and stays silent.",
+      },
+      {
+        file: "libs/m-util/src/main/java/test/corpus/maven/util/Clock.java",
+        imports: 1,
+        reports: [
+          {
+            messageId: "projectWithoutTagsCannotHaveDependencies",
+            specifier: "test.corpus.maven.domain.Policy",
+            target: "m-domain",
+          },
+        ],
+        denyAll: 1,
+        why: "A project no constraint row matches is an error, not a permission — the reactor parent at the root anchors a project too, but owns no import site, so the untagged row judges only this file's crossing.",
+      },
+    ],
+  },
+
   // ------------------------------------------------ peer cycles (Java)
   {
     id: "peer-cycles-in-java",
