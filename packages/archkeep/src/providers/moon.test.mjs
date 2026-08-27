@@ -602,13 +602,12 @@ describe("transformMoonGraph — edge type from scope", () => {
     expect(result.dependencies.web).toBeUndefined();
   });
 
-  it("skips an edge whose two ends are the same project", () => {
-    // A self-loop is not a dependency between projects.
+  it("refuses an edge whose two ends are the same project, naming the self-edge", () => {
+    // A self-loop is not a dependency between projects and is now refused loudly.
     const raw = twoProjectGraph();
     raw.graph.edges = [[0, 0, "production"]];
     raw.data["0"].dependencies = [];
-    const result = transformMoonGraph(raw);
-    expect(result.dependencies.web).toBeUndefined();
+    expect(() => transformMoonGraph(raw)).toThrow(/self-edge \[web, web\]/u);
   });
 
   it("does not read a graph that carries no edges array", () => {
@@ -665,12 +664,14 @@ describe("transformMoonGraph — edge type from scope", () => {
     expect(result.dependencies.api).toBeUndefined();
   });
 
-  it("skips a dependency record that names no project", () => {
+  it("refuses a dependency record that names no project, naming the project and the missing id", () => {
+    // A dependency record with no id is anomalous and is now refused loudly.
     const raw = twoProjectGraph();
     raw.graph.edges = [];
     /** @type {any} */ (raw.data["0"]).dependencies = [{ scope: "production", source: "explicit" }];
-    const result = transformMoonGraph(raw);
-    expect(result.dependencies.web).toBeUndefined();
+    expect(() => transformMoonGraph(raw)).toThrow(
+      /project 'web' has a dependency record with no id/u,
+    );
   });
 
   it("refuses a declared dependency naming a project the graph does not contain, naming both", () => {
