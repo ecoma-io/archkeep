@@ -239,9 +239,7 @@ describe("resolveJavaDependencies", () => {
     // The fixture index files declare no imports of their own, so a tree
     // without callers holds no edges — the empty answer is about coverage,
     // not absence of the resolver.
-    expect(
-      resolveJavaDependencies(workspace.projects, workspace.filesOf, workspace.readFile),
-    ).toEqual([]);
+    expect(resolveJavaDependencies(workspace)).toEqual([]);
 
     const tree = {
       "packages/acme/src/main/java/com/acme/app/App.java":
@@ -254,7 +252,7 @@ describe("resolveJavaDependencies", () => {
         "package com.acme.util;\nclass Strings {}\n",
     };
     const ws2 = workspaceOf(tree);
-    const edges = resolveJavaDependencies(ws2.projects, ws2.filesOf, ws2.readFile);
+    const edges = resolveJavaDependencies(ws2);
     expect(edges).toEqual([
       {
         source: "acme",
@@ -279,6 +277,6 @@ describe("resolveJavaDependencies", () => {
         "package com.acme.util;\nimport shared.thing.W;\nclass C {}\n",
     };
     const ws = workspaceOf(tree);
-    expect(resolveJavaDependencies(ws.projects, ws.filesOf, ws.readFile)).toEqual([]);
+    expect(resolveJavaDependencies(ws)).toEqual([]);
   });
 });

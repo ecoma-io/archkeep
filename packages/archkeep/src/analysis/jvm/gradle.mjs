@@ -446,15 +446,19 @@ export const gradleModelOf = perWorkspace(buildGradleModel);
  * that fail to resolve draw nothing here — the failure list has already
  * named them loudly, and the CLI turns that into exit 3.
  *
- * @param {{ name: string, root: string }[]} projects
- * @param {(name: string) => string[]} filesOf
- * @param {(path: string) => string|null} readFile
+ * Takes ONE workspace-shaped object (`{ projects, filesOf, readFile }`) rather
+ * than the positional triple, because the model is memoized on that object:
+ * the caller's one object — shared with the source-track resolvers and with
+ * `gradleManifestFailures` — is what keeps the whole model at one parse per
+ * run (#363).
+ *
+ * @param {object} workspace `{ projects, filesOf(name), readFile(path), root? }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
  */
-export function resolveGradleDependencies(projects, filesOf, readFile) {
-  const model = gradleModelOf({ projects, filesOf, readFile });
+export function resolveGradleDependencies(workspace) {
+  const model = gradleModelOf(workspace);
   const projectByDirectory = new Map(
-    projects.map((project) => [normalizePath(project.root ?? "", ""), project]),
+    workspace.projects.map((project) => [normalizePath(project.root ?? "", ""), project]),
   );
   const dependencies = [];
 

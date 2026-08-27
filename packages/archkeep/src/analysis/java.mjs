@@ -46,13 +46,7 @@
 import { maskJavaComments } from "./jvm/mask.mjs";
 import { jvmPackageIndex } from "./jvm/packages.mjs";
 import { resolveJvmSpecifier } from "./jvm/resolve.mjs";
-import {
-  emptyResult,
-  fileFailure,
-  perWorkspace,
-  positionAt,
-  projectOwning,
-} from "./source-util.mjs";
+import { emptyResult, fileFailure, positionAt, projectOwning } from "./source-util.mjs";
 
 /**
  * Every import in a `.java` file, in source order and WITHOUT deduplication —
@@ -123,13 +117,6 @@ function importableNameOf(staticKeyword, name) {
 }
 
 /**
- * The workspace's package index, built once per workspace object — the same
- * map the graph resolver below reads, so both layers share one answer about
- * who owns a name.
- */
-const jvmIndexOf = perWorkspace(jvmPackageIndex);
-
-/**
  * Analyzes one `.java` file.
  *
  * An ambiguous package (two tracked projects declaring the same deepest
@@ -138,13 +125,17 @@ const jvmIndexOf = perWorkspace(jvmPackageIndex);
  * violations against a guess. Intra-project imports are emitted as records
  * (`contract.md`), with `spelling.relative` true exactly there.
  *
+ * The package index arrives through `jvmPackageIndex` — already memoized per
+ * workspace object — so one whole-tree run builds it once however many files
+ * ask, and the graph resolver below reads the same map through the same memo.
+ *
  * @param {{ sourceFile: string, text: string, workspace: object }} request
  * @returns {{ imports: object[], failures: object[] }}
  */
 export function analyzeJava({ sourceFile, text, workspace }) {
   const result = emptyResult();
   try {
-    const index = jvmIndexOf(workspace);
+    const index = jvmPackageIndex(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
     for (const site of parseJavaImportSites(text)) {
       const { line, column } = positionAt(text, site.offset);
@@ -204,21 +195,21 @@ export function analyzeJava({ sourceFile, text, workspace }) {
  * source-truth half of the two-track principle. `resolveMavenDependencies`
  * owns the manifest half; neither replaces the other.
  *
- * `projects`: [{ name, root }]; `filesOf(name)`: workspace-relative paths of
- * a project's tracked files; `readFile(path)`: contents or null. Returns raw
- * Nx dependencies ({ source, target, sourceFile, type: "static" }). Ambiguous
- * names draw no edge — analysis reports them loudly instead, and an edge
- * against a guess would be worse than the missing one.
+ * Takes ONE workspace-shaped object (`{ projects, filesOf, readFile }`) rather
+ * than the positional triple: the package index is memoized on that object,
+ * so the caller's one object — shared with `analyzeJava`, the Kotlin resolver
+ * and the manifest resolvers — is what makes the index build once per run
+ * instead of once per call site (#363). Returns raw Nx dependencies
+ * ({ source, target, sourceFile, type: "static" }). Ambiguous names draw no
+ * edge — analysis reports them loudly instead, and an edge against a guess
+ * would be worse than the missing one.
  *
- * @param {{ name: string, root: string }[]} projects
- * @param {(name: string) => string[]} filesOf
- * @param {(path: string) => string|null} readFile
+ * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
  */
-export function resolveJavaDependencies(projects, filesOf, readFile) {
-  // One workspace-shaped object so the index builds once for this run; a
-  // fresh object per call simply gets no reuse, never a stale answer.
-  const index = jvmPackageIndex({ projects, filesOf, readFile });
+export function resolveJavaDependencies(workspace) {
+  const { projects, filesOf, readFile } = workspace;
+  const index = jvmPackageIndex(workspace);
   const dependencies = [];
   for (const project of projects) {
     for (const file of filesOf(project.name)) {

@@ -31,13 +31,7 @@
 import { maskKotlinComments } from "./jvm/mask.mjs";
 import { jvmPackageIndex } from "./jvm/packages.mjs";
 import { resolveJvmSpecifier } from "./jvm/resolve.mjs";
-import {
-  emptyResult,
-  fileFailure,
-  perWorkspace,
-  positionAt,
-  projectOwning,
-} from "./source-util.mjs";
+import { emptyResult, fileFailure, positionAt, projectOwning } from "./source-util.mjs";
 
 /** One identifier segment: backtick-quoted (any non-backtick content) or a plain identifier. */
 const KOTLIN_SEGMENT = String.raw`(?:` + "`[^`\\n]*`" + String.raw`|[\p{L}_$][\p{L}\p{Nd}_$]*)`;
@@ -89,13 +83,15 @@ export function parseKotlinImportSites(kotlinText) {
  */
 const importableNameOf = (name) => (name.endsWith(".*") ? name.slice(0, -2) : name);
 
-const jvmIndexOf = perWorkspace(jvmPackageIndex);
-
 /**
  * Analyzes one `.kt`/`.kts` file. Ambiguity resolves to null WITH a
  * positioned failure naming every claimant, exactly as Java's does — the
  * split-package rule cannot know which compiler unit order would win, and
  * neither will this reader pretend to.
+ *
+ * The package index arrives through `jvmPackageIndex` — already memoized per
+ * workspace object — so one whole-tree run builds it once however many files
+ * ask, and the graph resolver below reads the same map through the same memo.
  *
  * @param {{ sourceFile: string, text: string, workspace: object }} request
  * @returns {{ imports: object[], failures: object[] }}
@@ -103,7 +99,7 @@ const jvmIndexOf = perWorkspace(jvmPackageIndex);
 export function analyzeKotlin({ sourceFile, text, workspace }) {
   const result = emptyResult();
   try {
-    const index = jvmIndexOf(workspace);
+    const index = jvmPackageIndex(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
     for (const site of parseKotlinImportSites(text)) {
       const { line, column } = positionAt(text, site.offset);
@@ -155,15 +151,17 @@ export function analyzeKotlin({ sourceFile, text, workspace }) {
 /**
  * Static edges between JVM projects derived from written Kotlin imports —
  * the same source-truth track `resolveJavaDependencies` runs, one namespace
- * over.
+ * over. Takes ONE workspace-shaped object for the same reason it does: the
+ * package index is memoized on that object, so the caller's one object —
+ * shared with `analyzeKotlin`, the Java resolver and the manifest resolvers —
+ * is what makes the index build once per run (#363).
  *
- * @param {{ name: string, root: string }[]} projects
- * @param {(name: string) => string[]} filesOf
- * @param {(path: string) => string|null} readFile
+ * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
  */
-export function resolveKotlinDependencies(projects, filesOf, readFile) {
-  const index = jvmPackageIndex({ projects, filesOf, readFile });
+export function resolveKotlinDependencies(workspace) {
+  const { projects, filesOf, readFile } = workspace;
+  const index = jvmPackageIndex(workspace);
   const dependencies = [];
   for (const project of projects) {
     for (const file of filesOf(project.name)) {

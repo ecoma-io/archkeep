@@ -497,13 +497,17 @@ export const mavenModelOf = perWorkspace(buildMavenModel);
  * equal another project's SOLE identity. Collisions draw nothing here — the
  * failure list has already named them loudly.
  *
- * @param {{ name: string, root: string }[]} projects
- * @param {(name: string) => string[]} filesOf
- * @param {(path: string) => string|null} readFile
+ * Takes ONE workspace-shaped object (`{ projects, filesOf, readFile }`) rather
+ * than the positional triple, because the model is memoized on that object:
+ * the caller's one object — shared with the source-track resolvers and with
+ * `mavenManifestFailures` — is what keeps the whole model at one parse per
+ * run (#363).
+ *
+ * @param {object} workspace `{ projects, filesOf(name), readFile(path), root? }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
  */
-export function resolveMavenDependencies(projects, filesOf, readFile) {
-  const model = mavenModelOf({ projects, filesOf, readFile });
+export function resolveMavenDependencies(workspace) {
+  const model = mavenModelOf(workspace);
   const dependencies = [];
   for (const entry of model.entries) {
     for (const dep of entry.resolvedDependencies) {
