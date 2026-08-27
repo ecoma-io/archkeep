@@ -48,24 +48,34 @@ describe("the shipped stdio entry", () => {
     expect(tools.map((tool) => tool.name)).toContain("archkeep_check");
   });
 
-  it("answers a check on a markerless tree as unknown, not fail, over real pipes", async () => {
-    const nowhere = mkdtempSync(join(tmpdir(), "archkeep-mcp-int-nowhere-"));
-    try {
-      const session = await spawnServer(packageRoot);
-      spawned.push(session);
-      const result = await session.client.callTool({
-        name: "archkeep_check",
-        arguments: { workspaceRoot: nowhere },
-      });
-      expect(result.isError).toBeFalsy();
-      expect(result.structuredContent).toMatchObject({
-        runCompleted: false,
-        verdict: "unknown",
-      });
-    } finally {
-      rmSync(nowhere, { recursive: true, force: true });
-    }
-  });
+  // A real process over real pipes: the server boots, loads the engine, and
+  // runs a check on a throwaway tree before this answers. Vitest's 5 s
+  // default is a coin flip on that under parallel load — measured twice,
+  // 8 Moon tasks running concurrently, this exact test timing out at 5 s and
+  // then passing alone — so the budget names what the test costs instead of
+  // hoping for an idle machine.
+  it(
+    "answers a check on a markerless tree as unknown, not fail, over real pipes",
+    { timeout: 30_000 },
+    async () => {
+      const nowhere = mkdtempSync(join(tmpdir(), "archkeep-mcp-int-nowhere-"));
+      try {
+        const session = await spawnServer(packageRoot);
+        spawned.push(session);
+        const result = await session.client.callTool({
+          name: "archkeep_check",
+          arguments: { workspaceRoot: nowhere },
+        });
+        expect(result.isError).toBeFalsy();
+        expect(result.structuredContent).toMatchObject({
+          runCompleted: false,
+          verdict: "unknown",
+        });
+      } finally {
+        rmSync(nowhere, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("checks this repository's own workspace end to end", { timeout: 60_000 }, async () => {
     // The full stack over the real provider: this repository is a Moon
