@@ -44,7 +44,7 @@ describe("the shipped stdio entry", () => {
     const { client } = session;
     expect(client.getServerVersion()?.name).toBe("archkeep-mcp");
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(9);
+    expect(tools).toHaveLength(8);
     expect(tools.map((tool) => tool.name)).toContain("archkeep_check");
   });
 

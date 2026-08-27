@@ -39,13 +39,6 @@ tasks:
   # End to end: pack the artifact, install it into throwaway consumer
   # workspaces, drive the real CLI over real processes. This is the suite
   # the `verify-e2e` workflow job shards and runs.
-  e2e:
-    command: vitest run --config e2e/vitest.config.mjs
-    inputs:
-      - "**/*"
-      - "/package.json"
-      - "/pnpm-lock.yaml"
-      - "/packages/archkeep-rules/rules/**"
   # The packed artifact, proven outside this workspace: `pnpm pack`, install
   # into throwaway consumer trees this repository never built, drive what a
   # consumer buys (Nx graph, exit contract, the language server over its
@@ -53,7 +46,17 @@ tasks:
   # `/scripts/verify-package.mjs`, which is why that file is an input — a
   # change to the proof is a change to what the proof covers.
   integration:
-    command: node $workspaceRoot/scripts/verify-package.mjs $projectSource
+    # The consumer trees this drives must see THEIR OWN Moon workspace, not
+    # this one — Moon exports `MOON_WORKING_DIR`/`MOON_WORKSPACE_ROOT` into
+    # every task, and an inherited value makes `moon project-graph` inside a
+    # throwaway consumer answer for THIS workspace (measured: the Moon-path
+    # consumer checks all failed on this repo's nine projects until the vars
+    # were stripped). `NODE_PATH` goes too: it names this workspace's
+    # `node_modules`, which is not the consumer's resolution story.
+    script: |
+      for v in $(env | grep '^MOON_' | cut -d= -f1); do unset "$v"; done
+      unset NODE_PATH
+      node "$workspaceRoot/scripts/verify-package.mjs" "$projectRoot"
     inputs:
       - "**/*"
       - "/package.json"

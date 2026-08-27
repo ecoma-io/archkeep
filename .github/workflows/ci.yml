@@ -212,6 +212,13 @@ jobs:
             "https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz"
           echo "8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553  $dir/golangci-lint.tar.gz" | sha256sum --check --strict
           tar -xzf "$dir/golangci-lint.tar.gz" -C "$dir"
+          # /usr/local/bin, not $GITHUB_PATH: Moon composes a task's PATH
+          # from its toolchain dirs and drops the runner's per-step PATH
+          # additions (measured: the first run failed with "golangci-lint:
+          # command not found" inside the task this install had put on the
+          # step's PATH). A system location is on every PATH a task can
+          # build.
+          sudo mv "$dir/golangci-lint-2.12.2-linux-amd64/golangci-lint" /usr/local/bin/golangci-lint
 
       # The old line here was `moon run --force`, argued as "skips Moon's VCS
       # affected detection (which needs full git history, unavailable in the
@@ -461,16 +468,22 @@ jobs:
       # and the packed artifact, so nothing here duplicates those.
       #
       # Two orthogonal decisions, deliberately not mixed:
-      #   - WHETHER the suite runs is the affected graph's call, and only on
-      #     a pull request: `archkeep:e2e`'s declared inputs name the engine
-      #     tree and the shipped rule artifacts, so an engine change re-runs
-      #     E2E and a documentation-only change runs nothing — loudly, as
-      #     Moon's "No tasks affected by changed files" line. The merge queue
-      #     and `main` pass an empty MOON_BASE and always run the suite: the
+      #   - WHETHER the suite runs is Moon's call, and only on a pull
+      #     request: the query maps changed files onto the graph, and the
+      #     engine project's affected status is the semantic trigger for E2E
+      #     (the suite drives the packed engine artifact; the shipped rule
+      #     artifacts ride the same inputs). A documentation-only change
+      #     skips loudly, with a step-summary line naming the skip as
+      #     deliberate. The merge queue and `main` always run the suite: the
       #     queue verifies the actual merge state, which is no place for an
       #     affected shortcut.
       #   - HOW it runs is the shard: same suite, same file-hash split as
-      #     before, passed through Moon to the vitest CLI.
+      #     before, handed straight to the vitest CLI — no Moon in the
+      #     process tree, because Moon exports its own workspace as
+      #     `MOON_*` environment into every task it wraps, and the E2E
+      #     consumers must resolve the workspaces they create, not this one
+      #     (measured: a Moon-wrapped run failed nine rule-integrity checks
+      #     on that leak alone).
       #
       # A green shard has to mean "these files ran and passed", so both ways a
       # shard can end up running nothing exit 1 — measured against vitest
@@ -483,14 +496,18 @@ jobs:
       #     mass rename ever left a single e2e file behind.
       - name: E2E tests (shard ${{ matrix.shard }}/2)
         env:
-          MOON_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           SHARD: ${{ matrix.shard }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ -n "$MOON_BASE" ]; then
-            pnpm exec moon run archkeep:e2e --base="$MOON_BASE" --affected -- --shard="$SHARD"/2
-          else
-            pnpm e2e --shard="$SHARD"/2
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            affected="$(pnpm exec moon query projects --affected | jq '[.projects[].id] | index("archkeep") != null')"
+            if [ "$affected" != "true" ]; then
+              echo "E2E not affected: the changed files do not move the engine project. Skipping deliberately."
+              echo "### E2E skipped — not affected" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
           fi
+          pnpm e2e --shard="$SHARD"/2
 
   ci-gate:
     name: ci-gate

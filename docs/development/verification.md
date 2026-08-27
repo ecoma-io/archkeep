@@ -24,7 +24,8 @@ The three decisions a change meets, in order:
    printed claim ("No tasks affected by changed files"), not silence, and the
    invariants around it still ran.
 3. **End to end** — the E2E suite, sharded two ways by vitest. Whether it
-   runs is the affected graph's call on a pull request and unconditional on
+   runs is Moon's call on a pull request (`moon query projects --affected`:
+   the engine project's affected status is the trigger) and unconditional on
    the merge queue and `main`; how it runs is the shard. The two decisions
    are never mixed.
 

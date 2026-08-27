@@ -145,11 +145,13 @@ moon run archkeep:lint archkeep:test archkeep:typecheck
 ```
 
 The E2E suite is sharded two ways in CI, and on a pull request it only runs
-when the affected graph says the engine moved — an engine change re-runs it,
-a documentation-only change skips it loudly:
+when Moon's affected graph says the engine project moved — an engine change
+re-runs it, a documentation-only change skips it loudly (the gate reads the
+query, the run is plain vitest):
 
 ```bash
-moon run archkeep:e2e --base=<base-ref> --affected -- --shard=1/2
+moon query projects --affected
+pnpm e2e --shard=1/2
 ```
 
 The artifact proofs — the packed engine tarball installed into consumer
