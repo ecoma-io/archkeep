@@ -249,7 +249,14 @@ export function discoverProjects({ files, readFile }) {
  * reads it unguarded and an absent list is not the same fact as an empty one.
  *
  * @param {{name: string, root: string, config: object}[]} projects
- * @returns {{nodes: Record<string, object>, duplicateProjects: {name: string, roots: string[]}}}
+ * @returns {{nodes: Record<string, object>, duplicateProjects: {name: string, roots: string[]}[]}}
+ *   `duplicateProjects` names every name two or more projects resolved to and
+ *   every root that claimed it (#375): a silent `nodes[name] = …` overwrite
+ *   drops the shadowed project from the graph, its files match no root, and
+ *   the editor publishes no diagnostics for real boundary crossings — the
+ *   exact silent direction `../../../../AGENTS.md`'s invariant refuses. The
+ *   first project still wins in `nodes` (the index stays usable); the caller
+ *   publishes the collision through `indexGaps`.
  */
 export function buildNodes(projects) {
   // Null-prototype for the same reason `../providers/native/graph.mjs` and
@@ -264,8 +271,10 @@ export function buildNodes(projects) {
   // has no inherited `__proto__` accessor to collide with, so the name behaves
   // like every other project name: a real, own, enumerable entry.
   const nodes = Object.create(null);
-  const seenNames = new Map(); // name -> root, to detect duplicates
-  const duplicateMap = new Map(); // name -> array of roots that have this name
+  /** @type {Map<string, string>} name → root of the first project that claimed it. */
+  const seenNames = new Map();
+  /** @type {Map<string, string[]>} name → every root that resolved to it, for names claimed twice or more. */
+  const duplicateMap = new Map();
 
   for (const { name, root, config } of projects) {
     if (seenNames.has(name)) {
@@ -313,10 +322,12 @@ export function buildNodes(projects) {
  *   filesystem existence (the marker is a directory, which `readFileAt`
  *   cannot answer) and the provider's one-call graph reader, both injectable
  *   for the same reason `listFiles` is.
- * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], importSites: object[], nativeMarker: boolean, nativeModelFailure: string|null, moonModelFailure: string|null, nxModelFailure: string|null, workspaceLayoutFailure: string|null}}
+ * @returns {{root: string, files: string[], workspace: object, graph: object, skippedProjects: object[], fileFailures: object[], importSites: object[], duplicateProjects: {name: string, roots: string[]}[], nativeMarker: boolean, nativeModelFailure: string|null, moonModelFailure: string|null, nxModelFailure: string|null, workspaceLayoutFailure: string|null}}
  *   `importSites` is the whole tree's analysis output, retained past the graph
  *   build for the rule engine's evidence index — see this module header's "Why
- *   the whole tree's import sites stay on the index".
+ *   the whole tree's import sites stay on the index". `duplicateProjects` is
+ *   the Nx-shaped branch's own (#375): empty everywhere but that branch, which
+ *   is the only one that resolves names from `project.json` files itself.
  * @throws {Error} when the file list cannot be obtained. Loud on purpose: an
  *   index built from no files would put every file in no project, and a file in
  *   no project has no boundary to cross — a clean report, produced by not
@@ -824,7 +835,7 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
  *
  * Each sentence names a path, so the diagnostic says which file to open.
  *
- * @param {{skippedProjects?: {file: string, reason: string}[], fileFailures?: {sourceFile: string, reason: string}[], nativeModelFailure?: string|null, moonModelFailure?: string|null, nxModelFailure?: string|null, workspaceLayoutFailure?: string|null}} index
+ * @param {{skippedProjects?: {file: string, reason: string}[], fileFailures?: {sourceFile: string, reason: string}[], duplicateProjects?: {name: string, roots: string[]}[], nativeModelFailure?: string|null, moonModelFailure?: string|null, nxModelFailure?: string|null, workspaceLayoutFailure?: string|null}} index
  * @returns {string[]}
  */
 export function indexGaps({
