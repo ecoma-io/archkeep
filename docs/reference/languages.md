@@ -434,11 +434,12 @@ directory spelling gets `pom.xml` appended), then the parent's
 `(groupId, artifactId)` across every tracked pom when that path holds nothing —
 the route a root-parent reactor's two-level-deep children need, and the only
 route an empty `<relativePath/>` allows. A parent neither step can name leaves
-the child's coordinates unresolved, which draws its outbound edges but records
-the pom as a failure — nobody can name an edge TO it while its coordinates are
-unknown. On an Nx tree, nodes come from whatever inference plugins the
-workspace registers; this plugin adds import-derived and pom-coordinate edges
-beside them.
+the child's coordinates unresolved, which records the pom as a failure and
+refuses the run — nobody can name an edge TO it while its coordinates are
+unknown, and the Nx hook throws on the same failure rather than drawing
+partial edges ([nx.md](../integrations/nx.md)). On an Nx tree, nodes come from
+whatever inference plugins the workspace registers; this plugin adds
+import-derived and pom-coordinate edges beside them.
 
 **Versions are read for nothing.** Boundary edges need coordinate matching only,
 so `<dependencyManagement>`, BOM imports, version ranges, mediation and profile
@@ -455,7 +456,9 @@ languages share the same JVM package index. A tracked `.java`/`.kt` source the
 index cannot read is a whole-file failure that refuses the run (exit 3) naming
 the file — dropped silently, every import of the package it declared would
 classify external, a first-party crossing wearing an external face. The same
-posture the .NET namespace index holds for an unreadable `.cs`.
+posture the .NET namespace index holds for an unreadable `.cs` — and the Nx
+hook throws on the same failure rather than under-selecting
+([nx.md](../integrations/nx.md)).
 
 **Extraction covers the four JLS §7.5 import forms** — single type, on-demand
 (`a.b.*`), static single member, static on-demand — over comment-and-literal-
@@ -607,7 +610,9 @@ belong to the external node synthesis layer when a rule needs a name.
   directory, a `project(":x")` no settings file defines, a reference whose
   directory no declared project owns, a settings-less build file that declares
   project references, and two settings files claiming the same directory all
-  fail the whole run (exit 3) naming the file — the go.work precedent. A
+  fail the whole run (exit 3) naming the file — the go.work precedent — and
+  the Nx hook throws on the same list, so `nx affected` refuses rather than
+  under-selects ([nx.md](../integrations/nx.md)). A
   broken reactor read as "no dependencies" would mean "no drift" exactly
   where the tree is most broken.
 
@@ -690,7 +695,9 @@ reported offset stays an offset into the bytes on disk.
   the same posture as a malformed `go.work` or a broken tsconfig: XML that
   does not parse, a missing `Include`, a placeholder path, a reference to no
   tracked project, and an ambiguous `<Using>` namespace all refuse the
-  verdict rather than reading as "no dependencies".
+  verdict rather than reading as "no dependencies" — and the Nx hook throws
+  on the same lists, this one's and the namespace index's, so `nx affected`
+  refuses rather than under-selects ([nx.md](../integrations/nx.md)).
 
 **What the record leaves null:** `file` is always null — a `using` names a
 namespace, not a file, and which source file supplies a type is a compiler

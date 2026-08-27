@@ -48,7 +48,13 @@
 import { maskJavaComments } from "./jvm/mask.mjs";
 import { jvmPackageIndex } from "./jvm/packages.mjs";
 import { resolveJvmSpecifier } from "./jvm/resolve.mjs";
-import { emptyResult, fileFailure, positionAt, projectOwning } from "./source-util.mjs";
+import {
+  emptyResult,
+  fileFailure,
+  positionAt,
+  projectOwning,
+  refuseUnreadTree,
+} from "./source-util.mjs";
 
 /**
  * Every import in a `.java` file, in source order and WITHOUT deduplication —
@@ -205,19 +211,25 @@ export function analyzeJava({ sourceFile, text, workspace }) {
  * instead of once per call site (#363). Returns raw Nx dependencies
  * ({ source, target, sourceFile, type: "static" }). Ambiguous names draw no
  * edge — analysis reports them loudly instead, and an edge against a guess
- * would be worse than the missing one.
+ * would be worse than the missing one. An unreadable `.java`/`.kt` source
+ * refuses the whole graph (#364's posture — the index state corrupts every
+ * importer of its packages, so the failure cannot be attributed to the
+ * file's own edges), through the same `refuseUnreadTree` the manifest
+ * resolvers hold.
  *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
+ * @throws {Error} when `jvmPackageIndex` recorded any failure, naming each
+ *   unreadable JVM source.
  */
 export function resolveJavaDependencies(workspace) {
   const { projects, filesOf, readFile } = workspace;
-  // The index's read failures are deliberately NOT consumed here: this
-  // resolver is the Nx-hook path, which has no failure channel of its own —
-  // the hook-side posture is #364, and this function must not grow a second
-  // opinion about it. The CLI path funnels them through
-  // `./jvm/packages.mjs`'s `jvmIndexFailures` instead.
-  const { byName: index } = jvmPackageIndex(workspace);
+  // #364's posture closes the gap #397's comment below named: the hook DOES
+  // have a loud channel — a throw, which Nx turns into a failed graph
+  // computation — so the index's read failures are consumed here after all,
+  // through the same `refuseUnreadTree` the manifest readers hold.
+  const { byName: index, failures: indexFailures } = jvmPackageIndex(workspace);
+  refuseUnreadTree("the JVM package index", indexFailures);
   const dependencies = [];
   for (const project of projects) {
     for (const file of filesOf(project.name)) {

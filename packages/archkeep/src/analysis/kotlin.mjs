@@ -32,7 +32,13 @@
 import { maskKotlinComments } from "./jvm/mask.mjs";
 import { jvmPackageIndex } from "./jvm/packages.mjs";
 import { resolveJvmSpecifier } from "./jvm/resolve.mjs";
-import { emptyResult, fileFailure, positionAt, projectOwning } from "./source-util.mjs";
+import {
+  emptyResult,
+  fileFailure,
+  positionAt,
+  projectOwning,
+  refuseUnreadTree,
+} from "./source-util.mjs";
 
 /** One identifier segment: backtick-quoted (any non-backtick content) or a plain identifier. */
 const KOTLIN_SEGMENT = String.raw`(?:` + "`[^`\\n]*`" + String.raw`|[\p{L}_$][\p{L}\p{Nd}_$]*)`;
@@ -158,16 +164,24 @@ export function analyzeKotlin({ sourceFile, text, workspace }) {
  * shared with `analyzeKotlin`, the Java resolver and the manifest resolvers —
  * is what makes the index build once per run (#363).
  *
+ * An unreadable `.java`/`.kt` source refuses the whole graph (#364's posture
+ * — the index state corrupts every importer of its packages, so the failure
+ * cannot be attributed to the file's own edges), through the same
+ * `refuseUnreadTree` the manifest resolvers hold; this resolver and the Java
+ * one hold the identical check over the one shared index.
+ *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
+ * @throws {Error} when `jvmPackageIndex` recorded any failure, naming each
+ *   unreadable JVM source.
  */
 export function resolveKotlinDependencies(workspace) {
   const { projects, filesOf, readFile } = workspace;
-  // The index's read failures are deliberately NOT consumed here, for the
-  // reason `./java.mjs`'s `resolveJavaDependencies` states: this is the
-  // Nx-hook path, which has no failure channel of its own (#364). The CLI
-  // path funnels them through `./jvm/packages.mjs`'s `jvmIndexFailures`.
-  const { byName: index } = jvmPackageIndex(workspace);
+  // The same refusal `./java.mjs`'s `resolveJavaDependencies` holds over the
+  // one shared index (#364's posture): an unreadable source corrupts every
+  // importer of its packages, so either resolver alone refuses the tree.
+  const { byName: index, failures: indexFailures } = jvmPackageIndex(workspace);
+  refuseUnreadTree("the JVM package index", indexFailures);
   const dependencies = [];
   for (const project of projects) {
     for (const file of filesOf(project.name)) {

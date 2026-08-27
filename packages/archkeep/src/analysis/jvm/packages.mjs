@@ -30,6 +30,15 @@
  * Reads are injected (`workspace.filesOf` / `workspace.readFile`) and memoized
  * per workspace object through `perWorkspace`, so a whole-tree run builds the
  * index once no matter how many files ask.
+ *
+ * An unreadable `.java`/`.kt` source is recorded as a whole-file failure
+ * rather than dropped: a file that silently left the index would make every
+ * import of a package only it declares classify external — a first-party
+ * crossing wearing an external face, with nothing anywhere naming why (the
+ * `../dotnet/namespaces.mjs` precedent one family over). The failure list is
+ * what the graph resolvers refuse the tree on (#364's posture,
+ * `../source-util.mjs`'s `refuseUnreadTree`) and what the CLI funnel merges
+ * beside the analyzers' own read failures.
  */
 import { fileFailure, perWorkspace } from "../source-util.mjs";
 import { maskJavaComments, maskKotlinComments } from "./mask.mjs";
@@ -145,7 +154,8 @@ export const jvmPackageIndex = perWorkspace(buildJvmPackageIndex);
  * Whole-file failures for every JVM source the index could not read — the
  * funnel `../../commands/context.mjs` merges beside the manifest failures, so
  * an unreadable source refuses the verdict (exit 3) instead of quietly
- * degrading every importer of its packages to external.
+ * degrading every importer of its packages to external — and the graph
+ * resolvers' refusal input (#364's posture, `refuseUnreadTree`).
  *
  * @param {object} workspace
  * @returns {{ sourceFile: string, line: null, column: null, reason: string }[]}

@@ -51,13 +51,15 @@
  * pom — the go.work precedent. A broken reactor read as "no dependencies"
  * would mean "no drift" exactly where the tree is most broken, so the CLI
  * funnels these into the could-not-complete class (exit 3) beside Python's
- * unmodelled manifests.
+ * unmodelled manifests — and the graph resolver below THROWS on the same
+ * list (#364's posture, `../source-util.mjs`'s `refuseUnreadTree`), so
+ * `nx affected` fails loudly instead of under-selecting on it.
  */
 
 import { createRequire } from "node:module";
 
 import { normalizePath, resolveWithinWorkspace } from "../manifest-util.mjs";
-import { fileFailure, perWorkspace } from "../source-util.mjs";
+import { fileFailure, perWorkspace, refuseUnreadTree } from "../source-util.mjs";
 
 /** The parser's specifier, named once — the failure message quotes it. */
 const XML_PARSER = "fast-xml-parser";
@@ -559,8 +561,11 @@ export const mavenModelOf = perWorkspace(buildMavenModel);
 
 /**
  * Manifest-edge resolver: one edge per declared dependency whose coordinates
- * equal another project's SOLE identity. Collisions draw nothing here — the
- * failure list has already named them loudly.
+ * equal another project's SOLE identity. A reactor whose model records any
+ * could-not-complete failure refuses the whole graph (#364's posture) —
+ * silently omitting the affected edges is the under-selecting `nx affected`
+ * this plugin exists to close — so the loop's skips below are the second
+ * line of defense, not the refusal itself.
  *
  * Takes ONE workspace-shaped object (`{ projects, filesOf, readFile }`) rather
  * than the positional triple, because the model is memoized on that object:
@@ -570,14 +575,16 @@ export const mavenModelOf = perWorkspace(buildMavenModel);
  *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path), root? }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
+ * @throws {Error} when `mavenModelOf` recorded any failure, naming each pom.
  */
 export function resolveMavenDependencies(workspace) {
   const model = mavenModelOf(workspace);
+  refuseUnreadTree("the Maven model", model.failures);
   const dependencies = [];
   for (const entry of model.entries) {
     for (const dep of entry.resolvedDependencies) {
       const holders = model.identityHolders.get(`${dep.groupId}:${dep.artifactId}`);
-      if (!holders || holders.length !== 1) continue;
+      if (!holders || holders.length !== 1) continue; // unreachable while the refusal above holds; kept as the belt beneath it
       if (holders[0].projectName === entry.projectName) continue;
       dependencies.push({
         source: entry.projectName,

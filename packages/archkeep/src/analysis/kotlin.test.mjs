@@ -218,4 +218,19 @@ describe("resolveKotlinDependencies", () => {
     const ws = workspaceOf(tree);
     expect(resolveKotlinDependencies(ws)).toEqual([]);
   });
+
+  it("refuses the graph on a JVM source the package index could not read", () => {
+    // #364, the same check `resolveJavaDependencies` holds over the one
+    // shared index — spelled here too, because either resolver alone must
+    // refuse a tree whose index is corrupt, whichever languages the tree has.
+    const ws = {
+      root: "/workspace",
+      projects: [{ name: "acme", root: "packages/acme" }],
+      filesOf: () => ["packages/acme/src/main/kotlin/com/acme/app/App.kt"],
+      readFile: () => null,
+    };
+    expect(() => resolveKotlinDependencies(ws)).toThrow(
+      /packages\/acme\/src\/main\/kotlin\/com\/acme\/app\/App\.kt/,
+    );
+  });
 });

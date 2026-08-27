@@ -16,12 +16,30 @@
  * imports, smol-toml for Cargo/pyproject manifests) so the graph computes
  * without any language toolchain installed. A workspace with no Go/Rust/Python/
  * Java/C# projects pays nothing: every resolver keys off what it reads existing in
- * the project's tracked files. A resolver may THROW instead of returning — the
- * Python one does, for a declared path dependency it cannot attribute to any
- * project (`../analysis/python.mjs` header) — and the throw is deliberate:
- * edges and an error are the only two outputs this hook has, and an edge
- * quietly missing from the graph is the failure mode this plugin exists to
- * close.
+ * the project's tracked files.
+ *
+ * ## The hook's failure posture (#364)
+ *
+ * Edges and a throw are the only two outputs this hook has, and every
+ * manifest reader and name index throws for the states its funnel
+ * classifies as could-not-complete — the same failure lists the CLI turns
+ * into exit 3: the Maven, Gradle and .csproj models, the JVM package index,
+ * the C# namespace index (`../analysis/source-util.mjs`'s `refuseUnreadTree`).
+ * Nx wraps a throwing hook's error and fails the whole graph computation —
+ * measured against nx 23.1.1, which also has a dedicated `ProcessDependenciesError`
+ * for the event and whose daemon refuses with an error rather than serving a
+ * stale graph — so the throw is a designed-for channel, and `nx affected`
+ * fails loudly on a broken reactor instead of under-selecting on it.
+ *
+ * The boundary: manifests and workspace-wide name indexes throw — one
+ * unreadable entry corrupts resolution for every project that names that
+ * identity, arbitrarily far from the file, so the failure cannot be
+ * attributed to the file's own edges — while per-source import reads keep
+ * the null-read posture the hook's `readFile` states below (a dropped source
+ * loses only its own edges; a dropped manifest or index entry loses
+ * everyone's). Python's dangling-path throw is the precedent that predates
+ * the rule; its malformed-TOML tolerance stays the documented exception its
+ * own header pins (`../analysis/python.mjs`).
  *
  * Resolver contract (see `../analysis/*.mjs`): every resolver returns raw Nx
  * edges — { source, target, sourceFile, type } and nothing else. Go, Rust and
@@ -122,10 +140,14 @@ export const createDependencies = (options, context) => {
     // attacker-supplied the moment a PR adds a tracked path. A tracked symlink
     // whose realpath leaves the workspace would draw a dependency edge from
     // outside bytes into `nx affected`'s graph; refusing (null) drops the
-    // read so the file produces no edge (the `resolvePolyglotDependencies`
-    // contract is a null read = no edge, not a throw — this hook cannot exit
-    // non-zero by design). A plugin that never resolves outside bytes stays
-    // silent-green only when the bytes are really inside (`../containment.mjs`).
+    // read. For a SOURCE file an import walk reads, that is the end of it:
+    // null read = no edge, the file's own edges and nothing wider. For a
+    // MANIFEST or an index-feeding file (a pom, a settings or build file, a
+    // .csproj, a .java/.kt/.cs a name index reads), the reader records the
+    // null read as a could-not-complete failure and its resolver throws on
+    // it — the posture this file's header owns (#364). A plugin that never
+    // resolves outside bytes stays silent-green only when the bytes are
+    // really inside (`../containment.mjs`).
     if (containmentViolation(context.workspaceRoot, abs) !== null) return null;
     try {
       return readFileSync(abs, "utf8");

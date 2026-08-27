@@ -172,6 +172,45 @@ describe("resolveJvmPackagePrefix", () => {
   });
 });
 
+describe("jvmIndexFailures", () => {
+  it("records a JVM source the index could not read", () => {
+    // #364: an unreadable source used to leave the index silently, degrading
+    // every import of its packages to external — an edge quietly missing for
+    // a reason no face named. Recorded, it refuses the graph resolvers and
+    // rides the CLI funnel beside the analyzers' own read failures.
+    const workspace = {
+      projects: [{ name: "acme", root: "packages/acme" }],
+      filesOf: () => ["packages/acme/src/main/java/com/acme/app/App.java"],
+      readFile: () => null,
+    };
+    const failures = jvmIndexFailures(workspace);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toEqual({
+      sourceFile: "packages/acme/src/main/java/com/acme/app/App.java",
+      line: null,
+      column: null,
+      reason: "JVM source could not be read for the package index",
+    });
+  });
+
+  it("is empty over a tree whose every JVM source reads — through the same single build as the map view", () => {
+    const readFileCalls = [];
+    const workspace = {
+      projects: [{ name: "acme", root: "packages/acme" }],
+      filesOf: () => ["packages/acme/src/main/java/com/acme/app/App.java"],
+      readFile: (path) => {
+        readFileCalls.push(path);
+        return "package com.acme.app;\nclass App {}\n";
+      },
+    };
+    expect(jvmIndexFailures(workspace)).toEqual([]);
+    // The failure view and the map view are two reads of ONE memoized build
+    // (#363's invariant): asking for both costs one read of the file.
+    expect(jvmPackageIndex(workspace).byName.has("com.acme.app")).toBe(true);
+    expect(readFileCalls).toHaveLength(1);
+  });
+});
+
 const dottedName = fc
   .array(fc.constantFrom(..."abcdefgh"), { minLength: 1, maxLength: 5 })
   .map((parts) => parts.join("."));

@@ -298,4 +298,20 @@ describe("resolveJavaDependencies", () => {
     const ws = workspaceOf(tree);
     expect(resolveJavaDependencies(ws)).toEqual([]);
   });
+
+  it("refuses the graph on a JVM source the package index could not read", () => {
+    // #364: an unreadable source silently left the index, degrading every
+    // import of its packages to external — an edge quietly missing for a
+    // reason no face named. The resolver refuses the whole tree instead,
+    // through the same `refuseUnreadTree` the manifest readers hold.
+    const ws = {
+      root: "/workspace",
+      projects: [{ name: "acme", root: "packages/acme" }],
+      filesOf: () => ["packages/acme/src/main/java/com/acme/app/App.java"],
+      readFile: () => null,
+    };
+    expect(() => resolveJavaDependencies(ws)).toThrow(
+      /packages\/acme\/src\/main\/java\/com\/acme\/app\/App\.java/,
+    );
+  });
 });

@@ -37,14 +37,17 @@
  * holds for unresolvable placeholder coordinates (`../jvm/maven.mjs`), and
  * the `go.work` precedent one layer out. A broken manifest read as "no
  * dependencies" would mean "no drift" exactly where the tree is most broken,
- * so the CLI funnels these into the could-not-complete class (exit 3). One
+ * so the CLI funnels these into the could-not-complete class (exit 3) — and
+ * the graph resolver below THROWS on the same list (#364's posture,
+ * `../source-util.mjs`'s `refuseUnreadTree`), so `nx affected` fails loudly
+ * instead of under-selecting on it. One
  * reference stays quiet on purpose: a self-reference resolves to its own
  * project and draws no edge, because that csproj is legal and uninteresting.
  */
 import { createRequire } from "node:module";
 
 import { normalizePath } from "../manifest-util.mjs";
-import { fileFailure, perWorkspace } from "../source-util.mjs";
+import { fileFailure, perWorkspace, refuseUnreadTree } from "../source-util.mjs";
 import { csharpNamespaceIndex } from "./namespaces.mjs";
 import { resolveCsharpSpecifier } from "./resolve.mjs";
 
@@ -320,19 +323,27 @@ export const csprojModelOf = perWorkspace(({ projects, filesOf, readFile }) => {
  * `<ProjectReference>`, plus one per `<Using Include>` that names another
  * tracked project's namespace. The two spellings of one dependency from the
  * same csproj yield ONE edge — the declared reference is the provenance
- * worth keeping.
+ * worth keeping. A model recording any could-not-complete failure refuses
+ * the whole graph (#364's posture, `../source-util.mjs`'s `refuseUnreadTree`)
+ * — silently omitting the affected edges is the under-selecting `nx affected`
+ * this plugin exists to close.
  *
  * @param {{ projects: {name: string, root: string}[], filesOf: (name: string) => string[],
  *           readFile: (path: string) => string|null }} workspace
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
+ * @throws {Error} when `csprojModelOf` recorded any failure, naming each
+ *   csproj.
  */
 export function resolveCsprojDependencies(workspace) {
   const model = csprojModelOf(workspace);
+  refuseUnreadTree("the .csproj model", model.failures);
   const deps = [];
   const seen = new Set();
   for (const entry of model.entries) {
     for (const refPath of entry.projectRefPaths) {
       const target = model.identity.get(refPath);
+      // `undefined` is unreachable while the refusal above holds (a dangling
+      // reference is a recorded failure); kept as the belt beneath it.
       if (target === undefined || target === entry.projectName) continue;
       seen.add(`${entry.projectName} ${target} ${entry.csprojPath}`);
       deps.push({
