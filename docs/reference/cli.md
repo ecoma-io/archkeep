@@ -27,6 +27,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/archkeep/
 | `context`    | `<project> [--plan [<path>...]]` | Show the architecture constraints that apply to a project                                          | no               |
 | `provenance` | (none)                           | Describe where this run's facts came from and which rows carry an origin                           | no               |
 | `adr`        | `[<id>]`                         | List recorded architecture decisions and what each binds                                           | no               |
+| `rules`      | `<list                           | info                                                                                               | verify           | add> [<rule-name>]` | List official rules, show details, verify catalog integrity, or add a rule | no  |
 
 \* `fitness` reports no boundary violation, but it is a verdict command, not a
 descriptive one: a declared function that `fail`s makes it exit 1 (and an

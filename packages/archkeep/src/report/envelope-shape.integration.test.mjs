@@ -149,6 +149,8 @@ const files = [
   // `waivers` emits `result.unownedAcceptances`, and the roster holds both
   // new shapes rather than leaving them the one surface nothing measures.
   "tools/gen.mjs",
+  // A minimal catalog for the rules command to read
+  "node_modules/@ecoma-io/archkeep-rules/catalog.json",
 ];
 
 let root;
@@ -231,6 +233,18 @@ beforeAll(async () => {
   write("libs/adapter/go.mod", "module example.com/adapter\n\ngo 1.22\n");
   write("libs/adapter/adapter.go", 'package adapter\n\nconst Name = "adapter"\n');
   write("tools/gen.mjs", "export const gen = 1;\n");
+  // A minimal catalog for the rules command to read
+  write(
+    "node_modules/@ecoma-io/archkeep-rules/catalog.json",
+    `${JSON.stringify(
+      {
+        version: 1,
+        rules: [],
+      },
+      null,
+      2,
+    )}\n`,
+  );
 
   expect(git("init", "-q", "-b", "main")).toBe(0);
   expect(git("add", "-A")).toBe(0);
@@ -382,6 +396,7 @@ function argvForEveryCommand() {
     context: ["context", "domain", "--format", "json"],
     provenance: ["provenance", "--format", "json"],
     adr: ["adr", "--format", "json"],
+    rules: ["rules", "list", "--format", "json"],
   };
 }
 

@@ -8,7 +8,24 @@ integrity gate for shipped rule artifacts.
 The catalog holds the first four rules — `tag-cardinality`,
 `forbidden-tag-combination`, `max-fan-out`, and `max-fan-in` — with their
 committed artifacts, digests, and fixture suites. More rules arrive in subsequent
-changes. The package is not yet published to npm.
+changes.
+
+## Installation
+
+```bash
+npm install @ecoma-io/archkeep-rules
+```
+
+## CLI interface
+
+Once installed, the `archkeep` CLI provides four commands for working with the official rules catalog:
+
+- `archkeep rules list [--catalog <path>]` — List all official rules
+- `archkeep rules info <rule-name> [--catalog <path>]` — Show details for a specific rule
+- `archkeep rules verify [--catalog <path>]` — Verify catalog integrity through the REAL host
+- `archkeep rules add <rule-name> [--catalog <path>] [--to <dir>]` — Add a rule to your workspace
+
+The default catalog path is `node_modules/@ecoma-io/archkeep-rules/catalog.json`.
 
 ## What this package is
 

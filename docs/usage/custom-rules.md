@@ -178,3 +178,26 @@ and declares official rules as its own `customRules` rows — see
 Graph-consuming official rules (the fan rules) inherit the run's graph coverage
 — read the coverage notes beside their verdicts, as a run reporting
 unregistered-plugin coverage has a graph without polyglot edges.
+
+### Working with the official rules catalog
+
+The `archkeep rules` CLI commands provide a fast interface to the catalog without
+reading npm or the filesystem yourself. Install the rules package in your workspace:
+
+```bash
+npm install @ecoma-io/archkeep-rules
+```
+
+Then:
+
+- `archkeep rules list` — see every official rule, its description, and contract version
+- `archkeep rules info <rule-name>` — read one rule's full catalog entry (artifact path,
+  sha256 digest, params schema, evidence requirements)
+- `archkeep rules verify` — prove every catalog artifact loads and describes itself
+  correctly through the REAL host (the same proof CI runs on every catalog change)
+- `archkeep rules add <rule-name>` — copy the named rule's wasm to your workspace and
+  print or write the customRules row for your dialect
+
+The `add` command is the fastest way to adopt an official rule: it copies the exact
+bytes (verifiable by the digest you paste beside them) and renders the row your
+config dialect needs — no typo-prone manual transcription from the catalog.

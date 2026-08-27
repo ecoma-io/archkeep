@@ -296,7 +296,7 @@ Grouped the way the [concepts](docs/concepts/architecture.md) own them:
   floors, suppression budgets…), constraints grounded in ADRs, named profiles,
   six shipped preset policy packs ([waivers](docs/concepts/waivers.md) ·
   [fitness functions](docs/concepts/fitness-functions.md)).
-- **Deterministic evidence** — 21 commands with versioned, byte-stable JSON
+- **Deterministic evidence** — 22 commands with versioned, byte-stable JSON
   (a schema-versioned envelope), plus text and SARIF 2.1.0; a four-state
   verdict vocabulary where `unknown` demands a stated reason; coverage counts
   on every result; git provenance and a policy fingerprint naming the exact

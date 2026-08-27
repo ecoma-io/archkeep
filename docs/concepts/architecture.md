@@ -121,7 +121,7 @@ that looked and found nothing — and that holds for a declared gate exactly as
 it holds for a file: a rule that trapped, or whose artifact would not load, is
 never a rule that found nothing.
 
-## The 21 commands
+## The 22 commands
 
 | command      | what it does                                                                          | finds violations |
 | ------------ | ------------------------------------------------------------------------------------- | ---------------- |
@@ -146,6 +146,7 @@ never a rule that found nothing.
 | `context`    | Shows the architecture constraints that apply to a project¹                           | no               |
 | `provenance` | Reports the governance row schema and the run's origin                                | no               |
 | `adr`        | Lists recorded architecture decisions and what each binds (`docs/adr/`)               | no               |
+| `rules`      | Lists official rules, shows details, verifies catalog integrity, or adds a rule       | no               |
 
 `check` is the only command that exits 1 on boundary findings — with three
 companions: `fitness` exits 1 when a declared function fails (a failing fitness
