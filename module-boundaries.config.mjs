@@ -121,6 +121,16 @@ export const depConstraints = [
   // judge.
   { sourceTag: "type-extension", onlyDependOnLibsWithTags: ["type-package"] },
 
+  // `type-gates` is the repository's own gate machinery — `scripts/`, whose
+  // `gate-scripts` project verifies the tooling this table is enforced by.
+  // It carries no row of its own because it is held by the `scope-nx` row
+  // below: the scripts client the engine (the differential and coverage
+  // gates import its analysis), which makes them engine toolchain, and each
+  // such import carries a suppression row in `boundarySuppressions` rather
+  // than a license in this tag. Nothing may depend on the gates — the
+  // `type-package` row already refuses that direction for every published
+  // package.
+
   // Scope axis. `scope-nx` is the Nx-toolchain scope — plugins, and the
   // language server and CLI that share their analysis. The second scope has
   // now arrived, so the two rows are read together: each scope may depend

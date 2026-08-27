@@ -43,12 +43,12 @@
     "prepare": "lefthook install",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "pnpm exec moon run ...:lint",
     "check-packages": "node scripts/check-packages.mjs",
     "check-docs-links": "node scripts/check-docs-links.mjs",
     "readiness": "node scripts/check-readiness.mjs",
-    "test": "export ARCHKEEP_TEST_GLOB='scripts/**/*.test.mjs' && node -e \"if (require('node:fs').globSync(process.env.ARCHKEEP_TEST_GLOB).length === 0) { console.error('pnpm test: ' + process.env.ARCHKEEP_TEST_GLOB + ' matched no test file. node --test prints tests 0 and exits 0 on that, so a green run here would mean nothing ran.'); process.exit(1); }\" && node --test \"$ARCHKEEP_TEST_GLOB\"",
-    "typecheck": "tsc -p scripts/tsconfig.json",
+    "test": "pnpm exec moon run gate-scripts:test",
+    "typecheck": "pnpm exec moon run gate-scripts:typecheck",
     "e2e": "vitest run --config packages/archkeep/e2e/vitest.config.mjs"
   },
   "dependencies": {

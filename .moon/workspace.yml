@@ -15,6 +15,7 @@ projects:
   archkeep-rule-sdk-rust: "packages/archkeep-rule-sdk-rust"
   archkeep-rule-sdk-ts: "packages/archkeep-rule-sdk-ts"
   archkeep-vscode: "packages/archkeep-vscode"
+  gate-scripts: "scripts"
 vcs:
   provider: other
   # The repository uses `main`, not the traditional `master`. Without this

@@ -98,10 +98,10 @@ As with Claude Code, no gate depends on any of this — the editor-time hooks in
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `pnpm format`                                 | Prettier, in place                                                                                           |
 | `pnpm format:check`                           | Prettier, read-only — what CI runs                                                                           |
-| `pnpm lint`                                   | ESLint, zero warnings tolerated                                                                              |
-| `pnpm test`                                   | `node --test` over `scripts/*.test.mjs` — the gate scripts, nothing else                                     |
-| `pnpm typecheck`                              | `tsc --noEmit` over the gate scripts' JSDoc — each package has its own target                                |
-| `pnpm check-packages`                         | Asserts every `packages/*` directory is a project Moon can see, with CI targets                              |
+| `pnpm lint`                                   | Every project's `lint` target through Moon — ESLint for the JS/TS half, the language linters for the rest    |
+| `pnpm test`                                   | The gate scripts' own tests (`node --test` over `scripts/*.test.mjs`), through Moon                          |
+| `pnpm typecheck`                              | The gate scripts' JSDoc (`tsc --noEmit`), through Moon — each package has its own target                     |
+| `pnpm check-packages`                         | Asserts every `packages/*` directory plus `scripts/` is a project Moon can see, with CI targets              |
 | `node scripts/check-skills.mjs`               | The skills gate: shape, citations, and the plugin-manifest version chain                                     |
 | `node scripts/check-docs-links.mjs`           | Fails on any doc reference that cannot resolve — a gone target, a dead anchor                                |
 | `node scripts/check-cli-docs-roster.mjs`      | Holds every documented command count and roster to `COMMAND_NAMES` in cli.mjs                                |
@@ -112,10 +112,21 @@ As with Claude Code, no gate depends on any of this — the editor-time hooks in
 | `pnpm e2e`                                    | Packs the artifact and drives it as an installed CLI, end to end — CI runs it in two shards                  |
 
 Plus every project's own targets — a different suite, not a superset of the one
-above:
+above. Locally, the full form:
 
 ```bash
 moon run ...:lint ...:test ...:typecheck
+```
+
+On a pull request, CI runs the affected form of the same roster instead, and
+Moon decides what a change can have moved — through each task's declared
+`inputs` and the projects' `dependsOn` graph. A one-package change runs that
+package; a dependency change runs its consumers; an ESLint-config change runs
+every lint that reads it and no typecheck; a documentation-only change runs no
+Moon target at all, and says so in the log:
+
+```bash
+moon ci ...:lint ...:test ...:typecheck --base="$MOON_BASE"
 ```
 
 **This one needs more than Node.** Four of the eight packages are custom-rule

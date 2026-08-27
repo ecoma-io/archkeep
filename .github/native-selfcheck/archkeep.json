@@ -48,15 +48,17 @@
         "name": "archkeep-vscode",
         "type": "app",
         "tags": ["type-extension", "scope-nx", "layer:application", "stack:frontend"]
+      },
+      {
+        "root": "scripts",
+        "name": "gate-scripts",
+        "type": "lib",
+        "tags": ["type-gates", "scope-nx", "layer:tool", "stack:backend"]
       }
     ]
   },
   "coverage": {
     "exempt": [
-      {
-        "path": "scripts/**",
-        "reason": "the repository's own gate scripts (check-packages, differential-real-trees, verify-package, verify-vsix, package-vsix) and their tests — apparatus that keeps the two packages honest, never a project of its own."
-      },
       {
         "path": ".github/**",
         "reason": "CI/analysis workflow config plus its own Semgrep test runner (.github/semgrep/scripts.mjs) — repository apparatus, not a project this workspace's boundary law judges."
@@ -67,7 +69,7 @@
       },
       {
         "path": "*.mjs",
-        "reason": "root-level tool configuration read by the tools that consume it directly (eslint.config.mjs, commitlint.config.mjs, and this repository's own module-boundaries.config.mjs), not owned by either declared project."
+        "reason": "root-level tool configuration read by the tools that consume it directly (eslint.config.mjs, commitlint.config.mjs, and this repository's own module-boundaries.config.mjs), not owned by any declared project."
       }
     ]
   },

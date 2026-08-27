@@ -42,8 +42,10 @@ export const PACKAGES_DIR = "packages";
 export const CI_WORKFLOW = ".github/workflows/ci.yml";
 
 /**
- * The targets CI runs, taken from every `moon run ...:<target>` invocation in
- * the workflow (the `...` prefix means "all projects").
+ * The targets CI runs, taken from every `moon run …:<target>` and
+ * `moon ci …:<target>` invocation in the workflow (the `...` prefix means
+ * "all projects"). Both spellings name the same roster — that is the drift
+ * this derivation pins — so every invocation found contributes its targets.
  *
  * Three things a legal edit to `ci.yml` can do, each handled explicitly so
  * none of them silently narrows the list this script enforces:
@@ -82,8 +84,9 @@ export function parseCiTargets(workflowText) {
   const targets = [];
   const seen = new Set();
   for (const line of logicalLines) {
-    // Moon: `moon run ...:lint ...:test ...:typecheck` — `...:target` means all projects.
-    const moonMatch = /moon\s+run\s+(.*)$/.exec(line);
+    // Moon: `moon run ...:lint ...:test ...:typecheck` or `moon ci :lint :test` —
+    // the same roster under two commands, both read.
+    const moonMatch = /moon\s+(?:run|ci)\s+(.*)$/.exec(line);
     if (!moonMatch) continue;
     // Tracked per line, not globally: a second `moon run` invocation must be
     // free to skip its OWN leading flags even though earlier lines already
@@ -94,8 +97,14 @@ export function parseCiTargets(workflowText) {
       // Once a target has been seen ON THIS LINE, any flag breaks the loop —
       // that is the stop condition for a trailing flag like --parallel.
       if (word.startsWith("--") && targetsOnThisLine.length === 0) continue;
-      // Strip the `...:` prefix Moon uses for "all projects".
-      const target = word.replace(/^\.{3}:/, "");
+      // Strip the all-projects prefix Moon spells two ways — `...:target` (the
+      // form the `moon run` line uses) and `:target` (the form the `moon ci`
+      // line uses). Project-qualified targets (`archkeep:e2e`) are skipped
+      // first: they are not part of the every-project roster this gate holds
+      // projects to, and Moon itself fails a run that names a target no
+      // project declares.
+      if (/^[a-z][a-z0-9-]*:/i.test(word)) continue;
+      const target = word.replace(/^(?:\.{3})?:/, "");
       if (!/^[a-z][a-z0-9:-]*$/i.test(target)) break;
       targetsOnThisLine.push(target);
     }
@@ -117,30 +126,33 @@ export function parseCiTargets(workflowText) {
  * arrives as an argument. `projects` maps a project name to the root it
  * declares and the target names it declares.
  *
+ * `extraRequiredRoots` holds project roots the graph must declare that no
+ * `packages/` directory scan can discover — `scripts/`, whose project holds
+ * the gate scripts. A root listed here that no project claims fails exactly
+ * like an invisible package: the same silent-green shape, one directory
+ * outside the glob that would otherwise catch it.
+ *
  * @param {object} input
  * @param {string[]} input.packageDirs directory names directly under `packages/`
  * @param {{name: string, root: string, targets: string[]}[]} input.projects what the workspace tool reports
  * @param {string[]} input.ciTargets targets the CI workflow runs
+ * @param {string[]} [input.extraRequiredRoots] project roots required beyond `packages/*`
  * @returns {{lines: string[], failures: string[]}}
  */
-export function evaluate({ packageDirs, projects, ciTargets }) {
+export function evaluate({ packageDirs, projects, ciTargets, extraRequiredRoots = [] }) {
   const lines = [];
   const failures = [];
 
-  if (packageDirs.length === 0) {
-    lines.push(`0 packages — declared empty`);
-    lines.push(
-      `${PACKAGES_DIR}/ holds no package yet, so a green CI run runs nothing. That ` +
-        `is stated here rather than left to be inferred from a command that found ` +
-        `no work.`,
-    );
-    return { lines, failures };
-  }
-
   const byRoot = new Map(projects.map((p) => [p.root, p]));
 
-  for (const dir of packageDirs) {
-    const expectedRoot = `${PACKAGES_DIR}/${dir}`;
+  /**
+   * Judges one expected root — visible in the graph, declaring a CI target,
+   * or failing with the reason it would have run zero times in silence.
+   *
+   * @param {string} expectedRoot workspace-relative root a project must own
+   * @param {string} kind what the root holds, for the failure wording
+   */
+  function judge(expectedRoot, kind) {
     const project = byRoot.get(expectedRoot);
 
     if (!project) {
@@ -151,7 +163,7 @@ export function evaluate({ packageDirs, projects, ciTargets }) {
           `while still exiting 0. Add a manifest.`,
       );
       lines.push(`FAIL ${expectedRoot} — invisible to the graph`);
-      continue;
+      return;
     }
 
     const declared = ciTargets.filter((t) => project.targets.includes(t));
@@ -161,11 +173,11 @@ export function evaluate({ packageDirs, projects, ciTargets }) {
       failures.push(
         `${project.name} (${expectedRoot}) declares none of the targets CI runs ` +
           `(${ciTargets.join(", ")}). The workspace tool skips a project with no ` +
-          `matching target in silence, so nothing checks this package and the run ` +
+          `matching target in silence, so nothing checks this ${kind} and the run ` +
           `still exits 0.`,
       );
       lines.push(`FAIL ${project.name} — declares no CI target`);
-      continue;
+      return;
     }
 
     // Not every package legitimately has every target — a buildless package has
@@ -175,6 +187,23 @@ export function evaluate({ packageDirs, projects, ciTargets }) {
     // package, and a reviewer decides whether the gap is the intended one.
     const note = missing.length > 0 ? ` (no ${missing.join(", ")})` : "";
     lines.push(`ok   ${project.name} — ${declared.join(", ")}${note}`);
+  }
+
+  if (packageDirs.length === 0) {
+    lines.push(`0 packages — declared empty`);
+    lines.push(
+      `${PACKAGES_DIR}/ holds no package yet, so a green CI run runs nothing. That ` +
+        `is stated here rather than left to be inferred from a command that found ` +
+        `no work.`,
+    );
+  }
+
+  for (const dir of packageDirs) {
+    judge(`${PACKAGES_DIR}/${dir}`, "package");
+  }
+
+  for (const requiredRoot of extraRequiredRoots) {
+    judge(requiredRoot, "project");
   }
 
   return { lines, failures };
@@ -238,7 +267,7 @@ function main() {
   const ciTargets = parseCiTargets(readFileSync(workflowPath, "utf8"));
   if (ciTargets.length === 0) {
     console.error(
-      `No \`moon run …\` invocation was found in ` +
+      `No \`moon run …\`/\`moon ci …\` invocation was found in ` +
         `${CI_WORKFLOW}. Either CI stopped running the workspace's targets, or the ` +
         `line moved — both mean this check no longer knows what green is supposed ` +
         `to mean.`,
@@ -247,8 +276,15 @@ function main() {
   }
 
   const packageDirs = readPackageDirs(join(root, PACKAGES_DIR));
-  const projects = packageDirs.length > 0 ? readMoonProjects() : [];
-  const { lines, failures } = evaluate({ packageDirs, projects, ciTargets });
+  const projects = readMoonProjects();
+  const { lines, failures } = evaluate({
+    packageDirs,
+    projects,
+    ciTargets,
+    // `scripts/` holds the gate scripts — outside the packages glob the scan
+    // above reads, so its project is required by name rather than discovered.
+    extraRequiredRoots: ["scripts"],
+  });
 
   for (const line of lines) console.log(line);
 

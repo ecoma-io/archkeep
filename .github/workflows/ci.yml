@@ -32,12 +32,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
-      # 24 is the current default (`.node-version`, which every other job in
-      # this repository still reads); 22 is the `engines.node` floor this
-      # package promises. Both legs run the IDENTICAL suite — the 22 leg is
-      # not a reduced subset that could pass over what the 24 leg would
-      # run — so a Node-24-only API entering shipped code or a test fails the
-      # 22 leg here rather than in a consumer's CI later.
+      # Two floors, both real, both verified: the PUBLISHED packages
+      # (`packages/*/package.json`) each declare `engines.node` `>= 22`, and
+      # 22 is the leg that holds them to it; 24 is the workspace's own
+      # development floor — the root `package.json` declares it, and
+      # `.node-version` pins it as the default every other job reads. Both
+      # legs run the IDENTICAL suite — the 22 leg is not a reduced subset
+      # that could pass over what the 24 leg would run — so a Node-24-only
+      # API entering shipped code or a test fails the 22 leg here rather
+      # than in a consumer's CI later. If the published floor ever moves,
+      # `packages/*/package.json` is the contract to change first and this
+      # matrix follows it — never the reverse.
       matrix:
         node: [24, 22]
     steps:
@@ -86,37 +91,31 @@ jobs:
         if: github.event_name != 'merge_group'
         run: pnpm format:check
 
-      - run: pnpm lint
-
-      # The tests for the gate below. They run first because a broken gate
-      # reports nothing rather than reporting a failure, and this is the step
-      # that would say so.
+      # The old root lint / test / typecheck steps are gone, and their
+      # coverage moved INTO the Moon step below rather than beside it. Each
+      # verified a code path a project target now verifies through the same
+      # graph that decides what runs:
+      #   - `pnpm lint` was `eslint .` from the root — a whole-repository
+      #     traversal that re-linted every file each package's own `lint`
+      #     target lints, plus `scripts/` and the root configs. The traversal
+      #     is gone; `scripts/` and those root files are linted by the
+      #     `gate-scripts` project's `lint` target (`scripts/moon.yml`), and
+      #     every package file by the package that owns it — each file exactly
+      #     once, each under the graph's affected selection.
+      #   - `pnpm test` and `pnpm typecheck` covered only `scripts/`, which
+      #     sat outside every project as a verification-free zone. They are
+      #     `gate-scripts`' `test` and `typecheck` targets now — same
+      #     commands, same empty-glob refusals, inside the graph.
       #
-      # It can only say so while it runs something, and it used not to have to.
-      # `node --test` prints `tests 0` and exits 0 when its glob resolves no
-      # file — measured on node 24.16.0, where a file that DOES resolve counts
-      # as one test even with no `test()` call in it, so an empty glob is the
-      # only shape in which this lane runs nothing. The `test` script in
-      # `package.json` now refuses that itself, so a local run and the hook
-      # refuse it too, for the same reason the e2e shards below refuse theirs.
-      # The two Moon SDK `test` targets carry the same refusal in their own
-      # `moon.yml`, next to the toolchain each one argues against: `go test`
-      # and `cargo test` are both green over a tree that ran nothing.
-      - run: pnpm test
-
-      # The gate scripts' JSDoc, type-checked. `scripts/` is not a Moon project,
-      # so the `moon run` step below never reaches it — each package's own
-      # `typecheck` target covers only that package.
-      - run: pnpm typecheck
-
-      # Reads the target list out of THIS FILE — out of the `moon run` line
-      # below — and asserts every directory under `packages/` is a project the
-      # graph can see which declares at least one of those targets. Without it
-      # the next step exits 0 on three different states, only one of which is
-      # good: nothing exists, something exists with no matching target (skipped
-      # in silence), or something exists with no manifest (invisible entirely).
-      # Runs BEFORE that step, so an unreachable package fails as an error
-      # rather than passing as an absence.
+      # Reads the target list out of THIS FILE — out of the Moon step below —
+      # and asserts every directory under `packages/` plus `scripts/` is a
+      # project the graph can see which declares at least one of those
+      # targets. Without it the Moon step exits 0 on three different states,
+      # only one of which is good: nothing exists, something exists with no
+      # matching target (skipped in silence), or something exists with no
+      # manifest (invisible entirely). Runs BEFORE that step, so an
+      # unreachable project fails as an error rather than passing as an
+      # absence.
       - run: pnpm check-packages
 
       # Validates the arch-* skill structure: every expected skill exists,
@@ -178,11 +177,56 @@ jobs:
           rustup component add clippy rustfmt
           rustup target add wasm32-unknown-unknown
 
-      # --force skips Moon's VCS affected detection (which needs full git
-      # history, unavailable in the shallow checkout) and bypasses the local
-      # cache — both correct for CI, where every target must run fresh.
-      - name: Run every project's targets
-        run: pnpm exec moon run --force ...:lint ...:test ...:typecheck
+      # The old line here was `moon run --force`, argued as "skips Moon's VCS
+      # affected detection (which needs full git history, unavailable in the
+      # shallow checkout)" — while this job's own checkout above has carried
+      # `fetch-depth: 0` all along. The premise was stale: full history was
+      # present, so the only thing `--force` still did was disable affected
+      # detection and the input-hash cache, and every project's every target
+      # ran on every pull request no matter what changed.
+      #
+      # The replacement is Moon's own CI mode selecting exactly the targets a
+      # change can have moved — through each task's declared `inputs` (the
+      # per-project `moon.yml` files) and the projects' `dependsOn` graph:
+      #
+      #   - pull_request: `moon ci` against the pull request's base commit.
+      #     The base SHA is taken from the event payload rather than
+      #     `origin/$BASE_REF` because it is an ancestor of the checked-out
+      #     merge ref by construction — no dependency on which remote a fork
+      #     pull request fetches.
+      #   - merge_group: the same against `origin/main`. The queue branch
+      #     holds main plus every pull request ahead in the batch, so that
+      #     diff IS the batch, and `GITHUB_BASE_REF` is empty on this event.
+      #   - push to main, workflow_dispatch: `moon run` with no affected
+      #     filter — on the branch that ships, everything runs. An affected
+      #     filter there would diff `main` against itself and run nothing;
+      #     MOON_BASE stays empty and the `else` leg takes over.
+      #
+      # A pull request that touches nothing the graph maps to a target — a
+      # documentation-only change, say — exits 0 with Moon's own "No tasks
+      # affected by changed files" line in the log: the empty result is the
+      # graph's claim, printed rather than implied, and the repository-wide
+      # gates around this step still ran.
+      #
+      # `moon ci` is affected by definition — it has no `--affected` flag,
+      # and passing one is a clap error. (`moon run --affected` exists, and
+      # there its optional value swallows the token after it; `moon ci`
+      # avoids both traps.)
+      - name: Run the targets the change can have moved
+        env:
+          # The pull request's base commit, from the event payload rather
+          # than `origin/$BASE_REF`: it is an ancestor of the checked-out
+          # merge ref by construction, so no fork's remote layout matters.
+          # The merge queue's branch holds main plus every pull request
+          # ahead in the batch, so `origin/main` there diffs exactly the
+          # batch.
+          MOON_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && 'origin/main' || '' }}
+        run: |
+          if [ -n "$MOON_BASE" ]; then
+            pnpm exec moon ci --base="$MOON_BASE" ...:lint ...:test ...:typecheck
+          else
+            pnpm exec moon run ...:lint ...:test ...:typecheck
+          fi
 
       # The tool, run on the tree that ships it. Everything above proves the
       # code is correct against fixtures it built itself; this is the only step
@@ -207,9 +251,10 @@ jobs:
       # discovery, and `moon run` all at once. The way around it is a throwaway
       # COPY of the tracked tree with `.moon/` and per-project `moon.yml` files
       # removed and a `archkeep.json` written in —
-      # `.github/native-selfcheck/archkeep.json`, tracked and reviewable, describing
-      # the same two projects under the same tags this repository's own law already
-      # uses.
+      # `.github/native-selfcheck/archkeep.json`, tracked and reviewable,
+      # describing the same projects under the same tags this repository's
+      # own law already uses — every project the Moon graph declares, one
+      # `declared` entry each, and the same knowingly-unclaimed leftovers.
       #
       # Two properties make this worth a step of its own rather than a curiosity:
       #   - The `diff -q` below proves the copy reads the exact same
@@ -260,9 +305,7 @@ jobs:
           dir="$(mktemp -d)"
           git archive HEAD | tar -x -C "$dir"
           rm -r "$dir/.moon"
-          rm "$dir/packages/archkeep/moon.yml"
-          rm "$dir/packages/archkeep-mcp/moon.yml"
-          rm "$dir/packages/archkeep-vscode/moon.yml"
+          rm "$dir"/packages/*/moon.yml "$dir"/scripts/moon.yml
           cp .github/native-selfcheck/archkeep.json "$dir/archkeep.json"
           diff -q "$law" "$dir/module-boundaries.config.mjs"
           # Symlinked in, not copied and not installed fresh: the step above
