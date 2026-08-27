@@ -442,15 +442,24 @@ export function useRootSegment(path) {
  *
  * @param {string} rustText
  * @param {Set<string>} [knownCrates] Crate identifiers the workspace declares.
- * @returns {{ specifier: string, root: string|null, kind: string, offset: number }[]}
+ * @param {{ returnMetrics?: boolean }} [options] `returnMetrics: true` adds
+ *   `binarySearchIterations` \u2014 how many comparisons the claimed-range lookups
+ *   below made \u2014 so a regression test can budget in operations rather than
+ *   wall-clock time (#359). Production callers omit it and pay one increment
+ *   per comparison for the counter, nothing else.
+ * @returns {{ sites: { specifier: string, root: string|null, kind: string, offset: number }[], binarySearchIterations?: number }}
  */
-export function parseRustUseSites(rustText, knownCrates = new Set()) {
+export function parseRustUseSites(rustText, knownCrates = new Set(), options = {}) {
+  const { returnMetrics = false } = options;
   // A UTF-8 BOM is blanked, not stripped (see the header's byte-tolerance
   // bullet): same length, so every offset below stays an offset into the
   // original, and `^`-anchored forms see a line that starts like any other.
   const source = rustText.replace(/^\uFEFF/, " ");
   const sites = [];
   const claimed = [];
+  // Counted per comparison in `unclaimed` below; reported only under
+  // `returnMetrics`, never read otherwise.
+  let binarySearchIterations = 0;
 
   // `use` opens at a line start, after a same-line `;`/`{`/`}` statement
   // boundary, or after a same-line `#[…]` attribute block — every position
@@ -568,6 +577,7 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
     let high = claimed.length - 1;
     let last = -1; // the last range starting at or before `offset`
     while (low <= high) {
+      binarySearchIterations++;
       const mid = (low + high) >> 1;
       if (claimed[mid][0] <= offset) {
         last = mid;
@@ -593,7 +603,12 @@ export function parseRustUseSites(rustText, knownCrates = new Set()) {
     }
   }
 
-  return sites.sort((a, b) => a.offset - b.offset);
+  const sorted = sites.sort((a, b) => a.offset - b.offset);
+  const result = { sites: sorted };
+  if (returnMetrics) {
+    result.binarySearchIterations = binarySearchIterations;
+  }
+  return result;
 }
 
 /**
@@ -625,7 +640,9 @@ export function analyzeRust({ sourceFile, text, workspace }) {
     // site: a `.rs` file with thousands of `use` statements otherwise pays a
     // rescan of the file per site (`source-util.mjs`'s `lineStartsOf`).
     const lineStarts = lineStartsOf(text);
-    for (const site of parseRustUseSites(text, knownCrates)) {
+    const useSites = parseRustUseSites(text, knownCrates);
+    const sites = useSites.sites;
+    for (const site of sites) {
       const { line, column } = positionAt(text, site.offset, lineStarts);
       let resolved = null;
       if (site.root === null) {
