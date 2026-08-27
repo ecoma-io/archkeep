@@ -140,6 +140,10 @@ interpreters from the runner image. Without a toolchain, that language's
 targets fail — they do not skip, which is the whole point of `check-packages`
 below. If you have not touched an SDK, running one project's targets is fine:
 
+```bash
+moon run archkeep:lint archkeep:test archkeep:typecheck
+```
+
 The E2E suite is sharded two ways in CI, and on a pull request it only runs
 when the affected graph says the engine moved — an engine change re-runs it,
 a documentation-only change skips it loudly:
@@ -148,8 +152,13 @@ a documentation-only change skips it loudly:
 moon run archkeep:e2e --base=<base-ref> --affected -- --shard=1/2
 ```
 
+The artifact proofs — the packed engine tarball installed into consumer
+workspaces, and the extension's vsix — are Moon tasks too, gated by the same
+affected graph on pull requests:
+
 ```bash
-moon run archkeep:lint archkeep:test archkeep:typecheck
+moon run archkeep:integration
+moon run archkeep-vscode:package
 ```
 
 Not every SDK declares all three: `check-packages` reports

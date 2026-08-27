@@ -46,6 +46,19 @@ tasks:
       - "/package.json"
       - "/pnpm-lock.yaml"
       - "/packages/archkeep-rules/rules/**"
+  # The packed artifact, proven outside this workspace: `pnpm pack`, install
+  # into throwaway consumer trees this repository never built, drive what a
+  # consumer buys (Nx graph, exit contract, the language server over its
+  # installed path). The engine of the task lives in
+  # `/scripts/verify-package.mjs`, which is why that file is an input — a
+  # change to the proof is a change to what the proof covers.
+  integration:
+    command: node $workspaceRoot/scripts/verify-package.mjs $projectSource
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+      - "/scripts/verify-package.mjs"
 
 # Task `inputs`: declaring any replaces the whole-project default (`**/*` —
 # measured with `moon query tasks --affected`), so each task that declares

@@ -381,48 +381,41 @@ jobs:
           # already passed is the failure being refused here.
           rm -rf "$dir" || true
 
-      # The extension's own artifact, built on every pull request so a change
-      # that breaks packaging turns THIS build red instead of the release lane
-      # weeks later. It cannot run where the tests above ran: vsce walks
-      # `node_modules` with `npm list --production`, which fails outright
-      # against pnpm's symlinked layout, so the script stages the tracked files
-      # into a throwaway directory, installs the runtime dependencies with npm,
-      # and packs there — package-vsix.mjs holds the measurement.
-      - name: Package the VS Code extension
-        run: node scripts/package-vsix.mjs packages/archkeep-vscode dist/archkeep-vscode.vsix
+      # The extension's own artifact, built on every pull request where the
+      # graph says the extension moved, so a change that breaks packaging
+      # turns THIS build red instead of the release lane weeks later. It
+      # cannot run where the tests ran: vsce walks `node_modules` with
+      # `npm list --production`, which fails outright against pnpm's
+      # symlinked layout, so the script stages the tracked files into a
+      # throwaway directory, installs the runtime dependencies with npm, and
+      # packs there — package-vsix.mjs holds the measurement. On the merge
+      # queue and on `main` the packaging is unconditional (MOON_BASE empty).
+      - name: Package and prove the VS Code extension artifact
+        env:
+          MOON_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          if [ -n "$MOON_BASE" ]; then
+            pnpm exec moon run archkeep-vscode:package --base="$MOON_BASE" --affected
+          else
+            pnpm exec moon run archkeep-vscode:package
+          fi
 
-      # And prove the vsix holds what an install needs — the entry point, the
-      # decision modules, and `node_modules/vscode-languageclient`, the runtime
-      # dependency the extension imports on activation. `vsce package` exiting 0
-      # proves none of that: a vsix missing the language client installs
-      # cleanly and dies in the extension host, which no gate in this file
-      # would otherwise see. The release lane runs the same check against the
-      # exact bytes it uploads.
-      - name: Prove the vsix holds what an install needs
-        run: node scripts/verify-vsix.mjs dist/archkeep-vscode.vsix
-
-      # Everything above runs the tool where its dependencies already exist, so
-      # none of it can see the failure this step is for: the manifest declared
-      # zero dependencies once, and the suite stayed green because `typescript`
-      # and `smol-toml` sit in the root manifest, pnpm hoists them, and Node
-      # walks up. Published as-is it would have installed cleanly and thrown at
-      # the first `import ts from "typescript"`.
-      #
-      # So this packs the real tarball, installs it into a throwaway workspace
-      # with a tag vocabulary nothing in `src/` knows about, and drives what a
-      # consumer buys — the plugin loading inside a real `nx graph` (Nx is a
-      # peer dependency; the artifact must still work inside Nx workspaces),
-      # exiting 0 on a clean tree AND 1 on a violating one, and the language
-      # server answering through the symlinked path an installed plugin is
-      # launched by. The release lane runs the same script before `npm publish`;
-      # here it fails the change that broke resolution rather than the release
-      # weeks later.
-      #
-      # Last in verify-core because it is the slowest step in this job by a
-      # wide margin — it runs a full `pnpm install` against the registry — and
-      # everything above narrows the cause before this reports.
-      - name: Prove the packed artifact works outside this workspace
-        run: node scripts/verify-package.mjs packages/archkeep
+      # The engine's packed artifact, proven the way a consumer buys it: the
+      # tarball installed into throwaway workspaces this repository never
+      # built, the plugin loading inside a real `nx graph`, the checker's
+      # exit contract, the language server answering `initialize` through
+      # the symlinked path an installed plugin launches by. Slowest task in
+      # the job (it installs from the registry), so it runs last and gated
+      # like the rest.
+      - name: Prove the packed engine artifact works outside this workspace
+        env:
+          MOON_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          if [ -n "$MOON_BASE" ]; then
+            pnpm exec moon run archkeep:integration --base="$MOON_BASE" --affected
+          else
+            pnpm exec moon run archkeep:integration
+          fi
 
   verify-e2e:
     name: Verify (E2E ${{ matrix.shard }}/2)
