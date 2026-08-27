@@ -219,6 +219,42 @@ export const DEFAULT_MANIFEST_NAMES = Object.freeze([
 
 const PROJECT_TYPES = ["app", "lib", "e2e"];
 
+/**
+ * The deliberate default for `projects.infer.exclude` — the anchor-exclusion
+ * half of the phantom-project policy (issue #371): a tracked manifest inside a
+ * directory that is documentation or test data about the workspace, rather
+ * than a part of it, never anchors an inferred project, because inference over
+ * it would judge a phantom as real. `docs/`, `fixtures/` and `__fixtures__/`
+ * as whole path segments are the complete set: those three names mean "data
+ * about the tree" in every convention this package has measured, and a name
+ * like `examples/` was deliberately left OFF it — example projects are
+ * commonly real, built, governed code, so excluding them by name would be the
+ * same over-broad-by-name error the `obj`/`bin` half of the same issue
+ * repudiated (`./discover.mjs`'s `isDotnetGeneratedOutput`).
+ *
+ * Two facts make this exclusion safe rather than a silent hole:
+ *
+ * - `projects.declared` is exempt — a workspace with a real project under one
+ *   of these paths declares it, and declaration is the authoritative channel
+ *   inference never touches.
+ * - A dropped anchor's analyzable files do not vanish silently: they surface
+ *   through `./coverage.mjs`'s unclaimed-file judgment as whole-file failures
+ *   until the workspace either declares the project or records a reasoned
+ *   `coverage.exempt` row — which is the loud, explicit opt-in for "this
+ *   directory is fixture data".
+ *
+ * An explicit `exclude` list REPLACES this default (the `tsc` convention for
+ * the same field): a workspace that names its own list takes over the whole
+ * decision, `exclude: []` included — that spelling is the documented opt-out.
+ *
+ * @see DEFAULT_MANIFEST_NAMES
+ */
+export const DEFAULT_INFER_EXCLUDE = Object.freeze([
+  "**/docs/**",
+  "**/fixtures/**",
+  "**/__fixtures__/**",
+]);
+
 /** @type {(value: unknown) => value is Record<string, unknown>} */
 const isPlainObject = (value) =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -722,7 +758,9 @@ export function normalizeNativeModel(raw) {
           : {
               manifests: rawInfer.manifests ?? DEFAULT_MANIFEST_NAMES,
               include: rawInfer.include ?? ["**"],
-              exclude: rawInfer.exclude ?? [],
+              // Replaces, never merges: an explicit list takes over the whole
+              // decision — `DEFAULT_INFER_EXCLUDE`'s doc comment owns the why.
+              exclude: rawInfer.exclude ?? DEFAULT_INFER_EXCLUDE,
             },
     },
     projectRules: /** @type {unknown[]} */ (raw.projectRules ?? []).map((row) => {

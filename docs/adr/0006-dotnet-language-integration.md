@@ -63,6 +63,17 @@ The alternatives were considered and rejected with reasons:
    Solutions, target frameworks, assemblies, NuGet packages, and source sets
    are not nodes: the model stops at Project ([ADR 0005](0005-jvm-language-integration.md),
    Decision 3, extended verbatim).
+
+   _Amended 2026-08-27 (issue #371):_ the `obj`/`bin` rule is judged by role,
+   not name — a `.csproj` under those directories is generated output exactly
+   when the directory above the segment carries the tracked `.csproj` whose
+   build produced it (`Api.csproj` beside the `obj/`/`bin/` it fills). The
+   name-only reading silently excluded a legitimate project rooted under a
+   directory merely NAMED `obj` or `bin`, which is the silent direction this
+   repository refuses. The consumer-facing statement of both halves — this
+   rule and the default `projects.infer.exclude` set — is
+   [configuration.md](../reference/configuration.md).
+
 3. **Edges keep the two-track split, path-based.** `<ProjectReference>` draws
    a declared edge by resolving the written path (Windows separators
    normalized) to the project owning the csproj the path lands on; a path

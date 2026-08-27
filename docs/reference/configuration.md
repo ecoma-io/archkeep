@@ -35,16 +35,52 @@ Omitting this key entirely means the declared list is exhaustive -- no
 inference runs at all. Presence-with-defaults differs from absence; this is
 intentional.
 
-| field       | default (when the key is present but this field is not)                  | meaning                                                                                                     |
-| ----------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `manifests` | `project.json`, `package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml` | One tracked manifest per directory contributes a project, unless that directory is already a declared root. |
-| `include`   | `["**"]`                                                                 | Glob, matched with `path.posix.matchesGlob`.                                                                |
-| `exclude`   | `[]`                                                                     | Same matcher.                                                                                               |
+| field       | default (when the key is present but this field is not)                                                                                   | meaning                                                                                                     |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `manifests` | `project.json`, `package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `pom.xml`, `settings.gradle`, `settings.gradle.kts`, `*.csproj` | One tracked manifest per directory contributes a project, unless that directory is already a declared root. |
+| `include`   | `["**"]`                                                                                                                                  | Glob, matched with `path.posix.matchesGlob`.                                                                |
+| `exclude`   | `["**/docs/**", "**/fixtures/**", "**/__fixtures__/**"]`                                                                                  | Same matcher.                                                                                               |
 
 `manifests: []` or `include: []` is rejected outright rather than accepted as
 "match nothing" -- an empty list here reads as "infer zero projects," which is
 the silent direction. Omit `projects.infer` entirely to get that effect on
 purpose.
+
+##### The default exclusion set, and why it is deliberate
+
+A tracked manifest inside a directory that is data ABOUT the workspace --
+documentation, test fixtures -- anchors a phantom project: inference judges it
+and its files as real production code, silently. The default `exclude` set is
+the deliberate guard. It names three whole path segments -- `docs`, `fixtures`,
+`__fixtures__` -- and nothing else:
+
+- **Segments, not substrings**: `my-docs/` and `test-fixtures/` do not match.
+- **`examples` is deliberately absent**: example projects are commonly real,
+  built, governed code; excluding them by name would trade a phantom for a
+  silently missing project.
+- **An explicit list replaces the default** (the `tsconfig` convention for the
+  same field). A workspace naming its own `exclude` takes over the whole
+  decision -- `exclude: []` is the documented opt-out and means it.
+
+The exclusion is not a silent hole, by construction:
+
+- `projects.declared` is exempt from it. A workspace with a real project under
+  one of these paths declares it, and declaration is the authoritative channel
+  inference never touches.
+- A dropped anchor's analyzable files do not vanish: they surface as unclaimed
+  coverage findings ("not owned by any project") until the workspace either
+  declares the project or records a reasoned `coverage.exempt` row -- which is
+  the explicit, audited way to say "this directory is fixture data."
+
+##### Generated .NET output under `obj/` and `bin`
+
+A tracked `*.csproj` under an `obj/` or `bin/` directory never anchors a
+project when the directory above that segment carries the tracked `.csproj`
+whose build produced it -- the layout `dotnet build` itself writes, the
+project file beside the `obj/` and `bin/` it fills. The judgment is by role,
+not name: a source project that merely lives under a directory NAMED `obj` or
+`bin`, with no owning manifest above the segment, is discovered like any
+other.
 
 Every `path.posix.matchesGlob` pattern in this file -- `include`/`exclude`
 here, and `projectRules[].match`/`coverage.exempt[].path` below -- is capped

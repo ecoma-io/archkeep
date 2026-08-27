@@ -180,6 +180,126 @@ describe("discoverNativeProjects", () => {
     });
   });
 
+  // The default anchor-exclusion policy (issue #371): a tracked manifest in a
+  // directory that is data ABOUT the workspace — documentation, test
+  // fixtures — must not anchor a phantom project the boundary rules then
+  // judge as real. `./model.mjs`'s `DEFAULT_INFER_EXCLUDE` owns the set;
+  // these tests pin both directions it exists to hold.
+  describe("default anchor exclusions", () => {
+    // Silent-direction: before the default set, this exact tree silently
+    // grew phantom projects rooted at `docs/fixtures/example` and
+    // `tests/fixtures/go-lib`, named and judged like production code.
+    it("does not anchor a project on a tracked manifest inside docs/ or fixtures/ paths", () => {
+      const model = modelOf({ projects: { declared: [{ root: "apps/a" }], infer: {} } });
+      const { projects } = discoverNativeProjects({
+        root: "/repo",
+        files: [
+          "apps/a/x.go",
+          "docs/fixtures/example/package.json",
+          "tests/fixtures/go-lib/go.mod",
+          "libs/b/__fixtures__/kotlin-embed/settings.gradle",
+        ],
+        readFile: filesOf({
+          "docs/fixtures/example/package.json": JSON.stringify({ name: "example-app" }),
+          "tests/fixtures/go-lib/go.mod": "module example.com/go-lib\n",
+          "libs/b/__fixtures__/kotlin-embed/settings.gradle": "",
+        }),
+        model,
+      });
+      expect(projects.map((p) => p.root)).toEqual(["apps/a"]);
+    });
+
+    // The loudness half of the policy: dropping the anchor must not drop the
+    // FILES. A fixture's analyzable sources surface through `judgeCoverage`
+    // as unclaimed — the same channel the vendored-manifest case rides —
+    // until the workspace records a reasoned `coverage.exempt` row for them.
+    // Before the default set, the phantom project silently owned them.
+    it("leaves a fixture's analyzable files as loud unclaimed coverage, not silently owned", () => {
+      const model = modelOf({ projects: { declared: [{ root: "apps/a" }] } });
+      const { projects } = discoverNativeProjects({
+        root: "/repo",
+        files: [
+          "apps/a/x.go",
+          "docs/fixtures/example/package.json",
+          "docs/fixtures/example/main.go",
+        ],
+        readFile: filesOf({
+          "docs/fixtures/example/package.json": JSON.stringify({ name: "example-app" }),
+        }),
+        model,
+      });
+      // Attribution the way `./index.mjs`'s discover does it: a file belongs
+      // to the project whose root contains it — and no discovered project
+      // contains the fixture's files once its anchor is excluded.
+      const rootByFile = (file) => projects.find((p) => file.startsWith(`${p.root}/`))?.root;
+      const coverage = judgeCoverage({
+        files: ["apps/a/x.go", "docs/fixtures/example/main.go"],
+        projectOf: rootByFile,
+        exempt: [],
+      });
+      expect(coverage.unclaimed).toEqual(["docs/fixtures/example/main.go"]);
+      expect(coverage.failures).toHaveLength(1);
+      expect(coverage.failures[0].sourceFile).toBe("docs/fixtures/example/main.go");
+    });
+
+    // `projects.declared` is the authoritative channel and never subject to
+    // inference's exclusions: a workspace with a REAL project under docs/
+    // declares it, and the default set must not eat the declaration.
+    it("still discovers a declared project rooted under an excluded default path", () => {
+      const model = modelOf({
+        projects: { declared: [{ root: "docs/website", name: "docs-site" }], infer: {} },
+      });
+      const { projects } = discoverNativeProjects({
+        root: "/repo",
+        files: ["docs/website/package.json", "docs/website/index.js"],
+        readFile: filesOf({
+          "docs/website/package.json": JSON.stringify({ name: "ignored-by-declaration" }),
+        }),
+        model,
+      });
+      expect(
+        projects.map((p) => {
+          return p.name;
+        }),
+      ).toEqual(["docs-site"]);
+      expect(projects[0].root).toBe("docs/website");
+    });
+
+    // An explicit `exclude` list REPLACES the default (the `tsc` convention
+    // for the same field) — `exclude: []` is the documented opt-out, and it
+    // means it: the phantom comes back, because the workspace said so.
+    it("anchors a fixture-shaped manifest again when the workspace opts out with exclude: []", () => {
+      const model = modelOf({ projects: { declared: [], infer: { exclude: [] } } });
+      const { projects } = discoverNativeProjects({
+        root: "/repo",
+        files: ["docs/fixtures/example/package.json"],
+        readFile: filesOf({
+          "docs/fixtures/example/package.json": JSON.stringify({ name: "example-app" }),
+        }),
+        model,
+      });
+      expect(projects.map((p) => p.root)).toEqual(["docs/fixtures/example"]);
+    });
+
+    // The set matches whole path segments: `my-docs` and `test-fixtures` are
+    // different segments, and a real project living under either anchors —
+    // the same over-broad-by-name error the obj/bin half of this issue
+    // repudiated, refused here before it can be made.
+    it("matches whole segments only — my-docs and test-fixtures are not excluded", () => {
+      const model = modelOf({ projects: { declared: [], infer: {} } });
+      const { projects } = discoverNativeProjects({
+        root: "/repo",
+        files: ["my-docs/tool/package.json", "test-fixtures/go-lib/go.mod"],
+        readFile: filesOf({
+          "my-docs/tool/package.json": JSON.stringify({ name: "doc-tool" }),
+          "test-fixtures/go-lib/go.mod": "module example.com/lib\n",
+        }),
+        model,
+      });
+      expect(projects.map((p) => p.root).sort()).toEqual(["my-docs/tool", "test-fixtures/go-lib"]);
+    });
+  });
+
   describe("name collisions", () => {
     it("throws when two different roots resolve to the same project name", () => {
       const model = modelOf({
@@ -722,16 +842,54 @@ describe("dotnet inference (*.csproj in the default manifest list)", () => {
     expect(projects.map((project) => project.root).sort()).toEqual(["apps/api", "libs/core"]);
   });
 
-  it("refuses rather than modeling a tree whose only manifest is generated output", () => {
+  // Issue #371's over-broad half: the exclusion used to fire on the NAME
+  // `bin`/`obj` alone, so a legitimate project rooted under either was
+  // silently absent from the model — byte-for-byte identical to a workspace
+  // that never had it. Role-based judgment needs the owning `.csproj` beside
+  // the segment (`./discover.mjs`'s `isDotnetGeneratedOutput`); with no owner
+  // above it there is no evidence of build output, and anchoring is the loud
+  // direction — a project that appears and can be inspected beats one that
+  // silently never existed.
+  it("anchors a legitimate .csproj under a directory merely NAMED bin or obj", () => {
     const model = modelOf({ projects: { declared: [], infer: {} } });
-    expect(() =>
-      discoverNativeProjects({
-        root: "/repo",
-        files: ["apps/api/bin/Api.generated.csproj"],
-        readFile: filesOf({ "apps/api/bin/Api.generated.csproj": "<Project />" }),
-        model,
+    const { projects } = discoverNativeProjects({
+      root: "/repo",
+      files: ["tools/bin/Cli.csproj", "libs/obj/Core.csproj"],
+      readFile: filesOf({
+        "tools/bin/Cli.csproj": "<Project />",
+        "libs/obj/Core.csproj": "<Project />",
       }),
-    ).toThrow(/zero projects/);
+      model,
+    });
+    expect(projects.map((project) => project.root).sort()).toEqual(["libs/obj", "tools/bin"]);
+  });
+
+  // The same role signal holds at depth: MSBuild writes intermediate output
+  // under per-configuration subdirectories (`obj/Debug/net8.0/…`), and the
+  // owning manifest sits above the whole `obj` segment, not beside the file.
+  it("never anchors generated output nested below an owned obj/ segment", () => {
+    const model = modelOf({ projects: { declared: [], infer: {} } });
+    const { projects } = discoverNativeProjects({
+      root: "/repo",
+      files: [...Object.keys(tree), "apps/api/obj/Debug/net8.0/Api.generated.csproj"],
+      readFile: filesOf({
+        ...tree,
+        "apps/api/obj/Debug/net8.0/Api.generated.csproj": "<Project />",
+      }),
+      model,
+    });
+    expect(projects.map((project) => project.root).sort()).toEqual(["apps/api", "libs/core"]);
+  });
+
+  it("never anchors a project on generated bin/ output beside its owning .csproj", () => {
+    const model = modelOf({ projects: { declared: [], infer: {} } });
+    const { projects } = discoverNativeProjects({
+      root: "/repo",
+      files: [...Object.keys(tree), "apps/api/bin/Api.generated.csproj"],
+      readFile: filesOf({ ...tree, "apps/api/bin/Api.generated.csproj": "<Project />" }),
+      model,
+    });
+    expect(projects.map((project) => project.root).sort()).toEqual(["apps/api", "libs/core"]);
   });
 
   it("fails loudly when two .csproj files share one directory, naming both", () => {

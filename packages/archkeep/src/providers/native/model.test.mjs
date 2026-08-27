@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_INFER_EXCLUDE,
   DEFAULT_MANIFEST_NAMES,
   findNativeModelViolations,
   loadNativeModel,
@@ -690,7 +691,10 @@ describe("normalizeNativeModel", () => {
     expect(model.projects.infer).toEqual({
       manifests: DEFAULT_MANIFEST_NAMES,
       include: ["libs/**"],
-      exclude: [],
+      // The deliberate anchor-exclusion set, not `[]` — `DEFAULT_INFER_EXCLUDE`'s
+      // doc comment owns the policy; `discover.test.mjs`'s "default anchor
+      // exclusions" block pins what it does to a tree.
+      exclude: DEFAULT_INFER_EXCLUDE,
     });
   });
 
