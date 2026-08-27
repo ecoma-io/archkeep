@@ -114,7 +114,9 @@ class TheCommittedArtifact(unittest.TestCase):
         """
         self.assertTrue(DIGEST_FILE.is_file(), f"{DIGEST_FILE} is not committed")
         declared = DIGEST_FILE.read_text(encoding="utf-8").strip()
-        self.assertEqual(len(declared), 64, "a sha256 is 64 hex characters and nothing else")
+        self.assertEqual(
+            len(declared), 64, "a sha256 is 64 hex characters and nothing else"
+        )
         self.assertEqual(declared, declared.lower(), "a policy row pins lowercase hex")
         self.assertEqual(hashlib.sha256(ARTIFACT.read_bytes()).hexdigest(), declared)
 
@@ -179,7 +181,9 @@ class TheImportSectionWalk(unittest.TestCase):
         # after the first byte would misread it as a tiny section, and only a
         # module exercising both bytes can tell.
         clean = bytes([0, 4, 1, ord("a"), ord("b"), ord("c")])  # a custom section
-        long = bytes([1, 0xC8, 0x01]) + bytes(200)  # type section, two-byte LEB128 length
+        long = bytes([1, 0xC8, 0x01]) + bytes(
+            200
+        )  # type section, two-byte LEB128 length
         try:
             _refuse_unless_import_free(self._module(clean, long))
         except AssertionError as assertion:

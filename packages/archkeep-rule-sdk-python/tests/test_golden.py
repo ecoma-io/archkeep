@@ -144,11 +144,15 @@ class TheGoldenFixtures(unittest.TestCase):
         seen = 0
         for name in sorted(path.name for path in FIXTURES.glob("*.json")):
             for finding in replay(name)["findings"]:
-                self.assertIn(finding["id"], declared, f"{name} produced an undeclared id")
+                self.assertIn(
+                    finding["id"], declared, f"{name} produced an undeclared id"
+                )
                 seen += 1
         # Without this the test passes over a suite that produced no finding at
         # all, which is exactly the shape it is meant to catch.
-        self.assertGreater(seen, 0, "no fixture produced a finding, so nothing was checked")
+        self.assertGreater(
+            seen, 0, "no fixture produced a finding, so nothing was checked"
+        )
 
     def test_the_suite_covers_every_fixture_in_the_directory(self):
         """A fixture nobody replays is a fixture that proves nothing.

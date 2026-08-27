@@ -40,7 +40,7 @@ from archkeep_rule_sdk.build import (
 )
 
 #: A rule module that declares everything `read_declaration` looks for.
-WELL_FORMED = '''
+WELL_FORMED = """
 ARCHKEEP_RULE = {
     "name": "no-app-to-ring",
     "needs": ["model", "graph"],
@@ -50,7 +50,7 @@ ARCHKEEP_RULE = {
 
 def evaluate(evidence):
     return None
-'''
+"""
 
 
 def _written(text, directory, name="rule.py"):
@@ -94,7 +94,10 @@ class FindingsLiteralTests(unittest.TestCase):
         self.assertEqual(
             _findings_literal(
                 [
-                    {"id": "reached-ring", "message": "the app layer reached a ring internal"},
+                    {
+                        "id": "reached-ring",
+                        "message": "the app layer reached a ring internal",
+                    },
                     {"id": "unplaced-reach", "message": 'a reach with a "quote" in it'},
                 ]
             ),
@@ -111,7 +114,13 @@ class FindingsLiteralTests(unittest.TestCase):
         self.assertEqual(_findings_literal([]), "")
 
     def test_refuses_an_entry_that_states_no_id_or_no_message(self):
-        for entry in ({"id": "reached-ring"}, {"message": "m"}, None, "reached-ring", 7):
+        for entry in (
+            {"id": "reached-ring"},
+            {"message": "m"},
+            None,
+            "reached-ring",
+            7,
+        ):
             with self.assertRaises(BuildError) as raised:
                 _findings_literal([entry])
             self.assertIn("findings'][0]", str(raised.exception))
@@ -173,7 +182,9 @@ class ReadDeclarationTests(unittest.TestCase):
         # All three, not the first one: an author fixing a declaration one
         # named key per build is three builds where one would do.
         with TemporaryDirectory() as directory:
-            path = _written("ARCHKEEP_RULE = {}\n\ndef evaluate(e):\n    return None\n", directory)
+            path = _written(
+                "ARCHKEEP_RULE = {}\n\ndef evaluate(e):\n    return None\n", directory
+            )
             with self.assertRaises(BuildError) as raised:
                 read_declaration(path)
         message = str(raised.exception)
@@ -187,7 +198,9 @@ class ReadDeclarationTests(unittest.TestCase):
                 path = _written(source, directory)
                 with self.assertRaises(BuildError) as raised:
                     read_declaration(path)
-            self.assertIn("defines no evaluate(evidence) function", str(raised.exception))
+            self.assertIn(
+                "defines no evaluate(evidence) function", str(raised.exception)
+            )
 
 
 class RenderCarrierTests(unittest.TestCase):
@@ -200,7 +213,9 @@ class RenderCarrierTests(unittest.TestCase):
         rule_path = _written(source, root)
         crate_dir = root / "crate"
         declaration = read_declaration(rule_path)
-        render_carrier(declaration, rule_path, crate_dir, sdk_dependency='path = "../.."')
+        render_carrier(
+            declaration, rule_path, crate_dir, sdk_dependency='path = "../.."'
+        )
         return crate_dir
 
     def test_leaves_no_placeholder_unrendered_in_either_file(self):
@@ -212,7 +227,9 @@ class RenderCarrierTests(unittest.TestCase):
         crate_dir = self._render()
         for name in ("Cargo.toml", "src/lib.rs"):
             text = (crate_dir / name).read_text(encoding="utf-8")
-            self.assertNotIn("{{", text, f"{name} still carries an unrendered placeholder")
+            self.assertNotIn(
+                "{{", text, f"{name} still carries an unrendered placeholder"
+            )
 
     def test_writes_the_needs_list_in_both_spellings_from_one_source(self):
         # `{{NEEDS}}` and `{{NEEDS_WIRE}}` are the same kinds twice — bare words
@@ -233,7 +250,9 @@ class RenderCarrierTests(unittest.TestCase):
         self.assertIn(CRATE_NAME, manifest)
         self.assertIn('path = "../.."', manifest)
 
-    def test_copies_the_runtime_the_author_tests_against_rather_than_rendering_one(self):
+    def test_copies_the_runtime_the_author_tests_against_rather_than_rendering_one(
+        self,
+    ):
         # Byte-identical, because a second copy of the runtime would agree with
         # the first only until one of them was edited — and the disagreement
         # would be between what the author's tests import and what the artifact
@@ -242,11 +261,15 @@ class RenderCarrierTests(unittest.TestCase):
         shipped = (
             Path(build_module.__file__).resolve().parent / "runtime.py"
         ).read_bytes()
-        self.assertEqual((crate_dir / "src" / "archkeep_rule_sdk.py").read_bytes(), shipped)
+        self.assertEqual(
+            (crate_dir / "src" / "archkeep_rule_sdk.py").read_bytes(), shipped
+        )
 
     def test_copies_the_rule_itself_under_the_name_the_carrier_imports(self):
         crate_dir = self._render()
-        self.assertIn("ARCHKEEP_RULE", (crate_dir / "src" / "rule.py").read_text(encoding="utf-8"))
+        self.assertIn(
+            "ARCHKEEP_RULE", (crate_dir / "src" / "rule.py").read_text(encoding="utf-8")
+        )
 
 
 if __name__ == "__main__":

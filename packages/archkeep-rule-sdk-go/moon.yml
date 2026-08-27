@@ -16,10 +16,13 @@ tags:
   - scope-sdk
 tasks:
   # `script` rather than `command`, because this task is two commands and a Moon
-  # `command` is one — the same shape the Rust package's lint task has, and for
-  # the same reason: gofmt decides layout, go vet decides everything else, and
-  # splitting them into two tasks would leave `lint` naming only one of them.
+  # `command` is one — the same shape the Rust package's lint task has.
   #
+  # The static half is `golangci-lint run` (`.golangci.yml` argues the
+  # roster: errcheck, govet, ineffassign, staticcheck, unused — the defaults,
+  # and the whole mandate for a stdlib-only crate). `go vet` is NOT run
+  # beside it: golangci-lint already runs govet, and the same analyzer twice
+  # is one verdict paying two CI bills.
   # The `if` is not decoration. `gofmt -l` PRINTS the files it would reformat
   # and exits 0 either way, so `script: gofmt -l . && go vet ./...` would report
   # a green lint over a package whose every file was misformatted — an exit code
@@ -28,10 +31,11 @@ tasks:
   # gives, so emptiness is what this reads.
   #
   # Both halves see `./abi_freestanding.go` only in part: gofmt is blind to build
-  # constraints and formats it, `go vet` is not and skips it, because the
-  # standard toolchain cannot compile that file at all (`./README.md` measures
-  # why). What covers it instead is `./rebuild-example.sh`, which builds it with
-  # the toolchain that can and then instantiates the result.
+  # constraints and formats it, golangci-lint's govet is not and skips it,
+  # because the standard toolchain cannot compile that file at all
+  # (`./README.md` measures why). What covers it instead is
+  # `./rebuild-example.sh`, which builds it with the toolchain that can and
+  # then instantiates the result.
   lint:
     script: |
       if [ -n "$(gofmt -l .)" ]; then
@@ -39,7 +43,7 @@ tasks:
         gofmt -l .
         exit 1
       fi
-      go vet ./...
+      golangci-lint run ./...
   # Runs the unit tests, the golden fixture suite, and the artifact checks —
   # deliberately NOT a wasm rebuild. The artifact is committed and pinned by its
   # digest, so what the suite proves is the bytes in the tree rather than bytes

@@ -177,6 +177,42 @@ jobs:
           rustup component add clippy rustfmt
           rustup target add wasm32-unknown-unknown
 
+      # The Python SDK's `lint` target runs Ruff, and the version is pinned
+      # here rather than taken from the runner image's preinstalled copy so a
+      # new Ruff release cannot rewrite the verdicts on its own schedule.
+      # `packages/archkeep-rule-sdk-python/ruff.toml` argues the rule roster.
+      - name: Install the pinned Ruff the Python SDK's lint target runs
+        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+        with:
+          version: "0.15.16"
+
+      # The Go SDK's targets run on a pinned toolchain instead of whichever
+      # Go the runner image ships this month — the same determinism the
+      # Node matrix buys, and `go-version-file` keeps the floor owned by the
+      # module that requires it.
+      - name: Pin the Go toolchain the Go SDK's targets run
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: packages/archkeep-rule-sdk-go/go.mod
+
+      # golangci-lint is downloaded and checksum-pinned rather than taken from
+      # the runner image (whose copy moves underneath every job) and rather
+      # than an installer action (a second moving piece when the release
+      # tarball's digest is already the pin). The digest was read off the
+      # v2.12.2 release artifact itself. The `lint` target in
+      # `packages/archkeep-rule-sdk-go/moon.yml` argues the linter roster and
+      # why `go vet` is not run beside it.
+      - name: Install the pinned golangci-lint the Go SDK's lint target runs
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/golangci-lint"
+          mkdir -p "$dir"
+          curl --silent --show-error --fail --location \
+            --output "$dir/golangci-lint.tar.gz" \
+            "https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz"
+          echo "8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553  $dir/golangci-lint.tar.gz" | sha256sum --check --strict
+          tar -xzf "$dir/golangci-lint.tar.gz" -C "$dir"
+
       # The old line here was `moon run --force`, argued as "skips Moon's VCS
       # affected detection (which needs full git history, unavailable in the
       # shallow checkout)" — while this job's own checkout above has carried

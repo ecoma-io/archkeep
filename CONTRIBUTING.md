@@ -131,11 +131,14 @@ moon ci ...:lint ...:test ...:typecheck --base="$MOON_BASE"
 
 **This one needs more than Node.** Four of the eight packages are custom-rule
 SDKs, and each runs its targets in its own language's tooling: `cargo` with the
-`clippy` and `rustfmt` components (Rust), `go` with `gofmt` (Go), and `python3`
-(Python). CI installs the Rust components explicitly and gets the rest from the
-runner image. Without a toolchain, that language's targets fail — they do not
-skip, which is the whole point of `check-packages` below. If you have not
-touched an SDK, running one project's targets is fine:
+`clippy` and `rustfmt` components (Rust), `go` with `gofmt` and
+`golangci-lint` (Go — the static analysis is golangci-lint's default roster,
+which includes `go vet`; `go vet` is not run a second time beside it),
+`python3` plus `ruff` 0.15 (Python — check, format check, and compileall).
+CI pins the Rust components, Ruff and golangci-lint explicitly and gets the
+interpreters from the runner image. Without a toolchain, that language's
+targets fail — they do not skip, which is the whole point of `check-packages`
+below. If you have not touched an SDK, running one project's targets is fine:
 
 ```bash
 moon run archkeep:lint archkeep:test archkeep:typecheck

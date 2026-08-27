@@ -1,0 +1,28 @@
+# Ruff configuration for the Python rule-authoring SDK — the lint/static
+# analysis this package's `lint` target runs beside `compileall`.
+#
+# Why each group is selected, and what is deliberately not:
+#   - `E4`, `E7`, `E9` — the pycodestyle checks that are errors rather than
+#     layout opinions: bare excepts and syntax-level mistakes. E9 in
+#     particular is what `compileall` proves a second time, on purpose (see
+#     `moon.yml`): the artifact's carrier compiles every file again on a
+#     foreign interpreter.
+#   - `F` — pyflakes: undefined names, unused imports and variables, f-string
+#     placeholders without slots. The classic silent-wrong-answer group.
+#   - `B` — flake8-bugbear: the common-bug patterns (mutable default
+#     arguments, except-after-else chains, equality against None).
+#
+# Style-only groups (`W`, `C90`, `UP`, `SIM`, ...) stay out: Prettier owns
+# this repository's formatting doctrine for its own file types and `ruff
+# format --check` owns the Python one, and a rule that only argues layout is
+# noise in a gate that must mean "no bugs found".
+target-version = "py311"
+
+[lint]
+select = ["E4", "E7", "E9", "F", "B"]
+
+[lint.per-file-ignores]
+# The tests import the package only AFTER a `sys.path.insert` — the package
+# is not installed, and the path is what makes it importable (each test file
+# carries its own comment saying so). E402 would forbid the bootstrap.
+"tests/**" = ["E402"]
