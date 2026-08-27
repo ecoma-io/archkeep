@@ -455,8 +455,38 @@ function inferWorkspaceLayout(projectNodes) {
  * prototype rather than adding an entry — silent, and exactly the shape
  * `../../../AGENTS.md`'s invariant refuses.
  *
+ * **Anomalous output is refused loudly, never skipped** (#365) — the same
+ * posture `./native/discover.mjs` holds for the native provider's graph:
+ * collect every anomaly, throw once naming each. A `data` entry that is not a
+ * project node (no `id`, or no `source` string), one project `id` claimed by
+ * two entries, and an edge or declared dependency naming a project the graph
+ * does not contain, would each drop a project or an edge from the graph
+ * silently — a graph judged over less than the tree, byte-for-byte identical
+ * to one that never had them. Two facts pin the boundaries of "anomalous":
+ *
+ * - Every `Project` Moon serializes carries a non-optional `id` and `source`
+ *   (moon's `crates/project` source, read at @moonrepo/cli 2.5.3), and its
+ *   graph is keyed by `id` — so an entry missing either field, or a duplicate
+ *   `id`, did not come from a well-formed `moon project-graph`.
+ * - A root-level project's `source` is spelled `"."` on some Moon versions
+ *   and `""` on others (moon's own `is_root_level_source`, in `crates/common`,
+ *   accepts both — `"."` is the spelling 2.5.3 emits — and
+ *   `inferWorkspaceLayout`'s header owns the pair). The empty spelling is a
+ *   project root, not a missing one, and is accepted here — a falsy-source
+ *   skip would vanish the root project from the graph on the versions that
+ *   spell it that way.
+ *
+ * One anomaly class is reachable from ordinary configuration rather than
+ * malformed output, measured on @moonrepo/cli 2.5.3: a `moon.yml`
+ * `dependsOn:` naming a project that does not exist exits 0, keeps the record
+ * in the owning node's own `dependencies[]`, and drops it from
+ * `graph.edges`. Before #365 this provider dropped it too (`!nodes[target]`),
+ * vanishing a hand-declared edge — the #262 defect shape, reached through a
+ * typo'd id.
+ *
  * @param {object} raw The parsed JSON from `moon project-graph --json`.
  * @returns {{nodes: Record<string, object>, dependencies: Record<string, object[]>, workspaceLayout?: object}}
+ * @throws {Error} naming every anomaly at once when the payload carries any.
  */
 export function transformMoonGraph(raw) {
   if (!raw?.data) {
@@ -488,9 +518,12 @@ export function transformMoonGraph(raw) {
   // two loops below discover it.
   /** @type {Map<string, {source: string, target: string, type: string}>} */
   const edgesByPair = new Map();
+  // Both edge loops validate their endpoints BEFORE calling: membership in
+  // `nodes` is checked where a refusal can name the dropped edge, not in
+  // here where it could only drop it namelessly — the exact silent `return`
+  // this function used to carry, and the shape #365 exists to remove.
   const add = (source, target, type) => {
-    if (!source || !target || source === target) return;
-    if (!nodes[target]) return;
+    if (source === target) return;
     const key = JSON.stringify([source, target]);
     const existing = edgesByPair.get(key);
     if (existing) {
@@ -502,11 +535,41 @@ export function transformMoonGraph(raw) {
     (dependencies[source] ??= []).push(entry);
   };
 
+  // Every anomaly this provider refuses to judge over, collected across all
+  // three loops and thrown as ONE error — `./native/discover.mjs`'s
+  // collect-and-throw posture, so a payload carrying several defects names
+  // them all in a single refusal instead of failing one-per-run.
+  /** @type {string[]} */
+  const anomalies = [];
+
   // Build nodes from Moon's data map. Each entry is indexed by integer key
   // but identified by its `id` string — which becomes the Archkeep node key.
+  // An entry that is not a project node, or a second entry claiming an `id`
+  // already keyed, is an anomaly: skipping the first or letting the second
+  // overwrite it would judge the graph over one project fewer — the silent
+  // direction. See this function's header for the moon-source facts that
+  // bound "anomalous" (including why `source: ""` is not).
+  /** @type {Map<string, {key: string, source: string}>} */
+  const firstClaimOf = new Map();
   const projectNodes = Object.values(raw.data);
-  for (const node of projectNodes) {
-    if (!node.id || !node.source) continue;
+  for (const [key, node] of Object.entries(raw.data)) {
+    if (typeof node?.id !== "string" || node.id === "") {
+      anomalies.push(`data entry ${key} carries no id — it names no project`);
+      continue;
+    }
+    if (typeof node?.source !== "string") {
+      anomalies.push(`data entry ${key} ('${node.id}') carries no source path`);
+      continue;
+    }
+    const first = firstClaimOf.get(node.id);
+    if (first) {
+      anomalies.push(
+        `data entries ${first.key} and ${key} both declare project '${node.id}' ` +
+          `(sources '${first.source}' and '${node.source}') — the second would overwrite the first`,
+      );
+      continue;
+    }
+    firstClaimOf.set(node.id, { key, source: node.source });
     const tags = deriveTags(node);
     // Nx's `implicitDependencies` is the hand-declared list — so it is Moon's
     // `"explicit"` dependencies that belong here, not its `"implicit"` ones.
@@ -539,14 +602,28 @@ export function transformMoonGraph(raw) {
     };
   }
 
-  // Build dependencies from Moon's graph edges.
+  // Build dependencies from Moon's graph edges. The scope check runs FIRST:
+  // a "root"-scoped edge judges nothing (see `edgeTypeFromScope`), so what it
+  // names at either end is Moon's own bookkeeping and can never be a boundary
+  // this provider dropped.
   if (Array.isArray(raw.graph?.edges)) {
     for (const [srcIdx, tgtIdx, scope] of raw.graph.edges) {
-      const srcNode = raw.data[String(srcIdx)];
-      const tgtNode = raw.data[String(tgtIdx)];
-      if (!srcNode?.id || !tgtNode?.id) continue;
       const type = edgeTypeFromScope(scope);
       if (type === undefined) continue; // e.g. "root" scope
+      const srcNode = raw.data[String(srcIdx)];
+      const tgtNode = raw.data[String(tgtIdx)];
+      if (srcNode === undefined || tgtNode === undefined) {
+        anomalies.push(
+          `graph edge [${srcIdx}, ${tgtIdx}, ${scope}] names a data entry the payload does not carry`,
+        );
+        continue;
+      }
+      // An endpoint whose entry was already refused by the node loop's checks
+      // has been named there; dropping this edge is a consequence of that
+      // anomaly, not a second one — and the function throws before any of it
+      // reaches a verdict.
+      if (typeof srcNode?.id !== "string" || srcNode.id === "") continue;
+      if (typeof tgtNode?.id !== "string" || tgtNode.id === "") continue;
       add(srcNode.id, tgtNode.id, type);
     }
   }
@@ -557,13 +634,30 @@ export function transformMoonGraph(raw) {
   // `dep.source` is this loop's own reason to exist over the one above: it is
   // the only place this function's `source` argument is ever real.
   for (const node of projectNodes) {
-    if (!node.id || !Array.isArray(node.dependencies)) continue;
+    // An entry already refused by the node loop was named there.
+    if (typeof node?.id !== "string" || node.id === "" || !Array.isArray(node.dependencies))
+      continue;
     for (const dep of node.dependencies) {
-      if (!dep.id) continue;
+      if (!dep?.id) continue;
       const type = edgeTypeFromScope(dep.scope, dep.source);
       if (type === undefined) continue;
+      if (!nodes[dep.id]) {
+        anomalies.push(
+          `project '${node.id}' declares a dependency on '${dep.id}', which the graph does not contain`,
+        );
+        continue;
+      }
       add(node.id, dep.id, type);
     }
+  }
+
+  if (anomalies.length > 0) {
+    throw new Error(
+      "archkeep: `moon project-graph` produced anomalous output this provider refuses to judge " +
+        "over — every line below would otherwise drop a project or an edge from the graph " +
+        "silently, and a graph judged over less than the tree is the forbidden direction:\n  " +
+        anomalies.join("\n  "),
+    );
   }
 
   const workspaceLayout = inferWorkspaceLayout(projectNodes);
@@ -687,7 +781,10 @@ function isMoonBinaryMissing(error) {
  * @throws {Error} naming the install action when the Moon binary is in neither
  *   place it is looked for. Every other spawn failure, and a JSON parse
  *   failure, propagates untouched — already named by `../process.mjs`'s
- *   `runProcess`. No path here answers with an empty graph.
+ *   `runProcess`. Anomalous graph shape — duplicate project ids, entries that
+ *   are not project nodes, dependencies naming projects the graph does not
+ *   contain — is refused by `transformMoonGraph`, naming every instance in
+ *   one error. No path here answers with an empty graph.
  */
 export function readProjectGraph(
   workspaceRoot,
