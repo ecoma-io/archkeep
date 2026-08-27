@@ -140,6 +140,8 @@ export function getPath(reach, graph, sourceProjectName, targetProjectName) {
     if (current === targetProjectName) break;
     if (!adjList[current]) break;
     adjList[current]
+      .slice()
+      .sort()
       .filter((adj) => visited.indexOf(adj) === -1)
       .filter((adj) => matrix[adj]?.[targetProjectName])
       .forEach((adj) => {

@@ -115,6 +115,8 @@ importers:
         specifier: 0.28.20
         version: 0.28.20
 
+  packages/archkeep-rules: {}
+
   packages/archkeep-vscode:
     dependencies:
       vscode-languageclient:

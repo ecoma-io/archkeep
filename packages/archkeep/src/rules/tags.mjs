@@ -165,11 +165,13 @@ export function orphanedNotDependOnTags(depConstraints, graph) {
  * are what the message prints so a reader can see the hop that did it.
  */
 export function findDependenciesWithTags(targetProject, tags, graph, reach) {
-  const reachable = Object.keys(graph.nodes).filter(
-    (projectName) =>
-      pathExists(reach, targetProject.name, projectName) &&
-      tags.some((tag) => hasTag(graph.nodes[projectName], tag)),
-  );
+  const reachable = Object.keys(graph.nodes)
+    .sort()
+    .filter(
+      (projectName) =>
+        pathExists(reach, targetProject.name, projectName) &&
+        tags.some((tag) => hasTag(graph.nodes[projectName], tag)),
+    );
   return reachable.map((project) =>
     targetProject.name === project
       ? [targetProject]
