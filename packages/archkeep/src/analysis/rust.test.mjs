@@ -292,7 +292,7 @@ describe("parseRustUseSites", () => {
     // out of the ORIGINAL text: the BOM is blanked to one space, never
     // stripped, so nothing after it moves.
     const source = "\uFEFFuse engine_core::task::Task;\n";
-    const sites = parseRustUseSites(source);
+    const { sites } = parseRustUseSites(source);
     expect(sites.map((site) => [site.root, site.specifier])).toEqual([
       ["engine_core", "engine_core::task::Task"],
     ]);
@@ -301,7 +301,7 @@ describe("parseRustUseSites", () => {
     );
 
     const extern = "\uFEFFextern crate legacy_crate;\n";
-    const externSites = parseRustUseSites(extern);
+    const { sites: externSites } = parseRustUseSites(extern);
     expect(externSites.map((site) => site.root)).toEqual(["legacy_crate"]);
     expect(extern.slice(externSites[0].offset)).toMatch(/^legacy_crate/);
   });
@@ -314,7 +314,7 @@ describe("parseRustUseSites", () => {
       "fn f() { let x = <T as ::other_crate::Trait>::go(); }", // 4
     ].join("\n");
     expect(
-      parseRustUseSites(source).map((site) => `${site.kind} ${site.root} ${site.specifier}`),
+      parseRustUseSites(source).sites.map((site) => `${site.kind} ${site.root} ${site.specifier}`),
     ).toEqual([
       "static engine_core engine_core::Task",
       "re-export engine_core engine_core::Role",
@@ -325,23 +325,23 @@ describe("parseRustUseSites", () => {
 
   it("collapses a use path that wraps across lines so a report can print it", () => {
     const source = "use engine_core::{\n    task::Task,\n    role::Role,\n};\n";
-    const [site] = parseRustUseSites(source);
+    const [site] = parseRustUseSites(source).sites;
     expect(site.specifier).toBe("engine_core::{ task::Task, role::Role, }");
     expect(site.root).toBe("engine_core");
   });
 
   it("does not read a use inside a line comment or a doc comment", () => {
-    expect(parseRustUseSites("// use fake_crate::X;\n/// use other::Y;\n")).toEqual([]);
+    expect(parseRustUseSites("// use fake_crate::X;\n/// use other::Y;\n").sites).toEqual([]);
   });
 
   it("never records a mod declaration, which names a file in the same crate", () => {
-    expect(parseRustUseSites("mod tests;\npub mod inner { }\n")).toEqual([]);
+    expect(parseRustUseSites("mod tests;\npub mod inner { }\n").sites).toEqual([]);
   });
 
   it("records an inline ::path only when no use already claimed it", () => {
     // `use ::serde::de;` is both forms at once; recording it twice would
     // double every such import in a report.
-    expect(parseRustUseSites("use ::serde::de::Error;\n")).toHaveLength(1);
+    expect(parseRustUseSites("use ::serde::de::Error;\n").sites).toHaveLength(1);
   });
 
   it("finds a bare crate path only for crates the workspace declares", () => {
@@ -349,14 +349,14 @@ describe("parseRustUseSites", () => {
     // workspace's own `main.rs` is exactly that. But a bare `Name::item` is
     // far more often a type or an enum, so only declared crate names are read.
     const source = 'fn main() {\n    let s = String::from("x");\n    rba_desktop_lib::run();\n}\n';
-    expect(parseRustUseSites(source)).toEqual([]);
-    const withCrates = parseRustUseSites(source, new Set(["rba_desktop_lib"]));
+    expect(parseRustUseSites(source).sites).toEqual([]);
+    const { sites: withCrates } = parseRustUseSites(source, new Set(["rba_desktop_lib"]));
     expect(withCrates.map((site) => site.root)).toEqual(["rba_desktop_lib"]);
   });
 
   it("reports positions at the crate segment, in source order", () => {
     const source = "fn f() {}\n\n    use engine_core::Task;\n";
-    const [site] = parseRustUseSites(source);
+    const [site] = parseRustUseSites(source).sites;
     expect(source.slice(site.offset)).toBe("engine_core::Task;\n");
   });
 
@@ -366,7 +366,7 @@ describe("parseRustUseSites", () => {
     // bare-crate fallback claimed a truncated `b::` — a record naming text the
     // file does not contain.
     const source = '#[cfg(feature = "net")] use b::helper;\n';
-    expect(parseRustUseSites(source, new Set(["b"])).map((site) => site.specifier)).toEqual([
+    expect(parseRustUseSites(source, new Set(["b"])).sites.map((site) => site.specifier)).toEqual([
       "b::helper",
     ]);
   });
@@ -377,21 +377,21 @@ describe("parseRustUseSites", () => {
     // crate, so the bare-form fallback cannot have been the source of the
     // record either — only the `use` pass itself.
     const source = "pub fn f(){}; use inner::Thing;\n";
-    const sites = parseRustUseSites(source, new Set());
+    const { sites } = parseRustUseSites(source, new Set());
     expect(sites.map((site) => site.specifier)).toEqual(["inner::Thing"]);
     expect(sites[0].root).toBe("inner");
   });
 
   it("reads a use inside a function body, preceded by `{` (C-03)", () => {
     const source = 'fn main() { println!("hi"); use inner::Thing; }\n';
-    expect(parseRustUseSites(source).map((site) => site.specifier)).toEqual(["inner::Thing"]);
+    expect(parseRustUseSites(source).sites.map((site) => site.specifier)).toEqual(["inner::Thing"]);
   });
 
   it("does not let a string literal that is not a use create a record (C-03)", () => {
     // The same-line statement boundary only opens a `use`; text after a `{` or
     // `;` that merely calls a method must not be read as one.
     const source = "fn main() { let s = f(); s.trim(); }\n";
-    expect(parseRustUseSites(source)).toEqual([]);
+    expect(parseRustUseSites(source).sites).toEqual([]);
   });
 
   it("reads a second (and third) use sharing the same line", () => {
@@ -400,7 +400,7 @@ describe("parseRustUseSites", () => {
     // next `use` had no `(?:^|[{;}])` anchor left to open on — only the
     // first `use` on the line was ever recorded.
     const source = "use aaa::x; use bbb::y; use ccc::z;\n";
-    expect(parseRustUseSites(source).map((site) => site.specifier)).toEqual([
+    expect(parseRustUseSites(source).sites.map((site) => site.specifier)).toEqual([
       "aaa::x",
       "bbb::y",
       "ccc::z",
@@ -413,7 +413,7 @@ describe("parseRustUseSites", () => {
     // own closing bracket — dropping the `use` entirely, with no record and
     // no failure.
     const source = '#[doc = "see [link]"] use aaa::x;\n';
-    expect(parseRustUseSites(source).map((site) => site.specifier)).toEqual(["aaa::x"]);
+    expect(parseRustUseSites(source).sites.map((site) => site.specifier)).toEqual(["aaa::x"]);
   });
 
   it("returns promptly on a quote-heavy same-line attribute with no closing bracket (ReDoS)", () => {
@@ -441,7 +441,7 @@ describe("parseRustUseSites", () => {
     // really contains — the trade this analyzer's header states — and never a
     // missing one, and the `use` after it is still read.
     const source = "use a::b\nlet x = 1;\nuse c::d;\n";
-    const sites = parseRustUseSites(source);
+    const { sites } = parseRustUseSites(source);
     expect(sites.map((site) => site.specifier)).toEqual(["a::b let x = 1", "c::d"]);
     expect(sites.map((site) => site.offset)).toEqual([4, 24]);
   });
@@ -456,7 +456,7 @@ describe("parseRustUseSites", () => {
     // overlap.
     const source =
       "use aaa::x;\nextern crate bbb;\nuse ::serde::de::Error;\nfn f() { ::ccc::go(); }\n";
-    expect(parseRustUseSites(source).map((site) => site.specifier)).toEqual([
+    expect(parseRustUseSites(source).sites.map((site) => site.specifier)).toEqual([
       "aaa::x",
       "bbb",
       "::serde::de::Error",
@@ -481,8 +481,8 @@ describe("parseRustUseSites", () => {
     const terminated = "use engine_core::Task;\n".repeat(8000);
     const cost = (text) => {
       const start = performance.now();
-      const sites = parseRustUseSites(text);
-      return { ms: performance.now() - start, sites };
+      const result = parseRustUseSites(text);
+      return { ms: performance.now() - start, sites: result.sites };
     };
     const real = cost(terminated);
     const pathological = cost(unterminated);
@@ -498,20 +498,31 @@ describe("parseRustUseSites", () => {
     // so N `use` statements beside N qualified calls cost N*N range tests —
     // measured 11.4ms at 55KB, 32.3ms at 110KB, 122.9ms at 220KB, the same
     // four-times-for-twice-the-bytes shape. The claim is a binary search now.
-    // Same ratio discipline as the test above: the baseline is the same file
-    // without the qualified calls, so it is the same machine, moments apart.
+    //
+    // Unlike the ReDoS test above, this one counts OPERATIONS, not
+    // milliseconds: the parser reports how many comparisons `unclaimed` made
+    // (`returnMetrics`), so the budget is a property of the algorithm and a
+    // loaded CI runner cannot move either side of it. That replaced a
+    // wall-clock ratio that halved its own budget by construction and went
+    // intermittently red under load with no code change (#359).
     const paired = "use engine_core::Task;\nfn f() { ::other_crate::go(); }\n".repeat(4000);
     const uses = "use engine_core::Task;\n".repeat(4000);
-    const cost = (text) => {
-      const start = performance.now();
-      const sites = parseRustUseSites(text);
-      return { ms: performance.now() - start, sites };
-    };
+    const cost = (text) => parseRustUseSites(text, new Set(), { returnMetrics: true });
     const baseline = cost(uses);
     const both = cost(paired);
     expect(baseline.sites).toHaveLength(4000);
     expect(both.sites).toHaveLength(8000);
-    expect(both.ms).toBeLessThan(baseline.ms * 8 + 10);
+    // A binary search over 4000 claimed ranges makes at most ⌈log2(4000)⌁ = 12
+    // comparisons per fully-qualified path; 4000 paths then cost ≤ 48K. The
+    // old linear scan cost 4000 × 4000 = 16M — verified red against a
+    // temporarily degraded implementation before restoring the search, so the
+    // threshold is not vacuous. 3× headroom absorbs constants, nothing more.
+    const fqnCount = 4000;
+    const maxComparisonsPerLookup = Math.ceil(Math.log2(fqnCount));
+    expect(both.binarySearchIterations).toBeLessThan(fqnCount * maxComparisonsPerLookup * 3);
+    // The baseline file holds no qualified path, so nothing reaches the range
+    // test at all — a parse that reports work here is measuring the wrong thing.
+    expect(baseline.binarySearchIterations).toBe(0);
   });
 });
 
