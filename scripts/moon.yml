@@ -12,22 +12,19 @@
 #
 # `type-gates` is a new tag on the boundary law's type axis
 # (`../module-boundaries.config.mjs`): repository machinery, shipped to no
-# one, allowed to depend on itself and on nothing — the scripts that need the
-# engine's internals import it relatively, and each of those imports carries
-# its own suppression row there rather than a license in this tag.
-#
-# Task `inputs` follow the house shape (the bare `**/*` first, because
-# declaring inputs replaces the implicit whole-project default — measured
-# with `moon query tasks --affected`), then exactly the root files each task
-# reads: the bootstrap pair every Node-tooling task runs through, the shared
-# ESLint config for `lint`, the shared tsconfig for `typecheck`.
+# one. It deliberately carries NO `scope-nx`: the gate scripts reach the
+# engine's internals relatively, and the spelling verdicts those imports
+# earn must be REPORTED — measured: with `scope-nx` on this project the Moon
+# provider reported the same tree as clean while the native provider
+# reported eleven violations, a provider disagreement the self-check step
+# exists to catch. The reach is accepted, per file, in
+# `boundarySuppressions` — visible in both providers, argued once each.
 id: gate-scripts
 language: javascript
 layer: tool
 stack: backend
 tags:
   - type-gates
-  - scope-nx
 tasks:
   # The scripts' own JavaScript, plus the four root-level JS files no project
   # directory contains: the ESLint config itself, the commitlint config, the

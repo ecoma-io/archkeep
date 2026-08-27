@@ -62,6 +62,3 @@ tasks:
 # the engine in-process through the workspace symlink and `tsc` resolves its
 # types, so a warm cache must never replay either over engine bytes that have
 # since changed. A rules-catalog change must not re-run `lint` here.
-dependsOn:
-  - id: archkeep
-    scope: production

@@ -62,14 +62,3 @@ tasks:
 # deliberately absent: a change HERE does not re-run the SDKs — none of them
 # reads the engine (`scope-sdk` holds that boundary,
 # `module-boundaries.config.mjs`).
-dependsOn:
-  - id: archkeep-rules
-    scope: development
-  - id: archkeep-rule-sdk-go
-    scope: development
-  - id: archkeep-rule-sdk-python
-    scope: development
-  - id: archkeep-rule-sdk-rust
-    scope: development
-  - id: archkeep-rule-sdk-ts
-    scope: development

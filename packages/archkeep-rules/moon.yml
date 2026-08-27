@@ -75,6 +75,3 @@ tasks:
 # `test` over SDK bytes that had since changed — the silent direction. The
 # bootstrap pair (`/package.json`, `/pnpm-lock.yaml`) arrives implicitly for
 # every task via `.moon/tasks/all.yml`.
-dependsOn:
-  - id: archkeep-rule-sdk-rust
-    scope: build
