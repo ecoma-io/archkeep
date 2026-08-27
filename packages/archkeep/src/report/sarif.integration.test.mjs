@@ -368,7 +368,7 @@ const CUSTOM_EVIDENCE = serializeEvidenceBundle(
           column: 2,
           specifier: "example.test/ring/internal",
           kind: "static",
-          spelling: { path: false, relative: false },
+          spelling: { path: false, relative: false, namesOnly: false },
           resolved: { target: "ring", file: "libs/ring/x.go", external: false, packageName: null },
         },
         sourceProject: "app",

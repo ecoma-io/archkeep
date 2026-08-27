@@ -593,7 +593,7 @@ describe("analyzeRust", () => {
       column: 5,
       specifier: "engine_core::task::Task",
       kind: "static",
-      spelling: { path: false, relative: false },
+      spelling: { path: false, relative: false, namesOnly: true },
       resolved: { target: "core", file: null, external: false, packageName: null },
     });
   });
@@ -625,9 +625,9 @@ describe("analyzeRust", () => {
     // and `../`, which is JavaScript's shape and none of these.
     const { imports } = analyze("use crate::a::B;\nuse self::c::D;\nuse super::e::F;\n");
     expect(imports.map((record) => record.spelling)).toEqual([
-      { path: false, relative: true },
-      { path: false, relative: true },
-      { path: false, relative: true },
+      { path: false, relative: true, namesOnly: true },
+      { path: false, relative: true, namesOnly: true },
+      { path: false, relative: true, namesOnly: true },
     ]);
   });
 
@@ -640,6 +640,7 @@ describe("analyzeRust", () => {
     expect(analyze("fn main() {\n    shell_lib::run();\n}\n").imports[0].spelling).toEqual({
       path: false,
       relative: true,
+      namesOnly: true,
     });
   });
 
@@ -649,10 +650,12 @@ describe("analyzeRust", () => {
     expect(analyze("use engine_core::task::Task;\n").imports[0].spelling).toEqual({
       path: false,
       relative: false,
+      namesOnly: true,
     });
     expect(analyze("use serde::de::Deserialize;\n").imports[0].spelling).toEqual({
       path: false,
       relative: false,
+      namesOnly: true,
     });
   });
 
@@ -661,7 +664,7 @@ describe("analyzeRust", () => {
     // as equal would make every loose `.rs` file in the tree call every crate
     // its own.
     const { imports } = analyze("use shell_lib::run;\n", "loose/script.rs");
-    expect(imports[0].spelling).toEqual({ path: false, relative: false });
+    expect(imports[0].spelling).toEqual({ path: false, relative: false, namesOnly: true });
   });
 
   it("keeps crate::, self:: and super:: from a file no project owns as external", () => {

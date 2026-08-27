@@ -22,14 +22,15 @@
  *   header; neither matches the anchored forms.
  *
  * Everything downstream is the shared answer: `kind` always `"static"`,
- * `spelling.path` always false, `spelling.relative` true exactly when the
+ * `spelling.path` always false and `spelling.namesOnly` always true (a package
+ * name is a name, never a path — #376), `spelling.relative` true exactly when the
  * import resolved into its own project, resolution through
  * `./jvm/resolve.mjs` with Kotlin's default-import table, and graph edges via
  * the same contract as every other language. There is no dynamic import, no
  * type-only form, and no re-export syntax to model.
  */
 import { maskKotlinComments } from "./jvm/mask.mjs";
-import { jvmIndexFacts, jvmPackageIndex } from "./jvm/packages.mjs";
+import { jvmPackageIndex } from "./jvm/packages.mjs";
 import { resolveJvmSpecifier } from "./jvm/resolve.mjs";
 import {
   emptyResult,
@@ -105,7 +106,7 @@ const importableNameOf = (name) => (name.endsWith(".*") ? name.slice(0, -2) : na
 export function analyzeKotlin({ sourceFile, text, workspace }) {
   const result = emptyResult();
   try {
-    const index = jvmPackageIndex(workspace);
+    const { byName: index } = jvmPackageIndex(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
     for (const site of parseKotlinImportSites(text)) {
       const { line, column } = positionAt(text, site.offset);
@@ -142,6 +143,7 @@ export function analyzeKotlin({ sourceFile, text, workspace }) {
         spelling: {
           path: false,
           relative: target !== null && owner !== null && target === owner.name,
+          namesOnly: true,
         },
         resolved: resolution,
       });
@@ -170,12 +172,15 @@ export function analyzeKotlin({ sourceFile, text, workspace }) {
  *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
- * @throws {Error} when `jvmIndexFacts` recorded any failure, naming each
+ * @throws {Error} when `jvmPackageIndex` recorded any failure, naming each
  *   unreadable JVM source.
  */
 export function resolveKotlinDependencies(workspace) {
   const { projects, filesOf, readFile } = workspace;
-  const { byName: index, failures: indexFailures } = jvmIndexFacts(workspace);
+  // The same refusal `./java.mjs`'s `resolveJavaDependencies` holds over the
+  // one shared index (#364's posture): an unreadable source corrupts every
+  // importer of its packages, so either resolver alone refuses the tree.
+  const { byName: index, failures: indexFailures } = jvmPackageIndex(workspace);
   refuseUnreadTree("the JVM package index", indexFailures);
   const dependencies = [];
   for (const project of projects) {

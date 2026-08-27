@@ -128,7 +128,7 @@ describe("boundaryMetrics", () => {
     line: 3,
     column: 1,
     kind: "static",
-    spelling: { path: true, relative: true },
+    spelling: { path: true, relative: true, namesOnly: false },
     specifier: "../../beta/src/thing",
     resolved: {
       target: "beta",

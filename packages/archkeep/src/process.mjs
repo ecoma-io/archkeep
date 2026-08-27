@@ -71,15 +71,24 @@ export function environmentForTree(env = process.env) {
  * @param {Record<string, string|undefined>} [env] Optional environment
  *   override. When omitted, `environmentForTree()` is used — which strips
  *   ambient git redirects from `process.env`.
+ * @param {{stderr?: "pipe"|"ignore"}} [io] `stderr: "ignore"` is for a call
+ *   whose failure is an expected, HANDLED answer rather than something a
+ *   reader of this process's terminal should see. The root walk's
+ *   `git rev-parse` probe is the caller: run where no repository encloses
+ *   the directory, git prints `fatal: not a git repository` straight to the
+ *   caller's own stderr — noise in front of a refusal message that already
+ *   says everything worth saying. Unset means Node's default, so every other
+ *   caller's stdio is byte-for-byte what it was.
  * @returns {string}
  */
-export function runProcess(file, args, cwd, env) {
+export function runProcess(file, args, cwd, env, { stderr } = {}) {
   try {
     return execFileSync(file, args, {
       cwd,
       env: env ?? environmentForTree(),
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
+      ...(stderr === undefined ? {} : { stdio: ["pipe", "pipe", stderr] }),
     });
   } catch (cause) {
     throw new Error(

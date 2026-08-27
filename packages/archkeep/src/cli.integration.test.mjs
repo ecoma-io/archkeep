@@ -6212,26 +6212,22 @@ export const moduleBoundaryOptions = {
   writeLayout("packages/a/go.mod", "module example.com/a\n\ngo 1.24\n");
   // The specifier's literal text is what the absolute-import check reads
   // (`../rules/index.mjs`'s `imp = site.specifier`) — a custom `libsDir` of
-  // `packages` makes `packages/b` an absolute path into another project's
-  // library the same way a default-layout workspace reads `libs/b`.
+  // `packages` makes `packages/b/thing` an absolute path into another
+  // project's library the same way a default-layout workspace reads
+  // `libs/b`. Written in TypeScript because the check judges a
+  // JavaScript-family spelling: a Go module path of the same shape is a name
+  // the check must not read as a path (#376), so a `.go` file can no longer
+  // carry the crossing this test exists to catch.
   writeLayout(
-    "packages/a/doc.go",
-    `// Package a reaches b by an absolute-looking specifier.
-package a
-
-import (
-	"packages/b"
-)
-
-var _ = b.Name
-`,
+    "packages/a/doc.ts",
+    'import { Name } from "packages/b/thing";\n\nexport const name = Name;\n',
   );
   writeLayout("packages/b/go.mod", "module example.com/b\n\ngo 1.24\n");
 
   const layoutFiles = [
     "module-boundaries.config.mjs",
     "packages/a/go.mod",
-    "packages/a/doc.go",
+    "packages/a/doc.ts",
     "packages/b/go.mod",
   ];
 
@@ -6291,17 +6287,11 @@ export const moduleBoundaryOptions = {
 `,
   );
   writeNxLayout("packages/a/go.mod", "module example.com/a\n\ngo 1.24\n");
+  // TypeScript, not Go, for the reason the native block above states: the
+  // absolute-import check judges a JavaScript-family spelling (#376).
   writeNxLayout(
-    "packages/a/doc.go",
-    `// Package a reaches b by an absolute-looking specifier.
-package a
-
-import (
-	"packages/b"
-)
-
-var _ = b.Name
-`,
+    "packages/a/doc.ts",
+    'import { Name } from "packages/b/thing";\n\nexport const name = Name;\n',
   );
   writeNxLayout("packages/b/go.mod", "module example.com/b\n\ngo 1.24\n");
 
@@ -6309,7 +6299,7 @@ var _ = b.Name
     "nx.json",
     "module-boundaries.config.mjs",
     "packages/a/go.mod",
-    "packages/a/doc.go",
+    "packages/a/doc.ts",
     "packages/b/go.mod",
   ];
 
@@ -6426,9 +6416,15 @@ describe("the exit contract", () => {
 
   it("distinguishes a run that could not complete from a tree that is clean", async () => {
     // Exit 3, never 0 and never 1: a checker that could not look must not be
-    // mistaken for one that looked and found nothing.
+    // mistaken for one that looked and found nothing. The fixture is a real
+    // git repository with no marker anywhere in it, so the walk is bounded by
+    // the repository's top level (`findWorkspaceRoot`) and the refusal holds
+    // on any machine, whatever sits above its temporary directory — the
+    // machine shape that reported #339 had `~/.moon` up there, and a walk
+    // reading only marker presence made these two tests environment-dependent.
     const streams = env();
     streams.cwd = mkdtempSync(join(tmpdir(), "polyglot-not-a-workspace-"));
+    spawnSync("git", ["init", "--quiet"], { cwd: streams.cwd, encoding: "utf8" });
     afterAll(() => rmSync(streams.cwd, { recursive: true, force: true }));
     expect(await runCli(["check"], streams)).toBe(EXIT.error);
     expect(streams.lines.err.join("\n")).toContain("no workspace root above");
@@ -6445,11 +6441,38 @@ describe("the exit contract", () => {
   it("names both root markers in the not-a-workspace message, not just nx.json", async () => {
     const streams = env();
     streams.cwd = mkdtempSync(join(tmpdir(), "polyglot-not-a-workspace-both-markers-"));
+    spawnSync("git", ["init", "--quiet"], { cwd: streams.cwd, encoding: "utf8" });
     afterAll(() => rmSync(streams.cwd, { recursive: true, force: true }));
     expect(await runCli(["check"], streams)).toBe(EXIT.error);
     const message = streams.lines.err.join("\n");
     expect(message).toContain("nx.json");
     expect(message).toContain("archkeep.json");
+  });
+
+  // #339's machine shape, end to end: a bare `.moon` — moonrepo's user-level
+  // state directory, no `workspace.yml` in it — above a real git repository
+  // carrying no workspace marker. Before the fix the walk read only directory
+  // presence, climbed out of the repository, selected the home directory as a
+  // "Moon workspace", and failed loading a `module-boundaries.config.mjs`
+  // that was never written. Exit 3 either way — the defect is that the
+  // message depended on what sat above the caller, so both halves are pinned:
+  // the honest refusal AND the absence of the phantom-config failure. The
+  // "home" is a fixture directory, so the case runs anywhere.
+  it("refuses honestly when a bare .moon sits above the enclosing git repository", async () => {
+    const home = mkdtempSync(join(tmpdir(), "polyglot-phantom-home-"));
+    afterAll(() => rmSync(home, { recursive: true, force: true }));
+    mkdirSync(join(home, ".moon"));
+    const repo = join(home, "work", "repo");
+    mkdirSync(join(repo, "packages", "app"), { recursive: true });
+    spawnSync("git", ["init", "--quiet"], { cwd: repo, encoding: "utf8" });
+
+    const streams = env();
+    streams.cwd = join(repo, "packages", "app");
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const message = streams.lines.err.join("\n");
+    expect(message).toContain("no workspace root above");
+    expect(message).toContain(".moon/workspace.yml");
+    expect(message).not.toContain("cannot load");
   });
 
   it("calls a path outside the tree a usage error, since retyping it is the fix", async () => {
@@ -7380,7 +7403,7 @@ describe("`check` accepts unowned files through the policy's coverage.unowned", 
         mkdirSync(join(moonRoot, relativePath, ".."), { recursive: true });
         writeFileSync(join(moonRoot, relativePath), text);
       };
-      writeMoon(".moon/tool.yml", " ");
+      writeMoon(".moon/workspace.yml", " ");
       writeMoon(
         "law.json",
         lawWith({ unowned: [{ path: "orphans/**", reason: "vendored fixture corpus" }] }),
@@ -7396,7 +7419,7 @@ describe("`check` accepts unowned files through the policy's coverage.unowned", 
         {
           cwd: moonRoot,
           readGraph: () => moonGraph,
-          listFiles: () => [".moon/tool.yml", "law.json", "libs/a/a.go", "orphans/legacy.go"],
+          listFiles: () => [".moon/workspace.yml", "law.json", "libs/a/a.go", "orphans/legacy.go"],
         },
       );
       expect(unchecked).toBe(0);
@@ -9188,5 +9211,141 @@ export const customRules = [
     const compare = customEnv(false);
     expect(await runCli(["delta", oldPath], compare)).toBe(EXIT.error);
     expect(compare.lines.out.join("\n")).toContain("re-capture the baseline");
+  });
+});
+
+describe("an unreadable JVM source refuses the run (#374)", () => {
+  // The issue's own tree: `app` imports `com.example.domain.Policy` across a
+  // law that forbids it, and the ONE tracked file declaring that package is
+  // unreadable — a dangling symlink, one of #374's named causes, which the
+  // containment check passes because its deepest existing ancestor is inside
+  // the root while the read itself returns null. Only Nx and git are
+  // injected; the unreadable bytes are real files on disk, so what is pinned
+  // here is the whole path a consumer's `check` takes.
+  const jvmRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-jvm-unreadable-"));
+  afterAll(() => rmSync(jvmRoot, { recursive: true, force: true }));
+
+  const writeJvm = (relativePath, text) => {
+    mkdirSync(join(jvmRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(jvmRoot, relativePath), text);
+  };
+
+  writeJvm(
+    "nx.json",
+    `${JSON.stringify({
+      plugins: [
+        {
+          plugin: "@ecoma-io/archkeep/nx",
+          options: { boundaryConfig: "module-boundaries.config.mjs" },
+        },
+      ],
+    })}\n`,
+  );
+  // The law forbids exactly what the fixture imports: layer:app reaching
+  // layer:domain. With the declaration READABLE this tree is a finding
+  // (exit 1) — the readable twin of this fixture is what makes the refusal
+  // below provably about the read, not about the law.
+  writeJvm(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [
+  { sourceTag: "layer:app", onlyDependOnLibsWithTags: ["layer:app"] },
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: [],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+  );
+  writeJvm(
+    "libs/app/src/main/java/com/example/app/Service.java",
+    "package com.example.app;\n\nimport com.example.domain.Policy;\n\nclass Service {\n  Policy policy;\n}\n",
+  );
+  // The tracked-but-unreadable declaration: Policy.java -> nowhere.java.
+  mkdirSync(join(jvmRoot, "libs/domain/src/main/java/com/example/domain"), { recursive: true });
+  symlinkSync(
+    join(jvmRoot, "libs/domain/src/main/java/com/example/domain/nowhere.java"),
+    join(jvmRoot, "libs/domain/src/main/java/com/example/domain/Policy.java"),
+  );
+
+  const jvmContext = {
+    cwd: jvmRoot,
+    readGraph: () => ({
+      nodes: {
+        app: { name: "app", type: "lib", data: { root: "libs/app", tags: ["layer:app"] } },
+        domain: {
+          name: "domain",
+          type: "lib",
+          data: { root: "libs/domain", tags: ["layer:domain"] },
+        },
+      },
+      dependencies: { app: [], domain: [] },
+    }),
+    listFiles: () => [
+      "nx.json",
+      "module-boundaries.config.mjs",
+      "libs/app/src/main/java/com/example/app/Service.java",
+      "libs/domain/src/main/java/com/example/domain/Policy.java",
+    ],
+  };
+
+  const jvmEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (t) => out.push(t),
+      err: (t) => err.push(t),
+      lines: { out, err },
+      ...jvmContext,
+    };
+  };
+
+  it("refuses a scoped run that excludes the unreadable file, naming it", async () => {
+    // The silent direction, held end to end. Before the funnel this exact
+    // run exited 0: the analyzer track never saw the file (out of the
+    // requested scope), the package index dropped it without a word, every
+    // import of com.example.domain classified external, and no verdict named
+    // the crossing — byte-for-byte indistinguishable from a clean tree.
+    const streams = jvmEnv();
+    expect(await runCli(["check", "libs/app"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("libs/domain/src/main/java/com/example/domain/Policy.java");
+    expect(report).toContain("JVM source could not be read for the package index");
+  });
+
+  it("composes with the analyzer track's own whole-file failure, as the .NET twin does", async () => {
+    // Unscoped, the same tree already refused through the analyzer track's
+    // "could not be read" — the partial coverage #374 names. The index
+    // funnel adds its own record for the same file — two tracks, two
+    // sentences, one refusal — the exact composition the .NET twin holds
+    // for its namespace index, so a consumer who has seen one recognizes
+    // the other.
+    const streams = jvmEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("could not be read");
+    expect(report).toContain("JVM source could not be read for the package index");
+  });
+
+  it("reports the crossing itself once the declaration is readable — the refusal is about the read", async () => {
+    // The control: the SAME tree with the symlink replaced by the bytes it
+    // stood for turns the run into the finding it always should have been,
+    // proving the two refusals above name the unreadable declaration, not a
+    // broken fixture.
+    rmSync(join(jvmRoot, "libs/domain/src/main/java/com/example/domain/Policy.java"));
+    writeJvm(
+      "libs/domain/src/main/java/com/example/domain/Policy.java",
+      "package com.example.domain;\n\npublic class Policy {}\n",
+    );
+    const streams = jvmEnv();
+    expect(await runCli(["check"], streams)).toBe(EXIT.violations);
+    const report = streams.lines.out.join("\n");
+    expect(report).toContain("libs/app/src/main/java/com/example/app/Service.java");
   });
 });

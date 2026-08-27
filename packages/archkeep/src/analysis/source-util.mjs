@@ -107,6 +107,81 @@ export function positionAt(text, offset, lineStarts = lineStartsOf(text)) {
 }
 
 /**
+ * The store behind `ownershipIndexOf`, which owns its keying contract.
+ *
+ * @type {WeakMap<{ name: string, root: string }[], { roots: string[], entries: { name: string, root: string }[] }>}
+ */
+const ownershipIndexes = new WeakMap();
+
+/**
+ * The projects of `projects` sorted by their roots ascending, beside those
+ * normalized roots — the structure `projectOwning` binary-searches.
+ *
+ * Built once per projects ARRAY and keyed on its identity, for the same reason
+ * `perWorkspace` below keys on the workspace object: every caller holds one
+ * array steady for a whole run (`workspace.projects`, or the normalized copies
+ * `../go-work.mjs` and `./python.mjs` assemble before their loops)
+ * and asks it about every file, so one sort serves the run. A caller that
+ * builds a fresh array per call gets no reuse rather than a stale answer — and
+ * the array must not be mutated after a lookup, because a project pushed later
+ * would be invisible to every later answer, which is the silent direction.
+ *
+ * The sort is stable and `firstRootAtOrAfter` is a lower bound, so of two
+ * projects spelling one root the FIRST in the array is the one found — the tie
+ * the linear scan this replaces broke with a strict `>`.
+ *
+ * @param {{ name: string, root: string }[]} projects
+ * @returns {{ roots: string[], entries: { name: string, root: string }[] }}
+ */
+function ownershipIndexOf(projects) {
+  let index = ownershipIndexes.get(projects);
+  if (index === undefined) {
+    // `root ?? ""` here is the one spelling decision the scan also made: a
+    // project without a root is the workspace-root project, never a project
+    // that owns nothing.
+    const entries = [...projects].sort((a, b) => {
+      const left = a.root ?? "";
+      const right = b.root ?? "";
+      return left < right ? -1 : left > right ? 1 : 0;
+    });
+    index = { roots: entries.map((project) => project.root ?? ""), entries };
+    ownershipIndexes.set(projects, index);
+  }
+  return index;
+}
+
+/**
+ * Root comparisons `projectOwning` has performed since the module loaded.
+ *
+ * Nothing in production reads it. It exists so the complexity test counts
+ * deterministic operations instead of milliseconds — the wall-clock this
+ * repository does not trust in a test (cf. #359, #369). Every comparison the
+ * lookup makes is counted: one per binary-search step, one per equality probe.
+ */
+let rootComparisons = 0;
+export const ownershipRootComparisons = () => rootComparisons;
+
+/**
+ * The first index in `roots` (sorted ascending) whose value is at or after
+ * `probe` — the lower bound `projectOwning` walks ancestors with.
+ *
+ * @param {string[]} roots
+ * @param {string} probe
+ * @returns {number}
+ */
+function firstRootAtOrAfter(roots, probe) {
+  let low = 0;
+  let high = roots.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    rootComparisons++;
+    if (roots[mid] < probe) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+/**
  * The project owning `path`, by **longest**-prefix match on project roots.
  *
  * Longest and not first, and the difference is not cosmetic: a project nested
@@ -118,18 +193,35 @@ export function positionAt(text, offset, lineStarts = lineStartsOf(text)) {
  * A project whose root is `""` (a workspace-root project) matches everything,
  * which is correct and still loses to any longer root.
  *
+ * The answer is found by walking `path`'s ancestor prefixes from the longest —
+ * `path` itself, then each prefix ending at one of its `/` boundaries, then
+ * `""` — and asking the sorted roots for each: every root that can own `path`
+ * IS one of those ancestors (`path === root`, `path.startsWith(root + "/")`,
+ * or `root === ""`), ancestors strictly shorten as the walk strips segments,
+ * and a longer ancestor sorts after a shorter one, so the first ancestor the
+ * roots contain is the longest match. That turns the per-file, per-context
+ * linear scan over every project into one sort per run plus a walk of
+ * `log(projects)` comparisons per ancestor — the O(files × projects) term that
+ * dominated very large monorepos (cf. #369): on the issue's shape, 5,000
+ * projects and 200,000 files, the scan performed 1,000,000,000 root tests
+ * where the walk performs about 8,000,000 comparisons, its one-time sort
+ * included.
+ *
  * @param {{ name: string, root: string }[]} projects
  * @param {string} path Workspace-relative.
  * @returns {{ name: string, root: string }|null}
  */
 export function projectOwning(projects, path) {
-  let owner = null;
-  for (const project of projects) {
-    const root = project.root ?? "";
-    if (root !== "" && path !== root && !path.startsWith(`${root}/`)) continue;
-    if (owner === null || root.length > owner.root.length) owner = project;
+  const { roots, entries } = ownershipIndexOf(projects);
+  let candidate = path;
+  for (;;) {
+    const i = firstRootAtOrAfter(roots, candidate);
+    rootComparisons++;
+    if (i < roots.length && roots[i] === candidate) return entries[i];
+    if (candidate === "") return null;
+    const cut = candidate.lastIndexOf("/");
+    candidate = cut === -1 ? "" : candidate.slice(0, cut);
   }
-  return owner;
 }
 
 /**

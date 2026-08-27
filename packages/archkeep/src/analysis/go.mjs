@@ -62,7 +62,9 @@
  * - `kind` is always `static`. Go has no dynamic import, no type-only import,
  *   and no re-export form; a blank (`_`) or dot (`.`) import is still an
  *   ordinary compile-time dependency.
- * - `spelling.path` is always `false`; `spelling.relative` is true exactly when
+ * - `spelling.path` is always `false` and `spelling.namesOnly` always `true`
+ *   (a module path is the only spelling Go has, so no text rule may read it as
+ *   a path — the #376 leak); `spelling.relative` is true exactly when
  *   the import resolved to the source file's own project. Go has no relative
  *   import form, so the second bit reads what an import REACHED rather than
  *   how it was written — `isOwnProjectImport` states why that is the honest
@@ -398,7 +400,11 @@ export function analyzeGo({ sourceFile, text, workspace }) {
         // `relative` is true exactly when the import landed inside the file's
         // own project, which is `isOwnProjectImport` above and the same answer
         // Rust gives a binary that names its own package's library crate.
-        spelling: { path: false, relative: isOwnProjectImport(target, owner) },
+        spelling: {
+          path: false,
+          relative: isOwnProjectImport(target, owner),
+          namesOnly: true,
+        },
         resolved: {
           target,
           file: null,

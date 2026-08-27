@@ -156,7 +156,7 @@ describe("analyzeCSharp", () => {
       kind: "static",
       resolved: { target: "shop-domain", file: null, external: false, packageName: null },
     });
-    expect(result.imports[0].spelling).toEqual({ path: false, relative: false });
+    expect(result.imports[0].spelling).toEqual({ path: false, relative: false, namesOnly: true });
   });
 
   it("marks an intra-project directive relative and still emits it", () => {

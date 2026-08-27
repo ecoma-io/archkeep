@@ -12,6 +12,10 @@ import {
   findWorkspaceRoot,
   listTrackedFiles,
 } from "./workspace.mjs";
+// The walk's marker list, imported rather than restated: a second copy here
+// would agree with `WORKSPACE_MARKERS` exactly until someone edited one of
+// them — the drift this suite exists to catch, not to plant.
+import { WORKSPACE_MARKERS } from "./commands/context.mjs";
 
 /**
  * The scan driven with its real collaborators: the project attribution the rest
@@ -88,8 +92,10 @@ describe("analyzing through the real workspace", () => {
         kind: "static",
         // Go has no relative import form: a module path is absolute by
         // construction, so both bits are false and neither the self-circular
-        // check nor the path-specifier check can fire on one.
-        spelling: { path: false, relative: false },
+        // check nor the path-specifier check can fire on one. The third bit
+        // says the same thing the analyzer now says on every record: a module
+        // path is a NAME, so no path-text rule applies to it (#376).
+        spelling: { path: false, relative: false, namesOnly: true },
         resolved: { target: "inner", file: null, external: false, packageName: null },
       },
     ]);
@@ -112,6 +118,76 @@ describe("finding the tree to judge", () => {
     const orphan = mkdtempSync(join(tmpdir(), "polyglot-orphan-"));
     afterAll(() => rmSync(orphan, { recursive: true, force: true }));
     expect(findWorkspaceRoot(orphan)).toBeNull();
+  });
+
+  it("does not treat a bare .moon directory as a Moon workspace root", () => {
+    // #339: `~/.moon` is moonrepo's user-level state directory (moonrepo's
+    // own documentation puts the shared cache at `~/.moon/cache/shared`) —
+    // present on every machine moonrepo has ever run on, and never a
+    // workspace. A walk reading directory presence alone selected the home
+    // directory as a root and failed loading a boundary config that was never
+    // written, instead of refusing. The shaped marker — the `workspace.yml`
+    // moonrepo itself requires — is the walk's answer to that.
+    const home = mkdtempSync(join(tmpdir(), "polyglot-phantom-moon-"));
+    afterAll(() => rmSync(home, { recursive: true, force: true }));
+    mkdirSync(join(home, ".moon"));
+    mkdirSync(join(home, "scratch"));
+    expect(findWorkspaceRoot(join(home, "scratch"), WORKSPACE_MARKERS)).toBeNull();
+  });
+
+  it("stops at the top level of the enclosing git repository, even at a real Moon marker above it", () => {
+    // The boundary's other half: this ancestor marker is SHAPED — a genuine
+    // `.moon/workspace.yml`, which `moonMarkerAt` would accept at a chosen
+    // root — and the walk still refuses it, because the tree `git ls-files`
+    // answers for stops at the repository's top level, and a root beyond it
+    // would judge files belonging to another tree. Real git, real repository:
+    // the boundary is `git rev-parse --show-toplevel`'s own answer, and a
+    // stub would pin the intent while missing the mechanism, which lives
+    // entirely inside git.
+    const outer = mkdtempSync(join(tmpdir(), "polyglot-bounded-walk-"));
+    afterAll(() => rmSync(outer, { recursive: true, force: true }));
+    mkdirSync(join(outer, ".moon"));
+    writeFileSync(join(outer, ".moon", "workspace.yml"), "projects: {}\n");
+    const repo = join(outer, "work", "repo");
+    mkdirSync(join(repo, "packages", "app"), { recursive: true });
+    execFileSync("git", ["init", "--quiet"], {
+      cwd: repo,
+      env: environmentForTree(),
+      encoding: "utf8",
+    });
+    expect(findWorkspaceRoot(join(repo, "packages", "app"), WORKSPACE_MARKERS)).toBeNull();
+  });
+
+  it("finds a marker sitting ON the git repository's top level", () => {
+    // The boundary is inclusive: a repository that is itself the workspace is
+    // the ordinary case, and a strict boundary would refuse every one of them.
+    const repo = mkdtempSync(join(tmpdir(), "polyglot-at-top-walk-"));
+    afterAll(() => rmSync(repo, { recursive: true, force: true }));
+    writeFileSync(join(repo, "nx.json"), "{}\n");
+    mkdirSync(join(repo, "libs", "a"), { recursive: true });
+    execFileSync("git", ["init", "--quiet"], {
+      cwd: repo,
+      env: environmentForTree(),
+      encoding: "utf8",
+    });
+    expect(findWorkspaceRoot(join(repo, "libs", "a"))).toBe(repo);
+  });
+
+  it("asks the injected git seam for the boundary, so the walk is drivable with no git present", () => {
+    // The ceiling is a seam (`gitTopLevel`) for the same reason every spawn
+    // in this module is. The fixture root carries `nx.json`; a ceiling above
+    // the marker leaves it findable, one between the marker and `from` — the
+    // #339 shape — refuses it.
+    expect(
+      findWorkspaceRoot(join(root, "libs", "outer", "inner"), ["nx.json"], {
+        gitTopLevel: () => root,
+      }),
+    ).toBe(root);
+    expect(
+      findWorkspaceRoot(join(root, "libs", "outer", "inner"), ["nx.json"], {
+        gitTopLevel: () => join(root, "libs"),
+      }),
+    ).toBeNull();
   });
 });
 

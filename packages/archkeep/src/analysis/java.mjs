@@ -17,7 +17,9 @@
  *
  * No dynamic import, no type-only form, no re-export syntax, no aliasing:
  * `kind` is always `"static"` here, and `spelling.path` is always `false`
- * because no Java import is spelled as a filesystem path. `spelling.relative`
+ * because no Java import is spelled as a filesystem path — `spelling.namesOnly`
+ * is always `true`, a package name being a name and never a path (#376).
+ * `spelling.relative`
  * takes Go's argued answer — true exactly when the import resolved into its
  * own project — because Java offers no relative spelling either, so the bit
  * reads what an import REACHED rather than how it was written.
@@ -44,7 +46,7 @@
  *   other; backtick-quoted segments are not Java and are not read.
  */
 import { maskJavaComments } from "./jvm/mask.mjs";
-import { jvmIndexFacts, jvmPackageIndex } from "./jvm/packages.mjs";
+import { jvmPackageIndex } from "./jvm/packages.mjs";
 import { resolveJvmSpecifier } from "./jvm/resolve.mjs";
 import {
   emptyResult,
@@ -141,7 +143,7 @@ function importableNameOf(staticKeyword, name) {
 export function analyzeJava({ sourceFile, text, workspace }) {
   const result = emptyResult();
   try {
-    const index = jvmPackageIndex(workspace);
+    const { byName: index } = jvmPackageIndex(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
     for (const site of parseJavaImportSites(text)) {
       const { line, column } = positionAt(text, site.offset);
@@ -184,6 +186,7 @@ export function analyzeJava({ sourceFile, text, workspace }) {
         spelling: {
           path: false,
           relative: target !== null && owner !== null && target === owner.name,
+          namesOnly: true,
         },
         resolved: resolution,
       });
@@ -216,12 +219,16 @@ export function analyzeJava({ sourceFile, text, workspace }) {
  *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
  * @returns {{ source: string, target: string, sourceFile: string, type: string }[]}
- * @throws {Error} when `jvmIndexFacts` recorded any failure, naming each
+ * @throws {Error} when `jvmPackageIndex` recorded any failure, naming each
  *   unreadable JVM source.
  */
 export function resolveJavaDependencies(workspace) {
   const { projects, filesOf, readFile } = workspace;
-  const { byName: index, failures: indexFailures } = jvmIndexFacts(workspace);
+  // #364's posture closes the gap #397's comment below named: the hook DOES
+  // have a loud channel — a throw, which Nx turns into a failed graph
+  // computation — so the index's read failures are consumed here after all,
+  // through the same `refuseUnreadTree` the manifest readers hold.
+  const { byName: index, failures: indexFailures } = jvmPackageIndex(workspace);
   refuseUnreadTree("the JVM package index", indexFailures);
   const dependencies = [];
   for (const project of projects) {

@@ -32,7 +32,9 @@
  * There is no wildcard form (a plain `using` already imports a whole
  * namespace), no dynamic form, no re-export syntax: `kind` is always
  * `"static"`, and `spelling.path` is always `false` because no C# directive is
- * spelled as a filesystem path. `spelling.relative` takes Go's argued answer —
+ * spelled as a filesystem path — `spelling.namesOnly` is always `true`, so a
+ * namespace whose root is literally named `libs` is a name, not a path into a
+ * project (#376). `spelling.relative` takes Go's argued answer —
  * true exactly when the directive resolved into its own project — because no
  * C# spelling is relative either, so the bit reads what a directive REACHED
  * rather than how it was written.
@@ -300,6 +302,7 @@ export function analyzeCSharp({ sourceFile, text, workspace }) {
         spelling: {
           path: false,
           relative: target !== null && owner !== null && target === owner.name,
+          namesOnly: true,
         },
         resolved: resolution,
       });

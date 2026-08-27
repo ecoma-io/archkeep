@@ -146,7 +146,10 @@ and a new config file would have needed its own filename option to find itself.
 A workspace with no `nx.json` — `archkeep.json` at its root instead — states the
 same two keys directly on that file's own `boundaryConfig`/`tsConfig` fields
 (`src/providers/native/model.mjs`), because there is no `plugins[].options`
-table to nest them under; a Moon workspace (`.moon/` directory present — a
+table to nest them under; a Moon workspace (detected by the `workspace.yml`
+inside its `.moon` directory, never the directory alone — `~/.moon` is
+moonrepo's user-level state directory and directory presence is what once
+selected the home directory as a workspace (#339); a
 `archkeep.json` beside it is refused loudly, one project model per tree) takes
 the two names by convention — `boundaryConfig` from the default and `tsConfig`
 from a short ordered chain (`src/options.mjs`'s `readMoonOptions`), `--config`

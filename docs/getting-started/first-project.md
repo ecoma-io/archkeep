@@ -39,7 +39,9 @@ inferred:
 
 `projects.declared` names projects outright. `projects.infer` (when present) adds
 one project per tracked manifest it finds -- skipping any directory a declared
-row already claims. Omit `projects.infer` entirely to declare every project by
+row already claims, and skipping the documentation/fixture paths in its
+[default exclusion set](../reference/configuration.md#the-default-exclusion-set-and-why-it-is-deliberate).
+Omit `projects.infer` entirely to declare every project by
 hand; omit `projects.declared` to infer everything. Both together compose rather
 than compete.
 

@@ -307,8 +307,15 @@ const SCRIPT_KIND_BY_LANG = Object.freeze({
  * (`` `./${dir}/x` ``), which starts with a backtick or a quote and so is
  * neither — the honest answer for a specifier nobody can read.
  *
+ * `namesOnly` is per-LANGUAGE, so constant on every record this family
+ * produces: `false`, because this family can spell a filesystem path at all.
+ * That is the bit `isAbsoluteImportIntoAnotherProject` is gated on — a bare
+ * `libs/x` here is a deep import and a `/libs/x` an absolute path, while the
+ * same text in a language whose only spelling is the name is just a name
+ * whose first segments are those words (#376).
+ *
  * @param {string} specifier The raw string as written.
- * @returns {{ path: boolean, relative: boolean }}
+ * @returns {{ path: boolean, relative: boolean, namesOnly: boolean }}
  */
 export function specifierSpelling(specifier) {
   const relative =
@@ -316,7 +323,7 @@ export function specifierSpelling(specifier) {
     specifier === ".." ||
     specifier.startsWith("./") ||
     specifier.startsWith("../");
-  return { path: relative || specifier.startsWith("/"), relative };
+  return { path: relative || specifier.startsWith("/"), relative, namesOnly: false };
 }
 
 /**

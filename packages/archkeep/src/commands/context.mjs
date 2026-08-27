@@ -44,8 +44,8 @@ import {
 import { readProjectGraph } from "../providers/nx.mjs";
 import { ARCHKEEP_MODEL_FILE } from "../providers/native/model.mjs";
 import {
-  MOON_DIR,
-  MOON_ALT_DIR,
+  MOON_ALT_WORKSPACE_MARKER,
+  MOON_WORKSPACE_MARKER,
   mergeImportEdges,
   moonMarkerAt,
   moonProvider,
@@ -178,9 +178,22 @@ export function requireSingleProjectModel(root, { exists = existsSync } = {}) {
  * two callers still differ in posture — one throws where the other returns a
  * default — but they may not differ in what a workspace root IS.
  *
+ * The Moon entries are the SHAPED markers — `workspace.yml` inside the
+ * directory, not the directory alone (`../providers/moon.mjs`'s
+ * `MOON_WORKSPACE_MARKER` owns why): a walk reading directory existence
+ * selected the user's home directory as a workspace through `~/.moon`,
+ * moonrepo's user-level state directory (#339). A bare `.moon` beside an
+ * `nx.json` at a root already chosen is a different question, and stays with
+ * `requireSingleProjectModel`'s directory-presence gate below.
+ *
  * @type {string[]}
  */
-export const WORKSPACE_MARKERS = [NX_CONFIG_FILE, ARCHKEEP_MODEL_FILE, MOON_DIR, MOON_ALT_DIR];
+export const WORKSPACE_MARKERS = [
+  NX_CONFIG_FILE,
+  ARCHKEEP_MODEL_FILE,
+  MOON_WORKSPACE_MARKER,
+  MOON_ALT_WORKSPACE_MARKER,
+];
 
 /**
  * @typedef {object} CommandContext
@@ -500,9 +513,11 @@ export function resolveCommandContext(
   if (root === null) {
     throw new Error(
       `archkeep: no workspace root above ${cwd} — looked for an nx.json, a archkeep.json, or a ` +
-        `.moon (or .config/moon) directory in every parent. The tree to judge is found from the working directory, ` +
-        `never from this tool's own location: installed from the registry, this tool lives under ` +
-        `the consumer's node_modules and the two are always different trees.`,
+        `.moon/workspace.yml (or .config/moon/workspace.yml) in every parent, stopping at the top ` +
+        `level of the enclosing git repository: beyond it, a marker such as ~/.moon is user-level ` +
+        `tooling state, not this workspace's root. The tree to judge is found from the working ` +
+        `directory, never from this tool's own location: installed from the registry, this tool ` +
+        `lives under the consumer's node_modules and the two are always different trees.`,
     );
   }
   // Which provider may judge at all — the one gate

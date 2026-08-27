@@ -321,6 +321,16 @@ regardless of what was declared — a workspace with a custom layout got a rule
 that could never fire on its own layout
 ([#31](https://github.com/ecoma-io/archkeep/issues/31)).
 
+The check is scoped to the languages that can spell a filesystem path — the
+JavaScript family, where a bare `packages/…` is a deep import and a
+`/packages/…` an absolute path. A Go module path, a Rust crate, a Python
+dotted module, a C# namespace, a Java or Kotlin package is a NAME even when
+its text begins with the layout directory, and the name is the only spelling
+the language has, so the same import there produces no finding: the spelling
+judgement stands down and the project edge the import resolves to is judged
+by every other rule
+([#376](https://github.com/ecoma-io/archkeep/issues/376)).
+
 **A complete declaration is honored; a partial one is refused, loudly.**
 `workspaceLayout` must name both `appsDir` and `libsDir`, or neither.
 Declaring only one of the two exits **3** — no verdict — with a message

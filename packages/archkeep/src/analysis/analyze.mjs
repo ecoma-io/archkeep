@@ -81,6 +81,15 @@ export { LANGUAGE_BY_EXTENSION, languageOf };
  *   `./x` and `../x` in JavaScript, `crate::`/`self::`/`super::` and a sibling
  *   crate target of the same Cargo package in Rust, a leading-dot import in
  *   Python. It is the counter-evidence `noSelfCircularDependencies` looks for.
+ * @property {boolean} namesOnly The language's ONLY import spelling is a
+ *   name — a Go module path, a Rust crate, a Python dotted module, a C#
+ *   namespace, a Java or Kotlin package — so no specifier it produces is ever
+ *   a filesystem path, and text beginning `libs/…` or `apps/…` is a name whose
+ *   first segments are those words, not a path into a project. Constant on
+ *   every record one analyzer produces, unlike `path` and `relative`, which
+ *   answer per specifier. `isAbsoluteImportIntoAnotherProject` is gated on it
+ *   (#376): false in the JavaScript family, where a bare `libs/x` is a deep
+ *   import and a `/libs/x` an absolute path.
  */
 
 /**

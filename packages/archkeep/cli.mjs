@@ -1680,8 +1680,8 @@ async function runAdr(options, { cwd, env }) {
   const root = resolveWorkspaceRootForUsage(cwd);
   if (root === null) {
     env.err(
-      `archkeep: adr needs a workspace root — no nx.json, archkeep.json, or .moon marker found ` +
-        `walking up from ${cwd}`,
+      `archkeep: adr needs a workspace root — no nx.json, archkeep.json, or ` +
+        `.moon/workspace.yml marker found walking up from ${cwd}`,
     );
     return EXIT.error;
   }
@@ -1981,8 +1981,8 @@ async function runEvolution(options, { cwd, env }) {
   const root = findWorkspaceRoot(cwd, WORKSPACE_MARKERS);
   if (root === null) {
     env.err(
-      `archkeep: evolution needs a workspace root — no nx.json, archkeep.json, or .moon marker found ` +
-        `walking up from ${cwd}`,
+      `archkeep: evolution needs a workspace root — no nx.json, archkeep.json, or ` +
+        `.moon/workspace.yml marker found walking up from ${cwd}`,
     );
     return EXIT.error;
   }

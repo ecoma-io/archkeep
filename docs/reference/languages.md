@@ -428,13 +428,18 @@ opinion the conformance suite holds to the same verdict.
 `archkeep.json` workspace.** Every tracked root pom anchors a project, named by
 the same precedence as every other inferred manifest (declared row first,
 directory basename otherwise). groupId inherits along a parent chain found
-inside the tracked tree; a parent that is not a tracked pom leaves the child's
-coordinates unresolved, which records the pom as a failure and refuses the run
-— nobody can name an edge TO it while its coordinates are unknown, and the Nx
-hook throws on the same failure rather than drawing partial edges
-([nx.md](../integrations/nx.md)). On
-an Nx tree, nodes come from whatever inference plugins the workspace registers;
-this plugin adds import-derived and pom-coordinate edges beside them.
+inside the tracked tree, each link resolved the way a reactor build resolves
+one: the declared `<relativePath>` first (Maven's default `../pom.xml`; a
+directory spelling gets `pom.xml` appended), then the parent's
+`(groupId, artifactId)` across every tracked pom when that path holds nothing —
+the route a root-parent reactor's two-level-deep children need, and the only
+route an empty `<relativePath/>` allows. A parent neither step can name leaves
+the child's coordinates unresolved, which records the pom as a failure and
+refuses the run — nobody can name an edge TO it while its coordinates are
+unknown, and the Nx hook throws on the same failure rather than drawing
+partial edges ([nx.md](../integrations/nx.md)). On an Nx tree, nodes come from
+whatever inference plugins the workspace registers; this plugin adds
+import-derived and pom-coordinate edges beside them.
 
 **Versions are read for nothing.** Boundary edges need coordinate matching only,
 so `<dependencyManagement>`, BOM imports, version ranges, mediation and profile
@@ -447,9 +452,12 @@ require directory = package.** The index reads every tracked `.java` file's
 `package` line (masked first, so commented-out declarations cannot claim
 ownership) and maps longest declared prefix to project. A `.kt` file's packages
 are in the SAME index — a mixed module compiles into one namespace, and both
-languages share the same JVM package index. A source the index cannot read is
-recorded as a whole-file failure: it refuses the verdict (exit 3) and the Nx
-hook, rather than degrading every import of its packages to external
+languages share the same JVM package index. A tracked `.java`/`.kt` source the
+index cannot read is a whole-file failure that refuses the run (exit 3) naming
+the file — dropped silently, every import of the package it declared would
+classify external, a first-party crossing wearing an external face. The same
+posture the .NET namespace index holds for an unreadable `.cs` — and the Nx
+hook throws on the same failure rather than under-selecting
 ([nx.md](../integrations/nx.md)).
 
 **Extraction covers the four JLS §7.5 import forms** — single type, on-demand
@@ -486,7 +494,9 @@ imports below javadoc that quotes a code snippet.
 names a package, not a file, and which source file supplies a type is a
 compiler question this static reader does not answer. `kind` is always
 `"static"`; there is no dynamic or type-only import form. `spelling.path` is
-always false; `spelling.relative` is true exactly when the import resolved into
+always false and `spelling.namesOnly` always true — a Java package name is a
+name, never a path into a project, so the absolute-import spelling rule does
+not judge it; `spelling.relative` is true exactly when the import resolved into
 its own project — Java has no relative import form, so the bit reads what an
 import reached rather than how it was written.
 
@@ -534,7 +544,8 @@ Java's do.
   inside a script string is masked like any literal.
 
 **What the record leaves null:** exactly what Java's record leaves null —
-`file` always null, `kind` always `"static"`, `spelling.path` always false,
+`file` always null, `kind` always `"static"`, `spelling.path` always false and
+`spelling.namesOnly` always true (a package name is a name, never a path),
 `spelling.relative` true when the import resolved into its own project.
 
 ---
@@ -691,7 +702,9 @@ reported offset stays an offset into the bytes on disk.
 **What the record leaves null:** `file` is always null — a `using` names a
 namespace, not a file, and which source file supplies a type is a compiler
 question this static reader does not answer. `kind` is always `"static"`; C#
-has no dynamic or type-only import form. `spelling.path` is always false;
+has no dynamic or type-only import form. `spelling.path` is always false and
+`spelling.namesOnly` always true — a namespace whose root is literally named
+`libs` or `apps` is still a name, not a path into a project;
 `spelling.relative` is true exactly when the directive resolved into its own
 project.
 ---

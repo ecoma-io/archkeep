@@ -179,7 +179,7 @@ describe("reportCommand — the status contract", () => {
               specifier: "beta",
               resolvedProject: "beta",
               sourceProject: "alpha",
-              spelling: { path: false, relative: false },
+              spelling: { path: false, relative: false, namesOnly: false },
             },
           ],
           failures: [],

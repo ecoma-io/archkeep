@@ -110,8 +110,12 @@ const maskFor = (file) => MASK_BY_EXTENSION[file.slice(file.lastIndexOf("."))];
 /**
  * Build the index: every tracked JVM source's package, attributed by longest
  * project root. Returns the map keyed by exact declared dotted name, each
- * entry listing `{ project, file }` pairs in project order, beside one
- * whole-file failure per JVM source that could not be read.
+ * entry listing `{ project, file }` pairs in project order — beside one
+ * whole-file failure per JVM source that could not be read: a file dropped
+ * from the index silently would make every import of its package classify
+ * external, a first-party crossing wearing an external face, with nothing
+ * anywhere naming why (`../contract.md`'s I/O law). The same discipline the
+ * .NET twin holds for its namespace index (`../dotnet/namespaces.mjs`).
  *
  * @param {object} workspace `{ projects, filesOf(name), readFile(path) }`
  * @returns {{ byName: Map<string, { project: string, file: string }[]>,
@@ -140,37 +144,24 @@ function buildJvmPackageIndex(workspace) {
 }
 
 /**
- * The index's facts — the map and the failure list — built once per workspace
- * object. Both views below read through this one memoized build, so a run
- * that asks for the map and the failures pays a single index build, whatever
- * order it asks in.
- */
-export const jvmIndexFacts = perWorkspace(buildJvmPackageIndex);
-
-/**
- * The workspace's package index — the map view of `jvmIndexFacts`. Every JVM
+ * The workspace's package index, built once per workspace object. Every JVM
  * consumer — the analyzers, the graph resolvers — reads resolution through
  * this one map, so the layers can never disagree about who owns a name.
- *
- * @param {object} workspace
- * @returns {Map<string, { project: string, file: string }[]>}
  */
-export function jvmPackageIndex(workspace) {
-  return jvmIndexFacts(workspace).byName;
-}
+export const jvmPackageIndex = perWorkspace(buildJvmPackageIndex);
 
 /**
  * Whole-file failures for every JVM source the index could not read — the
  * funnel `../../commands/context.mjs` merges beside the manifest failures, so
  * an unreadable source refuses the verdict (exit 3) instead of quietly
- * degrading every importer of its packages to external, and the graph
- * resolvers' refusal input (`refuseUnreadTree`).
+ * degrading every importer of its packages to external — and the graph
+ * resolvers' refusal input (#364's posture, `refuseUnreadTree`).
  *
  * @param {object} workspace
  * @returns {{ sourceFile: string, line: null, column: null, reason: string }[]}
  */
 export function jvmIndexFailures(workspace) {
-  return jvmIndexFacts(workspace).failures;
+  return jvmPackageIndex(workspace).failures;
 }
 
 /**

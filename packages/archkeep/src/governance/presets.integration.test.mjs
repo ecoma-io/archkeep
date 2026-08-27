@@ -111,7 +111,7 @@ const site = (from, { specifier, target }) => ({
   column: 1,
   kind: "static",
   specifier,
-  spelling: { path: false, relative: false },
+  spelling: { path: false, relative: false, namesOnly: false },
   resolved:
     target === null
       ? { target: null, file: null, external: true, packageName: specifier }

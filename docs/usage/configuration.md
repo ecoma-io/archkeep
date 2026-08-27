@@ -10,11 +10,11 @@ which provider runs and what filenames it reads.
 
 A marker file at the workspace root decides:
 
-| marker          | provider | project model from                          |
-| --------------- | -------- | ------------------------------------------- |
-| `nx.json`       | Nx       | Nx's project graph (`nx graph`)             |
-| `.moon/`        | Moon     | Moon's project graph (`moon project-graph`) |
-| `archkeep.json` | native   | `archkeep.json` + tracked tree              |
+| marker                | provider | project model from                          |
+| --------------------- | -------- | ------------------------------------------- |
+| `nx.json`             | Nx       | Nx's project graph (`nx graph`)             |
+| `.moon/workspace.yml` | Moon     | Moon's project graph (`moon project-graph`) |
+| `archkeep.json`       | native   | `archkeep.json` + tracked tree              |
 
 More than one marker present is a hard error (exit 3) — the engine refuses to
 guess. Neither present exits 3 too, naming what it looked for.
@@ -58,7 +58,11 @@ would give you a full green run against a rule nobody wrote.
 
 ## Moon provider options
 
-A Moon workspace carries a `.moon/` directory at the root. Because Moon's
+A Moon workspace is detected by the `workspace.yml` inside a `.moon/` directory
+at the root (`.config/moon/workspace.yml` for moonrepo v2.0+'s alternative
+location) — the file moonrepo itself requires, never the directory alone: a
+bare `~/.moon` is moonrepo's user-level state directory, not a workspace. Because
+Moon's
 configuration does not provide a plugin-options table the way `nx.json`'s
 `plugins[].options` does, the two options fall back to their defaults by
 convention — `module-boundaries.config.mjs` and `tsconfig.base.json` at the

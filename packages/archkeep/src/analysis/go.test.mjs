@@ -733,7 +733,7 @@ describe("analyzeGo", () => {
       column: 2,
       specifier: "example.com/acme/beta/store",
       kind: "static",
-      spelling: { path: false, relative: false },
+      spelling: { path: false, relative: false, namesOnly: true },
       resolved: { target: "beta", file: null, external: false, packageName: null },
     });
   });
@@ -783,7 +783,7 @@ describe("analyzeGo", () => {
     const text = 'package main\n\nimport "example.com/acme/alpha/store"\n';
     const { imports } = analyze(text);
     expect(imports[0].resolved.target).toBe("alpha");
-    expect(imports[0].spelling).toEqual({ path: false, relative: true });
+    expect(imports[0].spelling).toEqual({ path: false, relative: true, namesOnly: true });
   });
 
   it("calls an import that leaves the project NOT relative, so the self-import rule keeps its teeth", () => {
@@ -906,7 +906,7 @@ describe("analyzeGo", () => {
       "loose/tool.go",
     );
     expect(imports[0].resolved.target).toBe("alpha");
-    expect(imports[0].spelling).toEqual({ path: false, relative: false });
+    expect(imports[0].spelling).toEqual({ path: false, relative: false, namesOnly: true });
   });
 
   it("returns an envelope rather than throwing when the workspace misbehaves", () => {
