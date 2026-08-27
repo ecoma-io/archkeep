@@ -24,9 +24,7 @@
  * timestamp is not.
  */
 
-import { execFileSync } from "node:child_process";
-
-import { environmentForTree } from "../process.mjs";
+import { runProcess } from "../process.mjs";
 
 /**
  * Resolves repository provenance from the workspace root.
@@ -49,22 +47,12 @@ import { environmentForTree } from "../process.mjs";
  * @throws {Error} when `root` is a git repository with no commits.
  */
 export function resolveProvenance(root) {
-  // G-09: every git spawn routes through the shared environment guard, so an
-  // ambient GIT_DIR/GIT_WORK_TREE from a wrapping tool (the editor hooks, an
-  // outer `git` call) can never make these spawns read a repository other
-  // than the tree at `root`.
-  const env = environmentForTree();
   // First, the "is this even a git repository at all" question, asked before
   // `rev-parse HEAD` so an unborn HEAD (a commitless repo) is distinguishable
   // from "not a repo" — the two must not share the `null` answer, because
   // only the first is a legitimate "no origin claim".
   try {
-    execFileSync("git", ["rev-parse", "--is-inside-work-tree"], {
-      cwd: root,
-      env,
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    runProcess("git", ["rev-parse", "--is-inside-work-tree"], root);
   } catch {
     // git not available, or not a git repository. Return null — the envelope
     // carries no origin claim rather than a false one.
@@ -72,12 +60,7 @@ export function resolveProvenance(root) {
   }
   let commit;
   try {
-    commit = execFileSync("git", ["rev-parse", "--verify", "HEAD"], {
-      cwd: root,
-      env,
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
+    commit = runProcess("git", ["rev-parse", "--verify", "HEAD"], root).trim();
   } catch {
     // `--is-inside-work-tree` passed above, so a repo EXISTS here, and
     // `--verify` (the two-argument form) failed to resolve HEAD. Two states
@@ -95,12 +78,7 @@ export function resolveProvenance(root) {
     // means the HEAD ref is broken.
     let reachable;
     try {
-      reachable = execFileSync("git", ["rev-list", "--count", "--all"], {
-        cwd: root,
-        env,
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      }).trim();
+      reachable = runProcess("git", ["rev-list", "--count", "--all"], root).trim();
     } catch {
       // `rev-list --all` failing too is a degenerate repo; treat it as unborn
       // rather than inventing a third class.
@@ -124,21 +102,11 @@ export function resolveProvenance(root) {
   // the tree.
   let remote = null;
   try {
-    const remotes = execFileSync("git", ["remote"], {
-      cwd: root,
-      env,
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
+    const remotes = runProcess("git", ["remote"], root).trim();
     if (remotes) {
       // Use the first remote's URL — typically "origin".
       const firstRemote = remotes.split("\n")[0].trim();
-      remote = execFileSync("git", ["remote", "get-url", firstRemote], {
-        cwd: root,
-        env,
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      }).trim();
+      remote = runProcess("git", ["remote", "get-url", firstRemote], root).trim();
     }
   } catch {
     // No remotes configured — `remote` stays null.
@@ -147,12 +115,7 @@ export function resolveProvenance(root) {
   // Dirty: any uncommitted change to tracked files means the working tree
   // does not match the commit. A baseline from a dirty tree is not a
   // reproducible claim about that commit.
-  const status = execFileSync("git", ["status", "--porcelain"], {
-    cwd: root,
-    env,
-    encoding: "utf-8",
-    stdio: ["pipe", "pipe", "pipe"],
-  }).trim();
+  const status = runProcess("git", ["status", "--porcelain"], root).trim();
   const dirty = status.length > 0;
 
   return { commit, remote, dirty };
