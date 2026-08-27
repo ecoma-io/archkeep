@@ -367,11 +367,9 @@ semgrep 1.172.0 rather than assumed:
 4. Keep it focused. Unrelated cleanup found along the way is welcome as its own
    pull request — mixed into this one it makes the real change unreviewable.
 
-Reviews come from a maintainer. [cubic](https://cubic.dev) is configured to read
-the diff for correctness defects but is not currently running — its free-tier
-review budget is exhausted and it has not posted a review on any pull request
-here. cubic is advisory in any case: it cannot approve, and it cannot stand in
-for a required check.
+Reviews come from a maintainer. No automated reviewer is configured: the defect
+class no deterministic gate can decide — a path that reports nothing — is owned
+by the maintainer reading the diff.
 
 ### How a pull request lands
 
