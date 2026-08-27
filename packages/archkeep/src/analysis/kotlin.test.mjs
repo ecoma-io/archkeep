@@ -198,7 +198,7 @@ describe("resolveKotlinDependencies", () => {
         "package com.acme.util;\nclass Strings {}\n",
     };
     const ws = workspaceOf(tree);
-    expect(resolveKotlinDependencies(ws.projects, ws.filesOf, ws.readFile)).toEqual([
+    expect(resolveKotlinDependencies(ws)).toEqual([
       {
         source: "acme",
         target: "util",
@@ -216,6 +216,6 @@ describe("resolveKotlinDependencies", () => {
         "package com.acme.util\n\nimport shared.thing.W\n\nclass C\n",
     };
     const ws = workspaceOf(tree);
-    expect(resolveKotlinDependencies(ws.projects, ws.filesOf, ws.readFile)).toEqual([]);
+    expect(resolveKotlinDependencies(ws)).toEqual([]);
   });
 });

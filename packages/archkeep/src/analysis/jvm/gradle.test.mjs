@@ -268,11 +268,7 @@ rootProject.name = "my-app" // inline comment
     };
 
     it("reads every covered project's build file, not just the settings owner's", () => {
-      const deps = resolveGradleDependencies(
-        reactorWorkspace.projects,
-        reactorWorkspace.filesOf,
-        reactorWorkspace.readFile,
-      );
+      const deps = resolveGradleDependencies(reactorWorkspace);
       assert.strictEqual(deps.length, 2);
       const appToCore = deps.find((d) => d.source === "app" && d.target === "core");
       assert.ok(appToCore !== undefined);
@@ -307,11 +303,7 @@ rootProject.name = "my-app" // inline comment
           return fixtures[path] || null;
         },
       };
-      const deps = resolveGradleDependencies(
-        rootOwned.projects,
-        rootOwned.filesOf,
-        rootOwned.readFile,
-      );
+      const deps = resolveGradleDependencies(rootOwned);
       assert.strictEqual(deps.length, 1);
       assert.strictEqual(deps[0].source, "my-app");
       assert.strictEqual(deps[0].target, "core");
@@ -341,11 +333,7 @@ rootProject.name = "my-app" // inline comment
           return fixtures[path] || null;
         },
       };
-      const deps = resolveGradleDependencies(
-        rootReferencing.projects,
-        rootReferencing.filesOf,
-        rootReferencing.readFile,
-      );
+      const deps = resolveGradleDependencies(rootReferencing);
       assert.strictEqual(deps.length, 1);
       assert.strictEqual(deps[0].source, "core");
       assert.strictEqual(deps[0].target, "my-app");
@@ -480,11 +468,7 @@ rootProject.name = "my-app" // inline comment
         },
       };
 
-      const deps = resolveGradleDependencies(
-        workspaceWithCycle.projects,
-        workspaceWithCycle.filesOf,
-        workspaceWithCycle.readFile,
-      );
+      const deps = resolveGradleDependencies(workspaceWithCycle);
 
       assert.strictEqual(deps.length, 2);
       assert.ok(deps.some((d) => d.source === "app" && d.target === "core"));
@@ -514,11 +498,7 @@ rootProject.name = "my-app" // inline comment
         },
       };
 
-      const deps = resolveGradleDependencies(
-        kotlinDslWorkspace.projects,
-        kotlinDslWorkspace.filesOf,
-        kotlinDslWorkspace.readFile,
-      );
+      const deps = resolveGradleDependencies(kotlinDslWorkspace);
 
       assert.strictEqual(deps.length, 1);
       assert.strictEqual(deps[0].source, "my-app");
@@ -548,11 +528,7 @@ rootProject.name = "my-app" // inline comment
         },
       };
 
-      const deps = resolveGradleDependencies(
-        mixedDslWorkspace.projects,
-        mixedDslWorkspace.filesOf,
-        mixedDslWorkspace.readFile,
-      );
+      const deps = resolveGradleDependencies(mixedDslWorkspace);
 
       assert.strictEqual(deps.length, 1);
       assert.strictEqual(deps[0].source, "my-app");

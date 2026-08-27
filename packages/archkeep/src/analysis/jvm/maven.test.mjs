@@ -206,7 +206,7 @@ describe("resolveMavenDependencies", () => {
 
   it("draws sibling edges through inherited groupId and interpolated coords", () => {
     const ws = reactor();
-    const edges = resolveMavenDependencies(ws.projects, ws.filesOf, ws.readFile);
+    const edges = resolveMavenDependencies(ws);
     expect(edges).toEqual([
       { source: "app", target: "core", sourceFile: "app/pom.xml", type: "static" },
     ]);
@@ -229,11 +229,7 @@ describe("resolveMavenDependencies", () => {
         "</project>",
       ].join("\n"),
     });
-    const edges = resolveMavenDependencies(
-      withChild.projects,
-      withChild.filesOf,
-      withChild.readFile,
-    );
+    const edges = resolveMavenDependencies(withChild);
     expect(edges).toEqual([
       { source: "app", target: "root", sourceFile: "app/pom.xml", type: "static" },
     ]);
@@ -251,7 +247,7 @@ describe("resolveMavenDependencies", () => {
         "</project>",
       ].join("\n"),
     });
-    expect(resolveMavenDependencies(ws.projects, ws.filesOf, ws.readFile)).toEqual([]);
+    expect(resolveMavenDependencies(ws)).toEqual([]);
     const failures = mavenManifestFailures(ws);
     expect(failures).toHaveLength(1);
     expect(failures[0].reason).toContain("com.acme:twin");
@@ -271,7 +267,7 @@ describe("resolveMavenDependencies", () => {
       "sib/pom.xml":
         "<project><groupId>com.sibling</groupId><artifactId>sib</artifactId></project>",
     });
-    const edges = resolveMavenDependencies(ws.projects, ws.filesOf, ws.readFile);
+    const edges = resolveMavenDependencies(ws);
     expect(edges).toEqual([
       { source: "app", target: "sib", sourceFile: "app/pom.xml", type: "static" },
     ]);
@@ -289,7 +285,7 @@ describe("resolveMavenDependencies", () => {
         "</project>",
       ].join("\n"),
     });
-    expect(resolveMavenDependencies(ws.projects, ws.filesOf, ws.readFile)).toEqual([]);
+    expect(resolveMavenDependencies(ws)).toEqual([]);
     const failures = mavenManifestFailures(ws);
     expect(failures.some((f) => f.reason.includes("${missing.prop}"))).toBe(true);
   });
@@ -307,7 +303,7 @@ describe("resolveMavenDependencies", () => {
       ].join("\n"),
       "dep/pom.xml": "<project><groupId>com.config</groupId><artifactId>dep</artifactId></project>",
     });
-    const edges = resolveMavenDependencies(ws.projects, ws.filesOf, ws.readFile);
+    const edges = resolveMavenDependencies(ws);
     expect(edges).toEqual([
       { source: "app", target: "dep", sourceFile: "app/pom.xml", type: "static" },
     ]);
