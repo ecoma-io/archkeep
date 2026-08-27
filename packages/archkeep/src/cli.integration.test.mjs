@@ -6426,9 +6426,15 @@ describe("the exit contract", () => {
 
   it("distinguishes a run that could not complete from a tree that is clean", async () => {
     // Exit 3, never 0 and never 1: a checker that could not look must not be
-    // mistaken for one that looked and found nothing.
+    // mistaken for one that looked and found nothing. The fixture is a real
+    // git repository with no marker anywhere in it, so the walk is bounded by
+    // the repository's top level (`findWorkspaceRoot`) and the refusal holds
+    // on any machine, whatever sits above its temporary directory — the
+    // machine shape that reported #339 had `~/.moon` up there, and a walk
+    // reading only marker presence made these two tests environment-dependent.
     const streams = env();
     streams.cwd = mkdtempSync(join(tmpdir(), "polyglot-not-a-workspace-"));
+    spawnSync("git", ["init", "--quiet"], { cwd: streams.cwd, encoding: "utf8" });
     afterAll(() => rmSync(streams.cwd, { recursive: true, force: true }));
     expect(await runCli(["check"], streams)).toBe(EXIT.error);
     expect(streams.lines.err.join("\n")).toContain("no workspace root above");
@@ -6445,11 +6451,38 @@ describe("the exit contract", () => {
   it("names both root markers in the not-a-workspace message, not just nx.json", async () => {
     const streams = env();
     streams.cwd = mkdtempSync(join(tmpdir(), "polyglot-not-a-workspace-both-markers-"));
+    spawnSync("git", ["init", "--quiet"], { cwd: streams.cwd, encoding: "utf8" });
     afterAll(() => rmSync(streams.cwd, { recursive: true, force: true }));
     expect(await runCli(["check"], streams)).toBe(EXIT.error);
     const message = streams.lines.err.join("\n");
     expect(message).toContain("nx.json");
     expect(message).toContain("archkeep.json");
+  });
+
+  // #339's machine shape, end to end: a bare `.moon` — moonrepo's user-level
+  // state directory, no `workspace.yml` in it — above a real git repository
+  // carrying no workspace marker. Before the fix the walk read only directory
+  // presence, climbed out of the repository, selected the home directory as a
+  // "Moon workspace", and failed loading a `module-boundaries.config.mjs`
+  // that was never written. Exit 3 either way — the defect is that the
+  // message depended on what sat above the caller, so both halves are pinned:
+  // the honest refusal AND the absence of the phantom-config failure. The
+  // "home" is a fixture directory, so the case runs anywhere.
+  it("refuses honestly when a bare .moon sits above the enclosing git repository", async () => {
+    const home = mkdtempSync(join(tmpdir(), "polyglot-phantom-home-"));
+    afterAll(() => rmSync(home, { recursive: true, force: true }));
+    mkdirSync(join(home, ".moon"));
+    const repo = join(home, "work", "repo");
+    mkdirSync(join(repo, "packages", "app"), { recursive: true });
+    spawnSync("git", ["init", "--quiet"], { cwd: repo, encoding: "utf8" });
+
+    const streams = env();
+    streams.cwd = join(repo, "packages", "app");
+    expect(await runCli(["check"], streams)).toBe(EXIT.error);
+    const message = streams.lines.err.join("\n");
+    expect(message).toContain("no workspace root above");
+    expect(message).toContain(".moon/workspace.yml");
+    expect(message).not.toContain("cannot load");
   });
 
   it("calls a path outside the tree a usage error, since retyping it is the fix", async () => {
@@ -7380,7 +7413,7 @@ describe("`check` accepts unowned files through the policy's coverage.unowned", 
         mkdirSync(join(moonRoot, relativePath, ".."), { recursive: true });
         writeFileSync(join(moonRoot, relativePath), text);
       };
-      writeMoon(".moon/tool.yml", " ");
+      writeMoon(".moon/workspace.yml", " ");
       writeMoon(
         "law.json",
         lawWith({ unowned: [{ path: "orphans/**", reason: "vendored fixture corpus" }] }),
@@ -7396,7 +7429,7 @@ describe("`check` accepts unowned files through the policy's coverage.unowned", 
         {
           cwd: moonRoot,
           readGraph: () => moonGraph,
-          listFiles: () => [".moon/tool.yml", "law.json", "libs/a/a.go", "orphans/legacy.go"],
+          listFiles: () => [".moon/workspace.yml", "law.json", "libs/a/a.go", "orphans/legacy.go"],
         },
       );
       expect(unchecked).toBe(0);

@@ -19,15 +19,22 @@ architecture's central seam —
 
 ## Workspace detection
 
-Archkeep detects a Moon workspace by a `.moon/` directory at the workspace root.
-Moonrepo v2.0+'s alternative location, `.config/moon/`, is recognized the same
+Archkeep detects a Moon workspace by the `workspace.yml` inside a `.moon/`
+directory at the workspace root — the file moonrepo itself requires of a
+workspace, never the directory alone. `~/.moon` exists on every machine
+moonrepo has ever run on (it is moonrepo's user-level state directory), and a
+walk that treated the bare directory as a marker would select the home
+directory as a "Moon workspace" instead of refusing. Moonrepo v2.0+'s
+alternative location, `.config/moon/workspace.yml`, is recognized the same
 way: either one alone makes the tree a Moon workspace, and diagnostics name
-whichever one is present. Both together are a **hard error** — Moon treats the
-two as mutually exclusive config roots, so a tree carrying both is refused
-loudly (exit 3), naming both directories, rather than silently judged against
-one of them. A `archkeep.json` or `nx.json` alongside either is refused for the
-same reason: this tool judges a workspace against exactly one project model.
-Exactly one marker may be present.
+whichever directory is present. Both directories together are a **hard
+error** — Moon treats the two as mutually exclusive config roots, so a tree
+carrying both is refused loudly (exit 3), naming both directories, rather
+than silently judged against one of them. A `archkeep.json` or `nx.json`
+alongside either is refused for the same reason: this tool judges a workspace
+against exactly one project model. Exactly one marker may be present. The
+walk also stops at the top level of the enclosing git repository, so a Moon
+marker above the repository being judged is tooling state, not its root.
 
 ## Configuration
 

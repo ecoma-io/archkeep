@@ -22,6 +22,8 @@ import {
   transformMoonGraph,
   MOON_DIR,
   MOON_ALT_DIR,
+  MOON_WORKSPACE_MARKER,
+  MOON_ALT_WORKSPACE_MARKER,
 } from "./moon.mjs";
 
 // ── constants ────────────────────────────────────────────────────────────────
@@ -35,6 +37,22 @@ describe("MOON_DIR", () => {
 describe("MOON_ALT_DIR", () => {
   it('is ".config/moon"', () => {
     expect(MOON_ALT_DIR).toBe(".config/moon");
+  });
+});
+
+describe("MOON_WORKSPACE_MARKER", () => {
+  // The walk's Moon marker (`../workspace.mjs`'s `findWorkspaceRoot` reads it
+  // through `../commands/context.mjs`'s `WORKSPACE_MARKERS`). A typo here
+  // fails no provider test — `moonMarkerAt` below reads directory presence —
+  // while every Moon workspace everywhere starts answering "no workspace
+  // root": the silent direction, so the spelling is pinned here, where the
+  // provider's own constants live.
+  it("is the workspace.yml inside .moon, not the directory alone (#339)", () => {
+    expect(MOON_WORKSPACE_MARKER).toBe(`${MOON_DIR}/workspace.yml`);
+  });
+
+  it("has a v2 spelling under .config/moon", () => {
+    expect(MOON_ALT_WORKSPACE_MARKER).toBe(`${MOON_ALT_DIR}/workspace.yml`);
   });
 });
 

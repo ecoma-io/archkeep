@@ -40,9 +40,14 @@ reading top to bottom — every step is a decision.
 
 ### 1. Find the workspace root
 
-`findWorkspaceRoot(cwd, [NX_CONFIG_FILE, MOON_DIR, ARCHKEEP_MODEL_FILE])` walks up
-for a marker — `nx.json`, `.moon/`, or `archkeep.json` — **from the working
-directory and never from this tool's own location**. Installed from a
+`findWorkspaceRoot` (`src/workspace.mjs`) walks up for a marker — `nx.json`,
+`archkeep.json`, or a Moon directory's `workspace.yml`, never the `.moon`
+directory alone (a bare `~/.moon` is moonrepo's user-level state directory,
+and directory presence alone is what once selected the home directory as a
+"workspace") — **from the working directory and never from this tool's own
+location**, and no further than the top level of the enclosing git
+repository: beyond it, an ancestor's markers belong to tooling state or
+another tree, not the tree `git ls-files` answers for. Installed from a
 registry, the tool sits inside `node_modules` while the tree it judges is
 above it — and under a pinned harness clone the two are different trees
 entirely. Which marker is present decides which provider the rest of this run

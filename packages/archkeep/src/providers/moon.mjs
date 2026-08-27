@@ -28,7 +28,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { delimiter, join, posix } from "node:path";
 
 import { environmentForTree, runProcess } from "../process.mjs";
 import { buildDependencies } from "./native/graph.mjs";
@@ -54,6 +54,30 @@ export const MOON_DIR = ".moon";
  * and `archkeep.json`.
  */
 export const MOON_ALT_DIR = ".config/moon";
+
+/**
+ * The file that makes a Moon directory a workspace-root marker for the walk
+ * (`../workspace.mjs`'s `findWorkspaceRoot`): `workspace.yml`, the one file
+ * moonrepo's own documentation marks "required" of a workspace. The directory
+ * alone is NOT a marker — `~/.moon` exists on every machine moonrepo has ever
+ * run on, as moonrepo's user-level state (its documentation puts the shared
+ * cache at `~/.moon/cache/shared`), and a walk that treated directory
+ * presence as enough selected the user's home directory as a "Moon
+ * workspace" (#339). These constants name the FILE so the walk's marker list
+ * (`../commands/context.mjs`'s `WORKSPACE_MARKERS`) holds the shaped marker.
+ *
+ * The provider gate (`moonMarkerAt` below) keeps reading directory presence,
+ * deliberately: given a root the walk already chose, a `.moon` directory
+ * beside an `nx.json` is two project models at one root whether or not the
+ * `.moon` is shaped — a decision nobody made — and refusing that stays loud.
+ */
+export const MOON_WORKSPACE_MARKER = posix.join(MOON_DIR, "workspace.yml");
+
+/**
+ * The v2 spelling of {@link MOON_WORKSPACE_MARKER}, under
+ * {@link MOON_ALT_DIR} — same shape, same reason.
+ */
+export const MOON_ALT_WORKSPACE_MARKER = posix.join(MOON_ALT_DIR, "workspace.yml");
 
 /**
  * Which Moon directory marks `root` as a Moonrepo workspace — `.moon/`,
