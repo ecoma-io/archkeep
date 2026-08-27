@@ -294,7 +294,13 @@ jobs:
             -c user.email=archkeep-native-selfcheck@invalid -c commit.gpgsign=false \
             commit -q -m "native self-check tree"
           (cd "$dir" && node "$cli" check)
-          rm -rf "$dir"
+          # The verdict was already delivered by the check's exit code above. This
+          # line only discards a mktemp tree the GitHub Actions runner deletes
+          # anyway when the job completes. A cleanup race inside `.git`
+          # (measured in merge-queue run 33032684620, where the check PASSED and
+          # then `rm -rf` failed with "Directory not empty") re-running a check that
+          # already passed is the failure being refused here.
+          rm -rf "$dir" || true
 
       # The extension's own artifact, built on every pull request so a change
       # that breaks packaging turns THIS build red instead of the release lane
