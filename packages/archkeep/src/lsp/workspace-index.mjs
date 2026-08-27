@@ -249,7 +249,7 @@ export function discoverProjects({ files, readFile }) {
  * reads it unguarded and an absent list is not the same fact as an empty one.
  *
  * @param {{name: string, root: string, config: object}[]} projects
- * @returns {Record<string, object>}
+ * @returns {{nodes: Record<string, object>, duplicateProjects: {name: string, roots: string[]}}}
  */
 export function buildNodes(projects) {
   // Null-prototype for the same reason `../providers/native/graph.mjs` and
@@ -264,14 +264,34 @@ export function buildNodes(projects) {
   // has no inherited `__proto__` accessor to collide with, so the name behaves
   // like every other project name: a real, own, enumerable entry.
   const nodes = Object.create(null);
+  const seenNames = new Map(); // name -> root, to detect duplicates
+  const duplicateMap = new Map(); // name -> array of roots that have this name
+
   for (const { name, root, config } of projects) {
+    if (seenNames.has(name)) {
+      // Duplicate name detected — record it for loud reporting
+      if (!duplicateMap.has(name)) {
+        duplicateMap.set(name, [seenNames.get(name)]);
+      }
+      duplicateMap.get(name).push(root);
+      // Skip adding the duplicate to nodes — first project wins
+      continue;
+    }
+    seenNames.set(name, root);
     nodes[name] = {
       name,
       type: nodeTypeOf(name, config.projectType),
       data: { ...config, root, tags: config.tags ?? [] },
     };
   }
-  return nodes;
+
+  // Convert the duplicate map to the expected output format
+  const duplicateProjects = [];
+  for (const [name, roots] of duplicateMap.entries()) {
+    duplicateProjects.push({ name, roots });
+  }
+
+  return { nodes, duplicateProjects };
 }
 
 /**
@@ -359,7 +379,7 @@ export function buildWorkspaceIndex({
   }
 
   const { projects, skipped } = discoverProjects({ files, readFile });
-  const nodes = buildNodes(projects);
+  const { nodes, duplicateProjects } = buildNodes(projects);
   // The same Module Federation fact the CLI path computes, from the same
   // predicate (`../workspace.mjs` → `annotateMFERemotes`): a CLI verdict and an
   // editor verdict on the same import must match, and the field failing closed
@@ -469,6 +489,7 @@ export function buildWorkspaceIndex({
     // input (`./diagnose.mjs` composes its run from these). See this module
     // header's "Why the whole tree's import sites stay on the index".
     importSites,
+    duplicateProjects,
     nativeMarker: false,
     nativeModelFailure: null,
     moonModelFailure: null,
@@ -570,6 +591,7 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
       // was read — and an empty list is the honest answer, not a missing field
       // every consumer would have to guard against.
       importSites: [],
+      duplicateProjects: [],
       nativeMarker: true,
       nativeModelFailure: cause?.message ?? String(cause),
       moonModelFailure: null,
@@ -626,6 +648,7 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
     // input (`./diagnose.mjs` composes its run from these), on this branch
     // exactly as on the Nx-shaped one.
     importSites,
+    duplicateProjects: [],
     nativeMarker: true,
     nativeModelFailure: null,
     moonModelFailure: null,
@@ -673,6 +696,7 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
       // empty list is the honest answer, not a missing field every consumer
       // would have to guard against.
       importSites: [],
+      duplicateProjects: [],
       nativeMarker: false,
       nativeModelFailure: null,
       moonModelFailure: cause?.message ?? String(cause),
@@ -715,6 +739,7 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
     // input (`./diagnose.mjs` composes its run from these), on this branch
     // exactly as on the other two.
     importSites,
+    duplicateProjects: [],
     nativeMarker: false,
     nativeModelFailure: null,
     moonModelFailure: null,
@@ -805,6 +830,7 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
 export function indexGaps({
   skippedProjects = [],
   fileFailures = [],
+  duplicateProjects = [],
   nativeModelFailure = null,
   moonModelFailure = null,
   nxModelFailure = null,
@@ -840,6 +866,11 @@ export function indexGaps({
             `so imports across a non-default apps/libs boundary are judged against the default layout ` +
             `instead of the one this workspace declared`,
         ]),
+    ...duplicateProjects.map(
+      ({ name, roots }) =>
+        `multiple projects resolve to the name '${name}': ${roots.map((r) => `'${r}'`).join(" and ")} — ` +
+        `only the first is indexed; files in the shadowed projects will show no diagnostics`,
+    ),
     ...skippedProjects.map(
       ({ file, reason }) =>
         `${file} ${firstLine(reason)}, so that project is missing from the graph entirely`,
