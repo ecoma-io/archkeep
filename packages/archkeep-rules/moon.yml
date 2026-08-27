@@ -32,6 +32,9 @@ tasks:
   # from Cargo.toml refuses here, at PR time, rather than at publish time.
   lint:
     script: cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && eslint . --max-warnings 0
+    inputs:
+      - "**/*"
+      - "/eslint.config.mjs"
   # The golden fixtures replayed natively, the committed artifacts held to
   # their digests, and the catalog validator's own suite. Cargo runs the
   # first two from `tests/`; node runs the third from `test/` — two
@@ -40,6 +43,9 @@ tasks:
   # package declaring both.
   test:
     script: cargo test --locked && node --test test/*.test.mjs
+    inputs:
+      - "**/*"
+      - "/packages/archkeep-rule-sdk-rust/**"
   # Three compilers for three audiences: `cargo check --all-targets` for the
   # host-compiled half, the same again for `wasm32-unknown-unknown` (the only
   # pass that reads the `#[cfg(target_arch = "wasm32")]` half of the SDK's
@@ -47,3 +53,22 @@ tasks:
   # other package's `typecheck` target uses.
   typecheck:
     script: cargo check --locked --all-targets && cargo check --locked --target wasm32-unknown-unknown && pnpm exec tsc -p tsconfig.json
+    inputs:
+      - "**/*"
+      - "/tsconfig.base.json"
+      - "/packages/archkeep-rule-sdk-rust/**"
+
+# Task `inputs`: declaring any replaces the whole-project default (`**/*` —
+# measured with `moon query tasks --affected`), so each task that declares any
+# restates the bare `**/*` first. The ones that matter beyond it:
+# `/eslint.config.mjs` and `/tsconfig.base.json` for the two tasks whose tail
+# runs ESLint, respectively `tsc`; and the whole `archkeep-rule-sdk-rust` tree
+# wherever cargo is invoked — the crate is a Cargo PATH dependency, so its
+# sources are compiled by `test` and `typecheck` while sitting OUTSIDE this
+# project's `**/*`. Without that entry a warm cache would replay a green
+# `test` over SDK bytes that had since changed — the silent direction. The
+# bootstrap pair (`/package.json`, `/pnpm-lock.yaml`) arrives implicitly for
+# every task via `.moon/tasks/all.yml`.
+dependsOn:
+  - id: archkeep-rule-sdk-rust
+    scope: build

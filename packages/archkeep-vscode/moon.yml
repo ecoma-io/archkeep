@@ -12,7 +12,27 @@ tags:
 tasks:
   lint:
     command: eslint . --max-warnings 0
+    inputs:
+      - "**/*"
+      - "/eslint.config.mjs"
   test:
     command: vitest run
   typecheck:
     command: tsc -p tsconfig.json
+    inputs:
+      - "**/*"
+      - "/tsconfig.base.json"
+
+# No `dependsOn`, deliberately. The extension is a pure client: it launches
+# whatever `@ecoma-io/archkeep` the WORKSPACE it runs in has installed, its
+# own suite exercises none of the engine's code, and packaging
+# (`scripts/package-vsix.mjs`) stages its tracked files alone. An engine
+# change must not re-run this suite, and a change here must not re-run the
+# engine's — the pairing that matters (extension against the installed
+# server) is proven end-to-end by `packages/archkeep/e2e/` and
+# `scripts/verify-package.mjs`, both of which drive the real artifact.
+#
+# Task `inputs` follow the house shape (`.moon/tasks/all.yml` carries the
+# bootstrap pair; explicit `**/*` first because declaring inputs replaces the
+# implicit whole-project default — measured with
+# `moon query tasks --affected`).

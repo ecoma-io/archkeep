@@ -13,7 +13,54 @@ tags:
 tasks:
   lint:
     command: eslint . --max-warnings 0
+    inputs:
+      - "**/*"
+      - "/eslint.config.mjs"
   test:
     command: vitest run
+    inputs:
+      - "**/*"
+      - "/packages/archkeep-rules/**"
+      - "/packages/archkeep-rule-sdk-go/**"
+      - "/packages/archkeep-rule-sdk-python/**"
+      - "/packages/archkeep-rule-sdk-rust/**"
+      - "/packages/archkeep-rule-sdk-ts/**"
   typecheck:
     command: tsc -p tsconfig.json
+    inputs:
+      - "**/*"
+      - "/tsconfig.base.json"
+
+# Verification dependencies, not npm ones. The engine imports no sibling
+# package (its own boundary test refuses one), but its CONFORMANCE suite reads
+# their committed bytes: `src/conformance/rule-sdks.integration.test.mjs`
+# loads each SDK's reference artifact through the real host, and
+# `src/conformance/official-rules.integration.test.mjs` replays every
+# `archkeep-rules` catalog artifact at its digest — so an SDK or catalog
+# change must re-run this package's `test`, and nothing else here. Scope
+# development: the dependency is test-fixture data, not runtime.
+#
+# Task `inputs`: declaring any replaces the whole-project default (`**/*` —
+# measured with `moon query tasks --affected`), so each task that declares
+# any restates the bare `**/*` first. Root `/eslint.config.mjs` and
+# `/tsconfig.base.json` ride on exactly the tasks that read them; the
+# bootstrap pair (`/package.json`, `/pnpm-lock.yaml`) arrives implicitly for
+# every task via `.moon/tasks/all.yml`; and `test` additionally hashes the
+# whole sibling trees its conformance suite reads — a deliberate
+# coarse-grained ceiling (an SDK README edit re-runs `test` here) that buys
+# the strong direction: a warm cache can never replay a verdict over bytes
+# the suite consumed and that have since changed. The reverse edge is
+# deliberately absent: a change HERE does not re-run the SDKs — none of them
+# reads the engine (`scope-sdk` holds that boundary,
+# `module-boundaries.config.mjs`).
+dependsOn:
+  - id: archkeep-rules
+    scope: development
+  - id: archkeep-rule-sdk-go
+    scope: development
+  - id: archkeep-rule-sdk-python
+    scope: development
+  - id: archkeep-rule-sdk-rust
+    scope: development
+  - id: archkeep-rule-sdk-ts
+    scope: development

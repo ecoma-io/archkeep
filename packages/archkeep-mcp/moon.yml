@@ -19,7 +19,43 @@ tags:
 tasks:
   lint:
     command: eslint . --max-warnings 0
+    inputs:
+      - "**/*"
+      - "/eslint.config.mjs"
   test:
     command: vitest run
+    inputs:
+      - "**/*"
+      - "/packages/archkeep/**"
   typecheck:
     command: tsc -p tsconfig.json
+    inputs:
+      - "**/*"
+      - "/tsconfig.base.json"
+      - "/packages/archkeep/**"
+
+# Verification dependencies, not npm ones — Moon needs these to decide what a
+# change invalidates, which package.json alone cannot tell it:
+#
+# - `archkeep` (scope production) — the one npm dependency: `src/` composes the
+#   engine's `./commands` subpath in-process, so an engine change must re-run
+#   this package's suite, and only this package's. `vscode` carries no such
+#   edge on purpose: it talks to the engine over LSP with the engine installed
+#   in a consumer's workspace, and its own suite drives none of it.
+# - The implicit bootstrap inputs (root `package.json` + `pnpm-lock.yaml`) come
+#   from `.moon/tasks/all.yml` — every task here runs a tool that install step
+#   provides.
+#
+# Task `inputs`: the default when none are declared is the whole project
+# (`**/*`) plus `.moon/**`, and root-level files are NOT included — declared
+# here per task, and the bare `**/*` first entry is what keeps the project's
+# own files hashed (explicit inputs REPLACE the default rather than extend
+# it — measured with `moon query tasks --affected`). `eslint.config.mjs` can
+# move every lint verdict, `tsconfig.base.json` every typecheck verdict, and
+# the whole engine tree rides on `test` and `typecheck` — the suite imports
+# the engine in-process through the workspace symlink and `tsc` resolves its
+# types, so a warm cache must never replay either over engine bytes that have
+# since changed. A rules-catalog change must not re-run `lint` here.
+dependsOn:
+  - id: archkeep
+    scope: production
