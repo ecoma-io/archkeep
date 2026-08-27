@@ -948,7 +948,7 @@ describe("analyzePython", () => {
       column: 6,
       specifier: "beta.store",
       kind: "static",
-      spelling: { path: false, relative: false },
+      spelling: { path: false, relative: false, namesOnly: true },
       resolved: {
         target: "beta",
         file: "libs/beta/src/beta/store.py",
@@ -1137,10 +1137,10 @@ describe("analyzePython", () => {
       "from . import deep\nfrom .deep import thing\nfrom ..beta import store\nimport beta.store\n",
     );
     expect(imports.map((record) => [record.specifier, record.spelling])).toEqual([
-      [".", { path: false, relative: true }],
-      [".deep", { path: false, relative: true }],
-      ["..beta", { path: false, relative: true }],
-      ["beta.store", { path: false, relative: false }],
+      [".", { path: false, relative: true, namesOnly: true }],
+      [".deep", { path: false, relative: true, namesOnly: true }],
+      ["..beta", { path: false, relative: true, namesOnly: true }],
+      ["beta.store", { path: false, relative: false, namesOnly: true }],
     ]);
   });
 
@@ -1150,7 +1150,7 @@ describe("analyzePython", () => {
     // may call it a path: the honest output is the analysis failure, not a
     // violation about a path nobody wrote.
     const { imports, failures } = analyze("from ... import escape\n");
-    expect(imports[0].spelling).toEqual({ path: false, relative: true });
+    expect(imports[0].spelling).toEqual({ path: false, relative: true, namesOnly: true });
     expect(imports[0].resolved).toBeNull();
     expect(failures).toHaveLength(1);
   });

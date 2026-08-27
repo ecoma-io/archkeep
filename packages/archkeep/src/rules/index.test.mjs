@@ -29,7 +29,7 @@ import { evaluate, evaluateWithSuppressions, MESSAGE_IDS } from "./index.mjs";
  */
 const jsSpelling = (specifier) => {
   const relative = [".", ".."].includes(specifier) || /^\.\.?\//u.test(specifier);
-  return { path: relative || specifier.startsWith("/"), relative };
+  return { path: relative || specifier.startsWith("/"), relative, namesOnly: false };
 };
 
 /**
@@ -197,6 +197,62 @@ describe("evaluate", () => {
       );
       expect(idsOf(violations)).toEqual(["noRelativeOrAbsoluteImportsAcrossLibraries"]);
     });
+
+    it("stays silent for a Go module path beginning with libs/, because the only spelling Go has is the name (#376)", () => {
+      // `module libs/foo` in `libs/foo/go.mod`, consumer in `apps/consumer`
+      // importing `libs/foo/bar`. The text begins with a layout directory, but
+      // a Go module path is a NAME: `spelling.namesOnly` says so, and the
+      // absolute-path check stands down. The edge to `foo` is inferred and
+      // correct — it reaches the tag checks below, never this spelling check.
+      // This test is red on the unfixed engine, which reported the import as
+      // `noRelativeOrAbsoluteImportsAcrossLibraries` — a verdict with no fix,
+      // because the name is the only spelling the language has.
+      const graph = graphOf([
+        project("consumer", { root: "apps/consumer", tags: ["layer:app"] }),
+        project("foo", { root: "libs/foo", tags: ["layer:domain"] }),
+      ]);
+      const violations = evaluate(
+        [
+          site({
+            sourceFile: "apps/consumer/main.go",
+            specifier: "libs/foo/bar",
+            // The Go analyzer's own declaration for every record it produces.
+            spelling: { path: false, relative: false, namesOnly: true },
+            resolved: {
+              target: "foo",
+              file: "libs/foo/bar.go",
+              external: false,
+              packageName: null,
+            },
+          }),
+        ],
+        graph,
+        config(permissive),
+      );
+      expect(violations).toEqual([]);
+    });
+
+    it("still reports every JavaScript-family absolute-path spelling after the #376 gate", () => {
+      // The over-gating regression, pinned from the loud side: the gate must
+      // silence Go's names without silencing the JS spellings ESLint itself
+      // reports — the bare `libs/…` deep import (`spelling.path` false, the
+      // record byte-identical to Go's but for `namesOnly`) AND the
+      // slash-prefixed `/libs/…`. The conformance differential holds this
+      // engine to ESLint on the bare form; this is the same pin at the unit
+      // layer, where a wrong gate fails with a name, not a case id.
+      const graph = graphOf([
+        project("alpha", { root: "libs/alpha", tags: ["zone:x"] }),
+        project("beta", { root: "libs/beta", tags: ["zone:y"] }),
+      ]);
+      for (const specifier of ["libs/beta/src/thing", "/libs/beta/src/thing"]) {
+        const violations = evaluate(
+          [site({ sourceFile: "libs/alpha/src/index.ts", specifier })],
+          graph,
+          config(permissive),
+        );
+        expect(idsOf(violations)).toEqual(["noRelativeOrAbsoluteImportsAcrossLibraries"]);
+      }
+    });
   });
 
   describe("noRelativeOrAbsoluteExternals", () => {
@@ -240,7 +296,7 @@ describe("evaluate", () => {
           site({
             sourceFile: "area/alpha/src/pkg/mod.py",
             specifier: ".",
-            spelling: { path: false, relative: true },
+            spelling: { path: false, relative: true, namesOnly: false },
             resolved: null,
           }),
         ],
@@ -381,7 +437,7 @@ describe("evaluate", () => {
         [
           site({
             specifier: "@fixture/version",
-            spelling: { path: false, relative: false },
+            spelling: { path: false, relative: false, namesOnly: false },
             resolved: {
               target: null,
               file: "outside/present.ts",
@@ -590,7 +646,7 @@ describe("evaluate", () => {
         site({
           sourceFile: "area/alpha/src/main.rs",
           specifier,
-          spelling: { path: false, relative: true },
+          spelling: { path: false, relative: true, namesOnly: false },
           resolved: { target: "alpha", file: null, external: false, packageName: null },
         }),
       );
@@ -606,7 +662,7 @@ describe("evaluate", () => {
           site({
             sourceFile: "area/alpha/src/main.rs",
             specifier: "unrelated_crate::thing",
-            spelling: { path: false, relative: false },
+            spelling: { path: false, relative: false, namesOnly: false },
             resolved: { target: "alpha", file: null, external: false, packageName: null },
           }),
         ],

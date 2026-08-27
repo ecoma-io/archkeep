@@ -219,7 +219,7 @@ describe("waiversCommand", () => {
               line: 3,
               column: 1,
               kind: "static",
-              spelling: { path: true, relative: true },
+              spelling: { path: true, relative: true, namesOnly: false },
               resolved: {
                 target: "beta",
                 file: "area/beta/src/thing.ts",
@@ -266,7 +266,7 @@ describe("waiversCommand", () => {
               line: 3,
               column: 1,
               kind: "static",
-              spelling: { path: true, relative: true },
+              spelling: { path: true, relative: true, namesOnly: false },
               resolved: {
                 target: "beta",
                 file: "area/beta/src/thing.ts",
@@ -356,7 +356,7 @@ describe("waiversCommand", () => {
               line: 3,
               column: 1,
               kind: "static",
-              spelling: { path: true, relative: true },
+              spelling: { path: true, relative: true, namesOnly: false },
               resolved: {
                 target: "beta",
                 file: "area/beta/src/thing.ts",

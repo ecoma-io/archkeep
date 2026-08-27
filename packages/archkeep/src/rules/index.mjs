@@ -176,13 +176,18 @@ const isProjectGraphProjectNode = (node) =>
  */
 function spellingOf(site) {
   const spelling = site.spelling;
-  if (typeof spelling?.path !== "boolean" || typeof spelling?.relative !== "boolean") {
+  if (
+    typeof spelling?.path !== "boolean" ||
+    typeof spelling?.relative !== "boolean" ||
+    typeof spelling?.namesOnly !== "boolean"
+  ) {
     throw new Error(
       `archkeep: ${site.sourceFile}:${site.line}:${site.column} imports ` +
         `'${site.specifier}' in a record carrying no \`spelling\` — the analysis contract ` +
-        `requires \`{ path, relative }\` on every import site, because whether a specifier ` +
-        `is a path and whether it stays inside its own project are per-language questions ` +
-        `only the analyzer can answer. See src/analysis/contract.md.`,
+        `requires \`{ path, relative, namesOnly }\` on every import site, because whether a ` +
+        `specifier is a path, whether it stays inside its own project, and whether its ` +
+        `language has any path spelling at all are per-language questions only the analyzer ` +
+        `can answer. See src/analysis/contract.md.`,
     );
   }
   return spelling;
@@ -585,8 +590,18 @@ function* candidateGroupsFor(site, ctx) {
   if (!sourceProject) return;
 
   // Relative and absolute paths are judged on their TEXT, before any resolution:
-  // the projects can be correct and the spelling still be the violation.
-  const absoluteIntoAnotherProject = isAbsoluteImportIntoAnotherProject(imp, ctx.workspaceLayout);
+  // the projects can be correct and the spelling still be the violation. The
+  // absolute half is a JavaScript-family convention — a bare `libs/x` deep
+  // import, a `/libs/x` absolute path — so it stands down entirely where the
+  // analyzer declared the language has no path spelling at all
+  // (`spelling.namesOnly`): a Go module path or a C# namespace beginning
+  // `libs/` is a name, and the name is the only spelling the language has
+  // (#376). The edge such an import resolves to is still judged by every check
+  // below — only this spelling check stands down, so gating it too broadly
+  // (on `spelling.path`, which is false for the bare JS form too) would trade
+  // this loud bug for a silent one against ESLint.
+  const absoluteIntoAnotherProject =
+    !spellingOf(site).namesOnly && isAbsoluteImportIntoAnotherProject(imp, ctx.workspaceLayout);
   let targetProject = absoluteIntoAnotherProject
     ? graph.nodes[findProjectForPath(imp, mappings)]
     : graph.nodes[getTargetProjectBasedOnRelativeImport(imp, site.sourceFile, mappings)];

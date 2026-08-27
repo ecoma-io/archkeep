@@ -330,7 +330,8 @@ const OWN_CRATE_ROOTS = new Set(["crate", "self", "super"]);
  *    `noSelfCircularDependencies` names.
  *
  * Nothing here is a filesystem path: a `use` path names items inside a module
- * tree, so `spelling.path` is always false for Rust.
+ * tree, so `spelling.path` is always false for Rust and `spelling.namesOnly`
+ * always true — a crate name is a name, never a path into a project (#376).
  *
  * @param {string|null} root The `use` path's first segment; `null` for a brace group.
  * @param {{name: string}|null} owner The project owning the source file.
@@ -661,7 +662,11 @@ export function analyzeRust({ sourceFile, text, workspace }) {
         column,
         specifier: site.specifier,
         kind: site.kind,
-        spelling: { path: false, relative: isOwnProjectPath(site.root, owner, byCrate) },
+        spelling: {
+          path: false,
+          relative: isOwnProjectPath(site.root, owner, byCrate),
+          namesOnly: true,
+        },
         resolved,
       });
     }

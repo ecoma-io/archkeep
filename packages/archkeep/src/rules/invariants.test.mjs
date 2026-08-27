@@ -32,7 +32,7 @@ import { evaluate, evaluateWithSuppressions } from "./index.mjs";
 /** How the JavaScript family spells a specifier (`typescript.mjs`'s answer). */
 const jsSpelling = (specifier) => {
   const relative = [".", ".."].includes(specifier) || /^\.\.?\//u.test(specifier);
-  return { path: relative || specifier.startsWith("/"), relative };
+  return { path: relative || specifier.startsWith("/"), relative, namesOnly: false };
 };
 
 const project = (name, { type = "lib", root = `area/${name}`, tags = [] } = {}) => ({

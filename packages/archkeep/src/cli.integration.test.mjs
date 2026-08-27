@@ -6212,26 +6212,22 @@ export const moduleBoundaryOptions = {
   writeLayout("packages/a/go.mod", "module example.com/a\n\ngo 1.24\n");
   // The specifier's literal text is what the absolute-import check reads
   // (`../rules/index.mjs`'s `imp = site.specifier`) — a custom `libsDir` of
-  // `packages` makes `packages/b` an absolute path into another project's
-  // library the same way a default-layout workspace reads `libs/b`.
+  // `packages` makes `packages/b/thing` an absolute path into another
+  // project's library the same way a default-layout workspace reads
+  // `libs/b`. Written in TypeScript because the check judges a
+  // JavaScript-family spelling: a Go module path of the same shape is a name
+  // the check must not read as a path (#376), so a `.go` file can no longer
+  // carry the crossing this test exists to catch.
   writeLayout(
-    "packages/a/doc.go",
-    `// Package a reaches b by an absolute-looking specifier.
-package a
-
-import (
-	"packages/b"
-)
-
-var _ = b.Name
-`,
+    "packages/a/doc.ts",
+    'import { Name } from "packages/b/thing";\n\nexport const name = Name;\n',
   );
   writeLayout("packages/b/go.mod", "module example.com/b\n\ngo 1.24\n");
 
   const layoutFiles = [
     "module-boundaries.config.mjs",
     "packages/a/go.mod",
-    "packages/a/doc.go",
+    "packages/a/doc.ts",
     "packages/b/go.mod",
   ];
 
@@ -6291,17 +6287,11 @@ export const moduleBoundaryOptions = {
 `,
   );
   writeNxLayout("packages/a/go.mod", "module example.com/a\n\ngo 1.24\n");
+  // TypeScript, not Go, for the reason the native block above states: the
+  // absolute-import check judges a JavaScript-family spelling (#376).
   writeNxLayout(
-    "packages/a/doc.go",
-    `// Package a reaches b by an absolute-looking specifier.
-package a
-
-import (
-	"packages/b"
-)
-
-var _ = b.Name
-`,
+    "packages/a/doc.ts",
+    'import { Name } from "packages/b/thing";\n\nexport const name = Name;\n',
   );
   writeNxLayout("packages/b/go.mod", "module example.com/b\n\ngo 1.24\n");
 
@@ -6309,7 +6299,7 @@ var _ = b.Name
     "nx.json",
     "module-boundaries.config.mjs",
     "packages/a/go.mod",
-    "packages/a/doc.go",
+    "packages/a/doc.ts",
     "packages/b/go.mod",
   ];
 

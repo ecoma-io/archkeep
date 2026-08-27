@@ -21,7 +21,7 @@ const importSite = (sourceFile, target, kind = "static") => ({
   // contract before judging (`src/analysis/contract.md`): whether a specifier
   // is a path and whether it stays inside its own project are questions only
   // an analyzer can answer, so the fixture states the JS-family answer.
-  spelling: { path: false, relative: false },
+  spelling: { path: false, relative: false, namesOnly: false },
 });
 
 describe("buildNativeGraph", () => {

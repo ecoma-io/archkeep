@@ -53,7 +53,7 @@ function unresolvableRecord(overrides = {}) {
     column: 1,
     specifier: "@acme/phantom",
     kind: "static",
-    spelling: { path: false, relative: false },
+    spelling: { path: false, relative: false, namesOnly: false },
     resolved: null,
     ...overrides,
   };

@@ -401,7 +401,7 @@ describe("building the index over a whole tree", () => {
                 line: 2,
                 column: 1,
                 specifier: "libs/shared",
-                spelling: { path: false, relative: false },
+                spelling: { path: false, relative: false, namesOnly: false },
                 kind: "static",
                 resolved: { target: "__proto__", file: null, external: false, packageName: null },
               },
@@ -650,7 +650,7 @@ describe("the Moon branch buildWorkspaceIndex takes for a .moon root", () => {
     line: 1,
     column: 1,
     specifier: "example.test/y",
-    spelling: { path: false, relative: false },
+    spelling: { path: false, relative: false, namesOnly: false },
     kind: "static",
     resolved: { target: "y", file: null, external: false, packageName: null },
   });
@@ -1166,7 +1166,7 @@ describe("the whole-tree import sites the index retains", () => {
     line: 3,
     column: 1,
     specifier: "example.test/outer",
-    spelling: { path: false, relative: false },
+    spelling: { path: false, relative: false, namesOnly: false },
     kind: "static",
     resolved: { target: "outer", file: null, external: false, packageName: null },
   });

@@ -78,7 +78,7 @@ function crossingRecord(overrides = {}) {
     column: 2,
     specifier: "example.invalid/acme/beta",
     kind: "static",
-    spelling: { path: false, relative: false },
+    spelling: { path: false, relative: false, namesOnly: false },
     resolved: {
       target: "acme-beta",
       file: "libs/beta/src/beta.go",

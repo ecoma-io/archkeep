@@ -14,7 +14,7 @@ const site = {
   column: 2,
   specifier: "example.test/ring",
   kind: "static",
-  spelling: { path: false, relative: false },
+  spelling: { path: false, relative: false, namesOnly: true },
   resolved: { target: "ring", file: "libs/ring/ring.go", external: false, packageName: null },
 };
 

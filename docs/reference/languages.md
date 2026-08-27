@@ -481,7 +481,9 @@ imports below javadoc that quotes a code snippet.
 names a package, not a file, and which source file supplies a type is a
 compiler question this static reader does not answer. `kind` is always
 `"static"`; there is no dynamic or type-only import form. `spelling.path` is
-always false; `spelling.relative` is true exactly when the import resolved into
+always false and `spelling.namesOnly` always true — a Java package name is a
+name, never a path into a project, so the absolute-import spelling rule does
+not judge it; `spelling.relative` is true exactly when the import resolved into
 its own project — Java has no relative import form, so the bit reads what an
 import reached rather than how it was written.
 
@@ -529,7 +531,8 @@ Java's do.
   inside a script string is masked like any literal.
 
 **What the record leaves null:** exactly what Java's record leaves null —
-`file` always null, `kind` always `"static"`, `spelling.path` always false,
+`file` always null, `kind` always `"static"`, `spelling.path` always false and
+`spelling.namesOnly` always true (a package name is a name, never a path),
 `spelling.relative` true when the import resolved into its own project.
 
 ---
@@ -682,7 +685,9 @@ reported offset stays an offset into the bytes on disk.
 **What the record leaves null:** `file` is always null — a `using` names a
 namespace, not a file, and which source file supplies a type is a compiler
 question this static reader does not answer. `kind` is always `"static"`; C#
-has no dynamic or type-only import form. `spelling.path` is always false;
+has no dynamic or type-only import form. `spelling.path` is always false and
+`spelling.namesOnly` always true — a namespace whose root is literally named
+`libs` or `apps` is still a name, not a path into a project;
 `spelling.relative` is true exactly when the directive resolved into its own
 project.
 ---

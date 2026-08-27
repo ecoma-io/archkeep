@@ -88,8 +88,10 @@ describe("analyzing through the real workspace", () => {
         kind: "static",
         // Go has no relative import form: a module path is absolute by
         // construction, so both bits are false and neither the self-circular
-        // check nor the path-specifier check can fire on one.
-        spelling: { path: false, relative: false },
+        // check nor the path-specifier check can fire on one. The third bit
+        // says the same thing the analyzer now says on every record: a module
+        // path is a NAME, so no path-text rule applies to it (#376).
+        spelling: { path: false, relative: false, namesOnly: true },
         resolved: { target: "inner", file: null, external: false, packageName: null },
       },
     ]);
