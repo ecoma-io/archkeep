@@ -17,13 +17,17 @@
  * pom inside a project draws no graph edge — the documented modeling limit,
  * with analysis attributing the file instead):
  *
- * - `<groupId>` inherited along a parent chain found INSIDE the tracked tree
- *   (`<parent><relativePath>`, default `../pom.xml`; a directory spelling
- *   gets `pom.xml` appended, matching Maven's own two-step resolution). A
- *   parent outside the workspace leaves the child's groupId unresolved: the
- *   project still draws its OUTBOUND edges, contributes no identity others
- *   can name, and `mavenManifestFailures` records the pom loudly — silence
- *   would read as "nobody depends on it", which is exactly what is unknown.
+ * - `<groupId>` inherited along a parent chain found INSIDE the tracked tree.
+ *   Each link resolves the way a reactor build resolves it: the declared
+ *   `<relativePath>` first (default `../pom.xml`; a directory spelling gets
+ *   `pom.xml` appended, matching Maven's own two-step resolution; an EMPTY
+ *   element names no path at all — resolution by declaration only), then the
+ *   parent's `(groupId, artifactId)` across every tracked root pom when the
+ *   path step holds nothing. A parent neither step can name leaves the
+ *   child's groupId unresolved: the project still draws its OUTBOUND edges,
+ *   contributes no identity others can name, and `mavenManifestFailures`
+ *   records the pom loudly — silence would read as "nobody depends on it",
+ *   which is exactly what is unknown.
  * - `<properties>` merged down the same chain (nearest wins), then
  *   `-Dkey=value` lines from `.mvn/maven.config` beside the workspace root
  *   and beside the declaring project (user properties outrank pom
@@ -346,59 +350,120 @@ function buildMavenModel(workspace) {
 
   const entryByPomPath = new Map(entries.map((entry) => [entry.pomPath, entry]));
 
-  // Pass 2 — parent chains walked to their end (not just to the first
-  // groupId: properties inherit from ancestors a nearer groupId would hide).
+  // Pass 2 — parent links, each resolved the way a reactor build resolves
+  // one: the declared <relativePath> first (Maven's default `../pom.xml`; a
+  // directory spelling gets `pom.xml` appended), then — when that path holds
+  // no tracked pom, or an empty <relativePath/> skipped the path step on
+  // purpose — the parent's coordinates across every tracked root pom. A
+  // reactor whose parent sits at the workspace root while its children sit
+  // two levels deep is the shape the path step alone cannot serve, and the
+  // coordinate step is what real Maven's own reactor resolution does there.
+  /** @type {Map<string, PomEntry>} pom path -> the parent entry it resolved to. */
+  const parentLink = new Map();
   for (const entry of entries) {
+    const ref = entry.parent;
+    if (!ref || ref.explicitRemote || ref.groupId === null) continue;
+    const path = parentPomPath(entry.pomPath, ref.relativePath ?? "../pom.xml");
+    const target = path === null ? undefined : entryByPomPath.get(path);
+    if (target !== undefined) parentLink.set(entry.pomPath, target);
+  }
+
+  /**
+   * The chain above one entry under the links resolved so far, with the pom a
+   * cycle was entered through when the chain closes on itself. Pure on
+   * purpose: the fixpoint below walks every entry once per round, and a walk
+   * that recorded failures would record them once per round.
+   *
+   * @param {PomEntry} entry
+   * @returns {{ chain: PomEntry[], cycleThrough: string|null }}
+   */
+  const walkFrom = (entry) => {
     const chain = [entry];
     const visited = new Set([entry.pomPath]);
-    let remoteBreak = null;
-    let malformedBreak = false;
     let current = entry;
+    let cycleThrough = null;
     for (;;) {
-      const parentRef = current.parent;
-      if (!parentRef || parentRef.groupId === null) {
-        // A parent block without even a groupId cannot be resolved anywhere,
-        // locally or remotely.
-        malformedBreak = parentRef !== null;
+      const next = parentLink.get(current.pomPath);
+      if (next === undefined) break;
+      if (visited.has(next.pomPath)) {
+        cycleThrough = next.pomPath;
         break;
       }
-      if (parentRef.explicitRemote) break;
-      const relative = parentRef.relativePath ?? "../pom.xml";
-      const parentPath = parentPomPath(current.pomPath, relative);
-      const parentEntry = parentPath === null ? undefined : entryByPomPath.get(parentPath);
-      if (!parentEntry) {
-        remoteBreak = {
-          groupId: parentRef.groupId,
-          artifactId: parentRef.artifactId ?? "?",
-          lookedFor: parentPath ?? "(outside the workspace)",
-        };
-        break;
-      }
-      if (visited.has(parentPath)) {
-        failures.push({
-          sourceFile: entry.pomPath,
-          reason: `sits on a parent cycle through ${parentPath}`,
-        });
-        break;
-      }
-      visited.add(parentPath);
-      chain.push(parentEntry);
-      current = parentEntry;
+      visited.add(next.pomPath);
+      chain.push(next);
+      current = next;
+    }
+    return { chain, cycleThrough };
+  };
+
+  // Linking iterates to a fixpoint because a parent found by coordinates can
+  // complete the identity another entry's declaration is waiting on: the
+  // child of a child whose groupIds both come from a root parent needs one
+  // round per coordinate link. Each round links at least one more entry or
+  // is the last — links only grow, over a finite set — so the loop cannot
+  // outlive `entries`.
+  for (;;) {
+    /** Identities as they stand: "g:a" -> the entries carrying it. */
+    const holdersNow = new Map();
+    for (const entry of entries) {
+      const { chain } = walkFrom(entry);
+      const groupId = chain.find((link) => link.declaredGroupId !== null)?.declaredGroupId;
+      if (groupId === undefined || entry.artifactId === null) continue;
+      const key = `${groupId}:${entry.artifactId}`;
+      holdersNow.set(key, [...(holdersNow.get(key) ?? []), entry]);
+    }
+    let linked = false;
+    for (const entry of entries) {
+      if (parentLink.has(entry.pomPath)) continue;
+      const ref = entry.parent;
+      if (!ref || ref.groupId === null || ref.artifactId === null) continue;
+      // Ambiguous coordinates link nothing — pass 3 below fails the run on
+      // the duplicate identity; a guess here would hide that there were two.
+      const holders = holdersNow.get(`${ref.groupId}:${ref.artifactId}`);
+      if (holders === undefined || holders.length !== 1) continue;
+      parentLink.set(entry.pomPath, holders[0]);
+      linked = true;
+    }
+    if (!linked) break;
+  }
+
+  // Per entry: the chain walked to its end (not just to the first groupId:
+  // properties inherit from ancestors a nearer groupId would hide), its
+  // failures, and its effective facts.
+  for (const entry of entries) {
+    const { chain, cycleThrough } = walkFrom(entry);
+    if (cycleThrough !== null) {
+      failures.push({
+        sourceFile: entry.pomPath,
+        reason: `sits on a parent cycle through ${cycleThrough}`,
+      });
     }
 
     // Effective groupId: nearest link that declares one, own included.
     const owner = chain.find((link) => link.declaredGroupId !== null);
     entry.effectiveGroupId = owner?.declaredGroupId ?? null;
     if (entry.effectiveGroupId === null) {
+      // The unresolved link belongs to the chain's top — the walk stopped
+      // there — and that link's own shape decides which sentence names the
+      // pom back.
+      const top = chain[chain.length - 1];
+      const ref = top.parent;
       failures.push({
         sourceFile: entry.pomPath,
         reason:
-          remoteBreak !== null
-            ? `declares no groupId and its parent ${remoteBreak.groupId}:${remoteBreak.artifactId} ` +
-              `is not a tracked workspace pom (looked for ${remoteBreak.lookedFor})`
-            : malformedBreak
+          ref === null
+            ? "declares no groupId and no parent — its identity cannot be established"
+            : ref.groupId === null
               ? "declares a <parent> without a groupId — its identity cannot be established"
-              : "declares no groupId and no parent — its identity cannot be established",
+              : `declares no groupId and its parent ${ref.groupId}:${ref.artifactId ?? "?"} is not a ` +
+                `tracked workspace pom (${
+                  ref.explicitRemote
+                    ? "its <relativePath/> names no path"
+                    : `looked for ${
+                        parentPomPath(top.pomPath, ref.relativePath ?? "../pom.xml") ??
+                        "(outside the workspace)"
+                      }`
+                }, and no tracked pom declares the identity ${ref.groupId}:${ref.artifactId ?? "?"})`,
       });
     }
 

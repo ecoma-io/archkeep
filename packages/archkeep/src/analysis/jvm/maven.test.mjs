@@ -406,3 +406,175 @@ describe("reactor drift (declared <module> with no tracked pom)", () => {
     expect(mavenManifestFailures(ws)).toEqual([]);
   });
 });
+
+describe("parent resolution beyond the default path (#372)", () => {
+  it("resolves a workspace-root parent by coordinates when the default path misses", () => {
+    // The issue's exact shape: the reactor's parent pom sits at the workspace
+    // root while the children sit two levels deep, so the default ../pom.xml
+    // points at a directory that holds no pom at all. Real Maven resolves
+    // such a parent through the reactor; the model resolves it by
+    // coordinates across the tracked poms, which is the same answer.
+    const ws = workspaceOf({
+      "pom.xml": [
+        "<project>",
+        "  <groupId>com.example</groupId>",
+        "  <artifactId>reactor</artifactId>",
+        "  <version>1.0.0</version>",
+        "  <packaging>pom</packaging>",
+        "  <modules><module>libs/mvn-domain</module><module>libs/mvn-api</module></modules>",
+        "</project>",
+      ].join("\n"),
+      "libs/mvn-domain/pom.xml": [
+        "<project>",
+        "  <parent><groupId>com.example</groupId><artifactId>reactor</artifactId></parent>",
+        "  <artifactId>mvn-domain</artifactId>",
+        "</project>",
+      ].join("\n"),
+      "libs/mvn-api/pom.xml": [
+        "<project>",
+        "  <parent><groupId>com.example</groupId><artifactId>reactor</artifactId></parent>",
+        "  <artifactId>mvn-api</artifactId>",
+        "  <dependencies>",
+        "    <dependency><groupId>com.example</groupId><artifactId>mvn-domain</artifactId></dependency>",
+        "  </dependencies>",
+        "</project>",
+      ].join("\n"),
+    });
+    const model = mavenModelOf(ws);
+    expect(model.failures).toEqual([]);
+    const api = model.entries.find((entry) => entry.pomPath === "libs/mvn-api/pom.xml");
+    expect(api?.effectiveGroupId).toBe("com.example");
+    // The edge needs BOTH children's identities: api's groupId arrives
+    // through the coordinate-resolved parent, and mvn-domain is namable only
+    // once its own has.
+    expect(resolveMavenDependencies(ws)).toEqual([
+      {
+        source: "libs-mvn-api",
+        target: "libs-mvn-domain",
+        sourceFile: "libs/mvn-api/pom.xml",
+        type: "static",
+      },
+    ]);
+  });
+
+  it("resolves a parent by coordinates through an empty <relativePath/>", () => {
+    // `<relativePath/>` names no path on purpose — real Maven then resolves
+    // the parent by declaration, which inside a reactor means by
+    // coordinates. Skipping the path step must not mean skipping the parent.
+    const ws = workspaceOf({
+      "pom.xml":
+        "<project><groupId>com.acme</groupId><artifactId>root</artifactId><packaging>pom</packaging></project>",
+      "core/pom.xml": [
+        "<project>",
+        "  <parent><groupId>com.acme</groupId><artifactId>root</artifactId><relativePath/></parent>",
+        "  <artifactId>core</artifactId>",
+        "</project>",
+      ].join("\n"),
+    });
+    const model = mavenModelOf(ws);
+    expect(model.failures).toEqual([]);
+    expect(model.entries.find((entry) => entry.pomPath === "core/pom.xml")?.effectiveGroupId).toBe(
+      "com.acme",
+    );
+  });
+
+  it("fails loudly when neither the path nor any tracked pom carries the parent", () => {
+    // The loud direction the whole design turns on: no path hit, no
+    // coordinates match. The run must refuse naming the pom and both
+    // attempts — resolving the child to nothing would read the reactor as
+    // clean exactly where nobody can say who depends on it.
+    const ws = workspaceOf({
+      "libs/orphan/pom.xml": [
+        "<project>",
+        "  <parent><groupId>com.elsewhere</groupId><artifactId>elsewhere-parent</artifactId></parent>",
+        "  <artifactId>orphan</artifactId>",
+        "</project>",
+      ].join("\n"),
+      "libs/ok/pom.xml":
+        "<project><groupId>com.acme</groupId><artifactId>ok</artifactId></project>",
+    });
+    const failures = mavenManifestFailures(ws);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].sourceFile).toBe("libs/orphan/pom.xml");
+    expect(failures[0].reason).toContain("com.elsewhere:elsewhere-parent");
+    expect(failures[0].reason).toContain("looked for libs/pom.xml");
+    expect(failures[0].reason).toContain("no tracked pom declares the identity");
+  });
+
+  it("fails an empty-<relativePath/> parent that no tracked pom carries, by name", () => {
+    const ws = workspaceOf({
+      "app/pom.xml": [
+        "<project>",
+        "  <parent>",
+        "    <groupId>org.springframework.boot</groupId>",
+        "    <artifactId>spring-boot-starter-parent</artifactId>",
+        "    <relativePath/>",
+        "  </parent>",
+        "  <artifactId>app</artifactId>",
+        "</project>",
+      ].join("\n"),
+    });
+    const failures = mavenManifestFailures(ws);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].reason).toContain("spring-boot-starter-parent");
+    expect(failures[0].reason).toContain("<relativePath/> names no path");
+  });
+
+  it("completes a grandchild's identity through a coordinate-resolved chain", () => {
+    // The fixpoint's reason to exist: `mid` has no own groupId, so `leaf`'s
+    // parent coordinates can only match once `mid` itself has resolved
+    // through the root — one round per coordinate link.
+    const ws = workspaceOf({
+      "pom.xml":
+        "<project><groupId>com.root</groupId><artifactId>root</artifactId><packaging>pom</packaging><properties><pkg>com.root</pkg></properties></project>",
+      "mid/pom.xml": [
+        "<project>",
+        "  <parent><groupId>com.root</groupId><artifactId>root</artifactId></parent>",
+        "  <artifactId>mid</artifactId>",
+        "  <packaging>pom</packaging>",
+        "</project>",
+      ].join("\n"),
+      "deep/leaf/pom.xml": [
+        "<project>",
+        "  <parent><groupId>com.root</groupId><artifactId>mid</artifactId></parent>",
+        "  <artifactId>leaf</artifactId>",
+        "  <dependencies>",
+        "    <dependency><groupId>${pkg}</groupId><artifactId>sib</artifactId></dependency>",
+        "  </dependencies>",
+        "</project>",
+      ].join("\n"),
+      "sib/pom.xml": "<project><groupId>com.root</groupId><artifactId>sib</artifactId></project>",
+    });
+    const model = mavenModelOf(ws);
+    expect(model.failures).toEqual([]);
+    const leaf = model.entries.find((entry) => entry.pomPath === "deep/leaf/pom.xml");
+    expect(leaf?.effectiveGroupId).toBe("com.root");
+    // Properties inherit along the coordinate-resolved chain too: `pkg` is
+    // declared on the root, two coordinate links above the leaf.
+    expect(leaf?.properties.pkg).toBe("com.root");
+    expect(resolveMavenDependencies(ws)).toEqual([
+      { source: "deep-leaf", target: "sib", sourceFile: "deep/leaf/pom.xml", type: "static" },
+    ]);
+  });
+
+  it("keeps a coordinate-ambiguous parent unresolved while the duplicate failure names it", () => {
+    const ws = workspaceOf({
+      "a/pom.xml": "<project><groupId>com.acme</groupId><artifactId>twin</artifactId></project>",
+      "b/pom.xml": "<project><groupId>com.acme</groupId><artifactId>twin</artifactId></project>",
+      "c/pom.xml": [
+        "<project>",
+        "  <parent><groupId>com.acme</groupId><artifactId>twin</artifactId></parent>",
+        "  <artifactId>c</artifactId>",
+        "</project>",
+      ].join("\n"),
+    });
+    const failures = mavenManifestFailures(ws);
+    // The duplicate identity is the louder fact; the unlinked child adds its
+    // own refusal. Neither may be dropped, and linking to either twin would
+    // have hidden that there were two.
+    expect(failures.some((f) => f.reason.includes("all declare the Maven identity"))).toBe(true);
+    expect(
+      failures.some((f) => f.sourceFile === "c/pom.xml" && f.reason.includes("com.acme:twin")),
+    ).toBe(true);
+  });
+});

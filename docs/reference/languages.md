@@ -428,11 +428,17 @@ opinion the conformance suite holds to the same verdict.
 `archkeep.json` workspace.** Every tracked root pom anchors a project, named by
 the same precedence as every other inferred manifest (declared row first,
 directory basename otherwise). groupId inherits along a parent chain found
-inside the tracked tree; a parent that is not a tracked pom leaves the child's
-coordinates unresolved, which draws its outbound edges but records the pom as a
-failure — nobody can name an edge TO it while its coordinates are unknown. On
-an Nx tree, nodes come from whatever inference plugins the workspace registers;
-this plugin adds import-derived and pom-coordinate edges beside them.
+inside the tracked tree, each link resolved the way a reactor build resolves
+one: the declared `<relativePath>` first (Maven's default `../pom.xml`; a
+directory spelling gets `pom.xml` appended), then the parent's
+`(groupId, artifactId)` across every tracked pom when that path holds nothing —
+the route a root-parent reactor's two-level-deep children need, and the only
+route an empty `<relativePath/>` allows. A parent neither step can name leaves
+the child's coordinates unresolved, which draws its outbound edges but records
+the pom as a failure — nobody can name an edge TO it while its coordinates are
+unknown. On an Nx tree, nodes come from whatever inference plugins the
+workspace registers; this plugin adds import-derived and pom-coordinate edges
+beside them.
 
 **Versions are read for nothing.** Boundary edges need coordinate matching only,
 so `<dependencyManagement>`, BOM imports, version ranges, mediation and profile

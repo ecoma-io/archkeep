@@ -186,14 +186,22 @@ function nativeModel(spec) {
   // `.mjs`: coverage judges the ANALYZABLE files no project claims
   // (`../providers/native/coverage.mjs`), so `archkeep.json` and
   // `tsconfig.base.json` need no row — and a row for either would be refused
-  // as stale, since it would match no unclaimed file.
-  const exempt = [
-    { path: BOUNDARY_CONFIG_FILE, reason: "the workspace's boundary law, owned by no project" },
-    {
-      path: DENY_ALL_CONFIG_FILE,
-      reason: "the corpus's forbid-everything law, owned by no project",
-    },
-  ];
+  // as stale, since it would match no unclaimed file. A case that declares
+  // the workspace root itself as a project (a root-parent Maven reactor)
+  // claims both modules instead: they are analyzed beside that project's
+  // sources, declare only exports so they contribute no import site, and an
+  // exempt row for a claimed file is exactly the stale shape the comment
+  // above names.
+  const rootClaimed = spec.projects.some((project) => project.root === "");
+  const exempt = rootClaimed
+    ? []
+    : [
+        { path: BOUNDARY_CONFIG_FILE, reason: "the workspace's boundary law, owned by no project" },
+        {
+          path: DENY_ALL_CONFIG_FILE,
+          reason: "the corpus's forbid-everything law, owned by no project",
+        },
+      ];
   const model = {
     projects: {
       declared: spec.projects.map((project) => ({
