@@ -489,11 +489,13 @@ describe("resolveCommandContext — Moon ambiguity refusals", () => {
     // the old preference, this resolves successfully with
     // `marker === ".config/moon"` and no word about the second directory.
     const { root, write } = fixture("context-moon-coexistence-");
-    write(".moon/tool.yml", " ");
-    write(".config/moon/tool.yml", " ");
+    // Both directories shaped: the walk needs a workspace.yml to see the root
+    // at all, and the refusal it then reaches is `moonMarkerAt`'s own.
+    write(".moon/workspace.yml", " ");
+    write(".config/moon/workspace.yml", " ");
 
     expect(() =>
-      resolveCommandContext({ cwd: root }, { listFiles: () => [".moon/tool.yml"] }),
+      resolveCommandContext({ cwd: root }, { listFiles: () => [".moon/workspace.yml"] }),
     ).toThrow(/declares both \.moon and \.config\/moon/u);
   });
 });
@@ -501,7 +503,10 @@ describe("resolveCommandContext — Moon ambiguity refusals", () => {
 describe("resolveCommandContext — the Moon branch scopes before it analyzes", () => {
   it("selects the Moon provider when only .moon is present", () => {
     const { root, write } = fixture("context-moon-provider-");
-    write(".moon/tool.yml", " ");
+    // workspace.yml, not the directory alone — that is the walk's Moon
+    // marker (#339); the directory presence this test's provider choice
+    // reads is unchanged and follows from the file.
+    write(".moon/workspace.yml", " ");
     write("libs/x/x.go", "package x\n");
     write("libs/y/y.go", "package y\n");
 
@@ -517,7 +522,7 @@ describe("resolveCommandContext — the Moon branch scopes before it analyzes", 
       { cwd: root, paths: ["libs/y"] },
       {
         readGraph: () => graph,
-        listFiles: () => [".moon/tool.yml", "libs/x/x.go", "libs/y/y.go"],
+        listFiles: () => [".moon/workspace.yml", "libs/x/x.go", "libs/y/y.go"],
       },
     );
 
@@ -533,7 +538,7 @@ describe("resolveCommandContext — the Moon branch scopes before it analyzes", 
 
   it("selects the Moon provider when .config/moon is present", () => {
     const { root, write } = fixture("context-alt-moon-provider-");
-    write(".config/moon/tool.yml", " ");
+    write(".config/moon/workspace.yml", " ");
     write("libs/x/x.go", "package x\n");
 
     const graph = {
@@ -547,7 +552,7 @@ describe("resolveCommandContext — the Moon branch scopes before it analyzes", 
       { cwd: root },
       {
         readGraph: () => graph,
-        listFiles: () => [".config/moon/tool.yml", "libs/x/x.go"],
+        listFiles: () => [".config/moon/workspace.yml", "libs/x/x.go"],
       },
     );
 
@@ -601,7 +606,7 @@ describe("resolveCommandContext — the unclaimed-file coverage hole, on the Nx 
 
   it("adds a whole-file failure for a tracked Go file outside every declared Moon project", () => {
     const { root, write } = fixture("context-moon-unclaimed-");
-    write(".moon/tool.yml", " ");
+    write(".moon/workspace.yml", " ");
     write("libs/a/a.go", "package a\n");
     write("libs/orphan/orphan.go", "package orphan\n");
 
@@ -614,7 +619,7 @@ describe("resolveCommandContext — the unclaimed-file coverage hole, on the Nx 
       { cwd: root },
       {
         readGraph: () => graph,
-        listFiles: () => [".moon/tool.yml", "libs/a/a.go", "libs/orphan/orphan.go"],
+        listFiles: () => [".moon/workspace.yml", "libs/a/a.go", "libs/orphan/orphan.go"],
       },
     );
 
@@ -750,7 +755,7 @@ describe("resolveCommandContext — unownedGap, the tolerated half of the same q
 
   it("names the same file on a Moon workspace", () => {
     const { root, write } = fixture("context-moon-unowned-gap-");
-    write(".moon/tool.yml", " ");
+    write(".moon/workspace.yml", " ");
     write("libs/a/a.go", "package a\n");
     write("tooling.config.mjs", "export const x = 1;\n");
 
@@ -763,7 +768,7 @@ describe("resolveCommandContext — unownedGap, the tolerated half of the same q
       { cwd: root },
       {
         readGraph: () => graph,
-        listFiles: () => [".moon/tool.yml", "libs/a/a.go", "tooling.config.mjs"],
+        listFiles: () => [".moon/workspace.yml", "libs/a/a.go", "tooling.config.mjs"],
       },
     );
 
@@ -1006,7 +1011,7 @@ describe("resolveCommandContext — options.boundaryConfigDeclared, on all three
     // every Moon run — there is no declared-but-missing case to answer here,
     // and this test is what would notice if one appeared.
     const { root, write } = fixture("context-declared-moon-");
-    write(".moon/tool.yml", " ");
+    write(".moon/workspace.yml", " ");
     write("libs/x/x.go", "package x\n");
 
     const context = resolveCommandContext(
@@ -1016,7 +1021,7 @@ describe("resolveCommandContext — options.boundaryConfigDeclared, on all three
           nodes: { x: { name: "x", type: "lib", data: { root: "libs/x" } } },
           dependencies: { x: [] },
         }),
-        listFiles: () => [".moon/tool.yml", "libs/x/x.go"],
+        listFiles: () => [".moon/workspace.yml", "libs/x/x.go"],
       },
     );
 

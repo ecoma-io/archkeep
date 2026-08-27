@@ -28,7 +28,7 @@
  * is the same tracked-file set every resolver in this project already reasons
  * about ("Resolvers read tracked files only", project `AGENTS.md`).
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
 
 import { containmentViolation } from "./containment.mjs";
@@ -58,28 +58,108 @@ export { environmentForTree, runProcess };
  * with a hoisted install, the right one by luck (same reason
  * `loadBoundaryConfig` takes a root — see `config.mjs`).
  *
+ * The walk is bounded by the enclosing git repository: a marker above the top
+ * level `git rev-parse --show-toplevel` names for `from` is tooling state,
+ * not this workspace's root. The case that made the bound necessary is
+ * `~/.moon` — moonrepo's user-level state directory, present on every machine
+ * moonrepo has ever run on (its own documentation puts the shared cache at
+ * `~/.moon/cache/shared`), which a walk reading only directory existence
+ * climbed to from any unmarked directory under the home directory, selecting
+ * `$HOME` as a "Moon workspace" and failing to load
+ * `$HOME/module-boundaries.config.mjs` instead of refusing (#339). The bound
+ * is inclusive: a marker ON the top level is the ordinary case, a repository
+ * that is itself the workspace. With no enclosing repository — or no `git` to
+ * ask — there is no bound, and the walk climbs as far as it did before one
+ * existed; the shape of the Moon markers is what holds the line there.
+ *
  * `markers` defaults to `nx.json` alone, so every existing caller keeps
  * finding exactly the root it found before. A native-provider caller passes
  * `[NX_CONFIG_FILE, ARCHKEEP_MODEL_FILE]` to recognise either root marker in
  * one walk — see `../cli.mjs`, which is the only caller that needs to tell
  * the two apart, and does so by checking which marker(s) the returned
- * directory actually carries.
+ * directory actually carries. A Moon marker names the directory's
+ * `workspace.yml` — the file moonrepo itself requires of a workspace — never
+ * the directory alone (`../providers/moon.mjs`'s `MOON_WORKSPACE_MARKER`):
+ * a bare `.moon` is the user-level state directory again, and directory
+ * presence alone is exactly what selected `$HOME`.
  *
  * @param {string} from Absolute directory to start at.
- * @param {string[]} [markers] Filenames or directory names whose presence
- *   marks a workspace root. `existsSync` works for both — a directory name
- *   like `.moon` is detected the same way a filename like `nx.json` is.
+ * @param {string[]} [markers] Filenames or relative paths whose presence
+ *   marks a workspace root. `existsSync` works for all of them — a relative
+ *   path like `.moon/workspace.yml` is detected the same way a filename like
+ *   `nx.json` is.
+ * @param {{gitTopLevel?: (from: string) => string|null}} [io] The git seam:
+ *   how the walk asks for the enclosing repository's top level, injectable
+ *   for the same reason every spawn here is. The default runs
+ *   `git rev-parse --show-toplevel` through `runProcess` — so ambient
+ *   `GIT_DIR`-style redirects are stripped, the boundary describing the tree
+ *   at `from` rather than whatever repository a hook exported — and answers
+ *   `null` when git cannot (no repository encloses `from`, or git is absent).
+ *   `null` is a missing boundary, never a refusal: the walk then climbs
+ *   unbounded, exactly as it did before the boundary existed.
  * @returns {string|null} Absolute path, or `null` when no ancestor has one.
  */
-export function findWorkspaceRoot(from, markers = [NX_CONFIG_FILE]) {
+export function findWorkspaceRoot(
+  from,
+  markers = [NX_CONFIG_FILE],
+  { gitTopLevel = gitTopLevelOf } = {},
+) {
+  const ceiling = gitTopLevel(resolve(from));
   let current = resolve(from);
   for (;;) {
     if (markers.some((marker) => existsSync(join(current, marker)))) return current;
+    // Inclusive on purpose: the marker check above already ran for the top
+    // level itself, so reaching the ceiling with no marker means no ancestor
+    // within the repository is a workspace root — and every ancestor beyond
+    // it is outside the tree `git ls-files` would answer for.
+    if (ceiling !== null && sameDirectory(current, ceiling)) return null;
     const parent = dirname(current);
     if (parent === current) return null;
     current = parent;
   }
 }
+
+/**
+ * The top level of the git repository enclosing `from` — the ceiling
+ * `findWorkspaceRoot` above stops its walk at.
+ *
+ * `null` when none does or when git cannot answer (absent binary, bare
+ * repository, unreadable `.git`): a boundary that cannot be measured is a
+ * boundary absent, and the walk degrades to its previous unbounded climb
+ * rather than refusing a root it never looked at. A repository git genuinely
+ * cannot read is caught loudly one call later by `listTrackedFiles`, whose
+ * own spawn has no `null` answer.
+ */
+function gitTopLevelOf(from) {
+  try {
+    // `stderr: "ignore"` because a directory no repository encloses is the
+    // COMMON case this probe must answer quietly — git's `fatal: not a git
+    // repository` belongs nowhere near a user's terminal for it.
+    return runProcess("git", ["rev-parse", "--show-toplevel"], from, undefined, {
+      stderr: "ignore",
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Do `a` and `b` name the same directory? `git rev-parse --show-toplevel`
+ * answers a fully resolved path while the walk holds the spelling it was
+ * given — on macOS every `os.tmpdir()` path starts `/var/folders/…`, whose
+ * real spelling is `/private/var/folders/…`, and a plain `===` would let the
+ * ceiling silently never bind there. Doubt answers false: a boundary that
+ * fails to bind is the old walk, while one that binds wrongly refuses a real
+ * workspace.
+ */
+const sameDirectory = (a, b) => {
+  if (a === b) return true;
+  try {
+    return realpathSync(a) === realpathSync(b);
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Every tracked file in the workspace, workspace-relative.

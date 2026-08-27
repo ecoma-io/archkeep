@@ -25,7 +25,8 @@ provider is active depends on the marker file at the workspace root:
   graph that the project-graph computation already produces.
 - A `archkeep.json` root activates the native provider, which discovers projects
   from the tracked tree and their manifests, with no external tool installed.
-- A `.moon/` directory activates the Moon provider, which reads the project
+- A `.moon/` directory carrying its `workspace.yml` activates the Moon
+  provider, which reads the project
   graph from `moon project-graph --json`.
 
 The provider is chosen once, at the start of a run, and the CLI works over

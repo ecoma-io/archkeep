@@ -38,8 +38,10 @@ Nothing runs until the tree has a workspace root. A repository with none gets a
 refusal, not an empty answer:
 
 ```text
-archkeep: no workspace root above <dir> — looked for an nx.json, a archkeep.json,
-or a .moon (or .config/moon) directory in every parent.
+archkeep: no workspace root above <dir> — looked for an nx.json, a archkeep.json, or a
+.moon/workspace.yml (or .config/moon/workspace.yml) in every parent, stopping at the top
+level of the enclosing git repository: beyond it, a marker such as ~/.moon is user-level
+tooling state, not this workspace's root.
 ```
 
 That is exit 3. Pick the marker the repository already has, or add the native
