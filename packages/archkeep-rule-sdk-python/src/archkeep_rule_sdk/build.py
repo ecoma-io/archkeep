@@ -81,7 +81,9 @@ def read_declaration(rule_path: Path):
     if not rule_path.is_file():
         raise BuildError(f"{rule_path} is not a file")
 
-    spec = importlib.util.spec_from_file_location("archkeep_rule_under_build", rule_path)
+    spec = importlib.util.spec_from_file_location(
+        "archkeep_rule_under_build", rule_path
+    )
     if spec is None or spec.loader is None:
         raise BuildError(f"{rule_path} could not be loaded as a Python module")
     module = importlib.util.module_from_spec(spec)
@@ -90,7 +92,9 @@ def read_declaration(rule_path: Path):
     # Broad on purpose: this is the author's own module body, which may raise
     # anything at all, and what a caller needs is the file and the reason.
     except Exception as error:
-        raise BuildError(f"{rule_path} raised while loading: {type(error).__name__}: {error}")
+        raise BuildError(
+            f"{rule_path} raised while loading: {type(error).__name__}: {error}"
+        ) from error
 
     declaration = getattr(module, "ARCHKEEP_RULE", None)
     if not isinstance(declaration, dict):
@@ -112,7 +116,9 @@ def read_declaration(rule_path: Path):
     return declaration
 
 
-def render_carrier(declaration, rule_path: Path, crate_dir: Path, sdk_dependency: str) -> None:
+def render_carrier(
+    declaration, rule_path: Path, crate_dir: Path, sdk_dependency: str
+) -> None:
     """Writes the carrier crate for one rule into `crate_dir`."""
     source_dir = crate_dir / "src"
     source_dir.mkdir(parents=True, exist_ok=True)
@@ -138,7 +144,10 @@ def render_carrier(declaration, rule_path: Path, crate_dir: Path, sdk_dependency
     # The runtime the artifact runs is the file the author's own tests import,
     # copied rather than re-rendered: a template of it would be a second
     # version of the runtime, and the two would agree only until one was edited.
-    shutil.copyfile(Path(__file__).resolve().parent / "runtime.py", source_dir / "archkeep_rule_sdk.py")
+    shutil.copyfile(
+        Path(__file__).resolve().parent / "runtime.py",
+        source_dir / "archkeep_rule_sdk.py",
+    )
     shutil.copyfile(rule_path, source_dir / "rule.py")
 
 
@@ -159,7 +168,7 @@ def _findings_literal(findings) -> str:
             raise BuildError(
                 f"ARCHKEEP_RULE['findings'][{index}] is {entry!r}, and a catalogue entry states "
                 f"an id and a message"
-            )
+            ) from None
         entries.append(f"({_rust_string(id)}, {_rust_string(message)})")
     return ", ".join(entries)
 
@@ -167,7 +176,9 @@ def _findings_literal(findings) -> str:
 def _rust_string(value) -> str:
     """One Python string as a Rust string literal."""
     if not isinstance(value, str):
-        raise BuildError(f"{value!r} is not a string, and a catalogue entry holds two of them")
+        raise BuildError(
+            f"{value!r} is not a string, and a catalogue entry holds two of them"
+        )
     escaped = (
         value.replace("\\", "\\\\")
         .replace('"', '\\"')
@@ -201,7 +212,7 @@ def run_cargo(crate_dir: Path, offline: bool) -> Path:
             f"{WASM_TARGET} target — `rustup target add {WASM_TARGET}` — because there is no "
             "Python toolchain that emits a core-wasm module with no imports. Running a built "
             "rule needs neither."
-        )
+        ) from None
     if completed.returncode != 0:
         raise BuildError(
             f"cargo build failed (exit {completed.returncode}). When the failure names "
@@ -219,7 +230,13 @@ def run_cargo(crate_dir: Path, offline: bool) -> Path:
     return artifact
 
 
-def build(rule_path: Path, out_path: Path, sdk_dependency: str, keep: Path | None, offline: bool) -> None:
+def build(
+    rule_path: Path,
+    out_path: Path,
+    sdk_dependency: str,
+    keep: Path | None,
+    offline: bool,
+) -> None:
     """The whole build, from a `rule.py` to a `.wasm` and its digest."""
     declaration = read_declaration(rule_path)
 
@@ -228,10 +245,14 @@ def build(rule_path: Path, out_path: Path, sdk_dependency: str, keep: Path | Non
         _build_in(declaration, rule_path, keep, out_path, sdk_dependency, offline)
         return
     with tempfile.TemporaryDirectory(prefix="archkeep-rule-carrier-") as scratch:
-        _build_in(declaration, rule_path, Path(scratch), out_path, sdk_dependency, offline)
+        _build_in(
+            declaration, rule_path, Path(scratch), out_path, sdk_dependency, offline
+        )
 
 
-def _build_in(declaration, rule_path, crate_dir, out_path, sdk_dependency, offline) -> None:
+def _build_in(
+    declaration, rule_path, crate_dir, out_path, sdk_dependency, offline
+) -> None:
     render_carrier(declaration, rule_path, crate_dir, sdk_dependency)
     artifact = run_cargo(crate_dir, offline)
 
@@ -241,11 +262,13 @@ def _build_in(declaration, rule_path, crate_dir, out_path, sdk_dependency, offli
     # Bare lowercase hex and a newline, nothing else: this string is pasted
     # verbatim into a `customRules` row's `sha256` field, which is 64 hex
     # characters with no filename beside it.
-    out_path.with_suffix(out_path.suffix + ".sha256").write_text(digest + "\n", encoding="utf-8")
+    out_path.with_suffix(out_path.suffix + ".sha256").write_text(
+        digest + "\n", encoding="utf-8"
+    )
 
     print(
         f"built {out_path} ({out_path.stat().st_size} bytes) for rule "
-        f"\"{declaration['name']}\", digest {digest}"
+        f'"{declaration["name"]}", digest {digest}'
     )
 
 
@@ -329,7 +352,7 @@ def _own_version() -> str:
             "this package's own version could not be read from its installed metadata "
             f"({type(error).__name__}: {error}), so the crate version to build against is "
             "unknown — pass --sdk-path to build against a checkout instead"
-        )
+        ) from error
 
 
 if __name__ == "__main__":

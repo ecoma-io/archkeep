@@ -12,7 +12,51 @@ tags:
 tasks:
   lint:
     command: eslint . --max-warnings 0
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+      - "/eslint.config.mjs"
   test:
     command: vitest run
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
   typecheck:
     command: tsc -p tsconfig.json
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+      - "/tsconfig.base.json"
+
+  # The extension's artifact: stage, `vsce package`, and prove the vsix
+  # holds what an install needs. Both scripts live in `/scripts/` and are
+  # inputs for the same reason verify-package.mjs is an input above — the
+  # proof changing is the proof changing. vsce walks `node_modules` with
+  # `npm list`, so the scripts stage into a throwaway npm-installed
+  # directory themselves (`package-vsix.mjs` holds the measurement).
+  package:
+    script: node $workspaceRoot/scripts/package-vsix.mjs $projectSource dist/archkeep-vscode.vsix && node $workspaceRoot/scripts/verify-vsix.mjs dist/archkeep-vscode.vsix
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+      - "/scripts/package-vsix.mjs"
+      - "/scripts/verify-vsix.mjs"
+# No `dependsOn`, deliberately. The extension is a pure client: it launches
+# whatever `@ecoma-io/archkeep` the WORKSPACE it runs in has installed, its
+# own suite exercises none of the engine's code, and packaging
+# (`scripts/package-vsix.mjs`) stages its tracked files alone. An engine
+# change must not re-run this suite, and a change here must not re-run the
+# engine's — the pairing that matters (extension against the installed
+# server) is proven end-to-end by `packages/archkeep/e2e/` and
+# `scripts/verify-package.mjs`, both of which drive the real artifact.
+#
+# Task `inputs` follow the house shape: the bare `**/*` first, because
+# declaring inputs replaces the implicit whole-project default — measured with
+# `moon query tasks --affected`; then exactly the root files that task's
+# verdict depends on (`/eslint.config.mjs`, `/tsconfig.base.json`) and the
+# bootstrap pair (`/package.json`, `/pnpm-lock.yaml`) every Node-tooling task
+# here runs through.

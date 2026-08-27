@@ -1,0 +1,65 @@
+# The gate scripts — `scripts/*.mjs`, the repository's own verification
+# machinery, as a Moon project.
+#
+# This project exists so the scripts stop being a verification boundary
+# outside the graph. Before it, `pnpm lint` / `pnpm test` / `pnpm typecheck`
+# were root commands whose coverage no `moon run --affected` could see: a
+# pull request touching only a gate script ran the whole workspace's package
+# targets and none of the script's own, and the scripts' lint/test/typecheck
+# were invisible to affected detection. Everything the root commands verified
+# is verified here, by the same commands, under the same three target names
+# every package answers to.
+#
+# `type-gates` is a new tag on the boundary law's type axis
+# (`../module-boundaries.config.mjs`): repository machinery, shipped to no
+# one. It deliberately carries NO `scope-nx`: the gate scripts reach the
+# engine's internals relatively, and the spelling verdicts those imports
+# earn must be REPORTED — measured: with `scope-nx` on this project the Moon
+# provider reported the same tree as clean while the native provider
+# reported eleven violations, a provider disagreement the self-check step
+# exists to catch. The reach is accepted, per file, in
+# `boundarySuppressions` — visible in both providers, argued once each.
+id: gate-scripts
+language: javascript
+layer: tool
+stack: backend
+tags:
+  - type-gates
+tasks:
+  # The scripts' own JavaScript, plus the four root-level JS files no project
+  # directory contains: the ESLint config itself, the commitlint config, the
+  # boundary law, and the opencode editor gate. They were covered by the old
+  # root `eslint .` traversal; this task is where that coverage lives now.
+  lint:
+    command: eslint . $workspaceRoot/eslint.config.mjs $workspaceRoot/commitlint.config.mjs $workspaceRoot/module-boundaries.config.mjs $workspaceRoot/.opencode/plugins/editor-gates.js
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+      - "/eslint.config.mjs"
+  # The gate scripts' own tests, with the same refusal the root `pnpm test`
+  # carried: `node --test` prints `tests 0` and exits 0 when its glob resolves
+  # no file, so emptiness of the glob is checked before the run, and a green
+  # target here must mean something ran.
+  test:
+    script: |
+      count="$(node -p "require('node:fs').globSync('**/*.test.mjs').length")"
+      if [ "$count" -eq 0 ]; then
+        echo "gate-scripts:test matched no test file. node --test prints tests 0 and exits 0 on that, so a green run here would mean nothing ran."
+        exit 1
+      fi
+      node --test '**/*.test.mjs'
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+  # The gate scripts' JSDoc, type-checked. The same program the root
+  # `pnpm typecheck` ran (`scripts/tsconfig.json`), reached through the graph
+  # now instead of beside it.
+  typecheck:
+    command: tsc -p tsconfig.json
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+      - "/tsconfig.base.json"

@@ -49,6 +49,7 @@ is, what it is not, and the line its neighbours may not cross — and
 - [Add integration](development/adding-integration.md) — extension points
 - [Development architecture](development/architecture.md) — internals and testing
 - [Testing](development/testing.md) — suites, coverage, differential
+- [Verification](development/verification.md) — CI shape, lint tiers, per-project contracts
 
 **I need exact reference**
 

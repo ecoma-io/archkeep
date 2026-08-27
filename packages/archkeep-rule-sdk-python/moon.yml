@@ -14,35 +14,26 @@ tags:
   - type-package
   - scope-sdk
 tasks:
-  # `compileall` is the whole of lint here, and the shortfall is stated rather
-  # than papered over: this repository has no Python linter and adding one
-  # would be a new toolchain dependency in every CI leg for a package whose
-  # source is four files. What it DOES check is load-bearing for this package
-  # in a way it would not be for most — every `.py` here is compiled a second
-  # time, by the RustPython inside a rule's artifact, and a file CPython's own
-  # compiler rejects is one that interpreter rejects too, at build time, with a
-  # worse message.
+  # Three linters, one per concern, in strictness order: `ruff check` is the
+  # static analysis (correctness-first rule set, `ruff.toml` argues the
+  # roster), `ruff format --check` is the Python formatting gate (Prettier
+  # does not read `.py`, so without it formatting had no owner), and
+  # `compileall` stays as the last half for the reason its old comment held:
+  # every `.py` here is compiled a second time by the RustPython inside a
+  # rule's artifact, and a file CPython's own compiler rejects is one that
+  # interpreter rejects at build time with a worse message.
   #
-  # `tabnanny` is deliberately absent, and the reason is measured rather than
-  # aesthetic: `python3 -m tabnanny <dir>` prints its findings and **exits 0**
-  # (Python 3.11.15), so a task that ran it would report a green build over
-  # every complaint it made — the shape `../../AGENTS.md` calls a gate that
-  # returns early quietly. Turning its output into an exit code would be
-  # writing a gate, which is not what a target is for.
-  #
-  # `PYTHONPYCACHEPREFIX` sends the `__pycache__` trees compileall writes into
-  # `target/`, which the root `.gitignore` already keeps out of git and out of
-  # Prettier's reach — without it a lint run leaves untracked directories
-  # scattered through the package.
+  # `script` because that is three commands, and `PYTHONPYCACHEPREFIX` sends
+  # the `__pycache__` trees compileall writes into `target/`, which the root
+  # `.gitignore` already keeps out of git and Prettier's reach.
   lint:
-    command: python3 -m compileall -q src examples tests
+    script: ruff check . && ruff format --check . && python3 -m compileall -q src examples tests
     env:
       PYTHONPYCACHEPREFIX: target/pycache
   # The golden suite, the runtime's red-direction tests, and the committed
   # artifact's digest and no-import-section checks. `unittest` rather than
   # pytest because pytest is a dependency and this package has none: an SDK
   # whose test run needs a wheel installed is an SDK a contributor cannot check
-  # out and verify.
   #
   # `-t tests` makes the tests directory the discovery root, so it needs no
   # `__init__.py` — the suite is a set of scripts, not a package, and adding one

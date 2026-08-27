@@ -106,7 +106,8 @@ def evaluate(evidence):
 
         finding = Finding(
             "dependency-on-forbidden-tag",
-            '%s depends on %s, which carries "%s"' % (source.name, target.name, forbidden_tag),
+            '%s depends on %s, which carries "%s"'
+            % (source.name, target.name, forbidden_tag),
         ).in_project(source.name)
         # The file only when the graph carried one: an edge has no line, and a
         # position invented to fill the shape sends a reader somewhere the

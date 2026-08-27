@@ -249,7 +249,9 @@ class Evidence:
         """Every project the run covers, in name order. Needs `model`."""
         if self._projects is _MISSING:
             self._declared("model", "projects")
-            self._projects = [Project(entry) for entry in self._raw["model"]["projects"]]
+            self._projects = [
+                Project(entry) for entry in self._raw["model"]["projects"]
+            ]
         return self._projects
 
     @property
@@ -299,9 +301,7 @@ class Evidence:
 
 def _require_text(value, what):
     if not isinstance(value, str) or not value:
-        raise RuleError(
-            "%s is %r, and it has to be a non-empty string" % (what, value)
-        )
+        raise RuleError("%s is %r, and it has to be a non-empty string" % (what, value))
     return value
 
 
@@ -338,7 +338,8 @@ class Finding:
         for axis, value in (("line", line), ("column", column)):
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 raise RuleError(
-                    "a finding's %s is %r, and positions are 1-based integers" % (axis, value)
+                    "a finding's %s is %r, and positions are 1-based integers"
+                    % (axis, value)
                 )
         self.line = line
         self.column = column
@@ -383,7 +384,8 @@ class Verdict:
     def __init__(self, kind, findings=(), reason=None, not_applicable_reason=None):
         if kind not in VERDICTS:
             raise RuleError(
-                "%r is not a verdict — the vocabulary is %s" % (kind, ", ".join(VERDICTS))
+                "%r is not a verdict — the vocabulary is %s"
+                % (kind, ", ".join(VERDICTS))
             )
         findings = list(findings)
         for index, finding in enumerate(findings):
@@ -415,7 +417,8 @@ class Verdict:
             if kind != requires and value is not None:
                 raise RuleError(
                     '"%s" carries a %s, which only "%s" carries — a rule that meant "%s" and '
-                    'said "%s" would be read as having decided' % (kind, field, requires, requires, kind)
+                    'said "%s" would be read as having decided'
+                    % (kind, field, requires, requires, kind)
                 )
         self.kind = kind
         self.findings = findings
@@ -550,7 +553,8 @@ def drive(evaluate, bundle, needs) -> dict:
     # argues why every one of those becomes an `unknown` rather than escaping.
     except Exception as error:
         return unknown(
-            "the rule raised %s: %s (at %s)" % (type(error).__name__, error, _where(error))
+            "the rule raised %s: %s (at %s)"
+            % (type(error).__name__, error, _where(error))
         ).to_wire()
 
     if not isinstance(verdict, Verdict):

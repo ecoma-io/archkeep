@@ -98,10 +98,10 @@ As with Claude Code, no gate depends on any of this — the editor-time hooks in
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `pnpm format`                                 | Prettier, in place                                                                                           |
 | `pnpm format:check`                           | Prettier, read-only — what CI runs                                                                           |
-| `pnpm lint`                                   | ESLint, zero warnings tolerated                                                                              |
-| `pnpm test`                                   | `node --test` over `scripts/*.test.mjs` — the gate scripts, nothing else                                     |
-| `pnpm typecheck`                              | `tsc --noEmit` over the gate scripts' JSDoc — each package has its own target                                |
-| `pnpm check-packages`                         | Asserts every `packages/*` directory is a project Moon can see, with CI targets                              |
+| `pnpm lint`                                   | Every project's `lint` target through Moon — ESLint for the JS/TS half, the language linters for the rest    |
+| `pnpm test`                                   | The gate scripts' own tests (`node --test` over `scripts/*.test.mjs`), through Moon                          |
+| `pnpm typecheck`                              | The gate scripts' JSDoc (`tsc --noEmit`), through Moon — each package has its own target                     |
+| `pnpm check-packages`                         | Asserts every `packages/*` directory plus `scripts/` is a project Moon can see, with CI targets              |
 | `node scripts/check-skills.mjs`               | The skills gate: shape, citations, and the plugin-manifest version chain                                     |
 | `node scripts/check-docs-links.mjs`           | Fails on any doc reference that cannot resolve — a gone target, a dead anchor                                |
 | `node scripts/check-cli-docs-roster.mjs`      | Holds every documented command count and roster to `COMMAND_NAMES` in cli.mjs                                |
@@ -112,22 +112,55 @@ As with Claude Code, no gate depends on any of this — the editor-time hooks in
 | `pnpm e2e`                                    | Packs the artifact and drives it as an installed CLI, end to end — CI runs it in two shards                  |
 
 Plus every project's own targets — a different suite, not a superset of the one
-above:
+above. Locally, the full form:
 
 ```bash
 moon run ...:lint ...:test ...:typecheck
 ```
 
+On a pull request, CI runs the affected form of the same roster instead, and
+Moon decides what a change can have moved — through each task's declared
+`inputs` and the projects' `dependsOn` graph. A one-package change runs that
+package; a dependency change runs its consumers; an ESLint-config change runs
+every lint that reads it and no typecheck; a documentation-only change runs no
+Moon target at all, and says so in the log:
+
+```bash
+moon ci ...:lint ...:test ...:typecheck --base="$MOON_BASE"
+```
+
 **This one needs more than Node.** Four of the eight packages are custom-rule
 SDKs, and each runs its targets in its own language's tooling: `cargo` with the
-`clippy` and `rustfmt` components (Rust), `go` with `gofmt` (Go), and `python3`
-(Python). CI installs the Rust components explicitly and gets the rest from the
-runner image. Without a toolchain, that language's targets fail — they do not
-skip, which is the whole point of `check-packages` below. If you have not
-touched an SDK, running one project's targets is fine:
+`clippy` and `rustfmt` components (Rust), `go` with `gofmt` and
+`golangci-lint` (Go — the static analysis is golangci-lint's default roster,
+which includes `go vet`; `go vet` is not run a second time beside it),
+`python3` plus `ruff` 0.15 (Python — check, format check, and compileall).
+CI pins the Rust components, Ruff and golangci-lint explicitly and gets the
+interpreters from the runner image. Without a toolchain, that language's
+targets fail — they do not skip, which is the whole point of `check-packages`
+below. If you have not touched an SDK, running one project's targets is fine:
 
 ```bash
 moon run archkeep:lint archkeep:test archkeep:typecheck
+```
+
+The E2E suite is sharded two ways in CI, and on a pull request it only runs
+when Moon's affected graph says the engine project moved — an engine change
+re-runs it, a documentation-only change skips it loudly (the gate reads the
+query, the run is plain vitest):
+
+```bash
+moon query projects --affected
+pnpm e2e --shard=1/2
+```
+
+The artifact proofs — the packed engine tarball installed into consumer
+workspaces, and the extension's vsix — are Moon tasks too, gated by the same
+affected graph on pull requests:
+
+```bash
+moon run archkeep:integration
+moon run archkeep-vscode:package
 ```
 
 Not every SDK declares all three: `check-packages` reports

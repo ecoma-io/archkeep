@@ -173,3 +173,58 @@ test("every package directory is judged, not just the first", () => {
   });
   assert.equal(failures.length, 2);
 });
+
+test("reads the target list out of a moon ci invocation the same way", () => {
+  // PR CI runs the affected form; the roster it names is the same one the
+  // full run names, and this gate holds both to it.
+  const workflow = `- run: pnpm exec moon ci :lint :test :typecheck --base origin/main --affected\n`;
+  assert.deepEqual(parseCiTargets(workflow), ["lint", "test", "typecheck"]);
+});
+
+test("a project-qualified target does not join the every-project roster", () => {
+  // `archkeep:e2e` is one project's target: Moon itself fails a run that
+  // names a target no project declares, so holding every package to it here
+  // would only manufacture a false gap in every ok line.
+  const workflow = `- run: moon ci archkeep:e2e :lint --base origin/main\n`;
+  assert.deepEqual(parseCiTargets(workflow), ["lint"]);
+});
+
+test("an extra required root is judged like a package directory", () => {
+  const { lines, failures } = evaluate({
+    packageDirs: [],
+    projects: [{ name: "gate-scripts", root: "scripts", targets: ["lint", "test"] }],
+    ciTargets: ["lint", "test"],
+    extraRequiredRoots: ["scripts"],
+  });
+  assert.deepEqual(failures, []);
+  assert.equal(lines[0], "0 packages — declared empty");
+  // The point of the state is that a reader is told, so the output has to say
+  // so in words rather than merely exit 0 the way the workspace tool does.
+  assert.match(lines.join("\n"), /runs nothing/);
+  assert.deepEqual(lines[2], "ok   gate-scripts — lint, test");
+});
+
+test("an extra required root no project claims fails instead of passing in silence", () => {
+  // scripts/ sits outside the packages glob, so deleting its manifest would
+  // otherwise be exactly the invisible-directory state this gate exists to
+  // catch — reached by no scan at all.
+  const { failures } = evaluate({
+    packageDirs: [],
+    projects: [],
+    ciTargets: ["lint"],
+    extraRequiredRoots: ["scripts"],
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /scripts.*not a project/);
+});
+
+test("an extra required root declaring no CI target fails instead of being skipped", () => {
+  const { failures } = evaluate({
+    packageDirs: [],
+    projects: [{ name: "gate-scripts", root: "scripts", targets: ["serve"] }],
+    ciTargets: ["lint"],
+    extraRequiredRoots: ["scripts"],
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /declares none of the targets/);
+});

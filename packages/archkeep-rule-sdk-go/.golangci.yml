@@ -1,0 +1,12 @@
+# golangci-lint configuration for the Go rule-authoring SDK.
+#
+# The package is stdlib-only (go.mod declares zero requires), so the default
+# v2 linter set is the whole mandate: `errcheck` (unchecked errors — the one
+# defect a rule artifact must not carry), `govet`, `ineffassign`,
+# `staticcheck` and `unused`. Nothing is enabled beyond it: the package is
+# four files, and a linter roster longer than the code it reads is noise.
+#
+# Formatting is deliberately NOT delegated here — `gofmt` stays the first
+# half of the `lint` target in `moon.yml`, which fails loudly when its output
+# is non-empty (`gofmt -l` exits 0 over findings; only emptiness means clean).
+version: "2"

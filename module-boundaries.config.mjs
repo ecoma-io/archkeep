@@ -121,6 +121,22 @@ export const depConstraints = [
   // judge.
   { sourceTag: "type-extension", onlyDependOnLibsWithTags: ["type-package"] },
 
+  // `type-gates` is the repository's own gate machinery — `scripts/`, whose
+  // `gate-scripts` project verifies the tooling this table is enforced by.
+  // The row states the one direction the gates live in: they may depend on
+  // the published packages (the differential, coverage and roster gates
+  // drive the engine's own analysis and CLI), on other gate scripts, and on
+  // nothing else. Their relative imports earn spelling verdicts the same as
+  // any cross-library import — the per-file rows in `boundarySuppressions`
+  // accept the reach, per file, with reasons. Measured twice: with
+  // `scope-nx` on the project instead, the Moon provider reported a tree
+  // the native provider reported eleven violations on — a constraint row
+  // that allows an edge was silencing the spelling verdicts the same edge
+  // had earned — and with no matching row at all, every import became a
+  // `projectWithoutTagsCannotHaveDependencies` finding. This row is the
+  // honest middle: the direction stated, the spelling still judged.
+  { sourceTag: "type-gates", onlyDependOnLibsWithTags: ["type-gates", "type-package"] },
+
   // Scope axis. `scope-nx` is the Nx-toolchain scope — plugins, and the
   // language server and CLI that share their analysis. The second scope has
   // now arrived, so the two rows are read together: each scope may depend
@@ -264,6 +280,64 @@ export const boundarySuppressions = [
     messageId: "noSelfCircularDependencies",
     reason:
       "`from archkeep_rule_sdk import ...` is the only spelling that resolves inside a Python rule's wasm carrier: the carrier registers the SDK runtime under that name in sys.modules, and there is no filesystem for the relative import this message recommends to walk. So the package's reference rule imports the SDK exactly as an outside author's rule does, and its tests import it exactly as the rule does. The rule being waived is about a language with two spellings for one import, where reaching a sibling file through the barrel is a real cycle — Python names a package one way, and taking the message's advice would produce an artifact that cannot load.",
+  },
+
+  // The five rows below hold the same fact for the gate scripts: the
+  // verification machinery in `scripts/` imports the engine's internals
+  // relatively because the engine publishes no deep path to import them by —
+  // its exports map names `.`, `./nx`, `./commands` and presets, and the
+  // differential, coverage and roster gates need `src/analysis`,
+  // `src/rules`, `src/providers` and `cli.mjs` directly, to put the engine's
+  // own judgment beside external trees and CI facts. Each row accepts one
+  // file's reach; a relative import appearing in a gate script NOT listed
+  // here still fails, under both providers.
+  {
+    path: "scripts/coverage-real-trees.mjs",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+    reason:
+      "the analyzer-coverage gate measures how much of real pinned trees the engine's own analyzers read, so it must drive `src/analysis` directly; the engine publishes no deep path for it, and the gate ships to no one — it is this repository verifying its own tool on trees it does not own.",
+  },
+  {
+    path: "scripts/differential-real-trees.mjs",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+    reason:
+      "the conformance differential runs the engine's real analysis, rules and native provider against external pinned trees and reads `extractBoundaryRule` out of `src/eslint-config.mjs` — internals no exports-map path publishes. It is the engine judging itself against trees it cannot be shipped inside of.",
+  },
+  {
+    path: "scripts/differential-real-trees-child.mjs",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+    reason:
+      "the child process of the differential gate: same reach as its parent row, under the boundary this gate exists to hold — one side of the comparison IS the engine under test, so importing it relatively is the measurement, not a coupling to police.",
+  },
+  {
+    path: "scripts/check-cli-docs-roster.mjs",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+    reason:
+      "the roster gate holds documented command counts to `COMMAND_NAMES`, exported by `packages/archkeep/cli.mjs`; importing the shipped entry point relatively is the gate reading its own source of truth — the alternative would be restating the roster, which is the drift this gate exists to catch.",
+  },
+  {
+    path: "scripts/check-cli-docs-roster.test.mjs",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+    reason:
+      "the roster gate's tests import the gate they test, which reaches `cli.mjs` for the reason its row above states — same reach, one level of indirection, same acceptance.",
+  },
+  {
+    path: "scripts/differential-real-trees.mjs",
+    messageId: "noImportsOfLazyLoadedLibraries",
+    reason:
+      "the same engine reach the spelling row above accepts for this file: with the type-gates row stating the dependency direction, the engine's rule battery also judges these imports against the lazy-loaded-library rule, and the reach is the measurement, not a coupling to police.",
+  },
+  {
+    path: "scripts/differential-real-trees-child.mjs",
+    messageId: "noImportsOfLazyLoadedLibraries",
+    reason:
+      "the child process of the differential gate: same reach, same argument as its parent's lazy-loaded row — the engine under test is imported directly because the comparison is the point.",
+  },
+  {
+    path: "scripts/coverage-real-trees.mjs",
+    messageId: "noImportsOfLazyLoadedLibraries",
+    reason:
+      "the analyzer-coverage gate drives `src/analysis` directly, for the reason its spelling row states; the lazy-loaded verdict is the same import judged by a second rule once the type-gates row makes the edge table-visible.",
   },
 ];
 

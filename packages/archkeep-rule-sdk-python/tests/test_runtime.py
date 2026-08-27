@@ -44,11 +44,20 @@ def _imported_by(path):
             names.add(node.module or ".")
     return sorted(names)
 
+
 BUNDLE = {
     "contract": 1,
     "rule": {"name": "a-rule", "params": {"tag": "layer-domain"}},
-    "model": {"projects": [{"name": "alpha", "root": "packages/alpha", "tags": ["layer-domain"]}]},
-    "graph": {"edges": [{"source": "alpha", "target": "beta", "type": "static", "sourceFile": None}]},
+    "model": {
+        "projects": [
+            {"name": "alpha", "root": "packages/alpha", "tags": ["layer-domain"]}
+        ]
+    },
+    "graph": {
+        "edges": [
+            {"source": "alpha", "target": "beta", "type": "static", "sourceFile": None}
+        ]
+    },
     "imports": [
         {
             "sourceProject": "alpha",
@@ -58,10 +67,18 @@ BUNDLE = {
             "specifier": "beta/pkg",
             "kind": "static",
             "spelling": {"path": False, "relative": False},
-            "resolved": {"target": "beta", "file": None, "external": False, "packageName": None},
+            "resolved": {
+                "target": "beta",
+                "file": None,
+                "external": False,
+                "packageName": None,
+            },
         }
     ],
-    "policy": {"depConstraints": [{"sourceTag": "a"}], "moduleBoundaryOptions": {"allow": []}},
+    "policy": {
+        "depConstraints": [{"sourceTag": "a"}],
+        "moduleBoundaryOptions": {"allow": []},
+    },
 }
 
 
@@ -156,7 +173,13 @@ class TheFinding(unittest.TestCase):
         self.assertNotIn("line", finding.to_wire())
         self.assertEqual(
             Finding("an-id", "a message").at("a/file.go", 4, 6).to_wire(),
-            {"id": "an-id", "message": "a message", "sourceFile": "a/file.go", "line": 4, "column": 6},
+            {
+                "id": "an-id",
+                "message": "a message",
+                "sourceFile": "a/file.go",
+                "line": 4,
+                "column": 6,
+            },
         )
 
     def test_carries_only_the_optional_fields_it_was_given(self):
@@ -192,12 +215,18 @@ class Drive(unittest.TestCase):
 
     def test_refuses_a_rule_that_answers_something_that_is_not_a_verdict(self):
         for answer in (None, {"verdict": "pass"}, "pass", 0):
-            verdict = drive(lambda evidence: answer, BUNDLE, ALL_KINDS)
+            # Bound through a default argument: B023's late-binding trap is
+            # real here in shape (the lambda outlives nothing today because
+            # `drive` runs inside the iteration, but the binding should not
+            # depend on that luck).
+            verdict = drive(lambda evidence, answer=answer: answer, BUNDLE, ALL_KINDS)
             self.assertEqual(verdict["verdict"], "unknown")
             self.assertIn("returned", verdict["reason"])
 
     def test_names_the_undeclared_kind_a_rule_reached_for(self):
-        verdict = drive(lambda evidence: from_findings(list(evidence.imports)), BUNDLE, ["model"])
+        verdict = drive(
+            lambda evidence: from_findings(list(evidence.imports)), BUNDLE, ["model"]
+        )
         self.assertEqual(verdict["verdict"], "unknown")
         self.assertIn("imports", verdict["reason"])
 
@@ -233,7 +262,9 @@ class TheRuntimeIsTheModuleTheArtifactRuns(unittest.TestCase):
         only module-level ones — a function-body import fails inside the
         artifact just as loudly, and later.
         """
-        self.assertEqual(_imported_by(_PACKAGE / "src" / "archkeep_rule_sdk" / "runtime.py"), [])
+        self.assertEqual(
+            _imported_by(_PACKAGE / "src" / "archkeep_rule_sdk" / "runtime.py"), []
+        )
 
     def test_the_reference_rule_imports_only_the_sdk(self):
         """What a rule may reach for, checked on the one rule this package ships.
@@ -245,8 +276,12 @@ class TheRuntimeIsTheModuleTheArtifactRuns(unittest.TestCase):
         self.assertEqual(imported, ["archkeep_rule_sdk"])
 
     def test_the_four_kinds_and_four_verdicts_are_the_wire_s(self):
-        self.assertEqual(runtime.EVIDENCE_KINDS, ("model", "graph", "imports", "policy"))
-        self.assertEqual(runtime.VERDICTS, ("pass", "fail", "unknown", "not_applicable"))
+        self.assertEqual(
+            runtime.EVIDENCE_KINDS, ("model", "graph", "imports", "policy")
+        )
+        self.assertEqual(
+            runtime.VERDICTS, ("pass", "fail", "unknown", "not_applicable")
+        )
         self.assertEqual(sorted(runtime.EVIDENCE_KINDS), sorted(ALL_KINDS))
         for kind in runtime.VERDICTS:
             self.assertIsInstance(kind, str)

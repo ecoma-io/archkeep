@@ -13,7 +13,82 @@ tags:
 tasks:
   lint:
     command: eslint . --max-warnings 0
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+      - "/eslint.config.mjs"
   test:
     command: vitest run
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+      - "/packages/archkeep-rules/**"
+      - "/packages/archkeep-rule-sdk-go/**"
+      - "/packages/archkeep-rule-sdk-python/**"
+      - "/packages/archkeep-rule-sdk-rust/**"
+      - "/packages/archkeep-rule-sdk-ts/**"
   typecheck:
     command: tsc -p tsconfig.json
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+      - "/tsconfig.base.json"
+  # End to end: pack the artifact, install it into throwaway consumer
+  # workspaces, drive the real CLI over real processes. This is the suite
+  # the `verify-e2e` workflow job shards and runs.
+  # The packed artifact, proven outside this workspace: `pnpm pack`, install
+  # into throwaway consumer trees this repository never built, drive what a
+  # consumer buys (Nx graph, exit contract, the language server over its
+  # installed path). The engine of the task lives in
+  # `/scripts/verify-package.mjs`, which is why that file is an input — a
+  # change to the proof is a change to what the proof covers.
+  integration:
+    # The consumer trees this drives must see THEIR OWN Moon workspace, not
+    # this one — Moon exports `MOON_WORKING_DIR`/`MOON_WORKSPACE_ROOT` into
+    # every task, and an inherited value makes `moon project-graph` inside a
+    # throwaway consumer answer for THIS workspace (measured: the Moon-path
+    # consumer checks all failed on this repo's nine projects until the vars
+    # were stripped). `NODE_PATH` goes too: it names this workspace's
+    # `node_modules`, which is not the consumer's resolution story.
+    script: |
+      for v in $(env | grep '^MOON_' | cut -d= -f1); do unset "$v"; done
+      unset NODE_PATH
+      node "$workspaceRoot/scripts/verify-package.mjs" "$projectRoot"
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+      - "/scripts/verify-package.mjs"
+
+# Task `inputs`: declaring any replaces the whole-project default (`**/*` —
+# measured with `moon query tasks --affected`), so each task that declares
+# any restates the bare `**/*` first. Root `/eslint.config.mjs` and
+# `/tsconfig.base.json` ride on exactly the tasks that read them; the
+# bootstrap pair (`/package.json`, `/pnpm-lock.yaml`) rides on every task,
+# each of which runs a tool the pnpm install provides; and `test` and `e2e`
+# additionally hash the sibling trees they drive — the conformance suite
+# reads every SDK's committed artifact and the `archkeep-rules` catalog, and
+# the E2E suite copies a shipped rule artifact into a consumer — a
+# deliberate coarse-grained ceiling (an SDK README edit re-runs `test`
+# here) that buys the strong direction: a warm cache can never replay a
+# verdict over bytes the suite consumed and that have since changed.
+#
+# This project declares NO `dependsOn`, deliberately, and the same facts
+# carry the affected graph without one: Moon maps a changed file to every
+# task whose `inputs` match it, which is why an engine change re-runs
+# `archkeep-mcp`'s `test` and `typecheck` (that package's inputs name this
+# tree) but not its `lint`, and why an SDK change re-runs `test` here while
+# a change here re-runs nothing in the SDKs — none of them reads the engine
+# (`scope-sdk` holds that boundary, `module-boundaries.config.mjs`).
+# `dependsOn` was measured and rejected: Moon judges declared edges against
+# the boundary constraint table, so the verification-only edges this
+# package's test fixtures need would read as scope violations, while the
+# same relationships expressed as inputs judge exactly what actually
+# changed.
+#
+# The `e2e` task is what the `verify-e2e` workflow job runs — gated there by
+# this task's affected status on pull requests, unconditionally on the merge
+# queue and on `main`.

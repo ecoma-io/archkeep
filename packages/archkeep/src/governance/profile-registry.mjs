@@ -342,7 +342,6 @@ export function loadProfileRegistry(
   if (violations.length > 0) {
     throw new Error(`archkeep: ${path} is malformed:\n  ${violations.join("\n  ")}`);
   }
-  /** @type {{profiles: object[]}} */ (parsed);
   return parsed;
 }
 
