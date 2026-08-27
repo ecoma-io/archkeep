@@ -467,6 +467,18 @@ jobs:
       # verify-core already proves lint, unit tests, typecheck, self-check,
       # and the packed artifact, so nothing here duplicates those.
       #
+      # Two orthogonal decisions, deliberately not mixed:
+      #   - WHETHER the suite runs is the affected graph's call, and only on
+      #     a pull request: `archkeep:e2e`'s declared inputs name the engine
+      #     tree and the shipped rule artifacts, so an engine change re-runs
+      #     E2E and a documentation-only change runs nothing — loudly, as
+      #     Moon's "No tasks affected by changed files" line. The merge queue
+      #     and `main` pass an empty MOON_BASE and always run the suite: the
+      #     queue verifies the actual merge state, which is no place for an
+      #     affected shortcut.
+      #   - HOW it runs is the shard: same suite, same file-hash split as
+      #     before, passed through Moon to the vitest CLI.
+      #
       # A green shard has to mean "these files ran and passed", so both ways a
       # shard can end up running nothing exit 1 — measured against vitest
       # 4.1.10:
@@ -476,11 +488,16 @@ jobs:
       #     be a smaller than count of test files`, thrown before any test
       #     runs. This is the one that would bite if the `include` glob or a
       #     mass rename ever left a single e2e file behind.
-      # Nothing selects by test NAME any more, so the third way — a `-t`
-      # pattern matching zero tests, which vitest reports as skipped and exits
-      # 0 for — is no longer reachable from this workflow at all.
       - name: E2E tests (shard ${{ matrix.shard }}/2)
-        run: pnpm e2e --shard=${{ matrix.shard }}/2
+        env:
+          MOON_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          if [ -n "$MOON_BASE" ]; then
+            pnpm exec moon run archkeep:e2e --base="$MOON_BASE" --affected -- --shard="$SHARD"/2
+          else
+            pnpm e2e --shard="$SHARD"/2
+          fi
 
   ci-gate:
     name: ci-gate
