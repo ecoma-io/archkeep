@@ -96,15 +96,25 @@ test("#236 — sync-cargo-lock.mjs still reaches its verdict through a symlinked
   // the script's whole purpose is writing Cargo.lock, and a smoke that could
   // mutate tracked files mid-suite would be a test with side effects on the
   // working tree. In-sync bytes make the verdict deterministic.
-  const root = join(TMP, "cargo-fixture", "packages", "archkeep-rule-sdk-rust");
-  mkdirSync(root, { recursive: true });
+  const sdkRoot = join(TMP, "cargo-fixture", "packages", "archkeep-rule-sdk-rust");
+  mkdirSync(sdkRoot, { recursive: true });
   writeFileSync(
-    join(root, "Cargo.toml"),
+    join(sdkRoot, "Cargo.toml"),
     readFileSync(join(REPO_ROOT, "packages/archkeep-rule-sdk-rust/Cargo.toml")),
   );
   writeFileSync(
-    join(root, "Cargo.lock"),
+    join(sdkRoot, "Cargo.lock"),
     readFileSync(join(REPO_ROOT, "packages/archkeep-rule-sdk-rust/Cargo.lock")),
+  );
+
+  // The script also syncs archkeep-rules/Cargo.lock, which records the SDK as
+  // a path dependency. Copy that lockfile into the fixture too, or the script
+  // will throw when it tries to read a file that does not exist.
+  const rulesRoot = join(TMP, "cargo-fixture", "packages", "archkeep-rules");
+  mkdirSync(rulesRoot, { recursive: true });
+  writeFileSync(
+    join(rulesRoot, "Cargo.lock"),
+    readFileSync(join(REPO_ROOT, "packages/archkeep-rules/Cargo.lock")),
   );
 
   const result = spawnViaSymlink("sync-cargo-lock.mjs", {
