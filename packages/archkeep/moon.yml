@@ -36,29 +36,43 @@ tasks:
       - "/package.json"
       - "/pnpm-lock.yaml"
       - "/tsconfig.base.json"
+  # End to end: pack the artifact, install it into throwaway consumer
+  # workspaces, drive the real CLI over real processes. This is the suite
+  # the `verify-e2e` workflow job shards and runs.
+  e2e:
+    command: vitest run --config e2e/vitest.config.mjs
+    inputs:
+      - "**/*"
+      - "/package.json"
+      - "/pnpm-lock.yaml"
+      - "/packages/archkeep-rules/rules/**"
 
-# Verification dependencies, not npm ones. The engine imports no sibling
-# package (its own boundary test refuses one), but its CONFORMANCE suite reads
-# their committed bytes: `src/conformance/rule-sdks.integration.test.mjs`
-# loads each SDK's reference artifact through the real host, and
-# `src/conformance/official-rules.integration.test.mjs` replays every
-# `archkeep-rules` catalog artifact at its digest — so an SDK or catalog
-# change must re-run this package's `test`, and nothing else here. Scope
-# development: the dependency is test-fixture data, not runtime.
-#
 # Task `inputs`: declaring any replaces the whole-project default (`**/*` —
 # measured with `moon query tasks --affected`), so each task that declares
 # any restates the bare `**/*` first. Root `/eslint.config.mjs` and
-# `/tsconfig.base.json` ride on exactly the tasks that read them, and the
-# bootstrap pair (`/package.json`, `/pnpm-lock.yaml`) rides on every task —
-# each runs a tool the pnpm install provides, and a lockfile bump can move
-# any of them. `sdk-go`, `sdk-rust` and `sdk-python` declare none of this:
-# their toolchains are system-level and their defaults suffice. In addition,
-# every task that runs a Node tool; and `test` additionally hashes the
-# whole sibling trees its conformance suite reads — a deliberate
-# coarse-grained ceiling (an SDK README edit re-runs `test` here) that buys
-# the strong direction: a warm cache can never replay a verdict over bytes
-# the suite consumed and that have since changed. The reverse edge is
-# deliberately absent: a change HERE does not re-run the SDKs — none of them
-# reads the engine (`scope-sdk` holds that boundary,
-# `module-boundaries.config.mjs`).
+# `/tsconfig.base.json` ride on exactly the tasks that read them; the
+# bootstrap pair (`/package.json`, `/pnpm-lock.yaml`) rides on every task,
+# each of which runs a tool the pnpm install provides; and `test` and `e2e`
+# additionally hash the sibling trees they drive — the conformance suite
+# reads every SDK's committed artifact and the `archkeep-rules` catalog, and
+# the E2E suite copies a shipped rule artifact into a consumer — a
+# deliberate coarse-grained ceiling (an SDK README edit re-runs `test`
+# here) that buys the strong direction: a warm cache can never replay a
+# verdict over bytes the suite consumed and that have since changed.
+#
+# This project declares NO `dependsOn`, deliberately, and the same facts
+# carry the affected graph without one: Moon maps a changed file to every
+# task whose `inputs` match it, which is why an engine change re-runs
+# `archkeep-mcp`'s `test` and `typecheck` (that package's inputs name this
+# tree) but not its `lint`, and why an SDK change re-runs `test` here while
+# a change here re-runs nothing in the SDKs — none of them reads the engine
+# (`scope-sdk` holds that boundary, `module-boundaries.config.mjs`).
+# `dependsOn` was measured and rejected: Moon judges declared edges against
+# the boundary constraint table, so the verification-only edges this
+# package's test fixtures need would read as scope violations, while the
+# same relationships expressed as inputs judge exactly what actually
+# changed.
+#
+# The `e2e` task is what the `verify-e2e` workflow job runs — gated there by
+# this task's affected status on pull requests, unconditionally on the merge
+# queue and on `main`.
