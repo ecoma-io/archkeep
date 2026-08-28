@@ -1,0 +1,52 @@
+{
+  // This repository's review policy — what the agent may weigh, and what it
+  // must not read at all. The file is fetched from the default branch, so it
+  // describes the policy that governs every review, including reviews of
+  // pull requests that would edit it.
+  //
+  // The ignore set is a universe filter, not a suggestion: ignored paths
+  // cost nothing against maxDiffLines, are invisible to rule matching, and
+  // cannot be reached by the tools either. The vendored host wiring (.claude,
+  // .codex, .opencode, .agents) is synced or generated; the committed wasm
+  // fixtures and the lockfile are bytes nobody reviews line by line.
+  ignore: [
+    "pnpm-lock.yaml",
+    "coverage/**",
+    "**/*.wasm",
+    ".claude/**",
+    ".codex/**",
+    ".opencode/**",
+    ".agents/**",
+  ],
+
+  // Generous but bounded. The largest reviewable diffs this repository sees
+  // are engine and gate-script changes with their fixtures; a diff past this
+  // bound is refused loudly rather than half-read and half-reported.
+  maxDiffLines: 3000,
+
+  // Path-scoped rubrics. Every document here must exist on the default
+  // branch — a declared rule with no file is a startup error, not dormancy.
+  rules: [
+    {
+      include: ["packages/archkeep/src/**/*.mjs", "packages/archkeep/*.mjs"],
+      instruction: ".github/action-agents/review/rules/engine.md",
+    },
+    {
+      include: [
+        "packages/archkeep-vscode/src/**",
+        "packages/archkeep-mcp/src/**",
+        "packages/archkeep-rules/src/**",
+        "packages/archkeep-rule-sdk-*/src/**",
+      ],
+      instruction: ".github/action-agents/review/rules/clients.md",
+    },
+    {
+      include: ["scripts/**/*.mjs"],
+      instruction: ".github/action-agents/review/rules/gates.md",
+    },
+    {
+      include: ["docs/**/*.md", "*.md", "packages/*/*.md"],
+      instruction: ".github/action-agents/review/rules/docs.md",
+    },
+  ],
+}

@@ -1,0 +1,66 @@
+name: Review
+
+# ecoma-io/action-agents' `review` action, wired against this repository: an
+# agent that decides what to read about a pull request, verifies before it
+# claims, and comments its findings. The policy it is judged under lives in
+# `.github/action-agents/review/` and is read from the default branch — never
+# from this checkout — so a pull request cannot edit the rubric that governs
+# its own review.
+#
+# The write surface is exactly one marker comment per pull request, updated
+# in place. No labels (triage's job), no verdicts, no mentions. `contents`
+# stays read-only because the working tree under `pull_request` is untrusted
+# input; a fork's pull request carries neither org secrets nor a write token,
+# so a fork gets a loud failure rather than a half-review.
+#
+# The action is pinned to the v0.4.1 tag's commit SHA. A floating tag is a
+# pointer the upstream owner can repoint at any commit — the same drift the
+# `workflow-action-not-pinned-to-sha` rule exists to catch for every other
+# `uses:` in this repository, and this one does not get an exemption for
+# being ours in spirit.
+#
+# Live, with dry-run off: a review's only output is the comment, so a dry run
+# would be a run that reads everything and reports nothing — work without a
+# deliverable, green on nothing.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  # `edited` is deliberately absent — a re-worded description does not change
+  # the code under review, and re-reviewing it would only churn the comment.
+  # There is no workflow_dispatch: without a pull request there is nothing
+  # for this action to look at.
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# One review per pull request: a rapid push sequence replaces the queued run
+# rather than stacking reviews of stale heads.
+concurrency:
+  group: review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Thirty reading turns over a real provider fit comfortably in this; a
+    # run that cannot finish in fifteen minutes has hit a bound and will say
+    # so rather than hang.
+    timeout-minutes: 15
+    steps:
+      # The checkout is the snapshot the review agent's tools read — the
+      # review's subject, never its configuration. Credential-free and
+      # shallow, the same invariant every checkout here states.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - uses: ecoma-io/action-agents/review@9206c30557e450e11016f8600cea9639a6205c1a # v0.4.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
+          api-key: ${{ secrets.ECOMA_LLM_API_KEY }}
+          model: review
+          dry-run: "false"
