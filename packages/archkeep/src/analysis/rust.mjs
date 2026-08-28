@@ -44,6 +44,16 @@
  *   and a `;` inside a comment or string can let a `use` written there be
  *   read — both are the accepted spurious-record trade (text the file really
  *   contains), never a missed project.
+ * - **A `use` no `;` ever terminates is a whole-file failure (#419).** A file
+ *   truncated inside a `use` — a failed write, a merge marker left mid-import —
+ *   used to parse as importing nothing, byte-for-byte identical to a file that
+ *   imports nothing, with a clean verdict over the hole. The scan already meets
+ *   the condition when it breaks (no `;` after an opener), so it reports the
+ *   opener's offset and `analyzeRust` records the whole-file failure from it.
+ *   A `;` from unrelated code below — a later statement, a comment — still
+ *   terminates the scan the way it always has, and the path text the two
+ *   together bridge is the documented spurious-record trade above, not a new
+ *   failure.
  * - **A `use` whose path opens with a brace group** — `use {a::b, c::d};` — is
  *   a LIST of paths and is read as one: each arm names its own crate at its
  *   head, so the statement means exactly `use a::b; use c::d;` and produces one
@@ -542,10 +552,17 @@ export function useRootSegment(path) {
  *   below made \u2014 so a regression test can budget in operations rather than
  *   wall-clock time (#359). Production callers omit it and pay one increment
  *   per comparison for the counter, nothing else.
- * @returns {{ sites: { specifier: string, root: string|null, kind: string, offset: number }[], binarySearchIterations?: number }}
+ * @returns {{ sites: { specifier: string, root: string|null, kind: string, offset: number }[], unterminatedUseAt: number|null, binarySearchIterations?: number }}
+ *   `unterminatedUseAt` is the offset of the first `use` opener no `;` ever
+ *   terminates \u2014 the shape a truncated file takes (#419) \u2014 or `null` when
+ *   every opener reached one. `analyzeRust` turns a non-null offset into a
+ *   whole-file failure, which is what keeps the empty `sites` that shape
+ *   produces from reading as a clean file.
  */
 export function parseRustUseSites(rustText, knownCrates = new Set(), options = {}) {
   const { returnMetrics = false } = options;
+  /** The offset of the first `use` opener no `;` terminates, `null` before one is seen. */
+  let unterminatedUseAt = null;
   // A UTF-8 BOM is blanked, not stripped (see the header's byte-tolerance
   // bullet): same length, so every offset below stays an offset into the
   // original, and `^`-anchored forms see a line that starts like any other.
@@ -595,8 +612,15 @@ export function parseRustUseSites(rustText, knownCrates = new Set(), options = {
     // either — every later candidate starts further along the same text — so
     // the old pattern's remaining attempts were all going to fail too. It is
     // the same verdict (no site), reached without re-scanning the tail once
-    // per candidate.
-    if (terminator === -1) break;
+    // per candidate. The offset is what keeps the verdict from reading as a
+    // claim: a `use` the file truncates before its `;` is the shape a failed
+    // write or a merge marker takes (#419), and `analyzeRust` records it as a
+    // whole-file failure so `check` reports the run incomplete instead of
+    // calling a file that imports nothing clean.
+    if (terminator === -1) {
+      unterminatedUseAt = m.index;
+      break;
+    }
     // Everything between the `use`'s whitespace and that `;`, which is what
     // `[^;]*` matched: the terminator is the first `;`, so no `;` is inside.
     const path = source.slice(pathOffset, terminator);
@@ -699,7 +723,7 @@ export function parseRustUseSites(rustText, knownCrates = new Set(), options = {
   }
 
   const sorted = sites.sort((a, b) => a.offset - b.offset);
-  const result = { sites: sorted };
+  const result = { sites: sorted, unterminatedUseAt };
   if (returnMetrics) {
     result.binarySearchIterations = binarySearchIterations;
   }
@@ -737,6 +761,20 @@ export function analyzeRust({ sourceFile, text, workspace }) {
     const lineStarts = lineStartsOf(text);
     const useSites = parseRustUseSites(text, knownCrates);
     const sites = useSites.sites;
+    // A `use` the file truncates before its `;` used to parse as importing
+    // nothing, with no failure beside the empty result — the clean verdict
+    // over it was the bug (#419). The whole-file shape is what turns the
+    // verdict loud: `check` counts the file toward `unchecked` and refuses to
+    // call the run complete, instead of reporting a hole as a clean file.
+    if (useSites.unterminatedUseAt !== null) {
+      result.failures.push(
+        fileFailure(
+          sourceFile,
+          "a `use` statement opens and never terminates — the file is truncated or malformed, " +
+            `so its imports cannot be read (line ${positionAt(text, useSites.unterminatedUseAt, lineStarts).line})`,
+        ),
+      );
+    }
     for (const site of sites) {
       const { line, column } = positionAt(text, site.offset, lineStarts);
       let resolved = null;

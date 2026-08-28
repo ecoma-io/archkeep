@@ -1101,3 +1101,78 @@ describe("rustManifestFailures", () => {
     expect(rustManifestFailures(workspace)).toEqual([]);
   });
 });
+
+describe("unterminated `use` — the #419 malformation", () => {
+  // A file truncated inside a `use` — a failed write, a merge marker left
+  // mid-import — used to parse as importing nothing, byte-for-byte identical
+  // to a file that imports nothing, with a clean verdict over it (#419, the
+  // sibling audit of #413's Go posture). Each case is that shape.
+  it("reports the opener offset when no `;` ever terminates the last `use`", () => {
+    const truncated = ["mod domain;", "use engine_core::task::Task", ""].join("\n");
+    const { sites, unterminatedUseAt } = parseRustUseSites(truncated);
+    expect(sites).toEqual([]);
+    // The `use` on line 2, at its line start.
+    expect(unterminatedUseAt).toBe(truncated.indexOf("use "));
+  });
+
+  it("reports the same when the broken `use` sits mid-file with no later `;`", () => {
+    const truncated = ["mod domain;", "use engine_core::task::Task", "fn main() {}"].join("\n");
+    const { sites, unterminatedUseAt } = parseRustUseSites(truncated);
+    expect(sites).toEqual([]);
+    expect(unterminatedUseAt).not.toBe(null);
+  });
+
+  it("still reads every `use` a `;` terminates, wherever it sits", () => {
+    // The `;` the scan breaks at is the SAME `;` the site parser searches
+    // for, so a file whose semicolons all arrive — even late, even from
+    // unrelated statements — reads as it always has.
+    const whole = "mod domain;\nuse engine_core::task::Task;\nuse std::io::Write;\n";
+    const { sites, unterminatedUseAt } = parseRustUseSites(whole);
+    expect(unterminatedUseAt).toBe(null);
+    expect(sites.map((site) => site.specifier)).toEqual([
+      "engine_core::task::Task",
+      "std::io::Write",
+    ]);
+  });
+
+  it("records a whole-file failure for a `use` the file truncates (#419)", () => {
+    // The silent direction, pinned loud: `failures` used to come back empty
+    // over the hole. The whole-file shape (line and column null) is what
+    // counts the file toward `unchecked` and turns `coverage.complete` false,
+    // so `check` reports the run incomplete instead of clean.
+    const workspace = {
+      root: "/w",
+      projects: [{ name: "shell", root: "acme/apps/shell" }],
+      filesOf: () => ["acme/apps/shell/src/main.rs"],
+      readFile: () => null,
+    };
+    const truncated = "mod domain;\nuse engine_core::task::Task\n";
+    const { imports, failures } = analyzeRust({
+      sourceFile: "acme/apps/shell/src/main.rs",
+      text: truncated,
+      workspace,
+    });
+    expect(imports).toEqual([]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].sourceFile).toBe("acme/apps/shell/src/main.rs");
+    expect(failures[0].line).toBe(null);
+    expect(failures[0].column).toBe(null);
+    expect(failures[0].reason).toMatch(/never terminates/);
+    expect(failures[0].reason).toMatch(/line 2\)$/u);
+  });
+
+  it("records no malformation failure for a file whose `use` statements all terminate", () => {
+    const workspace = {
+      root: "/w",
+      projects: [{ name: "shell", root: "acme/apps/shell" }],
+      filesOf: () => ["acme/apps/shell/src/main.rs"],
+      readFile: () => null,
+    };
+    const { failures } = analyzeRust({
+      sourceFile: "acme/apps/shell/src/main.rs",
+      text: "mod domain;\nuse engine_core::task::Task;\n",
+      workspace,
+    });
+    expect(failures).toEqual([]);
+  });
+});

@@ -103,6 +103,68 @@ export function parseJavaImportSites(javaText) {
 }
 
 /**
+ * Why a `.java` file's imports cannot be fully read, as a reason for
+ * `analyzeJava` to record as a whole-file failure (`contract.md`): an
+ * `import` that never reaches its `;`.
+ *
+ * The detection mirrors the import regex's own failure conditions, so a file
+ * it reads fully is never flagged. The opener is the import regex's own head
+ * — line head through a BOM, or behind a `;`, then `import` and whitespace —
+ * which is also what keeps the header's documented single-line limit a LIMIT:
+ * a line-wrapped import (`import` then `\n`) matches neither this scan nor
+ * the site regex, so it stays a missed record, never a refusal. And the `;`
+ * is required to arrive before the next `{`: the brace a type body opens with
+ * is what separates a line-wrapped import (whose `;` precedes any body) from
+ * a truncated one (whose body opens first), so an `import` cut off before its
+ * `;` — a failed write, a merge marker left mid-import — no longer parses as
+ * zero import sites with no failure, byte-for-byte identical to a file that
+ * imports nothing (#419). The Go posture `goImportMalformations` set: shapes
+ * the regex answers are the documented parse limits; the shape it cannot
+ * answer is the failure.
+ *
+ * Comments, strings and text blocks are masked first — the same
+ * `maskJavaComments` the site parser runs — so import-shaped text a code
+ * generator's template or a comment holds is never read as import syntax and
+ * a compiling file is never reported as broken.
+ *
+ * @param {string} javaText Raw file contents.
+ * @returns {string[]} One reason naming its line, or empty when the imports
+ *   read fully.
+ */
+export function javaImportMalformations(javaText) {
+  const source = maskJavaComments(javaText);
+  const JAVA_IMPORT_HEAD = /(?:^\uFEFF?|[\n;])[ \t]*(?:import[ \t]+)/gu;
+  /** @type {string[]} */
+  const reasons = [];
+  // `;` and `{` ascend with the text, and so do the openers, so one shared
+  // cursor walks both lists in a single pass — the same shape the Rust scan's
+  // non-overlapping windows hold, instead of an `indexOf` per opener that
+  // rescans the tail (`.rs` content is attacker-supplied per SECURITY.md).
+  const terminators = [...source.matchAll(/[;{]/g)];
+  let cursor = 0;
+  for (const m of source.matchAll(JAVA_IMPORT_HEAD)) {
+    const at = m.index + m[0].length;
+    while (cursor < terminators.length && terminators[cursor].index < at) cursor += 1;
+    const next = terminators[cursor];
+    if (next === undefined || next[0] === "{") {
+      // The matched span starts at its ANCHOR (a `\n` or `;`), so the
+      // reason must locate the keyword inside the span rather than point at
+      // m.index — the anchor is the PREVIOUS line when it is a `\n`, and a
+      // diagnostic naming the wrong line sends every reader to the wrong
+      // import. The same locate-it move `parseJavaImportSites` makes for
+      // the name.
+      const importOffset = m.index + m[0].indexOf("import");
+      reasons.push(
+        "an `import` never reaches its `;` — the file is truncated or malformed, " +
+          `so its imports cannot be read (line ${positionAt(javaText, importOffset).line})`,
+      );
+      break;
+    }
+  }
+  return reasons;
+}
+
+/**
  * The dotted name resolution walks for an import, stripped of the parts that
  * name members rather than packages:
  *
@@ -151,6 +213,14 @@ export function analyzeJava({ sourceFile, text, workspace }) {
   try {
     const { byName: index } = jvmPackageIndex(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
+    // A file truncated inside an import used to parse as importing nothing,
+    // with no failure beside the empty result — the clean verdict over it was
+    // the bug (#419). The whole-file shape is what turns the verdict loud:
+    // `check` counts the file toward `unchecked` and refuses to call the run
+    // complete, instead of reporting a hole as a clean file.
+    for (const reason of javaImportMalformations(text)) {
+      result.failures.push(fileFailure(sourceFile, reason));
+    }
     for (const site of parseJavaImportSites(text)) {
       const { line, column } = positionAt(text, site.offset);
       const resolved = resolveJvmSpecifier(site.importableName, { language: "java" }, index);
