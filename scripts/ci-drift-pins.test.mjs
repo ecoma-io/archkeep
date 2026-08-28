@@ -20,7 +20,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 import { parseActionRefs, parseContainerImages, parseJobs } from "./ci-workflow-facts.mjs";
 
@@ -36,6 +36,20 @@ const WORKFLOWS_DIR = new URL("../.github/workflows/", import.meta.url);
  */
 function readWorkflow(name) {
   return readFileSync(new URL(name, WORKFLOWS_DIR), "utf8");
+}
+
+/**
+ * Enumerates the workflow files from the directory itself rather than from a
+ * list held here — a roster a test restates is the roster that drifts the
+ * moment a workflow is added (nightly.yml landed and the two #234 pins went
+ * on checking four files). Sorted so assertion messages stay stable.
+ *
+ * @returns {string[]} `.yml` file names under `.github/workflows/`
+ */
+function listWorkflows() {
+  return readdirSync(WORKFLOWS_DIR)
+    .filter((name) => name.endsWith(".yml"))
+    .sort();
 }
 
 test("#245 — every ci.yml job answers to ci-gate, and ci-gate names only real jobs", () => {
@@ -83,38 +97,53 @@ test("#245 — every analysis.yml job answers to analysis-gate, same both-direct
   );
 });
 
-test("#230 — release.yml's conformance-gated publish jobs share one byte-identical if:", () => {
+test("#230 — each workflow's conformance-gated publish jobs share one byte-identical if:", () => {
   // A publish job is identified structurally, not by name: it is any job that
   // needs verify-conformance, the differential gate whose header owns the
-  // contract. Renaming or adding destinations keeps the pin working; editing
-  // one expression divergently turns it red.
-  const gated = parseJobs(readWorkflow("release.yml")).filter((job) =>
-    job.needs.includes("verify-conformance"),
-  );
+  // contract. Grouped per file — a lane's gate expression is that lane's own
+  // contract, so identity is required within a workflow, not across them.
+  // Lanes are found by this shape wherever they live, which is what keeps a
+  // second release lane from inheriting a divergent expression silently.
+  const lanes = listWorkflows()
+    .map((file) => ({
+      file,
+      gated: parseJobs(readWorkflow(file)).filter((job) =>
+        job.needs.includes("verify-conformance"),
+      ),
+    }))
+    .filter((entry) => entry.gated.length > 0);
 
   assert.ok(
-    gated.length >= 2,
-    `expected the conformance-gated publish jobs, found ${gated.length}. If release.yml's ` +
-      `layout changed so its job-level if: lines are no longer read, this pin has gone ` +
-      `blind — fix the reader, do not lower the bar.`,
+    lanes.length >= 1,
+    "no workflow declares a job that needs verify-conformance — either the differential " +
+      "gate was renamed (fix the filter here) or every publish lane lost its gate. Both " +
+      "are silent until this pin says otherwise.",
   );
-  for (const job of gated) {
-    assert.ok(
-      job.gateIf !== null && job.gateIf.length > 0,
-      `publish job ${job.id} needs verify-conformance but declares no job-level if:, so it ` +
-        `runs or skips by GitHub's implicit success() alone`,
-    );
-  }
-
-  const [first, ...rest] = gated;
-  for (const job of rest) {
-    assert.equal(
-      job.gateIf,
-      first.gateIf,
-      `${job.id}'s gate expression differs from ${first.id}'s. A divergence between publish ` +
-        `jobs is a release that ships to one destination and not another, with every job ` +
-        `reporting Success either way.`,
-    );
+  assert.ok(
+    lanes.some((entry) => entry.gated.length >= 2),
+    "no workflow has two or more conformance-gated jobs, so the byte-identical comparison " +
+      "below has nothing to compare and this pin has gone blind. If release.yml's layout " +
+      "changed so its job-level if: lines are no longer read, fix the reader — do not " +
+      "lower the bar.",
+  );
+  for (const { file, gated } of lanes) {
+    for (const job of gated) {
+      assert.ok(
+        job.gateIf !== null && job.gateIf.length > 0,
+        `${file}: publish job ${job.id} needs verify-conformance but declares no job-level ` +
+          `if:, so it runs or skips by GitHub's implicit success() alone`,
+      );
+    }
+    const [first, ...rest] = gated;
+    for (const job of rest) {
+      assert.equal(
+        job.gateIf,
+        first.gateIf,
+        `${file}: ${job.id}'s gate expression differs from ${first.id}'s. A divergence ` +
+          `between a lane's publish jobs is a release that ships to one destination and ` +
+          `not another, with every job reporting Success either way.`,
+      );
+    }
   }
 });
 
@@ -124,7 +153,7 @@ test("#230 — release.yml's conformance-gated publish jobs share one byte-ident
 const PINNED_REF_EXEMPTIONS = /** @type {{workflow: string, ref: string, reason: string}[]} */ ([]);
 
 test("#234 — every action reference in every workflow is pinned to a full commit SHA", () => {
-  const files = ["ci.yml", "release.yml", "analysis.yml", "differential.yml"];
+  const files = listWorkflows();
   let seen = 0;
   for (const file of files) {
     for (const { ref, line } of parseActionRefs(readWorkflow(file))) {
@@ -154,7 +183,7 @@ test("#234 — every action reference in every workflow is pinned to a full comm
 
 test("#234 — every container image carries a sha256 digest", () => {
   let seen = 0;
-  for (const file of ["ci.yml", "release.yml", "analysis.yml", "differential.yml"]) {
+  for (const file of listWorkflows()) {
     for (const { image, line } of parseContainerImages(readWorkflow(file))) {
       seen += 1;
       assert.match(
