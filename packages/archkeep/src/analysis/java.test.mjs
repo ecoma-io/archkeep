@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { analyzeJava, parseJavaImportSites, resolveJavaDependencies } from "./java.mjs";
+import {
+  analyzeJava,
+  javaImportMalformations,
+  parseJavaImportSites,
+  resolveJavaDependencies,
+} from "./java.mjs";
 import { jvmIndexFailures } from "./jvm/packages.mjs";
 import { maskJavaComments } from "./jvm/mask.mjs";
 
@@ -371,5 +376,105 @@ describe("resolveJavaDependencies", () => {
     expect(() => resolveJavaDependencies(ws)).toThrow(
       /packages\/acme\/src\/main\/java\/com\/acme\/app\/App\.java/,
     );
+  });
+});
+
+describe("javaImportMalformations", () => {
+  // Each case is the shape a TRUNCATED file takes (#419): the import regex
+  // matches nothing, zero import sites, no failure — byte-for-byte identical
+  // to a file that imports nothing. The malformation is what says the empty
+  // result is not a claim.
+  it("flags an `import` that never reaches its `;` before a type body opens", () => {
+    const truncated = ["package app;", "", "import com.acme.core.Kernel", ""].join("\n");
+    const reasons = javaImportMalformations(truncated);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/never reaches its `;`/);
+    expect(reasons[0]).toMatch(/line 3\)$/);
+  });
+
+  it("flags the same when the `import` sits mid-file with no `;` before the class body", () => {
+    const truncated = ["package app;", "", "import com.acme.core.Kernel", "class App {}"].join(
+      "\n",
+    );
+    const reasons = javaImportMalformations(truncated);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/line 3\)$/);
+  });
+
+  it("does not flag a well-formed file", () => {
+    const whole = [
+      "package app;",
+      "",
+      "import com.acme.core.Kernel;",
+      "import com.acme.util.*;",
+      "",
+      "class App {}",
+    ].join("\n");
+    expect(javaImportMalformations(whole)).toEqual([]);
+  });
+
+  it("does not flag import-shaped text inside a comment or a text block", () => {
+    // A code-generating template and a commented-out import hold text that
+    // only looks like an import; flagging either would report a compiling file
+    // as broken.
+    const template = [
+      "package app;",
+      "",
+      "// import com.acme.core.Kernel",
+      'var tmpl = """',
+      "import com.acme.core.Kernel",
+      '""";',
+      "",
+      "class App {}",
+    ].join("\n");
+    expect(javaImportMalformations(template)).toEqual([]);
+  });
+
+  it("still keeps the multi-line-import limit — line-wrapped imports are not flagged", () => {
+    // A line-wrapped import (`import` then `\\n`) matches neither the
+    // malformation scan nor the site regex, so it stays a missed record — a
+    // documented limit, never a refusal.
+    const wrapped = "package app;\n\nimport\ncom.acme.core.Kernel;\n\nclass App {}";
+    expect(javaImportMalformations(wrapped)).toEqual([]);
+  });
+
+  it("reports one reason per file, not one per broken import", () => {
+    const truncated = "import com.acme.a.Foo\nimport com.acme.b.Bar\nclass App {}";
+    const reasons = javaImportMalformations(truncated);
+    expect(reasons).toHaveLength(1);
+  });
+});
+
+describe("analyzeJava — #419 whole-file failure", () => {
+  it("records a whole-file failure for an `import` the file truncates (#419)", () => {
+    const workspace = baseWorkspace();
+    const truncated = [
+      "package com.acme.app;",
+      "",
+      "import com.acme.core.Kernel",
+      "",
+      "class App {}",
+    ].join("\n");
+    const { imports, failures } = analyzeIn(
+      workspace,
+      "packages/acme/src/main/java/com/acme/app/App.java",
+      truncated,
+    );
+    expect(imports).toEqual([]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].sourceFile).toBe("packages/acme/src/main/java/com/acme/app/App.java");
+    expect(failures[0].line).toBe(null);
+    expect(failures[0].column).toBe(null);
+    expect(failures[0].reason).toMatch(/never reaches its `;`/);
+  });
+
+  it("records no malformation failure for a file whose imports read fully", () => {
+    const workspace = baseWorkspace();
+    const { failures } = analyzeIn(
+      workspace,
+      "packages/acme/src/main/java/com/acme/app/App.java",
+      "package com.acme.app;\n\nimport com.acme.core.Kernel;\n\nclass App {}",
+    );
+    expect(failures).toEqual([]);
   });
 });

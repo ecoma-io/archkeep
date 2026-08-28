@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { dotnetIndexFailures } from "./dotnet/namespaces.mjs";
 
-import { analyzeCSharp, parseCSharpDirectiveSites, resolveCsharpDependencies } from "./csharp.mjs";
+import {
+  analyzeCSharp,
+  csharpDirectiveMalformations,
+  parseCSharpDirectiveSites,
+  resolveCsharpDependencies,
+} from "./csharp.mjs";
 
 /**
  * An in-memory workspace whose `readFile` backs a real fixture tree — the
@@ -330,5 +335,101 @@ describe("resolveCsharpDependencies", () => {
       readFile: () => null,
     };
     expect(() => resolveCsharpDependencies(ws)).toThrow(/libs\/shop\/app\/Service\.cs/);
+  });
+});
+
+describe("csharpDirectiveMalformations", () => {
+  // Each case is the shape a TRUNCATED file takes (#419): the directive regex
+  // matches nothing, zero directive sites, no failure — byte-for-byte
+  // identical to a file that imports nothing. The malformation is what says
+  // the empty result is not a claim.
+  it("flags a `using` directive that never reaches its `;` before a type body opens", () => {
+    const truncated = ["namespace Shop.App;", "", "using Shop.Domain", ""].join("\n");
+    const reasons = csharpDirectiveMalformations(truncated);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/never reaches its `;`/);
+    expect(reasons[0]).toMatch(/line 3\)$/);
+  });
+
+  it("flags an `extern alias` that never reaches its `;` before a body opens", () => {
+    const truncated = ["extern alias X", "namespace Shop.App {", "}", ""].join("\n");
+    const reasons = csharpDirectiveMalformations(truncated);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/extern alias/);
+    expect(reasons[0]).toMatch(/line 1\)$/);
+  });
+
+  it("keeps the masked-`;` silence — a later declaration's own `;` is not the alias's", () => {
+    // `extern alias X` then `namespace Shop.App;`: the next terminator the
+    // walk reads is the NAMESPACE's `;`, so the broken alias stays the one
+    // silence the `{`-before-`;` rule keeps — the same mask `import a.B`
+    // before `import c.D;` keeps in the Java scan. Pinned so the rule's
+    // exact reach stays visible in both directions.
+    expect(csharpDirectiveMalformations("extern alias X\nnamespace Shop.App;")).toEqual([]);
+  });
+
+  it("does not flag a well-formed file", () => {
+    const whole = [
+      "using Shop.Domain;",
+      "using static Shop.Domain.Policy;",
+      "using Alias = Shop.Domain.Rules;",
+      "extern alias X;",
+      "",
+      "namespace Shop.App;",
+      "class App {}",
+    ].join("\n");
+    expect(csharpDirectiveMalformations(whole)).toEqual([]);
+  });
+
+  it("does not flag a using STATEMENT — resource disposal, not a directive", () => {
+    // `using (var s = f()) { … }` and `using var s = f();` are not directives
+    // and must not flag a compiling file.
+    expect(csharpDirectiveMalformations("using var s = f();\nclass C { }")).toEqual([]);
+    expect(csharpDirectiveMalformations("using (var s = f())\n{\n    s.Read();\n}")).toEqual([]);
+  });
+
+  it("does not flag directive-shaped text inside strings, raw strings, or comments", () => {
+    const template = [
+      "// using Shop.Domain",
+      'var code = """',
+      "using Shop.Domain",
+      '""";',
+      "class C { }",
+    ].join("\n");
+    expect(csharpDirectiveMalformations(template)).toEqual([]);
+  });
+
+  it("reports one reason per kind — using, extern alias — not one per occurrence", () => {
+    const truncated = "using A.B\nusing C.D\nextern alias X\nclass C { }";
+    const reasons = csharpDirectiveMalformations(truncated);
+    expect(reasons).toHaveLength(2);
+    expect(reasons[0]).toMatch(/using/);
+    expect(reasons[1]).toMatch(/extern alias/);
+  });
+});
+
+describe("analyzeCSharp — #419 whole-file failure", () => {
+  it("records a whole-file failure for a `using` directive the file truncates (#419)", () => {
+    const truncated = ["using Shop.Domain", "", "class App {}"].join("\n");
+    const { imports, failures } = analyzeCSharp({
+      sourceFile: "libs/shop/app/Service.cs",
+      text: truncated,
+      workspace: WORKSPACE,
+    });
+    expect(imports).toEqual([]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].sourceFile).toBe("libs/shop/app/Service.cs");
+    expect(failures[0].line).toBe(null);
+    expect(failures[0].column).toBe(null);
+    expect(failures[0].reason).toMatch(/never reaches its `;`/);
+  });
+
+  it("records no malformation failure for a file whose directives read fully", () => {
+    const { failures } = analyzeCSharp({
+      sourceFile: "libs/shop/app/Service.cs",
+      text: "using Shop.Domain;\n\nclass App {}",
+      workspace: WORKSPACE,
+    });
+    expect(failures).toEqual([]);
   });
 });

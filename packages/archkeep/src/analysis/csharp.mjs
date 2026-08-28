@@ -104,6 +104,23 @@ const CS_USING_BODY = new RegExp(
   "gu",
 );
 
+/**
+ * The directive openers without their bodies — the heads the malformation
+ * scan (`csharpDirectiveMalformations`) anchors on. They live beside the
+ * regexes they mirror rather than inside the scan, because the two must
+ * agree about where a directive opens: a head that matched MORE than the
+ * body regex would flag a file the body regexes read fully.
+ */
+const CS_USING_BODY_HEAD = new RegExp(
+  String.raw`(?:^\uFEFF?|[\n;{}])[ \t]*(?:global[ \t]+)?using[ \t]+`,
+  "gu",
+);
+
+/** The extern-alias opener, for the same scan. */
+const CS_EXTERN_ALIAS_HEAD = new RegExp(
+  String.raw`(?:^\uFEFF?|[\n;{}])[ \t]*extern[ \t]+alias[ \t]+`,
+  "gu",
+);
 /** The extern-alias directive: `extern alias X;` — recorded, resolved as external. */
 const CS_EXTERN_ALIAS = new RegExp(
   String.raw`(?:^\uFEFF?|[\n;{}])[ \t]*extern[ \t]+alias[ \t]+(${SEG})[ \t]*(?=;)`,
@@ -234,8 +251,103 @@ export function parseCSharpDirectiveSites(csharpText) {
 }
 
 /**
+ * Why a `.cs` file's directives cannot be fully read, as reasons for
+ * `analyzeCSharp` to record as whole-file failures (`contract.md`): a `using`
+ * or `extern alias` directive that never reaches its `;`.
+ *
+ * The detection mirrors the directive regexes' own failure conditions, so a
+ * file they read fully is never flagged. The openers are the body regexes'
+ * own heads, and the `;` is required to arrive before the next `{`: the brace
+ * a type body opens with separates a directive that terminated (`;` first)
+ * from one the file truncates — a failed write, a merge marker left
+ * mid-directive — which used to parse as zero directive sites with no
+ * failure, byte-for-byte identical to a file that imports nothing (#419).
+ * A `(` right after the
+ * keyword is the using-STATEMENT family — `using (var s = f()) { … }`,
+ * `using (x);`, and the `using var x = f();` declaration whose body starts
+ * `var` — never a directive; a statement's `;` may arrive inside its own
+ * block, so the scan has no opinion there. One silence the rule keeps: a
+ * missing `;` that a LATER declaration supplies its own (`extern alias X`
+ * then `namespace Shop.App;`) is not seen — the walk reads the next
+ * terminator, and attributing a `;` to its declaration is parser work the
+ * head regexes do not carry. The same mask the Java scan's terminator walk
+ * keeps.
+ *
+ * The mask runs first (the same `maskCSharpComments` the site parser runs),
+ * so directive-shaped text inside strings, raw strings and comments is never
+ * read as directive syntax and a compiling file is never reported as broken.
+ *
+ * The Go posture `goImportMalformations` set (#419's sibling audit): shapes
+ * the regexes answer are the documented parse limits; the shape they cannot
+ * answer is the failure.
+ *
+ * @param {string} csharpText Raw file contents.
+ * @returns {string[]} At most one reason per kind — `using`, `extern alias` —
+ *   each naming its line. Empty when the directives read fully.
+ */
+export function csharpDirectiveMalformations(csharpText) {
+  const source = maskCSharpComments(csharpText);
+  /** @type {string[]} */
+  const reasons = [];
+  const flagged = new Set();
+  const flag = (offset, kind, reason) => {
+    if (flagged.has(kind)) return;
+    flagged.add(kind);
+    reasons.push(`${reason} (line ${positionAt(csharpText, offset).line})`);
+  };
+  // `;` and `{` ascend with the text, and so do the openers, so each arm
+  // walks the same terminator list with its own forward cursor — one pass per
+  // arm, not an `indexOf` per opener that rescans the tail (`.cs` content is
+  // attacker-supplied per SECURITY.md). Both arms hold ONE rule, the using
+  // arm's: the directive's own `;` must arrive before the next `{`. An
+  // `indexOf`-style "a `;` exists somewhere later" is what the alias arm
+  // briefly held, and it is the weaker claim — a LATER declaration's `;`
+  // (`extern alias X` then `namespace Shop.App;`) masked the truncation and
+  // the silent direction survived it.
+  const terminators = [...source.matchAll(/[;{]/g)];
+  const terminatorAfter = () => {
+    let cursor = 0;
+    return (at) => {
+      while (cursor < terminators.length && terminators[cursor].index < at) cursor += 1;
+      return terminators[cursor];
+    };
+  };
+  // The matched spans start at their ANCHORS (a `\n`, `;`, `{` or `}`), so
+  // each reason locates the keyword inside the span rather than pointing at
+  // m.index — the anchor names the PREVIOUS line when it is a `\n`, and a
+  // diagnostic naming the wrong line sends every reader to the wrong
+  // directive. The same locate-it move `parseCSharpDirectiveSites` makes for
+  // the specifier.
+  const usingTerminatorAfter = terminatorAfter();
+  for (const m of source.matchAll(CS_USING_BODY_HEAD)) {
+    const at = m.index + m[0].length;
+    if (source[at] === "(") continue;
+    const next = usingTerminatorAfter(at);
+    if (next === undefined || next[0] === "{") {
+      flag(
+        m.index + m[0].indexOf("using"),
+        "using",
+        "a `using` directive never reaches its `;` — the file is truncated or malformed, so its imports cannot be read",
+      );
+    }
+  }
+  const externTerminatorAfter = terminatorAfter();
+  for (const m of source.matchAll(CS_EXTERN_ALIAS_HEAD)) {
+    const next = externTerminatorAfter(m.index + m[0].length);
+    if (next === undefined || next[0] === "{") {
+      flag(
+        m.index + m[0].indexOf("extern"),
+        "extern alias",
+        "an `extern alias` never reaches its `;` — the file is truncated or malformed, so its imports cannot be read",
+      );
+    }
+  }
+  return reasons;
+}
+
+/**
  * The workspace's namespace index, built once per workspace object — the same
- * map the graph resolver below reads, so both layers share one answer about
+ * map the graph resolver below reads, both layers share one answer about
  * who owns a name.
  */
 const csharpIndexOf = perWorkspace(csharpNamespaceIndex);
@@ -258,6 +370,14 @@ export function analyzeCSharp({ sourceFile, text, workspace }) {
   try {
     const { byName: index } = csharpIndexOf(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
+    // A file truncated inside a directive used to parse as importing nothing,
+    // with no failure beside the empty result — the clean verdict over it was
+    // the bug (#419). The whole-file shape is what turns the verdict loud:
+    // `check` counts the file toward `unchecked` and refuses to call the run
+    // complete, instead of reporting a hole as a clean file.
+    for (const reason of csharpDirectiveMalformations(text)) {
+      result.failures.push(fileFailure(sourceFile, reason));
+    }
     for (const site of parseCSharpDirectiveSites(text)) {
       const { line, column } = positionAt(text, site.offset);
       let resolution;
