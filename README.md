@@ -390,8 +390,9 @@ The v2 line itself is the [`next` branch](https://github.com/ecoma-io/archkeep/t
 cut from the commit 1.0.0-rc.1 was tagged from. It exists to develop 2.0
 and releases from its own lane as a `2.0.0-rc.N` chain; it carries no
 release yet, and nothing on it changes what a workspace on 1.x is told.
-The VS Code extension ships as a `.vsix` today while its marketplace
-listing waits on a publisher account. Roadmap items beyond 1.x — semantic
+The VS Code extension ships as a `.vsix` today; its marketplace listing
+starts at the stable cut, because the marketplace carries no prerelease
+versions. Roadmap items beyond 1.x — semantic
 understanding, predictive drift — are labeled direction, not promises.
 
 ## Contributing

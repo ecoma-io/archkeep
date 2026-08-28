@@ -70,7 +70,10 @@ const main = () => {
   const packResult = run("pnpm", ["pack"], packageDir);
   check("pnpm pack succeeds", packResult.exitCode === 0, packResult.stderr);
 
-  const tarball = packResult.stdout.trim().match(/ecoma-io-archkeep-rules-[\d.]+\.tgz/)?.[0];
+  // The version may carry a semver prerelease suffix (`1.0.0-rc.1`), so the
+  // name is not digits and dots only — `[\d.]+` stopped matching the day the
+  // first release candidate was packed.
+  const tarball = packResult.stdout.trim().match(/ecoma-io-archkeep-rules-\d[\w.-]*\.tgz/)?.[0];
   check("tarball filename found", !!tarball);
   if (!tarball) {
     console.error("ERROR: Could not find tarball filename from pnpm pack");

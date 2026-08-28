@@ -34,8 +34,13 @@ a required check and could never merge.
 
 The repository crosses from 0.x to the v1 contract through a release candidate:
 a proposed v1 contract shipped for that proposal to be judged, not a stable
-release. The version is `1.0.0-rc.1`, published to every registry the release
-lane serves, and flagged as a prerelease on GitHub. The stable 1.x is the same
+release. The version is `1.0.0-rc.1`, flagged as a prerelease on GitHub. That
+release run is also the evidence this file's publish notes argue from: PyPI,
+crates.io and the Go tag published, and every npm publish job failed — so the
+candidate never reached npm, read off the registry rather than inferred from
+the failed jobs. Why each refusing step refuses is stated where the step is
+described: the dist-tag note below for npm, the `publish-vsix` description
+for the marketplace. The stable 1.x is the same
 contract once the [readiness conditions](../doctrine/roadmap.md#the-goal-of-1x)
 hold and the maintainer cuts it; the branch policy (CONTRIBUTING.md#which-branch-a-change-lands-on)
 
@@ -65,13 +70,25 @@ it in release-please's release building — so the `1.0.0-rc.1` cut is flagged,
 the stable `1.0.0` that graduates from it is not, and the key stays with
 nothing to remove.
 
-**npm dist-tag note.** The publish jobs run bare `npm publish` (no
-`--tag`), so the candidate receives the `latest` dist-tag by semver ordering
-and a bare install resolves to it until stable is cut. Consumers pinning a
-`^0.15.0` range are unaffected: semver ranges exclude prereleases, so the
-range resolves to the highest stable 0.x rather than to the candidate. The
-maintainer decides whether to add `--tag` logic to the publish jobs; the
-facts above are what the maintainer decides from.
+**npm dist-tag note.** npm refuses to publish a prerelease version without
+an explicit dist-tag — a bare `npm publish` of `1.0.0-rc.1` exits with
+"You must specify a tag using --tag when publishing a prerelease version"
+(measured on npm 11; the release run for that version failed its npm publish
+jobs on exactly this refusal). The publish jobs therefore derive the tag from
+the version's own prerelease identifier up to its first dot: `1.0.0-rc.1`
+publishes under `rc`, and a later `rc.2` moves that tag rather than
+accumulating `rc.1`, `rc.2`, ... A stable version publishes bare and holds
+`latest`, as before. Consumers pinning a `^0.15.0` range are unaffected
+either way: semver ranges exclude prereleases, so the range resolves to the
+highest stable 0.x, never to the candidate; `npm i @ecoma-io/archkeep@rc` is
+how a consumer asks for the candidate explicitly.
+
+The VS Code Marketplace is stricter than npm: it cannot carry a version with
+a prerelease suffix at all — vsce refuses the publish before contacting the
+marketplace, and its `--pre-release` flag does not bypass that check (it
+selects a target; measured in the vsce source the lane installs). A
+candidate's `.vsix` therefore lives on its GitHub release only, and the
+stable cut is the first version the marketplace receives.
 
 ## What happens before anything is published
 
@@ -92,18 +109,26 @@ A gate only proves it runs when it can go red. A version that fails to resolve
 at install time cannot be unpublished away, which is why this check runs before
 `npm publish` and not after it.
 
-## The two packages, two registries
+## What the lane publishes, and where
 
-| package                    | registry            | what publishes it                     |
-| -------------------------- | ------------------- | ------------------------------------- |
-| `packages/archkeep`        | npm                 | release-please tag                    |
-| `packages/archkeep-vscode` | VS Code Marketplace | the release lane's `publish-vsix` job |
+| artifact                            | registry            | what publishes it                                     |
+| ----------------------------------- | ------------------- | ----------------------------------------------------- |
+| `packages/archkeep`                 | npm                 | the `publish` job, from the release-please tag        |
+| `packages/archkeep-mcp`             | npm                 | the `publish-mcp` job                                 |
+| `packages/archkeep-rules`           | npm                 | the `publish-rules` job                               |
+| `packages/archkeep-rule-sdk-ts`     | npm                 | the `publish-ts-sdk` job                              |
+| `packages/archkeep-rule-sdk-go`     | the Go module proxy | the `publish-go-module` job, whose publish is the tag |
+| `packages/archkeep-rule-sdk-python` | PyPI                | the `publish-pypi` job                                |
+| `packages/archkeep-rule-sdk-rust`   | crates.io           | the `publish-crates` job                              |
+| `packages/archkeep-vscode`          | VS Code Marketplace | the `publish-vsix` job                                |
 
-Both publish from the same release lane when the tag lands. The `publish-vsix`
+All publish from the same release lane when the tag lands. The `publish-vsix`
 job packs and verifies the `.vsix` and attaches it to the GitHub release on
 every release; its marketplace `vsce publish` step skips — loudly, in the job
-log — until a marketplace publisher account and its `ECOMA_VSCE_PAT` secret
-exist, and runs automatically from the release that follows their arrival.
+log and the step summary — when the version carries a semver prerelease
+suffix (the marketplace cannot carry one, so a candidate's `.vsix` lives on
+its GitHub release and the stable cut is the first version the marketplace
+receives) or when the `ECOMA_VSCE_PAT` secret is absent.
 
 ## The manual step this lane used to need
 

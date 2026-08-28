@@ -113,10 +113,16 @@ language cannot arrive in the engine and stay invisible in the editor.
 
 ### VS Code marketplace
 
-Not on the marketplace yet. The missing piece is the publisher account, not the
-pipeline. CI packages the `.vsix` on every pull request and verifies an install
-would hold what it needs; every release uploads the verified `.vsix` to the
-GitHub release.
+Not on the marketplace yet, and no longer because a piece is missing: the
+publisher account exists and holds its PAT as the `ECOMA_VSCE_PAT` repository
+secret, but the marketplace cannot carry a version with a semver prerelease
+suffix — vsce refuses the publish outright, and its `--pre-release` flag
+selects a target rather than bypassing that check (measured in the vsce
+source the release lane installs). So the `1.0.0-rc.1` candidate ships from
+its GitHub release, and the stable cut is the first version the marketplace
+receives. CI packages the `.vsix` on every pull request and verifies an
+install would hold what it needs; every release uploads the verified `.vsix`
+to the GitHub release.
 
 ### From a .vsix
 
