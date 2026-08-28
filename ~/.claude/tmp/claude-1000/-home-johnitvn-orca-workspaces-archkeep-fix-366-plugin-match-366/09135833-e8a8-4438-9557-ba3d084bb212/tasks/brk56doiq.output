@@ -1,8 +1,0 @@
-
- RUN  v4.1.11 /home/johnitvn/orca/workspaces/archkeep/fix-366-plugin-match-366/packages/archkeep
-      Coverage enabled with v8
-
-fatal: Needed a single revision
-fatal: Needed a single revision
-
-[killed]
