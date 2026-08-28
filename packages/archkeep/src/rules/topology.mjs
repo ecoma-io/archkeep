@@ -254,13 +254,15 @@ export function circularViolation({
       targetProjectName: targetProject.name,
       path: circularPath.reduce((acc, v) => `${acc} -> ${v.name}`, sourceProject.name),
       filePaths: circularFilePath
+        .map((files) => files.filter((f) => typeof f === "string"))
         .map((files) =>
           files.length > 1
             ? `[${files.map((f) => `\n${spacer}${spacer}${f}`).join(",")}\n${spacer}]`
             : // Upstream indexes `files[0]` unguarded, printing `undefined` for a
-              // hop with no file to blame. Ours can legitimately have none, since
-              // the index only knows the files it was handed.
-              (files[0] ?? ""),
+              // hop with no file to blame. Ours can legitimately have none —
+              // a manifest-declared edge carries no import site — and a blank
+              // bullet names nothing, so the hop says what it is instead.
+              (files[0] ?? "(no source file — a manifest declares this dependency)"),
         )
         .reduce((acc, files) => `${acc}\n- ${files}`, `- ${sourceFile}`),
     },

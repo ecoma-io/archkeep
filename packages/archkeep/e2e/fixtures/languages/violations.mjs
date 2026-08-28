@@ -94,15 +94,25 @@ export const JAVA_VIOLATION = {
     "</dependency></dependencies></project>",
   "libs/domain/src/main/java/com/example/domain/Violate.java":
     "package com.example.domain;\n\nimport com.example.application.App;\n\nclass Violate { App app; }\n",
+  // application's pom loses its downward `domain` dependency — the declared
+  // twin of the removed import. Either witness surviving keeps the pair's
+  // edge alive and closes a project cycle, and `noCircularDependencies`
+  // fires before the tag table is ever read.
   "libs/application/src/main/java/com/example/application/App.java":
     "package com.example.application;\n\nclass App {}\n",
+  "libs/application/pom.xml":
+    "<project><groupId>com.example</groupId><artifactId>application</artifactId>" +
+    "<version>1.0.0</version></project>",
 };
 
 /**
  * Kotlin violation: `domain` imports `application`.
  * Replaces `libs/domain/pom.xml` and adds `libs/domain/src/main/kotlin/com/example/domain/Violate.kt`.
- * Also replaces `libs/application/src/main/kotlin/com/example/application/App.kt` to remove the
- * domain import and prevent a circular dependency.
+ * Also unwitnesses the clean application→domain pair on BOTH tracks: `App.kt`
+ * loses the domain import AND application's pom loses its declared `domain`
+ * dependency — either track surviving keeps the pair's edge alive and closes
+ * a project cycle, and `noCircularDependencies` fires before the tag table
+ * is ever read.
  */
 export const KOTLIN_VIOLATION = {
   "libs/domain/pom.xml":
@@ -114,14 +124,19 @@ export const KOTLIN_VIOLATION = {
     "package com.example.domain\n\nimport com.example.application.App\n\nclass Violate(val app: App)\n",
   "libs/application/src/main/kotlin/com/example/application/App.kt":
     "package com.example.application\n\nclass App\n",
+  "libs/application/pom.xml":
+    "<project><groupId>com.example</groupId><artifactId>application</artifactId>" +
+    "<version>1.0.0</version></project>",
 };
 
 /**
  * Gradle violation: `domain` project depends on `:application`.
  * Replaces `libs/domain/build.gradle` to add the forbidden upward dependency,
- * and adds a Domain.kt importing upward alongside it. Also replaces
- * `libs/application/src/main/kotlin/com/example/application/Application.kt` to
- * remove the domain import and prevent a circular dependency.
+ * and adds a Domain.kt importing upward alongside it. Also unwitnesses the
+ * clean application→domain pair on BOTH tracks — `Application.kt` loses the
+ * domain import and `libs/application/build.gradle` loses its
+ * `project(":libs:domain")` — so neither track can close a project cycle
+ * and preempt the tag rule.
  */
 export const GRADLE_VIOLATION = {
   "libs/domain/build.gradle": 'dependencies { implementation project(":libs:application") }\n',
@@ -129,4 +144,41 @@ export const GRADLE_VIOLATION = {
     "package com.example.domain\n\nimport com.example.application.Application\n\nclass Violate { val app: Application = Application() }\n",
   "libs/application/src/main/kotlin/com/example/application/Application.kt":
     "package com.example.application\n\nclass Application\n",
+  "libs/application/build.gradle": "dependencies { }\n",
+};
+
+/**
+ * .NET violation: `domain` uses `application` through a written `using`.
+ * Adds `libs/domain/Reach.cs` — the source track, which carries the
+ * position the report blames. Also unwitnesses the clean application→domain
+ * edge on BOTH of its tracks — `App.cs` loses its `using Example.Domain`,
+ * `Application.csproj` loses its `<ProjectReference>` — because either one
+ * surviving would keep the pair's edge alive and close a project cycle,
+ * and `noCircularDependencies` fires before the tag table is ever read
+ * (this file's header documents the same convention for every language).
+ */
+export const DOTNET_VIOLATION = {
+  "libs/domain/Reach.cs":
+    "using Example.Application;\n\nnamespace Example.Domain;\n\nclass Reach { Application app; }\n",
+  "libs/application/Application.csproj":
+    '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n',
+  "libs/application/App.cs": "namespace Example.Application;\n\nclass App {}\n",
+};
+
+/**
+ * .NET violation witnessed by the MANIFEST track alone: `Domain.csproj`
+ * gains an upward `<ProjectReference>` to `application`, closing the cycle
+ * domain→application→domain with no `using` written anywhere — every other
+ * file stays byte-identical to the clean fixture. The import track sees two
+ * unrelated trees; only the declared application→domain edge (clean
+ * fixture's own downward ProjectReference, witnessed by `App.cs` too) plus
+ * this declared-only upward one closes the loop, so `noCircularDependencies`
+ * is the finding and no tag rule has a position to blame. Before the
+ * declared edges reached every face's graph, this tree reported EMPTY on
+ * them — the silent direction this case exists to catch: exit 0,
+ * byte-for-byte the clean answer, on a workspace whose check must refuse.
+ */
+export const DOTNET_DECLARED_CYCLE = {
+  "libs/domain/Domain.csproj":
+    '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include="..\\application\\Application.csproj" /></ItemGroup></Project>\n',
 };

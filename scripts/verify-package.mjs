@@ -1435,6 +1435,10 @@ try {
   );
 
   // Violating reactor: mvn-core reaching up into mvn-app, written in both Java and Kotlin.
+  // The rule this asserts changed with declared manifest edges: the poms draw
+  // mvn-app -> mvn-core, so core's import closes a CYCLE, and
+  // noCircularDependencies fires before the depConstraints table is read —
+  // the tags violation this check once named is no longer produced here.
   write(consumerMaven, VIOLATING_FILES_MAVEN);
   commitTree(consumerMaven, "core reaches up into app", false);
   const dirtyMaven = run("pnpm", ["exec", "archkeep", "check"], consumerMaven);
@@ -1446,7 +1450,7 @@ try {
   );
   check(
     "the maven violation names its rule and reports both java and kotlin file:line:column",
-    dirtyMavenOutput.includes("onlyTagsConstraintViolation") &&
+    dirtyMavenOutput.includes("noCircularDependencies") &&
       /Violate\.java:\d+:\d+/.test(dirtyMavenOutput) &&
       /ViolateKotlin\.kt:\d+:\d+/.test(dirtyMavenOutput),
     dirtyMavenOutput || "(no output)",
@@ -1509,7 +1513,7 @@ try {
   );
   check(
     "the gradle violation names its rule and its kotlin file:line:column",
-    dirtyGradleOutput.includes("onlyTagsConstraintViolation") &&
+    dirtyGradleOutput.includes("noCircularDependencies") &&
       /Violate\.kt:\d+:\d+/.test(dirtyGradleOutput),
     dirtyGradleOutput || "(no output)",
   );

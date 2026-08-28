@@ -9320,17 +9320,19 @@ export const moduleBoundaryOptions = {
   });
 
   it("composes with the analyzer track's own whole-file failure, as the .NET twin does", async () => {
-    // Unscoped, the same tree already refused through the analyzer track's
-    // "could not be read" — the partial coverage #374 names. The index
-    // funnel adds its own record for the same file — two tracks, two
-    // sentences, one refusal — the exact composition the .NET twin holds
-    // for its namespace index, so a consumer who has seen one recognizes
-    // the other.
+    // Unscoped, the same unreadable file is heard by BOTH tracks — the
+    // analyzer's own "could not be read" and the package index's row for
+    // the same file. The funnel states the fact once: the run still
+    // refuses, and the report names the file in ONE row rather than
+    // counting the same unreadable file twice (`dedupeWholeFileFailures`
+    // in `../analysis/source-util.mjs`). The scoped run above still
+    // carries the index's own sentence, because there it is the only
+    // witness.
     const streams = jvmEnv();
     expect(await runCli(["check"], streams)).toBe(EXIT.error);
     const report = streams.lines.out.join("\n");
     expect(report).toContain("could not be read");
-    expect(report).toContain("JVM source could not be read for the package index");
+    expect(report.match(/Policy\.java/g)).toHaveLength(1);
   });
 
   it("reports the crossing itself once the declaration is readable — the refusal is about the read", async () => {

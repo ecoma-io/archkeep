@@ -204,6 +204,17 @@ from `moon.yml` tags. A constraint table written for `layer:core` will not match
 a project carrying `layer-core`, and vice versa — the strings must agree
 exactly.
 
+Two further tags come from Moon's own project metadata rather than the `tags`
+list: a project whose `moon.yml` declares `layer: library` or `stack: frontend`
+carries the derived Archkeep tags `layer:library` and `stack:frontend` —
+colon-form, matching the convention constraint tables use for every other
+provider. So a colon-form constraint row CAN match in a Moon workspace, but
+only through the derived path: the declared tag `layer-library` is carried
+verbatim and never becomes `layer:library`. A workspace that classifies
+projects through `tags:` alone should write its constraint rows in the same
+dash form; one that uses Moon's `layer:`/`stack:` fields gets colon-form tags
+it cannot rename.
+
 ## Dependency scopes
 
 Moon's project-graph edges carry a scope that Archkeep maps to dependency types:

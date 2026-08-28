@@ -350,3 +350,30 @@ export const refuseUnreadTree = (reader, failures) => {
  * @returns {boolean}
  */
 export const isWholeFileFailure = (failure) => failure.line === null;
+
+/**
+ * One whole-file failure per source file, first reason kept.
+ *
+ * The funnel that merges every failure source (`../commands/context.mjs`)
+ * can legitimately hear about the same unreadable file twice — the language
+ * analyzer's own read failure AND the package/namespace index's row for the
+ * same file (`.NET`'s `dotnetIndexFailures`, the JVM's `jvmIndexFailures`).
+ * The two rows state one fact — "this file could not be analyzed" — and a
+ * consumer counting rows would be told "2 files" when one file failed, which
+ * is exactly the kind of wrong number a report must not carry. Positioned
+ * failures pass through untouched: several blind spots in one file are
+ * several distinct facts, one per import site.
+ *
+ * @param {{ sourceFile: string, line: number|null }[]} failures
+ * @returns {{ sourceFile: string, line: number|null }[]} Same order, whole-
+ *   file rows deduplicated by `sourceFile`.
+ */
+export const dedupeWholeFileFailures = (failures) => {
+  const seen = new Set();
+  return failures.filter((failure) => {
+    if (!isWholeFileFailure(failure)) return true;
+    if (seen.has(failure.sourceFile)) return false;
+    seen.add(failure.sourceFile);
+    return true;
+  });
+};
