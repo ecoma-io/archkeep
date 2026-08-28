@@ -386,6 +386,10 @@ reports each as `met`, `not met` or honestly `unmeasured`
 keeps the v1 contract: changes that alter what an unchanged workspace is
 told move to the v2 line instead
 ([the branch policy](CONTRIBUTING.md#which-branch-a-change-lands-on)).
+The v2 line itself is the [`next` branch](https://github.com/ecoma-io/archkeep/tree/next),
+cut from the commit 1.0.0-rc.1 was tagged from. It exists to develop 2.0
+and releases from its own lane as a `2.0.0-rc.N` chain; it carries no
+release yet, and nothing on it changes what a workspace on 1.x is told.
 The VS Code extension ships as a `.vsix` today while its marketplace
 listing waits on a publisher account. Roadmap items beyond 1.x — semantic
 understanding, predictive drift — are labeled direction, not promises.
