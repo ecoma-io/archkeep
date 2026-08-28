@@ -1,9 +1,10 @@
 # Architecture authority
 
 What Archkeep is, what surrounds it, and the line every one of those neighbours
-may not cross. This document owns the system boundary and the non-goals that
-follow from it. It states the boundary once; every other page that touches the
-question links here rather than restating it.
+may not cross. This document owns the system boundary, the contract everything
+built on top of it answers to, and the non-goals that follow from both. It
+states the boundary once; every other page that touches the question links
+here rather than restating it.
 
 ## The system
 
@@ -150,10 +151,149 @@ The line above is not prose. Each piece of it is held by a mechanism:
 - **Determinism** — the same tree and configuration produce the same verdict,
   proven byte-for-byte by the determinism suite (intent contract **K**).
 
-## Where this leaves the roadmap
+## The intelligence layer
 
-Because the boundary is stable, the roadmap is about breadth and reading, not
-about the boundary itself: which languages a workspace may govern (owned by
-[north-star.md](north-star.md)), which capabilities are in 1.x, and what 2.x
-extends on top of the deterministic core. [roadmap.md](roadmap.md) owns the
-staged path; this document owns the line that path stays inside.
+The deterministic core answers one question completely: does the code that
+exists agree with the architecture that was declared. What it does not answer
+is the set of questions one step away from the verdict: why the drift
+happened, what a change is likely to break before it is made, what a path
+from the observed structure to the declared one would cost. Those questions
+need reading, predicting and recommending — and each of them, done badly, can
+destroy the property that makes the core worth having. The resolution is a
+layer: architecture intelligence reads and predicts on top of the
+deterministic authority, never in place of it. The layer split is the thesis,
+stated as three mechanical rules:
+
+- **The core's outputs are the layer's input facts.** Verdicts, graphs,
+  diffs, snapshots, drift signals — everything the deterministic engine
+  reports is the evidence an intelligence capability reads. It invents no
+  evidence of its own: a claim about the architecture traces to an output
+  the core can reproduce.
+- **Every intelligence output surfaces beside a verdict, never inside one.**
+  A prediction, an explanation or a recommendation appears labelled as what
+  it is, from a command or a field a consumer asks for. `check`'s exit code,
+  the verdict fields of its JSON envelope, and the language server's
+  diagnostics never depend on a model, a network call, or any other
+  nondeterministic component.
+- **The asymmetry is the design.** A prediction is allowed to be wrong; a
+  verdict is not. A wrong recommendation costs a discarded suggestion; a
+  wrong verdict costs a consumer's trust in every green build. So the two
+  live in different commands, different output fields, different failure
+  stories — and a proposal that blurs them is a change of direction,
+  recognised and argued as such, not a feature.
+
+"Potentially AI-assisted reasoning" in the roadmap's intelligence
+capabilities means exactly this: judgment may enter the system, and where it
+does it is labelled, bounded, and expendable — never load-bearing for what a
+workspace is told its architecture is.
+
+The layer's proposals use five words, and they are not interchangeable:
+
+- **Verdict** — the deterministic core's answer. Reproducible, exit-coded,
+  load-bearing. Only the core produces one.
+- **Evidence** — a reproducible fact about the architecture: a graph edge, a
+  diff hunk, a drift signal, a snapshot. What verdicts and intelligence both
+  read.
+- **Prediction** — a statement about what has not happened yet: likely
+  breakage, likely drift. Allowed to be wrong; always labelled; never folded
+  into a verdict.
+- **Proposal** — a statement about what could change: a migration path, a
+  boundary adjustment, a plan. Offered to a human or an agent to accept or
+  refuse; never applied by the thing that offered it.
+- **Judgment** — model or heuristic output that is neither evidence nor
+  verdict. Always labelled as such, always expendable: removing it must
+  never change what the workspace is told its architecture is.
+
+[roadmap.md](roadmap.md) owns the capability list and its maturity stages;
+any entry on this layer answers five questions before it is built. A
+capability on the intelligence layer:
+
+- **reads the core as its evidence.** Name the deterministic outputs it
+  consumes. An advanced-drift proposal leans on the drift the core already
+  reports; a change-risk proposal leans on `impact` and the graph. A
+  capability whose evidence cannot be named is not reading the architecture
+  this system governs.
+- **proposes, explains or predicts — it never decides.** The agent-skill
+  protocol ([principles.md](principles.md) § 7) holds at every layer: the
+  read-only commands stay read-only, the workspace edits its own law, the
+  checker judges. No intelligence output carries the authority of a verdict.
+- **is reproducible at its own boundary.** Its deterministic components
+  produce the same result from the same inputs; wherever a model
+  contributes, the contribution is labelled, its inputs are recorded, and
+  removing it degrades the answer rather than invalidating it.
+- **fails loudly, by the invariant this repository is judged against.** The
+  empty-result invariant — AGENTS.md's "The invariant everything is judged
+  against" section — extends here: a capability that cannot reach an answer
+  says so, in its output, rather than printing a plausible one. A confident
+  guess is the silent direction wearing a richer format.
+- **ships complete or not at all.** The bar [north-star.md](north-star.md)
+  holds for languages holds here: a half-shipped intelligence feature —
+  predictions without a stated error story, recommendations without a
+  refuse path — implies more than it delivers, and implying is the one thing
+  an enforcement tool may not do.
+
+A capability arrives through the same door everything else here does:
+
+1. **A decision, in the open.** An issue names the capability, the
+   deterministic evidence it reads, the surface its output appears on, and
+   its failure story. An ADR is added when architecture moves
+   ([ADR 0002](../adr/0002-custom-rules-one-contract.md) is the model for
+   what belongs there).
+2. **A deterministic substrate, named.** Every intelligence feature leans on
+   a deterministic half the core already ships or ships with it —
+   anticipated drift needs the deterministic drift first, risk needs
+   `impact`, evolution intelligence needs the snapshot-and-diff history. The
+   substrate is testable without the intelligence on top, by the same
+   standards every analyzer here is held to.
+3. **Implementation behind the existing seams.** The layer boundaries of
+   [principles.md](principles.md) § 6 hold: intelligence composes the core's
+   command layer at the edge, like every other client, and adds no layer
+   that reaches across one.
+4. **Conformance, the way everything else here earned it.** Fixtures first,
+   then real trees; a differential where one exists; and for every labelled
+   output, a test that goes red when the label is missing — the silent
+   direction for an intelligence feature is output that reads authoritative
+   and is not.
+
+On top of the system's own non-goals above, the layer adds the ones specific
+to it:
+
+- **Not a second engine.** Intelligence is composed from the core's command
+  layer, the way the MCP server and the VS Code client are — never a
+  parallel implementation of analysis that could disagree with the first.
+- **Not intelligence in the verdict path.** No capability may make a green
+  result mean "probably fine", shorten a check, or substitute a summary for
+  a verdict an unchanged workspace would have received.
+- **Not a capability before its decision.** Nothing ships because the
+  roadmap names it: a capability arrives through a recorded decision — an
+  issue, an ADR where architecture moves — that names its evidence, its
+  output surface, and its failure story. "Proposals are never decisions"
+  applies to this repository's own roadmap as much as to an agent's.
+- **Not a product surface that edits the law.** Whatever reads or suggests,
+  the constraint table stays code in the workspace, reviewed like code.
+
+## How the intelligence layer erodes the authority
+
+Five signals, in the order they would probably appear:
+
+1. A verdict, an exit code, or a diagnostic starts depending on a
+   nondeterministic component — "the check passed faster because the model
+   pre-screened it".
+2. Intelligence output appears in a core envelope without its label — a
+   field a consumer cannot tell from evidence.
+3. A capability ships whose evidence cannot be named — no command, no
+   graph, no diff it reads.
+4. A proposal applies itself — a migration or boundary change written
+   without a human or workspace owner accepting it.
+5. The core's own suite starts tolerating a plausible-but-unreproducible
+   answer to keep an intelligence test green.
+
+Each is individually reasonable. Together they are how a tool whose verdicts
+prove something becomes a tool whose outputs merely suggest it.
+
+Because the boundary is stable, the roadmap is about breadth and maturity,
+not about the boundary itself: which languages a workspace may govern (owned
+by [north-star.md](north-star.md)), and the maturity ladder that orders the
+deterministic capabilities already shipping from the intelligence ones still
+ahead. [roadmap.md](roadmap.md) owns that ladder; this document owns the
+line it stays inside.
