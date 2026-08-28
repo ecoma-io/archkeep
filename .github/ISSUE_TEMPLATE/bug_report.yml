@@ -76,11 +76,13 @@ body:
       multiple: true
       options:
         - TypeScript / JavaScript
+        - Vue (script block)
         - Go
         - Rust
         - Python
         - Java
         - Kotlin
+        - C#
         - None — this is not language-specific
     validations:
       required: true
