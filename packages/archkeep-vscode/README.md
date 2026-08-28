@@ -92,8 +92,13 @@ engine and stay invisible in the editor.
 
 ## Status
 
-Not on the marketplace yet, and the missing piece is the publisher account, not
-the pipeline. CI packages the `.vsix` on every pull request and opens it to
+Not on the marketplace yet, and no longer because a piece is missing: the
+publisher account and its `ECOMA_VSCE_PAT` secret exist, but the marketplace
+cannot carry a version with a prerelease suffix, so the `1.0.0-rc.1`
+candidate ships from the GitHub release and the stable cut is the first
+version the marketplace receives
+([integrations/vscode.md](../../docs/integrations/vscode.md) owns the
+status). CI packages the `.vsix` on every pull request and opens it to
 prove an install would hold what it needs (`scripts/package-vsix.mjs` and
 `scripts/verify-vsix.mjs` at the repository root). The extension is versioned
 **with the repository** — one version for the engine and the client, written by
@@ -102,8 +107,8 @@ release-please's `extra-files` and held to each other by
 the workspace pairs with the engine it is released with, and one version makes
 the pairing visible. Every release uploads the verified `.vsix` to the GitHub
 release — installable today via **Install from VSIX**. The marketplace publish
-step exists in the release lane but skips, loudly, until an `ecoma-io`
-publisher account and its `ECOMA_VSCE_PAT` secret exist. `private: true` is there to
+step exists in the release lane but skips, loudly, when the version carries a
+prerelease suffix or the `ECOMA_VSCE_PAT` secret is absent. `private: true` is there to
 make `npm publish` refuse — this is an extension, not a package, and the
 marketplace is its only destination.
 

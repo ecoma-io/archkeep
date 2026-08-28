@@ -65,13 +65,25 @@ it in release-please's release building — so the `1.0.0-rc.1` cut is flagged,
 the stable `1.0.0` that graduates from it is not, and the key stays with
 nothing to remove.
 
-**npm dist-tag note.** The publish jobs run bare `npm publish` (no
-`--tag`), so the candidate receives the `latest` dist-tag by semver ordering
-and a bare install resolves to it until stable is cut. Consumers pinning a
-`^0.15.0` range are unaffected: semver ranges exclude prereleases, so the
-range resolves to the highest stable 0.x rather than to the candidate. The
-maintainer decides whether to add `--tag` logic to the publish jobs; the
-facts above are what the maintainer decides from.
+**npm dist-tag note.** npm refuses to publish a prerelease version without
+an explicit dist-tag — a bare `npm publish` of `1.0.0-rc.1` exits with
+"You must specify a tag using --tag when publishing a prerelease version"
+(measured on npm 11; the release run for that version failed its npm publish
+jobs on exactly this refusal). The publish jobs therefore derive the tag from
+the version's own prerelease identifier up to its first dot: `1.0.0-rc.1`
+publishes under `rc`, and a later `rc.2` moves that tag rather than
+accumulating `rc.1`, `rc.2`, ... A stable version publishes bare and holds
+`latest`, as before. Consumers pinning a `^0.15.0` range are unaffected
+either way: semver ranges exclude prereleases, so the range resolves to the
+highest stable 0.x, never to the candidate; `npm i @ecoma-io/archkeep@rc` is
+how a consumer asks for the candidate explicitly.
+
+The VS Code Marketplace is stricter than npm: it cannot carry a version with
+a prerelease suffix at all — vsce refuses the publish before contacting the
+marketplace, and its `--pre-release` flag does not bypass that check (it
+selects a target; measured in the vsce source the lane installs). A
+candidate's `.vsix` therefore lives on its GitHub release only, and the
+stable cut is the first version the marketplace receives.
 
 ## What happens before anything is published
 
@@ -102,8 +114,10 @@ at install time cannot be unpublished away, which is why this check runs before
 Both publish from the same release lane when the tag lands. The `publish-vsix`
 job packs and verifies the `.vsix` and attaches it to the GitHub release on
 every release; its marketplace `vsce publish` step skips — loudly, in the job
-log — until a marketplace publisher account and its `ECOMA_VSCE_PAT` secret
-exist, and runs automatically from the release that follows their arrival.
+log and the step summary — when the version carries a semver prerelease
+suffix (the marketplace cannot carry one, so a candidate's `.vsix` lives on
+its GitHub release and the stable cut is the first version the marketplace
+receives) or when the `ECOMA_VSCE_PAT` secret is absent.
 
 ## The manual step this lane used to need
 
