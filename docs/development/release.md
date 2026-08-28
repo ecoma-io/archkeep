@@ -37,7 +37,18 @@ a proposed v1 contract shipped for that proposal to be judged, not a stable
 release. The version is `1.0.0-rc.1`, published to every registry the release
 lane serves, and flagged as a prerelease on GitHub. The stable 1.x is the same
 contract once the [readiness conditions](../doctrine/roadmap.md#the-goal-of-1x)
-hold and the maintainer cuts it; the branch policy (CONTRIBUTING.md#which-branch-a-change-lands-on)
+hold and the maintainer cuts it; the branch policy (the "Which branch a change
+lands on" section of CONTRIBUTING.md at the repository root) keeps `main` the
+line that contract holds on — work that would change what an unchanged
+workspace is told moves to `next`, the v2 line, which releases from
+its own lane as a `2.0.0-rc.N` chain rather than by tagging a `main` commit
+with a 2.x number.
+
+The lane this document describes serves the v1.x line: it triggers on `main`,
+and the component its manifest names sits on that line. The v2 line's
+`2.0.0-rc.N` chain gets its own lane when the first candidate is actually cut
+— a release lane with nothing to release cannot be validated against a real
+cut, so none is built ahead of one.
 
 **How the candidate is cut.** A commit on `main` whose message carries a
 `Release-As: 1.0.0-rc.1` footer forces exactly that version for exactly one

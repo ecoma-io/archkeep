@@ -404,7 +404,8 @@ Before implementing on `main`, classify the change against this gate:
 5. **Removal, deprecation, or breaking** API, config, or output contract.
 
 1–3 belong on `main` when validation shows it; 4–5 are v2 work on `next`
-(which does not exist until v2 starts), or maintainer-authorized exceptions
+(which exists since the 1.0.0-rc.1 candidate, created from the same commit
+`main` tagged), or maintainer-authorized exceptions
 recorded on the pull request. A missing test or a missing sentence is not
 authorization, and "the implementation is better" is not a compatibility
 argument.
