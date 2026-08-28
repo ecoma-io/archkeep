@@ -34,8 +34,13 @@ a required check and could never merge.
 
 The repository crosses from 0.x to the v1 contract through a release candidate:
 a proposed v1 contract shipped for that proposal to be judged, not a stable
-release. The version is `1.0.0-rc.1`, published to every registry the release
-lane serves, and flagged as a prerelease on GitHub. The stable 1.x is the same
+release. The version is `1.0.0-rc.1`, flagged as a prerelease on GitHub. That
+release run is also the evidence this file's publish notes argue from: PyPI,
+crates.io and the Go tag published, and every npm publish job failed — so the
+candidate never reached npm, read off the registry rather than inferred from
+the failed jobs. Why each refusing step refuses is stated where the step is
+described: the dist-tag note below for npm, the `publish-vsix` description
+for the marketplace. The stable 1.x is the same
 contract once the [readiness conditions](../doctrine/roadmap.md#the-goal-of-1x)
 hold and the maintainer cuts it; the branch policy (CONTRIBUTING.md#which-branch-a-change-lands-on)
 
@@ -104,14 +109,20 @@ A gate only proves it runs when it can go red. A version that fails to resolve
 at install time cannot be unpublished away, which is why this check runs before
 `npm publish` and not after it.
 
-## The two packages, two registries
+## What the lane publishes, and where
 
-| package                    | registry            | what publishes it                     |
-| -------------------------- | ------------------- | ------------------------------------- |
-| `packages/archkeep`        | npm                 | release-please tag                    |
-| `packages/archkeep-vscode` | VS Code Marketplace | the release lane's `publish-vsix` job |
+| artifact                            | registry            | what publishes it                                     |
+| ----------------------------------- | ------------------- | ----------------------------------------------------- |
+| `packages/archkeep`                 | npm                 | the `publish` job, from the release-please tag        |
+| `packages/archkeep-mcp`             | npm                 | the `publish-mcp` job                                 |
+| `packages/archkeep-rules`           | npm                 | the `publish-rules` job                               |
+| `packages/archkeep-rule-sdk-ts`     | npm                 | the `publish-ts-sdk` job                              |
+| `packages/archkeep-rule-sdk-go`     | the Go module proxy | the `publish-go-module` job, whose publish is the tag |
+| `packages/archkeep-rule-sdk-python` | PyPI                | the `publish-pypi` job                                |
+| `packages/archkeep-rule-sdk-rust`   | crates.io           | the `publish-crates` job                              |
+| `packages/archkeep-vscode`          | VS Code Marketplace | the `publish-vsix` job                                |
 
-Both publish from the same release lane when the tag lands. The `publish-vsix`
+All publish from the same release lane when the tag lands. The `publish-vsix`
 job packs and verifies the `.vsix` and attaches it to the GitHub release on
 every release; its marketplace `vsce publish` step skips — loudly, in the job
 log and the step summary — when the version carries a semver prerelease
