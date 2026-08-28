@@ -1,0 +1,126 @@
+# The nightly full matrix: the whole E2E suite unsharded, and the full unit
+# suite, on the merged tree of `main`.
+#
+# WHY THIS EXISTS — every PR already runs verify-core and both E2E shards, so
+# nothing here runs for the first time. What a PR path structurally cannot
+# see:
+#   - The two shards partition the suite by a path hash. Each file runs
+#     somewhere on every PR, but never all files in ONE process on `main` —
+#     cross-file interference that only appears unsharded (shared temp
+#     naming, port collisions, one file's cleanup racing another's setup)
+#     is invisible to the sharded pair until this run catches it.
+#   - `verify-e2e` skips on documentation-only pull requests via the
+#     affected query. A doc-only merge that was itself correct can still
+#     leave `main` broken by an earlier partial revert; the nightly runs
+#     unconditionally, no affected shortcut anywhere.
+#   - Time itself: fixture dates, waiver windows, and coverage floors are
+#     wall-clock sensitive. A suite that only ever runs within the hour of
+#     being written cannot notice the day its own fixtures lapse.
+#
+# THIS IS NOT A REQUIRED CHECK, AND THAT ABSENCE IS DELIBERATE — the same
+# argument `differential.yml` makes for its own schedule: a nightly lane that
+# blocked anything would turn every red run into an urgent triage at the
+# worst hour, and the pressure to silence it is exactly how a nightly dies.
+# A red run here is treated like a red `differential`: fix it like a failing
+# required check, never re-run it until it goes away.
+name: Nightly
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly, 23 03 UTC — the same off-peak-minute convention as the other
+    # scheduled workflows, deliberately NOT colliding with Monday's analysis
+    # and differential slots.
+    - cron: "23 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  nightly-e2e:
+    name: Nightly full E2E (unsharded)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The whole suite, one process, no shard. It packs its own artifact and
+      # installs it fresh, exactly as the sharded PR legs do — the only
+      # variable this lane changes is the sharding itself.
+      - run: pnpm e2e
+
+  nightly-core:
+    name: Nightly full unit suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      # The four toolchain steps below are copied from `verify-core`
+      # (ci.yml), which argues each in place next to the package that needs
+      # it: clippy/rustfmt/wasm32 for the Rust SDK's targets, the pinned
+      # Ruff, the pinned Go toolchain, and the checksum-pinned
+      # golangci-lint into /usr/local/bin (a $GITHUB_PATH addition does not
+      # survive into a Moon task's PATH — measured there). Running the
+      # unfiltered `...:lint` matrix without them fails the first job that
+      # reaches an SDK target, so they are load-bearing here, not ceremony.
+      - name: Add the Rust components and target the SDK's targets run
+        run: |
+          rustup component add clippy rustfmt
+          rustup target add wasm32-unknown-unknown
+
+      - name: Install the pinned Ruff the Python SDK's lint target runs
+        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+        with:
+          version: "0.15.16"
+
+      - name: Pin the Go toolchain the Go SDK's targets run
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: packages/archkeep-rule-sdk-go/go.mod
+
+      - name: Install the pinned golangci-lint the Go SDK's lint target runs
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/golangci-lint"
+          mkdir -p "$dir"
+          curl --silent --show-error --fail --location \
+            --output "$dir/golangci-lint.tar.gz" \
+            "https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz"
+          echo "8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553  $dir/golangci-lint.tar.gz" | sha256sum --check --strict
+          tar -xzf "$dir/golangci-lint.tar.gz" -C "$dir"
+          sudo mv "$dir/golangci-lint-2.12.2-linux-amd64/golangci-lint" /usr/local/bin/golangci-lint
+
+      # Every package's own lint/test/typecheck suite through Moon — the
+      # `...:` prefix selects the targets across all projects, the same set
+      # verify-core proves per PR — re-proven nightly against a calendar
+      # that has moved on. No affected filter: on a scheduled run there is
+      # no base to diff against, and everything running is the point.
+      - run: pnpm exec moon run ...:lint ...:test ...:typecheck
+      - run: node packages/archkeep/cli.mjs check

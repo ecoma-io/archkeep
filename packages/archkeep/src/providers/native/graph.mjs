@@ -232,3 +232,61 @@ export function buildNativeGraph({
     ...(exemptedFiles && exemptedFiles.length > 0 ? { exemptedFiles } : {}),
   };
 }
+
+/**
+ * Folds manifest-resolver records — `{source, target, sourceFile, type}` from
+ * `../../graph/create-dependencies.mjs`'s `resolveDeclaredManifestEdges` —
+ * into an already-built graph's `dependencies`, in place. The callers are the
+ * graph assemblies that have no plugin host to draw these edges for them:
+ * this module's own `buildGraph` (the CLI's native branch and this package's
+ * language-server index), the Moon branch of both, and the language server's
+ * Nx-shaped index. On the CLI's Nx branch the polyglot plugin registers into
+ * Nx's own graph computation instead — `resolvePolyglotDependencies` there,
+ * these same resolvers — so that face arrives with the edges already drawn.
+ *
+ * Deduplication is by `(source, target, type)`, the same key `buildDependencies`
+ * dedupes import sites by and the same key the JSON envelope flattens on, so a
+ * dependency witnessed by BOTH tracks — a written `using` and the
+ * `<ProjectReference>` for it, a Kotlin import and the Gradle `project(":x")`
+ * — carries one record, exactly as one witnessed by two imports does. The
+ * resolvers iterate only the workspace's own projects and resolve every target
+ * against that same project list, so source and target are nodes of the graph
+ * this fold serves by construction; no membership check is taken here, because
+ * one that skipped would be the silent direction — an edge dropped for not
+ * being a node is a finding unreported, where a mismatch between the merged
+ * records and the graph's nodes is a caller bug that should surface.
+ *
+ * @param {{nodes: Record<string, object>, dependencies?: Record<string, {source: string, target: string, type: string}[]>}} graph
+ *   Mutated in place.
+ * @param {{source: string, target: string, sourceFile?: string, type: string}[]} records
+ * @returns {{nodes: Record<string, object>, dependencies: Record<string, {source: string, target: string, type: string}[]>}} The same graph.
+ */
+export function mergeDeclaredEdges(graph, records) {
+  // Null-prototype for the same reason `buildDependencies` above uses one:
+  // every key is a project name this package does not control.
+  const dependencies = graph.dependencies ?? Object.create(null);
+  graph.dependencies = dependencies;
+  const seen = new Set();
+  for (const list of Object.values(dependencies)) {
+    for (const edge of list ?? []) {
+      seen.add(JSON.stringify([edge.source, edge.target, edge.type]));
+    }
+  }
+  for (const record of records) {
+    const key = JSON.stringify([record.source, record.target, record.type]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    (dependencies[record.source] ??= []).push({
+      source: record.source,
+      target: record.target,
+      type: record.type,
+    });
+  }
+  // The cast is the post-condition the signature promises: the fold above
+  // guarantees `dependencies` exists on the graph it returns, but the
+  // parameter's declared type — which admits a graph arriving without one —
+  // is what `graph` carries here.
+  return /** @type {{nodes: Record<string, object>, dependencies: Record<string, {source: string, target: string, type: string}[]>}} */ (
+    graph
+  );
+}

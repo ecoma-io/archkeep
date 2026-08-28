@@ -43,7 +43,11 @@ import {
   readMoonOptions,
   readPluginOptions,
 } from "../options.mjs";
-import { moonMarkerAt } from "../providers/moon.mjs";
+import {
+  MOON_ALT_WORKSPACE_MARKER,
+  MOON_WORKSPACE_MARKER,
+  moonMarkerAt,
+} from "../providers/moon.mjs";
 import { ARCHKEEP_MODEL_FILE, loadNativeModel } from "../providers/native/model.mjs";
 
 import { readBoundaryConfig } from "./boundary-config.mjs";
@@ -80,6 +84,88 @@ const PACKAGE_MANIFEST_FILE = "package.json";
 const MFE_CONFIG_FILES = Object.freeze([
   "module-federation.config.js",
   "module-federation.config.ts",
+]);
+
+/**
+ * The manifests the non-TypeScript halves of the project graph are read from —
+ * the finite names each provider decides projects and edges by.
+ *
+ * This list carried none of them, and that was the defect #410 reports: the
+ * watched set described the TypeScript-side configuration only, while on a Go,
+ * Rust, Python, JVM or Moon workspace the graph itself is read from manifests.
+ * `textDocument/didSave` invalidates the whole session only when
+ * `touchesWatchedFile` matches this list, so saving an edited `go.mod`
+ * republished the manifest alone and left every open verdict answering from
+ * the graph as it was at index time — a module added to the workspace stayed
+ * invisible, the rules judged against a graph that no longer matched disk, and
+ * the affected files went on publishing `[]`, which reads as "no violation"
+ * (`../../../../AGENTS.md`). Only an unrelated watched edit or an editor
+ * restart rebuilt the graph.
+ *
+ * What reads each entry:
+ *
+ * - `go.mod` — the module path `../analysis/go.mjs`'s `resolveGoDependencies`
+ *   resolves Go imports against, and the anchor
+ *   `../providers/native/model.mjs`'s `DEFAULT_MANIFEST_NAMES` infers Go
+ *   projects from. Renaming a module in the editor re-points or drops every
+ *   edge into that project at the next index build; this entry is what makes
+ *   the next index build happen.
+ * - `go.work` — the use list deciding which Go modules the workspace's own
+ *   tooling builds (`../go-work.mjs`'s parser): the same module set the Go
+ *   analysis models, so a save of it is a graph-shaping edit on the same terms
+ *   as a `go.mod`.
+ * - `Cargo.toml` — crate identity, `[workspace]` membership and dependency
+ *   declarations (`../analysis/rust.mjs`). One basename covers the root
+ *   manifest and every member's, the reach `**\/package.json` already has.
+ * - `pyproject.toml` — the package names and `sources` tables
+ *   `../analysis/python.mjs` resolves Python imports against.
+ * - `pom.xml` — Maven identity and dependency edges
+ *   (`../analysis/jvm/maven.mjs`), and a project anchor in
+ *   `DEFAULT_MANIFEST_NAMES`.
+ * - `settings.gradle` / `settings.gradle.kts` — the reactor structure
+ *   `../analysis/jvm/gradle.mjs` reads Gradle identity from.
+ * - `build.gradle` / `build.gradle.kts` — the dependency declarations the same
+ *   module reads Gradle EDGES from, which is why they sit beside the settings
+ *   file that anchors the reactor rather than instead of it.
+ * - `moon.yml` and the two `workspace.yml` spellings — the Moon provider
+ *   derives its whole graph from `moon project-graph --json`
+ *   (`../providers/moon.mjs`'s `readProjectGraph`), which reads the tree's
+ *   `moon.yml` files for ids, tags and `dependsOn`, under the workspace whose
+ *   marker the two imported constants name. They are imported rather than
+ *   spelled out so the watched set follows Moon's own directory conventions
+ *   instead of a second copy of them.
+ *
+ * `*.csproj` is deliberately absent although `DEFAULT_MANIFEST_NAMES` carries
+ * it: that entry is a glob PATTERN, and the reach this list's entries get —
+ * `touchesWatchedFile`'s workspace-relative suffix comparison, mirrored by the
+ * `**\/<entry>` glob `registerFileWatchers` registers — covers exact names and
+ * directory-prefixed names only. A pattern entry would register `**\/*.csproj`,
+ * a watcher that fires, while the suffix match could never answer it: a
+ * notification path that looks covered and is not, which is the silent
+ * direction in the one list whose job is noticing. The list carries only names
+ * it can fire on.
+ *
+ * The entries are unconditional rather than provider-selected, for the same
+ * reason `archkeep.json` is: which manifests shape a root's graph can move
+ * under a running session — a `go.mod` appearing beside `nx.json` — and a
+ * watch list fixed to the provider the session started with is this same
+ * stale-graph hole one step out. The cost of an entry a TypeScript-only
+ * workspace never matches is one glob; the failure it buys out is a graph the
+ * editor never re-reads.
+ */
+const POLYGLOT_GRAPH_MANIFESTS = Object.freeze([
+  "go.mod",
+  "go.work",
+  "Cargo.toml",
+  "pyproject.toml",
+  "pom.xml",
+  "settings.gradle",
+  "settings.gradle.kts",
+  "build.gradle",
+  "build.gradle.kts",
+  "moon.yml",
+  MOON_WORKSPACE_MARKER,
+  MOON_ALT_WORKSPACE_MARKER,
 ]);
 
 /**
@@ -150,6 +236,15 @@ const MFE_CONFIG_FILES = Object.freeze([
  * takes a project's NAME when its `project.json` states none, so an edit to it
  * can move a project in the graph and not only waive something in it.
  *
+ * The polyglot graph manifests are here for that same argument one level out,
+ * at the place a project comes into existence at all: on a Go, Rust, Python,
+ * JVM or Moon root the graph itself is read from manifests this list used to
+ * carry none of, so saving an edited one republished the manifest alone and
+ * left every verdict answering from the graph as it was at index time. Which
+ * names, and which module reads each, is `POLYGLOT_GRAPH_MANIFESTS`'s own
+ * comment — the roster is not restated here, because two rosters are two
+ * chances to drift.
+ *
  * Those three are PER-PROJECT paths rather than workspace-root singletons, and
  * they need no new mechanism for it: `registerFileWatchers` gives every entry
  * the glob `**\/<entry>` and `touchesWatchedFile` matches the same reach — an
@@ -209,6 +304,7 @@ export function watchedFilesFor(options, { unresolved = false } = {}) {
     ARCHKEEP_MODEL_FILE,
     PACKAGE_MANIFEST_FILE,
     ...MFE_CONFIG_FILES,
+    ...POLYGLOT_GRAPH_MANIFESTS,
   ]);
 }
 

@@ -1,9 +1,12 @@
 // E2E scenarios for the `rules` command.
 //
 // `rules` provides a CLI interface to the official rules catalog:
-// list, info, verify, and add. All commands are descriptive and
-// never exit 1 (verify exits 1 only on failed integrity checks).
-import { mkdirSync, rmSync } from "node:fs";
+// list, info, verify, and add. The verbs are descriptive except `verify`:
+// a verification that ran and came back negative (a digest mismatch) exits 1
+// — a finding, the same class as a boundary violation — and exit 3 stays the
+// could-not-look class (a missing or unreadable catalog).
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { packArtifact } from "./helpers/artifact.mjs";
 import { createNativeConsumer } from "./helpers/consumer.mjs";
@@ -120,6 +123,64 @@ describe("rules verify", () => {
     const result = archkeep(consumer.root, ["rules", "verify", "--catalog", catalogPath]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toMatch(/OK|FAILED/);
+  });
+
+  // The three-state exit contract, at the process boundary a CI script
+  // branches on: a completed verification with a negative result is exit 1 —
+  // the finding a script must act on — and only a run that could not look is
+  // exit 3. Collapsing the two makes "this shipped artifact was tampered
+  // with" indistinguishable from "the catalog could not be read".
+  it("exits 1 when an artifact's bytes do not match its digest", () => {
+    const tamperedDir = join(consumer.root, "tampered-catalog");
+    mkdirSync(join(tamperedDir, "rules"), { recursive: true });
+    writeFileSync(
+      join(tamperedDir, "rules", "tampered-rule.wasm"),
+      Buffer.from("bytes edited after the catalog recorded their digest"),
+    );
+    writeFileSync(
+      join(tamperedDir, "catalog.json"),
+      JSON.stringify({
+        version: 1,
+        rules: [
+          {
+            name: "tampered-rule",
+            description: "artifact bytes edited after the digest was recorded",
+            contract: 1,
+            needs: [],
+            params: {},
+            artifact: "rules/tampered-rule.wasm",
+            sha256: "0".repeat(64),
+          },
+        ],
+      }),
+    );
+
+    const result = archkeep(consumer.root, [
+      "rules",
+      "verify",
+      "--catalog",
+      join(tamperedDir, "catalog.json"),
+      "--format",
+      "json",
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.json).not.toBeNull();
+    expect(result.json.status).toBe("findings");
+    expect(result.json.exitCode).toBe(1);
+    expect(result.stdout).toContain("Digest mismatch");
+  });
+
+  it("exits 3 when the catalog cannot be read at all", () => {
+    const result = archkeep(consumer.root, [
+      "rules",
+      "verify",
+      "--catalog",
+      join(consumer.root, "no-such-catalog.json"),
+    ]);
+
+    expect(result.exitCode).toBe(3);
+    expect(result.stderr).toContain("catalog not found");
   });
 });
 

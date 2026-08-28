@@ -31,9 +31,11 @@
  *
  * - **Identity** from `settings.gradle` / `settings.gradle.kts`: root project
  *   name and `include(...)` declarations → the project-directory mapping
- *   (ADR 0005 Decision 2). Handles `include("a", "b")`, multi-arg includes,
- *   and ignores `includeBuild` in v1 (composite builds are a discovery-only
- *   signal for now; edges from included builds are not modeled).
+ *   (ADR 0005 Decision 2). Handles the parenthesized call and Groovy's
+ *   parenless `include "a", "b"` spelling, single- and multi-arg and
+ *   multi-line includes, and ignores `includeBuild` in v1 (composite builds
+ *   are a discovery-only signal for now; edges from included builds are not
+ *   modeled).
  * - **Edges** from `build.gradle` / `build.gradle.kts` dependency declarations:
  *   `project(":x")` references in ANY configuration (`implementation`, `api`,
  *   `testImplementation`, `compileOnly`, `runtimeOnly`, `annotationProcessor`,
@@ -78,7 +80,9 @@ import { fileFailure, perWorkspace, refuseUnreadTree } from "../source-util.mjs"
  *
  * Extracts:
  * - Root project name from `rootProject.name = ...` or `rootProject{name = ...}`
- * - Included projects from `include("a", "b")` or `include ":a", ":b"`
+ * - Included projects from `include("a", "b")` and from Groovy's parenless
+ *   spelling `include ":a", ":b"` — both read as a comma-separated list of
+ *   quoted project paths
  * - Ignores `includeBuild` statements in v1 (composite builds not modeled for edges)
  *
  * @param {string} text Raw file contents.
@@ -89,11 +93,22 @@ export function parseGradleSettings(text) {
   // First, remove block comments to avoid matching include statements inside them
   let processedText = text.replace(/\/\*[\s\S]*?\*\//g, "");
 
-  // Then preprocess to handle multi-line includes by collapsing them
-  // This regex finds include(...) calls and collapses newlines within them
+  // Then preprocess to handle multi-line includes by collapsing them, so the
+  // per-line reader below sees each call whole. Both call spellings wrap: the
+  // parenthesized call spans to its closing parenthesis, and the parenless
+  // Groovy list spans its trailing commas. Reading only the first line of a
+  // wrapped call would take one project of the list and stay silent about the
+  // rest. Each pattern requires the newline it exists to collapse, so a
+  // single-line call is matched by neither.
   processedText = processedText.replace(/include\s*\([^)]*\)/g, (match) => {
     return match.replace(/\r?\n/g, " ");
   });
+  processedText = processedText.replace(
+    /include\s+(?:['"][^'"]*['"]\s*,?\s*\r?\n\s*)+['"][^'"]*['"]/g,
+    (match) => {
+      return match.replace(/\r?\n/g, " ");
+    },
+  );
 
   const lines = processedText.split(/\r?\n/);
   let rootProjectName = null;
@@ -122,12 +137,23 @@ export function parseGradleSettings(text) {
       }
     }
 
-    // Parse include("a", "b") or include ":a", ":b"
-    const includeMatch = /include\s*\(([^)]*)\)/.exec(trimmed);
-    if (includeMatch) {
-      const args = includeMatch[1];
+    // Parse include("a", "b") and the Groovy parenless spelling
+    // include ":a", ":b". Both are a comma-separated list of quoted project
+    // paths, so the argument text is taken whichever way the call is written
+    // and the quoted strings are lifted out of it. The parenless branch ends
+    // at its last well-formed argument rather than at end of line, so a `//`
+    // comment trailing the call is never read as an argument; and it reaches
+    // neither `includeBuild` spelling, because both branches demand
+    // whitespace or `(` directly after `include`.
+    const parenthesizedInclude = /include\s*\(([^)]*)\)/.exec(trimmed);
+    const parenlessInclude =
+      parenthesizedInclude === null
+        ? /\binclude\s+(['"][^'"]*['"](?:\s*,\s*['"][^'"]*['"])*)/.exec(trimmed)
+        : null;
+    const includeArgs = parenthesizedInclude?.[1] ?? parenlessInclude?.[1] ?? null;
+    if (includeArgs !== null) {
       // Split by commas, handling quoted strings
-      const argMatches = args.match(/(['"])([^'"]+)\1/g) || [];
+      const argMatches = includeArgs.match(/(['"])([^'"]+)\1/g) || [];
       for (const arg of argMatches) {
         const projectName = arg.slice(1, -1); // Remove quotes
         // Remove leading ":" if present
@@ -153,6 +179,8 @@ export function parseGradleSettings(text) {
  * Extracts `project(":x")` references from ANY configuration:
  * - implementation, api, testImplementation, compileOnly, runtimeOnly, etc.
  * - Custom configurations
+ * - Both argument spellings: the positional path (`project(":x")`) and
+ *   Groovy's named-argument map (`project(path: ':x', configuration: 'default')`)
  *
  * @param {string} text Raw file contents.
  * @returns {{ projectDependencies: string[], reason?: undefined } |
@@ -220,33 +248,44 @@ export function parseGradleBuild(text) {
         }
       }
 
-      // Match project(":name") in various forms:
-      // - project(":name") - quoted
-      // - project(':name') - single quoted
+      // Match project(":name") in these forms:
+      // - project(":name") / project(':name') - the positional quoted path
       // - project(":") - the root project, an empty path
-      // - project(":name") with configuration
+      // - project(:name) - Groovy DSL without quotes, one path segment
+      // - project(path: ':name') and project(path: ':name', configuration:
+      //   'default') - Groovy's named-argument map, where further named
+      //   arguments may follow the path
       // In Kotlin DSL: project(":name") (always quoted)
-      // In Groovy DSL: project(":name") or project(':name') or project :name (no quotes)
+      // In Groovy DSL: quotes optional on the positional form
 
-      // Pattern 1: project(":xyz") or project(':xyz') — `[^'"]*` rather than
-      // `+` so the root project's own spelling, `":"`, is read too. An empty
-      // dep path resolves through the reactor map's root claim (`""`), the
-      // same key every settings file registers; missing it would drop the
-      // edge silently, which is the one failure this reader must not make.
-      const quotedMatch = /project\s*\(\s*['"]:([^'"]*)['"]\s*\)/.exec(trimmed);
-      if (quotedMatch) {
-        const depName = quotedMatch[1];
-        if (!projectDependencies.includes(depName)) {
-          projectDependencies.push(depName);
-        }
-      }
-
-      // Pattern 2: project(:xyz) - Groovy DSL without quotes
-      const unquotedMatch = /project\s*\(\s*:([a-zA-Z0-9_-]+)\s*\)/.exec(trimmed);
-      if (unquotedMatch) {
-        const depName = unquotedMatch[1];
-        if (depName && !projectDependencies.includes(depName)) {
-          projectDependencies.push(depName);
+      // The argument list is captured up to the closing parenthesis and the
+      // path read out of it, because the path string's closing quote is not
+      // where the call ends: in the named-argument spelling `configuration:`
+      // (or any further named argument) follows it, and a matcher demanding
+      // `)` right at that fixed offset dropped the record while the project
+      // existed.
+      const projectCall = /project\s*\(([^)]*)\)/.exec(trimmed);
+      if (projectCall) {
+        const args = projectCall[1];
+        // Positional quoted — `[^'"]*` rather than `+` so the root project's
+        // own spelling, `":"`, is read too. An empty dep path resolves
+        // through the reactor map's root claim (`""`), the same key every
+        // settings file registers; missing it would drop the edge silently,
+        // which is the one failure this reader must not make.
+        const positionalQuoted = /^\s*['"]:([^'"]*)['"]\s*$/.exec(args);
+        // Positional unquoted Groovy — one path segment, never empty.
+        const positionalUnquoted = /^\s*:([a-zA-Z0-9_-]+)\s*$/.exec(args);
+        // The `path:` named argument — the comma-or-start guard keeps a
+        // suffix like `somepath:` from reading as `path:`. The value is
+        // quoted: an unquoted value would be a Groovy variable reference,
+        // not a path this reader can resolve.
+        const namedArgument = /(?:^|,)\s*path\s*:\s*['"]:([^'"]*)['"]/.exec(args);
+        const pathMatch = positionalQuoted ?? positionalUnquoted ?? namedArgument;
+        if (pathMatch) {
+          const depName = pathMatch[1];
+          if (!projectDependencies.includes(depName)) {
+            projectDependencies.push(depName);
+          }
         }
       }
 

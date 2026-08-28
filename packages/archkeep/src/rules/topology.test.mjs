@@ -347,6 +347,36 @@ describe("circularViolation", () => {
     expect(result.data.path).toContain("beta");
     expect(typeof result.data.filePaths).toBe("string");
   });
+
+  it("names a manifest-declared hop instead of printing a blank bullet", () => {
+    // A cycle can close through a declared edge — a pom or a csproj names
+    // the dependency, and no import site exists to blame. `- ` + an empty
+    // string named nothing; the hop now says what it is. Detection is
+    // unchanged: the index never decided the verdict, only the message.
+    const declaredIndex = createFileDependencyIndex([
+      {
+        sourceFile: undefined,
+        sourceProject: "beta",
+        targetProject: "alpha",
+        dynamic: false,
+      },
+    ]);
+    const result = circularViolation({
+      reach,
+      graph,
+      sourceProject: alpha,
+      targetProject: beta,
+      sourceFile: "area/alpha/src/index.ts",
+      fileIndex: declaredIndex,
+      ignored: noIgnored,
+    });
+    expect(result).not.toBeNull();
+    // Pinned byte for byte, under the same carve-out as the golden above:
+    // this shape printed nothing before the manifest edges landed.
+    expect(result.data.filePaths).toBe(
+      "- area/alpha/src/index.ts\n- (no source file — a manifest declares this dependency)",
+    );
+  });
 });
 
 describe("lazyLoadedViolation", () => {

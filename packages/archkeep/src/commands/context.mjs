@@ -35,7 +35,7 @@ import { jvmIndexFailures } from "../analysis/jvm/packages.mjs";
 import { languageOf } from "../analysis/registry.mjs";
 import { pythonUnmodelledFailures } from "../analysis/python.mjs";
 import { rustManifestFailures } from "../analysis/rust.mjs";
-import { fileFailure } from "../analysis/source-util.mjs";
+import { dedupeWholeFileFailures, fileFailure } from "../analysis/source-util.mjs";
 import {
   DEFAULT_OPTIONS,
   NX_CONFIG_FILE,
@@ -53,6 +53,11 @@ import {
   moonProvider,
 } from "../providers/moon.mjs";
 import { nativeProvider } from "../providers/native/index.mjs";
+import { mergeDeclaredEdges } from "../providers/native/graph.mjs";
+import {
+  resolveDeclaredManifestEdges,
+  resolveDeclaredManifestFailures,
+} from "../graph/create-dependencies.mjs";
 import {
   analyzeWorkspace,
   annotateMFERemotes,
@@ -595,6 +600,22 @@ export function resolveCommandContext(
     });
     annotateMFERemotes(graph.nodes, workspace.readFile);
     annotatePackageFacts(graph.nodes, workspace.readFile);
+    // The manifest track's edges, folded into the graph the verdicts judge.
+    // ADR 0006 Decision 3 and ADR 0005 Decision 4 draw declared edges with no
+    // face qualifier, and this branch's graph IS the verdict input — without
+    // the fold, a cycle closed only by a `<ProjectReference>` (or a Maven
+    // `<dependency>`, or a Gradle `project(":x")`) reports empty, the one
+    // result this tool may never produce. The failure list doubles as the
+    // no-throw guard (`../graph/create-dependencies.mjs`'s
+    // `resolveDeclaredManifestFailures` — each resolver refuses on exactly
+    // the failures its `*ManifestFailures` twin reports, same memoized
+    // model), and the same list joins the funnel below, so a tree that WOULD
+    // refuse still refuses through the structured could-not-complete
+    // envelope instead of an unhandled error.
+    const manifestRefusalFailures = resolveDeclaredManifestFailures(workspace);
+    if (manifestRefusalFailures.length === 0) {
+      mergeDeclaredEdges(graph, resolveDeclaredManifestEdges(workspace));
+    }
 
     // `boundaryConfigDeclared` is carried straight off the model rather than
     // re-derived here: `../providers/native/model.mjs`'s
@@ -627,22 +648,21 @@ export function resolveCommandContext(
     // sources feeding the SAME whole-file failure shape a language analyzer
     // produces for an unreadable file, so nothing downstream needs to know
     // which provider found the gap.
-    failures = [
+    failures = dedupeWholeFileFailures([
       ...wholeTreeAnalysis.failures.filter((failure) => selectedFiles.has(failure.sourceFile)),
       ...discovered.failures,
       // Workspace-scoped on purpose, the same posture the two unclaimed
       // equivalents above hold: a wildcard run must not be able to hide a
       // project whose manifest it cannot read by naming a path that excludes
-      // it (`../analysis/python.mjs`'s `pythonUnmodelledFailures`).
+      // it (`../analysis/python.mjs`'s `pythonUnmodelledFailures`). The four
+      // manifest lists are computed once above, where the declared-edge fold
+      // needs them as its no-throw guard.
       ...pythonUnmodelledFailures(workspace),
+      ...manifestRefusalFailures,
       ...goManifestFailures(workspace),
       ...rustManifestFailures(workspace),
-      ...mavenManifestFailures(workspace),
-      ...gradleManifestFailures(workspace),
       ...jvmIndexFailures(workspace),
-      ...dotnetManifestFailures(workspace),
-      ...dotnetIndexFailures(workspace),
-    ];
+    ]);
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
     analyzed = analyzedFiles.length;
     // Unaffected by `paths`: an exempted file is by definition unowned by any
@@ -732,6 +752,16 @@ export function resolveCommandContext(
       importSites: wholeTreeAnalysis.imports,
       projectOf: (file) => projectOfFile.get(file),
     });
+    // The manifest track folds in after the import sites, for the same
+    // no-face-qualifier reason the native branch above states at its own
+    // fold — Moon has no plugin hook to draw declared edges either, and its
+    // `dependsOn` entries are a different track (`moon.yml`), not a
+    // substitute for Maven/Gradle/csproj manifests tracked inside its
+    // projects. Same provable guard, same funnel reuse.
+    const manifestRefusalFailures = resolveDeclaredManifestFailures(workspace);
+    if (manifestRefusalFailures.length === 0) {
+      mergeDeclaredEdges(graph, resolveDeclaredManifestEdges(workspace));
+    }
 
     const selected = selectFiles(
       owned.map(({ file }) => file),
@@ -746,18 +776,15 @@ export function resolveCommandContext(
     // analyzes the whole tree before `paths` narrows anything, for the same
     // reason).
     const unclaimedFiles = unclaimedAnalyzableFiles({ tracked, owned });
-    failures = [
+    failures = dedupeWholeFileFailures([
       ...wholeTreeAnalysis.failures.filter((failure) => selectedFiles.has(failure.sourceFile)),
       ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Moon project graph" }),
       ...pythonUnmodelledFailures(workspace),
+      ...manifestRefusalFailures,
       ...goManifestFailures(workspace),
       ...rustManifestFailures(workspace),
-      ...mavenManifestFailures(workspace),
-      ...gradleManifestFailures(workspace),
       ...jvmIndexFailures(workspace),
-      ...dotnetManifestFailures(workspace),
-      ...dotnetIndexFailures(workspace),
-    ];
+    ]);
     unclaimedGap = { files: unclaimedFiles };
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
     analyzed = analyzedFiles.length;
@@ -814,7 +841,7 @@ export function resolveCommandContext(
     // `discovered.failures` has, so a scoped `check <path>` cannot hide an
     // orphan file elsewhere in the tree by naming a path that excludes it.
     const unclaimedFiles = unclaimedAnalyzableFiles({ tracked, owned });
-    failures = [
+    failures = dedupeWholeFileFailures([
       ...failures,
       ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Nx project graph" }),
       ...pythonUnmodelledFailures(workspace),
@@ -825,7 +852,7 @@ export function resolveCommandContext(
       ...jvmIndexFailures(workspace),
       ...dotnetManifestFailures(workspace),
       ...dotnetIndexFailures(workspace),
-    ];
+    ]);
     unclaimedGap = { files: unclaimedFiles };
     // Same reason as the Moon branch above: `coverage.exempt` is a native-only
     // concept, so an Nx workspace has nothing to report here.

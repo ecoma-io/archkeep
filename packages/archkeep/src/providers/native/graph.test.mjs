@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { evaluate } from "../../rules/index.mjs";
-import { buildDependencies, buildNativeGraph } from "./graph.mjs";
+import { buildDependencies, buildNativeGraph, mergeDeclaredEdges } from "./graph.mjs";
 
 const project = (overrides) => ({
   name: "p",
@@ -466,5 +466,55 @@ describe("buildDependencies", () => {
     expect(dependencies["__proto__"]).toEqual([
       { source: "__proto__", target: "a", type: "implicit" },
     ]);
+  });
+});
+
+describe("mergeDeclaredEdges", () => {
+  const declared = (source, target, type = "static") => ({ source, target, type });
+
+  // The face-level regression this helper exists for: a dependency witnessed
+  // by BOTH tracks — a written `using` and the ProjectReference for it, a
+  // Kotlin import and the Gradle `project(":x")` — carries ONE record after
+  // the fold, exactly as one witnessed by two imports does. Two records for
+  // the same (source, target, type) would double-count every edge-derived
+  // report a fixture asserts a length on.
+  it("folds declared records into a built graph, deduplicating the dual-track witness", () => {
+    const graph = {
+      nodes: {},
+      dependencies: buildDependencies({
+        importSites: [importSite("a/x.ts", "b")],
+        nodes: {
+          a: { name: "a", data: { root: "a", tags: [], implicitDependencies: [] } },
+          b: { name: "b", data: { root: "b", tags: [], implicitDependencies: [] } },
+        },
+        projectOf: () => "a",
+      }),
+    };
+    mergeDeclaredEdges(graph, [
+      { source: "a", target: "b", sourceFile: "a/Example.csproj", type: "static" },
+      declared("b", "a"),
+    ]);
+    expect(graph.dependencies.a).toEqual([{ source: "a", target: "b", type: "static" }]);
+    expect(graph.dependencies.b).toEqual([{ source: "b", target: "a", type: "static" }]);
+  });
+
+  // The key is the JSON tuple, not a join: source `"a b"` → target `"c"` and
+  // source `"a"` → target `"b c"` must not read as the same edge.
+  it("keeps space-colliding project names distinct", () => {
+    const graph = { nodes: {}, dependencies: Object.create(null) };
+    mergeDeclaredEdges(graph, [declared("a b", "c"), declared("a", "b c")]);
+    expect(graph.dependencies["a b"]).toEqual([declared("a b", "c")]);
+    expect(graph.dependencies.a).toEqual([declared("a", "b c")]);
+  });
+
+  // A graph that arrived without a dependencies map at all — the Moon
+  // provider's refused-read shape — gets one, and a project named `__proto__`
+  // is a real own entry of it, for the same reason `buildDependencies`'s map
+  // is null-prototype.
+  it("creates the map when the graph lacks one, owning __proto__ as a key", () => {
+    const graph = { nodes: {} };
+    mergeDeclaredEdges(graph, [declared("__proto__", "a")]);
+    expect(Object.prototype.hasOwnProperty.call(graph.dependencies, "__proto__")).toBe(true);
+    expect(graph.dependencies["__proto__"]).toEqual([declared("__proto__", "a")]);
   });
 });

@@ -57,12 +57,13 @@ import { join } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
 import { resolveCsharpDependencies } from "../analysis/csharp.mjs";
-import { resolveCsprojDependencies } from "../analysis/dotnet/csproj.mjs";
+import { resolveCsprojDependencies, dotnetManifestFailures } from "../analysis/dotnet/csproj.mjs";
 import { resolveGoDependencies } from "../analysis/go.mjs";
 import { resolveJavaDependencies } from "../analysis/java.mjs";
 import { resolveKotlinDependencies } from "../analysis/kotlin.mjs";
-import { resolveMavenDependencies } from "../analysis/jvm/maven.mjs";
-import { resolveGradleDependencies } from "../analysis/jvm/gradle.mjs";
+import { resolveMavenDependencies, mavenManifestFailures } from "../analysis/jvm/maven.mjs";
+import { resolveGradleDependencies, gradleManifestFailures } from "../analysis/jvm/gradle.mjs";
+import { dotnetIndexFailures } from "../analysis/dotnet/namespaces.mjs";
 import { resolvePythonDependencies } from "../analysis/python.mjs";
 import { resolveRustDependencies } from "../analysis/rust.mjs";
 import { resolveOptions } from "../options.mjs";
@@ -112,6 +113,64 @@ export function resolvePolyglotDependencies(projects, filesOf, readFile) {
     seen.add(key);
     return true;
   });
+}
+
+/**
+ * The manifest-track edges in one list — `<ProjectReference>` (plus
+ * `<Using Include>`) for .NET trees, Maven coordinate matching and Gradle
+ * `project(":x")` for JVM ones. `resolvePolyglotDependencies` above already
+ * folds these into the Nx plugin hook's answer; the CLI's native and Moon
+ * branches and the language server's index build their graphs from import
+ * sites alone, with no plugin host to call the hook, so they fold this list
+ * themselves (`../providers/native/graph.mjs`'s `mergeDeclaredEdges`) — the
+ * two-track contract of `../../../../docs/adr/0006-dotnet-language-integration.md`
+ * (Decision 3) and `../../../../docs/adr/0005-jvm-language-integration.md`
+ * (Decision 4) names no face it does not hold on.
+ *
+ * Each resolver refuses — throws — on exactly the failure list its
+ * `*ManifestFailures` twin reports from the same memoized model
+ * (`../../analysis/source-util.mjs`'s `perWorkspace` memoizes on the
+ * workspace object, so twin calls share one build): a caller that has found
+ * `mavenManifestFailures`/`gradleManifestFailures`/`dotnetManifestFailures`/
+ * `dotnetIndexFailures` empty on THIS workspace cannot hit the throw.
+ *
+ * @param {object} workspace The shared workspace-shaped object.
+ * @returns {{source: string, target: string, sourceFile: string, type: string}[]}
+ */
+export function resolveDeclaredManifestEdges(workspace) {
+  return [
+    ...resolveCsprojDependencies(workspace),
+    ...resolveMavenDependencies(workspace),
+    ...resolveGradleDependencies(workspace),
+  ];
+}
+
+/**
+ * The could-not-complete failures behind `resolveDeclaredManifestEdges`'s
+ * refusal — the four manifest and index failure lists folded into one. A
+ * caller uses this list twice: folded into its own whole-file failure
+ * reporting, and as the no-throw guard for the edge call — each resolver
+ * refuses on exactly the failures its `*ManifestFailures` twin reports from
+ * the same memoized model, so an empty list here makes
+ * `resolveDeclaredManifestEdges` unable to throw on this workspace. Both
+ * halves of that sentence live beside each other here so the identity cannot
+ * drift between a caller that forgets to report and one that skips the guard.
+ *
+ * `jvmIndexFailures` and `pythonUnmodelledFailures` are deliberately absent:
+ * no resolver here reads the JVM package index or refuses on Python's
+ * unmodelled posture, so neither is a condition of the no-throw guarantee —
+ * callers keep those lists flowing through their own funnels.
+ *
+ * @param {object} workspace The shared workspace-shaped object.
+ * @returns {{sourceFile: string, reason: string}[]}
+ */
+export function resolveDeclaredManifestFailures(workspace) {
+  return [
+    ...mavenManifestFailures(workspace),
+    ...gradleManifestFailures(workspace),
+    ...dotnetManifestFailures(workspace),
+    ...dotnetIndexFailures(workspace),
+  ];
 }
 
 /**

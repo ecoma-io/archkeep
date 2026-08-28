@@ -70,6 +70,67 @@ include(
       assert.deepStrictEqual(result.includedProjects, ["core", "app"]);
     });
 
+    it("extracts included projects from the Groovy parenless include", () => {
+      // #409: the parenless spelling is documented Groovy DSL, and the reader
+      // matched the parenthesized call alone — a settings file that used only
+      // it declared a subproject nothing ever saw.
+      const text = `
+include "core"
+rootProject.name = "my-app"
+`;
+      const result = parseGradleSettings(text);
+      assert.strictEqual(result.rootProjectName, "my-app");
+      assert.deepStrictEqual(result.includedProjects, ["core"]);
+    });
+
+    it("extracts included projects from a parenless include list", () => {
+      const text = `
+include "core", "app"
+`;
+      const result = parseGradleSettings(text);
+      assert.deepStrictEqual(result.includedProjects, ["core", "app"]);
+    });
+
+    it("reads parenless and parenthesized includes in one settings file", () => {
+      const text = `
+include("core")
+include "app"
+rootProject.name = "my-app"
+`;
+      const result = parseGradleSettings(text);
+      assert.deepStrictEqual(result.includedProjects, ["core", "app"]);
+    });
+
+    it("reads a parenless include wrapped across lines", () => {
+      const text = `
+include "core",
+    "app"
+`;
+      const result = parseGradleSettings(text);
+      assert.deepStrictEqual(result.includedProjects, ["core", "app"]);
+    });
+
+    it("does not read a parenless include past a trailing line comment", () => {
+      const text = `
+include "core" // the "app" project is included elsewhere
+`;
+      const result = parseGradleSettings(text);
+      assert.deepStrictEqual(result.includedProjects, ["core"]);
+    });
+
+    it("does not read includeBuild as an include", () => {
+      // Composite builds are discovery-only in v1: a reader that swallowed
+      // `includeBuild` into the include matcher would map a directory the
+      // settings file never included.
+      const text = `
+includeBuild "shared-build"
+includeBuild("other-build")
+include("core")
+`;
+      const result = parseGradleSettings(text);
+      assert.deepStrictEqual(result.includedProjects, ["core"]);
+    });
+
     it("ignores line comments", () => {
       const text = `
 // include("ignored")
@@ -157,6 +218,51 @@ rootProject.name = "my-app" // inline comment
 }`;
       const result = parseGradleBuild(text);
       assert.deepStrictEqual(result.projectDependencies, ["core"]);
+    });
+
+    it("extracts project(path: ':x') named-argument references", () => {
+      // #409: the named-argument map is documented Groovy DSL, and the reader
+      // demanded `)` right after the path string — the `path:` name ahead of
+      // it already broke the match — so the record was dropped while the
+      // project existed.
+      const text = `dependencies {
+    implementation project(path: ':core')
+}`;
+      const result = parseGradleBuild(text);
+      assert.deepStrictEqual(result.projectDependencies, ["core"]);
+    });
+
+    it("extracts project(path: ':x', configuration: 'default') references", () => {
+      const text = `dependencies {
+    implementation project(path: ':core', configuration: 'default')
+}`;
+      const result = parseGradleBuild(text);
+      assert.deepStrictEqual(result.projectDependencies, ["core"]);
+    });
+
+    it("extracts named-argument references in double quotes", () => {
+      const text = `dependencies {
+    implementation project(path: ":core", configuration: "default")
+}`;
+      const result = parseGradleBuild(text);
+      assert.deepStrictEqual(result.projectDependencies, ["core"]);
+    });
+
+    it("extracts the named-argument path wherever it sits in the argument list", () => {
+      const text = `dependencies {
+    implementation project(configuration: 'default', path: ':core')
+}`;
+      const result = parseGradleBuild(text);
+      assert.deepStrictEqual(result.projectDependencies, ["core"]);
+    });
+
+    it("keeps reading positional references beside named-argument ones", () => {
+      const text = `dependencies {
+    implementation project(":core")
+    testImplementation project(path: ':utils', configuration: 'default')
+}`;
+      const result = parseGradleBuild(text);
+      assert.deepStrictEqual(result.projectDependencies, ["core", "utils"]);
     });
 
     it("handles various configuration names", () => {
@@ -337,6 +443,70 @@ rootProject.name = "my-app" // inline comment
       assert.strictEqual(deps.length, 1);
       assert.strictEqual(deps[0].source, "core");
       assert.strictEqual(deps[0].target, "my-app");
+    });
+
+    it("discovers the subproject a parenless include is the only declaration of", () => {
+      // #409: with the parenless spelling unmatched, `lib` never entered the
+      // discovered set and app's reference onto it was refused — a valid
+      // reactor the reader could not read whole. This goes red the moment
+      // the parenless include stops being read.
+      const parenlessInclude = {
+        projects: [
+          { name: "app", root: "app" },
+          { name: "lib", root: "lib" },
+        ],
+        filesOf: (projectName) => {
+          const map = { app: ["app/build.gradle"], lib: ["lib/build.gradle"] };
+          return map[projectName] || [];
+        },
+        readFile: (path) => {
+          const fixtures = {
+            "settings.gradle": 'rootProject.name = "demo"\ninclude("app")\ninclude "lib"\n',
+            "app/build.gradle": 'dependencies { implementation project(":lib") }\n',
+            "lib/build.gradle": "dependencies { }\n",
+          };
+          return fixtures[path] || null;
+        },
+      };
+      const deps = resolveGradleDependencies(parenlessInclude);
+      assert.strictEqual(deps.length, 1);
+      assert.strictEqual(deps[0].source, "app");
+      assert.strictEqual(deps[0].target, "lib");
+      assert.strictEqual(deps[0].sourceFile, "app/build.gradle");
+      assert.deepStrictEqual(gradleManifestFailures(parenlessInclude), []);
+    });
+
+    it("draws the edge a named-argument project() line is the only evidence of", () => {
+      // #409: with the named-argument spelling unmatched the record was
+      // dropped and nothing was raised — byte-for-byte the clean tree while
+      // app depends on lib. This is the silent direction: if the reader
+      // stops reading the spelling, this is the test that stays green while
+      // the edge disappears.
+      const namedArgumentDependency = {
+        projects: [
+          { name: "app", root: "app" },
+          { name: "lib", root: "lib" },
+        ],
+        filesOf: (projectName) => {
+          const map = { app: ["app/build.gradle"], lib: ["lib/build.gradle"] };
+          return map[projectName] || [];
+        },
+        readFile: (path) => {
+          const fixtures = {
+            "settings.gradle": 'rootProject.name = "demo"\ninclude("app", "lib")\n',
+            "app/build.gradle":
+              "dependencies { implementation project(path: ':lib', configuration: 'default') }\n",
+            "lib/build.gradle": "dependencies { }\n",
+          };
+          return fixtures[path] || null;
+        },
+      };
+      const deps = resolveGradleDependencies(namedArgumentDependency);
+      assert.strictEqual(deps.length, 1);
+      assert.strictEqual(deps[0].source, "app");
+      assert.strictEqual(deps[0].target, "lib");
+      assert.strictEqual(deps[0].sourceFile, "app/build.gradle");
+      assert.deepStrictEqual(gradleManifestFailures(namedArgumentDependency), []);
     });
   });
 
