@@ -55,3 +55,10 @@ pnpm-debug.log*
 # resolver under test.
 packages/archkeep/.cli-eslint-config-fixture-*/
 __pycache__/
+
+# A directory literally named `~` — the residue of a path whose leading `~`
+# did not expand before `git add` ran, so the `.claude/tmp/` entry above never
+# matched and session files landed under the literal directory instead.
+# Ignored so a recurrence is invisible to `git add -A` instead of riding it
+# into a commit.
+~/
