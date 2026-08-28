@@ -2,6 +2,11 @@
 # fixed commits — `scripts/differential-real-trees.mjs`, which holds the tree
 # table, the explained-differences ledger, and the exit contract.
 #
+# This runs on `main` by schedule — the default branch — not on every
+# development line. A branch's `push` trigger (ci.yml `branches:` list)
+# decides whether that line's merged tree runs this suite; the schedule
+# here only decides WHEN a qualified tree runs it, not WHICH tree.
+#
 # THIS IS NOT A REQUIRED CHECK, AND THAT ABSENCE IS DELIBERATE — read this
 # before wiring it into `ci-gate`. Every required check answers for the diff
 # under review; this one also depends on two third-party repositories being
