@@ -4,45 +4,6 @@ For working **on** this repository. Read it before the first edit — the rules
 below are the ones a diff gets rejected for violating, and most of them are not
 inferable from the code.
 
-## Which line is this checkout on
-
-Everything below applies on both development lines; this section only decides
-which contract the checkout sits under. It is an operational summary that adds
-no rule of its own — the authority for each topic is linked, and where this
-section and its authority disagree, the authority wins.
-
-Run `git branch --show-current` before the first edit, and let the branch —
-never an issue title or a conversation — decide where a change lands:
-
-- **`main` is the v1.x contract and release line.** What an unchanged v1
-  workspace is told — APIs, CLI, config schema, output contracts, exit codes,
-  and their meaning — is protected by
-  [the v1 contract gate](#the-v1-contract-gate); only classes 1–3 (bug fix,
-  additive, performance/internal) land here.
-- **`next` is the v2 development line.** Intentional breaking, semantic, and
-  architectural changes belong there, argued inside the frame
-  [docs/doctrine/architecture-authority.md](docs/doctrine/architecture-authority.md)
-  owns — and nothing on `next` weakens what every line inherits: [the
-  empty-result invariant](#the-invariant-everything-is-judged-against),
-  deterministic verdicts, reproducible evidence.
-- **A bug found on `next` is checked against `main` first.** It reproduces
-  there → fix on `main`, the line consumers run, and forward-port; it does
-  not → fix on `next` as a v2 regression.
-  [How the two lines move](CONTRIBUTING.md#how-the-two-lines-move) owns the
-  mechanics.
-- **A change needed on both lines lands on `main` first**, then reaches
-  `next` by forward-port. `main`'s history is never rewritten.
-- **Releases never cross lines.** `main` cuts `v1.x` from its own lane;
-  `next` cuts `2.0.0-rc.N` from its own and graduates stable `2.0.0` from the
-  same stream. A `2.x` tag is never cut from `main`; a `v1.x` version is
-  never cut from `next`.
-
-[CONTRIBUTING.md](CONTRIBUTING.md#which-branch-a-change-lands-on) owns branch
-targeting; [docs/development/release.md](docs/development/release.md) owns
-release mechanics;
-[docs/doctrine/architecture-authority.md](docs/doctrine/architecture-authority.md)
-owns the system boundary and the intelligence layer's contract.
-
 ## What this repository is
 
 Archkeep makes an Nx workspace's dependency graph and module boundaries real for
@@ -410,12 +371,11 @@ If a commit was AI-assisted, it carries `Assisted-by: <tool>`, or
 every commit message on the branch into the body of the one that lands, trailers
 and all, so a trailer repeated five times arrives in history five times.
 
-## The v1 contract gate
+## The compatibility contract
 
-From the 1.0.0-rc.1 candidate onward, `main` holds the v1 contract
-([CONTRIBUTING.md](CONTRIBUTING.md#which-branch-a-change-lands-on) owns which
-branch a change targets). The sentence under [## Commits](#commits) — a change
-to what is reported on an unchanged workspace is a breaking change — names the
+From the 1.0.0-rc.1 candidate onward, `main` holds one contract on one
+development line. The sentence under [## Commits](#commits) — a change to
+what is reported on an unchanged workspace is a breaking change — names the
 loudest case. The full contract both halves cover:
 
 - **API compatibility** — exported library APIs and public types keep their
@@ -432,9 +392,9 @@ loudest case. The full contract both halves cover:
   [documented definition](docs/development/release.md#release-stages-the-100-rc1-candidate)
   of a breaking change.
 
-Before implementing on `main`, classify the change against this gate:
+Before implementing, classify the change against this gate:
 
-1. **Bug fix** that preserves v1 semantics.
+1. **Bug fix.**
 2. **Additive** — a new command, option, field, rule, or language; the
    contract's surface grows and nothing already stated changes meaning.
 3. **Performance or internal** — the observable contract is byte-for-byte
@@ -442,10 +402,9 @@ Before implementing on `main`, classify the change against this gate:
 4. **Semantic change** — what an unchanged workspace is told would differ.
 5. **Removal, deprecation, or breaking** API, config, or output contract.
 
-1–3 belong on `main` when validation shows it; 4–5 are v2 work on `next`
-(which exists since the 1.0.0-rc.1 candidate, created from the same commit
-`main` tagged), or maintainer-authorized exceptions
-recorded on the pull request. A missing test or a missing sentence is not
+1–3 are the ordinary pull request. 4–5 are breaking changes, and on a single
+development line they land only as maintainer-authorized exceptions recorded
+on the pull request. A missing test or a missing sentence is not
 authorization, and "the implementation is better" is not a compatibility
 argument.
 
