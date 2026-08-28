@@ -428,59 +428,19 @@ will see in CI:
 
 ### Which branch a change lands on
 
-There are two development lines, and the version they are allowed to break
-decides the branch:
+There is one development line, `main`, and from the 1.0.0-rc.1 candidate
+onward it holds one contract. A pull request keeps it: bug fixes, security
+fixes, documentation and test improvements, performance work, and additive
+features — additive meaning the contract's surface only grows. What "keeps
+the contract" covers — APIs, CLI, configuration, output shapes, exit codes,
+and the _meaning_ of all of them — is defined in
+[AGENTS.md](AGENTS.md#the-compatibility-contract), and an agent classifies
+its change against that gate before implementing.
 
-- **`main` is the v1.x line.** From the 1.0.0-rc.1 candidate onward it holds
-  the v1 contract and receives only changes that keep it: bug fixes, security
-  fixes, documentation and test improvements, performance work, and additive
-  features — additive meaning the contract's surface only grows. What "keeps
-  the contract" covers — APIs, CLI, configuration, output shapes, exit codes,
-  and the _meaning_ of all of them — is defined in
-  [AGENTS.md](AGENTS.md#the-v1-contract-gate), and an agent classifies its
-  change against that gate before implementing.
-- **`next` is the v2 line.** It exists since 2026-08-28, created from `main`
-  at the `v1.0.0-rc.1` tag (`eac30f9`), so the two lines start from the same
-  contract. It is where intentional breaking changes — API,
-  semantics, configuration, graph model, provider behavior — are developed as
-  a batch instead of arriving one at a time on `main`. It is not a queue for
-  every new feature: a compatible feature belongs on `main`.
-
-A maintainer can explicitly authorize a breaking change on `main` — that is
-an exception, made in the open on the pull request, never inferred from a
-missing test or a missing sentence.
-
-### How the two lines move
-
-- **Backport (a `next` change that turns out to keep the v1 contract).** It
-  lands on `main` first and is forward-ported to `next` — never the other way
-  round, because `main` is the line consumers run and the line the v1
-  contract binds.
-- **Forward-port.** After a merge to `main`, `next` takes the commit by
-  merging `main` — not by rebasing, which would rewrite `next`'s history
-  under every open v2 branch. Conflict resolution belongs to the forward-port
-  pull request, not to whichever v2 feature touches the same lines next.
-- **Pull request targeting.** A pull request against `main` states its class
-  from [AGENTS.md](AGENTS.md#the-v1-contract-gate) (bug fix, additive, or
-  performance/internal) and claims to keep the v1 contract; a pull request
-  against `next` names the v1 behavior it changes and why. A pull request
-  that targets `main` while changing what an unchanged workspace is told is
-  rejected on classification, not on review taste.
-- **Releases per line.** `main` releases through the lane
-  [release.md](docs/development/release.md) owns: release-please proposes,
-  the maintainer merges, the tag publishes — 1.x versions only. `next`
-  releases as a `2.0.0-rc.N` chain from its own lane (`release-next.yml`,
-  its own release-please configuration and manifest), built ahead of the
-  first candidate and inert until one is named: the lane skips itself while
-  its manifest still holds a v1.x seed, and a `Release-As: 2.0.0-rc.1`
-  commit is what bootstraps it. Each lane's tag guard refuses the other
-  line's version prefix, so a 2.x version is never cut from a `main` commit
-  and a v1 version is never cut from a `next` commit — mechanically, not by
-  convention.
-- **Sync state.** `next` is not a frozen fork. Everything on `main` — bug
-  fixes above all — reaches it by forward-port, so a fix is never "v2 only"
-  by accident of history, and a bug fixed on `next` that also exists on
-  `main` is filed and fixed where the defect lives, then forwarded.
+A maintainer can explicitly authorize a change that breaks the contract —
+that is an exception, made in the open on the pull request, never inferred
+from a missing test or a missing sentence. It is how a future major would
+ever arrive; it is not a queue, and it is not the ordinary path.
 
 ## How a release happens
 

@@ -375,24 +375,21 @@ Full index: [**docs/**](docs/README.md).
 ## Status: crossing into 1.0
 
 Everything described on this page ships today. The release in flight is
-**1.0.0-rc.1** — the release candidate for the v1 contract, not yet stable
-1.x and not yet a claim that the contract is finished. Stable 1.x is the
-same contract once the project's four measured readiness conditions hold —
-consecutive green weekly differentials on real trees, an external workspace
-running `check` as a blocking gate, fifty quiet commits since the last
-breaking change, releases that land unattended — and `pnpm readiness`
+**1.0.0-rc.1** — the release candidate for the compatibility contract, not
+yet stable 1.0 and not yet a claim that the contract is finished. Stable 1.0
+is the same contract once the project's four measured readiness conditions
+hold — consecutive green weekly differentials on real trees, an external
+workspace running `check` as a blocking gate, fifty quiet commits since the
+last breaking change, releases that land unattended — and `pnpm readiness`
 reports each as `met`, `not met` or honestly `unmeasured`
 ([roadmap](docs/doctrine/roadmap.md)). From the candidate onward, `main`
-keeps the v1 contract: changes that alter what an unchanged workspace is
-told move to the v2 line instead
-([the branch policy](CONTRIBUTING.md#which-branch-a-change-lands-on)).
-The v2 line itself is the [`next` branch](https://github.com/ecoma-io/archkeep/tree/next),
-cut from the commit 1.0.0-rc.1 was tagged from. It exists to develop 2.0
-and releases from its own lane as a `2.0.0-rc.N` chain; it carries no
-release yet, and nothing on it changes what a workspace on 1.x is told.
+keeps that contract on a single development line: a change that alters what
+an unchanged workspace is told is a breaking change, and it lands only as a
+maintainer-authorized exception
+([which branch a change lands on](CONTRIBUTING.md#which-branch-a-change-lands-on)).
 The VS Code extension ships as a `.vsix` today; its marketplace listing
 starts at the stable cut, because the marketplace carries no prerelease
-versions. Roadmap items beyond 1.x — semantic
+versions. Capabilities beyond the deterministic core — semantic
 understanding, predictive drift — are labeled direction, not promises.
 
 ## Contributing
