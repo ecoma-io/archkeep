@@ -570,7 +570,7 @@ describe("a real editor session against a real workspace", () => {
   }, 30_000);
 
   it("registers a file watcher for every file a verdict depends on", async () => {
-    // Eight, and the ones worth naming go beyond the boundary table and every
+    // The first eight go beyond the boundary table and every
     // `project.json`, which are the inputs to a verdict. `nx.json` is where the
     // options live for an Nx-shaped root, and `archkeep.json` is both the marker
     // AND the options for a native one — this fixture is Nx-shaped, so it
@@ -586,7 +586,7 @@ describe("a real editor session against a real workspace", () => {
     // renamed — the editor would go on painting verdicts from a config it no
     // longer reads, which looks exactly like a clean tree.
     //
-    // The last three are watched because they WAIVE a verdict rather than
+    // The next three are watched because they WAIVE a verdict rather than
     // produce one, which is the same argument one step further out: a
     // project's `package.json` supplies `data.declaredPackages` (which waives
     // `noTransitiveDependencies`) and `data.entryPoints`, and its
@@ -598,6 +598,14 @@ describe("a real editor session against a real workspace", () => {
     // a violation that had become real. `package.json` is also where
     // `discoverProjects` reads a project's NAME when its `project.json` states
     // none, so watching it keeps a rename from going stale too.
+    //
+    // The rest are the manifests the Go, Rust, Python, JVM and Moon providers
+    // read the project graph itself from (`./src/lsp/server.mjs`'s
+    // `POLYGLOT_GRAPH_MANIFESTS`, which owns the per-file why). #410 was this
+    // list covering the TypeScript-side configuration only: on those
+    // workspaces a saved `go.mod` or `Cargo.toml` re-published the manifest
+    // alone, and the graph every verdict answered from stayed at its index-
+    // time shape until an unrelated file moved or the editor restarted.
     const { client } = await connected();
 
     const registration = await client.waitFor(
@@ -611,13 +619,25 @@ describe("a real editor session against a real workspace", () => {
         .map((w) => w.globPattern)
         .sort(),
     ).toEqual([
+      "**/.config/moon/workspace.yml",
+      "**/.moon/workspace.yml",
+      "**/Cargo.toml",
       "**/archkeep.json",
+      "**/build.gradle",
+      "**/build.gradle.kts",
+      "**/go.mod",
+      "**/go.work",
       "**/module-boundaries.config.mjs",
       "**/module-federation.config.js",
       "**/module-federation.config.ts",
+      "**/moon.yml",
       "**/nx.json",
       "**/package.json",
+      "**/pom.xml",
       "**/project.json",
+      "**/pyproject.toml",
+      "**/settings.gradle",
+      "**/settings.gradle.kts",
       "**/tsconfig.base.json",
     ]);
 
@@ -784,6 +804,97 @@ describe("a real editor session against a native archkeep.json workspace", () =>
     expect(violation, `no tag violation among ${JSON.stringify(diagnostics)}`).toBeDefined();
 
     client.kill();
+  }, 30_000);
+
+  // #410, driven end to end: the graph a verdict is judged against is read
+  // from manifests, and a manifest edited in the editor has to move that
+  // graph when it is saved. Everything here is a real process, a real git
+  // tree and the real Go analysis — the unit tier next door proves the
+  // watched-set membership; only a live session proves the verdict actually
+  // moves, and that the failing direction is silence.
+  it("re-judges an open document when a graph-shaping manifest is saved from the editor", async () => {
+    const tree = realpathSync(mkdtempSync(join(tmpdir(), "archkeep-lsp-gomod-")));
+    const write = (relativePath, text) => {
+      const absolute = join(tree, relativePath);
+      mkdirSync(dirname(absolute), { recursive: true });
+      writeFileSync(absolute, text, "utf8");
+    };
+    try {
+      // No project at `apps/outer` yet, and inference opted into (`projects.infer`
+      // present — an absent key means the declared list is exhaustive, per
+      // `./providers/native/model.mjs`'s `normalizeNativeModel`). `apps/inner/main.go`
+      // imports `native.test/outer`, which no module claims, so the import
+      // resolves external and the first verdict is a clean list.
+      write(
+        "archkeep.json",
+        JSON.stringify({
+          boundaryConfig: "native-boundary.config.mjs",
+          projects: {
+            declared: [{ root: "apps/inner", tags: ["zone:inner"] }],
+            infer: {},
+          },
+          coverage: {
+            exempt: [
+              {
+                path: "native-boundary.config.mjs",
+                reason: "boundary config at the root is not a project source file",
+              },
+            ],
+          },
+        }),
+      );
+      write("native-boundary.config.mjs", boundaryConfig(false));
+      write("apps/inner/go.mod", "module native.test/inner\n\ngo 1.23\n");
+      write("apps/inner/main.go", INNER_GO);
+      // The index reads TRACKED files only (`./lsp/workspace-index.mjs`'s
+      // header), so the fixture has to be a tree git can answer for before the
+      // server can see any of it.
+      execFileSync("git", ["init", "-q"], { cwd: tree, env: environmentForTree() });
+      execFileSync("git", ["add", "-A"], { cwd: tree, env: environmentForTree() });
+
+      const { client } = await connected(SERVER, tree);
+      const uri = pathToFileURL(join(tree, "apps/inner/main.go")).href;
+
+      client.send({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: { textDocument: { uri, languageId: "go", version: 1, text: INNER_GO } },
+      });
+      // The baseline the save has to move. An empty list here is a true
+      // statement about the tree as the server indexed it — which is exactly
+      // what stops being true the moment the second module exists.
+      expect(await client.diagnosticsFor(uri)).toEqual([]);
+
+      // A second Go module appears, the way it does in an editor: files
+      // written, the manifest saved. The index is tracked-only, so the new
+      // files are staged first — the same step a developer's git hook or the
+      // editor's git integration performs, and the reason the staged set and
+      // not the working tree is what a re-index reads.
+      write("apps/outer/go.mod", "module native.test/outer\n\ngo 1.23\n");
+      write("apps/outer/outer.go", "package outer\n");
+      execFileSync("git", ["add", "--", "apps/outer/go.mod", "apps/outer/outer.go"], {
+        cwd: tree,
+        env: environmentForTree(),
+      });
+      client.send({
+        jsonrpc: "2.0",
+        method: "textDocument/didSave",
+        params: { textDocument: { uri: pathToFileURL(join(tree, "apps/outer/go.mod")).href } },
+      });
+
+      // The second publish for `main.go` is the assertion. Before the fix the
+      // saved manifest was not a watched file, so this publish never arrived —
+      // the editor went on painting the crossing clean, indistinguishable from
+      // a checked file, until an unrelated config moved. Named rather than
+      // counted, so a lone `analysisFailure` cannot pass for the violation.
+      expect((await client.diagnosticsFor(uri, 1)).map((d) => d.code)).toContain(
+        "onlyTagsConstraintViolation",
+      );
+
+      client.kill();
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+    }
   }, 30_000);
 
   // G-01: a project named `__proto__` must be a first-class node in the graph
