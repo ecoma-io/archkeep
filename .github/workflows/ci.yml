@@ -13,12 +13,10 @@ on:
   # this event or the queue waits forever.
   merge_group:
   push:
-    # Both development lines run the same suite on every push, so each line is
-    # testable independently and a red push names its line: `main` is the v1
-    # contract line (and the one whose pushes are releases), `next` is the v2
-    # line. The branch policy in CONTRIBUTING.md owns which line a change
-    # lands on; this list only makes sure neither line ships unchecked.
-    branches: [main, next]
+    # `main` is the one development line, and the one whose pushes are
+    # releases: its merged tree runs the full suite on every push, so a red
+    # push names its commit instead of surfacing in a release lane later.
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -244,8 +242,8 @@ jobs:
       #     pull request fetches.
       #   - merge_group: the same against `origin/<queue target>`, taken
       #     from the event's `base_ref` (`refs/heads/main` today) rather
-      #     than hardcoded, so a merge queue on the other development line
-      #     needs no edit here. The queue branch holds the target branch
+      #     than hardcoded, so a merge queue on another base branch needs
+      #     no edit here. The queue branch holds the target branch
       #     plus every pull request ahead in the batch, so that diff IS
       #     the batch, and `GITHUB_BASE_REF` is empty on this event.
       #   - push to main, workflow_dispatch: `moon run` with no affected

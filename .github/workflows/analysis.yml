@@ -17,10 +17,10 @@ name: Analysis
 
 on:
   push:
-    # Both development lines run analysis on every push, for the same
-    # reason `ci.yml` runs on both: each line is independently testable,
-    # and a red push names its line.
-    branches: [main, next]
+    # `main` — the one development line — runs analysis on every push, for
+    # the same reason `ci.yml` runs there: the merged tree is measured, and
+    # a red push names its commit.
+    branches: [main]
   # Unfiltered, for the same reason `ci.yml` is: `Semgrep` is a required status
   # check, and a `branches: [main]` filter here would skip this workflow entirely
   # on a stacked pull request — leaving that check pending forever rather than
