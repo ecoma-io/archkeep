@@ -291,6 +291,8 @@ Five signals, in the order they would probably appear:
 Each is individually reasonable. Together they are how a tool whose verdicts
 prove something becomes a tool whose outputs merely suggest it.
 
+## Where this leaves the roadmap
+
 Because the boundary is stable, the roadmap is about breadth and maturity,
 not about the boundary itself: which languages a workspace may govern (owned
 by [north-star.md](north-star.md)), and the maturity ladder that orders the

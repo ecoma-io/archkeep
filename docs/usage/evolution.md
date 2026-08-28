@@ -160,7 +160,7 @@ record with full SHAs (`result.base`, `result.head`, `result.revisions`,
 ## What this deliberately is not
 
 No whole-history mining, no causality claims, no blame inference, no health
-scores over time, no predictions. Those are the 2.x directions the repository's
-roadmap (docs/doctrine/roadmap.md) names; this command stops
-at deterministic, revision-backed evolution evidence — the same line
-`history` draws, one revision source over.
+scores over time, no predictions. Those are the intelligence directions the
+repository's roadmap ([../doctrine/roadmap.md](../doctrine/roadmap.md)) stages
+for later maturity; this command stops at deterministic, revision-backed
+evolution evidence — the same line `history` draws, one revision source over.
