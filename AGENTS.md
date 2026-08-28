@@ -371,6 +371,44 @@ If a commit was AI-assisted, it carries `Assisted-by: <tool>`, or
 every commit message on the branch into the body of the one that lands, trailers
 and all, so a trailer repeated five times arrives in history five times.
 
+## The two development lines
+
+This checkout sits on one of two lines, and the line decides the contract in
+force and what may land:
+
+- **`main` holds the v1 contract.** Its changes answer to the
+  [v1 contract gate](#the-v1-contract-gate) below.
+- **`next` is the v2 line** — the line this section was written on,
+  created from `main` at the `v1.0.0-rc.1` tag (`eac30f9`), so the two lines
+  start from the same contract. It receives the gate's classes 4–5 and the
+  capabilities the 2.x direction names
+  ([roadmap.md](docs/doctrine/roadmap.md) § 2.x owns that list). The
+  backport, forward-port, targeting and release rules between the two lines
+  are stated once, in CONTRIBUTING.md's "Which branch a change lands on"
+  section, and not repeated here.
+
+What does **not** change on this line, whatever a v2 feature proposes: the
+invariant this file owns above, the seven principles
+([principles.md](docs/doctrine/principles.md)), and the authority boundary
+([architecture-authority.md](docs/doctrine/architecture-authority.md)). A v2
+capability _reads_ the deterministic core's verdicts — `check`, `graph`,
+`diff`, `drift` — and proposes, explains or predicts beside them; it never
+replaces a verdict, never sits inside the path that produces one, and never
+makes what an unchanged workspace is told depend on a model, a network, or
+any other nondeterministic component. A prediction is allowed to be wrong
+where a verdict is not — that asymmetry is what this line develops
+against, and a proposal that erases it is a change of direction, refused by
+the boundary above, rather than a feature.
+
+The declared intent and the observed architecture stay what they are on this
+line: the boundary config the workspace reviews as code, and the graph read
+from source. v2 work may deepen either side or the evidence between them, but
+a claim this system reports stays reproducible from source — "the agent
+said the architecture is fine" is not one of its outputs. An agent handling
+an architecture change keeps the protocol the `arch-*` skills already teach:
+propose from the read-only commands, let the workspace edit its own law, let
+the checker judge.
+
 ## The v1 contract gate
 
 From the 1.0.0-rc.1 candidate onward, `main` holds the v1 contract
@@ -404,8 +442,9 @@ Before implementing on `main`, classify the change against this gate:
 5. **Removal, deprecation, or breaking** API, config, or output contract.
 
 1–3 belong on `main` when validation shows it; 4–5 are v2 work on `next`
-(which does not exist until v2 starts), or maintainer-authorized exceptions
-recorded on the pull request. A missing test or a missing sentence is not
+(which exists since the 1.0.0-rc.1 candidate, created from the same commit
+`main` tagged), or maintainer-authorized exceptions recorded on the pull
+request. A missing test or a missing sentence is not
 authorization, and "the implementation is better" is not a compatibility
 argument.
 
