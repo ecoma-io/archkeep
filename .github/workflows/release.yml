@@ -497,11 +497,30 @@ jobs:
       # token. Once `@ecoma-io/archkeep` exists on the registry, bind
       # this workflow as a trusted publisher there and delete the `env:` block —
       # the `id-token: write` above is already what that mode needs.
+      #
+      # A prerelease version needs an explicit dist-tag: npm refuses a bare
+      # publish of one — "You must specify a tag using --tag when publishing a
+      # prerelease version" — which is how the 1.0.0-rc.1 release failed this
+      # step. The tag is the version's own prerelease identifier up to its
+      # first dot, so `1.0.0-rc.1` publishes under `rc` and a later `rc.2`
+      # moves that tag instead of accumulating `rc.1`, `rc.2`, ...; a stable
+      # version publishes bare and holds `latest` exactly as before. The
+      # dist-tag note in docs/development/release.md owns the story; this
+      # step is where the other npm jobs below point when they say they
+      # publish by the same rule.
       - name: Publish
         working-directory: packages/archkeep
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
-        run: npm publish --provenance --access public
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          case "$version" in
+            *-*)
+              prerelease="${version#*-}"
+              npm publish --provenance --access public --tag "${prerelease%%.*}"
+              ;;
+            *) npm publish --provenance --access public ;;
+          esac
 
   publish-mcp:
     name: Publish the MCP server to npm
@@ -589,11 +608,23 @@ jobs:
           fi
           echo "packed $tgz, depending on @ecoma-io/archkeep $dep"
 
+      # The dist-tag rule is the engine Publish step's, verbatim — npm refuses
+      # a bare prerelease publish, and this package versions with the engine,
+      # so the same case reads this package's own manifest. The tarball glob
+      # stays: the published bytes are the verified ones, not a re-pack.
       - name: Publish the verified tarball
         working-directory: packages/archkeep-mcp
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
-        run: npm publish ecoma-io-archkeep-mcp-*.tgz --provenance --access public
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          case "$version" in
+            *-*)
+              prerelease="${version#*-}"
+              npm publish ecoma-io-archkeep-mcp-*.tgz --provenance --access public --tag "${prerelease%%.*}"
+              ;;
+            *) npm publish ecoma-io-archkeep-mcp-*.tgz --provenance --access public ;;
+          esac
 
   publish-rules:
     name: Publish the official rules catalog to npm
@@ -655,11 +686,21 @@ jobs:
       # `npm publish`, not `pnpm publish`, and `--access public` because the
       # package is scoped: the engine's own Publish step argues both, and the
       # license consequence it names is why this package carries its own LICENSE.
+      # The dist-tag rule is the engine Publish step's, verbatim — this package
+      # versions with the engine and npm refuses a bare prerelease publish.
       - name: Publish
         working-directory: packages/archkeep-rules
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
-        run: npm publish --provenance --access public
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          case "$version" in
+            *-*)
+              prerelease="${version#*-}"
+              npm publish --provenance --access public --tag "${prerelease%%.*}"
+              ;;
+            *) npm publish --provenance --access public ;;
+          esac
 
   publish-ts-sdk:
     name: Publish the TypeScript rule SDK to npm
@@ -730,12 +771,22 @@ jobs:
       # licence consequence it names is why this package carries its own
       # LICENSE — measured here rather than assumed, by the verifier above,
       # which goes red when the file is absent because npm and pnpm then select
-      # different files from the same tree.
+      # different files from the same tree. The dist-tag rule is the engine
+      # Publish step's, verbatim — ADR 0002 puts every SDK on the engine's
+      # version chain and npm refuses a bare prerelease publish.
       - name: Publish
         working-directory: packages/archkeep-rule-sdk-ts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
-        run: npm publish --provenance --access public
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          case "$version" in
+            *-*)
+              prerelease="${version#*-}"
+              npm publish --provenance --access public --tag "${prerelease%%.*}"
+              ;;
+            *) npm publish --provenance --access public ;;
+          esac
 
   publish-vsix:
     name: Publish the VS Code extension
@@ -789,40 +840,65 @@ jobs:
           TAG: ${{ needs.prepare.outputs.tag }}
         run: gh release upload "$TAG" dist/archkeep-vscode.vsix
 
-      # Publishing is guarded, not wired to a publisher that does not exist
-      # yet: the `ecoma-io` marketplace publisher account has not been created,
-      # so there is no ECOMA_VSCE_PAT secret to hold. When the secret is absent
-      # this step SKIPS LOUDLY — a log line and a step-summary entry saying so
-      # and why — never silently, because a green release lane that shipped
-      # nothing is the exact defect the prepare job's tripwire exists for. The
-      # vsix on the release above is real either way. The secret is named
+      # Publishing is guarded twice, and each guard SKIPs LOUDLY — a log line
+      # and a step-summary entry saying so and why — never silently, because a
+      # green release lane that shipped nothing is the exact defect the
+      # prepare job's tripwire exists for. The vsix on the release above is
+      # real either way.
+      #
+      # The first guard is the version itself: the marketplace cannot carry a
+      # version with a semver prerelease suffix at all. vsce validates
+      # `semver.prerelease(version)` unconditionally on publish — the
+      # `--pre-release` flag does not bypass it, it only selects a target
+      # (measured in the vsce 3.9.2 source this lane installs), and the
+      # 1.0.0-rc.1 release failed this step on exactly that refusal. So a
+      # candidate's `.vsix` lives on its GitHub release only, and the stable
+      # cut is the first version the marketplace receives.
+      #
+      # The second guard is the PAT. The `ecoma-io` publisher account exists
+      # and holds ECOMA_VSCE_PAT as of the 1.0.0-rc.1 release, but the guard
+      # stays: an absent or rotated-away secret must skip with a reason, not
+      # die as an unauthenticated vsce error. The secret is named
       # `ECOMA_VSCE_PAT` to match this workflow's other organisation secrets
       # (`ECOMA_NPM_ACCESS_TOKEN`, `ECOMA_PYPI_API_TOKEN`,
       # `ECOMA_CRATES_API_TOKEN`), and it reaches vsce through the environment
       # as `VSCE_PAT` — the exact name vsce documents reading, and not
       # renameable — never through `${{}}` interpolation into this script.
-      #
-      # To turn publishing on: create the publisher, mint a marketplace PAT,
-      # store it as the ECOMA_VSCE_PAT repository secret. No workflow change
-      # needed.
       - name: Publish to the marketplace, or say loudly why not
         env:
           VSCE_PAT: ${{ secrets.ECOMA_VSCE_PAT }}
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
+          version="$(node -p "require('./packages/archkeep-vscode/package.json').version")"
+          case "$version" in
+            *-*)
+              {
+                echo "## Marketplace publish SKIPPED"
+                echo ""
+                echo "\`$TAG\` was released and its .vsix is on the GitHub release,"
+                echo "but it was NOT published to the VS Code Marketplace: the"
+                echo "marketplace cannot carry a version with a prerelease suffix"
+                echo "('$version'), and vsce refuses the publish before contacting it."
+                echo "The stable cut of this line publishes to the marketplace."
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "SKIPPED, and here is why: $version carries a prerelease suffix, which the"
+              echo "VS Code Marketplace does not support — vsce refuses the publish outright."
+              echo "$TAG's .vsix is on the GitHub release. The stable cut publishes."
+              exit 0
+              ;;
+          esac
           if [ -z "$VSCE_PAT" ]; then
             {
               echo "## Marketplace publish SKIPPED"
               echo ""
               echo "\`$TAG\` was released and its .vsix is on the GitHub release,"
               echo "but it was NOT published to the VS Code Marketplace: the"
-              echo "ECOMA_VSCE_PAT secret is absent because the publisher account"
-              echo "does not exist yet. Create the publisher, store its PAT as the"
-              echo "ECOMA_VSCE_PAT repository secret, and the next release publishes."
+              echo "ECOMA_VSCE_PAT secret is absent. Restore the publisher's PAT as"
+              echo "the ECOMA_VSCE_PAT repository secret, and the next release publishes."
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "SKIPPED, and here is why: ECOMA_VSCE_PAT is absent (no marketplace publisher"
-            echo "account exists yet), so $TAG was NOT published to the VS Code Marketplace. The"
-            echo ".vsix is on the GitHub release. Store an ECOMA_VSCE_PAT secret to turn publishing on."
+            echo "SKIPPED, and here is why: ECOMA_VSCE_PAT is absent, so $TAG was NOT published"
+            echo "to the VS Code Marketplace. The .vsix is on the GitHub release. Restore the"
+            echo "ECOMA_VSCE_PAT secret to turn publishing on."
             exit 0
           fi
           pnpm --dir packages/archkeep-vscode exec vsce publish --packagePath "$GITHUB_WORKSPACE/dist/archkeep-vscode.vsix"

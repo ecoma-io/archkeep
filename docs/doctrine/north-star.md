@@ -81,8 +81,10 @@ installed. The cell is not a checkmark because that client is not on the
 marketplace yet: it runs from a development host or the `.vsix` CI builds,
 verifies and attaches to each of its releases, so a developer who does not
 already run an LSP client still has a manual install to perform. What is
-missing there is the marketplace publisher account — the release lane already
-publishes the moment one exists — and it is one piece of work rather than four.
+missing there is no longer a publisher account — the account exists and the
+release lane publishes through it — but the marketplace carries no prerelease
+versions, so the listing starts at the stable cut;
+[integrations/vscode.md](../integrations/vscode.md) owns that status.
 
 Two cells are refusals rather than gaps, and both are argued where they are
 implemented. Nx already infers TypeScript and JavaScript edges, so a second

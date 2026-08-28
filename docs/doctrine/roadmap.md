@@ -172,10 +172,10 @@ owns the mechanics.
   ([development/testing.md](../development/testing.md))
 
 The VS Code marketplace listing is deliberately **not** on that list. The
-client exists, the `.vsix` attaches to every release, and the release lane
-publishes to the marketplace the moment a publisher account exists
-([integrations/vscode.md](../integrations/vscode.md)) — so the listing lands
-whenever that account does, independent of what version the package carries,
+client exists, the `.vsix` attaches to every release, and the publisher
+account exists; the marketplace carries no prerelease versions, so the
+listing starts at the stable cut
+([integrations/vscode.md](../integrations/vscode.md) owns that status) —
 and 1.0 does not wait for it.
 
 ### What 1.0 waits for, and how each condition is read
