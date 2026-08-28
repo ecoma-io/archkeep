@@ -140,6 +140,35 @@ jobs:
           token: ${{ steps.app-token.outputs.token || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      # A tag guard, not a convention. `main` is the v1 line, and a `v2.*` tag
+      # cut from it is the one direction the branch policy forbids outright
+      # (CONTRIBUTING.md, "Releases per line": a 2.x version is never cut from a
+      # `main` commit). Today it is unreachable — the manifest this lane reads
+      # holds 1.x, and the version only crosses to 2.0.0 through a BREAKING
+      # CHANGE commit the v1 contract gate refuses on `main` — but a guard
+      # that matters is built for the day its premise bends, and a wrong
+      # direction here is the one refusal that must never be silent. A
+      # mismatch fails the lane red before anything below can tag, upload, or
+      # publish; the v2 line's own lane carries the mirror guard against
+      # `v1.*` versions cut from `next`.
+      - name: Refuse a 2.x tag on the v1 line
+        env:
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          case "$TAG" in
+            "")
+              echo "no release in this push; nothing to guard"
+              ;;
+            v2.*)
+              echo "release-please computed $TAG on the v1 line. A 2.x version is never cut"
+              echo "from main: breaking changes develop on next (CONTRIBUTING.md, 'Which"
+              echo "branch a change lands on'). Failing the lane instead of publishing."
+              exit 1
+              ;;
+            *)
+              echo "$TAG is a v1 version — the only kind this lane cuts"
+              ;;
+          esac
 
       # release-please's output fails two of this repository's own gates, and
       # the steps below repair both on release-please's branch before CI ever
