@@ -50,10 +50,32 @@ its own lane as a `2.0.0-rc.N` chain rather than by tagging a `main` commit
 with a 2.x number.
 
 The lane this document describes serves the v1.x line: it triggers on `main`,
-and the component its manifest names sits on that line. The v2 line's
-`2.0.0-rc.N` chain gets its own lane when the first candidate is actually cut
-— a release lane with nothing to release cannot be validated against a real
-cut, so none is built ahead of one.
+and the component its manifest names sits on that line. The v2 line has its
+own lane — `release-next.yml`, triggering on `next`, driving its own
+release-please configuration and manifest (`release-please-config-next.json`,
+`.release-please-manifest-next.json`) — so the two lines share no release
+state and neither can move the other's versions. Each lane's tag guard
+refuses the other line's prefix (`v2.*` on `main`, `v1.*` on `next`): the
+mechanical half of a rule the branch summary in AGENTS.md states in prose.
+
+The v2 lane is built ahead of the first candidate and inert until the
+maintainer names one. Its manifest seeds from the newest v1 release in
+shared history, and a manifest that still holds a v1.x version means the
+stream has not been bootstrapped: the lane skips its release-please step
+loudly — naming the `Release-As: 2.0.0-rc.1` commit that flips it — instead
+of proposing a v1.x version from the v2 line. The skip is not a theoretical
+guard: measured against release-please 17.6.0 with this repository's own
+configuration, a prerelease manifest plus commits typed `docs` (a visible
+changelog section) already yields a `1.0.1-rc.1` proposal, because the
+default strategy bumps a prerelease on any commit that writes a changelog
+entry — so an unguarded lane would open a v1 release pull request on `next`
+the first time a documentation commit landed. Bootstrapping is one commit:
+`Release-As: 2.0.0-rc.1` forces exactly that version for exactly one
+release (the mechanism "How the candidate is cut" describes, pointed at the
+v2 line), the manifest then reads `2.0.0-rc.1`, and from then on the lane
+computes normally. The dry run that validated the configuration pair is
+cited on the pull request that introduced it; the publish legs are the one
+part a dry run cannot prove and are measured on the first real cut.
 
 **How the candidate is cut.** A commit on `main` whose message carries a
 `Release-As: 1.0.0-rc.1` footer forces exactly that version for exactly one
@@ -93,6 +115,15 @@ accumulating `rc.1`, `rc.2`, ... A stable version publishes bare and holds
 either way: semver ranges exclude prereleases, so the range resolves to the
 highest stable 0.x, never to the candidate; `npm i @ecoma-io/archkeep@rc` is
 how a consumer asks for the candidate explicitly.
+
+The v2 line's prereleases do not share the `rc` tag. `rc` is the v1 line's
+dist-tag, and a dist-tag is a promise about which stream a version came
+from — the v2 lane publishes every prerelease under `next` rather than
+deriving the tag from the version's own prerelease identifier, which would
+spell `rc` again (`2.0.0-rc.1`'s identifier is `rc`) and promise v1
+consumers a v2 version. The stable `2.0.0` that graduates publishes bare
+and holds `latest`, so a consumer on `@rc` never receives a v2 version and
+one on `@next` never receives a v1 one.
 
 The VS Code Marketplace is stricter than npm: it cannot carry a version with
 a prerelease suffix at all — vsce refuses the publish before contacting the

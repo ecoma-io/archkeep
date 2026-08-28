@@ -469,9 +469,14 @@ missing test or a missing sentence.
 - **Releases per line.** `main` releases through the lane
   [release.md](docs/development/release.md) owns: release-please proposes,
   the maintainer merges, the tag publishes — 1.x versions only. `next`
-  releases as a `2.0.0-rc.N` chain cut from that line's own lane once it has
-  a candidate; a 2.x version is never cut from a `main` commit, and a v1
-  patch version is never cut from a `next` commit.
+  releases as a `2.0.0-rc.N` chain from its own lane (`release-next.yml`,
+  its own release-please configuration and manifest), built ahead of the
+  first candidate and inert until one is named: the lane skips itself while
+  its manifest still holds a v1.x seed, and a `Release-As: 2.0.0-rc.1`
+  commit is what bootstraps it. Each lane's tag guard refuses the other
+  line's version prefix, so a 2.x version is never cut from a `main` commit
+  and a v1 version is never cut from a `next` commit — mechanically, not by
+  convention.
 - **Sync state.** `next` is not a frozen fork. Everything on `main` — bug
   fixes above all — reaches it by forward-port, so a fix is never "v2 only"
   by accident of history, and a bug fixed on `next` that also exists on
