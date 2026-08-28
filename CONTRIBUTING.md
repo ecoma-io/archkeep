@@ -439,8 +439,9 @@ decides the branch:
   and the _meaning_ of all of them — is defined in
   [AGENTS.md](AGENTS.md#the-v1-contract-gate), and an agent classifies its
   change against that gate before implementing.
-- **`next` is the v2 line.** It does not exist yet; the maintainer creates it
-  when v2 work starts. It is where intentional breaking changes — API,
+- **`next` is the v2 line.** It exists since 2026-08-28, created from `main`
+  at the `v1.0.0-rc.1` tag (`eac30f9`), so the two lines start from the same
+  contract. It is where intentional breaking changes — API,
   semantics, configuration, graph model, provider behavior — are developed as
   a batch instead of arriving one at a time on `main`. It is not a queue for
   every new feature: a compatible feature belongs on `main`.
@@ -448,6 +449,33 @@ decides the branch:
 A maintainer can explicitly authorize a breaking change on `main` — that is
 an exception, made in the open on the pull request, never inferred from a
 missing test or a missing sentence.
+
+### How the two lines move
+
+- **Backport (a `next` change that turns out to keep the v1 contract).** It
+  lands on `main` first and is forward-ported to `next` — never the other way
+  round, because `main` is the line consumers run and the line the v1
+  contract binds.
+- **Forward-port.** After a merge to `main`, `next` takes the commit by
+  merging `main` — not by rebasing, which would rewrite `next`'s history
+  under every open v2 branch. Conflict resolution belongs to the forward-port
+  pull request, not to whichever v2 feature touches the same lines next.
+- **Pull request targeting.** A pull request against `main` states its class
+  from [AGENTS.md](AGENTS.md#the-v1-contract-gate) (bug fix, additive, or
+  performance/internal) and claims to keep the v1 contract; a pull request
+  against `next` names the v1 behavior it changes and why. A pull request
+  that targets `main` while changing what an unchanged workspace is told is
+  rejected on classification, not on review taste.
+- **Releases per line.** `main` releases through the lane
+  [release.md](docs/development/release.md) owns: release-please proposes,
+  the maintainer merges, the tag publishes — 1.x versions only. `next`
+  releases as a `2.0.0-rc.N` chain cut from that line's own lane once it has
+  a candidate; a 2.x version is never cut from a `main` commit, and a v1
+  patch version is never cut from a `next` commit.
+- **Sync state.** `next` is not a frozen fork. Everything on `main` — bug
+  fixes above all — reaches it by forward-port, so a fix is never "v2 only"
+  by accident of history, and a bug fixed on `next` that also exists on
+  `main` is filed and fixed where the defect lives, then forwarded.
 
 ## How a release happens
 
