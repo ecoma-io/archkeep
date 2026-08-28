@@ -1,6 +1,11 @@
 # The nightly full matrix: the whole E2E suite unsharded, and the full unit
 # suite, on the merged tree of `main`.
 #
+# This runs on `main` by schedule — the default branch — not on every
+# development line. A branch's `push` trigger (ci.yml `branches:` list)
+# decides whether that line's merged tree runs this suite; the schedule
+# here only decides WHEN a qualified tree runs it, not WHICH tree.
+#
 # WHY THIS EXISTS — every PR already runs verify-core and both E2E shards, so
 # nothing here runs for the first time. What a PR path structurally cannot
 # see:

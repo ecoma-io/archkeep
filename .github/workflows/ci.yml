@@ -13,7 +13,12 @@ on:
   # this event or the queue waits forever.
   merge_group:
   push:
-    branches: [main]
+    # Both development lines run the same suite on every push, so each line is
+    # testable independently and a red push names its line: `main` is the v1
+    # contract line (and the one whose pushes are releases), `next` is the v2
+    # line. The branch policy in CONTRIBUTING.md owns which line a change
+    # lands on; this list only makes sure neither line ships unchecked.
+    branches: [main, next]
   workflow_dispatch:
 
 concurrency:
@@ -237,9 +242,12 @@ jobs:
       #     `origin/$BASE_REF` because it is an ancestor of the checked-out
       #     merge ref by construction — no dependency on which remote a fork
       #     pull request fetches.
-      #   - merge_group: the same against `origin/main`. The queue branch
-      #     holds main plus every pull request ahead in the batch, so that
-      #     diff IS the batch, and `GITHUB_BASE_REF` is empty on this event.
+      #   - merge_group: the same against `origin/<queue target>`, taken
+      #     from the event's `base_ref` (`refs/heads/main` today) rather
+      #     than hardcoded, so a merge queue on the other development line
+      #     needs no edit here. The queue branch holds the target branch
+      #     plus every pull request ahead in the batch, so that diff IS
+      #     the batch, and `GITHUB_BASE_REF` is empty on this event.
       #   - push to main, workflow_dispatch: `moon run` with no affected
       #     filter — on the branch that ships, everything runs. An affected
       #     filter there would diff `main` against itself and run nothing;
@@ -260,12 +268,22 @@ jobs:
           # The pull request's base commit, from the event payload rather
           # than `origin/$BASE_REF`: it is an ancestor of the checked-out
           # merge ref by construction, so no fork's remote layout matters.
-          # The merge queue's branch holds main plus every pull request
-          # ahead in the batch, so `origin/main` there diffs exactly the
-          # batch.
-          MOON_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && 'origin/main' || '' }}
+          # The merge queue's branch holds the target branch plus every
+          # pull request ahead in the batch, so diffing against that target
+          # there is exactly the batch — which is why `base_ref` is read
+          # from the event instead of naming a branch.
+          MOON_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
         run: |
           if [ -n "$MOON_BASE" ]; then
+            # The merge-queue event names its base as a fully-qualified ref
+            # (`refs/heads/main`); moon wants the remote-tracking spelling,
+            # so a value in that shape gets the prefix swapped. The pull
+            # request event's value is a plain SHA, which must pass through
+            # untouched — rewriting one produced `origin/<sha>`, a ref that
+            # exists nowhere, and took this step down.
+            case "$MOON_BASE" in
+              refs/heads/*) MOON_BASE="origin/${MOON_BASE#refs/heads/}" ;;
+            esac
             pnpm exec moon ci --base="$MOON_BASE" ...:lint ...:test ...:typecheck
           else
             pnpm exec moon run ...:lint ...:test ...:typecheck
