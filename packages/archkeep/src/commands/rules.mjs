@@ -13,6 +13,20 @@
  * corrupt catalog. `add` exits 0 on success, 3 on any failure. `list` and `info`
  * are purely descriptive and always exit 0.
  *
+ * Exit 1 is a finding — a verification that ran, looked at the bytes, and came
+ * back negative. Exit 3 is the run that could not look. The two must never
+ * share a code: a script branching on the exit code has to tell "the shipped
+ * rule artifact was modified" from "the catalog could not be read", and the
+ * first of those is the one the integrity gate exists to catch.
+ *
+ * Catalog-derived paths are contained to the directory that anchors them, on
+ * the mechanism `../containment.mjs` already enforces for report output and
+ * history captures: an `artifact` field (verify, add) resolves under the
+ * catalog's own directory, an `add` target under the directory `--to` names,
+ * and an entry that escapes either fails the run loudly with the entry named.
+ * The catalog is data a consumer may have downloaded, vendored, or had
+ * modified under it — data does not get to name a path outside its tree.
+ *
  * The catalog is read from the filesystem at a user-resolvable path, never by
  * import or package dependency. This keeps the engine independent of the rules
  * package — the boundary law has no row allowing scope-nx → scope-sdk.
@@ -46,6 +60,8 @@ import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { loadCustomRule } from "../custom-rules/host.mjs";
+import { EXIT } from "../verdict.mjs";
+import { containmentViolation, pathEscapes } from "../containment.mjs";
 
 /** Default catalog path when `--catalog` is not provided. */
 const DEFAULT_CATALOG_PATH = "node_modules/@ecoma-io/archkeep-rules/catalog.json";
@@ -105,6 +121,42 @@ function loadCatalog(catalogPath, cwd) {
  */
 function resolveCatalogPath(options, _cwd) {
   return options.catalog ?? DEFAULT_CATALOG_PATH;
+}
+
+/**
+ * The reason a catalog-derived path may not be read or written, or `null` when
+ * it is contained.
+ *
+ * Two legs, the pattern `../containment.mjs` already enforces for report
+ * output and history captures: a path whose resolved form escapes the anchor
+ * directory is refused with the escape named, and a path that stays inside
+ * lexically still goes through `containmentViolation`, so a symlink in the
+ * tree cannot walk a read out of the directory or land a write somewhere
+ * other than the path named. The caller resolves first and hands the SAME
+ * resolved string here that it reads or writes — `containment.mjs`'s own
+ * header owns why the `..`-across-a-symlink corner demands that.
+ *
+ * @param {string} anchorDir The absolute directory the entry resolves under.
+ * @param {string} candidatePath The resolved absolute candidate — the same
+ *   string the read or write will act on.
+ * @param {{forWrite?: boolean}} [options] Writes carry the write policy.
+ * @returns {string|null} The refusal reason, or `null` when contained.
+ */
+function entryPathViolation(anchorDir, candidatePath, { forWrite = false } = {}) {
+  if (pathEscapes(anchorDir, candidatePath)) {
+    return (
+      `'${candidatePath}' resolves outside '${anchorDir}' — a catalog entry must not name a ` +
+      `path outside the directory it is resolved from`
+    );
+  }
+  // `containmentViolation` probes realpaths, which needs existing components.
+  // A read anchor always exists — the catalog was read out of it. A write
+  // anchor that does not exist yet is a directory this run's `mkdir` creates a
+  // moment later, so there is nothing planted to walk, and where the caller
+  // pointed `--to` is the caller's explicit choice, not the escape this
+  // refuses.
+  if (!existsSync(anchorDir)) return null;
+  return containmentViolation(anchorDir, candidatePath, { forWrite });
 }
 
 /**
@@ -277,6 +329,7 @@ export async function rulesInfoCommand(options, { cwd, ruleName }) {
  * Verifies catalog integrity and artifacts through the REAL host.
  *
  * This loads each catalog artifact through `loadCustomRule` to verify:
+ * - The artifact path stays inside the catalog's own directory
  * - The artifact file exists
  * - The digest matches the catalog entry
  * - The artifact loads and describes itself correctly
@@ -306,6 +359,19 @@ export async function rulesVerifyCommand(options, { cwd }) {
 
   for (const rule of catalog.rules) {
     const artifactPath = resolve(catalogDir, rule.artifact);
+
+    // Contained before anything is read: the artifact field is catalog data,
+    // and a `../…` (or a symlink walked out of the tree) must fail this run
+    // with the entry named, never be read.
+    const pathRefusal = entryPathViolation(catalogDir, artifactPath);
+    if (pathRefusal !== null) {
+      findings.push({
+        rule: rule.name,
+        severity: "fail",
+        message: `Artifact '${rule.artifact}' refused: ${pathRefusal}`,
+      });
+      continue;
+    }
 
     if (!existsSync(artifactPath)) {
       findings.push({
@@ -366,14 +432,16 @@ export async function rulesVerifyCommand(options, { cwd }) {
     }
   }
 
+  // Three states, the posture the header promises. `findings` — the check ran
+  // and produced negative results (digest mismatch, host refusal, an escaping
+  // artifact) — is the exit-1 class. `no-verdict` stays the exit-3 class: the
+  // run could not look. Collapsing the two makes "this artifact was tampered
+  // with" indistinguishable from "the catalog could not be read" for every
+  // script that branches on the exit code.
   const status =
-    findings.length > 0
-      ? "no-verdict"
-      : passed.length === catalog.rules.length
-        ? "ok"
-        : "no-verdict";
+    findings.length > 0 ? "findings" : passed.length === catalog.rules.length ? "ok" : "no-verdict";
 
-  const exitCode = status === "no-verdict" ? 3 : 0;
+  const exitCode = status === "ok" ? EXIT.ok : status === "findings" ? EXIT.violations : EXIT.error;
 
   const coverage = {
     complete: findings.length === 0 && passed.length === catalog.rules.length,
@@ -437,7 +505,7 @@ export async function rulesVerifyCommand(options, { cwd }) {
  */
 export async function rulesAddCommand(options, { cwd, ruleName }) {
   const catalogPath = resolveCatalogPath(options, cwd);
-  const { catalog } = loadCatalog(catalogPath, cwd);
+  const { catalog, path: resolvedCatalogPath } = loadCatalog(catalogPath, cwd);
 
   const context = {
     root: cwd,
@@ -482,9 +550,44 @@ export async function rulesAddCommand(options, { cwd, ruleName }) {
     };
   }
 
-  // Resolve artifact path
-  const catalogDir = resolve(resolveCatalogPath(options, cwd), "..");
+  // Resolve artifact path — from the path `loadCatalog` actually read, not a
+  // second resolution that would anchor a relative `--catalog` on the process
+  // cwd instead of this run's workspace.
+  const catalogDir = resolve(resolvedCatalogPath, "..");
   const sourceArtifactPath = resolve(catalogDir, rule.artifact);
+
+  // Contained before anything is read — same boundary as `verify`, same
+  // reason: the artifact field is catalog data.
+  const pathRefusal = entryPathViolation(catalogDir, sourceArtifactPath);
+  if (pathRefusal !== null) {
+    const coverage = {
+      complete: false,
+      projects: 0,
+      analyzedFiles: 0,
+      imports: 0,
+      notAnalyzed: [{ file: sourceArtifactPath, reason: pathRefusal }],
+      blindSpots: [],
+      notes: [],
+    };
+
+    return {
+      status: "no-verdict",
+      catalog,
+      report: {
+        text: `Rule '${rule.name}' refused: artifact '${rule.artifact}' — ${pathRefusal}\n`,
+        json: renderJson(
+          jsonEnvelope({
+            command: "rules add",
+            context,
+            status: "no-verdict",
+            exitCode: 3,
+            coverage,
+            result: { catalog: catalogPath, rule: rule.name },
+          }),
+        ),
+      },
+    };
+  }
 
   if (!existsSync(sourceArtifactPath)) {
     const coverage = {
@@ -552,13 +655,51 @@ export async function rulesAddCommand(options, { cwd, ruleName }) {
   // Determine output directory
   const outputDir = options.to ? resolve(cwd, options.to) : resolve(cwd, DEFAULT_RULES_DIR);
 
+  // The final name is catalog-derived — `ruleName` matched a catalog entry —
+  // so it is contained to the directory `--to` names, the write-side guard the
+  // report writer runs (`../../cli.mjs`). The target is resolved ONCE here and
+  // the identical string feeds the check and the write below. The lexical half
+  // runs before the directory is created, so a refused run creates nothing;
+  // when `--to` does not exist yet there is nothing planted for the symlink
+  // probe to walk, and `entryPathViolation` says so by returning `null`.
+  const targetArtifactPath = resolve(outputDir, `${ruleName}.wasm`);
+  const writeRefusal = entryPathViolation(outputDir, targetArtifactPath, { forWrite: true });
+  if (writeRefusal !== null) {
+    const coverage = {
+      complete: false,
+      projects: 0,
+      analyzedFiles: 1,
+      imports: 0,
+      notAnalyzed: [{ file: targetArtifactPath, reason: writeRefusal }],
+      blindSpots: [],
+      notes: [],
+    };
+
+    return {
+      status: "no-verdict",
+      catalog,
+      report: {
+        text: `Rule '${ruleName}' refused: ${writeRefusal}\n`,
+        json: renderJson(
+          jsonEnvelope({
+            command: "rules add",
+            context,
+            status: "no-verdict",
+            exitCode: 3,
+            coverage,
+            result: { catalog: catalogPath, rule: rule.name },
+          }),
+        ),
+      },
+    };
+  }
+
   // Create directory if needed
   if (!existsSync(outputDir)) {
     mkdirSync(outputDir, { recursive: true });
   }
 
   // Copy artifact bytes
-  const targetArtifactPath = resolve(outputDir, `${ruleName}.wasm`);
   writeFileSync(targetArtifactPath, artifactBytes);
 
   // Generate the customRules row
