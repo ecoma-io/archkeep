@@ -91,6 +91,36 @@ describe("parseJavaImportSites", () => {
     expect(parseJavaImportSites(source)).toHaveLength(1);
   });
 
+  it("reads both imports when two share a line — the `;` anchors, never consumed (#407)", () => {
+    // Consuming the `;` left the scan past the second import's only legal
+    // anchor, so a generated one-line import block read as one import.
+    const source =
+      "package p;\nimport com.acme.core.Kernel; import static com.acme.util.Strings.EMPTY;\nclass T {}\n";
+    const sites = parseJavaImportSites(source);
+    expect(sites.map((site) => site.importableName)).toEqual([
+      "com.acme.core.Kernel",
+      "com.acme.util.Strings",
+    ]);
+    // Each offset points at its own name, so diagnostics land on real columns.
+    for (const site of sites) {
+      expect(source.slice(site.offset, site.offset + site.importableName.length)).toBe(
+        site.importableName,
+      );
+    }
+  });
+
+  it("reads a BOM-prefixed default-package file's first import (#407)", () => {
+    // The BOM is matched, not stripped, exactly as the JVM package declaration
+    // (`./jvm/packages.mjs`) and the C# directive parse already tolerate —
+    // the offset stays an offset into the bytes on disk.
+    const source = "﻿import com.acme.core.Kernel;\nclass T {}\n";
+    const sites = parseJavaImportSites(source);
+    expect(sites.map((site) => site.importableName)).toEqual(["com.acme.core.Kernel"]);
+    expect(source.slice(sites[0].offset, sites[0].offset + "com.acme.core.Kernel".length)).toBe(
+      "com.acme.core.Kernel",
+    );
+  });
+
   it("does not read a multi-line import statement — the pinned silent limit", () => {
     const source = "package p;\nimport com.acme.\n    core.Kernel;\nclass T {}\n";
     // Every formatter writes imports onto one line; this test PINS that the
@@ -249,6 +279,34 @@ describe("analyzeJava", () => {
     const result = analyzeIn(workspace, "packages/acme/src/main/java/com/acme/app/A.java", fqnOnly);
     expect(result.imports).toEqual([]);
     expect(result.failures).toEqual([]);
+  });
+
+  it("reports the crossing for both imports when two share a line — the silent direction (#407)", () => {
+    // Before the `;` was a lookahead, consuming it left the scan past the
+    // second import's only anchor — `analyzeJava` answered one site and the
+    // second import's boundary crossing was invisible.
+    const workspace = baseWorkspace();
+    const caller =
+      "package com.acme.app;\nimport com.acme.core.Kernel; import com.acme.core.spi.KernelSpi;\nclass A {}\n";
+    const result = analyzeIn(workspace, "packages/acme/src/main/java/com/acme/app/A.java", caller);
+    expect(result.failures).toEqual([]);
+    expect(result.imports).toHaveLength(2);
+    expect(result.imports[0].resolved.target).toBe("core");
+    expect(result.imports[1].resolved.target).toBe("core");
+  });
+
+  it("reports the crossing behind a BOM before the first import — the silent direction (#407)", () => {
+    const workspace = baseWorkspace();
+    // A default-package file: no `package` line to absorb the BOM, so a
+    // BOM-intolerant anchor skips the import itself.
+    const caller = "﻿import com.acme.core.Kernel;\nclass A { Kernel k; }\n";
+    const result = analyzeIn(workspace, "packages/acme/src/main/java/com/acme/app/A.java", caller);
+    expect(result.failures).toEqual([]);
+    expect(result.imports).toHaveLength(1);
+    expect(result.imports[0].resolved.target).toBe("core");
+    // The column counts the BOM — the offset indexes the bytes on disk.
+    expect(result.imports[0].line).toBe(1);
+    expect(result.imports[0].column).toBe(9);
   });
 });
 

@@ -70,15 +70,21 @@ import {
  */
 export function parseJavaImportSites(javaText) {
   const source = maskJavaComments(javaText);
-  // Anchored to a line head OR behind a semicolon (`package p; import q.R;`
-  // is legal Java), with the name required to start on the same line — which
-  // pins the multi-line limit above instead of silently mis-reading one.
-  // Name grammar: dot-joined identifier segments with ONE optional trailing
-  // `.*` (the on-demand form); nothing else matches, so `a.*.b` and friends
-  // are text, not imports.
+  // Anchored to a line head — through a leading UTF-8 BOM, matched rather than
+  // stripped so offsets keep indexing the bytes on disk, the same anchor
+  // `./jvm/packages.mjs`'s package declaration and `./csharp.mjs` hold
+  // (#221's lesson) — OR behind a semicolon (`package p; import q.R;` is legal
+  // Java), with the name required to start on the same line, which pins the
+  // multi-line limit above instead of silently mis-reading one. Name grammar:
+  // dot-joined identifier segments with ONE optional trailing `.*` (the
+  // on-demand form); nothing else matches, so `a.*.b` and friends are text,
+  // not imports. The terminator is a lookahead, never a consumed `;` (#407):
+  // consuming it left the scan past the anchor of a second import on the same
+  // line, so `import a.B; import c.D;` read only the first — un-consumed, the
+  // `;` anchors the next import exactly as a line head does.
   const SEG = String.raw`[\p{L}_$][\p{L}\p{Nd}_$]*`;
   const JAVA_IMPORT = new RegExp(
-    `(?:^|[\\n;])[ \\t]*(?:import[ \\t]+)(static[ \\t]+)?(${SEG}(?:\\.${SEG})*(?:\\.\\*)?)[ \\t]*;`,
+    `(?:^\\uFEFF?|[\\n;])[ \\t]*(?:import[ \\t]+)(static[ \\t]+)?(${SEG}(?:\\.${SEG})*(?:\\.\\*)?)[ \\t]*(?=;)`,
     "gu",
   );
   const sites = [];

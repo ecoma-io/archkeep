@@ -94,16 +94,19 @@ const DOTTED_NAME = `${SEG}(?:\\.${SEG})*`;
  * The body of a using directive, captured up to its terminating semicolon.
  * The anchor accepts a fresh declaration's every legal predecessor — line
  * head (through a UTF-8 BOM), `;`, `{`, `}` — so `namespace N { using A.B; }`
- * on one line is read like any formatted tree.
+ * on one line is read like any formatted tree. The semicolon is a lookahead,
+ * never part of the match (#407): consumed, the scan resumed PAST it, and the
+ * `;` before a second same-line directive — its only legal anchor — was
+ * already behind it, so `using A.B; using C.D;` read only `A.B`.
  */
 const CS_USING_BODY = new RegExp(
-  String.raw`(?:^\uFEFF?|[\n;{}])[ \t]*(?:global[ \t]+)?using[ \t]+([^;\n]+?)[ \t]*;`,
+  String.raw`(?:^\uFEFF?|[\n;{}])[ \t]*(?:global[ \t]+)?using[ \t]+([^;\n]+?)[ \t]*(?=;)`,
   "gu",
 );
 
 /** The extern-alias directive: `extern alias X;` — recorded, resolved as external. */
 const CS_EXTERN_ALIAS = new RegExp(
-  String.raw`(?:^\uFEFF?|[\n;{}])[ \t]*extern[ \t]+alias[ \t]+(${SEG})[ \t]*;`,
+  String.raw`(?:^\uFEFF?|[\n;{}])[ \t]*extern[ \t]+alias[ \t]+(${SEG})[ \t]*(?=;)`,
   "gu",
 );
 
