@@ -277,9 +277,13 @@ jobs:
           if [ -n "$MOON_BASE" ]; then
             # The merge-queue event names its base as a fully-qualified ref
             # (`refs/heads/main`); moon wants the remote-tracking spelling,
-            # so the prefix comes off and `origin/` goes on. A pull
-            # request's value is a plain SHA and passes through untouched.
-            MOON_BASE="origin/${MOON_BASE#refs/heads/}"
+            # so a value in that shape gets the prefix swapped. The pull
+            # request event's value is a plain SHA, which must pass through
+            # untouched — rewriting one produced `origin/<sha>`, a ref that
+            # exists nowhere, and took this step down.
+            case "$MOON_BASE" in
+              refs/heads/*) MOON_BASE="origin/${MOON_BASE#refs/heads/}" ;;
+            esac
             pnpm exec moon ci --base="$MOON_BASE" ...:lint ...:test ...:typecheck
           else
             pnpm exec moon run ...:lint ...:test ...:typecheck
