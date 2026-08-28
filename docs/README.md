@@ -5,13 +5,14 @@ Two doors. Take the one that matches what you are here to do.
 - **I want to use it** → [getting-started/installation.md](getting-started/installation.md)
 - **I want to change it** → [development/architecture.md](development/architecture.md)
 
-And four documents that are neither, but decide what the rest say — all four
+And five documents that are neither, but decide what the rest say — all five
 live in [doctrine/](doctrine/):
 [why.md](doctrine/why.md) — the problem this exists for, with the measurement behind it —
 [north-star.md](doctrine/north-star.md) — where it is going and what it will refuse on
 the way — [architecture-authority.md](doctrine/architecture-authority.md) — what Archkeep
-is, what it is not, and the line its neighbours may not cross — and
-[roadmap.md](doctrine/roadmap.md) — the staged path there, by major version.
+is, what it is not, and the line its neighbours may not cross —
+[roadmap.md](doctrine/roadmap.md) — the staged path there, by major version — and
+[v2.md](doctrine/v2.md) — the frame the v2 line's proposals are argued inside.
 
 ---
 
@@ -194,6 +195,7 @@ decided rather than summarized into them.
 | [principles.md](doctrine/principles.md)                           | The seven binding principles                                                            |
 | [architecture-governance.md](doctrine/architecture-governance.md) | How Archkeep practices what it enforces                                                 |
 | [roadmap.md](doctrine/roadmap.md)                                 | The staged path: what ships today, and which capabilities belong to which major version |
+| [v2.md](doctrine/v2.md)                                           | The v2 line's foundation: the thesis, what v2 work must satisfy, and what it refuses    |
 
 ## Development
 
@@ -224,6 +226,7 @@ allowed to say it". That table:
 | [`docs/doctrine/architecture-authority.md`](doctrine/architecture-authority.md) | What Archkeep is, what it is not, and the boundary its neighbours may not cross                                                                                                                                                                  |
 | [`docs/doctrine/principles.md`](doctrine/principles.md)                         | The seven binding principles                                                                                                                                                                                                                     |
 | [`docs/doctrine/roadmap.md`](doctrine/roadmap.md)                               | The staged path: what ships today, which capabilities belong to which major version, and in what order                                                                                                                                           |
+| [`docs/doctrine/v2.md`](doctrine/v2.md)                                         | The v2 line's foundation: the intelligence-on-top-of-authority thesis, what a 2.x capability must satisfy, the line's non-goals, and how it would drift                                                                                          |
 | `docs/getting-started/`                                                         | Installation, first project, first policy, and the upgrade off the Lattice name — which owns every consumer-facing consequence of the rename, so no other page restates one                                                                      |
 | `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, profiles, projects, drift, discovery, evidence, provenance, adr, waivers, health, fitness functions, custom rules, reconciliation, governance lifecycle, agentic development, integrations |
 | `docs/concepts/discovery.md`                                                    | Discovery: the proposal-only line, what is observed, the four candidate classes, uncertainty markers                                                                                                                                             |
