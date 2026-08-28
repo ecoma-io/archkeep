@@ -1,0 +1,117 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "$comment": "Why the v2 line cuts its own versions.\n\nThe v2 line (`next`) releases as a `2.0.0-rc.N` chain through `release-next.yml`, driven by this configuration and its manifest (`.release-please-manifest-next.json`) — a second release state, deliberately not shared with the v1 lane's (`release-please-config.json`, `.release-please-manifest.json`), so the two lines cannot move each other's versions and the tag guard on each lane refuses the other line's prefix (`v2.*` never cuts from `main`, `v1.*` never cuts from `next`).\n\nEverything below is inherited verbatim from the v1 configuration, for the reasons its `$comment` argues: the repository is the releasable unit because the version-bearing files span the tree, `extra-files` is the one authoritative enumeration of them, `pull-request-title-pattern` satisfies commitlint's `scope-enum`, and `prerelease: true` only flags the GitHub release object while the version carries a prerelease suffix.\n\nThe manifest seeds from the newest v1 release in shared history — `1.0.1-rc.1`, tagged from the `main` commit this line rebased onto — so the first computed version is a function of the v2 commits alone. The first candidate is named by a `Release-As: 2.0.0-rc.1` commit (the same one-shot mechanism the v1 lane documents), a maintainer decision this file does not make.\n\nGo module publishing is absent on purpose: the Go module path carries no `/v2` major-version suffix, so a `v2` tag would sever the module's consumers rather than release to them. That migration is v2 feature work on this line, and its absence from this configuration is the loud record of the deferral.",
+  "last-release-sha": "ffcc86e5a275d67ad93dd65e0bc43025b48f627e",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "initial-version": "1.0.1-rc.1",
+      "include-component-in-tag": false,
+      "pull-request-title-pattern": "chore(archkeep): release ${version}",
+      "bump-minor-pre-major": true,
+      "prerelease": true,
+      "bump-patch-for-minor-pre-major": false,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": ".claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": ".claude-plugin/marketplace.json",
+          "jsonpath": "$.plugins[0].version"
+        },
+        {
+          "type": "json",
+          "path": ".codex-plugin/plugin.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/archkeep/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/archkeep-mcp/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/archkeep-vscode/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "toml",
+          "path": "packages/archkeep-rule-sdk-rust/Cargo.toml",
+          "jsonpath": "$.package.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/archkeep-rule-sdk-ts/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "toml",
+          "path": "packages/archkeep-rule-sdk-python/pyproject.toml",
+          "jsonpath": "$.project.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/archkeep-rules/package.json",
+          "jsonpath": "$.version"
+        }
+      ],
+      "changelog-sections": [
+        {
+          "type": "feat",
+          "section": "Features"
+        },
+        {
+          "type": "fix",
+          "section": "Bug Fixes"
+        },
+        {
+          "type": "docs",
+          "section": "Documentation"
+        },
+        {
+          "type": "refactor",
+          "section": "Internal",
+          "hidden": true
+        },
+        {
+          "type": "perf",
+          "section": "Internal",
+          "hidden": true
+        },
+        {
+          "type": "test",
+          "section": "Internal",
+          "hidden": true
+        },
+        {
+          "type": "build",
+          "section": "Internal",
+          "hidden": true
+        },
+        {
+          "type": "ci",
+          "section": "Internal",
+          "hidden": true
+        },
+        {
+          "type": "chore",
+          "section": "Internal",
+          "hidden": true
+        },
+        {
+          "type": "style",
+          "section": "Internal",
+          "hidden": true
+        }
+      ]
+    }
+  }
+}

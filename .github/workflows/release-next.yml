@@ -1,0 +1,776 @@
+name: Release (v2 line)
+
+# This file exists only on `next`. The v1 lane (`.github/workflows/release.yml`)
+# exists only on `main`; each line's lane is the other file's mirror, and the
+# two are never merged into one — a lane that triggers on both branches is a
+# lane that cannot say which contract the version it cuts answers to.
+#
+# What changes beside the branch name:
+#
+# - The manifest and config are THIS line's own files
+#   (`.release-please-manifest-next.json`, `release-please-config-next.json`),
+#   so a v1 release proposal and a v2 one never write each other's pull
+#   requests.
+# - A guard refuses a `v1.*` tag from this lane — the mirror image of the
+#   v1 lane's refusal of `v2.*` (CONTRIBUTING.md, "Releases per line":
+#   releases never cross lines).
+# - Until the line bootstraps (see the skip gate below), the lane refuses to
+#   run release-please at all, loudly, because this line's manifest still
+#   holds a 1.x version and a docs-only commit would otherwise open a
+#   release pull request proposing `1.0.1-rc.2` from the v2 line — the one
+#   direction the branch policy forbids, reached by doing nothing.
+# - npm dist-tags: `main`'s lane owns `rc` for its prereleases; this line's
+#   prereleases publish under `next` and its stable cut graduates to bare
+#   (`latest`). The dist-tag note in docs/development/release.md owns the
+#   story.
+# - No Go-module job: `packages/archkeep-rule-sdk-go`'s module path carries
+#   no `/v2` suffix, so a `v2.x` tag on today's path breaks Go's own
+#   import-version rule before any consumer resolves it. The job arrives
+#   with the module's v2 path migration, not before — stated here so the
+#   absence is a decision, not an omission.
+
+on:
+  push:
+    branches: [next]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The `on:` filter restricts push triggers to `next`, but
+    # `workflow_dispatch` can start from any branch that carries this file.
+    # The guard stops the lane from reading its own config and manifest out
+    # of a feature-branch checkout — `release-please` and the skip gate
+    # both resolve facts from the tree they stand on, and a branch other
+    # than `next` has no authoritative manifest to read.
+    if: github.ref_name == 'next'
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    # Same hoist the v1 lane argues at length — see that file for the full
+    # story of why the gate reads `env` and not `secrets` (a `secrets` test
+    # in an `if:` is a startup failure with zero jobs, measured there).
+    env:
+      RELEASE_APP_ID: ${{ secrets.ECOMA_APP_ID }}
+    outputs:
+      # The v1 lane's output story applies verbatim: the component sits at
+      # the repository ROOT, so the un-prefixed pair is the one every publish
+      # job steers on, and reading a prefixed spelling is the
+      # published-nothing-under-green defect that lane's comment records.
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # The skip gate needs the tags and the full history, not a shallow
+      # clone: it reads the manifest's version and then walks every commit
+      # message between that version's tag and HEAD looking for the
+      # bootstrap marker. Everything below this file's checkout keeps no
+      # credentials — this job pushes nothing from git (the reformat lands
+      # through the REST API, `scripts/push-reformatted-files.mjs`), the
+      # same arrangement the v1 lane argues at its checkout step.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Mint a GitHub App token
+        id: app-token
+        if: env.RELEASE_APP_ID != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ECOMA_APP_ID }}
+          private-key: ${{ secrets.ECOMA_APP_KEY }}
+
+      # THE BOOTSTRAP GATE, and why it exists.
+      #
+      # This line's manifest is seeded at `1.0.1-rc.1` — the version `main`
+      # holds, so the two lines' histories agree at the branch point. Left
+      # alone, that seed is a trap: release-please reading a 1.x manifest
+      # with only docs commits since the tag proposes `1.0.1-rc.2` — a v1
+      # release cut from the v2 line, exactly what "releases never cross
+      # lines" forbids. Measured, not reasoned: a dry run of this line's own
+      # config against a manifest at `1.0.0-rc.1` proposed
+      # `chore(archkeep): release 1.0.1-rc.1` on docs-only commits, because
+      # the visible Documentation changelog section is a bump input on a
+      # prerelease manifest.
+      #
+      # The gate reads the same facts release-please would and decides
+      # first: run the lane only when the line has actually crossed to 2.x —
+      # either the manifest already says so (normal operation from the first
+      # cut onward), or a commit since the manifest's version carries the
+      # marker release-please itself consumes:
+      #
+      #     Release-As: 2.0.0-rc.1
+      #
+      # That marker is the maintainer's bootstrap decision, made on a
+      # commit to `next` — deliberately not an option on a workflow input
+      # or a variable, so the act of cutting the first 2.x candidate is a
+      # reviewed commit like any other change of direction. Until it
+      # exists, every push to `next` ends here, green, with the summary
+      # below saying what the lane would need in order to run. Self-
+      # expiring by design: the first bootstrap makes the 1.x branch of
+      # this gate dead code, and nothing but the summary ever mentions it
+      # again.
+      - name: Refuse a 1.x release from the v2 line before bootstrap
+        id: skip-gate
+        run: |
+          version="$(node -p "require('./.release-please-manifest-next.json')['.']")"
+          bootstrapped=""
+          case "$version" in
+            2.*)
+              bootstrapped="manifest"
+              ;;
+            *)
+              if git log "v${version}..HEAD" --format=%B | grep -qi '^Release-As: 2\.'; then
+                bootstrapped="commit"
+              fi
+              ;;
+          esac
+          if [ -z "$bootstrapped" ]; then
+            {
+              echo "## Release lane SKIPPED — the v2 line has not bootstrapped"
+              echo ""
+              echo "This lane cuts 2.x releases from \`next\`, but the manifest"
+              echo "(\`.release-please-manifest-next.json\`) still holds \`${version}\`, and no"
+              echo "commit since \`v${version}\` carries the bootstrap marker. Running"
+              echo "release-please now would propose a 1.x version from the v2 line."
+              echo ""
+              echo "To bootstrap the line, land a commit on \`next\` whose message"
+              echo "contains:"
+              echo ""
+              echo "    Release-As: 2.0.0-rc.1"
+              echo ""
+              echo "The next push after that commit runs this lane and opens the"
+              echo "release pull request for \`2.0.0-rc.1\`. This is a maintainer"
+              echo "decision (docs/development/release.md, 'Releases per line');"
+              echo "the lane refuses to make it by accident."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "SKIPPED: manifest holds ${version} and no Release-As: 2.* commit exists"
+            echo "since v${version}. The lane runs after the line bootstraps to 2.x —"
+            echo "see the step summary for the one-marker bootstrap."
+            echo "bootstrapping=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "bootstrap state: ${bootstrapped}"
+          echo "bootstrapping=true" >> "$GITHUB_OUTPUT"
+
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        if: steps.skip-gate.outputs.bootstrapping == 'true'
+        with:
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          config-file: release-please-config-next.json
+          manifest-file: .release-please-manifest-next.json
+
+      # The mirror guard. The v1 lane refuses `v2.*` from `main`; this lane
+      # refuses `v1.*` from `next`, and the reasoning is the same shape: a
+      # guard that matters is built for the day its premise bends. Today the
+      # skip gate above keeps release-please from even running before
+      # bootstrap, and the manifest only crosses to 2.x through the marker —
+      # but if a future refactor of the gate or the manifest lets a 1.x
+      # proposal through, this is the last line that says no, red, before
+      # anything below can tag, upload, or publish.
+      - name: Refuse a 1.x tag on the v2 line
+        if: steps.skip-gate.outputs.bootstrapping == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          case "$TAG" in
+            "")
+              echo "no release in this push; nothing to guard"
+              ;;
+            v1.*)
+              echo "release-please computed $TAG on the v2 line. A v1.x version is never"
+              echo "cut from next: the v1 contract and its releases live on main"
+              echo "(CONTRIBUTING.md, 'Which branch a change lands on'). Failing the"
+              echo "lane instead of publishing."
+              exit 1
+              ;;
+            v2.*)
+              echo "$TAG is a 2.x version — the only kind this lane cuts"
+              ;;
+            *)
+              echo "release-please computed '$TAG', which is neither v1.* nor v2.*."
+              echo "This lane cannot say what contract that tag answers to. Failing"
+              echo "the lane instead of publishing under an unrecognised version."
+              exit 1
+              ;;
+          esac
+
+      # Everything from here through the tripwire is the v1 lane's
+      # prepare tail, verbatim but for the file names in the release-please
+      # step above: release-please's JSON re-serialization fails Prettier,
+      # its Cargo.toml write strands Cargo.lock, and both repairs land on
+      # the release branch through the signed-commit REST API path before
+      # CI sees the pull request. The full argument for each step lives in
+      # the v1 lane's copy; this file does not restate it.
+      - name: Check out the release branch to repair it
+        if: steps.release.outputs.pr != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        if: steps.release.outputs.pr != ''
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.release.outputs.pr != ''
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Repair release-please's output and push
+        if: steps.release.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          # Through the environment, never interpolated into the script —
+          # the v1 lane's copy argues the `|| '{}'` and the env-before-if
+          # evaluation order; nothing is restated here.
+          RELEASE_BRANCH: ${{ fromJSON(steps.release.outputs.pr || '{}').headBranchName }}
+        run: |
+          pnpm install --frozen-lockfile
+
+          pnpm exec prettier --write \
+            .claude-plugin/plugin.json \
+            .claude-plugin/marketplace.json \
+            .codex-plugin/plugin.json \
+            packages/archkeep/package.json \
+            packages/archkeep-mcp/package.json \
+            packages/archkeep-vscode/package.json \
+            packages/archkeep-rule-sdk-ts/package.json
+
+          node scripts/sync-cargo-lock.mjs
+
+          if git diff --quiet; then
+            echo "nothing to repair; nothing to push"
+          else
+            node scripts/push-reformatted-files.mjs \
+              --root "$GITHUB_WORKSPACE" \
+              --branch "$RELEASE_BRANCH"
+          fi
+
+      # The v1 lane's tripwire, unchanged: `paths_released` and the output
+      # the publish jobs steer on must agree, or the lane fails here naming
+      # both values instead of publishing nothing under a green light.
+      - name: Fail if a release was cut that a publish job cannot see
+        env:
+          PATHS_RELEASED: ${{ steps.release.outputs.paths_released }}
+          GRAPH_RELEASED: ${{ steps.release.outputs.release_created }}
+        run: |
+          if printf '%s' "$PATHS_RELEASED" | grep -qF '"."' && [ "$GRAPH_RELEASED" != "true" ]; then
+            echo "release-please created a release for the root, but the output"
+            echo "every publish job steers on did not report it:"
+            echo "  paths_released = $PATHS_RELEASED"
+            echo "  release_created read '$GRAPH_RELEASED'"
+            echo ""
+            echo "release-please-config-next.json and this workflow have drifted."
+            echo "Publish would skip and this lane would report success having"
+            echo "shipped nothing."
+            exit 1
+          fi
+
+  # The conformance differential against the TAGGED bytes — the v1 lane's
+  # job, verbatim, for the same reason: only this job measures the exact
+  # code the tag carries, and its two red classes (findings block the
+  # release; infra labels it UNVERIFIED and proceeds) are the vocabulary
+  # every publish job's waiver expression below reads. The full argument
+  # lives in the v1 lane's copy of this job.
+  verify-conformance:
+    name: Differential against real trees (gate)
+    needs: prepare
+    if: needs.prepare.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      exit_class: ${{ steps.differential.outputs.exit_class }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run the differential
+        id: differential
+        run: |
+          set +e
+          node scripts/differential-real-trees.mjs --summary-out "$RUNNER_TEMP/differential-summary.json"
+          code=$?
+          if [ -f "$RUNNER_TEMP/differential-summary.json" ]; then
+            exit_class="$(node scripts/differential-real-trees.mjs --exit-class-of "$RUNNER_TEMP/differential-summary.json")"
+          else
+            [ "$code" -eq 0 ] && code=3
+            exit_class="infra"
+          fi
+          echo "exit_class=$exit_class" >> "$GITHUB_OUTPUT"
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+
+  publish:
+    name: Publish to npm
+    # The gate expression is every publish job's in this file AND the v1
+    # lane's, byte for byte — `scripts/ci-drift-pins.test.mjs` holds that
+    # equality per workflow file, and a divergence here would be a release
+    # that ships to one destination and not another.
+    #
+    # `verify-package.mjs` and the full E2E suite run before publish, on
+    # the tagged bytes — the same refuse-to-ship-unproven-bytes bargain as
+    # the v1 lane, whose budget note (#445) this job inherits: 30 minutes,
+    # measured, because this is the only publish job that runs the suite.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prove the packed artifact works outside this workspace
+        run: node scripts/verify-package.mjs packages/archkeep
+
+      - name: E2E full tests (pre-publish)
+        run: pnpm e2e
+
+      # THE DIST-TAG RULE, and where it deliberately leaves the v1 lane's.
+      # npm refuses a bare prerelease publish; the v1 lane answers with the
+      # version's own prerelease identifier (`1.0.1-rc.1` → tag `rc`). This
+      # line cannot reuse that spelling: `main`'s 1.x candidates own `rc`,
+      # and a v2 candidate publishing there would let `npm i @ecoma-io/archkeep@rc`
+      # resolve across the line boundary the branch policy holds shut. So:
+      # every 2.x prerelease publishes under `next`, each new candidate
+      # moving that one tag instead of accumulating; the stable cut
+      # (`2.0.0` with no suffix) publishes bare and takes `latest`. The
+      # dist-tag note in docs/development/release.md owns the story.
+      #
+      # The fall-through case fails on purpose: the tag guard in prepare
+      # should make a non-2.x version unreachable here, and a publish step
+      # that could ship one anyway would be the lane agreeing with a version
+      # it just refused.
+      - name: Publish
+        working-directory: packages/archkeep
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          case "$version" in
+            2.*-*) npm publish --provenance --access public --tag next ;;
+            2.*) npm publish --provenance --access public ;;
+            *)
+              echo "$version is not a 2.x version. The v2 line publishes nothing"
+              echo "else, and prepare's tag guard should have stopped this run —"
+              echo "failing here rather than publishing a version this lane does"
+              echo "not own."
+              exit 1
+              ;;
+          esac
+
+  publish-mcp:
+    name: Publish the MCP server to npm
+    # The v1 lane's job, with this lane's dist-tag rule. Packs with pnpm and
+    # publishes THE TARBALL it packed — the workspace-protocol guard and the
+    # rest of the argument live in the v1 lane's copy.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prove the packed server works outside this workspace
+        run: node scripts/verify-mcp-package.mjs
+
+      - name: Pack the tarball and prove its dependency is a real version
+        working-directory: packages/archkeep-mcp
+        run: |
+          pnpm pack
+          tgz="$(ls ecoma-io-archkeep-mcp-*.tgz)"
+          dep="$(tar -xOf "$tgz" package/package.json | node -e \
+            'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const m=JSON.parse(s);console.log(m.dependencies["@ecoma-io/archkeep"] ?? "?")})')"
+          if [ -z "$dep" ] || [ "${dep#workspace:}" != "$dep" ]; then
+            echo "$tgz depends on '@ecoma-io/archkeep' as '$dep' — a protocol no"
+            echo "registry consumer can install. pnpm pack should have written the"
+            echo "concrete version; publishing this tarball would ship the manifest"
+            echo "that state describes. Not publishing."
+            exit 1
+          fi
+          echo "packed $tgz, depending on @ecoma-io/archkeep $dep"
+
+      - name: Publish the verified tarball
+        working-directory: packages/archkeep-mcp
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          case "$version" in
+            2.*-*) npm publish ecoma-io-archkeep-mcp-*.tgz --provenance --access public --tag next ;;
+            2.*) npm publish ecoma-io-archkeep-mcp-*.tgz --provenance --access public ;;
+            *)
+              echo "$version is not a 2.x version. The v2 line publishes nothing"
+              echo "else — failing rather than publishing a version this lane does"
+              echo "not own."
+              exit 1
+              ;;
+          esac
+
+  publish-rules:
+    name: Publish the official rules catalog to npm
+    # The v1 lane's job with this lane's dist-tag rule; the catalog versions
+    # with the engine, and its pre-publish proof is
+    # `scripts/verify-rules-package.mjs`.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prove the packed rules package works after install
+        run: node scripts/verify-rules-package.mjs
+
+      - name: Publish
+        working-directory: packages/archkeep-rules
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          case "$version" in
+            2.*-*) npm publish --provenance --access public --tag next ;;
+            2.*) npm publish --provenance --access public ;;
+            *)
+              echo "$version is not a 2.x version. The v2 line publishes nothing"
+              echo "else — failing rather than publishing a version this lane does"
+              echo "not own."
+              exit 1
+              ;;
+          esac
+
+  publish-ts-sdk:
+    name: Publish the TypeScript rule SDK to npm
+    # The v1 lane's job with this lane's dist-tag rule; the SDK ships the
+    # engine's version (ADR 0002's one version chain), and
+    # `scripts/verify-rule-sdk-ts-package.mjs` proves it compiles a rule
+    # outside this workspace before anything uploads.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prove the packed SDK compiles a rule outside this workspace
+        run: node scripts/verify-rule-sdk-ts-package.mjs
+
+      - name: Publish
+        working-directory: packages/archkeep-rule-sdk-ts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ECOMA_NPM_ACCESS_TOKEN }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          case "$version" in
+            2.*-*) npm publish --provenance --access public --tag next ;;
+            2.*) npm publish --provenance --access public ;;
+            *)
+              echo "$version is not a 2.x version. The v2 line publishes nothing"
+              echo "else — failing rather than publishing a version this lane does"
+              echo "not own."
+              exit 1
+              ;;
+          esac
+
+  publish-vsix:
+    name: Publish the VS Code extension
+    # The v1 lane's job, unchanged in its guards: the vsix rides every
+    # release as the GitHub-release asset, the marketplace step skips a
+    # prerelease loudly (vsce refuses the suffix outright — the v1 lane's
+    # comment owns the measurement), and the stable cut publishes. For this
+    # line that means `2.0.0-rc.N` ships the asset only and `2.0.0` is the
+    # first marketplace version from this lane.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Package the VS Code extension
+        run: node scripts/package-vsix.mjs packages/archkeep-vscode dist/archkeep-vscode.vsix
+
+      - name: Prove the vsix holds what an install needs
+        run: node scripts/verify-vsix.mjs dist/archkeep-vscode.vsix
+
+      - name: Upload the vsix to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release upload "$TAG" dist/archkeep-vscode.vsix
+
+      - name: Publish to the marketplace, or say loudly why not
+        env:
+          VSCE_PAT: ${{ secrets.ECOMA_VSCE_PAT }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          version="$(node -p "require('./packages/archkeep-vscode/package.json').version")"
+          case "$version" in
+            *-*)
+              {
+                echo "## Marketplace publish SKIPPED"
+                echo ""
+                echo "\`$TAG\` was released and its .vsix is on the GitHub release,"
+                echo "but it was NOT published to the VS Code Marketplace: the"
+                echo "marketplace cannot carry a version with a prerelease suffix"
+                echo "('$version'), and vsce refuses the publish before contacting it."
+                echo "The stable cut of this line publishes to the marketplace."
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "SKIPPED, and here is why: $version carries a prerelease suffix, which the"
+              echo "VS Code Marketplace does not support — vsce refuses the publish outright."
+              echo "$TAG's .vsix is on the GitHub release. The stable cut publishes."
+              exit 0
+              ;;
+          esac
+          if [ -z "$VSCE_PAT" ]; then
+            {
+              echo "## Marketplace publish SKIPPED"
+              echo ""
+              echo "\`$TAG\` was released and its .vsix is on the GitHub release,"
+              echo "but it was NOT published to the VS Code Marketplace: the"
+              echo "ECOMA_VSCE_PAT secret is absent. Restore the publisher's PAT as"
+              echo "the ECOMA_VSCE_PAT repository secret, and the next release publishes."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "SKIPPED, and here is why: ECOMA_VSCE_PAT is absent, so $TAG was NOT published"
+            echo "to the VS Code Marketplace. The .vsix is on the GitHub release. Restore the"
+            echo "ECOMA_VSCE_PAT secret to turn publishing on."
+            exit 0
+          fi
+          pnpm --dir packages/archkeep-vscode exec vsce publish --packagePath "$GITHUB_WORKSPACE/dist/archkeep-vscode.vsix"
+          {
+            echo "## Marketplace publish"
+            echo ""
+            echo "\`$TAG\` was published to the VS Code Marketplace from the vsix on its GitHub release."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-pypi:
+    name: Publish the Python rule SDK to PyPI
+    # The v1 lane's job, unchanged: the package-presence guard skips loudly
+    # until `packages/archkeep-rule-sdk-python` lands, and an empty
+    # ECOMA_PYPI_API_TOKEN with the package present fails red. The argument
+    # lives in the v1 lane's copy.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - name: Find the Python rule SDK in this release, or say loudly why not
+        id: sdk
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if [ -f packages/archkeep-rule-sdk-python/pyproject.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## PyPI publish SKIPPED"
+              echo ""
+              echo "\`$TAG\` carries no \`packages/archkeep-rule-sdk-python\` package, so"
+              echo "nothing was published to PyPI. The Python rule SDK is staged by"
+              echo "ADR 0002 and has not landed; the release that first carries it"
+              echo "publishes it from this job with no workflow change."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "SKIPPED, and here is why: $TAG carries no packages/archkeep-rule-sdk-python,"
+            echo "so there is no Python distribution to publish. The job goes live with the"
+            echo "release that first ships that package."
+          fi
+
+      - name: Build the distribution
+        if: steps.sdk.outputs.present == 'true'
+        run: |
+          python3 -m pip install --upgrade 'build==1.5.0' 'twine==7.0.0'
+          python3 -m build packages/archkeep-rule-sdk-python
+
+      - name: Publish to PyPI
+        if: steps.sdk.outputs.present == 'true'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.ECOMA_PYPI_API_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if [ -z "$TWINE_PASSWORD" ]; then
+            echo "$TAG carries packages/archkeep-rule-sdk-python, but ECOMA_PYPI_API_TOKEN"
+            echo "is empty in this repository's context. It is an organisation secret, so"
+            echo "either it was removed or it is not granted to this repository — grant it"
+            echo "under the organisation's Actions secrets, then re-run this job. Failing"
+            echo "red rather than skipping: a release that carries a Python package and"
+            echo "does not reach PyPI is the lane shipping nothing under a green light."
+            exit 1
+          fi
+          python3 -m twine upload --non-interactive packages/archkeep-rule-sdk-python/dist/*
+
+  publish-crates:
+    name: Publish the Rust rule SDK to crates.io
+    # The v1 lane's job, unchanged: the version-equality proof, the
+    # `--locked` dry run, and the empty-token failure direction all carry
+    # over; the argument lives in the v1 lane's copy. Prerelease versions
+    # publish to crates.io as-is — the registry records `2.0.0-rc.1` as a
+    # prerelease the way it records every other RC this repository cut.
+    needs: [prepare, verify-conformance]
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - name: Prove the tagged crate carries the tagged version
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { tomlSectionVersion } from "./scripts/check-skills.mjs";
+            const version = tomlSectionVersion(
+              readFileSync("packages/archkeep-rule-sdk-rust/Cargo.toml", "utf8"),
+              "[package]",
+            );
+            const tag = process.env.TAG;
+            if (`v${version}` !== tag) {
+              console.error(
+                `Cargo.toml says ${version} but the tag is ${tag}. release-please ` +
+                  "writes this manifest via extra-files and check-skills holds the " +
+                  "chain on every pull request; if they disagree HERE, the chain " +
+                  "broke after the last gate that looked, and publishing would " +
+                  "upload a number that is not the release. crates.io uploads " +
+                  "cannot be deleted, so this stops before the upload.",
+              );
+              process.exit(1);
+            }
+          '
+
+      - name: Prove the crate publishes before publishing it
+        working-directory: packages/archkeep-rule-sdk-rust
+        run: |
+          cargo test --locked
+          cargo publish --dry-run --locked
+
+      - name: Publish to crates.io
+        working-directory: packages/archkeep-rule-sdk-rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.ECOMA_CRATES_API_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "$TAG carries packages/archkeep-rule-sdk-rust, but ECOMA_CRATES_API_TOKEN"
+            echo "is empty in this repository's context. It is an organisation secret, so"
+            echo "either the name differs (check the exact spelling — CRATES) or it is"
+            echo "not granted to this repository; grant it under the organisation's"
+            echo "Actions secrets, then re-run this job. Failing red rather than"
+            echo "skipping: the crate is in the tagged bytes, and a release that does"
+            echo "not reach crates.io is the lane shipping nothing under a green light."
+            exit 1
+          fi
+          cargo publish --locked
