@@ -1,0 +1,40 @@
+{
+  // The language every other version is judged against. This repository's
+  // documentation is written in English first — its only language today,
+  // by decision.
+  sourceLanguage: "en",
+
+  // The one translation this workflow governs, mirrored GitHub-style as a
+  // suffixed twin. It does not exist yet: this file is the check that
+  // decision was waiting for, not a promise the translation exists. A dry
+  // run reports the missing twin; a real run proposes it as a pull request
+  // a human reviews, merges or closes.
+  //
+  // The suffix shape is the more specific claim, so README.vi.md
+  // classifies as vi even though both patterns can name it. A bare
+  // `{document}.md` pattern claims every markdown file in the repository —
+  // skills, fixtures, the whole docs tree — so the ignore list narrows the
+  // program to exactly one document until each joins deliberately.
+  languages: {
+    en: "{document}.md",
+    vi: "{document}.vi.md",
+  },
+
+  ignore: ["**", "!README.md"],
+
+  // Product and protocol names that stay in English in every translation.
+  glossary: [
+    "GitHub Actions",
+    "archkeep",
+    "Nx",
+    "Moon",
+    "wasm",
+    "LSP",
+    "OpenAI-compatible",
+    "pull request",
+  ],
+
+  instructions: {
+    instruction: ".github/action-agents/harmonise/instruction.md",
+  },
+}

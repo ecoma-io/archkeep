@@ -1,0 +1,87 @@
+name: Harmonise
+
+# ecoma-io/action-agents' `harmonise` action, wired for the day this
+# repository gains its first translated document. Today every document here
+# is English by decision — the root AGENTS.md records why the translated
+# READMEs went away: a translation kept in sync by hand against no check
+# falls behind silently and reads as current, which is worse than an absent
+# one. This workflow is the check that decision was waiting for: the config
+# declares `en` as the source and `vi` as the one governed translation,
+# narrowed to README.md until each document joins deliberately.
+#
+# Dispatch-only, dry-run by default. There is no schedule yet on purpose: a
+# weekly run over a translation that does not exist is a weekly report
+# about an absence, and nothing a schedule does can merge the pull request
+# that would resolve it — that decision is human. When a translation
+# lands, add the schedule below, staggered from this repository's analysis
+# run (`41 4 * * 1`, in analysis.yml):
+#
+#   schedule:
+#     - cron: "17 5 * * 1"
+#
+# A real run writes exactly one ref — its own proposal branch
+# `harmonise/<source-language>` — and opens one pull request; the model
+# never names the branch, and no other branch or ref is touched. Runs
+# queue rather than cancel, because cancelling would abandon a
+# half-published proposal.
+#
+# The App token gives the run the organisation App's identity: events
+# raised by `GITHUB_TOKEN` are suppressed by GitHub's recursion
+# prevention, so a harmonise pull request opened on the workflow token
+# would sit there with no checks at all. The org-level secrets
+# (`ECOMA_APP_ID`, `ECOMA_APP_KEY`) make that the normal path here; empty
+# credentials would skip only that step and degrade to `github.token`.
+#
+# No checkout: the action reads everything through the API and builds its
+# proposal through the Git Data API — the checkout its own repository
+# carries exists only to locate a path-local action reference, which a
+# pinned remote ref replaces.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Report drift and propose nothing.
+        required: false
+        default: "true"
+        type: string
+
+# What a real run writes when it falls back to the workflow token: blobs,
+# a tree, a commit, its own branch ref, and the one pull request. Nothing
+# else — no issues, no comments, no merges.
+permissions:
+  contents: write
+  pull-requests: write
+
+# Two harmonise runs must never mutate the branch at once; unlike triage,
+# cancelling in progress would abandon half-published proposals, so queued
+# runs wait instead of being cancelled.
+concurrency:
+  group: harmonise
+  cancel-in-progress: false
+
+jobs:
+  harmonise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Hoisted so the App-token step's `if:` has something it is allowed to
+    # read — secrets cannot be referenced directly in step conditionals.
+    env:
+      HARMONISE_APP_ID: ${{ secrets.ECOMA_APP_ID }}
+    steps:
+      - name: Mint a GitHub App token
+        id: app-token
+        if: env.HARMONISE_APP_ID != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ECOMA_APP_ID }}
+          private-key: ${{ secrets.ECOMA_APP_KEY }}
+
+      - uses: ecoma-io/action-agents/harmonise@9206c30557e450e11016f8600cea9639a6205c1a # v0.4.1
+        with:
+          github-token: ${{ steps.app-token.outputs.token || github.token }}
+          api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
+          api-key: ${{ secrets.ECOMA_LLM_API_KEY }}
+          model: harmonise
+          source-language: en
+          dry-run: ${{ inputs.dry-run || 'true' }}
