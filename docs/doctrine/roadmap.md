@@ -278,7 +278,9 @@ different relationship to the architecture the core already governs.
 above names the headroom; nothing in it is a dated promise, and a prediction is
 allowed to be wrong where a verdict is not. Nothing in 2.x weakens the 1.x
 contract: every intelligence feature sits on top of the deterministic core,
-never in place of it.
+never in place of it. The v2 line's own foundational document — the thesis,
+what a 2.x capability must satisfy, and how the line would drift — is
+[v2.md](v2.md); that file owns the frame, this section owns the order.
 
 ## What this roadmap refuses
 
