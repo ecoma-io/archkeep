@@ -352,9 +352,14 @@ export function createMoonConsumer(artifact, filesFn = moonConsumerFiles) {
  * a `Record<string, string>` file map with three projects (domain,
  * application, api) and language-specific source files.
  *
+ * Exported so a suite that holds one contract across every language fixture
+ * (`languages/unreadable.e2e.mjs`) iterates THIS table rather than a second
+ * copy of it — the same one-registry rule `createNativeLanguageConsumer`
+ * itself answers to.
+ *
  * @type {Record<string, (packageName: string, peers: Record<string, string>, packageManager: string) => Record<string, string>>}
  */
-const LANGUAGE_FIXTURES = {
+export const LANGUAGE_FIXTURES = {
   go: goLanguageFiles,
   typescript: typescriptLanguageFiles,
   javascript: javascriptLanguageFiles,
