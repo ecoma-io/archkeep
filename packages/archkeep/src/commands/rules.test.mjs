@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -115,7 +116,14 @@ describe("rulesVerifyCommand", () => {
       { cwd: corruptedCatalogDir },
     );
 
-    expect(result.status).toBe("no-verdict");
+    // A digest mismatch is a completed verification with a negative result —
+    // the `findings` status and exit 1, the same class as a boundary
+    // violation. It must never read as `no-verdict` (exit 3), the class for a
+    // run that could not look: "this artifact was tampered with" and "the
+    // catalog could not be read" are different facts for every script that
+    // branches on the exit code.
+    expect(result.status).toBe("findings");
+    expect(JSON.parse(result.report.json).exitCode).toBe(1);
     expect(result.report.text).toContain("FAILED");
 
     // Find which rule has the corrupted wasm
@@ -155,7 +163,12 @@ describe("rulesVerifyCommand", () => {
       { cwd: missingArtifactDir },
     );
 
-    expect(result.status).toBe("no-verdict");
+    // A named artifact that is not there is a negative answer the run reached
+    // by looking — the catalog read fine, the entry claims bytes that do not
+    // exist. That is a `findings` run (exit 1), not a `no-verdict` one (exit
+    // 3): the catalog itself being unreadable is the could-not-look case.
+    expect(result.status).toBe("findings");
+    expect(JSON.parse(result.report.json).exitCode).toBe(1);
     expect(result.report.text).toContain("FAILED");
     expect(result.report.text).toContain("missing-artifact-rule");
     expect(result.report.text).toContain("Artifact not found: rules/missing.wasm");
@@ -168,8 +181,51 @@ describe("rulesVerifyCommand", () => {
     const result = await rulesVerifyCommand({ catalog: catalogPath }, { cwd: tempCatalogDir });
 
     expect(result.status).toBe("ok");
+    expect(JSON.parse(result.report.json).exitCode).toBe(0);
     expect(result.report.text).toContain("OK");
     expect(result.report.text).not.toContain("FAILED");
+  });
+
+  it("refuses a catalog artifact that escapes the catalog directory, naming the entry", async () => {
+    const base = mkdtempSync(join(tmpdir(), "archkeep-escape-read-"));
+    const catalogDir = join(base, "vendored", "catalog");
+    mkdirSync(catalogDir, { recursive: true });
+
+    // The outside file EXISTS and the catalog carries its real digest — a run
+    // that followed the escape would have no digest complaint. The refusal has
+    // to be the escape itself, so this proves the bytes were never read, not
+    // merely that they failed some later check.
+    const outsideBytes = Buffer.from("bytes the catalog must not reach");
+    writeFileSync(join(base, "outside-secrets.wasm"), outsideBytes);
+    const outsideDigest = createHash("sha256").update(outsideBytes).digest("hex");
+
+    const catalog = {
+      version: 1,
+      rules: [
+        {
+          name: "escape-artist",
+          description: "rule whose artifact field escapes the catalog directory",
+          contract: 1,
+          needs: [],
+          params: {},
+          artifact: "../../outside-secrets.wasm",
+          sha256: outsideDigest,
+        },
+      ],
+    };
+    writeFileSync(join(catalogDir, "catalog.json"), JSON.stringify(catalog));
+
+    const result = await rulesVerifyCommand(
+      { catalog: join(catalogDir, "catalog.json") },
+      { cwd: base },
+    );
+
+    expect(result.status).toBe("findings");
+    expect(JSON.parse(result.report.json).exitCode).toBe(1);
+    expect(result.report.text).toContain("escape-artist");
+    expect(result.report.text).toContain("outside");
+
+    rmSync(base, { recursive: true, force: true });
   });
 
   it("renders JSON when format is json", async () => {
@@ -317,5 +373,129 @@ export const depConstraints = [];
     expect(result.status).toBe("ok");
     const json = JSON.parse(result.report.json);
     expect(json.command).toBe("rules add");
+  });
+
+  // A catalog a consumer downloaded, vendored, or had modified under it is
+  // data, so neither of the two paths `add` derives from it may escape the
+  // directory that anchors it: the `artifact` field (read side, resolved under
+  // the catalog's directory) and the rule name (write side, resolved under
+  // `--to`). Each test below has an in-tree sibling that must keep working, so
+  // the guard cannot pass only by refusing everything.
+  describe("containment", () => {
+    /** Builds a catalog whose two rules' artifacts are real in-tree bytes. */
+    function writeContainedCatalog(catalogDir) {
+      const rulesDir = join(catalogDir, "rules");
+      mkdirSync(rulesDir, { recursive: true });
+
+      const inTreeBytes = Buffer.from("in-tree rule bytes");
+      const escapeBytes = Buffer.from("escaping rule bytes");
+      writeFileSync(join(rulesDir, "in-tree-rule.wasm"), inTreeBytes);
+      writeFileSync(join(rulesDir, "escape-artist.wasm"), escapeBytes);
+
+      const ruleShape = (name, artifact, bytes) => ({
+        name,
+        description: "catalog-derived name and artifact under containment",
+        contract: 1,
+        needs: [],
+        params: {},
+        artifact,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      });
+
+      const catalogPath = join(catalogDir, "catalog.json");
+      writeFileSync(
+        catalogPath,
+        JSON.stringify({
+          version: 1,
+          rules: [
+            ruleShape("in-tree-rule", "rules/in-tree-rule.wasm", inTreeBytes),
+            // A catalog entry whose NAME escapes — the half the write side
+            // resolves under `--to`.
+            ruleShape("../escape-artist", "rules/escape-artist.wasm", escapeBytes),
+          ],
+        }),
+      );
+      return catalogPath;
+    }
+
+    it("refuses a rule whose artifact escapes the catalog directory and copies nothing", async () => {
+      const base = mkdtempSync(join(tmpdir(), "archkeep-escape-add-read-"));
+      const catalogDir = join(base, "vendored", "catalog");
+      mkdirSync(catalogDir, { recursive: true });
+
+      // The outside file exists with the digest the catalog records, so the
+      // refusal must be the escape itself — the bytes were never read.
+      const outsideBytes = Buffer.from("bytes the catalog must not reach");
+      writeFileSync(join(base, "outside-secrets.wasm"), outsideBytes);
+      const outsideDigest = createHash("sha256").update(outsideBytes).digest("hex");
+      writeFileSync(
+        join(catalogDir, "catalog.json"),
+        JSON.stringify({
+          version: 1,
+          rules: [
+            {
+              name: "escape-artist",
+              description: "rule whose artifact field escapes the catalog directory",
+              contract: 1,
+              needs: [],
+              params: {},
+              artifact: "../../outside-secrets.wasm",
+              sha256: outsideDigest,
+            },
+          ],
+        }),
+      );
+
+      const outputDir = join(base, "tools", "rules");
+      const result = await rulesAddCommand(
+        { catalog: join(catalogDir, "catalog.json"), to: outputDir },
+        { cwd: base, ruleName: "escape-artist" },
+      );
+
+      expect(result.status).toBe("no-verdict");
+      expect(JSON.parse(result.report.json).exitCode).toBe(3);
+      expect(result.report.text).toContain("escape-artist");
+      expect(result.report.text).toContain("outside");
+      expect(existsSync(join(outputDir, "escape-artist.wasm"))).toBe(false);
+
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("refuses a rule whose name escapes the output directory and writes nothing outside it", async () => {
+      const base = mkdtempSync(join(tmpdir(), "archkeep-escape-add-write-"));
+      const catalogPath = writeContainedCatalog(join(base, "vendored", "catalog"));
+      const outputDir = join(base, "tools", "rules");
+
+      const result = await rulesAddCommand(
+        { catalog: catalogPath, to: outputDir },
+        { cwd: base, ruleName: "../escape-artist" },
+      );
+
+      expect(result.status).toBe("no-verdict");
+      expect(JSON.parse(result.report.json).exitCode).toBe(3);
+      expect(result.report.text).toContain("../escape-artist");
+      expect(result.report.text).toContain("outside");
+      // The write did not land where the unguarded resolve would have put it.
+      expect(existsSync(join(base, "escape-artist.wasm"))).toBe(false);
+      expect(existsSync(join(outputDir, "escape-artist.wasm"))).toBe(false);
+
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("accepts an in-tree rule name and artifact from the same catalog", async () => {
+      const base = mkdtempSync(join(tmpdir(), "archkeep-contained-ok-"));
+      const catalogPath = writeContainedCatalog(join(base, "vendored", "catalog"));
+      const outputDir = join(base, "tools", "rules");
+
+      const result = await rulesAddCommand(
+        { catalog: catalogPath, to: outputDir },
+        { cwd: base, ruleName: "in-tree-rule" },
+      );
+
+      expect(result.status).toBe("ok");
+      expect(existsSync(join(outputDir, "in-tree-rule.wasm"))).toBe(true);
+
+      rmSync(base, { recursive: true, force: true });
+    });
   });
 });
