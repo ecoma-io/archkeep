@@ -150,10 +150,11 @@ candidate set.
 
 ## Where this sits
 
-Discovery is a 1.x capability like the rest of the governance wave:
-deterministic, computed from the observed graph with no predictive component and
-no LLM anywhere in the core path. What 2.x could add on top — natural-language
+Discovery ships today as part of the governance wave: deterministic, computed
+from the observed graph with no predictive component and no LLM anywhere in
+the core path. What the intelligence layer could add on top — natural-language
 summarisation of a proposal, or learned vocabulary from many workspaces — is
-direction, not a promise. The deterministic candidates are what ships today.
+later maturity on the same roadmap, not a promise. The deterministic
+candidates are what ships today.
 
 The command reference is [../reference/discovery.md](../reference/discovery.md).

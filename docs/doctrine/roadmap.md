@@ -1,7 +1,7 @@
 # Roadmap
 
 Where Archkeep is going, in stages. This document owns the staged direction —
-which capabilities belong to which major version, and in what order the project
+the maturity ladder that orders the capabilities, and in what order the project
 earns them. It deliberately owns nothing finer than that: individual features,
 their design and their sequencing live in GitHub issues and milestones, because
 a roadmap that lists fifty features is a backlog wearing a roadmap's name, and
@@ -145,15 +145,15 @@ A new reader should find these capabilities described as present, not promised.
   ([skills/overview.md](../skills/overview.md),
   [architecture-authority.md](architecture-authority.md))
 
-## 1.x — Universal Agentic Architecture Governance
+## The road to stable 1.0
 
-The goal of 1.x: the system above, complete and stable — the deterministic
+The goal: the system above, complete and stable — the deterministic
 authority, its evidence commands, the machine-readable intent it enforces, the
 evolution safety that keeps change honest, and the agent protocol that makes
 agents consumers rather than authorities.
 
-Most of 1.x is already implemented and listed above. What remains before a
-**stable 1.0** is hardening of the proof, not a new feature list — one item,
+Almost all of it is already implemented and listed above. What remains before
+a **stable 1.0** is hardening of the proof, not a new feature list — one item,
 and it is evidence rather than code:
 
 Stable 1.0 is approached through a release candidate: `1.0.0-rc.1` proposes
@@ -225,45 +225,20 @@ None of the four is a feature, and that is the point: what separates 0.x from
 1.0 here is evidence, and evidence is something the project accumulates rather
 than something it implements.
 
-### Capabilities pulled forward from 2.x
+## The intelligence capabilities ahead
 
-Four capabilities moved from the 2.x direction into the 1.x scope, each in a
-deliberately deterministic form. They are listed here so the adjusted roadmap is
-explicit, not silent:
-
-1. **Architecture Intent** — the boundary config as a machine-readable
-   contract: boundaries, allowed and forbidden dependencies, constraints and
-   intended structure. It includes no AI-generated intent, no semantic
-   architecture inference, and no automatic redesign.
-2. **Basic Drift Detection** — the difference between intended architecture and
-   observed architecture, computed from graph, policy, snapshot, diff and
-   intent. Deterministic only; no predictive drift intelligence.
-3. **Lightweight Architecture Evolution / History** — deterministic historical
-   evidence: a `graph` snapshot → a change → a `diff` between the two, each
-   carrying provenance. No recommendation engine.
-4. **Architecture Planning Facts for Agents** — context, affected projects,
-   dependency impact, constraints, allowed boundaries and violations, provided
-   to an agent as facts. The agent reasons, plans and decides how to modify
-   code; Archkeep does not become an LLM.
-   ([architecture-authority.md](architecture-authority.md))
-
-Each of these four is deterministic and inspectable: the verdict is reproducible
-from source, and the authority never reasons about the architecture it reports.
-
-## 2.x — Architecture Intelligence
-
-The goal of 2.x: the layer that reads and predicts, sitting on top of — never
-in place of — the deterministic 1.x core. It is not "more rules"; it is a
-different relationship to the architecture the core already governs.
+The goal of this stage: the layer that reads and predicts, sitting on top of —
+never in place of — the deterministic core above. It is not "more rules"; it is
+a different relationship to the architecture the core already governs.
 
 - **Deeper architecture intent** — richer, machine-readable intent beyond the
   dependency constraint table.
 - **Semantic architecture understanding** — the architecture as a meaning to be
   read, not only a graph to be checked.
 - **Advanced drift detection** — drift that is anticipated or explained, on top
-  of the deterministic drift 1.x already reports.
+  of the deterministic drift already reported.
 - **Architecture evolution intelligence** — how the architecture changed and
-  why, on top of the deterministic snapshot-and-diff history 1.x already keeps.
+  why, on top of the deterministic snapshot-and-diff history already kept.
 - **Change risk analysis and architectural impact prediction** — what a change
   is _likely_ to break, not only what it _demonstrably_ breaks.
 - **Migration planning and architecture recommendations** — proposed paths,
@@ -271,14 +246,16 @@ different relationship to the architecture the core already governs.
 - **Cross-repository architecture intelligence** — reasoning across more than
   one repository at a time.
 - **Agent-assisted architecture planning** — planning help that extends the
-  facts 1.x provides, while the agent remains the decision-maker.
+  facts already provided, while the agent remains the decision-maker.
 - **Potentially AI-assisted reasoning** — where intelligence is not a verdict.
 
-2.x is a **direction, not a commitment to implementation details**. The list
-above names the headroom; nothing in it is a dated promise, and a prediction is
-allowed to be wrong where a verdict is not. Nothing in 2.x weakens the 1.x
-contract: every intelligence feature sits on top of the deterministic core,
-never in place of it.
+This stage is a **direction, not a commitment to implementation details**. The
+list above names the headroom; nothing in it is a dated promise, and a
+prediction is allowed to be wrong where a verdict is not. Nothing ahead
+weakens what ships today: every intelligence capability sits on top of the
+deterministic core, never in place of it — and each must answer the five
+questions [architecture-authority.md](architecture-authority.md) puts to the
+layer before it is built.
 
 ## What this roadmap refuses
 
@@ -286,8 +263,8 @@ never in place of it.
   keep. Order is the commitment; time is not.
 - **A feature list.** Features live in issues, where they can be discussed,
   rejected and closed without this document lying in the meantime.
-- **A phase 3.** When 2.x is real, what comes after it will be visible from
-  there, and not before.
+- **A phase 3.** When the capabilities above are real, what comes after them
+  will be visible from there, and not before.
 - **Moving the authority.** Any capability that would let an agent, a provider,
   a skill or CI decide whether an architecture is valid — rather than report
   whether it holds — is refused by the boundary in
