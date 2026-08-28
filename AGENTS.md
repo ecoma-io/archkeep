@@ -21,10 +21,10 @@ never an issue title or a conversation — decide where a change lands:
   additive, performance/internal) land here.
 - **`next` is the v2 development line.** Intentional breaking, semantic, and
   architectural changes belong there, argued inside the frame
-  [docs/doctrine/v2.md](docs/doctrine/v2.md) owns — and nothing on `next`
-  weakens what every line inherits: [the empty-result
-  invariant](#the-invariant-everything-is-judged-against), deterministic
-  verdicts, reproducible evidence.
+  [docs/doctrine/architecture-authority.md](docs/doctrine/architecture-authority.md)
+  owns — and nothing on `next` weakens what every line inherits: [the
+  empty-result invariant](#the-invariant-everything-is-judged-against),
+  deterministic verdicts, reproducible evidence.
 - **A bug found on `next` is checked against `main` first.** It reproduces
   there → fix on `main`, the line consumers run, and forward-port; it does
   not → fix on `next` as a v2 regression.
@@ -39,8 +39,9 @@ never an issue title or a conversation — decide where a change lands:
 
 [CONTRIBUTING.md](CONTRIBUTING.md#which-branch-a-change-lands-on) owns branch
 targeting; [docs/development/release.md](docs/development/release.md) owns
-release mechanics; [docs/doctrine/v2.md](docs/doctrine/v2.md) owns the v2
-frame.
+release mechanics;
+[docs/doctrine/architecture-authority.md](docs/doctrine/architecture-authority.md)
+owns the system boundary and the intelligence layer's contract.
 
 ## What this repository is
 
