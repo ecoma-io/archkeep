@@ -1,0 +1,54 @@
+{
+  // This repository's triage policy — the sheet is the complete list of
+  // what the model may apply, and a name the repository has no label for
+  // is a startup refusal rather than a silent no-op. Split three ways:
+  // `universal` applies to every thread; `issues` and `pr` are added to it
+  // according to what is classified. Every label named here already exists
+  // in this repository except the `size/*` rungs, which were created for
+  // this sheet.
+  labels: {
+    universal: {
+      bug: "Reproducible incorrect behaviour — it worked before, or should have.",
+      documentation: "Documentation or examples only; no runtime code is affected.",
+      enhancement: "A new capability, or an improvement to one that exists.",
+      question: "Asking how something works or is meant to be used, not reporting that it is broken.",
+    },
+    issues: {
+      "good first issue": "Small, self-contained, and needs no prior context with this repository.",
+      // This repository's defining defect class, already a label here.
+      // The distinction from `bug` is direction, not severity: a plain
+      // `bug` is wrong behaviour anyone can see; a `false negative` is the
+      // tooling reporting nothing over a real violation — the failure that
+      // never announces itself, and the reason this repository exists.
+      "false negative": "A violation exists and the tooling reported nothing — the silent direction.",
+    },
+    pr: {
+      // Size is measured from the diff and never offered to the model; the
+      // rung labels are declared here because a size label is applied like
+      // any other and must be on the PR sheet.
+      "size/xs": "",
+      "size/s": "",
+      "size/m": "",
+      "size/l": "",
+      "size/xl": "",
+    },
+  },
+
+  // Review effort, not raw magnitude: a lockfile nobody reads line by line
+  // does not make a pull request large to review, and committed wasm
+  // fixtures are bytes, not reviewable lines.
+  size: {
+    exclude: ["pnpm-lock.yaml", "coverage/**", "**/*.wasm"],
+    ladder: [
+      { upTo: 10, label: "size/xs" },
+      { upTo: 50, label: "size/s" },
+      { upTo: 200, label: "size/m" },
+      { upTo: 500, label: "size/l" },
+      { label: "size/xl" },
+    ],
+  },
+
+  instructions: {
+    instruction: ".github/action-agents/triage/instruction.md",
+  },
+}

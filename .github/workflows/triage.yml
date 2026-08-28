@@ -1,0 +1,54 @@
+name: Triage
+
+# ecoma-io/action-agents' `triage` action, classifying this repository's
+# issues and pull requests against the label sheet declared in
+# `.github/action-agents/triage/triage.json5`. The sheet is read from the
+# default branch — never from this event's tree — so a pull request cannot
+# edit the labels that govern its own triage, and every name it declares
+# must already exist as a repository label: a missing one is a startup
+# refusal, not dormancy. The semantic labels were already here; the five
+# `size/*` rungs were created for this workflow.
+#
+# The whole write surface is labels. Live, with dry-run off, the same
+# posture action-agents' own repository runs: labels are reversible and the
+# sheet is narrow — `choose no label rather than a wrong one` is written
+# into the instructions the sheet points at.
+#
+# No checkout: triage reads everything through the API — thread bodies, the
+# diff, the sheet — and nothing from the working tree. Consuming the action
+# by its pinned SHA instead of a path in a checkout is what makes that true.
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  workflow_dispatch:
+
+# Exactly what a real run writes and nothing more: labels on issues and
+# pull requests. `contents` stays read-only because nothing is read from,
+# or written to, the tree.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+# One triage run per thread: a rapid sequence of edits to the same issue
+# replaces the queued run rather than stacking classifications of stale
+# text. Runs for different threads are independent.
+concurrency:
+  group: triage-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: ecoma-io/action-agents/triage@9206c30557e450e11016f8600cea9639a6205c1a # v0.4.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
+          api-key: ${{ secrets.ECOMA_LLM_API_KEY }}
+          model: triage
+          dry-run: false
