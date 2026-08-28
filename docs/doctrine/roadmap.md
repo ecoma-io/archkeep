@@ -63,7 +63,7 @@ A new reader should find these capabilities described as present, not promised.
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer. ([reference/exit-codes.md](../reference/exit-codes.md))
-- **21 commands — `check`, `graph`, `diff`, `delta`, `discover`,
+- **22 commands — `check`, `change`, `graph`, `diff`, `delta`, `discover`,
   `drift`, `reconcile`, `waivers`, `fitness`, `history`, `trajectory`,
   `evolution`,
   `health`, `report`, `debt`, `impact`, `explain`, `context`, `provenance`,
@@ -155,6 +155,12 @@ agents consumers rather than authorities.
 Most of 1.x is already implemented and listed above. What remains before a
 **stable 1.0** is hardening of the proof, not a new feature list — one item,
 and it is evidence rather than code:
+
+Stable 1.0 is approached through a release candidate: `1.0.0-rc.1` proposes
+this contract as it stands; the conditions below decide when the same contract
+stops being a candidate and becomes the version that holds.
+[docs/development/release.md](../development/release.md#release-stages-the-100-rc1-candidate)
+owns the mechanics.
 
 - **Breadth of conformance evidence.** The differential against
   `@nx/enforce-module-boundaries` runs over real public workspaces, weekly and

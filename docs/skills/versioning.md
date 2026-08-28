@@ -35,19 +35,19 @@ writes it, run by the release lane on release-please's branch. The extension is 
 the engine it is released with, and one version is what makes the pairing
 visible. The rule SDK manifests are on it for the decision
 [adr/0002](../adr/0002-custom-rules-one-contract.md) records: every SDK joins
-this one chain, so "the SDK for engine 0.x" is a fact a reader takes from the
+this one chain, so which engine an SDK pairs with is a fact a reader takes from the
 number rather than a compatibility matrix. The Go SDK carries no manifest
 version at all — a Go module's version is its git tag, which is the one place
 the release lane speaks for it.
 
 The MCP package is on the chain for the same reason the extension is: it
 composes the engine's own command layer in-process (the `./commands` subpath),
-so one version is what makes the pairing real — "the MCP face for engine 0.x"
+so one version is what makes the pairing real — which engine the MCP face pairs
 is a fact a consumer reads off the number, not a compatibility matrix.
 
 The rules catalog is on the chain for the same reason the SDKs are: every
 artifact it ships speaks contract 1 of the engine it is paired with, so "the
-official rules for engine 0.x" is read off the number rather than guessed from
+official rules for the engine it is released with" is read off the number rather than guessed from
 a compatibility matrix — and a catalog that claims a version it was never
 bumped to is exactly the drift this chain exists to refuse.
 

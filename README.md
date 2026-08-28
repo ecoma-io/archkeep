@@ -372,18 +372,23 @@ Read it in this order, or jump to what you need:
 
 Full index: [**docs/**](docs/README.md).
 
-## Status: pre-1.0, and measured about it
+## Status: crossing into 1.0
 
-Everything described on this page ships today. Pre-1.0 means breaking changes
-are still possible, and this project defines 1.0 as four measured conditions —
-not a date: consecutive green weekly differentials on real trees, an external
-workspace running `check` as a blocking gate, fifty quiet commits since the
-last breaking change, releases that land unattended. `pnpm readiness` reports
-each condition as `met`, `not met` or honestly `unmeasured`
-([roadmap](docs/doctrine/roadmap.md)). The VS Code extension ships as a
-`.vsix` today while its marketplace listing waits on a publisher account.
-Roadmap items beyond 1.x — semantic understanding, predictive drift — are
-labeled direction, not promises.
+Everything described on this page ships today. The release in flight is
+**1.0.0-rc.1** — the release candidate for the v1 contract, not yet stable
+1.x and not yet a claim that the contract is finished. Stable 1.x is the
+same contract once the project's four measured readiness conditions hold —
+consecutive green weekly differentials on real trees, an external workspace
+running `check` as a blocking gate, fifty quiet commits since the last
+breaking change, releases that land unattended — and `pnpm readiness`
+reports each as `met`, `not met` or honestly `unmeasured`
+([roadmap](docs/doctrine/roadmap.md)). From the candidate onward, `main`
+keeps the v1 contract: changes that alter what an unchanged workspace is
+told move to the v2 line instead
+([the branch policy](CONTRIBUTING.md#which-branch-a-change-lands-on)).
+The VS Code extension ships as a `.vsix` today while its marketplace
+listing waits on a publisher account. Roadmap items beyond 1.x — semantic
+understanding, predictive drift — are labeled direction, not promises.
 
 ## Contributing
 
