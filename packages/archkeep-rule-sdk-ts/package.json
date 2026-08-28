@@ -1,6 +1,6 @@
 {
   "name": "@ecoma-io/archkeep-rule-sdk",
-  "version": "0.15.0",
+  "version": "1.0.0-rc.1",
   "private": false,
   "description": "Author Archkeep custom architecture rules in AssemblyScript (TypeScript syntax) and compile them to core WebAssembly.",
   "keywords": [
