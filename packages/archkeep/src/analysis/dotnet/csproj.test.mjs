@@ -142,13 +142,56 @@ describe("csprojEntryOf", () => {
     expect(result.entry.projectRefPaths).toEqual(["apps/Domain/Domain.csproj"]);
   });
 
-  it("returns reason for malformed csproj", () => {
-    const result = csprojEntryOf("Bad", "bad.csproj", `<Project><unclosed`);
-    expect(result.reason).toMatch(/malformed XML/);
+  it("resolves a reference from a csproj at the workspace root (#408)", () => {
+    // A root-level .csproj has no `/` in its path. Before the guard, the
+    // unguarded `slice(0, -1)` stripped the filename's last character —
+    // `App.csproj` resolved as directory `App.cspro` — so every reference
+    // landed on a path no project occupied.
+    const result = csprojEntryOf(
+      "RootApp",
+      "RootApp.csproj",
+      `<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="libs/Domain/Domain.csproj" />
+  </ItemGroup>
+</Project>`,
+    );
+    expect(result.reason).toBeUndefined();
+    expect(result.problems).toEqual([]);
+    expect(result.entry.projectRefPaths).toEqual(["libs/Domain/Domain.csproj"]);
   });
 });
 
 describe("resolveCsprojDependencies", () => {
+  it("resolves a ProjectReference from a root-level csproj — the silent direction (#408)", () => {
+    const workspace = {
+      projects: [
+        { name: "RootApp", root: "" },
+        { name: "Domain", root: "libs/domain" },
+      ],
+      filesOf: (name) => {
+        if (name === "RootApp") return ["RootApp.csproj"];
+        if (name === "Domain") return ["libs/domain/Domain.csproj"];
+        return [];
+      },
+      readFile: (path) => {
+        if (path === "RootApp.csproj")
+          return `<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="libs/domain/Domain.csproj" />
+  </ItemGroup>
+</Project>`;
+        if (path === "libs/domain/Domain.csproj")
+          return `<Project Sdk="Microsoft.NET.Sdk"></Project>`;
+        return null;
+      },
+    };
+    const deps = resolveCsprojDependencies(workspace);
+    expect(deps).toHaveLength(1);
+    expect(deps[0].source).toBe("RootApp");
+    expect(deps[0].target).toBe("Domain");
+  });
+
   it("resolves ProjectReference to graph edge", () => {
     const workspace = {
       projects: [

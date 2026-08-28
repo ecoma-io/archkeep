@@ -217,7 +217,15 @@ export function usingNamespacesOf(project) {
 export function csprojEntryOf(projectName, csprojPath, text) {
   const parsed = parseCsproj(text);
   if (parsed.reason !== undefined) return { reason: parsed.reason };
-  const csprojDir = csprojPath.slice(0, csprojPath.lastIndexOf("/"));
+  // A manifest at the workspace root has no separator: `lastIndexOf` answers
+  // -1 and the unguarded slice would strip the filename's last character —
+  // `App.csproj` resolved as directory `App.cspro` (#408), so every reference
+  // it declared landed on a path no project occupies. `""` is the root, the
+  // same answer `../jvm/maven.mjs` and `../jvm/gradle.mjs` give their
+  // root-level manifests.
+  const csprojDir = csprojPath.includes("/")
+    ? csprojPath.slice(0, csprojPath.lastIndexOf("/"))
+    : "";
   const facts = projectReferenceFacts(parsed.project, csprojDir);
   return {
     entry: {

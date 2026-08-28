@@ -102,6 +102,17 @@ describe("parseCSharpDirectiveSites", () => {
     expect(source.slice(sites[0].offset, sites[0].offset + 3)).toBe("A.B");
   });
 
+  it("reads both directives when two share a line — the `;` anchors, never consumed (#407)", () => {
+    // Consuming the `;` left the scan past the second directive's only legal
+    // anchor, so `using A.B; using C.D;` read only `A.B`.
+    const source = "using A.B; using C.D;\n";
+    const sites = parseCSharpDirectiveSites(source);
+    expect(sites.map((site) => site.specifier)).toEqual(["A.B", "C.D"]);
+    for (const site of sites) {
+      expect(source.slice(site.offset, site.offset + site.specifier.length)).toBe(site.specifier);
+    }
+  });
+
   it("matches a first-line directive through a UTF-8 BOM at its disk offset", () => {
     // The BOM is matched, not stripped: the offset indexes the bytes on disk,
     // so the reported column counts the BOM itself — the same answer the JVM

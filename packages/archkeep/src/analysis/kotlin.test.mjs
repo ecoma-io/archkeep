@@ -80,6 +80,33 @@ describe("parseKotlinImportSites", () => {
     const source = "import one.pkg.A\n\nfun main() {}\n";
     expect(parseKotlinImportSites(source)).toHaveLength(1);
   });
+
+  it("reads a CRLF file's imports identically to its LF twin (#406)", () => {
+    const lf = [
+      "package p",
+      "",
+      "import com.acme.core.Kernel",
+      "import com.acme.util.Strings as S",
+      "",
+      "class T",
+    ].join("\n");
+    const expected = parseKotlinImportSites(lf);
+    expect(expected).toHaveLength(2);
+    expect(
+      parseKotlinImportSites(lf.replaceAll("\n", "\r\n")).map((site) => site.specifier),
+    ).toEqual(expected.map((site) => site.specifier));
+  });
+
+  it("reads a BOM-prefixed script's first import at its disk offset (#407)", () => {
+    // The BOM is matched, not stripped, exactly as the C# directive parse does
+    // (`./csharp.test.mjs`): the offset indexes the bytes on disk.
+    const source = "﻿import com.acme.core.Kernel\n\nclass T\n";
+    const sites = parseKotlinImportSites(source);
+    expect(sites.map((site) => site.specifier)).toEqual(["com.acme.core.Kernel"]);
+    expect(source.slice(sites[0].offset, sites[0].offset + sites[0].specifier.length)).toBe(
+      "com.acme.core.Kernel",
+    );
+  });
 });
 
 describe("analyzeKotlin", () => {
@@ -185,6 +212,43 @@ describe("analyzeKotlin", () => {
     expect(result.imports).toEqual([]);
     expect(result.failures).toHaveLength(1);
     expect(result.failures[0].reason).toContain("disk exploded");
+  });
+
+  it("reports the crossing in a CRLF file whose ONLY import violates — the silent direction (#406)", () => {
+    // Windows `core.autocrlf=true` checkouts are CRLF throughout; before the
+    // terminator carried `\r`, `analyzeKotlin` answered zero import sites for
+    // such a file — byte-for-byte the answer a file with no imports gives.
+    const workspace = baseWorkspace();
+    const caller =
+      "package com.acme.app\r\n\r\nimport com.acme.core.Kernel\r\n\r\nclass A { val k = Kernel() }\r\n";
+    const result = analyzeIn(
+      workspace,
+      "packages/acme/src/main/kotlin/com/acme/app/Main.kt",
+      caller,
+    );
+    expect(result.failures).toEqual([]);
+    expect(result.imports).toHaveLength(1);
+    expect(result.imports[0].resolved.target).toBe("core");
+    expect(result.imports[0].line).toBe(3);
+  });
+
+  it("reports the crossing behind a BOM before the first import — the silent direction (#407)", () => {
+    const workspace = baseWorkspace();
+    // A default-package script: no `package` line to absorb the BOM, so the
+    // import itself is what a BOM-intolerant anchor skips.
+    const caller = "﻿import com.acme.core.Kernel\n\nclass A { val k = Kernel() }\n";
+    const result = analyzeIn(
+      workspace,
+      "packages/acme/src/main/kotlin/com/acme/app/Main.kt",
+      caller,
+    );
+    expect(result.failures).toEqual([]);
+    expect(result.imports).toHaveLength(1);
+    expect(result.imports[0].resolved.target).toBe("core");
+    // The column counts the BOM, because the offset indexes the bytes on disk
+    // — `../contract.md`'s byte-tolerance law.
+    expect(result.imports[0].line).toBe(1);
+    expect(result.imports[0].column).toBe(9);
   });
 });
 

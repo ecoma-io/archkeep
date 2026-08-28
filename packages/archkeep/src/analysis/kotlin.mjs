@@ -43,16 +43,21 @@ import {
 /** One identifier segment: backtick-quoted (any non-backtick content) or a plain identifier. */
 const KOTLIN_SEGMENT = String.raw`(?:` + "`[^`\\n]*`" + String.raw`|[\p{L}_$][\p{L}\p{Nd}_$]*)`;
 
-// Anchored to a line head (or behind a semicolon); the name must start on the
-// import's own line; the optional alias is captured only to keep it out of
-// the specifier.
+// Anchored to a line head — through a leading UTF-8 BOM, matched rather than
+// stripped so offsets keep indexing the bytes on disk (#221's lesson, the same
+// anchor `./jvm/packages.mjs`'s package declaration and `./csharp.mjs` hold) —
+// or behind a semicolon; the name must start on the import's own line; the
+// optional alias is captured only to keep it out of the specifier. The
+// terminator is a lookahead over `\r` as well as `\n` (#406): on a CRLF file
+// the lookahead must succeed at the line break, or every import in the file
+// is dropped, byte-for-byte like a file with none.
 const KOTLIN_IMPORT = new RegExp(
-  String.raw`(?:^|[\n;])[ \t]*(?:import[ \t]+)(` +
+  String.raw`(?:^\uFEFF?|[\n;])[ \t]*(?:import[ \t]+)(` +
     KOTLIN_SEGMENT +
     String.raw`(?:\.` +
     KOTLIN_SEGMENT +
     String.raw`)*(?:\.\*)?)` +
-    String.raw`(?:[ \t]+as[ \t]+[\p{L}_$][\p{L}\p{Nd}_$]*)?[ \t]*(?=[\n;}]|$)`,
+    String.raw`(?:[ \t]+as[ \t]+[\p{L}_$][\p{L}\p{Nd}_$]*)?[ \t]*(?=[\r\n;}]|$)`,
   "gu",
 );
 
