@@ -30,6 +30,49 @@ default names the target branch as the scope (`chore(main): …`), and `main` is
 not in `commitlint.config.mjs`'s `scope-enum`, so the default title would fail
 a required check and could never merge.
 
+## Release stages: the 1.0.0-rc.1 candidate
+
+The repository crosses from 0.x to the v1 contract through a release candidate:
+a proposed v1 contract shipped for that proposal to be judged, not a stable
+release. The version is `1.0.0-rc.1`, published to every registry the release
+lane serves, and flagged as a prerelease on GitHub. The stable 1.x is the same
+contract once the [readiness conditions](../doctrine/roadmap.md#the-goal-of-1x)
+hold and the maintainer cuts it; the branch policy (CONTRIBUTING.md#which-branch-a-change-lands-on)
+
+**How the candidate is cut.** A commit on `main` whose message carries a
+`Release-As: 1.0.0-rc.1` footer forces exactly that version for exactly one
+release — the release-please strategy reads the newest `Release-As` note and
+returns it verbatim (measured against release-please 17.6.0, the version
+release-please-action v5.0.0 bundles), so the run that follows computes
+normally again and the mechanism self-expires behind the tag it cuts. The
+config-file `release-as` key upstream deprecated is not used: one commit, one
+cut, no persistent state to forget.
+
+**Iterating the candidate.** Each deliberate iteration needs its own
+`Release-As:` commit — `1.0.0-rc.2`, `1.0.0-rc.3` — because the default
+strategy from a prerelease version carries the suffix onto a bumped base
+(`1.0.1-rc.1`, not `1.0.0-rc.2`). An RC is named explicitly rather than
+incremented.
+
+**Graduation to stable.** Cutting stable `1.0.0` is one
+`Release-As: 1.0.0` commit. After that, the default strategy computes
+normally: `fix` → `1.0.1`, `feat` → `1.1.0`, `!` → `2.0.0`.
+
+**Prerelease flagging is automatic.** The `prerelease: true` configuration
+key flags the GitHub release as a prerelease only while the version itself
+carries a prerelease suffix or the major is still 0 — the same version gates
+it in release-please's release building — so the `1.0.0-rc.1` cut is flagged,
+the stable `1.0.0` that graduates from it is not, and the key stays with
+nothing to remove.
+
+**npm dist-tag note.** The publish jobs run bare `npm publish` (no
+`--tag`), so the candidate receives the `latest` dist-tag by semver ordering
+and a bare install resolves to it until stable is cut. Consumers pinning a
+`^0.15.0` range are unaffected: semver ranges exclude prereleases, so the
+range resolves to the highest stable 0.x rather than to the candidate. The
+maintainer decides whether to add `--tag` logic to the publish jobs; the
+facts above are what the maintainer decides from.
+
 ## What happens before anything is published
 
 CI packs the real tarball and installs it into a throwaway workspace

@@ -426,6 +426,29 @@ will see in CI:
   also why rebase merging is off rather than merely unfashionable: GitHub cannot
   sign a rebase, so a rebase merge into `main` is refused outright.)
 
+### Which branch a change lands on
+
+There are two development lines, and the version they are allowed to break
+decides the branch:
+
+- **`main` is the v1.x line.** From the 1.0.0-rc.1 candidate onward it holds
+  the v1 contract and receives only changes that keep it: bug fixes, security
+  fixes, documentation and test improvements, performance work, and additive
+  features — additive meaning the contract's surface only grows. What "keeps
+  the contract" covers — APIs, CLI, configuration, output shapes, exit codes,
+  and the _meaning_ of all of them — is defined in
+  [AGENTS.md](AGENTS.md#the-v1-contract-gate), and an agent classifies its
+  change against that gate before implementing.
+- **`next` is the v2 line.** It does not exist yet; the maintainer creates it
+  when v2 work starts. It is where intentional breaking changes — API,
+  semantics, configuration, graph model, provider behavior — are developed as
+  a batch instead of arriving one at a time on `main`. It is not a queue for
+  every new feature: a compatible feature belongs on `main`.
+
+A maintainer can explicitly authorize a breaking change on `main` — that is
+an exception, made in the open on the pull request, never inferred from a
+missing test or a missing sentence.
+
 ## How a release happens
 
 Nothing you need to do — but worth knowing, because it explains a pull request
@@ -449,6 +472,16 @@ Two details that are easy to trip over:
   not release-please's default. The default names the target branch as the scope
   (`chore(main): …`), and `main` is not in `commitlint.config.mjs`'s `scope-enum`
   — the release pull request would fail a required check and could never merge.
+
+- **The version can be forced for one release.** A `Release-As: <version>`
+  footer on any commit between the current tag and the next release forces
+  exactly that version once — the strategy reads the newest such note and
+  returns it verbatim, so the run after it computes normally again. This is
+  how the 1.0.0-rc.1 candidate and the stable 1.0.0 that graduates from it
+  are named.
+  [docs/development/release.md](docs/development/release.md#release-stages-the-100-rc1-candidate)
+  owns the stages; the `prerelease: true` configuration key flags the GitHub
+  release accordingly with nothing to remove after graduation.
 
 Before anything is published, CI packs the real tarball and installs it into a
 throwaway workspace (`scripts/verify-package.mjs`, described in the commands
