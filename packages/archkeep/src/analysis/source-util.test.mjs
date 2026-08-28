@@ -2,6 +2,7 @@ import { fc, test } from "@fast-check/vitest";
 import { describe, expect, it } from "vitest";
 
 import {
+  dedupeWholeFileFailures,
   emptyResult,
   fileFailure,
   lineStartsOf,
@@ -348,5 +349,30 @@ describe("envelope helpers", () => {
       column: null,
       reason: "unreadable",
     });
+  });
+
+  it("keeps one whole-file failure per file when the funnel hears it twice", () => {
+    // An unreadable JVM source reaches the funnel through the analyzer's own
+    // read failure AND the package index's row for the same file. Two rows
+    // would tell a consumer "2 files" when one failed — one fact, one row.
+    const merged = [
+      fileFailure("libs/x/A.kt", "Kotlin analysis failed: EACCES"),
+      { sourceFile: "libs/x/A.kt", line: 3, column: 8, reason: "a positioned blind spot" },
+      fileFailure("libs/x/A.kt", "JVM source could not be read for the package index"),
+      fileFailure("libs/y/B.go", "Go analysis failed: EACCES"),
+    ];
+    expect(dedupeWholeFileFailures(merged)).toEqual([
+      fileFailure("libs/x/A.kt", "Kotlin analysis failed: EACCES"),
+      { sourceFile: "libs/x/A.kt", line: 3, column: 8, reason: "a positioned blind spot" },
+      fileFailure("libs/y/B.go", "Go analysis failed: EACCES"),
+    ]);
+  });
+
+  it("keeps positioned failures whole — several blind spots in one file are distinct facts", () => {
+    const sites = [
+      { sourceFile: "libs/x/A.cs", line: 2, column: 1, reason: "first" },
+      { sourceFile: "libs/x/A.cs", line: 5, column: 1, reason: "second" },
+    ];
+    expect(dedupeWholeFileFailures(sites)).toEqual(sites);
   });
 });
