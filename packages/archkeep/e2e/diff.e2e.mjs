@@ -3,14 +3,22 @@
 // `diff` takes a graph baseline FILE (not a git ref) and compares the
 // current graph against it. It is descriptive — it never exits 1. It
 // refuses incomplete baselines or incomplete head graphs (exit 3).
-import { writeFileSync } from "node:fs";
+import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { packArtifact } from "./helpers/artifact.mjs";
-import { createNativeConsumer, commitFiles } from "./helpers/consumer.mjs";
+import {
+  createNativeConsumer,
+  createNativeLanguageConsumer,
+  commitFiles,
+  fixtureFiles,
+  applyFiles,
+} from "./helpers/consumer.mjs";
 import { archkeep } from "./helpers/run.mjs";
 import { CORE_REACHES_APP } from "./fixtures/violations.mjs";
+import { canonicalNativeFiles, mutations } from "./fixtures/canonical/native.mjs";
+import { assertDelta } from "./helpers/canonical.mjs";
 
 let artifact;
 let nativeConsumer;
@@ -199,6 +207,86 @@ describe("diff --config", () => {
       const result = archkeep(consumer.root, ["diff", baselineFile]);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("boundary violation resolved");
+    } finally {
+      consumer.cleanup();
+    }
+  });
+});
+
+describe("diff incompleteness, metadata, and determinism", () => {
+  it("refuses exit 3 when a head source file cannot be read", () => {
+    const consumer = createNativeLanguageConsumer(artifact, canonicalNativeFiles);
+    try {
+      const baselineFile = join(consumer.root, "baseline-head-incomplete.json");
+      archkeep(consumer.root, ["graph", "--format", "json", "--output", baselineFile]);
+
+      // A dangling symlink is tracked by git but unreadable on disk: the
+      // head graph cannot be complete, and every "removed" entry would be
+      // ambiguous between "gone" and "never seen".
+      const coreGo = join(consumer.root, "libs/core/core.go");
+      const original = readFileSync(coreGo, "utf8");
+      rmSync(coreGo);
+      symlinkSync("definitely-missing.go", coreGo);
+
+      const refused = archkeep(consumer.root, ["diff", baselineFile, "--format", "json"]);
+      expect(refused.exitCode, "diff refuses an unreadable head source").toBe(3);
+      expect(refused.stderr).toContain("head graph has incomplete coverage");
+
+      // The refusal was about coverage, not architecture: restoring the file
+      // restores the empty self-diff.
+      rmSync(coreGo);
+      writeFileSync(coreGo, original);
+      const restored = archkeep(consumer.root, ["diff", baselineFile, "--format", "json"]);
+      expect(restored.exitCode).toBe(0);
+      assertDelta(restored.json.result, {});
+    } finally {
+      consumer.cleanup();
+    }
+  });
+
+  it("reports a tags edit as changedProjects, with no edge movement", () => {
+    const consumer = createNativeLanguageConsumer(artifact, canonicalNativeFiles);
+    try {
+      const clean = fixtureFiles(artifact, canonicalNativeFiles);
+      // tooling carries no law row, so the edit cannot be confounded with a
+      // boundary refusal.
+      const withTooling = mutations["add-project-tooling"](clean);
+      applyFiles(consumer.root, clean, withTooling, "add the tooling project");
+
+      const baselineFile = join(consumer.root, "baseline-tags.json");
+      archkeep(consumer.root, ["graph", "--format", "json", "--output", baselineFile]);
+
+      const renamed = {
+        ...withTooling,
+        "archkeep.json": withTooling["archkeep.json"].replace("layer/tooling", "layer/bench"),
+      };
+      applyFiles(consumer.root, withTooling, renamed, "rename tooling's layer tag");
+
+      const result = archkeep(consumer.root, ["diff", baselineFile, "--format", "json"]);
+      expect(result.exitCode).toBe(0);
+      assertDelta(result.json.result, { changedProjects: ["tooling"] });
+      const fields = result.json.result.changedProjects[0].changes.map((change) => change.field);
+      expect(fields, "the tags edit is named as such").toContain("tags");
+    } finally {
+      consumer.cleanup();
+    }
+  });
+
+  it("produces byte-identical output across two runs over one mutation", () => {
+    const consumer = createNativeLanguageConsumer(artifact, canonicalNativeFiles);
+    try {
+      const clean = fixtureFiles(artifact, canonicalNativeFiles);
+      const baselineFile = join(consumer.root, "baseline-determinism.json");
+      archkeep(consumer.root, ["graph", "--format", "json", "--output", baselineFile]);
+
+      const mutated = mutations["add-edge-api-core"](clean);
+      applyFiles(consumer.root, clean, mutated, "mutation: add-edge-api-core");
+
+      const first = archkeep(consumer.root, ["diff", baselineFile]);
+      const second = archkeep(consumer.root, ["diff", baselineFile]);
+      expect(first.exitCode).toBe(0);
+      expect(second.exitCode).toBe(0);
+      expect(second.stdout).toBe(first.stdout);
     } finally {
       consumer.cleanup();
     }

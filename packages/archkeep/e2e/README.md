@@ -60,13 +60,20 @@ Every consumer workspace is:
 
 ```
 fixtures/
-  boundary-law.mjs       Two-layer (core/app) and three-layer (core/api/app) constraint tables
-  nx-consumer.mjs        Nx workspace: nx.json, project.json, Go sources
-  native-consumer.mjs    Native workspace: archkeep.json, Go sources, no nx
-  native-monorepo.mjs    3-project native monorepo (app → api → core)
+  boundary-law.mjs             Two-layer (core/app) and three-layer (core/api/app) constraint tables
+  nx-consumer.mjs              Nx workspace: nx.json, project.json, Go sources
+  native-consumer.mjs          Native workspace: archkeep.json, Go sources, no nx
+  native-monorepo.mjs          3-project native monorepo (app → api → core)
   vertical-slice-consumer.mjs  Feature-sliced tree whose law is a fitness function
-  waiver-law.mjs         One law in three readings: permanent, active waiver, lapsed waiver
-  violations.mjs         Files that produce specific violation types
+  waiver-law.mjs               One law in three readings: permanent, active waiver, lapsed waiver
+  violations.mjs               Files that produce specific violation types
+  drift-consumer.mjs           Consumer for the `drift` intent scenarios
+  intent-consumer.mjs          Consumer for the `architecture-intent` scenarios
+  composition-consumer.mjs     Consumer for official-rules-with-presets scenarios
+  determinism-sweep.mjs        Consumer behind the byte-identical sweep
+  evolution/                   Committed history snapshots (JSON) for the `history` scenarios
+  canonical/                   One hand-authored canonical architecture per provider, plus the mutation maps the oracle and canonical-graph suites read
+  languages/                   One fixture map per language face, plus `boundary-law.mjs` and `violations.mjs` shared by every language suite
 ```
 
 `vertical-slice-consumer.mjs` is the one fixture whose point is what the
@@ -78,24 +85,30 @@ exists to pin.
 
 ### Test files
 
-| File                  | Commands covered                                                                                                |
-| --------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `check.e2e.mjs`       | `check` (clean, violating, no-marker, JSON envelope)                                                            |
-| `graph.e2e.mjs`       | `graph` (clean, JSON envelope, project names, edges, `--output`)                                                |
-| `diff.e2e.mjs`        | `diff` (self-baseline, added/removed edge, invalid/incomplete baseline)                                         |
-| `drift.e2e.mjs`       | `drift` (matching tree, forbidden edge, missing project, malformed intent)                                      |
-| `history.e2e.mjs`     | `history` (empty/capture, evolution)                                                                            |
-| `context.e2e.mjs`     | `context` (tags, constraints, text and JSON, unknown project)                                                   |
-| `intent.e2e.mjs`      | `architecture-intent` through the installed CLI                                                                 |
-| `moon.e2e.mjs`        | Moon provider (`check`, `graph`, `diff`, `impact`, `explain`, `context`)                                        |
-| `impact.e2e.mjs`      | `impact` (leaf, mid-chain, root project, unknown project)                                                       |
-| `explain.e2e.mjs`     | `explain` (clean site, violating site, malformed/missing site)                                                  |
-| `fitness.e2e.mjs`     | `fitness` and `check`'s fold of it: clean → coupled → fixed, plus the unjudgeable case (exit 3)                 |
-| `waivers.e2e.mjs`     | The suppression table over a real violation: permanent, active, expired, and the row left stale by a fix        |
-| `parity.e2e.mjs`      | Native/Nx semantic parity (projects, edges, violations, envelope)                                               |
-| `determinism.e2e.mjs` | Repeated-execution byte-identical output                                                                        |
-| `sweep.e2e.mjs`       | Every machine-readable command, run twice, byte-identical                                                       |
-| `languages/*.e2e.mjs` | Go, Rust, Python, TypeScript, JavaScript and Vue, one file each, plus `cross-language.e2e.mjs` for their parity |
+| File                       | Commands covered                                                                                                                                                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `check.e2e.mjs`            | `check` (clean, violating, no-marker, JSON envelope)                                                                                                                                                                   |
+| `graph.e2e.mjs`            | `graph` (clean, JSON envelope, project names, edges, `--output`)                                                                                                                                                       |
+| `diff.e2e.mjs`             | `diff` (self-baseline, added/removed edge, invalid/incomplete baseline)                                                                                                                                                |
+| `drift.e2e.mjs`            | `drift` (matching tree, forbidden edge, missing project, malformed intent)                                                                                                                                             |
+| `history.e2e.mjs`          | `history` (empty/capture, evolution)                                                                                                                                                                                   |
+| `context.e2e.mjs`          | `context` (tags, constraints, text and JSON, unknown project)                                                                                                                                                          |
+| `intent.e2e.mjs`           | `architecture-intent` through the installed CLI                                                                                                                                                                        |
+| `moon.e2e.mjs`             | Moon provider (`check`, `graph`, `diff`, `impact`, `explain`, `context`)                                                                                                                                               |
+| `impact.e2e.mjs`           | `impact` (leaf, mid-chain, root project, unknown project)                                                                                                                                                              |
+| `explain.e2e.mjs`          | `explain` (clean site, violating site, malformed/missing site)                                                                                                                                                         |
+| `fitness.e2e.mjs`          | `fitness` and `check`'s fold of it: clean → coupled → fixed, plus the unjudgeable case (exit 3)                                                                                                                        |
+| `waivers.e2e.mjs`          | The suppression table over a real violation: permanent, active, expired, and the row left stale by a fix                                                                                                               |
+| `parity.e2e.mjs`           | Native/Nx semantic parity (projects, edges, violations, envelope)                                                                                                                                                      |
+| `determinism.e2e.mjs`      | Repeated-execution byte-identical output                                                                                                                                                                               |
+| `sweep.e2e.mjs`            | Every machine-readable command, run twice, byte-identical                                                                                                                                                              |
+| `languages/*.e2e.mjs`      | Go, Rust, Python, TypeScript, JavaScript, Vue, Java (Maven), Kotlin (Gradle), Gradle's own resolution, the JVM mixed-resolution blind spot, and .NET/C#, one file each, plus `cross-language.e2e.mjs` for their parity |
+| `canonical-graph.e2e.mjs`  | The hand-authored canonical architecture under each provider (native, Nx, Moon), asserted edge by edge                                                                                                                 |
+| `canonical-oracle.e2e.mjs` | The oracle's own self-test: every canonical assertion must reject its seeded wrong answer, so an empty oracle result means "no violation"                                                                              |
+| `rules.e2e.mjs`            | `rules` command through the installed CLI                                                                                                                                                                              |
+| `composition.e2e.mjs`      | Official rules composing with shipped presets                                                                                                                                                                          |
+| `evidence.e2e.mjs`         | Dual-track witness conflicts: withdrawing one witness of an edge moves nothing, withdrawing both removes exactly one record                                                                                            |
+| `metamorphic.e2e.mjs`      | Workspace-level graph invariance: comments, blank lines, import order, and dead code produce an empty delta                                                                                                            |
 
 ### Sharding
 
@@ -124,6 +137,11 @@ message Vitest prints.
   and `pnpm e2e --shard=2/2`, in parallel with `verify-core`
 - **Release lane**: `pnpm e2e` runs the whole suite in one job before
   `npm publish`, against the exact tag checkout
+- **Nightly**: `nightly.yml` runs the whole suite unsharded on `main`, plus
+  the full unit suite — catching cross-file interference the two PR shards
+  partition away, drift a doc-only affected-skip could leave on `main`, and
+  wall-clock sensitivity the merge-hour runs cannot see. Not a required
+  check; a red run is treated as a regression, not a flake.
 
 The existing `verify-package.mjs` step remains unchanged — it proves LSP initialization and Nx Go-edge drawing, responsibilities the E2E suite does not duplicate.
 

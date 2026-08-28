@@ -36,6 +36,7 @@ import { pythonLanguageFiles } from "../fixtures/languages/python.mjs";
 import { javaLanguageFiles } from "../fixtures/languages/java.mjs";
 import { kotlinLanguageFiles } from "../fixtures/languages/kotlin.mjs";
 import { gradleLanguageFiles } from "../fixtures/languages/gradle.mjs";
+import { dotnetLanguageFiles } from "../fixtures/languages/dotnet.mjs";
 
 /**
  * Writes a file map into a base directory, creating intermediate directories.
@@ -93,6 +94,50 @@ export function commitFiles(consumer, files, message) {
   commitTree(consumer, message, false);
 }
 
+/**
+ * Materializes a fixture's file map with the packed tarball wired in: the
+ * first `"*"` in the fixture's `package.json` is the archkeep devDependency
+ * (every fixture puts it first in `devDependencies`), and it becomes the
+ * `file:` path pnpm installs. The creation helpers and the mutation suites
+ * share this one substitution so a test's baseline file map is byte-identical
+ * to the tree the consumer was actually created from.
+ *
+ * @param {{ tarballPath: string, peers: Record<string, string>, packageName: string, packageManager: string }} artifact
+ * @param {(packageName: string, peers: Record<string, string>, packageManager: string) => Record<string, string>} fixtureFn
+ * @returns {Record<string, string>} Relative path → contents.
+ */
+export function fixtureFiles(artifact, fixtureFn) {
+  const files = fixtureFn(artifact.packageName, artifact.peers, artifact.packageManager);
+  files["package.json"] = files["package.json"].replace(
+    '"*"',
+    JSON.stringify(`file:${artifact.tarballPath}`),
+  );
+  return files;
+}
+
+/**
+ * Applies a whole-file-map mutation to an existing consumer and commits it:
+ * every relative path present in `previous` but absent from `files` is
+ * deleted, every path in `files` is written, and the result is committed so
+ * `git ls-files` sees the mutated workspace. The deletion half is what
+ * `commitFiles` cannot express — removing a project must remove its files.
+ *
+ * @param {string} consumer Absolute path to the consumer workspace.
+ * @param {Record<string, string>} previous The file map the consumer was last
+ *   written with — its keys decide what counts as removed.
+ * @param {Record<string, string>} files The mutated file map.
+ * @param {string} message Commit message.
+ */
+export function applyFiles(consumer, previous, files, message) {
+  for (const relative of Object.keys(previous)) {
+    if (!(relative in files)) {
+      rmSync(join(consumer, relative), { force: true });
+    }
+  }
+  write(consumer, files);
+  commitTree(consumer, message, false);
+}
+
 /** Runs a command, capturing everything. Argument array — never a shell string. */
 function run(command, args, cwd, extraEnv = {}) {
   return spawnSync(command, args, {
@@ -132,14 +177,9 @@ export function createNxConsumer(artifact) {
  * @returns {ConsumerWorkspace}
  */
 export function createNxLanguageConsumer(artifact, fixtureFn) {
-  const { tarballPath, peers, packageName, packageManager } = artifact;
   const consumer = realpathSync(mkdtempSync(join(tmpdir(), "archkeep-e2e-nx-")));
 
-  const files = fixtureFn(packageName, peers, packageManager);
-  files["package.json"] = files["package.json"].replace(
-    '"*"',
-    JSON.stringify(`file:${tarballPath}`),
-  );
+  const files = fixtureFiles(artifact, fixtureFn);
   write(consumer, files);
   // `allowBuilds` blocks pnpm 11 lifecycle scripts until the workspace
   // decides — same reasoning as `scripts/verify-package.mjs`.
@@ -174,14 +214,9 @@ export function createNxLanguageConsumer(artifact, fixtureFn) {
  * @returns {ConsumerWorkspace}
  */
 export function createNativeConsumer(artifact) {
-  const { tarballPath, peers, packageName, packageManager } = artifact;
   const consumer = realpathSync(mkdtempSync(join(tmpdir(), "archkeep-e2e-native-")));
 
-  const files = nativeConsumerFiles(packageName, peers, packageManager);
-  files["package.json"] = files["package.json"].replace(
-    '"*"',
-    JSON.stringify(`file:${tarballPath}`),
-  );
+  const files = fixtureFiles(artifact, nativeConsumerFiles);
   write(consumer, files);
   writeFileSync(
     join(consumer, "pnpm-workspace.yaml"),
@@ -228,14 +263,9 @@ export function createNativeConsumer(artifact) {
  * @returns {ConsumerWorkspace}
  */
 export function createNativeMonorepoConsumer(artifact) {
-  const { tarballPath, peers, packageName, packageManager } = artifact;
   const consumer = realpathSync(mkdtempSync(join(tmpdir(), "archkeep-e2e-native-mono-")));
 
-  const files = nativeMonorepoFiles(packageName, peers, packageManager);
-  files["package.json"] = files["package.json"].replace(
-    '"*"',
-    JSON.stringify(`file:${tarballPath}`),
-  );
+  const files = fixtureFiles(artifact, nativeMonorepoFiles);
   write(consumer, files);
   writeFileSync(
     join(consumer, "pnpm-workspace.yaml"),
@@ -269,23 +299,21 @@ export function createNativeMonorepoConsumer(artifact) {
 }
 
 /**
- * Creates a Moonrepo consumer workspace: three projects (web, api, core)
+ * Creates a Moonrepo consumer workspace: four projects (web, cli, api, core)
  * with `.moon/workspace.yml`, per-project `moon.yml` files, TypeScript and
  * Go sources, no `nx` dependency. Proves Archkeep's Moon provider works
  * against a real Moon workspace through the installed CLI.
  *
  * @param {{ tarballPath: string, peers: Record<string, string>, packageName: string, packageManager: string }} artifact
+ * @param {(packageName: string, peers: Record<string, string>, packageManager: string) => Record<string, string>} [filesFn]
+ *   The fixture providing the file map; defaults to `moonConsumerFiles`. The
+ *   canonical fixtures pass their own (see `../fixtures/canonical/`).
  * @returns {ConsumerWorkspace}
  */
-export function createMoonConsumer(artifact) {
-  const { tarballPath, peers, packageName, packageManager } = artifact;
+export function createMoonConsumer(artifact, filesFn = moonConsumerFiles) {
   const consumer = realpathSync(mkdtempSync(join(tmpdir(), "archkeep-e2e-moon-")));
 
-  const files = moonConsumerFiles(packageName, peers, packageManager);
-  files["package.json"] = files["package.json"].replace(
-    '"*"',
-    JSON.stringify(`file:${tarballPath}`),
-  );
+  const files = fixtureFiles(artifact, filesFn);
   write(consumer, files);
   // The Moon fixture provides its own `pnpm-workspace.yaml` with workspace
   // packages, so the default one is not written.
@@ -336,6 +364,7 @@ const LANGUAGE_FIXTURES = {
   java: javaLanguageFiles,
   kotlin: kotlinLanguageFiles,
   gradle: gradleLanguageFiles,
+  dotnet: dotnetLanguageFiles,
 };
 
 /**
@@ -361,14 +390,9 @@ export function createNativeLanguageConsumer(artifact, languageOrFn) {
     );
   }
 
-  const { tarballPath, peers, packageName, packageManager } = artifact;
   const consumer = realpathSync(mkdtempSync(join(tmpdir(), "archkeep-e2e-lang-")));
 
-  const files = fixtureFn(packageName, peers, packageManager);
-  files["package.json"] = files["package.json"].replace(
-    '"*"',
-    JSON.stringify(`file:${tarballPath}`),
-  );
+  const files = fixtureFiles(artifact, fixtureFn);
   write(consumer, files);
   // Write `pnpm-workspace.yaml` only if the fixture didn't provide one.
   // Fixtures with pnpm workspace packages (e.g. JavaScript) supply their
