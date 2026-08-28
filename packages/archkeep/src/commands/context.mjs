@@ -28,11 +28,13 @@ import { join } from "node:path";
 import { containmentViolation } from "../containment.mjs";
 import { dotnetIndexFailures } from "../analysis/dotnet/namespaces.mjs";
 import { dotnetManifestFailures } from "../analysis/dotnet/csproj.mjs";
+import { goManifestFailures } from "../analysis/go.mjs";
 import { mavenManifestFailures } from "../analysis/jvm/maven.mjs";
 import { gradleManifestFailures } from "../analysis/jvm/gradle.mjs";
 import { jvmIndexFailures } from "../analysis/jvm/packages.mjs";
 import { languageOf } from "../analysis/registry.mjs";
 import { pythonUnmodelledFailures } from "../analysis/python.mjs";
+import { rustManifestFailures } from "../analysis/rust.mjs";
 import { fileFailure } from "../analysis/source-util.mjs";
 import {
   DEFAULT_OPTIONS,
@@ -633,6 +635,8 @@ export function resolveCommandContext(
       // project whose manifest it cannot read by naming a path that excludes
       // it (`../analysis/python.mjs`'s `pythonUnmodelledFailures`).
       ...pythonUnmodelledFailures(workspace),
+      ...goManifestFailures(workspace),
+      ...rustManifestFailures(workspace),
       ...mavenManifestFailures(workspace),
       ...gradleManifestFailures(workspace),
       ...jvmIndexFailures(workspace),
@@ -746,6 +750,8 @@ export function resolveCommandContext(
       ...wholeTreeAnalysis.failures.filter((failure) => selectedFiles.has(failure.sourceFile)),
       ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Moon project graph" }),
       ...pythonUnmodelledFailures(workspace),
+      ...goManifestFailures(workspace),
+      ...rustManifestFailures(workspace),
       ...mavenManifestFailures(workspace),
       ...gradleManifestFailures(workspace),
       ...jvmIndexFailures(workspace),
@@ -812,6 +818,8 @@ export function resolveCommandContext(
       ...failures,
       ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Nx project graph" }),
       ...pythonUnmodelledFailures(workspace),
+      ...goManifestFailures(workspace),
+      ...rustManifestFailures(workspace),
       ...mavenManifestFailures(workspace),
       ...gradleManifestFailures(workspace),
       ...jvmIndexFailures(workspace),

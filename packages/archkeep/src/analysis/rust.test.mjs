@@ -6,6 +6,7 @@ import {
   crateImportName,
   parseRustUseSites,
   resolveRustDependencies,
+  rustManifestFailures,
   useRootSegment,
 } from "./rust.mjs";
 
@@ -143,10 +144,17 @@ describe("resolveRustDependencies", () => {
     expect(resolveRustDependencies(projects, filesOf, (p) => contents[p] ?? null)).toEqual([]);
   });
 
-  it("skips a crate whose manifest is listed but cannot be read", () => {
-    // `filesOf` names the manifest; `readFile` cannot produce it (a file
-    // deleted between the listing and the read). The crate must not be
-    // guessed into existence, and the run must not throw.
+  it("refuses the graph when a Cargo.toml is listed but cannot be read (#405)", () => {
+    // The loud direction. `filesOf` names the manifest; `readFile` cannot
+    // produce it (a file deleted between the listing and the read, a
+    // permission change). The crate must not be guessed into existence, and
+    // the resolver must now throw — the same posture the Maven and .csproj
+    // readers hold. The empty parse it used to be read as would drop the
+    // project's identity from every map while the graph computation still
+    // succeeded.
+    const withGhost = [...projects, { name: "ghost", root: "acme/libs/ghost" }];
+    const filesOfGhost = (name) =>
+      name === "ghost" ? ["acme/libs/ghost/Cargo.toml"] : filesOf(name);
     const contents = {
       "acme/libs/alpha/Cargo.toml": [
         '[package]\nname = "alpha"\nversion = "0.1.0"',
@@ -154,17 +162,9 @@ describe("resolveRustDependencies", () => {
       ].join("\n\n"),
       "acme/libs/beta/Cargo.toml": '[package]\nname = "beta"\nversion = "0.1.0"\n',
     };
-    const withGhost = [...projects, { name: "ghost", root: "acme/libs/ghost" }];
-    const filesOfGhost = (name) =>
-      name === "ghost" ? ["acme/libs/ghost/Cargo.toml"] : filesOf(name);
-    expect(resolveRustDependencies(withGhost, filesOfGhost, (p) => contents[p] ?? null)).toEqual([
-      {
-        source: "alpha",
-        target: "beta",
-        sourceFile: "acme/libs/alpha/Cargo.toml",
-        type: "static",
-      },
-    ]);
+    expect(() =>
+      resolveRustDependencies(withGhost, filesOfGhost, (p) => contents[p] ?? null),
+    ).toThrow(/acme\/libs\/ghost\/Cargo\.toml/);
   });
 
   it("draws edges in both directions when a project sits at the workspace root", () => {
@@ -1055,5 +1055,49 @@ describe('analyzeRust — a dependency renamed via `package = "…"`', () => {
       external: false,
       packageName: null,
     });
+  });
+});
+
+describe("rustManifestFailures", () => {
+  const workspace = {
+    root: "/w",
+    projects: [
+      { name: "engine", root: "acme/libs/engine" },
+      { name: "app", root: "acme/apps/app" },
+    ],
+    filesOf: (name) =>
+      ({
+        engine: ["acme/libs/engine/Cargo.toml"],
+        app: ["acme/apps/app/Cargo.toml", "acme/apps/app/src/main.rs"],
+      })[name] ?? [],
+    readFile: (path) =>
+      ({
+        "acme/libs/engine/Cargo.toml": '[package]\nname = "engine"\nversion = "0.1.0"\n',
+        "acme/apps/app/Cargo.toml": '[package]\nname = "app"\nversion = "0.1.0"\n',
+      })[path] ?? null,
+  };
+
+  it("surfaces an unreadable Cargo.toml as a whole-file failure naming it (#405)", () => {
+    // The analysis-side funnel: `rustManifestFailures` is what
+    // `src/commands/context.mjs` spreads into the run's failure list, so
+    // `check` exits 3 (could-not-complete) rather than reporting clean while a
+    // tracked manifest cannot be read. The workspace-shape test exercises the
+    // memoized builders, not the throw the graph resolver raises. Both
+    // builders walk the same root manifest, so the dedupe must answer one
+    // failure, not two.
+    const unreadable = {
+      ...workspace,
+      readFile: (path) => (path === "acme/apps/app/Cargo.toml" ? null : workspace.readFile(path)),
+    };
+    const failures = rustManifestFailures(unreadable);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].sourceFile).toBe("acme/apps/app/Cargo.toml");
+    expect(failures[0].line).toBe(null);
+    expect(failures[0].column).toBe(null);
+    expect(failures[0].reason).toMatch(/could not be read/u);
+  });
+
+  it("reports no manifest failure for a workspace whose Cargo.toml files all read", () => {
+    expect(rustManifestFailures(workspace)).toEqual([]);
   });
 });
