@@ -24,7 +24,8 @@
  * manifest reader and name index throws for the states its funnel
  * classifies as could-not-complete — the same failure lists the CLI turns
  * into exit 3: the Maven, Gradle and .csproj models, the JVM package index,
- * the C# namespace index (`../analysis/source-util.mjs`'s `refuseUnreadTree`).
+ * the C# namespace index, the Go module map and the Rust crate map
+ * (`../analysis/source-util.mjs`'s `refuseUnreadTree`).
  * Nx wraps a throwing hook's error and fails the whole graph computation —
  * measured against nx 23.1.1, which also has a dedicated `ProcessDependenciesError`
  * for the event and whose daemon refuses with an error rather than serving a

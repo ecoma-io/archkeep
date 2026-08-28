@@ -31,6 +31,31 @@
  *   string literal, and a mask that ate string literals would have nothing
  *   left to read.
  *
+ * ## The two shapes that parse as nothing, and the failure that says so (#413)
+ *
+ * Both import regexes require a closing token: the block form a `)`, the
+ * single form a quote. A file truncated inside an import — a failed write, a
+ * merge marker left mid-import, a bad checkout — supplies neither, so both
+ * regexes matched nothing and the file analyzed as importing NOTHING, with no
+ * failure record and a clean verdict over it. `goImportMalformations` detects
+ * exactly those zero-record shapes and hands `analyzeGo` a whole-file failure
+ * per `contract.md`, which is what counts the file toward `unchecked` and
+ * turns the verdict loud. Shapes the regexes still misread but do answer — a
+ * quote closed on a later line, a `)` supplied from a function body below —
+ * produce a record today and stay the documented parse limits above.
+ *
+ * ## An unreadable go.mod refuses, it does not skip (#405)
+ *
+ * `parseGoModulePath` parses content; it never sees a failed read. Reading a
+ * tracked go.mod as the empty string made a null read (permissions, EISDIR, a
+ * file gone between the listing and the read) parse to no module path and the
+ * project silently leave the module map — every import reaching it resolved
+ * as if it were a proxy package, and the run reported clean over the hole.
+ * The per-workspace reader records a whole-file failure naming the manifest
+ * instead, the same posture the JVM and Python manifest readers hold, and the
+ * graph resolver refuses the whole graph for it (`refuseUnreadTree`, #364's
+ * posture — `../graph/create-dependencies.mjs`'s header owns the boundary).
+ *
  * `import` opens its line, after indentation only, OR follows a `;` on the
  * same line — the same statement separator `gofmt` inserts automatically at
  * a newline, so an explicit one reopens an import exactly the way a fresh
@@ -77,6 +102,7 @@ import {
   perWorkspace,
   positionAt,
   projectOwning,
+  refuseUnreadTree,
   trackedManifests,
 } from "./source-util.mjs";
 
@@ -174,6 +200,189 @@ export function maskGoComments(goText) {
   return masked + goText.slice(copied);
 }
 
+/**
+ * `goText` with the CONTENT of every string literal blanked out, byte-for-byte
+ * the same length and with both quote delimiters of a closed literal left in
+ * place, so an offset into the result is the same offset into the original.
+ *
+ * `maskGoComments` keeps literals intact on purpose — an import path IS a
+ * string literal, and the site regexes read their content. The malformation
+ * scan below needs the opposite view: the Go source a code-generating raw
+ * string holds must not be mistaken for import syntax, or a template would
+ * have a compiling file reported as broken. Blanking rather than deleting
+ * keeps every offset honest for the same reason the comment mask does. The
+ * literal forms are the three `maskGoComments` scans — an interpreted string
+ * and a rune literal, both escape-aware and ended by a line break, and a raw
+ * string, which takes no escapes and runs either to its closing backtick or
+ * to end-of-file.
+ *
+ * @param {string} goText
+ * @returns {string} Same length as `goText`.
+ */
+function blankGoStringContents(goText) {
+  const scan = /["'`]/g;
+  let masked = "";
+  let copied = 0;
+  let match;
+  while ((match = scan.exec(goText)) !== null) {
+    const start = match.index;
+    let end;
+    if (match[0] === "`") {
+      const close = goText.indexOf("`", start + 1);
+      end = close === -1 ? goText.length : close + 1;
+    } else {
+      // Interpreted string or rune literal: `\` escapes the next character,
+      // except at a line break, where the literal is unterminated instead.
+      let at = start + 1;
+      while (at < goText.length && goText[at] !== match[0] && goText[at] !== "\n") {
+        at += goText[at] === "\\" && goText[at + 1] !== "\n" ? 2 : 1;
+      }
+      end = Math.min(goText[at] === match[0] ? at + 1 : at, goText.length);
+    }
+    const close = end > start && goText[end - 1] === match[0] ? end - 1 : end;
+    masked +=
+      goText.slice(copied, start + 1) +
+      blankOut(goText.slice(start + 1, close)) +
+      goText.slice(close, end);
+    copied = end;
+    scan.lastIndex = end;
+  }
+  return masked + goText.slice(copied);
+}
+
+/** An alias is optional in every form this scan reads, and `\\s+` follows it. */
+const GO_ALIAS_AT = /[\p{L}_.][\p{L}\p{Nd}_.]*\s+/uy;
+
+/**
+ * Why a `.go` file's imports cannot be fully read, as reasons for `analyzeGo`
+ * to record as whole-file failures (`contract.md`): an `import (…)` block that
+ * never closes, a block spec whose string never closes inside its block, an
+ * import whose string literal never terminates, and an `import` statement that
+ * states no path at all. Each is the shape a TRUNCATED file takes — a failed
+ * write, a merge marker left mid-import, a bad checkout — and each used to
+ * parse as zero import sites with no failure record, byte-for-byte identical
+ * to a file that imports nothing (#413).
+ *
+ * The detection mirrors the import regexes' own failure conditions, so a file
+ * they read fully is never flagged: the block branch asks whether the `)` the
+ * block form could end at exists, and the string branches ask whether the
+ * closing quote `[^"]+` needs exists in the range that form searches — the
+ * whole rest of the file for a single-form import, the block's content for a
+ * spec inside one. Shapes the regexes still misread but do answer — a quote
+ * closed on a later line, a `)` supplied from a function body below — produce
+ * a record today and stay the header's documented parse limits, not new
+ * failures here.
+ *
+ * Imports written inside a raw string are excluded: the template a
+ * code-generating file holds is text, and flagging it would report a
+ * compiling file as broken (`blankGoStringContents` removes them). One reason
+ * per kind keeps a file with many truncated imports to one record each, and
+ * keeps the scan linear: a failed block search is never repeated, because no
+ * later opener can find a `)` an earlier one already failed to find.
+ *
+ * The graph layer does not consume this — per-source import reads keep the
+ * null-read posture there, where a dropped source loses only its own edges
+ * (`../graph/create-dependencies.mjs`'s header). This is the failure the
+ * ANALYSIS verdict refuses on: a whole-file failure counts the file toward
+ * `unchecked`, and `check` reports the run incomplete instead of clean.
+ *
+ * @param {string} goText
+ * @returns {string[]} At most one reason per kind, each naming the line it was
+ *   seen on. Empty when the imports read fully.
+ */
+export function goImportMalformations(goText) {
+  const source = blankGoStringContents(maskGoComments(goText));
+  /** @type {string[]} */
+  const reasons = [];
+  const flagged = new Set();
+  const flag = (offset, kind, reason) => {
+    if (flagged.has(kind)) return;
+    flagged.add(kind);
+    reasons.push(`${reason} (line ${positionAt(goText, offset).line})`);
+  };
+  // The last of each quote kind is the O(1) answer to "does this literal ever
+  // close": a quote terminates exactly when another of its kind follows it,
+  // which is the same search the site regexes' `[^"]+` / `[^\`]+` run.
+  const lastDoubleQuote = source.lastIndexOf('"');
+  const lastBacktick = source.lastIndexOf("`");
+  // `lastClose` keeps the block search linear across openers: openers ascend,
+  // and each `)` lies after its own opener, so the next search resumes at the
+  // close just found rather than rescanning the text before it.
+  let lastClose = 0;
+  let unclosedSince = -1;
+  for (const m of source.matchAll(/(?:^|;)[ \t]*import/gm)) {
+    let at = m.index + m[0].length;
+    while (at < source.length && /\s/u.test(source[at])) at += 1;
+    if (at >= source.length) {
+      flag(
+        m.index,
+        "bare",
+        "an import states no path — the file is truncated or malformed, so its imports cannot be read",
+      );
+      continue;
+    }
+    if (source[at] === "(") {
+      if (unclosedSince !== -1 && at > unclosedSince) continue;
+      const close = source.indexOf(")", Math.max(at + 1, lastClose));
+      if (close === -1) {
+        unclosedSince = at;
+        flag(
+          at,
+          "block",
+          "an `import (` block opens and never closes — the file is truncated or malformed, so its imports cannot be read",
+        );
+        continue;
+      }
+      lastClose = close + 1;
+      // Every quote inside the block content is a spec's string delimiter:
+      // everything else the content could have held is blanked. The quotes
+      // pair left-to-right — the same pairing `blankGoStringContents` ran —
+      // so an odd count means the last one opened a spec's string that
+      // nothing inside the block closes, which is the one `blockForm`'s
+      // `[^"]+` cannot bridge.
+      for (const quote of ['"', "`"]) {
+        const positions = [];
+        let at2 = source.indexOf(quote, at + 1);
+        while (at2 !== -1 && at2 < close) {
+          positions.push(at2);
+          at2 = source.indexOf(quote, at2 + 1);
+        }
+        if (positions.length % 2 === 1) {
+          flag(
+            positions[positions.length - 1],
+            "block-spec",
+            "an import path inside an `import (` block opens a string that never closes — the file is truncated or malformed, so its imports cannot be read",
+          );
+        }
+      }
+      continue;
+    }
+    GO_ALIAS_AT.lastIndex = at;
+    const alias = GO_ALIAS_AT.exec(source);
+    if (alias !== null) {
+      at = alias.index + alias[0].length;
+      while (at < source.length && /\s/u.test(source[at])) at += 1;
+    }
+    if (at >= source.length || (source[at] !== '"' && source[at] !== "`")) {
+      flag(
+        m.index,
+        "bare",
+        "an import states no path — the file is truncated or malformed, so its imports cannot be read",
+      );
+      continue;
+    }
+    const last = source[at] === '"' ? lastDoubleQuote : lastBacktick;
+    if (last <= at) {
+      flag(
+        at,
+        "string",
+        "an import opens a string literal that never terminates — the file is truncated or malformed, so its imports cannot be read",
+      );
+    }
+  }
+  return reasons;
+}
+
 // An import alias is a Go identifier: `\p{L}` is what `unicode.IsLetter`
 // accepts as a starting rune (gofmt permits `import π "…"`), and the ASCII
 // `[A-Za-z_.]` this used to be silently dropped every non-ASCII one — a
@@ -243,18 +452,44 @@ export function parseGoImports(goText) {
  * `projects`: [{ name, root }]; `filesOf(name)`: workspace-relative paths of
  * a project's tracked files; `readFile(path)`: contents or null. Returns raw
  * Nx dependencies ({ source, target, sourceFile, type: "static" }).
+ *
+ * A go.mod the tree tracks but the read cannot produce is not parsed as the
+ * empty string (#405): the project's module paths would be unknown, so every
+ * import reaching it resolved as if it were a proxy package and the project
+ * left the graph in silence. The read failure is recorded and the whole graph
+ * is refused (`refuseUnreadTree`, #364's posture) — a manifest is an identity
+ * anchor, so one unreadable entry corrupts resolution for every project that
+ * names it, which is not a loss this resolver may answer with a missing edge.
+ * A go.mod that READS but declares no module directive is different: the
+ * content is known and there is genuinely no identity in it (a `go.work`-
+ * owning root), so that project still contributes nothing — loudly recorded
+ * nowhere, because nothing was lost.
+ *
+ * @throws {Error} when any tracked go.mod could not be read, naming each one.
  */
 export function resolveGoDependencies(projects, filesOf, readFile) {
   const moduleOf = new Map(); // module path -> project name
   const goProjects = [];
+  const unreadable = [];
   for (const project of projects) {
     const goModPath = normalizePath(project.root, "go.mod");
     if (!filesOf(project.name).includes(goModPath)) continue;
-    const modulePath = parseGoModulePath(readFile(goModPath) ?? "");
+    const text = readFile(goModPath);
+    if (text === null) {
+      unreadable.push(
+        fileFailure(
+          goModPath,
+          "could not be read — the project's Go module paths are unknown, so imports reaching it cannot be judged",
+        ),
+      );
+      continue;
+    }
+    const modulePath = parseGoModulePath(text);
     if (!modulePath) continue;
     moduleOf.set(modulePath, project.name);
     goProjects.push(project);
   }
+  refuseUnreadTree("the Go module map", unreadable);
 
   const dependencies = [];
   for (const project of goProjects) {
@@ -289,20 +524,54 @@ export function resolveGoDependencies(projects, filesOf, readFile) {
  * per `.go` file. Every tracked `go.mod` in a project counts, not only the one
  * at its root — see `trackedManifests` for why analysis is broader here than
  * the edge resolver above.
+ *
+ * A tracked `go.mod` the read cannot produce is recorded as a whole-file
+ * failure naming the manifest rather than parsed as the empty string (#405):
+ * the empty string parses to no module path, and the project would leave the
+ * module map in silence — every import reaching it then resolved as if it were
+ * a proxy package, indistinguishable from a real external import. The failure
+ * is workspace-scoped, the way the Python and JVM manifest readers record
+ * theirs: a module list this reader could not read is a hole in every run,
+ * not only in the files that happen to import into it.
  */
 const goModulesOf = perWorkspace((workspace) => {
   const byModulePath = new Map(); // module path -> project name
   const byProject = new Map(); // project name -> [module path]
+  const failures = [];
   for (const project of workspace.projects) {
     for (const goModPath of trackedManifests(workspace, project.name, "go.mod")) {
-      const modulePath = parseGoModulePath(workspace.readFile(goModPath) ?? "");
+      const text = workspace.readFile(goModPath);
+      if (text === null) {
+        failures.push(
+          fileFailure(
+            goModPath,
+            "could not be read — the project's Go module paths are unknown, so imports reaching it cannot be judged",
+          ),
+        );
+        continue;
+      }
+      const modulePath = parseGoModulePath(text);
       if (!modulePath) continue;
       byModulePath.set(modulePath, project.name);
       byProject.set(project.name, [...(byProject.get(project.name) ?? []), modulePath]);
     }
   }
-  return { byModulePath, byProject };
+  return { byModulePath, byProject, failures };
 });
+
+/**
+ * Every tracked go.mod this reader could not read, as whole-file failures
+ * attributed to the manifest — the accessor `../commands/context.mjs` merges
+ * beside `pythonUnmodelledFailures` and the JVM readers', so `check` reports
+ * the run incomplete (exit 3) rather than clean while a project's module list
+ * says nothing this tool can read. Workspace-scoped on purpose, for the same
+ * reason those readers are: a scoped run must not be able to hide a project
+ * whose manifest it cannot read by naming a path that excludes it.
+ *
+ * @param {object} workspace
+ * @returns {object[]} `fileFailure` shapes (`./source-util.mjs`).
+ */
+export const goManifestFailures = (workspace) => goModulesOf(workspace).failures;
 
 /** True when `importPath` is inside the module rooted at `modulePath`. */
 const isUnderModule = (importPath, modulePath) =>
@@ -374,6 +643,15 @@ export function analyzeGo({ sourceFile, text, workspace }) {
     const { byModulePath, byProject } = goModulesOf(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
     const ownModules = owner ? (byProject.get(owner.name) ?? []) : [];
+
+    // A file truncated inside an import used to parse as importing nothing,
+    // with no failure beside the empty result — the clean verdict over it was
+    // the bug (#413). The whole-file shape is what turns the verdict loud:
+    // `check` counts the file toward `unchecked` and refuses to call the run
+    // complete, instead of reporting a hole as a clean file.
+    for (const reason of goImportMalformations(text)) {
+      result.failures.push(fileFailure(sourceFile, reason));
+    }
 
     for (const site of parseGoImportSites(text)) {
       const { line, column } = positionAt(text, site.offset);

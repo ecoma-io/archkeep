@@ -28,11 +28,13 @@ import { join } from "node:path";
 import { containmentViolation } from "../containment.mjs";
 import { dotnetIndexFailures } from "../analysis/dotnet/namespaces.mjs";
 import { dotnetManifestFailures } from "../analysis/dotnet/csproj.mjs";
+import { goManifestFailures } from "../analysis/go.mjs";
 import { mavenManifestFailures } from "../analysis/jvm/maven.mjs";
 import { gradleManifestFailures } from "../analysis/jvm/gradle.mjs";
 import { jvmIndexFailures } from "../analysis/jvm/packages.mjs";
 import { languageOf } from "../analysis/registry.mjs";
 import { pythonUnmodelledFailures } from "../analysis/python.mjs";
+import { rustManifestFailures } from "../analysis/rust.mjs";
 import { dedupeWholeFileFailures, fileFailure } from "../analysis/source-util.mjs";
 import {
   DEFAULT_OPTIONS,
@@ -657,6 +659,8 @@ export function resolveCommandContext(
       // needs them as its no-throw guard.
       ...pythonUnmodelledFailures(workspace),
       ...manifestRefusalFailures,
+      ...goManifestFailures(workspace),
+      ...rustManifestFailures(workspace),
       ...jvmIndexFailures(workspace),
     ]);
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
@@ -777,6 +781,8 @@ export function resolveCommandContext(
       ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Moon project graph" }),
       ...pythonUnmodelledFailures(workspace),
       ...manifestRefusalFailures,
+      ...goManifestFailures(workspace),
+      ...rustManifestFailures(workspace),
       ...jvmIndexFailures(workspace),
     ]);
     unclaimedGap = { files: unclaimedFiles };
@@ -839,6 +845,8 @@ export function resolveCommandContext(
       ...failures,
       ...unclaimedFileFailures({ files: unclaimedFiles, providerLabel: "the Nx project graph" }),
       ...pythonUnmodelledFailures(workspace),
+      ...goManifestFailures(workspace),
+      ...rustManifestFailures(workspace),
       ...mavenManifestFailures(workspace),
       ...gradleManifestFailures(workspace),
       ...jvmIndexFailures(workspace),

@@ -79,6 +79,17 @@
  * entry it comes from — same `path`/`workspace = true` handling — so a `use`
  * naming the rename lands on the same project the graph edge already points
  * at, never a second, disagreeing answer.
+ *
+ * **An unreadable Cargo.toml refuses, it does not skip (#405).** Every reader
+ * here — the edge resolver, `crateNamesOf`, `renamedDepsOf` — distinguishes a
+ * manifest that is absent from one it cannot read (`trackedManifests` and the
+ * per-project `filesOf` check settle absence first), and the unreadable state
+ * is a whole-file failure naming the manifest plus a `refuseUnreadTree` throw
+ * in the graph resolver, the same two faces the Maven, Gradle and .csproj
+ * readers have (`./source-util.mjs`). The empty parse it used to be read as
+ * would drop the project's own identity from every map while the run stayed
+ * clean. `rustManifestFailures` is the analysis-side funnel
+ * `src/commands/context.mjs` spreads, so `check` exits 3 rather than 0.
  */
 import { normalizePath, parseManifest } from "./manifest-util.mjs";
 import {
@@ -88,6 +99,7 @@ import {
   perWorkspace,
   positionAt,
   projectOwning,
+  refuseUnreadTree,
   trackedManifests,
 } from "./source-util.mjs";
 
@@ -123,14 +135,40 @@ function findWorkspaceManifest(startDir, readFile) {
 /**
  * Static edges between Rust projects. Same contract as the Go resolver:
  * `projects` [{ name, root }], `filesOf(name)`, `readFile(path)` → raw deps.
+ *
+ * A Cargo.toml the tree tracks but the read cannot produce is not parsed as
+ * the empty string (#405): the empty parse names no crate, and the project
+ * would leave `projectByRoot` in silence — every path dependency pointing at
+ * it would resolve to no target, and the edge would be dropped as if none was
+ * declared. The read failure is recorded and the whole graph is refused
+ * (`refuseUnreadTree`, #364's posture — `../graph/create-dependencies.mjs`'s
+ * header owns the boundary): a manifest is an identity anchor, so one
+ * unreadable entry corrupts resolution for every project that names it. A
+ * manifest that READS but declares no `[package]` is different — the content
+ * is known and genuinely names no crate (a workspace-only manifest), so that
+ * project still contributes nothing, as before.
+ *
+ * @throws {Error} when any tracked root Cargo.toml could not be read, naming
+ *   each one.
  */
 export function resolveRustDependencies(projects, filesOf, readFile) {
   const projectByRoot = new Map();
   const crates = [];
+  const unreadable = [];
   for (const project of projects) {
     const manifestPath = normalizePath(project.root, "Cargo.toml");
     if (!filesOf(project.name).includes(manifestPath)) continue;
-    const manifest = parseManifest(readFile(manifestPath) ?? "");
+    const text = readFile(manifestPath);
+    if (text === null) {
+      unreadable.push(
+        fileFailure(
+          manifestPath,
+          "could not be read — the project's crate name is unknown, so imports reaching it cannot be judged",
+        ),
+      );
+      continue;
+    }
+    const manifest = parseManifest(text);
     if (!manifest?.package?.name) continue; // workspace-only manifests are not crates
     // Normalized, not raw: Nx spells the workspace-root project's `root` as
     // `"."`, which `normalizePath` collapses to `""` — the same value a
@@ -139,6 +177,7 @@ export function resolveRustDependencies(projects, filesOf, readFile) {
     projectByRoot.set(normalizePath(project.root, ""), project.name);
     crates.push({ project, manifest, manifestPath });
   }
+  refuseUnreadTree("the Rust crate map", unreadable);
 
   const dependencies = [];
   for (const { project, manifest, manifestPath } of crates) {
@@ -211,16 +250,34 @@ export function crateImportName(manifest) {
  * why analysis is broader here than the edge resolver above, and for the one
  * project in this workspace that needs it. A workspace-only manifest declares
  * no `[package]`, so the repo-root `Cargo.toml` contributes nothing.
+ *
+ * A tracked manifest the read cannot produce is recorded as a whole-file
+ * failure naming it rather than parsed as the empty string (#405): the empty
+ * parse names no crate, and the project would leave the crate map in silence —
+ * every `use` of it then resolved `external: true`, indistinguishable from a
+ * registry import. The failure is workspace-scoped, the way the Python and JVM
+ * manifest readers record theirs.
  */
 const crateNamesOf = perWorkspace((workspace) => {
   const byCrate = new Map();
+  const failures = [];
   for (const project of workspace.projects) {
     for (const manifestPath of trackedManifests(workspace, project.name, "Cargo.toml")) {
-      const crate = crateImportName(parseManifest(workspace.readFile(manifestPath) ?? ""));
+      const text = workspace.readFile(manifestPath);
+      if (text === null) {
+        failures.push(
+          fileFailure(
+            manifestPath,
+            "could not be read — the project's crate name is unknown, so imports reaching it cannot be judged",
+          ),
+        );
+        continue;
+      }
+      const crate = crateImportName(parseManifest(text));
       if (crate) byCrate.set(crate, project.name);
     }
   }
-  return byCrate;
+  return { byCrate, failures };
 });
 
 /**
@@ -241,8 +298,10 @@ const crateNamesOf = perWorkspace((workspace) => {
  * Tauri `src-tauri/` shape) draws no graph edge to resolve a rename against
  * in the first place, so there is no target here to be consistent with.
  *
- * @returns {Map<string, Map<string, string>>} project name -> (the identifier
- *   a `.rs` file spells -> the project the rename actually reaches).
+ * @returns {{byProject: Map<string, Map<string, string>>, failures: object[]}}
+ *   `byProject`: project name -> (the identifier a `.rs` file spells -> the
+ *   project the rename actually reaches). `failures`: one whole-file failure
+ *   per tracked root manifest the read could not produce (#405).
  */
 const renamedDepsOf = perWorkspace((workspace) => {
   const projectByRoot = new Map();
@@ -255,10 +314,21 @@ const renamedDepsOf = perWorkspace((workspace) => {
   }
 
   const byProject = new Map();
+  const failures = [];
   for (const project of workspace.projects) {
     const manifestPath = normalizePath(project.root, "Cargo.toml");
     if (!workspace.filesOf(project.name).includes(manifestPath)) continue;
-    const manifest = parseManifest(workspace.readFile(manifestPath) ?? "");
+    const text = workspace.readFile(manifestPath);
+    if (text === null) {
+      failures.push(
+        fileFailure(
+          manifestPath,
+          "could not be read — the project's crate name is unknown, so imports reaching it cannot be judged",
+        ),
+      );
+      continue;
+    }
+    const manifest = parseManifest(text);
     if (!manifest) continue;
 
     const aliases = new Map();
@@ -304,8 +374,32 @@ const renamedDepsOf = perWorkspace((workspace) => {
     }
     if (aliases.size > 0) byProject.set(project.name, aliases);
   }
-  return byProject;
+  return { byProject, failures };
 });
+
+/**
+ * The unreadable-manifest failures of this workspace's Rust readers, as the
+ * run's failure list wants them (`../contract.md`). Both builders above read
+ * the same root manifests — the root project's `Cargo.toml` is walked by
+ * `crateNamesOf`'s `trackedManifests` and by `renamedDepsOf`'s root-only read
+ * — so the same unreadable file would be recorded twice without the dedupe.
+ *
+ * @param {object} workspace
+ * @returns {object[]} `fileFailure` shapes (`../analysis/source-util.mjs`).
+ */
+export function rustManifestFailures(workspace) {
+  const seen = new Set();
+  const failures = [];
+  for (const failure of [
+    ...crateNamesOf(workspace).failures,
+    ...renamedDepsOf(workspace).failures,
+  ]) {
+    if (seen.has(failure.sourceFile)) continue;
+    seen.add(failure.sourceFile);
+    failures.push(failure);
+  }
+  return failures;
+}
 
 /** Path prefixes that name the crate being compiled rather than another one. */
 const OWN_CRATE_ROOTS = new Set(["crate", "self", "super"]);
@@ -628,11 +722,11 @@ export function parseRustUseSites(rustText, knownCrates = new Set(), options = {
 export function analyzeRust({ sourceFile, text, workspace }) {
   const result = emptyResult();
   try {
-    const byCrate = crateNamesOf(workspace);
+    const { byCrate } = crateNamesOf(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
     // A rename is legible only inside the project whose OWN manifest declares
     // it — see the header's "A renamed dependency IS followed".
-    const ownAliases = owner ? renamedDepsOf(workspace).get(owner.name) : undefined;
+    const ownAliases = owner ? renamedDepsOf(workspace).byProject.get(owner.name) : undefined;
     const knownCrates = ownAliases
       ? new Set([...byCrate.keys(), ...ownAliases.keys()])
       : new Set(byCrate.keys());

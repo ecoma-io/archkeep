@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   analyzeGo,
+  goImportMalformations,
+  goManifestFailures,
   maskGoComments,
   parseGoImports,
   parseGoImportSites,
@@ -510,32 +512,42 @@ describe("resolveGoDependencies", () => {
     expect(resolveGoDependencies(projects, filesOf, (p) => lookalike[p] ?? null)).toEqual([]);
   });
 
-  it("skips a project whose go.mod is listed but cannot be read, or names no module", () => {
-    // Two silent-direction guards. A go.mod that is listed but gone (deleted
-    // between the listing and the read) must not be parsed as the empty
-    // string — the empty string IS a module path for nothing, and the project
-    // could then match every import spelled `""`. And a go.mod that parsed
-    // but declares no module should not invent one. Neither may become an
-    // edge, and neither may throw.
-    const expanded = [
-      ...projects,
-      { name: "gamma", root: "acme/libs/gamma" },
-      { name: "delta", root: "acme/libs/delta" },
-    ];
+  it("refuses the graph when a go.mod is listed but cannot be read (#405)", () => {
+    // The loud direction. A go.mod that is listed but gone (deleted between
+    // the listing and the read, a permission change) used to be read as the
+    // empty string: the project's module path was unknown, so imports
+    // reaching INTO it resolved to nothing and drew no edge, while the graph
+    // computation still succeeded. Now the resolver throws and Nx fails the
+    // whole graph computation — the same posture the Maven and .csproj
+    // readers hold.
+    const expanded = [...projects, { name: "gamma", root: "acme/libs/gamma" }];
     const filesExpanded = {
       ...files,
       gamma: ["acme/libs/gamma/go.mod", "acme/libs/gamma/tool.go"],
+    };
+    const filesOfExpanded = (name) => filesExpanded[name] ?? [];
+    expect(() =>
+      resolveGoDependencies(expanded, filesOfExpanded, (p) => contents[p] ?? null),
+    ).toThrow(/acme\/libs\/gamma\/go\.mod/);
+  });
+
+  it("still skips a project whose go.mod reads but names no module", () => {
+    // A go.mod that parsed but declares no module (a `go.work`-owning root
+    // with no module of its own) invents nothing — that absence is the file's
+    // real content, not a failed read, so it is not a refusal.
+    const expanded = [...projects, { name: "delta", root: "acme/libs/delta" }];
+    const filesExpanded = {
+      ...files,
       delta: ["acme/libs/delta/go.mod", "acme/libs/delta/cmd.go"],
     };
     const filesOfExpanded = (name) => filesExpanded[name] ?? [];
     const contentsExpanded = {
       ...contents,
-      // gamma's manifest is listed but cannot be produced; delta's can be and
-      // declares no module — a `go.work`-owning root with no module of its own.
       "acme/libs/delta/go.mod": "go 1.24\n",
     };
-    const readFileExpanded = (p) => contentsExpanded[p] ?? null;
-    expect(resolveGoDependencies(expanded, filesOfExpanded, readFileExpanded)).toEqual([
+    expect(
+      resolveGoDependencies(expanded, filesOfExpanded, (p) => contentsExpanded[p] ?? null),
+    ).toEqual([
       { source: "alpha", target: "beta", sourceFile: "acme/libs/alpha/main.go", type: "static" },
     ]);
   });
@@ -643,6 +655,98 @@ describe("parseGoImportSites", () => {
     const doubled = 'package x\n\nimport "fmt"\nimport "fmt"\n';
     expect(parseGoImportSites(doubled)).toHaveLength(2);
     expect(parseGoImports(doubled)).toEqual(["fmt"]);
+  });
+});
+
+describe("goImportMalformations", () => {
+  // Each case is the shape a TRUNCATED file takes (#413): the parse reads it
+  // as zero import sites with no failure, byte-for-byte identical to a file
+  // that imports nothing. The malformation is what says the empty result is
+  // not a claim.
+  it("flags an `import (` block that opens and never closes, naming its line", () => {
+    const truncated = [
+      "package main", // 1
+      "", // 2
+      "import (", // 3
+      '\t"fmt"', // 4
+      '\t"example.com/acme/beta/pkg"', // 5 — EOF before the `)`
+    ].join("\n");
+    const reasons = goImportMalformations(truncated);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/import \(/);
+    expect(reasons[0]).toMatch(/line 3\)$/);
+  });
+
+  it("flags a single-form import whose string literal never terminates", () => {
+    const truncated = 'package main\n\nimport "example.com/acme/beta/pkg\n';
+    const reasons = goImportMalformations(truncated);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/never terminates/);
+    expect(reasons[0]).toMatch(/line 3\)$/);
+  });
+
+  it("flags a block spec whose string never closes inside an otherwise-closed block", () => {
+    // The block's `)` is present, so the block branch succeeds — the odd quote
+    // count inside the content is what the spec branch must catch.
+    const truncated = [
+      "package main", // 1
+      "import (", // 2
+      '\t"fmt"', // 3
+      '\t"example.com/acme/beta/pkg', // 4 — no closing quote before `)`
+      ")", // 5
+    ].join("\n");
+    const reasons = goImportMalformations(truncated);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/opens a string that never closes/);
+    expect(reasons[0]).toMatch(/line 4\)$/);
+  });
+
+  it("flags an import that states no path at all", () => {
+    const bare = "package main\n\nimport\n";
+    const reasons = goImportMalformations(bare);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/states no path/);
+    expect(reasons[0]).toMatch(/line 3\)$/);
+  });
+
+  it("does not flag a well-formed file — block form, single form, aliased, backticked", () => {
+    const whole = [
+      "package main",
+      "",
+      "import (",
+      '\t"fmt"',
+      '\talias "example.com/acme/beta/pkg"',
+      ")",
+      "",
+      'import "example.com/acme/gamma"',
+      "import _ `example.com/acme/delta`",
+    ].join("\n");
+    expect(goImportMalformations(whole)).toEqual([]);
+  });
+
+  it("does not flag import-shaped text inside a raw string or a comment", () => {
+    // A code-generating file's template and a TODO hold text that only looks
+    // like an import; flagging either would report a compiling file as broken.
+    const template = [
+      "package gen",
+      "",
+      "const tmpl = `package {{.Name}}",
+      "",
+      'import "example.com/acme/{{.Name}}/pkg"',
+      "`",
+      "",
+      "// import (",
+      '// \t"example.com/acme/commented/pkg"',
+      "// )",
+    ].join("\n");
+    expect(goImportMalformations(template)).toEqual([]);
+  });
+
+  it("reports one reason per kind, not one per broken import", () => {
+    const truncated = 'import "fmt"\nimport "example.com/a\nimport "example.com/b\n';
+    const reasons = goImportMalformations(truncated);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/never terminates/);
   });
 });
 
@@ -933,5 +1037,70 @@ describe("analyzeGo", () => {
     };
     const result = analyzeGo({ sourceFile: "a/b.go", text: 'import "fmt"', workspace: hostile });
     expect(result.failures[0].reason).toBe("Go analysis failed: graph unavailable");
+  });
+
+  it("records a whole-file failure for an import block the file truncates (#413)", () => {
+    // The silent direction, pinned red: a file cut off mid-import used to
+    // parse as importing nothing, and `failures` came back empty — a verdict
+    // indistinguishable from a clean file. The whole-file shape (line and
+    // column null) is what counts the file toward `unchecked` and turns
+    // `coverage.complete` false, so `check` reports the run incomplete instead
+    // of clean.
+    const truncated = 'package main\n\nimport (\n\t"fmt"\n\t"example.com/acme/beta/pkg"\n';
+    const { imports, failures } = analyzeGo({
+      sourceFile: "acme/apps/gamma/main.go",
+      text: truncated,
+      workspace: bomWorkspace,
+    });
+    expect(imports).toEqual([]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].sourceFile).toBe("acme/apps/gamma/main.go");
+    expect(failures[0].line).toBe(null);
+    expect(failures[0].column).toBe(null);
+    expect(failures[0].reason).toMatch(/import \(/);
+  });
+
+  it("records a whole-file failure for a single-form import the file truncates (#413)", () => {
+    const truncated = 'package main\n\nimport "example.com/acme/beta/pkg\n';
+    const { failures } = analyzeGo({
+      sourceFile: "acme/apps/gamma/main.go",
+      text: truncated,
+      workspace: bomWorkspace,
+    });
+    expect(failures).toHaveLength(1);
+    expect(failures[0].sourceFile).toBe("acme/apps/gamma/main.go");
+    expect(failures[0].line).toBe(null);
+    expect(failures[0].column).toBe(null);
+  });
+
+  it("records no malformation failure for a file whose imports read fully", () => {
+    const { failures } = analyzeGo({
+      sourceFile: "acme/apps/gamma/main.go",
+      text: 'package main\n\nimport "example.com/acme/alpha/feature"\n',
+      workspace: bomWorkspace,
+    });
+    expect(failures).toEqual([]);
+  });
+
+  it("surfaces an unreadable go.mod as a whole-file failure naming it (#405)", () => {
+    // The analysis-side funnel: `goManifestFailures` is what
+    // `src/commands/context.mjs` spreads into the run's failure list, so
+    // `check` exits 3 (could-not-complete) rather than reporting clean while a
+    // tracked manifest cannot be read. The workspace-shape test exercises the
+    // memoized builder, not the throw the graph resolver raises.
+    const unreadable = {
+      ...bomWorkspace,
+      readFile: (path) => (path === "acme/libs/alpha/go.mod" ? null : bomWorkspace.readFile(path)),
+    };
+    const failures = goManifestFailures(unreadable);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].sourceFile).toBe("acme/libs/alpha/go.mod");
+    expect(failures[0].line).toBe(null);
+    expect(failures[0].column).toBe(null);
+    expect(failures[0].reason).toMatch(/could not be read/);
+  });
+
+  it("reports no manifest failure for a workspace whose go.mod files all read", () => {
+    expect(goManifestFailures(bomWorkspace)).toEqual([]);
   });
 });
