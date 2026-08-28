@@ -455,7 +455,16 @@ jobs:
     needs: [prepare, verify-conformance]
     if: needs.prepare.result == 'success' && needs.prepare.outputs.released == 'true' && (needs.verify-conformance.result == 'success' || needs.verify-conformance.outputs.exit_class == 'infra') && !cancelled()
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 30, measured, not inherited: this is the only publish job that runs the
+    # full `pnpm e2e` suite, and the 10 it shared with the E2E-free jobs killed
+    # the v1.0.1-rc.1 publish mid-suite — job 98969981421 (run 33205240557,
+    # attempt 2) died at 10m17s on `##[error]The operation was canceled.`, with
+    # vue.e2e.mjs and go.e2e.mjs green seconds before. A rerun re-executes the
+    # run's own commit, so no rerun could ever finish; the budget, not the
+    # suite, was the defect (#445). 30 is ~3x the observed kill point and the
+    # same bounded-but-generous shape `verify-conformance`'s 45 uses. The E2E
+    # stays a hard pre-publish gate — the budget now says what running it costs.
+    timeout-minutes: 30
     permissions:
       contents: read
       # Mints the OIDC token npm exchanges for a provenance attestation: npm
