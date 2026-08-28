@@ -685,6 +685,89 @@ describe("keeping up with the buffer and with the tree", () => {
     },
   );
 
+  it.each([
+    ["go.mod", "apps/api/go.mod"],
+    ["go.work", "go.work"],
+    ["Cargo.toml", "libs/ledger/Cargo.toml"],
+    ["pyproject.toml", "packages/etl/pyproject.toml"],
+    ["pom.xml", "services/billing/pom.xml"],
+    ["settings.gradle", "settings.gradle"],
+    ["settings.gradle.kts", "services/billing/settings.gradle.kts"],
+    ["build.gradle", "apps/api/build.gradle"],
+    ["build.gradle.kts", "apps/api/build.gradle.kts"],
+    ["moon.yml", "apps/webapp/moon.yml"],
+    [".moon/workspace.yml", ".moon/workspace.yml"],
+    [".config/moon/workspace.yml", ".config/moon/workspace.yml"],
+  ])(
+    "re-diagnoses every open document when the graph manifest %s is saved from the editor",
+    async (_name, relativePath) => {
+      // The silent-stale direction #410 reports, driven through the door the
+      // issue names. Saving a graph manifest used to republish the manifest
+      // alone, because `touchesWatchedFile` matched a list that carried the
+      // TypeScript-side configuration only: the project graph kept its
+      // index-time shape, and every open verdict kept answering from it —
+      // byte-for-byte identical to a checked tree. The red direction: with a
+      // manifest out of `watchedFilesFor`, `build` stays 1 and the second
+      // publish never happens. Both a root-level spelling (`go.work`, the two
+      // `workspace.yml` markers) and a per-project depth are driven, since
+      // `touchesWatchedFile`'s suffix reach has to cover where each file
+      // actually lives.
+      let build = 0;
+      const { server, sent } = session({
+        buildIndex: () => {
+          build += 1;
+          return { workspace: {}, graph: { nodes: {} } };
+        },
+      });
+      await server.handle(initialize());
+      await server.handle(didOpen());
+      await server.handle({
+        jsonrpc: "2.0",
+        method: "textDocument/didSave",
+        params: { textDocument: { uri: `file://${ROOT}/${relativePath}` } },
+      });
+
+      expect(build).toBe(2);
+      expect(published(sent)).toHaveLength(2);
+    },
+  );
+
+  it.each(["go.mod", ".moon/workspace.yml"])(
+    "re-diagnoses when the file watcher reports a changed %s too, not only on a save",
+    async (name) => {
+      // The other door into the same predicate. The client-side watcher
+      // reports a manifest change made beside the editor — `git checkout`, a
+      // `go work use` — and it reaches the same `touchesWatchedFile`, so the
+      // watched set has to cover the manifests there as well or the two doors
+      // would disagree about what shapes the graph.
+      let build = 0;
+      const { server, sent } = session({
+        buildIndex: () => {
+          build += 1;
+          return { workspace: {}, graph: { nodes: {} } };
+        },
+      });
+      await server.handle(initialize());
+      await server.handle(didOpen());
+      await server.handle({
+        jsonrpc: "2.0",
+        method: "workspace/didChangeWatchedFiles",
+        params: {
+          changes: [
+            {
+              uri:
+                name === "go.mod" ? `file://${ROOT}/libs/ledger/go.mod` : `file://${ROOT}/${name}`,
+              type: 2,
+            },
+          ],
+        },
+      });
+
+      expect(build).toBe(2);
+      expect(published(sent)).toHaveLength(2);
+    },
+  );
+
   it("re-diagnoses everything when the boundary config is saved from the editor itself", async () => {
     // The reload a client with no file watching would otherwise never get. It
     // only covers a change made in the editor — a `git checkout` beside it
@@ -793,7 +876,7 @@ describe("keeping up with the buffer and with the tree", () => {
 });
 
 describe("asking the client to watch the files a verdict depends on", () => {
-  it("registers a watcher for the boundary config and every project.json", async () => {
+  it("registers a watcher for the boundary config, the graph manifests, and every project.json", async () => {
     const { server, sent } = session();
     await server.handle(
       initialize({
@@ -828,6 +911,25 @@ describe("asking the client to watch the files a verdict depends on", () => {
         "package.json",
         "module-federation.config.js",
         "module-federation.config.ts",
+        // The manifests the Go, Rust, Python, JVM and Moon providers read the
+        // project graph itself from (`./server.mjs`'s
+        // `POLYGLOT_GRAPH_MANIFESTS`, which owns the per-file why). Written
+        // literally for the same reason as every entry above: #410 was this
+        // list describing the TypeScript-side configuration only, and an
+        // assertion derived from `watchedFilesFor` would have stayed green
+        // through exactly that hole.
+        "go.mod",
+        "go.work",
+        "Cargo.toml",
+        "pyproject.toml",
+        "pom.xml",
+        "settings.gradle",
+        "settings.gradle.kts",
+        "build.gradle",
+        "build.gradle.kts",
+        "moon.yml",
+        ".moon/workspace.yml",
+        ".config/moon/workspace.yml",
       ].map((file) => ({ globPattern: `**/${file}` })),
     );
   });
