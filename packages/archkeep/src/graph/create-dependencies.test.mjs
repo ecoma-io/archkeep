@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { resolveJavaDependencies } from "../analysis/java.mjs";
 import { resolveKotlinDependencies } from "../analysis/kotlin.mjs";
 import { analyzeWorkspace } from "../workspace.mjs";
-import { resolvePolyglotDependencies } from "./create-dependencies.mjs";
+import {
+  resolveDeclaredManifestEdges,
+  resolveDeclaredManifestFailures,
+  resolvePolyglotDependencies,
+} from "./create-dependencies.mjs";
 
 /**
  * The #363 invariant, pinned by counting reads: the JVM package index builds
@@ -104,5 +108,95 @@ describe("resolvePolyglotDependencies builds each JVM read-once structure once",
     expect(count(JAVA_APP)).toBe(afterGraph[JAVA_APP] + 1);
     expect(count(JAVA_LIB)).toBe(afterGraph[JAVA_LIB] + 1);
     expect(count(KOTLIN_UTIL)).toBe(afterGraph[KOTLIN_UTIL] + 1);
+  });
+});
+
+describe("resolveDeclaredManifestEdges / resolveDeclaredManifestFailures", () => {
+  // One workspace carrying BOTH manifest families, so the composition is
+  // pinned as a fold of all three resolvers — not just whichever one the
+  // test's language happens to use. The Maven reactor and the .NET pair are
+  // the minimal shapes their own suites use.
+  const MIXED = {
+    "pom.xml": [
+      "<project>",
+      "  <groupId>com.acme</groupId>",
+      "  <artifactId>acme-parent</artifactId>",
+      "  <version>1.0.0</version>",
+      "  <packaging>pom</packaging>",
+      "</project>",
+    ].join("\n"),
+    "app/pom.xml": [
+      "<project>",
+      "  <parent><groupId>com.acme</groupId><artifactId>acme-parent</artifactId></parent>",
+      "  <artifactId>app</artifactId>",
+      "  <dependencies>",
+      "    <dependency><groupId>com.acme</groupId><artifactId>core</artifactId></dependency>",
+      "  </dependencies>",
+      "</project>",
+    ].join("\n"),
+    "core/pom.xml": [
+      "<project>",
+      "  <parent><groupId>com.acme</groupId><artifactId>acme-parent</artifactId></parent>",
+      "  <artifactId>core</artifactId>",
+      "</project>",
+    ].join("\n"),
+    "libs/domain/Domain.csproj":
+      '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n',
+    "libs/domain/Domain.cs": "namespace Example.Domain;\n\nclass Domain {}\n",
+    "libs/application/Application.csproj":
+      '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include="..\\domain\\Domain.csproj" /></ItemGroup></Project>\n',
+    "libs/application/App.cs": "namespace Example.Application;\n\nclass App {}\n",
+  };
+  const MIXED_PROJECTS = [
+    { name: "root", root: "" },
+    { name: "app", root: "app" },
+    { name: "core", root: "core" },
+    { name: "domain", root: "libs/domain" },
+    { name: "application", root: "libs/application" },
+  ];
+  const mixedWorkspace = (files = MIXED) => ({
+    root: "/workspace",
+    projects: MIXED_PROJECTS,
+    filesOf: (name) => {
+      const project = MIXED_PROJECTS.find((candidate) => candidate.name === name);
+      if (!project) return [];
+      return Object.keys(files).filter(
+        (file) => project.root === "" || file.startsWith(`${project.root}/`),
+      );
+    },
+    readFile: (path) => files[path] ?? null,
+  });
+
+  it("folds a Maven edge and a csproj edge into one list", () => {
+    const ws = mixedWorkspace();
+    expect(resolveDeclaredManifestEdges(ws)).toEqual(
+      expect.arrayContaining([
+        { source: "app", target: "core", sourceFile: "app/pom.xml", type: "static" },
+        {
+          source: "application",
+          target: "domain",
+          sourceFile: "libs/application/Application.csproj",
+          type: "static",
+        },
+      ]),
+    );
+    expect(resolveDeclaredManifestFailures(ws)).toEqual([]);
+  });
+
+  // The no-throw guard the CLI and language-server callers rely on: a tree
+  // whose manifest cannot be read is REPORTED by
+  // `resolveDeclaredManifestFailures` — and refused by
+  // `resolveDeclaredManifestEdges` — from the same memoized model, so a
+  // caller folding the failure list and guarding the edge call on its
+  // emptiness can never report a clean tree it refused, nor refuse one it
+  // reported clean.
+  it("reports and refuses the same unreadable manifest from one model", () => {
+    const ws = mixedWorkspace({
+      ...MIXED,
+      "core/pom.xml": "<project><unclosed>",
+    });
+    const failures = resolveDeclaredManifestFailures(ws);
+    expect(failures).toEqual([expect.objectContaining({ sourceFile: "core/pom.xml" })]);
+    expect(() => resolveDeclaredManifestEdges(ws)).toThrow(/pom/i);
   });
 });

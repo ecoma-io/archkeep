@@ -126,7 +126,11 @@ import {
   createWorkspace,
   listTrackedFiles,
 } from "../workspace.mjs";
-import { buildDependencies } from "../providers/native/graph.mjs";
+import { buildDependencies, mergeDeclaredEdges } from "../providers/native/graph.mjs";
+import {
+  resolveDeclaredManifestEdges,
+  resolveDeclaredManifestFailures,
+} from "../graph/create-dependencies.mjs";
 import { nodeTypeOf, PROJECT_CONFIG_FILE } from "../providers/native/discover.mjs";
 import { ARCHKEEP_MODEL_FILE } from "../providers/native/model.mjs";
 import { nativeProvider } from "../providers/native/index.mjs";
@@ -425,6 +429,18 @@ export function buildWorkspaceIndex({
 
   const { importSites, fileFailures } = analyzeTrackedFiles({ files, workspace });
 
+  // The manifest track — Maven, Gradle, csproj — draws its edges here too.
+  // The CLI's Nx face gets them from the polyglot plugin inside Nx's own
+  // graph computation; this index has no plugin host, so it folds the same
+  // resolvers' records itself (`../graph/create-dependencies.mjs`), the way
+  // the native and Moon branches below do. The failure list doubles as the
+  // no-throw guard (that module's `resolveDeclaredManifestFailures` — each
+  // resolver refuses on exactly the failures its `*ManifestFailures` twin
+  // reports, same memoized model) and joins `fileFailures`, so a manifest
+  // the index cannot read is a named gap on every document rather than
+  // silently missing edges.
+  const manifestRefusalFailures = resolveDeclaredManifestFailures(workspace);
+
   // `nx.json`'s `workspaceLayout` reaches the rule engine here the same way
   // `../providers/nx.mjs`'s `readProjectGraph` merges it onto the graph it
   // returns to `cli.mjs` — see that function's own doc for why a merge step
@@ -485,17 +501,22 @@ export function buildWorkspaceIndex({
         `workspace, whose projects are declared in package.json, yields none`
       : null;
 
+  const graph = {
+    nodes,
+    dependencies: buildDependencies({ importSites, nodes, projectOf }),
+    ...(workspaceLayout === undefined ? {} : { workspaceLayout }),
+  };
+  if (manifestRefusalFailures.length === 0) {
+    mergeDeclaredEdges(graph, resolveDeclaredManifestEdges(workspace));
+  }
+
   return {
     root,
     files,
     workspace,
-    graph: {
-      nodes,
-      dependencies: buildDependencies({ importSites, nodes, projectOf }),
-      ...(workspaceLayout === undefined ? {} : { workspaceLayout }),
-    },
+    graph,
     skippedProjects: skipped,
-    fileFailures,
+    fileFailures: [...fileFailures, ...manifestRefusalFailures],
     // Retained past the graph build — the evidence half of `evaluate()`'s
     // input (`./diagnose.mjs` composes its run from these). See this module
     // header's "Why the whole tree's import sites stay on the index".
@@ -638,9 +659,26 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
   // reports the same way: an unowned file is analyzed by nothing and judged
   // by nothing, which is exactly the hole `../providers/native/coverage.mjs`'s
   // own header names.
-  const fileFailures = [...discovered.failures, ...analysisFailures];
+  const manifestRefusalFailures = resolveDeclaredManifestFailures(workspace);
+  const fileFailures = [
+    ...discovered.failures,
+    ...analysisFailures,
+    // The manifest track's own could-not-complete failures, in the same
+    // whole-file shape — an unreadable pom/build.gradle/.csproj is a file
+    // this index could not analyze, exactly like the ones above.
+    ...manifestRefusalFailures,
+  ];
 
   const graph = nativeProvider.buildGraph({ discovered, importSites });
+  // The manifest track's edges fold in after the import sites — no plugin
+  // host exists on this branch to draw them (`../graph/create-dependencies.mjs`
+  // names the faces that route through the Nx hook instead). The failure list
+  // above doubles as the no-throw guard: each resolver refuses on exactly the
+  // failures its `*ManifestFailures` twin reports from the same memoized model.
+  if (manifestRefusalFailures.length === 0) {
+    mergeDeclaredEdges(graph, resolveDeclaredManifestEdges(workspace));
+  }
+
   // The same Module Federation and `package.json` facts the Nx branch and
   // `../../cli.mjs`'s native branch both compute, from the same shared
   // functions (`../workspace.mjs`) — a CLI verdict and an editor verdict on
@@ -739,13 +777,24 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
     projectOf: (file) => projectOfFile.get(file),
   });
 
+  // The manifest track folds in after the import sites, for the same
+  // no-face-qualifier reason the CLI's Moon branch states at its own fold —
+  // Moon has no plugin hook to draw declared edges either. The failure list
+  // doubles as the no-throw guard and joins `fileFailures`, so an
+  // unreadable pom/build.gradle/.csproj is a named gap rather than silently
+  // missing edges.
+  const manifestRefusalFailures = resolveDeclaredManifestFailures(workspace);
+  if (manifestRefusalFailures.length === 0) {
+    mergeDeclaredEdges(graph, resolveDeclaredManifestEdges(workspace));
+  }
+
   return {
     root,
     files,
     workspace,
     graph,
     skippedProjects: [],
-    fileFailures,
+    fileFailures: [...fileFailures, ...manifestRefusalFailures],
     // Retained past the graph build — the evidence half of `evaluate()`'s
     // input (`./diagnose.mjs` composes its run from these), on this branch
     // exactly as on the other two.
