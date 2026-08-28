@@ -55,6 +55,16 @@ jobs:
     name: Prepare release
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # The `on:` filter restricts push triggers to `main`, but
+    # `workflow_dispatch` can start from any branch that carries this file —
+    # and it is carried verbatim on `next`, the v2 line. The guard stops a
+    # manual dispatch from reading the v1 config and manifest out of a tree
+    # that is not `main`'s: release-please resolves its facts from the ref
+    # it runs on, and running them on `next` would open a v1 release pull
+    # request against the v2 line — the one direction the branch policy
+    # forbids (CONTRIBUTING.md, "Which branch a change lands on").
+    if: github.ref_name == 'main'
+
     permissions:
       contents: write
       pull-requests: write
