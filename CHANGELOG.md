@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.1-rc.1](https://github.com/ecoma-io/archkeep/compare/v1.0.0-rc.1...v1.0.1-rc.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **ci:** publish a prerelease version to npm under its own dist-tag ([#430](https://github.com/ecoma-io/archkeep/issues/430)) ([2f2258a](https://github.com/ecoma-io/archkeep/commit/2f2258aebe3dbbde82af27c7dd6bda3a32ed2340))
+
+
+### Documentation
+
+* **workspace:** name the v2 line where 1.0 is announced ([#436](https://github.com/ecoma-io/archkeep/issues/436)) ([7c939eb](https://github.com/ecoma-io/archkeep/commit/7c939eb77f52c4978ea0580f1dad764d903f71df))
+* **workspace:** write down how the two development lines move ([#431](https://github.com/ecoma-io/archkeep/issues/431)) ([df55748](https://github.com/ecoma-io/archkeep/commit/df55748b60a82fa6d3b9b3fe0936f8e5c9a49761))
+
 ## [1.0.0-rc.1](https://github.com/ecoma-io/archkeep/compare/v0.15.0...v1.0.0-rc.1) (2026-08-28)
 
 
