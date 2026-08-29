@@ -56,7 +56,11 @@ release-please-action v5.0.0 bundles), so the run that follows computes
 normally again and the mechanism self-expires behind the tag it cuts. The
 config-file `release-as` key upstream deprecated is not used: one commit,
 one cut, no persistent state to forget. The 0.16.0 cut back to the 0.x line
-is named this way.
+is named this way. The footer has to be on the commit that lands: the merge
+queue builds the squash commit's message from the branch's commit messages,
+not from the pull-request body, so a footer left only in the pull-request
+body never reaches `main` (measured 2026-08-29, when #474's queue merge
+kept the branch commit's trailers and dropped the body's).
 
 **Ordinary 0.x arithmetic in the interim.** `feat:` moves the minor,
 `fix:` the patch, and a minor may carry a behavior change, named in the
