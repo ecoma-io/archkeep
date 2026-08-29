@@ -1214,7 +1214,7 @@ async function runReconcile(options, { cwd, env }) {
  * `check` remains the authority on the law.
  *
  * @param {{format: string, output: string|null, config: string|null,
- *   intent: string|null, paths: string[]}} options
+ *   intent: string|null, eventOut?: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function,
  *   listFiles?: Function}}} runContext
  * @returns {Promise<number>}
@@ -1271,7 +1271,19 @@ async function runChange(options, { cwd, env }) {
     // profile-aware the same way `check` is.
     const { config } = await resolvePolicy(options, commandContext, cwd);
 
-    result = await changeCommand(baselinePath, intentPath, commandContext, { config });
+    // `--event-out` names the reconcile event store directory, resolved from
+    // cwd like the other path flags; `undefined` when absent, so a run
+    // without the flag writes no event and stays byte-identical.
+    const eventOut =
+      typeof options.eventOut === "string" && options.eventOut !== ""
+        ? isAbsolute(options.eventOut)
+          ? options.eventOut
+          : resolve(cwd, options.eventOut)
+        : undefined;
+    result = await changeCommand(baselinePath, intentPath, commandContext, {
+      config,
+      ...(eventOut === undefined ? {} : { eventOut }),
+    });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -2570,6 +2582,16 @@ const CHANGE_FLAG_HELP = Object.freeze([
     describe: Object.freeze(["Write the report to a file instead of stdout"]),
   }),
   Object.freeze({
+    flag: "--event-out",
+    key: "eventOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Also write the reconcile EvolutionEvent to this directory",
+      "(one file per run, idempotent; the classification always",
+      "rides the envelope result — see docs/concepts/evolution.md)",
+    ]),
+  }),
+  Object.freeze({
     flag: "--config",
     key: "config",
     arg: "<file>",
@@ -3275,7 +3297,13 @@ const COMMANDS = Object.freeze({
     summary: "Reconcile a declared change intent against the architectural delta",
     flagHelp: CHANGE_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(CHANGE_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, config: null, intent: null }),
+    defaults: Object.freeze({
+      format: "text",
+      output: null,
+      config: null,
+      intent: null,
+      eventOut: null,
+    }),
     formats: DESCRIBABLE_FORMATS,
     run: runChange,
   }),
