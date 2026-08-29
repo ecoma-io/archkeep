@@ -373,7 +373,14 @@ and all, so a trailer repeated five times arrives in history five times.
 
 ## The compatibility contract
 
-From the 1.0.0-rc.1 candidate onward, `main` holds one contract on one
+The release line is 0.x again: the 2026-08-28 candidates are parked — the
+engine package has no release candidate on npm, so the rc line cannot be
+consumed — and `main` cuts ordinary 0.x versions until the
+[readiness conditions](docs/doctrine/roadmap.md#what-10-waits-for-and-how-each-condition-is-read)
+hold and the maintainer names the next candidate (maintainer decision,
+2026-08-29, recorded in #473; docs/development/release.md owns the stages).
+On the 0.x line a minor may carry a behavior change, named in the
+changelog. From that candidate onward, `main` holds one contract on one
 development line. The sentence under [## Commits](#commits) — a change to
 what is reported on an unchanged workspace is a breaking change — names the
 loudest case. The full contract both halves cover:
@@ -389,7 +396,7 @@ loudest case. The full contract both halves cover:
   decides, what a graph edge means, what an exit code says. A function whose
   signature stayed the same but whose verdict changed broke a consumer's CI
   on code they did not touch, which is the
-  [documented definition](docs/development/release.md#release-stages-the-100-rc1-candidate)
+  [documented definition](docs/development/release.md#release-stages-the-0x-line-and-the-parked-candidate)
   of a breaking change.
 
 Before implementing, classify the change against this gate:
@@ -402,11 +409,12 @@ Before implementing, classify the change against this gate:
 4. **Semantic change** — what an unchanged workspace is told would differ.
 5. **Removal, deprecation, or breaking** API, config, or output contract.
 
-1–3 are the ordinary pull request. 4–5 are breaking changes, and on a single
-development line they land only as maintainer-authorized exceptions recorded
-on the pull request. A missing test or a missing sentence is not
-authorization, and "the implementation is better" is not a compatibility
-argument.
+1–3 are the ordinary pull request. On the 0.x line, 4–5 land as a minor
+bump with the behavior change named in the changelog — that is what a 0.x
+minor is. From the next release candidate onward, 4–5 are breaking changes
+and land only as maintainer-authorized exceptions recorded on the pull
+request. A missing test or a missing sentence is not authorization, and
+"the implementation is better" is not a compatibility argument.
 
 Validation is proportional to the risk: a rule tweak re-runs its regression
 fixtures and the differential against `@nx/enforce-module-boundaries`; an

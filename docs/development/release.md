@@ -30,46 +30,55 @@ default names the target branch as the scope (`chore(main): …`), and `main` is
 not in `commitlint.config.mjs`'s `scope-enum`, so the default title would fail
 a required check and could never merge.
 
-## Release stages: the 1.0.0-rc.1 candidate
+## Release stages: the 0.x line and the parked candidate
 
-The repository crosses from 0.x to the compatibility contract through a release
-candidate: a proposed contract shipped for that proposal to be judged, not a
-stable release. The version is `1.0.0-rc.1`, flagged as a prerelease on GitHub. That
-release run is also the evidence this file's publish notes argue from: PyPI,
-crates.io and the Go tag published, and every npm publish job failed — so the
-candidate never reached npm, read off the registry rather than inferred from
-the failed jobs. Why each refusing step refuses is stated where the step is
-described: the dist-tag note below for npm, the `publish-vsix` description
-for the marketplace. The stable 1.0 is the same contract once the
+The release line is 0.x again (maintainer decision, 2026-08-29, recorded in
+#473). The 2026-08-28 candidates — `1.0.0-rc.1` and `1.0.1-rc.1` — stay in
+the tag history, but the line returns to ordinary 0.x versioning until the
 [readiness conditions](../doctrine/roadmap.md#what-10-waits-for-and-how-each-condition-is-read)
-hold and the maintainer cuts it; `main` is the one line that contract holds on
-(CONTRIBUTING.md, "Which branch a change lands on").
+hold and the maintainer names the next candidate. The 2026-08-28 cut ran
+before the engine package had ever shipped an rc to npm, so the candidate
+line cannot be consumed coherently; the 0.x interim restores a consumable
+`latest` instead.
 
-**How the candidate is cut.** A commit on `main` whose message carries a
-`Release-As: 1.0.0-rc.1` footer forces exactly that version for exactly one
+The 1.0.0-rc.1 release run remains the evidence this file's publish notes
+argue from: PyPI, crates.io and the Go tag published, and every npm publish
+job failed — so the candidate never reached npm, read off the registry
+rather than inferred from the failed jobs. Why each refusing step refuses is
+stated where the step is described: the dist-tag note below for npm, the
+`publish-vsix` description for the marketplace.
+
+**How a version is forced.** A commit on `main` whose message carries a
+`Release-As: <version>` footer forces exactly that version for exactly one
 release — the release-please strategy reads the newest `Release-As` note and
 returns it verbatim (measured against release-please 17.6.0, the version
 release-please-action v5.0.0 bundles), so the run that follows computes
 normally again and the mechanism self-expires behind the tag it cuts. The
-config-file `release-as` key upstream deprecated is not used: one commit, one
-cut, no persistent state to forget.
+config-file `release-as` key upstream deprecated is not used: one commit,
+one cut, no persistent state to forget. The 0.16.0 cut back to the 0.x line
+is named this way.
 
-**Iterating the candidate.** Each deliberate iteration needs its own
+**Ordinary 0.x arithmetic in the interim.** `feat:` moves the minor,
+`fix:` the patch, and a minor may carry a behavior change, named in the
+changelog — that is what a 0.x minor is. CONTRIBUTING.md, "Which branch a
+change lands on", owns what binds when; AGENTS.md, "The compatibility
+contract", keeps the classification vocabulary.
+
+**The candidate ladder, when it resumes.** Each deliberate rc needs its own
 `Release-As:` commit — `1.0.0-rc.2`, `1.0.0-rc.3` — because the default
 strategy from a prerelease version carries the suffix onto a bumped base
 (`1.0.1-rc.1`, not `1.0.0-rc.2`). An RC is named explicitly rather than
-incremented.
-
-**Graduation to stable.** Cutting stable `1.0.0` is one
-`Release-As: 1.0.0` commit. After that, the default strategy computes
-normally: `fix` → `1.0.1`, `feat` → `1.1.0`, `!` → `2.0.0`.
+incremented, and the name the maintainer picks is the number that cuts.
+Graduation to stable is one `Release-As: 1.0.0` commit. After that, the
+default strategy computes normally: `fix` → `1.0.1`, `feat` → `1.1.0`,
+`!` → `2.0.0`.
 
 **Prerelease flagging is automatic.** The `prerelease: true` configuration
 key flags the GitHub release as a prerelease only while the version itself
 carries a prerelease suffix or the major is still 0 — the same version gates
-it in release-please's release building — so the `1.0.0-rc.1` cut is flagged,
-the stable `1.0.0` that graduates from it is not, and the key stays with
-nothing to remove.
+it in release-please's release building — so the `1.0.0-rc.1` cut was
+flagged, every 0.x cut is flagged too, and the stable `1.0.0` that
+graduates will not be. The key stays with nothing to remove.
 
 **npm dist-tag note.** npm refuses to publish a prerelease version without
 an explicit dist-tag — a bare `npm publish` of `1.0.0-rc.1` exits with
@@ -81,14 +90,15 @@ publishes under `rc`, and a later `rc.2` moves that tag rather than
 accumulating `rc.1`, `rc.2`, ... A stable version publishes bare and holds
 `latest`, as before. Consumers pinning a `^0.15.0` range are unaffected
 either way: semver ranges exclude prereleases, so the range resolves to the
-highest stable 0.x, never to the candidate; `npm i @ecoma-io/archkeep@rc` is
+highest stable 0.x, never to the candidate; `npm i @ecoma-io/archkeep@rc`
+is the deliberate opt-in to the candidate line.
 
 The VS Code Marketplace is stricter than npm: it cannot carry a version with
 a prerelease suffix at all — vsce refuses the publish before contacting the
 marketplace, and its `--pre-release` flag does not bypass that check (it
 selects a target; measured in the vsce source the lane installs). A
 candidate's `.vsix` therefore lives on its GitHub release only, and the
-stable cut is the first version the marketplace receives.
+first version the marketplace carries is a stable one.
 
 ## What happens before anything is published
 
