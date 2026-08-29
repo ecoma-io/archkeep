@@ -121,3 +121,26 @@ export function transitionKind(transition) {
   if (transition.codeDrift) return "code drift";
   return "unchanged";
 }
+
+/**
+ * One transition's canonical evolution classes as a renderable line. Shared
+ * by every reporter that renders a transition record (`history` today;
+ * `evolution` will render the same record), so the JSON field and its prose
+ * cannot disagree about what a classification is — one spelling, one home,
+ * beside the sibling `transitionKind` label.
+ *
+ * The line appears only when the record carries classifications: an
+ * unclassified transition is labelled by its kind, and the empty-classification
+ * statement — where it applies — is a note on the record, never a second line
+ * this helper has to invent.
+ *
+ * @param {string[]|undefined} classifications The record's `classifications`
+ *   array; `undefined` when the caller's record predates the field.
+ * @returns {string[]} The line, or `[]` when there is nothing to state.
+ */
+export function formatClassifications(classifications) {
+  if (!Array.isArray(classifications) || classifications.length === 0) {
+    return [];
+  }
+  return [`classifications: ${classifications.map((c) => sanitize(c)).join(", ")}`];
+}

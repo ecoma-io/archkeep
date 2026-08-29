@@ -12,7 +12,7 @@
  * becomes prose, so the two commands cannot disagree about it.
  */
 
-import { formatChanges, transitionKind } from "./snapshot-text.mjs";
+import { formatChanges, formatClassifications, transitionKind } from "./snapshot-text.mjs";
 
 /**
  * The whole history report.
@@ -21,7 +21,7 @@ import { formatChanges, transitionKind } from "./snapshot-text.mjs";
  *   snapshots: {name: string, id: string}[],
  *   transitions: {from: string, to: string, architectureChanged: boolean,
  *     changes: object|null, policyChanged: boolean|null, providerChanged: boolean,
- *     codeDrift: boolean, notes: string[]}[]}, coverage: object}} input
+ *     codeDrift: boolean, notes: string[], classifications?: string[]}[]}, coverage: object}} input
  * @returns {string}
  */
 export function formatHistoryReport({ evolution, coverage }) {
@@ -61,6 +61,11 @@ export function formatHistoryReport({ evolution, coverage }) {
     if (transition.architectureChanged) changed += 1;
     const kind = transitionKind(transition);
     sections.push(`~ ${transition.from} → ${transition.to}  (${kind})`);
+    // The canonical classes, appended as their own line so the kind label
+    // (a display shorthand) and the classification (a fact) both print.
+    for (const line of formatClassifications(transition.classifications)) {
+      sections.push(`  ${line}`);
+    }
     if (transition.changes) {
       for (const line of formatChanges(transition.changes)) sections.push(`  ${line}`);
     }
