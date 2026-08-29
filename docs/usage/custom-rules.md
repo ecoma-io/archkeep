@@ -196,8 +196,10 @@ Then:
 - `archkeep rules verify` — prove every catalog artifact loads and describes itself
   correctly through the REAL host (the same proof CI runs on every catalog change)
 - `archkeep rules add <rule-name>` — copy the named rule's wasm to your workspace and
-  print or write the customRules row for your dialect
+  print the customRules row to paste into your boundary config
 
 The `add` command is the fastest way to adopt an official rule: it copies the exact
-bytes (verifiable by the digest you paste beside them) and renders the row your
-config dialect needs — no typo-prone manual transcription from the catalog.
+bytes (verifiable by the digest you paste beside them) and prints the row ready to
+paste — no typo-prone manual transcription from the catalog. The row leaves `params`
+out: parameter values are the workspace's law to choose, and `archkeep rules info`
+shows the schema a rule declares.
