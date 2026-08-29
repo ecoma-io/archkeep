@@ -70,6 +70,11 @@
  *   same class of limit Kotlin's backtick segments pin.
  * - An **unterminated directive** (no `;` before end of line) is not a
  *   complete directive and is not read.
+ * - A **statement whose initializer opens but never closes** (`using var x =
+ *   new F {`, the `;` never arriving) is neither read nor flagged — the `{`
+ *   behind the resource's `=` is the statement's own (#469), the same
+ *   silence a `using (r) {` block has always held. The malformation scan
+ *   judges directives only.
  */
 import { csharpNamespaceIndex } from "./dotnet/namespaces.mjs";
 import { maskCSharpComments } from "./dotnet/mask.mjs";
@@ -129,6 +134,13 @@ const CS_EXTERN_ALIAS = new RegExp(
 
 /** Exactly one identifier followed by `=`: the alias form. */
 const ALIAS_FORM = new RegExp(String.raw`^(${SEG})[ \t]*=[ \t]*(.+)$`, "su");
+
+/**
+ * One bare identifier, optionally verbatim (`@class`): an alias's own name.
+ * The malformation scan reads it backwards — the text before an initializer
+ * `=` is an alias's name only when it is NOT this shape.
+ */
+const ALIAS_NAME = new RegExp(String.raw`^@?${SEG}$`, "u");
 
 /** A dotted name, optionally behind the `global::` qualifier: the plain form. */
 const PLAIN_FORM = new RegExp(String.raw`^(?:global::)?(${DOTTED_NAME})$`, "u");
@@ -262,10 +274,17 @@ export function parseCSharpDirectiveSites(csharpText) {
  * from one the file truncates — a failed write, a merge marker left
  * mid-directive — which used to parse as zero directive sites with no
  * failure, byte-for-byte identical to a file that imports nothing (#419).
- * A `(` right after the
- * keyword is the using-STATEMENT family — `using (var s = f()) { … }`,
- * `using (x);`, and the `using var x = f();` declaration whose body starts
- * `var` — never a directive; a statement's `;` may arrive inside its own
+ * Statement shapes hold no opinion at all, by two markers the text shows
+ * before any terminator arrives: a `(` right after the keyword is the
+ * parenthesized family — `using (var s = f()) { … }`, `using (x);` — and an
+ * `=` between the keyword and the walk's first `{` is the declaration family
+ * (#469) whenever MORE than one bare identifier precedes it — `var writer`,
+ * `Dictionary<string, int> map`, every declaration spelling — because a
+ * brace behind a resource's own `=` is that statement's initializer, while
+ * the first `{` behind a directive can only be the file's truncation. One
+ * bare identifier before the `=` is an ALIAS's own name (`using Pair = …`),
+ * the brace then belongs to whatever follows, and the truncated alias stays
+ * loud. A statement's `;` may arrive inside its own
  * block, so the scan has no opinion there. One silence the rule keeps: a
  * missing `;` that a LATER declaration supplies its own (`extern alias X`
  * then `namespace Shop.App;`) is not seen — the walk reads the next
@@ -324,11 +343,21 @@ export function csharpDirectiveMalformations(csharpText) {
     if (source[at] === "(") continue;
     const next = usingTerminatorAfter(at);
     if (next === undefined || next[0] === "{") {
-      flag(
-        m.index + m[0].indexOf("using"),
-        "using",
-        "a `using` directive never reaches its `;` — the file is truncated or malformed, so its imports cannot be read",
-      );
+      // The declaration family's initializer `=` (#469) — argued beside the
+      // openers above: an `=` whose prefix is more than one bare identifier
+      // is a resource's own, and the brace with it. One bare identifier is
+      // an alias's own name, the brace belongs to whatever follows, and the
+      // truncated alias stays loud.
+      const eq = next !== undefined ? source.indexOf("=", at) : -1;
+      const initializer =
+        eq !== -1 && eq < next.index && !ALIAS_NAME.test(source.slice(at, eq).trim());
+      if (next === undefined || !initializer) {
+        flag(
+          m.index + m[0].indexOf("using"),
+          "using",
+          "a `using` directive never reaches its `;` — the file is truncated or malformed, so its imports cannot be read",
+        );
+      }
     }
   }
   const externTerminatorAfter = terminatorAfter();
