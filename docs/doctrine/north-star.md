@@ -188,7 +188,7 @@ The third is the one that matters most at platform scale, and it gets harder wit
 every language added — which is the honest cost of choosing breadth. A suite of
 fixtures proves the rules agree about the situations someone thought to build.
 Only a real tree proves they agree about the situations nobody thought of, and
-two pinned trees are the start of that proof rather than its end.
+five pinned trees are the start of that proof rather than its end.
 
 ## The refusals
 

@@ -586,7 +586,7 @@ ESLint does not, and parity is what makes this comparison mean anything.
 config today** — but the reason has changed shape. All fifteen message types
 agree wherever both engines can see the code, and the only false negative any
 probe records is the exemption-mechanism one above; what blocks removal is now
-the breadth of the evidence — two real trees is a measurement, not a survey of
+the breadth of the evidence — five real trees is a measurement, not a survey of
 what workspaces do — plus the residue conditions 2 and 3 name.
 
 Three things have to become true first, and all three now have a mechanism
@@ -623,7 +623,7 @@ holding them rather than a plan.
    mechanism, with its scope stated rather than implied. A suite of minimal
    fixtures proves the rules agree about the situations someone thought to
    build; `scripts/differential-real-trees.mjs` at the repository root points
-   both engines at real public workspaces — two, with unrelated constraint
+   both engines at real public workspaces — five, with unrelated constraint
    vocabularies, pinned at fixed commits — and requires the same verdict set,
    with every difference either explained in its ledger or failing the run,
    and a zero-verdict answer from either engine failing it too on trees
@@ -645,18 +645,29 @@ holding them rather than a plan.
    findings-red. On the native leg, both trees agree with the Nx graph node
    for node, edge for edge — code-pushup's 175 edges and 34 verdicts, ng-doc's
    13 edges and 8 verdicts — with only code-pushup's already-ledgered
-   `workspace#type` field difference remaining. The scope: both trees are
-   TypeScript and JavaScript workspaces,
+   `workspace#type` field difference remaining. The corpus grew to five trees
+   on 2026-08-29 (telesarch, commitstory, cdwr — two pnpm workspaces and an
+   npm one, pinned and measured the same way): cdwr adds a third violating
+   tree — upstream 36 verdicts, this engine 49, the 13-verdict residue being
+   `tools/cdwr-cli.ts`'s `eslint-disable` directive, ledgered like
+   code-pushup's — and cdwr's root `project.json` reproduces code-pushup's
+   already-ledgered missing-`projectType` divergence under a different node
+   name. telesarch contributes the ledger's first `native-missing` entries:
+   27 of nx's project edges the native face cannot draw, every one a pnpm
+   workspace link resolving external in the TypeScript analysis — the
+   documented no-realpath limit, not a new defect. commitstory agrees
+   exactly: 2 nodes, 1 edge, zero verdicts on both engines. The scope: all
+   five trees are TypeScript and JavaScript workspaces,
    which is also the entire surface upstream can read — no public Nx tree with
    Go, Rust, Python or Vue sources and a non-trivial constraint table under a
-   permissive license existed to pin (the search and its rejects are recorded
-   in the script's tree table), so real-tree agreement covers TypeScript and
-   JavaScript for now and two trees remain evidence rather than a survey.
+   permissive license existed to pin (both searches and their rejects are
+   recorded in the script's tree table), so real-tree agreement covers TypeScript and
+   JavaScript for now and five trees remain evidence rather than a survey.
 
 The honest position is still the one the tool already takes: run **both**.
 ESLint stays authoritative for JavaScript, TypeScript and Vue, where it is
 correct and where agreement is measured on the 39 fixture workspaces ESLint can
-read plus the two pinned real trees above — evidence that grows with the tree
+read plus the five pinned real trees above — evidence that grows with the tree
 table, not a proof over every workspace shape. This tool covers Go,
 Rust and Python, where
 ESLint reports nothing at all and any enforcement is a strict improvement over
