@@ -1,20 +1,24 @@
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   ADR_DIR,
   ADR_ID_PATTERN,
+  ADR_STATUSES,
   adrsBinding,
   boundFitnessIds,
   declaredFitnessNames,
+  hasAuthority,
   loadAdrRegistry,
   parseFrontmatterFields,
   resolveDecisionRef,
   stripAdrPrefix,
   unresolvedDecisionRefRows,
+  validateLineage,
   validateRecord,
 } from "./adr-registry.mjs";
 
@@ -241,10 +245,19 @@ describe("loadAdrRegistry", () => {
 describe("supersedes chain", () => {
   it("reads a superseding record's chain back to the record it replaces", () => {
     const io = inMemoryTree({
-      ...Object.fromEntries(VALID),
+      "0001-bind-collaboration.md": `---
+id: 0001-bind-collaboration
+status: superseded
+bindings:
+  - rule:no-direct-dep
+  - fitness:hotspot
+---
+
+# Bind collaboration
+`,
       "0002-bind-logs.md": `---
 id: 0002-bind-logs
-status: superseded
+status: active
 supersedes:
   - 0001-bind-collaboration
 bindings:
@@ -256,12 +269,294 @@ bindings:
     });
     const { records } = loadAdrRegistry("/tmp/x", io);
     const superseding = records.find((r) => r.id === "0002-bind-logs");
-    expect(superseding.status).toBe("superseded");
+    expect(superseding.status).toBe("active");
     expect(superseding.supersedes).toEqual(["0001-bind-collaboration"]);
-    // The superseded record still parses, still binds what it bound.
+    expect(superseding.supersededBy).toEqual([]);
+    // The replaced record keeps its parsed content and gains the derived link.
     const old = records.find((r) => r.id === "0001-bind-collaboration");
-    expect(old.status).toBe("accepted");
+    expect(old.status).toBe("superseded");
     expect(old.bindings).toContain("rule:no-direct-dep");
+    expect(old.supersededBy).toEqual(["0002-bind-logs"]);
+  });
+});
+
+describe("statuses and authority (wave 2)", () => {
+  it("carries exactly the five lifecycle statuses", () => {
+    expect(ADR_STATUSES).toEqual(["proposed", "accepted", "active", "superseded", "retired"]);
+  });
+
+  it("gives authority to active and accepted only", () => {
+    expect(hasAuthority("active")).toBe(true);
+    expect(hasAuthority("accepted")).toBe(true);
+    expect(hasAuthority("proposed")).toBe(false);
+    expect(hasAuthority("superseded")).toBe(false);
+    expect(hasAuthority("retired")).toBe(false);
+  });
+
+  it("loads active and retired records as legal statuses", () => {
+    const io = treeWith({
+      "0002-active.md": "---\nid: 0002-active\nstatus: active\n---\n",
+      "0003-retired.md": "---\nid: 0003-retired\nstatus: retired\n---\n",
+    });
+    const { records } = loadAdrRegistry("/tmp/x", io);
+    expect(records.find((r) => r.id === "0002-active").status).toBe("active");
+    expect(records.find((r) => r.id === "0003-retired").status).toBe("retired");
+  });
+
+  it("still refuses a status outside the five", () => {
+    expect(() => validateRecord({ id: "0001-x", frontmatter: "status: launched\n" })).toThrow(
+      /status "launched" is not one of proposed, accepted, active, superseded, retired/,
+    );
+  });
+});
+
+describe("prose fields (wave 2)", () => {
+  const record = validateRecord({
+    id: "0001-bind-collaboration",
+    frontmatter: "id: 0001-bind-collaboration\nstatus: accepted\n",
+    body: `## Context
+
+The bind rule needs a home.
+
+## Decision
+
+We chose the registry form.
+
+### Why
+
+Because it is one contract.
+
+## Alternatives
+
+We considered dropping bindings.
+
+## Consequences
+
+The registry carries the load.
+
+## Assumptions
+
+Records stay markdown.
+`,
+  });
+
+  it("surfaces each documented prose field from its ## heading", () => {
+    expect(record.context).toBe("The bind rule needs a home.");
+    expect(record.decision).toBe(
+      "We chose the registry form.\n\n### Why\n\nBecause it is one contract.",
+    );
+    expect(record.alternatives).toBe("We considered dropping bindings.");
+    expect(record.consequences).toBe("The registry carries the load.");
+    expect(record.assumptions).toBe("Records stay markdown.");
+    // An absent heading is an absent field, never an empty one.
+    expect(record.rationale).toBeUndefined();
+  });
+
+  it("maps ## Refused alternatives to the same alternatives field", () => {
+    const refused = validateRecord({
+      id: "0003-x",
+      frontmatter: null,
+      body: "## Refused alternatives\n\nWe refused the flat file.\n",
+    });
+    expect(refused.alternatives).toBe("We refused the flat file.");
+    expect(refused.context).toBeUndefined();
+  });
+
+  it("closes the open field at the next ## heading, and ## Status opens nothing", () => {
+    const withStatus = validateRecord({
+      id: "0004-x",
+      frontmatter: null,
+      body: `## Context
+
+Before.
+
+## Status
+
+Accepted, since forever.
+
+## Consequences
+
+After.
+`,
+    });
+    expect(withStatus.context).toBe("Before.");
+    expect(withStatus.consequences).toBe("After.");
+  });
+
+  it("never throws on a body that is only prose or has no recognized heading", () => {
+    for (const body of [
+      "",
+      "just prose, no headings at all",
+      "## A heading we do not track\n\nSlack text.\n",
+    ]) {
+      expect(() => validateRecord({ id: "0005-x", frontmatter: null, body })).not.toThrow();
+    }
+  });
+
+  it("keeps the last occurrence of a repeated heading", () => {
+    const repeated = validateRecord({
+      id: "0006-x",
+      frontmatter: null,
+      body: "## Context\n\nFirst.\n\n## Context\n\nLast.\n",
+    });
+    expect(repeated.context).toBe("Last.");
+  });
+});
+
+describe("created / updated (wave 2)", () => {
+  it("parses both string fields and keeps them off the record when absent", () => {
+    const withMeta = validateRecord({
+      id: "0001-x",
+      frontmatter: "created: 2026-01-02\nupdated: 2026-03-04\n",
+    });
+    expect(withMeta.created).toBe("2026-01-02");
+    expect(withMeta.updated).toBe("2026-03-04");
+
+    const without = validateRecord({ id: "0002-x", frontmatter: "status: accepted\n" });
+    expect(without.created).toBeUndefined();
+    expect(without.updated).toBeUndefined();
+  });
+
+  it("refuses a non-string form loudly — the timeline is committed bytes, never generated", () => {
+    expect(() =>
+      validateRecord({ id: "0001-x", frontmatter: "created:\n  - 2026-01-02\n" }),
+    ).toThrow(/0001-x: created must be a single string value/);
+  });
+});
+
+describe("lineage validation (wave 2)", () => {
+  const load = (files) =>
+    loadAdrRegistry("/tmp/x", inMemoryTree({ ...Object.fromEntries(VALID), ...files }));
+
+  it("refuses a supersedes target that is not a record — the chain renders as fact or not at all", () => {
+    expect(() =>
+      load({
+        "0002-active.md":
+          "---\nid: 0002-active\nstatus: active\nsupersedes:\n  - 0999-ghost\n---\n",
+      }),
+    ).toThrow(/0002-active supersedes 0999-ghost, which is not an ADR in docs\/adr/);
+  });
+
+  it("refuses a record superseding itself", () => {
+    expect(() =>
+      load({
+        "0002-active.md":
+          "---\nid: 0002-active\nstatus: active\nsupersedes:\n  - 0002-active\n---\n",
+      }),
+    ).toThrow(/0002-active supersedes itself/);
+  });
+
+  it("refuses a cycle, naming the chain — every member retired so no other rule trips", () => {
+    expect(() =>
+      load({
+        "0002-a.md": "---\nid: 0002-a\nstatus: retired\nsupersedes:\n  - 0003-b\n---\n",
+        "0003-b.md": "---\nid: 0003-b\nstatus: retired\nsupersedes:\n  - 0004-c\n---\n",
+        "0004-c.md": "---\nid: 0004-c\nstatus: retired\nsupersedes:\n  - 0002-a\n---\n",
+      }),
+    ).toThrow(/supersedes cycle: 0002-a -> 0003-b -> 0004-c -> 0002-a/);
+  });
+
+  it("refuses a superseded record with no successor (dangling) — retired needs none", () => {
+    expect(() =>
+      load({
+        "0002-abandoned.md": "---\nid: 0002-abandoned\nstatus: superseded\n---\n",
+      }),
+    ).toThrow(/0002-abandoned is superseded but nothing supersedes it/);
+  });
+
+  it("refuses a successor without authority — proposed may not replace another; the retired target keeps this the only violation", () => {
+    expect(() =>
+      load({
+        "0002-draft.md":
+          "---\nid: 0002-draft\nstatus: proposed\nsupersedes:\n  - 0003-retired\n---\n",
+        "0003-retired.md": "---\nid: 0003-retired\nstatus: retired\n---\n",
+      }),
+    ).toThrow(/0002-draft is proposed and supersedes 0003-retired — only a record with authority/);
+  });
+
+  it("the old superseded-successor shape reports every violation at once", () => {
+    expect(() =>
+      load({
+        "0002-bind-logs.md": `---
+id: 0002-bind-logs
+status: superseded
+supersedes:
+  - 0001-bind-collaboration
+bindings:
+  - rule:sticky-logs
+---
+`,
+      }),
+    ).toThrow(
+      /0002-bind-logs is superseded and supersedes 0001-bind-collaboration[\s\S]*0001-bind-collaboration is accepted but superseded by \[0002-bind-logs\][\s\S]*0002-bind-logs is superseded but nothing supersedes it/,
+    );
+  });
+
+  it("refuses an active record superseded by another — the contradiction rule", () => {
+    expect(() =>
+      load({
+        "0002-active.md":
+          "---\nid: 0002-active\nstatus: active\nsupersedes:\n  - 0001-bind-collaboration\n---\n",
+      }),
+    ).toThrow(/0001-bind-collaboration is accepted but superseded by \[0002-active\]/);
+  });
+
+  it("refuses the contradiction for accepted targets too", () => {
+    expect(() =>
+      load({
+        "0002-superseding.md":
+          "---\nid: 0002-superseding\nstatus: accepted\nsupersedes:\n  - 0001-bind-collaboration\n---\n",
+      }),
+    ).toThrow(/0001-bind-collaboration is accepted but superseded by \[0002-superseding\]/);
+  });
+
+  it("allows more than one successor, each with authority", () => {
+    const io = inMemoryTree({
+      "0001-bind-collaboration.md": `---
+id: 0001-bind-collaboration
+status: superseded
+bindings:
+  - rule:no-direct-dep
+---
+`,
+      "0002-b.md":
+        "---\nid: 0002-b\nstatus: active\nsupersedes:\n  - 0001-bind-collaboration\n---\n",
+      "0003-c.md":
+        "---\nid: 0003-c\nstatus: accepted\nsupersedes:\n  - 0001-bind-collaboration\n---\n",
+    });
+    const { byId } = loadAdrRegistry("/tmp/x", io);
+    expect(byId.get("0001-bind-collaboration").supersededBy).toEqual(["0002-b", "0003-c"]);
+  });
+
+  it("exports validateLineage for direct use, attaching supersededBy in place", () => {
+    const replaced = { id: "0001-old", status: "superseded", supersedes: [] };
+    const successor = { id: "0002-new", status: "active", supersedes: ["0001-old"] };
+    const out = validateLineage([replaced, successor]);
+    expect(out).toStrictEqual([replaced, successor]);
+    expect(replaced.supersededBy).toEqual(["0002-new"]);
+    expect(successor.supersededBy).toEqual([]);
+  });
+});
+
+describe("backward compatibility — the repository's own registry (wave 2)", () => {
+  it("loads every existing record with its pre-existing fields unchanged", () => {
+    const root = fileURLToPath(new URL("../../../../", import.meta.url));
+    const { records } = loadAdrRegistry(root);
+    expect(records.map((r) => r.id)).toEqual([
+      "0001-boundary-levels",
+      "0002-custom-rules-one-contract",
+      "0003-rename-lattice-to-archkeep",
+      "0004-correct-old-name-deprecation-mechanics",
+      "0005-jvm-language-integration",
+      "0006-dotnet-language-integration",
+    ]);
+    for (const record of records) {
+      expect(record.status).toBe("accepted");
+      expect(record.supersedes).toEqual([]);
+      expect(record.supersededBy).toEqual([]);
+      expect(record.created).toBeUndefined();
+      expect(record.updated).toBeUndefined();
+    }
   });
 });
 
