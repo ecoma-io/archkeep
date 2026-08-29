@@ -4,7 +4,7 @@
  * `decisionRef` any of them cite actually resolves to a recorded decision.
  *
  * Provenance is descriptive, exactly like `graph`/`diff`/`drift`: it never
- * changes a verdict, so it never exits 1. It answers three questions:
+ * changes a verdict, so it never exits 1. It answers four questions:
  *
  * 1. **Repository provenance** — the git commit, remote, and dirty state of the
  *    tree this run judged, through the shared `resolveProvenance`
@@ -28,7 +28,20 @@
  *    caller, and a row bound to a nonexistent ADR id read as legitimately
  *    documented everywhere it was rendered. A row with no `decisionRef` is
  *    not a finding here; a row whose `decisionRef` names nothing the registry
- *    knows is.
+ * 4. **Decision lifecycle provenance** — the provenance of the ADR records
+ *    themselves: for every decision in the registry, who created it and who
+ *    last changed it (read from the record file's own git history as
+ *    committed static facts — the author and author-date of the first and
+ *    last commits that touched `docs/adr/<id>.md`), which decision replaced
+ *    which, what constraints it binds, and the committed evidence of its
+ *    current state. The report is read-only: it surfaces the record, it never
+ *    computes or judges a verdict. A decision whose record file has no
+ *    attributable history is flagged `no origin recorded — cannot attest`,
+ *    never silently passed. (PR E —
+ *    https://github.com/ecoma-io/archkeep/issues/491.)
+ *    `recordOrigin`'s `on` never enters here: attribution reads a committed
+ *    author date, it does not produce one, so the injected clock stays out of
+ *    the read path by construction.
  *
  * ## Determinism
  *
@@ -53,15 +66,22 @@
  *
  * An empty `unattested` list must mean exactly "every governance row carries
  * an origin", an empty `unresolvedDecisionRefs` list must mean exactly "every
- * decisionRef citation resolves", and neither means the other.
+ * decisionRef citation resolves", and an empty `decisionLifecycle` list must
+ * mean exactly "the registry holds no decisions" — and neither means the
+ * other.
  */
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatProvenanceReport } from "../report/provenance-text.mjs";
 import { loadIntent } from "../architecture-intent/model.mjs";
 import { loadBoundaryConfig } from "../config.mjs";
-import { resolveProvenance } from "./provenance.mjs";
+import { resolveFileAttribution, resolveProvenance } from "./provenance.mjs";
 import { readAdrContext } from "./adr.mjs";
-import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
+import {
+  ADR_DIR,
+  declaredFitnessNames,
+  hasAuthority,
+  unresolvedDecisionRefRows,
+} from "../governance/adr-registry.mjs";
 
 /**
  * Whether a row declares a governance origin (`origin.by`/`origin.tool`).
@@ -169,28 +189,41 @@ export function unresolvedDecisionRefNote(decisionRef) {
 }
 
 /**
- * The provenance verdict: three answer surfaces, each fail-closed.
+ * The provenance verdict: four answer surfaces, each fail-closed.
  *
  * `repo` is the git provenance, `established` whether git could answer,
- * `rows`/`unattested` the per-row decision provenance, and
+ * `rows`/`unattested` the per-row decision provenance,
  * `unresolvedDecisionRefs` every row whose `decisionRef` cites no ADR, rule,
- * or fitness record this workspace's registry knows. All three are findings
- * about *documentation*, not about the architecture — this command never
- * changes what `check` or `drift` decide, and it exits 0 when it completes.
+ * or fitness record this workspace's registry knows, and `decisionLifecycle`
+ * the attribution of every recorded decision (its ADR record file's git
+ * history) plus its committed status, authority, timeline, lineage, and
+ * bindings. All four are findings about *documentation*, not about the
+ * architecture — this command never changes what `check` or `drift` decide,
+ * and it exits 0 when it completes.
  *
  * @param {{root: string, tracked: string[], provider: string, marker: string,
  *   options: {boundaryConfig: string|object, inline?: boolean}}} commandContext
  *   From `resolveCommandContext`.
  * @param {{loadIntentOverride?: (root: string, io: object) => Promise<object>,
  *   loadConfigOverride?: (root: string, boundaryConfig: string) => Promise<object>,
- *   loadAdrRegistryOverride?: typeof import("../governance/adr-registry.mjs").loadAdrRegistry}} [io]
- *   `loadAdrRegistryOverride` is forwarded to `readAdrContext` (`./adr.mjs`)
- *   unchanged.
+ *   loadAdrRegistryOverride?: typeof import("../governance/adr-registry.mjs").loadAdrRegistry,
+ *   fileAttribution?: (root: string, file: string) =>
+ *     {createdBy: import("../governance/provenance-record.mjs").OriginRecord,
+ *     lastChangedBy: import("../governance/provenance-record.mjs").OriginRecord} | null}}
+ *   [io] `loadAdrRegistryOverride` is forwarded to `readAdrContext`
+ *   (`./adr.mjs`) unchanged; `fileAttribution` defaults to
+ *   `resolveFileAttribution` (`./provenance.mjs`) and reads a record file's
+ *   commit history as committed static facts.
  * @returns {Promise<{status: "ok", repo: {commit: string|null, remote: string|null,
  *   dirty: boolean|null, established: boolean},
  *   rows: {kind: string, attested: boolean, origin: object|null}[],
  *   unattested: {kind: string, label: string, note: string}[],
  *   unresolvedDecisionRefs: {kind: string, label: string, decisionRef: string, note: string}[],
+ *   decisionLifecycle: {id: string, status: string, authority: boolean,
+ *     created: string|null, updated: string|null, supersedes: string[],
+ *     supersededBy: string[], bindings: string[],
+ *     attribution: {createdBy: object|null, lastChangedBy: object|null},
+ *     attested: boolean, note: string|null}[],
  *   report: {text: string, json: string}}>}
  * @throws {Error} on a malformed intent, boundary config, or ADR registry —
  *   exit 3, the loud refusal every command that reads them makes.
@@ -274,6 +307,38 @@ export async function provenanceCommand(commandContext, io = {}) {
     note: unresolvedDecisionRefNote(decisionRef),
   }));
 
+  // PR E — decision lifecycle provenance: every recorded decision's current
+  // state (status, authority, committed timeline, lineage, bindings),
+  // attributed with WHO recorded it. Attribution reads the record file's own
+  // git history as committed static facts (first commit = createdBy, last =
+  // lastChangedBy) — a read, never a produced `on`, so no clock and no
+  // wall-clock time enter. When git cannot answer, the fact is named
+  // cannot-attest below, never silently passed.
+  const attributor = io.fileAttribution ?? resolveFileAttribution;
+  const decisionLifecycle = [];
+  for (const record of adrContext.records) {
+    const attribution = attributor(root, `${ADR_DIR}/${record.id}.md`);
+    const supersedes = Array.isArray(record.supersedes) ? record.supersedes : [];
+    const supersededBy = Array.isArray(record.supersededBy) ? record.supersededBy : [];
+    const bindings = Array.isArray(record.bindings) ? record.bindings : [];
+    decisionLifecycle.push({
+      id: record.id,
+      status: record.status,
+      authority: hasAuthority(record.status),
+      created: record.created ?? null,
+      updated: record.updated ?? null,
+      supersedes,
+      supersededBy,
+      bindings,
+      attribution: {
+        createdBy: attribution?.createdBy ?? null,
+        lastChangedBy: attribution?.lastChangedBy ?? null,
+      },
+      attested: attribution !== null,
+      note: attribution === null ? "no origin recorded — cannot attest" : null,
+    });
+  }
+
   const establishment = repo !== null;
   const repoResult = establishment ? repo : { commit: null, remote: null, dirty: null };
   const rowsTotal = rowList.length;
@@ -292,6 +357,7 @@ export async function provenanceCommand(commandContext, io = {}) {
     unattested,
     decisionRefTotal: decisionRefRows.length,
     unresolvedDecisionRefs,
+    decisionLifecycle,
   });
 
   const context = {
@@ -314,9 +380,10 @@ export async function provenanceCommand(commandContext, io = {}) {
       blindSpots: [],
       notes: [],
     },
-    // The three answer surfaces; `result.rows` preserves the canonical row
-    // order. `unresolvedDecisionRefs` is unconditional, like `unattested` —
-    // an empty array is itself the claim "every citation resolves", never an
+    // The four answer surfaces; `result.rows` preserves the canonical row
+    // order. `unresolvedDecisionRefs` and `decisionLifecycle` are both
+    // unconditional, like `unattested` — an empty array is itself the claim
+    // "every citation resolves"/"the registry holds no decisions", never an
     // omitted key that would leave a reader unable to tell "checked, clean"
     // from "never checked" (`../../../../AGENTS.md`).
     result: {
@@ -329,13 +396,14 @@ export async function provenanceCommand(commandContext, io = {}) {
       })),
       unattested: unattested.map(({ kind, label, note }) => ({ kind, label, note })),
       unresolvedDecisionRefs,
+      decisionLifecycle,
     },
   });
 
   return {
     status: "ok",
     repo: { ...repoResult, established: establishment },
-    // The three answer surfaces, also available readably (not only inside the
+    // The four answer surfaces, also available readably (not only inside the
     // envelope) so `cli.mjs` can drive the text report from the same facts.
     rows: rowList.map(({ kind, attested, origin }) => ({
       kind,
@@ -344,6 +412,7 @@ export async function provenanceCommand(commandContext, io = {}) {
     })),
     unattested: unattested.map(({ kind, label, note }) => ({ kind, label, note })),
     unresolvedDecisionRefs,
+    decisionLifecycle,
     report: {
       text: reportText,
       json: renderJson(envelope),

@@ -120,3 +120,63 @@ export function resolveProvenance(root) {
 
   return { commit, remote, dirty };
 }
+/**
+ * Resolves the git attribution of ONE file under `root`: the origin that
+ * CREATED it and the origin that LAST CHANGED it, read from commit metadata.
+ *
+ * Both are committed static facts — an author name, email, and author date
+ * frozen in the repository's history — so the answer is byte-identical across
+ * every run over the same tree, and no wall-clock time and no injected clock
+ * ever enter (the determinism rule `resolveProvenance` states above). The
+ * origin shape is the same one a governance row carries: `by` names the
+ * author, `tool` is `"git"` (the commit records the change; the tool behind
+ * the commit is unknowable from the bytes), and `on` is the commit's author
+ * date — READ, not produced, which is exactly the read surface
+ * `../governance/provenance-record.mjs` already documents: an `on` is only
+ * ever written by `recordOrigin`, and a committed `on` is its own read fact.
+ *
+ * Returns `null` when git cannot answer (not a repository) or the file has
+ * never been committed — the reader then renders
+ * `no origin recorded — cannot attest` rather than pretending an author.
+ * A file whose history is missing is a legitimate "no claim" state, not the
+ * loud could-not-look a commitless repository is: `resolveProvenance` owns
+ * that refusal, and this reads only after a repository is established.
+ *
+ * @param {string} root The workspace root directory.
+ * @param {string} file The tracked file whose history is attributed, relative
+ *   to `root` (e.g. `docs/adr/0001-boundary-levels.md`).
+ * @returns {{createdBy: import("../governance/provenance-record.mjs").OriginRecord,
+ *   lastChangedBy: import("../governance/provenance-record.mjs").OriginRecord} | null}
+ */
+export function resolveFileAttribution(root, file) {
+  // First, the "is this even a git repository at all" question — the same
+  // probe `resolveProvenance` runs, so a non-repository is a clean `null`
+  // (no claim) rather than a thrown error here.
+  try {
+    runProcess("git", ["rev-parse", "--is-inside-work-tree"], root);
+  } catch {
+    return null;
+  }
+  let log;
+  try {
+    // Oldest-first (`--reverse`), so the first line is the creator. `%aI` is
+    // the strict ISO-8601 author date (no locale-dependent formatting), and
+    // NUL separators keep a name containing spaces or a newline parseable.
+    // `--` ends option parsing so a file name beginning with `-` is safe.
+    log = runProcess("git", ["log", "--reverse", "--format=%an%x00%ae%x00%aI", "--", file], root);
+  } catch {
+    // Not a repository, or the file path is unreadable — either way, no
+    // attributable history to claim. Null, not a thrown error.
+    return null;
+  }
+  const lines = log.split("\n").filter((line) => line.length > 0);
+  if (lines.length === 0) return null; // the file was never committed
+  const parse = (line) => {
+    const [name, email, on] = line.split("\u0000");
+    return { by: `${name} <${email}>`, tool: "git", on };
+  };
+  return {
+    createdBy: parse(lines[0]),
+    lastChangedBy: parse(lines[lines.length - 1]),
+  };
+}

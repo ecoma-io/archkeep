@@ -14,6 +14,12 @@ vi.mock("./provenance.mjs", () => ({
     remote: "git@example.com:acme/repo.git",
     dirty: false,
   })),
+  // Default: no attributable history — the decision lifecycle reads cannot-attest
+  // unless a case injects `fileAttribution` through `ioWith`. A missing mock
+  // would leave the command's `io.fileAttribution ?? resolveFileAttribution`
+  // default undefined and every call would crash; this factory pins the read
+  // surface down explicitly.
+  resolveFileAttribution: vi.fn(() => null),
 }));
 // The real jsonEnvelope builds the `workspace.provenance` block this command's
 // JSON contract depends on; the envelope is part of what is under test here,
@@ -48,12 +54,15 @@ const config = (rows = []) => ({ depConstraints: rows });
 /**
  * `io` playing both the intent and config loaders off these payloads.
  *
- * @param {{intent?: object, config?: object, adrRecords?: object[]}} payload
+ * @param {{intent?: object, config?: object, adrRecords?: object[],
+ *   fileAttribution?: (root: string, file: string) => object|null}} payload
  *   `adrRecords` are `loadAdrRegistry`-shaped records (each an `{id, bindings}`
  *   at minimum) — `readAdrContext` derives both `byId` and `knownFitness`
  *   from them, the same way it would from a real `docs/adr/` tree.
+ *   `fileAttribution` (default: the mocked `resolveFileAttribution`, which
+ *   answers `null` — cannot-attest) is passed to the command as `io.fileAttribution`.
  */
-function ioWith({ intent: file, config: cfg, adrRecords = [] }) {
+function ioWith({ intent: file, config: cfg, adrRecords = [], fileAttribution }) {
   return {
     loadIntentOverride: async () => file,
     loadConfigOverride: async () => cfg,
@@ -64,6 +73,7 @@ function ioWith({ intent: file, config: cfg, adrRecords = [] }) {
       records: adrRecords,
       byId: new Map(adrRecords.map((record) => [record.id, record])),
     }),
+    ...(fileAttribution === undefined ? {} : { fileAttribution }),
   };
 }
 
@@ -377,5 +387,169 @@ describe("provenanceCommand", () => {
         }),
       ).rejects.toThrow(/malformed ADR registry/);
     });
+  });
+});
+
+// PR E — the decision lifecycle: every recorded decision's current state
+// attributed with WHO recorded it, read from committed git history (or
+// `io.fileAttribution`, its test seam). Descriptive and verdict-neutral,
+// exactly like the other three surfaces.
+describe("decision lifecycle (PR E)", () => {
+  const lifecycleRecords = () => [
+    {
+      id: "0001-bind-collaboration",
+      status: "active",
+      created: "2026-01-15",
+      updated: "2026-08-01",
+      supersedes: [],
+      supersededBy: [],
+      bindings: ["type-package"],
+    },
+    {
+      id: "0002-scopes",
+      status: "active",
+      supersedes: ["0003-rename-lattice"],
+      supersededBy: [],
+      bindings: [],
+    },
+    {
+      id: "0003-rename-lattice",
+      status: "superseded",
+      supersedes: [],
+      supersededBy: ["0002-scopes"],
+      bindings: [],
+    },
+  ];
+  const attribution = {
+    createdBy: { by: "Tess <tess@example.com>", tool: "git", on: "2026-01-02T00:00:00.000Z" },
+    lastChangedBy: { by: "Rex <rex@example.com>", tool: "git", on: "2026-08-16T00:00:00.000Z" },
+  };
+
+  it("attributes every recorded decision from its file's committed history", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({
+        intent: intent(),
+        adrRecords: lifecycleRecords(),
+        fileAttribution: () => attribution,
+      }),
+    );
+    expect(result.decisionLifecycle).toHaveLength(3);
+    expect(result.decisionLifecycle[0]).toEqual({
+      id: "0001-bind-collaboration",
+      status: "active",
+      authority: true,
+      created: "2026-01-15",
+      updated: "2026-08-01",
+      supersedes: [],
+      supersededBy: [],
+      bindings: ["type-package"],
+      attribution: { createdBy: attribution.createdBy, lastChangedBy: attribution.lastChangedBy },
+      attested: true,
+      note: null,
+    });
+  });
+
+  it("renders the attributed lifecycle with created/last-change, lineage, bindings, and timeline", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({
+        intent: intent(),
+        adrRecords: lifecycleRecords(),
+        fileAttribution: () => attribution,
+      }),
+    );
+    expect(result.report.text).toContain(
+      "decisions  3 recorded — 3 attributed, 0 without attribution",
+    );
+    expect(result.report.text).toContain(
+      "created by Tess <tess@example.com> on 2026-01-02T00:00:00.000Z",
+    );
+    expect(result.report.text).toContain(
+      "changed by Rex <rex@example.com> on 2026-08-16T00:00:00.000Z",
+    );
+    expect(result.report.text).toContain("supersedes 0003-rename-lattice");
+    expect(result.report.text).toContain("superseded by 0002-scopes");
+    expect(result.report.text).toContain("binds type-package");
+    expect(result.report.text).toContain("timeline 2026-01-15 → 2026-08-01");
+    expect(result.report.text).toContain(
+      "✔ every decision's lifecycle is attributed — each change names who recorded it and with what tool",
+    );
+  });
+
+  it("marks a decision without attribute history cannot-attest — never a silent pass", async () => {
+    // `ioWith` leaves `fileAttribution` unset, so the mocked
+    // `resolveFileAttribution` (→ null) is the command's default.
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({ intent: intent(), adrRecords: lifecycleRecords() }),
+    );
+    expect(result.decisionLifecycle).toHaveLength(3);
+    for (const decision of result.decisionLifecycle) {
+      expect(decision.attested).toBe(false);
+      expect(decision.attribution).toEqual({ createdBy: null, lastChangedBy: null });
+      expect(decision.note).toBe("no origin recorded — cannot attest");
+    }
+    expect(result.report.text).toContain(
+      "decisions  3 recorded — 0 attributed, 3 without attribution",
+    );
+    expect(result.report.text).toContain(
+      "unattributed lifecycle (no origin recorded — cannot attest):",
+    );
+    expect(result.report.text).toContain("  0001-bind-collaboration");
+    expect(result.report.text).toContain("  0002-scopes");
+    expect(result.report.text).toContain("  0003-rename-lattice");
+    expect(result.report.text).toContain(
+      "3 of them carry no recorded origin behind their lifecycle",
+    );
+  });
+
+  it("is verdict-neutral — cannot-attest decisions change no verdict (exit stays 0)", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({ intent: intent(), adrRecords: lifecycleRecords() }),
+    );
+    expect(result.status).toBe("ok");
+    expect(result.report.json).not.toContain('"exitCode": 1');
+  });
+
+  it("surfaces no decision section when the registry holds no decisions — 'no fact, no claim'", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({ intent: intent(), adrRecords: [] }),
+    );
+    expect(result.decisionLifecycle).toEqual([]);
+    expect(result.report.text).not.toContain("decisions");
+    expect(result.report.text).not.toContain("cannot attest");
+  });
+
+  it("serializes result.decisionLifecycle in the JSON envelope, unconditionally", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({
+        intent: intent(),
+        adrRecords: lifecycleRecords(),
+        fileAttribution: () => attribution,
+      }),
+    );
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.result.decisionLifecycle).toHaveLength(3);
+    expect(envelope.result.decisionLifecycle[0].attested).toBe(true);
+    expect(envelope.result.decisionLifecycle[0].supercedes).toBeUndefined();
+    expect(envelope.result.decisionLifecycle[0].supersedes).toEqual([]);
+  });
+
+  it("is byte-identical across two runs over the same tree, attribution fixed", async () => {
+    const io = ioWith({
+      intent: intent(),
+      adrRecords: lifecycleRecords(),
+      fileAttribution: () => attribution,
+    });
+    const [a, b] = await Promise.all([
+      provenanceCommand(commandContext(), io),
+      provenanceCommand(commandContext(), io),
+    ]);
+    expect(a.report.json).toBe(b.report.json);
+    expect(a.report.text).toBe(b.report.text);
   });
 });

@@ -11,9 +11,9 @@
  * the mock, not the code.
  */
 import { describe, it, expect, vi } from "vitest";
-import { resolveProvenance } from "./provenance.mjs";
+import { resolveFileAttribution, resolveProvenance } from "./provenance.mjs";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -172,5 +172,137 @@ describe("resolveProvenance", () => {
       // no remotes
     }
     expect(provenance.remote).toBe(expectedRemote);
+  });
+});
+
+describe("resolveFileAttribution", () => {
+  function makeRepoWithTwoCommitters() {
+    const repo = mkdtempSync(join(tmpdir(), "archkeep-file-attribution-"));
+    try {
+      execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
+      const stripEnv = () => ({
+        cwd: repo,
+        env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined },
+      });
+      mkdirSync(join(repo, "docs/adr"), { recursive: true });
+      const file = "docs/adr/0001-boundary-levels.md";
+      writeFileSync(join(repo, file), "---\nstatus: proposed\n---\n");
+      execFileSync(
+        "git",
+        ["-c", "user.name=Tess", "-c", "user.email=tess@example.com", "add", "."],
+        stripEnv(),
+      );
+      execFileSync(
+        "git",
+        ["-c", "user.name=Tess", "-c", "user.email=tess@example.com", "commit", "-m", "propose"],
+        stripEnv(),
+      );
+      // A second, later commit by a different author records the last change.
+      writeFileSync(join(repo, file), "---\nstatus: accepted\n---\n");
+      execFileSync(
+        "git",
+        ["-c", "user.name=Rex", "-c", "user.email=rex@example.com", "add", "."],
+        stripEnv(),
+      );
+      execFileSync(
+        "git",
+        ["-c", "user.name=Rex", "-c", "user.email=rex@example.com", "commit", "-m", "accept"],
+        stripEnv(),
+      );
+      return { repo, file };
+    } catch (err) {
+      rmSync(repo, { recursive: true, force: true });
+      throw err;
+    }
+  }
+
+  it("attributes the first and last commits of a file as committed static facts", () => {
+    const { repo, file } = makeRepoWithTwoCommitters();
+    try {
+      const attribution = resolveFileAttribution(repo, file);
+      expect(attribution).not.toBeNull();
+      expect(attribution.createdBy.by).toBe("Tess <tess@example.com>");
+      expect(attribution.lastChangedBy.by).toBe("Rex <rex@example.com>");
+      // `tool` names git, and `on` is the committed author date — read, not
+      // produced, so it is a stable ISO string rather than the wall clock.
+      expect(attribution.createdBy.tool).toBe("git");
+      expect(attribution.lastChangedBy.tool).toBe("git");
+      expect(attribution.createdBy.on).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
+      expect(attribution.lastChangedBy.on).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("is byte-identical across calls over the same tree — committed facts do not move", () => {
+    const { repo, file } = makeRepoWithTwoCommitters();
+    try {
+      const first = JSON.stringify(resolveFileAttribution(repo, file));
+      const second = JSON.stringify(resolveFileAttribution(repo, file));
+      expect(first).toBe(second);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores an ambient GIT_DIR — the spawns route through environmentForTree (G-09)", () => {
+    const { repo, file } = makeRepoWithTwoCommitters();
+    try {
+      const baseline = JSON.stringify(resolveFileAttribution(repo, file));
+      const gitEnvBackup = {
+        GIT_DIR: process.env.GIT_DIR,
+        GIT_WORK_TREE: process.env.GIT_WORK_TREE,
+        GIT_INDEX_FILE: process.env.GIT_INDEX_FILE,
+      };
+      try {
+        vi.stubEnv("GIT_DIR", "/somewhere/else");
+        vi.stubEnv("GIT_WORK_TREE", "/somewhere/else");
+        vi.stubEnv("GIT_INDEX_FILE", "/somewhere/else");
+        expect(JSON.stringify(resolveFileAttribution(repo, file))).toBe(baseline);
+      } finally {
+        vi.unstubAllEnvs();
+        for (const [key, value] of Object.entries(gitEnvBackup)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("returns null when the directory is not a git repository — no claim, not a throw", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "archkeep-file-attribution-nogit-"));
+    try {
+      expect(resolveFileAttribution(tmp, "docs/adr/0001-x.md")).toBeNull();
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("returns null when the file was never committed — an untracked author is a lie", () => {
+    const repo = mkdtempSync(join(tmpdir(), "archkeep-file-attribution-uncommitted-"));
+    try {
+      execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
+      execFileSync(
+        "git",
+        [
+          "-c",
+          "user.name=Tess",
+          "-c",
+          "user.email=tess@example.com",
+          "commit",
+          "--allow-empty",
+          "-m",
+          "base",
+        ],
+        { cwd: repo, env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined } },
+      );
+      mkdirSync(join(repo, "docs/adr"), { recursive: true });
+      writeFileSync(join(repo, "docs/adr/0001-x.md"), "---\nstatus: proposed\n---\n");
+      expect(resolveFileAttribution(repo, "docs/adr/0001-x.md")).toBeNull();
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 });
