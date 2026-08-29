@@ -709,6 +709,44 @@ describe("goImportMalformations", () => {
     expect(reasons[0]).toMatch(/line 3\)$/);
   });
 
+  it("does not flag a line-head identifier that begins with the letters import (#468)", () => {
+    // docker/cli@cef1e669 carries three such identifiers at line head —
+    // `importContentType`, `importPath`, `imports` — and each read as the
+    // keyword, flagging a compiling file "an import states no path".
+    const source = [
+      "package store", // 1
+      "", // 2
+      "const (", // 3
+      "\tmodulePath = 1", // 4
+      "\timportPath", // 5
+      "\timportContentType", // 6
+      ")", // 7
+      "", // 8
+      "var (", // 9
+      "\timports = 1", // 10
+      ")", // 11
+    ].join("\n");
+    expect(goImportMalformations(source)).toEqual([]);
+  });
+
+  it("still flags a genuinely bare import in a file that carries import-prefixed identifiers", () => {
+    // The over-suppression guard: a boundary lax enough to swallow the
+    // keyword itself silences this file too, and this assertion turns red.
+    const source = [
+      "package store", // 1
+      "", // 2
+      "const (", // 3
+      "\timportPath", // 4
+      ")", // 5
+      "", // 6
+      "import", // 7 — the keyword, states no path, EOF follows
+    ].join("\n");
+    const reasons = goImportMalformations(source);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/states no path/);
+    expect(reasons[0]).toMatch(/line 7\)$/);
+  });
+
   it("does not flag a well-formed file — block form, single form, aliased, backticked", () => {
     const whole = [
       "package main",
@@ -1080,6 +1118,42 @@ describe("analyzeGo", () => {
       workspace: bomWorkspace,
     });
     expect(failures).toEqual([]);
+  });
+
+  it("reads a compiling file whose const members begin with import with no failure (#468)", () => {
+    // The issue's shape with real imports beside the identifiers: both
+    // directions pinned at once — no failure for the identifiers, and the
+    // import records still present, so a boundary fix that over-suppresses
+    // the keyword loses them and turns this red. The aliased spec proves
+    // the boundary stayed open for every legal follower.
+    const text = [
+      "package store", // 1
+      "", // 2
+      "import (", // 3
+      '\t"fmt"', // 4
+      '\tstore "example.com/acme/beta/store"', // 5
+      ")", // 6
+      "", // 7
+      "const (", // 8
+      "\tmodulePath = 1", // 9
+      "\timportPath", // 10
+      "\timportContentType", // 11
+      ")", // 12
+      "", // 13
+      'import "example.com/acme/gamma"', // 14
+    ].join("\n");
+    const { imports, failures } = analyzeGo({
+      sourceFile: "acme/apps/gamma/main.go",
+      text,
+      workspace: bomWorkspace,
+    });
+    expect(failures).toEqual([]);
+    expect(imports.map((record) => [record.specifier, record.line])).toEqual([
+      ["fmt", 4],
+      ["example.com/acme/beta/store", 5],
+      ["example.com/acme/gamma", 14],
+    ]);
+    expect(imports[1].resolved).toMatchObject({ target: "beta", external: false });
   });
 
   it("surfaces an unreadable go.mod as a whole-file failure naming it (#405)", () => {
