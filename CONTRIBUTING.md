@@ -479,8 +479,8 @@ Two details that are easy to trip over:
   how the 0.16.0 return to the 0.x line, each release candidate, and the
   stable 1.0.0 that graduates from one are named.
   [docs/development/release.md](docs/development/release.md#release-stages-the-0x-line-and-the-parked-candidate)
-  owns the stages; the `prerelease: true` configuration key flags the GitHub
-  release accordingly with nothing to remove after graduation.
+  owns the stages; the `prerelease` key is not set on the 0.x line and is
+  re-added when the candidate ladder resumes.
 
 Before anything is published, CI packs the real tarball and installs it into a
 throwaway workspace (`scripts/verify-package.mjs`, described in the commands
