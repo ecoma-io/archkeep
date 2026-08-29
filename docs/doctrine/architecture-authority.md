@@ -59,10 +59,13 @@ on, so the vocabulary is locked here once:
   with no toolchain and no assumption about any workspace's names.
 - **Evidence** is what ties a claim to its source: a graph edge, a snapshot,
   a diff hunk, a drift signal, a decision citation — reproducible facts the
-  core computes and everything else reads
-  ([concepts/evidence.md](../concepts/evidence.md) owns the vocabulary). A
-  verdict cites evidence; a claim that cannot name its evidence is not about
-  the architecture this system governs.
+  core computes and everything else reads. The model that carries evidence
+  through every capability lives in
+  [concepts/evidence.md](../concepts/evidence.md); the envelope contract
+  that renders it lives in
+  [reference/evidence.md](../reference/evidence.md). A verdict cites
+  evidence; a claim that cannot name its evidence is not about the
+  architecture this system governs.
 - **Reconciliation** is the loop that keeps the two sides honest: the gap
   between intent and reality identified and classified element by element —
   violated, satisfied, waived, unknown — so that every difference becomes a
