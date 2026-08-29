@@ -43,9 +43,49 @@ verdict on every reachable path or refusing to look silently
 evidence a human or an agent can act on — context before an edit, impact during
 planning, diff across time, explain after a finding. None of the others judges.
 
+## Intent, reality, and architecture state
+
+The question this document opens with — does the code that exists agree with
+the architecture that was declared — names two sides everything below depends
+on, so the vocabulary is locked here once:
+
+- **Architectural intent** is the architecture a workspace declares: the
+  constraint table, the named profiles, the recorded decisions, the waivers
+  and exceptions it accepts. It lives in files, is reviewed like code, in the
+  repository it governs — and nothing infers it. Declaring intent is a human
+  act.
+- **Architectural reality** is the architecture the repository actually has:
+  the projects, the import sites and the edges, read statically from source,
+  with no toolchain and no assumption about any workspace's names.
+- **Evidence** is what ties a claim to its source: a graph edge, a snapshot,
+  a diff hunk, a drift signal, a decision citation — reproducible facts the
+  core computes and everything else reads. The model that carries evidence
+  through every capability lives in
+  [concepts/evidence.md](../concepts/evidence.md); the envelope contract
+  that renders it lives in
+  [reference/evidence.md](../reference/evidence.md). A verdict cites
+  evidence; a claim that cannot name its evidence is not about the
+  architecture this system governs.
+- **Reconciliation** is the loop that keeps the two sides honest: the gap
+  between intent and reality identified and classified element by element —
+  violated, satisfied, waived, unknown — so that every difference becomes a
+  decision (a fix, a waiver, a re-declared intent) rather than an accident
+  that compounds
+  ([concepts/reconciliation.md](../concepts/reconciliation.md)).
+
+Under both sits **architecture state**: one workspace's intent, its observed
+reality, the constraints binding them, the decisions and exceptions modifying
+them, and the evidence tying every claim to where it came from. Architecture
+changes through state transitions, and the commands are those transitions'
+mechanisms: `graph` captures the state, `diff` compares two, `history` and
+`evolution` replay the sequence, `provenance` attributes each to its origin,
+and `drift` and `reconcile` measure where reality has left its intent. They
+are mechanisms serving one state and its lifecycle — not separate products,
+and not generations of this system.
+
 ## What is not Archkeep
 
-Four things sit around the core, and each has a boundary it must not cross.
+Five things sit around the core, and each has a boundary it must not cross.
 They are named so that "replace the authority with the provider" is recognised
 as a direction change rather than an implementation detail.
 
@@ -88,15 +128,28 @@ constraint table in the workspace and the verdict the authority computes; CI is
 where that verdict is acted on, and it is as replaceable as the provider it
 runs against.
 
+### Orchestration and platform clients are consumers, not territory
+
+A fifth neighbour: the orchestration systems, action bots and UI platforms
+that schedule work around Archkeep — Reeve, the `action-agents` workflows, a
+product surface such as Loom, or any other client. They integrate through the
+same documented surfaces every consumer uses — the exit codes, the versioned
+JSON envelopes, the MCP tools, the language server's diagnostics — and they
+may not pull Archkeep across its own boundary: it does not become an
+orchestration engine, a task runner, a code executor, or a UI platform, and
+no client is handed the authority to decide whether an architecture is valid.
+The verdict travels to them; it never travels from them.
+
 ## The boundary, stated once
 
-| role                   | decides                                                        | supplies                                 |
-| ---------------------- | -------------------------------------------------------------- | ---------------------------------------- |
-| **Archkeep**           | is this edge valid? (deterministic, inspectable, reproducible) | verdict, context, impact, diff, evidence |
-| **Provider** (Nx/Moon) | how is the project graph shaped?                               | graph edges, project discovery           |
-| **Native discovery**   | how is the graph read with no tool?                            | graph edges, project discovery           |
-| **Agent**              | what code to write, and whether to follow the verdict          | reasoning, planning, code modification   |
-| **CI / PR**            | does this change block, and when?                              | a gate on the verdict                    |
+| role                        | decides                                                        | supplies                                    |
+| --------------------------- | -------------------------------------------------------------- | ------------------------------------------- |
+| **Archkeep**                | is this edge valid? (deterministic, inspectable, reproducible) | verdict, context, impact, diff, evidence    |
+| **Provider** (Nx/Moon)      | how is the project graph shaped?                               | graph edges, project discovery              |
+| **Native discovery**        | how is the graph read with no tool?                            | graph edges, project discovery              |
+| **Agent**                   | what code to write, and whether to follow the verdict          | reasoning, planning, code modification      |
+| **CI / PR**                 | does this change block, and when?                              | a gate on the verdict                       |
+| **Orchestrator / platform** | when the authority is asked, and where the answer surfaces     | automation and rendering around the verdict |
 
 The two columns restated as the model the thesis gives:
 
@@ -264,6 +317,10 @@ to it:
 - **Not intelligence in the verdict path.** No capability may make a green
   result mean "probably fine", shorten a check, or substitute a summary for
   a verdict an unchanged workspace would have received.
+- **Not a prerequisite of the core.** The deterministic authority's readiness —
+  for a consumer, and for stable 1.0 — is judged without waiting on any
+  intelligence capability: the layer extends the core and never gates it.
+  [roadmap.md](roadmap.md) owns that ordering.
 - **Not a capability before its decision.** Nothing ships because the
   roadmap names it: a capability arrives through a recorded decision — an
   issue, an ADR where architecture moves — that names its evidence, its

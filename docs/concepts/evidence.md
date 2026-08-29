@@ -5,7 +5,9 @@ governance capabilities speak one language: every judgment Archkeep reaches can
 be stated as a verdict in one four-state vocabulary, with the evidence each
 state is required to carry, so a consumer can compare verdicts across runs,
 feeds, and rules — and so a verdict that cannot be backed is never emitted at
-all.
+all. The doctrine owns the words themselves:
+[architecture-authority.md](../doctrine/architecture-authority.md) declares
+verdict and evidence; this page owns the model that carries them.
 
 ## One vocabulary for every judgment
 

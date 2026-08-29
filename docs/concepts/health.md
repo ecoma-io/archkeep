@@ -7,8 +7,8 @@ every metric. The `health` command's behavior is documented in
 
 ## The invariant
 
-The repository's one judgment — an empty result is a claim, not a shrug —
-applies at the metric level verbatim:
+The repository's one judgment — an empty result is a claim, not a shrug, as
+the repository's AGENTS.md states — applies at the metric level verbatim:
 
 **A metric whose evidence is unavailable is `unknown` or `not_applicable` —
 reading it as zero is the error.**

@@ -571,7 +571,7 @@ Both Groovy DSL (quotes optional, parentheses optional) and Kotlin DSL (strings
 required) are supported. Every scope, including test, draws the same edge — the
 same project-granularity rule Maven's reader follows.
 
-**Version catalogs are not read in v1.** `libs.catalog.reference` forms are not
+**Version catalogs are not read yet.** `libs.catalog.reference` forms are not
 resolved; a catalog entry that cannot be resolved to a workspace project stays
 silent (it may be an external Maven coordinate, a version reference, or a bundle).
 External `implementation "group:artifact:version"` dependencies are also not read
@@ -582,8 +582,9 @@ belong to the external node synthesis layer when a rule needs a name.
 
 - **A multi-line include statement must have its arguments quoted.** The
   settings-file reader handles multi-line `include("a", "b")` but not every
-  Groovy DSL variant — the v1 parser expects quoted strings in include calls.
-- **`includeBuild` is discovery-only in v1.** Composite builds are detected
+  Groovy DSL variant — the current Gradle reader expects quoted strings in
+  include calls.
+- **`includeBuild` is discovery-only.** Composite builds are detected
   but edges from included builds are not modeled — the reactor reads the
   directory mapping, but project dependencies across composite boundaries draw
   no edge.
@@ -591,7 +592,7 @@ belong to the external node synthesis layer when a rule needs a name.
   `/* ... */` comments before processing; a malformed block comment that
   doesn't close is treated as malformed input.
 - **Version catalog references are not resolved.** `libs.bundles.testing` or
-  `libs.versions.lib` are not read in v1 — a catalog entry that cannot be
+  `libs.versions.lib` are not read — a catalog entry that cannot be
   resolved to a workspace project stays silent.
 - **External dependency coordinates are not read.** `implementation
 "group:artifact:version"` forms are not modeled — they belong to the external

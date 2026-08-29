@@ -1,9 +1,11 @@
 # Evidence and the verdict vocabulary
 
 Every `check --format json` envelope now carries a `decision` object naming the
-run's verdict in one canonical vocabulary. This page is the single source of
-that vocabulary — the four states, the invariants that hold them together, and
-the shape the `decision` field takes in the envelope
+run's verdict in one canonical vocabulary. The words themselves are doctrine —
+[architecture-authority.md](../doctrine/architecture-authority.md) declares
+verdict and evidence for the system — while this page is the single source of
+the envelope contract: the four states, the invariants that hold them
+together, and the shape the `decision` field takes in the envelope
 ([json-output.md](json-output.md)).
 
 The vocabulary exists because the three statuses the envelope has always used —
