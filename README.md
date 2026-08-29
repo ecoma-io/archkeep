@@ -130,7 +130,7 @@ Enforcement is one stage of what Archkeep does. The commands form a loop:
 | Discover  | What architecture do we actually have?        | `discover` · `graph`                                                                            |
 | Declare   | What architecture do we intend?               | the policy table · `architecture-intent.json`                                                   |
 | Enforce   | Does this tree agree?                         | `check` · `fitness`                                                                             |
-| Explain   | Why? Who depends on this? Since when?         | `explain` · `impact` · `context` · `adr` · `provenance`                                         |
+| Explain   | Why? Who depends on this? Since when?         | `explain` · `impact` · `context` · `adr` · `decisions` · `provenance`                           |
 | Evolve    | Where is it drifting? What did a change cost? | `diff` · `delta` · `change` · `drift` · `history` · `trajectory` · `debt` · `health` · `report` |
 | Reconcile | How do we close the gap — or accept it?       | `reconcile --propose` · `waivers`                                                               |
 
@@ -296,7 +296,7 @@ Grouped the way the [concepts](docs/concepts/architecture.md) own them:
   floors, suppression budgets…), constraints grounded in ADRs, named profiles,
   six shipped preset policy packs ([waivers](docs/concepts/waivers.md) ·
   [fitness functions](docs/concepts/fitness-functions.md)).
-- **Deterministic evidence** — 22 commands with versioned, byte-stable JSON
+- **Deterministic evidence** — 23 commands with versioned, byte-stable JSON
   (a schema-versioned envelope), plus text and SARIF 2.1.0; a four-state
   verdict vocabulary where `unknown` demands a stated reason; coverage counts
   on every result; git provenance and a policy fingerprint naming the exact

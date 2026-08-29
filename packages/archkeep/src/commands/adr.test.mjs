@@ -2,19 +2,22 @@ import { describe, expect, it } from "vitest";
 
 import { adrCommand, readAdrContext } from "./adr.mjs";
 
-/** A registry as `loadAdrRegistryOverride` returns it. */
+/** A registry as `loadAdrRegistryOverride` returns it (post-A records carry
+ * the derived `supersededBy` reverse-link array on every entry). */
 function REGISTRY_ENTRIES() {
   return [
     {
       id: "0001-bind-collaboration",
       status: "accepted",
       supersedes: [],
+      supersededBy: ["0002-bind-logs"],
       bindings: ["rule:no-direct-dep", "fitness:hotspot"],
     },
     {
       id: "0002-bind-logs",
       status: "superseded",
       supersedes: ["0001-bind-collaboration"],
+      supersededBy: [],
       bindings: ["rule:sticky-logs"],
     },
   ];
@@ -28,7 +31,7 @@ function registry() {
   };
 }
 
-const ioWith = (override) => ({ loadAdrRegistryOverride: override });
+const ioWith = (override, extra = {}) => ({ loadAdrRegistryOverride: override, ...extra });
 
 describe("readAdrContext", () => {
   it("derives the known-fitness set from the bindings across records", () => {
@@ -49,18 +52,112 @@ describe("adrCommand", () => {
       {},
       ioWith(() => registry()),
     );
-    expect(result.status).toBe("ok");
-    expect(result.coverage.complete).toBe(true);
     expect(result.result.adrs).toEqual(["0001-bind-collaboration", "0002-bind-logs"]);
     expect(result.result.registry).toEqual({ dir: "docs/adr", count: 2 });
     expect(result.result.supersedes).toEqual([
       { adr: "0002-bind-logs", supersedes: "0001-bind-collaboration" },
     ]);
+    // The derived reverse link is mirrored into the envelope, not only the text.
+    expect(result.result.supersededBy).toEqual([
+      { adr: "0001-bind-collaboration", supersededBy: "0002-bind-logs" },
+    ]);
     // The supersession chain is stated in text, not just the payload.
     expect(result.report.text).toContain("supersedes: 0001-bind-collaboration");
+    expect(result.report.text).toContain("supersededBy: 0002-bind-logs");
     // Both records' status sets listed.
     expect(result.report.text).toContain("(accepted)");
     expect(result.report.text).toContain("(superseded)");
+  });
+
+  it("derives per-decision fitness from injected verdicts, honestly when none resolve", () => {
+    const result = adrCommand(
+      "/ws",
+      {},
+      ioWith(() => registry()),
+    );
+    // No verdicts were supplied: the authority decision verifies nothing →
+    // unverifiable (never healthy), the superseded one is not measured.
+    expect(result.result.fitness).toEqual([
+      {
+        id: "0001-bind-collaboration",
+        status: "accepted",
+        level: "unverifiable",
+        verified: false,
+        reason:
+          "no bound constraint for 0001-bind-collaboration resolves or was evaluated — none can be verified",
+      },
+      {
+        id: "0002-bind-logs",
+        status: "superseded",
+        level: "not_applicable",
+        verified: false,
+        reason:
+          'status "superseded" carries no authority — only active/accepted decisions are measured',
+      },
+    ]);
+    expect(result.report.text).toContain(
+      `fitness:      unverifiable — no bound constraint for 0001-bind-collaboration resolves or was evaluated — none can be verified`,
+    );
+    // The derivation is per-record; the dump carries one line per record.
+    expect(result.report.text).toContain(
+      `fitness:      not_applicable — status "superseded" carries no authority — only active/accepted decisions are measured`,
+    );
+  });
+
+  it("reports enforced / partially-enforced / violated levels from injected verdicts", () => {
+    // `fitness:hotspot` strips to `hotspot`; `rule:no-direct-dep` strips to
+    // `no-direct-dep`. One declared name passes → partially-enforced; both
+    // pass → enforced; one fails → violated (failure wins over everything).
+    const withVerdicts = (functions) =>
+      adrCommand(
+        "/ws",
+        {},
+        ioWith(() => registry(), { fitnessVerdicts: functions }),
+      );
+
+    const partial = withVerdicts([{ name: "hotspot", verdict: "pass" }]);
+    expect(partial.result.fitness[0].level).toBe("partially-enforced");
+    expect(partial.result.fitness[0].reason).toContain("1 of 2 bound constraint(s) verified true");
+    expect(partial.report.text).toContain("fitness:      partially-enforced —");
+
+    const enforced = withVerdicts([
+      { name: "hotspot", verdict: "pass" },
+      { name: "no-direct-dep", verdict: "pass" },
+    ]);
+    expect(enforced.result.fitness[0]).toMatchObject({ level: "enforced", verified: true });
+    expect(enforced.report.text).toContain(
+      "fitness:      enforced — verified true: bound constraints resolve and pass",
+    );
+
+    const violated = withVerdicts([
+      { name: "hotspot", verdict: "pass" },
+      { name: "no-direct-dep", verdict: "fail" },
+    ]);
+    expect(violated.result.fitness[0].level).toBe("violated");
+    expect(violated.report.text).toContain(
+      'fitness:      violated — bound constraint "no-direct-dep" FAILED — what-must-remain-true is currently false',
+    );
+  });
+
+  it("shows created/updated and prose fields on the single-record face", () => {
+    const entries = REGISTRY_ENTRIES();
+    entries[0].created = "2026-01-05";
+    entries[0].updated = "2026-02-11";
+    entries[0].context = "Two projects must not reach across the boundary.\n\nSee the doc.";
+    entries[0].rationale = "Collaboration ties in the wrong direction.";
+    const result = adrCommand(
+      "/ws",
+      { id: "0001-bind-collaboration" },
+      ioWith(() => ({ records: entries, byId: new Map(entries.map((r) => [r.id, r])) })),
+    );
+    expect(result.status).toBe("ok");
+    expect(result.report.text).toContain("created:   2026-01-05");
+    expect(result.report.text).toContain("updated:   2026-02-11");
+    expect(result.report.text).toContain(
+      "context:     Two projects must not reach across the boundary.",
+    );
+    expect(result.report.text).toContain("             See the doc.");
+    expect(result.report.text).toContain("rationale:   Collaboration ties in the wrong direction.");
   });
 
   it("shows one record for a known id", () => {

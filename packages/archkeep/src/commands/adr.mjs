@@ -55,6 +55,20 @@
  * `bindings` beside `knownFitness`, at exit 0. Naming a limit is not a
  * verdict; leaving it unnamed would be the silent direction
  * (`../../../../AGENTS.md`).
+ * ## What it can say about fitness
+ *
+ * Wave 2's fitness derivation (`../governance/decision-fitness.mjs`) folds a
+ * decision's bound constraints and their verdicts into one per-decision
+ * level. It is NOT wired into this command's own read: `adr` stays the
+ * registry-only surface it was. The caller may hand verdicts in through
+ * `io.fitnessVerdicts` (the same `{name, verdict}` shape `fitness` produces)
+ * and every record then renders its level — `verified` only when a bound
+ * constraint passes. Without verdicts the derivation still runs, and its
+ * honest answer is echoed: a decision with authority but nothing verifiable
+ * is `unverifiable` — never healthy — while a status without authority is
+ * `not_applicable`. An empty verdict set is not silence; it is the registry
+ * alone asserting nothing. Levels never change the exit code: `adr` remains
+ * 0/2/3, a description of what is recorded, not a gate.
  */
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import {
@@ -65,6 +79,8 @@ import {
 } from "../report/adr-text.mjs";
 import { ADR_DIR, stripAdrPrefix } from "../governance/adr-registry.mjs";
 import { adrsBinding, boundFitnessIds, loadAdrRegistry } from "../governance/adr-registry.mjs";
+import { computeDecisionFitness } from "../governance/decision-fitness.mjs";
+import { stripRuleFitnessPrefix } from "../governance/adr-registry.mjs";
 
 /**
  * The other half of the id name space the positional argument answers
@@ -124,8 +140,11 @@ export function readAdrContext(root, io = {}) {
  * @param {{id?: string}} options
  * @param {{loadAdrRegistryOverride?: typeof loadAdrRegistry, tracked?: string[],
  *   lstatSync?: (path: string) => {isSymbolicLink: () => boolean},
- *   realpathSync?: (path: string) => string}} [io] Forwarded to
- *   `readAdrContext` unchanged.
+ *   realpathSync?: (path: string) => string, fitnessVerdicts?:
+ *   Array<{name: string, verdict: string}>}} [io] `tracked`, `lstatSync` and
+ *   `realpathSync` are forwarded to `readAdrContext` unchanged; `fitnessVerdicts`
+ *   feeds the per-decision fitness derivation ("What it can say about fitness"
+ *   in the module header owns what an absent array means).
  * @returns {{status: "ok"|"no-verdict", result: object, coverage: object,
  *   report: {text: string, json: string}}}
  * @throws {Error} on an unreadable registry (exit-3 class).
@@ -134,6 +153,21 @@ export function adrCommand(root, options, io = {}) {
   const ctx = readAdrContext(root, io);
 
   const { records, byId, knownFitness } = ctx;
+
+  // Per-decision fitness: the wave-2 derivation, fed a lookup built from
+  // whatever verdicts the caller can supply (`io.fitnessVerdicts`, the same
+  // `{name, verdict}` shape the `fitness` command emits). A binding's prefix
+  // (`rule:`/`fitness:`) is stripped before the lookup — a verdict names a
+  // declared fitness id, and `fitness:hotspot` and `hotspot` are the same id.
+  // An empty verdict set is a legitimate input: every authority decision then
+  // derives `unverifiable`, which is the registry alone asserting nothing —
+  // the module header's "What it can say about fitness" owns the wording.
+  const verdictByName = new Map((io.fitnessVerdicts ?? []).map((v) => [v.name, v]));
+  const fitnessLookup = (bindingId) => verdictByName.get(stripRuleFitnessPrefix(bindingId));
+  const fitnessById = new Map(
+    computeDecisionFitness(records, null, fitnessLookup).map((entry) => [entry.id, entry]),
+  );
+  const fitness = [...fitnessById.values()];
 
   // An id the caller asked about that the registry does not know is a named
   // unknown, not a clean result — the invariant. Two cases, told apart by the
@@ -194,15 +228,22 @@ export function adrCommand(root, options, io = {}) {
     supersedes: records.flatMap((record) =>
       record.supersedes.map((ref) => ({ adr: record.id, supersedes: ref })),
     ),
+    // The derived reverse link — the records whose `supersedes` names this
+    // one — so a machine reader of the envelope sees the same lineage the
+    // text face shows.
+    supersededBy: records.flatMap((record) =>
+      record.supersededBy.map((id) => ({ adr: record.id, supersededBy: id })),
+    ),
+    fitness,
     unresolved,
     knownFitness: [...knownFitness].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
   };
 
   const text =
     requestedId === undefined
-      ? formatAdrDump({ records, knownFitness })
+      ? formatAdrDump({ records, knownFitness, fitnessById })
       : byId.has(resolvedAdrId)
-        ? formatAdrRecord(byId.get(resolvedAdrId), knownFitness)
+        ? formatAdrRecord(byId.get(resolvedAdrId), knownFitness, fitnessById)
         : isFitnessRef
           ? formatAdrReverse({ fitnessId: requestedId, adrIds: adrsBinding(records, requestedId) })
           : formatAdrMissing({ adrId: requestedId });

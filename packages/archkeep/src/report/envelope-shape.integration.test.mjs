@@ -395,6 +395,7 @@ function argvForEveryCommand() {
     explain: ["explain", "libs/domain/doc.go:4:2", "--format", "json"],
     context: ["context", "domain", "--format", "json"],
     provenance: ["provenance", "--format", "json"],
+    decisions: ["decisions", "0001-layers", "--format", "json"],
     adr: ["adr", "--format", "json"],
     rules: ["rules", "list", "--format", "json"],
   };

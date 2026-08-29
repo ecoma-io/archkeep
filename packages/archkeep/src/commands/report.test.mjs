@@ -326,7 +326,104 @@ describe("reportCommand — decisions link a governed row to its record", () => 
       },
     ]);
     expect(result.report.text).toContain("0001-layering (accepted)");
+    // Wave-2 additive surface, still over the same run: the record carries its
+    // authority, the governed row that stands on it, and -- because a declared
+    // `no-cycles` gate (if the law declared one) passes here -- a fitness level.
+    // None of these existed before the wave-2 fields; the existing assertion
+    // above (the record row) is the byte-identical baseline they must not break.
+    // No fitness declared in `config()` here, so the record is unverifiable --
+    // the registry alone asserts nothing.
+    expect(result.result.decisions.records).toHaveLength(1);
+    expect(result.result.decisions.records[0]).toMatchObject({
+      id: "0001-layering",
+      status: "accepted",
+      authority: true,
+      bindings: ["no-cycles"],
+    });
+    expect(result.result.decisions.records[0].fitness.level).toBe("unverifiable");
+    expect(result.result.decisions.records[0].constraints).toEqual([
+      { kind: "depConstraints[0]", label: "depConstraints[0] *" },
+    ]);
+    expect(result.result.decisions.unresolvedDecisionRefs).toEqual([]);
+    expect(result.report.text).toContain("stands on: depConstraints[0] depConstraints[0] *");
+    expect(result.report.text).toContain("fitness: unverifiable");
     expect(result.status).toBe("ok");
+  });
+
+  it("derives an enforced level when a bound gate passes, violating when it fails", async () => {
+    const root = tree({ adrs: { [ADR_FILE]: ADR_TEXT } });
+    const legal = () =>
+      config({
+        fitness: [
+          {
+            name: "no-cycles",
+            match: ["tag:type-package"],
+            condition: { type: "cycle-free" },
+          },
+        ],
+        depConstraints: [
+          { sourceTag: "*", onlyDependOnLibsWithTags: ["*"], decisionRef: "0001-layering" },
+        ],
+      });
+    // The record binds `no-cycles`. Declaring it and passing the gate →
+    // enforced; the same law over a graph WITH a cycle fails the gate → the
+    // decision folds `violated`, and the run holds its verdict back (a failing
+    // gate is a named uninspectable in the fitness surface's own lane).
+    const passing = await reportCommand(context({ root, tracked: [ADR_TRACKED] }), {
+      config: legal(),
+    });
+    expect(passing.result.decisions.records[0].fitness).toMatchObject({
+      level: "enforced",
+      verified: true,
+    });
+    expect(passing.report.text).toContain(
+      "fitness: enforced — verified true: bound constraints resolve and pass",
+    );
+
+    const cyclic = context({
+      root,
+      tracked: [ADR_TRACKED],
+      graph: {
+        nodes: {
+          a: { name: "a", type: "lib", data: { root: "libs/a", tags: ["type-package"] } },
+          b: { name: "b", type: "lib", data: { root: "libs/b", tags: ["type-package"] } },
+        },
+        dependencies: {
+          a: [{ source: "a", target: "b", type: "static" }],
+          b: [{ source: "b", target: "a", type: "static" }],
+        },
+      },
+    });
+    const violated = await reportCommand(cyclic, { config: legal() });
+    expect(violated.result.decisions.records[0].fitness.level).toBe("violated");
+    expect(violated.report.text).toContain("fitness: violated");
+    // A violated gate is a REAL verdict (`fitnessCommand` determined it), not
+    // an uninspected one — so it renders loudly but does not hold the
+    // document's status back. The report stays `ok` (descriptive) while the
+    // gate's own `fitness` lane carries the failure, exactly as the header
+    // ("Descriptive, and what its status means") owns.
+    expect(violated.status).toBe("ok");
+  });
+
+  it("lists unresolved decisionRefs explicitly when any citation fails to resolve", async () => {
+    const root = tree({ adrs: { [ADR_FILE]: ADR_TEXT } });
+    const result = await reportCommand(context({ root, tracked: [ADR_TRACKED] }), {
+      config: config({
+        depConstraints: [
+          { sourceTag: "*", onlyDependOnLibsWithTags: ["*"], decisionRef: "0009-nonexistent" },
+        ],
+      }),
+    });
+    expect(result.result.decisions.unresolvedDecisionRefs).toEqual([
+      {
+        kind: "depConstraints[0]",
+        label: "depConstraints[0] *",
+        decisionRef: "0009-nonexistent",
+        reason: '"0009-nonexistent" does not resolve — no matching ADR, rule, or fitness record',
+      },
+    ]);
+    expect(result.report.text).toContain("unresolved decisionRefs:");
+    expect(result.status).toBe("no-verdict");
   });
 
   it("reads an unresolved citation as unknown, never a pass", async () => {

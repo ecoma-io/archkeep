@@ -44,6 +44,27 @@
  * plugin but whose tracked files include polyglot manifests under project
  * roots, `explain` refuses loudly rather than explaining a judgment from a
  * graph whose edges silently under-represent the real architecture.
+ *
+ * ## The "why does this constraint exist" chain
+ *
+ * A constraint row that carries a `decisionRef` claims a governing decision —
+ * an ADR record, or a rule/fitness id the law declares. `explain` resolves
+ * that claim against the workspace's ADR registry and walks it through the
+ * governance graph (`../governance/decision-graph.mjs`), surfacing the
+ * decision's status and authority, its rationale/context prose, and its
+ * supersession lineage — not just the pointer. It is read-only, exactly like
+ * the rest of `explain`: an agent is shown WHY the row exists, never handed
+ * the authority to change the decision or the verdict.
+ *
+ * Resolution never changes the exit code and never invents a fact. A
+ * `decisionRef` that resolves to nothing — or a registry that cannot be read
+ * at all — renders as UNRESOLVED, the same loud wording `check`/`report`
+ * use; a `rule:`/`fitness:`-shaped ref that the law declares renders as
+ * exactly that, a fitness rule this law declares. Only an unresolved site or
+ * incomplete analysis moves `status`, so an unchanged tree pays no changed
+ * exit code. The registry is read lazily, only when a matched row actually
+ * carries a `decisionRef` — the common case (no `docs/adr/` adopted yet)
+ * pays no extra read.
  */
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { UsageError } from "../errors.mjs";
@@ -53,6 +74,15 @@ import { findProjectForPath, createProjectRootMappings } from "../rules/specifie
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatExplainReport } from "../report/explain-text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { readAdrContext } from "./adr.mjs";
+import { lineage } from "../governance/decision-graph.mjs";
+import { unresolvedDecisionRefNote } from "./provenance-command.mjs";
+import {
+  declaredFitnessNames,
+  hasAuthority,
+  resolveDecisionRef,
+  stripAdrPrefix,
+} from "../governance/adr-registry.mjs";
 
 /**
  * Parses a `file:line:column` site string into its components.
@@ -137,6 +167,102 @@ export function findSite(parsed, imports) {
  */
 function findMatchingConstraints(depConstraints, sourceProjectNode) {
   return findConstraintsFor(depConstraints, sourceProjectNode);
+}
+/**
+ * Resolves the "why does this constraint exist" chain for every distinct
+ * `decisionRef` the matched constraint rows carry, in first-sight order.
+ *
+ * A `decisionRef` names the ADR (or rule/fitness id) that authorizes the row.
+ * Resolution is the registry's own (`resolveDecisionRef`); the walk that
+ * surfaces status/authority/rationale/context and lineage is the governance
+ * graph's (`lineage`). Failures are named, never silent:
+ *
+ * - a registry that cannot be read resolves nothing — every ref is `unknown`
+ *   with the read failure as its reason, the same posture `report` takes for
+ *   the same condition;
+ * - a ref that resolves to no ADR, rule, or fitness record the registry knows
+ *   is `unknown`, with `unresolvedDecisionRefNote`'s shared wording.
+ *
+ * Deterministic: matched-row order, distinct refs deduplicated on first
+ * sight, and the walk's own registry (byte-sorted filename) order. Empty when
+ * no matched row carries a `decisionRef` — the caller then changes no byte of
+ * its explanation.
+ *
+ * @param {object[]} matchedConstraints The constraint rows that matched the
+ *   explained site.
+ * @param {string} root The workspace root, for the registry read.
+ * @param {string[]} tracked Tracked files, for the registry read.
+ * @param {object} config The loaded boundary config, for the declared-name
+ *   half of `resolveDecisionRef`.
+ * @returns {object[]} One entry per distinct ref: `resolution` is the
+ *   registry's own `"adr" | "fitness" | "unknown"`; an `"adr"` entry carries
+ *   the record's authority and prose facts plus the lineage walk.
+ */
+function resolveDecisionChains(matchedConstraints, root, tracked, config) {
+  const refs = [];
+  for (const row of matchedConstraints) {
+    if (typeof row?.decisionRef !== "string" || row.decisionRef.trim() === "") continue;
+    if (!refs.includes(row.decisionRef)) refs.push(row.decisionRef);
+  }
+  if (refs.length === 0) return [];
+
+  let registry = null;
+  let registryReason = null;
+  try {
+    registry = readAdrContext(root, { tracked });
+  } catch (error) {
+    registryReason = String(error?.message ?? error);
+  }
+
+  const knownFitness = declaredFitnessNames(config);
+  return refs.map((ref) => {
+    if (registry === null) {
+      return {
+        ref,
+        resolution: "unknown",
+        reason: `the decision registry could not be read: ${registryReason}`,
+      };
+    }
+    const resolution = resolveDecisionRef(registry.byId, knownFitness, ref);
+    if (resolution === "adr") {
+      const record = registry.byId.get(stripAdrPrefix(ref));
+      const recordFacts = { id: record.id, status: record.status };
+      for (const key of [
+        "created",
+        "updated",
+        "context",
+        "decision",
+        "rationale",
+        "alternatives",
+        "consequences",
+        "assumptions",
+      ]) {
+        if (record[key] !== undefined) recordFacts[key] = record[key];
+      }
+      recordFacts.supersedes = record.supersedes;
+      recordFacts.supersededBy = record.supersededBy;
+      recordFacts.bindings = record.bindings;
+      return {
+        ref,
+        resolution: "adr",
+        authority: hasAuthority(record.status),
+        record: recordFacts,
+        lineage: lineage(record.id, {
+          records: registry.records,
+          byId: registry.byId,
+          // The lineage walk reads only `records`/`byId`; the graph walk's
+          // full shape is supplied so the call satisfies the type rather than
+          // leaning on an unchecked subset.
+          knownFitness,
+          rows: [],
+        }),
+      };
+    }
+    if (resolution === "fitness") {
+      return { ref, resolution: "fitness" };
+    }
+    return { ref, resolution: "unknown", reason: unresolvedDecisionRefNote(ref) };
+  });
 }
 
 /**
@@ -353,6 +479,15 @@ export function explainCommand(site, commandContext, config) {
     unresolvable: false,
     reason: null,
   };
+  // The "why does this constraint exist" chain — the governing decision(s)
+  // behind the rows that matched this site, resolved through the ADR registry
+  // and walked through the governance graph (`resolveDecisionChains`'s own
+  // header argues the fail-closed wording and the determinism). Additive: an
+  // explanation whose rows carry no `decisionRef` keeps every byte it had.
+  const decisions = resolveDecisionChains(matchedConstraints, root, commandContext.tracked, config);
+  if (decisions.length > 0) {
+    explanation.decisions = decisions;
+  }
 
   const context = { root, provider, marker, provenance: resolveProvenance(root) };
   const coverage = {
@@ -375,6 +510,7 @@ export function explainCommand(site, commandContext, config) {
     matchedConstraints,
     violations,
     verdict,
+    ...(decisions.length > 0 ? { decisions } : {}),
   };
 
   const envelope = jsonEnvelope({
