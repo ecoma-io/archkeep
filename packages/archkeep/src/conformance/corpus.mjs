@@ -2003,4 +2003,40 @@ export const ARCHITECTURE_CORPUS = [
       },
     ],
   },
+  // ------------------------------------------------- no-verdict (TypeScript)
+  {
+    id: "declared-project-unresolvable-import",
+    style: "no-verdict — a run that cannot finish judging the tree",
+    languages: ["ts"],
+    verdict: "no-verdict",
+    intent:
+      "The invariant's SILENT direction, driven through the real `check` path: a tracked file whose " +
+      "literal import names a DECLARED project but cannot be resolved (no tsconfig `paths` mapping / " +
+      "no module the TypeScript resolver can answer to) is a whole-file failure. `check` refuses a " +
+      "verdict over it — exit 3, `coverage.complete: false`, the file named in `notAnalyzed` — because " +
+      "an empty violation list over a file the run could not fully judge reads byte-identically to a " +
+      "clean workspace (the exact shape `src/cli.integration.test.mjs` pins for the native provider). " +
+      "This case is the corpus's proof that a no-verdict verdict can be asserted at all: every other " +
+      "case here is clean or findings, and the corpus's per-case assertions hard-code those two until " +
+      "this one declares `verdict: no-verdict`. A regression that silently downgraded this tree to " +
+      '`status: "ok"` (exit 0) fails the case in the silent direction.',
+    projects: [
+      { name: "billing-core", root: "libs/billing/core", tags: ["scope:billing"] },
+      // A declared project whose name is an `@scope/package` spelling: an import
+      // of it from a sibling is a workspace-internal dependency that must resolve
+      // to a project node, and with no paths mapping it cannot (typescript.mjs's
+      // `namesDeclaredProject`).
+      { name: "@billing/api", root: "libs/billing/api", tags: ["scope:checkout"] },
+    ],
+    depConstraints: [{ sourceTag: "*", onlyDependOnLibsWithTags: ["*"] }],
+    options: {},
+    files: {
+      "libs/billing/core/index.ts":
+        'import { helper } from "@billing/api";\nexport const used = helper;\n',
+      "libs/billing/api/index.ts": "export const helper = 42;\n",
+    },
+    // No probes: a file the run cannot judge carries no boundary-finding label,
+    // and a `no-verdict` case asserts the refusal, not a violation.
+    probes: [],
+  },
 ];
