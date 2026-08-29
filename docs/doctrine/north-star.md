@@ -64,19 +64,20 @@ out loud rather than implying with a checkmark.
 
 Against that bar, the state today:
 
-| language                  |        edges        | enforcement |          editor          | limits declared |
-| ------------------------- | :-----------------: | :---------: | :----------------------: | :-------------: |
-| Go                        |         ✅          |     ✅      |      LSP · VS Code       |       ✅        |
-| Rust                      |         ✅          |     ✅      |      LSP · VS Code       |       ✅        |
-| Python                    |         ✅          |     ✅      |      LSP · VS Code       |       ✅        |
-| TypeScript and JavaScript |      Nx's own       |     ✅      | deliberately not claimed |       ✅        |
-| Vue                       |      Nx's own       |     ✅      |      LSP · VS Code       |       ✅        |
-| Java                      | `pom.xml` + imports |     ✅      |      LSP · VS Code       |       ✅        |
-| Kotlin                    |  shared with Java   |     ✅      |      LSP · VS Code       |       ✅        |
+| language                  |        edges         | enforcement |          editor          | limits declared |
+| ------------------------- | :------------------: | :---------: | :----------------------: | :-------------: |
+| Go                        |          ✅          |     ✅      |      LSP · VS Code       |       ✅        |
+| Rust                      |          ✅          |     ✅      |      LSP · VS Code       |       ✅        |
+| Python                    |          ✅          |     ✅      |      LSP · VS Code       |       ✅        |
+| TypeScript and JavaScript |       Nx's own       |     ✅      | deliberately not claimed |       ✅        |
+| Vue                       |       Nx's own       |     ✅      |      LSP · VS Code       |       ✅        |
+| Java                      | `pom.xml` + imports  |     ✅      |      LSP · VS Code       |       ✅        |
+| Kotlin                    |   shared with Java   |     ✅      |      LSP · VS Code       |       ✅        |
+| C# / .NET                 | `*.csproj` + imports |     ✅      |      LSP · VS Code       |       ✅        |
 
 _LSP_ means any LSP client reaches the diagnostics; Claude Code does, from this
 repository's own marketplace. _VS Code_ means `packages/archkeep-vscode`, which
-routes the same five extensions and starts the server the workspace has
+routes the same eight extensions and starts the server the workspace has
 installed. The cell is not a checkmark because that client is not on the
 marketplace yet: it runs from a development host or the `.vsix` CI builds,
 verifies and attaches to each of its releases, so a developer who does not
@@ -99,7 +100,7 @@ registry disagree.
 ## How the next language earns its place
 
 Breadth is the goal, and breadth is also the way this project could quietly stop
-being trustworthy: seven analyzers that each half-read their language would report
+being trustworthy: eight analyzers that each half-read their language would report
 clean far more often than they report correctly, and every one of those clean
 reports would look exactly like the enforcement working.
 
@@ -195,11 +196,11 @@ These are load-bearing. Each is already enforced somewhere in the code or the
 tests; this list exists so that a proposal to remove one is recognised as a
 change of direction rather than a cleanup.
 
-**Static reading only.** Nothing invokes `go`, `cargo`, `uv`, `mvn` or `gradle` to answer a
-question about imports. Nx computes the graph on _every_ invocation, so a graph
-that needs seven language toolchains installed is a graph that fails on the machine that
-does not have them — a lint-only CI job, or a contributor who touches none of the
-seven languages.
+**Static reading only.** Nothing invokes `go`, `cargo`, `uv`, `mvn`, `gradle` or
+`dotnet` to answer a question about imports. Nx computes the graph on _every_
+invocation, so a graph that needs eight language toolchains installed is a graph
+that fails on the machine that does not have them — a lint-only CI job, or a
+contributor who touches none of the eight languages.
 
 **Edges only — never nodes, never targets.** Projects stay declared by
 hand-written `project.json`, and no target is ever inferred. The community
@@ -244,7 +245,7 @@ the imports — breadth is safe, because coverage is something the run reports
 rather than something the reader assumes.
 
 That is the whole reason this project can aim at being a platform rather than
-seven analyzers. Not the layering, and not the test count.
+eight analyzers. Not the layering, and not the test count.
 
 ## How to tell this is drifting
 
