@@ -212,13 +212,14 @@ claim) are what `scripts/differential-real-trees.test.mjs` pins under
 ### Conformance — the labeled corpus, where ESLint has no parser
 
 The differential can only speak where ESLint can read the file, which is
-JavaScript, TypeScript and Vue. On `.go`, `.rs` and `.py` — the languages this
-tool exists for — upstream is silent by inability, so no comparison there can
+JavaScript, TypeScript and Vue. On `.go`, `.rs`, `.py`, `.java`, `.kt` and
+`.cs` — the languages upstream cannot read at all — upstream is silent by
+inability, so no comparison there can
 catch a rule that stopped firing: every spelling of the import would go quiet
 together and still agree.
 
 `corpus.mjs` and `corpus.integration.test.mjs` are that half. Architecture
-styles built in those three languages, each probe carrying the findings a
+styles built in Go, Rust and Python, each probe carrying the findings a
 person decided in advance, run end to end through `cli.mjs`'s `check` over a
 native (`archkeep.json`) workspace. The mechanism that keeps a near-miss from
 being an engine that never looked — a second, forbid-everything policy every
