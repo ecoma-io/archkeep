@@ -205,6 +205,9 @@ describe("rules add", () => {
     expect(result.json.command).toBe("rules add");
     expect(result.json.result.rule).toBe("tag-cardinality");
     expect(result.json.result.artifactPath).toContain("tag-cardinality.wasm");
+    // #425's silent direction: the printed row must never carry the catalog's
+    // params SCHEMA as if it were values — a row that parses but cannot run.
+    expect(result.json.result.customRulesRow).not.toHaveProperty("params");
   });
 
   it("fails on unknown rule name", () => {

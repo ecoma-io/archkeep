@@ -375,6 +375,76 @@ export const depConstraints = [];
     expect(json.command).toBe("rules add");
   });
 
+  // The printed row is the command's output contract, and a row that cannot
+  // run is the silent direction: it parses, it reads complete, and only the
+  // first `check` after adoption says otherwise (#425). These pin the two
+  // fields that made the printed row unrunnable.
+  it("prints a runnable row: artifact names the copy destination and no params schema rides along", async () => {
+    const workspaceDir = mkdtempSync(join(tmpdir(), "archkeep-add-row-"));
+    mkdirSync(workspaceDir, { recursive: true });
+
+    const result = await rulesAddCommand(
+      { catalog: catalogPath },
+      { cwd: workspaceDir, ruleName: "max-fan-out" },
+    );
+
+    expect(result.status).toBe("ok");
+    const row = JSON.parse(result.report.json).result.customRulesRow;
+
+    // The artifact field is where the bytes actually landed —
+    // workspace-root-relative, the way a row's artifact resolves — not the
+    // bare filename the destination happens to end with.
+    expect(row.artifact).toBe("tools/rules/max-fan-out.wasm");
+    expect(existsSync(join(workspaceDir, row.artifact))).toBe(true);
+
+    // The catalog's `params` field is the SCHEMA; pasted as values it sends
+    // the rule to `unknown` at check time. The row leaves `params` out and
+    // the printout points at `rules info` instead.
+    expect(Object.hasOwn(row, "params")).toBe(false);
+    expect(result.report.text).toContain("archkeep rules info max-fan-out");
+
+    rmSync(workspaceDir, { recursive: true, force: true });
+  });
+
+  it("prints a params-free row with no info hint for a rule that declares no parameters", async () => {
+    const base = mkdtempSync(join(tmpdir(), "archkeep-add-row-paramless-"));
+    const rulesDir = join(base, "rules");
+    mkdirSync(rulesDir, { recursive: true });
+    const bytes = Buffer.from("paramless rule bytes");
+    writeFileSync(join(rulesDir, "paramless.wasm"), bytes);
+    const paramlessCatalogPath = join(base, "catalog.json");
+    writeFileSync(
+      paramlessCatalogPath,
+      JSON.stringify({
+        version: 1,
+        rules: [
+          {
+            name: "paramless",
+            description: "a rule declaring no parameters",
+            contract: 1,
+            needs: [],
+            params: {},
+            artifact: "rules/paramless.wasm",
+            sha256: createHash("sha256").update(bytes).digest("hex"),
+          },
+        ],
+      }),
+    );
+
+    const result = await rulesAddCommand(
+      { catalog: paramlessCatalogPath },
+      { cwd: base, ruleName: "paramless" },
+    );
+
+    expect(result.status).toBe("ok");
+    const row = JSON.parse(result.report.json).result.customRulesRow;
+    expect(row.artifact).toBe("tools/rules/paramless.wasm");
+    expect(Object.hasOwn(row, "params")).toBe(false);
+    expect(result.report.text).not.toContain("rules info");
+
+    rmSync(base, { recursive: true, force: true });
+  });
+
   // A catalog a consumer downloaded, vendored, or had modified under it is
   // data, so neither of the two paths `add` derives from it may escape the
   // directory that anchors it: the `artifact` field (read side, resolved under

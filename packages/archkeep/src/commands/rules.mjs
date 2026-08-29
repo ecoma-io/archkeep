@@ -40,20 +40,22 @@
  * `check` never reads the catalog (that claim stays true). Only the `rules` verb
  * reads it, at the user's explicit request.
  *
- * ## `rules add` dialect split
+ * ## `rules add` output
  *
- * v1 WRITES the row for:
- * - JSON dialect (`module-boundaries.config.mjs`)
- * - Inline `archkeep.json` policy (atomic write, only touching `customRules` key)
- *
- * v1 PRINTS a ready-to-paste row for:
- * - `.mjs`/`.js` module dialect (real sha256, `reason: "<fill>"` placeholder)
- * - ESLint flat-config dialect (which carries no `customRules` — the printout says so)
+ * `add` copies the artifact bytes into the workspace and PRINTS one
+ * ready-to-paste customRules row (real sha256, `reason: "<fill this in>"`
+ * placeholder) — every dialect gets the same printout, and no code path
+ * writes a config file or programmatically edits a JavaScript module. The
+ * row carries no `params`: the catalog's `params` field is the parameter
+ * SCHEMA, and the values are the workspace's law to choose — when the rule
+ * declares parameters the printout points at `rules info` for the schema.
+ * ESLint flat configs carry no `customRules` at all, so the printout says
+ * so instead of printing a row.
  *
  * Never auto-downloads anything. Never programmatically edits JavaScript modules.
  */
 
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 
@@ -495,9 +497,10 @@ export async function rulesVerifyCommand(options, { cwd }) {
 /**
  * Adds a rule from the catalog to the workspace.
  *
- * This copies the exact wasm bytes to a local directory and either:
- * - WRITES the customRules row for JSON dialect and inline archkeep.json
- * - PRINTS a ready-to-paste row for .mjs/.js module dialect and ESLint flat-config
+ * This copies the exact wasm bytes to a local directory and PRINTS one
+ * ready-to-paste customRules row — no config file is written. The row
+ * carries no `params`: the catalog's `params` field is the schema, and the
+ * printout points at `rules info` for it when the rule declares parameters.
  *
  * @param {{catalog?: string, to?: string}} options The parsed command options.
  * @param {{cwd: string, ruleName: string}} runContext The command context.
@@ -702,22 +705,37 @@ export async function rulesAddCommand(options, { cwd, ruleName }) {
   // Copy artifact bytes
   writeFileSync(targetArtifactPath, artifactBytes);
 
-  // Generate the customRules row
+  // Generate the customRules row. `artifact` names where the bytes were just
+  // copied — workspace-root-relative with forward slashes, the way a row's
+  // `artifact` resolves — not the bare filename the destination ends with.
+  // `params` is left out on purpose: the catalog's `params` field is the
+  // parameter SCHEMA, not values, and values are the workspace's law to
+  // choose — the same reason `../custom-rules/evidence.mjs` keeps an absent
+  // `params` absent rather than defaulting one onto the declared row. The
+  // printout points at `rules info` for the schema.
+  const artifactPath = relative(cwd, targetArtifactPath).split(sep).join("/");
   const customRulesRow = {
     name: rule.name,
-    artifact: `${ruleName}.wasm`,
+    artifact: artifactPath,
     sha256: rule.sha256,
-    params: rule.params || {},
     reason: "<fill this in>",
   };
 
   const rowJson = JSON.stringify(customRulesRow, null, 2);
+
+  const paramsHint =
+    Object.keys(rule.params || {}).length > 0
+      ? `This rule declares parameters the row leaves out — ` +
+        `\`archkeep rules info ${rule.name}\` shows the schema; add the values it ` +
+        `requires, since a row without them answers \`unknown\` at check time.\n`
+      : "";
 
   const text =
     `Rule "${rule.name}" added to workspace\n` +
     `Artifact copied to: ${targetArtifactPath}\n\n` +
     `Add this row to your boundary config under customRules:\n` +
     `${rowJson}\n\n` +
+    paramsHint +
     `For .mjs/.js module configs, paste this row and set a real reason.\n` +
     `For ESLint flat configs, the flat config dialect does not support customRules — ` +
     `add a module-boundaries.config.mjs to your workspace instead.\n`;
