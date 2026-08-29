@@ -125,6 +125,48 @@ describe("the corpus's own shape", () => {
       ]),
     ).toThrow(/claimant/u);
   });
+  it("declares a verdict every case can legitimately hold, and holds to it", () => {
+    // A case models one of the three verdicts the kernel can reach. The other
+    // two are derived from its probes (the `no-verdict` case is structurally
+    // different: it has NO probes, because a file the run cannot judge carries
+    // no boundary-finding label) — so an explicit `verdict` must agree with the
+    // derivation, and a `no-verdict` case must carry no labeled finding.
+    const invalid = [];
+    for (const spec of ARCHITECTURE_CORPUS) {
+      const anyFinding = spec.probes.some((probe) => probe.reports.length > 0);
+      const derived = anyFinding ? "findings" : "clean";
+      const declared = spec.verdict ?? derived;
+      if (!["clean", "findings", "no-verdict"].includes(declared)) {
+        invalid.push(
+          `${spec.id}: verdict '${String(declared)}' is not one of clean/findings/no-verdict`,
+        );
+      } else if (declared !== "no-verdict" && declared !== derived) {
+        invalid.push(`${spec.id}: declares '${declared}' but its probes imply '${derived}'`);
+      } else if (declared === "no-verdict" && anyFinding) {
+        invalid.push(`${spec.id}: declares no-verdict yet a probe claims a finding`);
+      }
+    }
+    expect(invalid, "cases whose declared verdict does not match their structure").toEqual([]);
+  });
+
+  it("gives the no-verdict case a file that genuinely cannot be judged", () => {
+    // The point of a no-verdict case is that `check` refuses to finish judging
+    // a tree. Its files must not be silently downgradable to clean: at least
+    // one declared project must carry an unresolvable import, and the case's
+    // `intent` must say what the silent regression would look like.
+    const noVerdict = ARCHITECTURE_CORPUS.filter((spec) => spec.verdict === "no-verdict");
+    const underSpecified = noVerdict.flatMap((spec) => {
+      const problems = [];
+      if (!spec.intent || !/silent|refus|verdict/u.test(spec.intent)) {
+        problems.push(`${spec.id}: intent does not name the silent-direction regression`);
+      }
+      if (spec.probes.length !== 0) {
+        problems.push(`${spec.id}: a no-verdict case must carry no probes`);
+      }
+      return problems;
+    });
+    expect(underSpecified, "no-verdict cases that do not say what they guard").toEqual([]);
+  });
 
   it("refuses a case that would overwrite the workspace scaffolding", () => {
     const shadowing = {
@@ -140,12 +182,16 @@ describe("the corpus's own shape", () => {
   it("carries a positive and a near-miss in every case", () => {
     // A case of positives alone cannot tell an engine that reproduces the
     // semantics from one that reports on everything; a case of near-misses
-    // alone cannot tell enforcement from silence.
-    const lopsided = ARCHITECTURE_CORPUS.filter(
-      (spec) =>
-        !spec.probes.some((probe) => probe.reports.length > 0) ||
-        !spec.probes.some((probe) => probe.reports.length === 0),
-    ).map((spec) => spec.id);
+    // alone cannot tell enforcement from silence. A `no-verdict` case is the
+    // exception: it models a run that CANNOT judge the tree, so it carries
+    // deliberately no probes (the separate `verdict` shape test above pins that).
+    const lopsided = ARCHITECTURE_CORPUS.filter((spec) => spec.verdict !== "no-verdict")
+      .filter(
+        (spec) =>
+          !spec.probes.some((probe) => probe.reports.length > 0) ||
+          !spec.probes.some((probe) => probe.reports.length === 0),
+      )
+      .map((spec) => spec.id);
     expect(lopsided, "cases carrying only positives or only near-misses").toEqual([]);
   });
 
@@ -277,15 +323,38 @@ for (const spec of ARCHITECTURE_CORPUS) {
     it("reads the whole tree and says so", () => {
       // Everything below compares two answers; this is what stops both of
       // them being empty for the same reason.
-      expect(run.coverage.complete, "the run could not analyze the whole fixture").toBe(true);
-      expect(run.coverage.notAnalyzed).toEqual([]);
+      // Computed with a `for…of` rather than `spec.probes.reduce(…, 0)`: the
+      // corpus cases are a heterogeneous union, and the new no-verdict case's
+      // `probes: []` member makes TS fail to resolve `.reduce`'s accumulator
+      // overload across the union (observed even before any `verdict` narrowing
+      // above — the empty array element type is the trigger, not the `if`).
+      // A `for…of` sum needs no element/accumulator inference, matching the
+      // import-site test's shape.
+      let expectedImports = 0;
+      for (const probe of spec.probes) expectedImports += probe.imports;
+      if (spec.verdict === "no-verdict") {
+        // A no-verdict case is a run that REFUSES to finish judging the tree:
+        // coverage is deliberately incomplete, and the unjudged file must be
+        // named so the refusal is loud rather than (silently) clean.
+        expect(run.coverage.complete, "a no-verdict run must not claim full coverage").toBe(false);
+        expect(run.coverage.notAnalyzed.length, "the unjudged file must be named").toBeGreaterThan(
+          0,
+        );
+      } else {
+        expect(run.coverage.complete, "the run could not analyze the whole fixture").toBe(true);
+        expect(run.coverage.notAnalyzed).toEqual([]);
+      }
       expect(run.coverage.blindSpots).toEqual([]);
       expect(run.coverage.projects, "projects discovered from archkeep.json").toBe(
         spec.projects.length,
       );
-      expect(run.coverage.imports, "import sites read across the whole fixture").toBe(
-        spec.probes.reduce((total, probe) => total + probe.imports, 0),
-      );
+      if (spec.verdict !== "no-verdict") {
+        // A no-verdict file's import sites are not counted (the whole file is
+        // unjudged), so the whole-fixture import total does not hold for it.
+        expect(run.coverage.imports, "import sites read across the whole fixture").toBe(
+          expectedImports,
+        );
+      }
     });
 
     it("reports exactly the findings its probes claim, and nothing else", () => {
@@ -302,6 +371,13 @@ for (const spec of ARCHITECTURE_CORPUS) {
     });
 
     it("carries the verdict its findings imply", () => {
+      if (spec.verdict === "no-verdict") {
+        // The silent direction, pinned: a tree the run cannot finish judging
+        // must be told apart from clean (exit 3 vs exit 0) byte-for-byte.
+        expect(run.status).toBe("no-verdict");
+        expect(run.exitCode).toBe(3);
+        return;
+      }
       const anyFinding = spec.probes.some((probe) => probe.reports.length > 0);
       expect(run.status).toBe(anyFinding ? "findings" : "clean");
       expect(run.exitCode).toBe(anyFinding ? 1 : 0);

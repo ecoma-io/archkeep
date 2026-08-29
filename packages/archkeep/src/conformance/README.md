@@ -336,7 +336,7 @@ disposition:
   partition axis rather than a layer axis, where the violation is between peers
   and no layer ordering exists to decide it.
 
-**20 fixture workspaces, 88 probes, 80 projects**, carrying 53 labeled findings
+**21 fixture workspaces, 88 probes, 82 projects**, carrying 53 labeled findings
 and 41 near-miss probes that must produce nothing.
 
 ### How it runs, and why it runs the whole command
@@ -399,11 +399,19 @@ moves:
 | `noImportOfNonBuildableLibraries`            |   1 |    0 |      0 |          0 |    0 |      0 |   0 |
 | `noRelativeOrAbsoluteImportsAcrossLibraries` |   0 |    0 |      0 |          1 |    0 |      0 |   0 |
 
-TypeScript appears in one case only, and only where it sharpens the point: the
-modular monolith is one constraint table over a tree whose modules are written
-in two languages, and the relative crossing in its web module is the axis Go
+TypeScript appears in two cases for two different reasons. One is the modular
+monolith: a single constraint table over a tree whose modules are written in
+two languages, where the relative crossing in its web module is the axis Go
 cannot break — the target project is one the module is allowed to reach, and
-the spelling is the violation.
+the spelling is the violation. The other is
+`declared-project-unresolvable-import`, a `no-verdict` case whose whole point is
+that the run CANNOT finish judging the tree: an import naming a declared
+`@scope`-spelled project with no `tsconfig` `paths` mapping to resolve it is a
+whole-file failure, so `check` refuses a verdict over that file (exit 3)
+instead of reporting it clean. That case carries no probes by design — a file
+the run could not judge carries no boundary-finding label — and its presence is
+what lets the labeled corpus assert the SILENT direction of the invariant:
+`status: "no-verdict"` and exit 3, told apart byte-for-byte from a clean run.
 
 The three ids no probe reaches are named rather than left to be noticed, and
 each needs a mechanism these languages do not have:
