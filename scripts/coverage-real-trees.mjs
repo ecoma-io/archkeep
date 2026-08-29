@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// What the Go, Rust and Python analyzers actually read, on real repositories.
+// What the Go, Rust, Python, Java/Kotlin and C# analyzers actually read, on
+// real repositories.
 //
 // `differential-real-trees.mjs` puts this engine's verdict beside real ESLint's
 // on real public workspaces. It structurally cannot cover the languages this
