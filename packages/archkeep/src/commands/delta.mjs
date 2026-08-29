@@ -43,6 +43,20 @@
  * instead. Dirty base provenance and a dirty head are notes too: weaker
  * evidence, not unreadable evidence.
  *
+ * (wave 3, additive) Each compare run maps its own capture output into the
+ * canonical evolution event (`../governance/evolution-event.mjs`, design §1):
+ * a `kind: "transition"`, `source: "delta"` record whose classifications come
+ * from the ONE predicate home `classifyEvolution` (through
+ * `./delta-classify.mjs`'s `classifyDeltaEvolution`), whose observed/findings/
+ * fitness facts are mapped — never re-derived — from the structural signal,
+ * the policy comparison and the violation classification this run already
+ * computed, and whose disposition is a function of the delta's own verb
+ * (`deltaDisposition`). The event rides the result envelope as the additive
+ * `classifications`/`affected` fields, and `--event-out <dir>` (owned by
+ * `../../cli.mjs`) additionally appends the record to the event store
+ * (`../governance/evolution-store.mjs`). Absent the flag, no file is written
+ * and nothing else about the run changes byte-for-byte.
+ *
  * This module computes and returns; `../../cli.mjs`'s `runDelta` owns argv,
  * output destination and the process exit code (`./README.md`).
  */
@@ -51,20 +65,35 @@ import { createRequire } from "node:module";
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { stripTrailingSlashes } from "../path-util.mjs";
 import { referenceTime } from "../governance/clock.mjs";
+import {
+  eventDedupeKey,
+  eventId,
+  EVOLUTION_EVENT_SCHEMA_VERSION,
+} from "../governance/evolution-event.mjs";
+import { writeEvent } from "../governance/evolution-store.mjs";
+import { recordOrigin } from "../governance/provenance-record.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { buildDecision } from "../report/evidence.mjs";
 import { formatDeltaReport } from "../report/delta-text.mjs";
 import { formatDeltaSarif } from "../report/sarif.mjs";
 import { evaluateRun } from "../rules/index.mjs";
 import { customRulesForDelta, declaresCustomRules } from "./custom-rules.mjs";
-import { classifyCustomFindings, classifyDelta } from "./delta-classify.mjs";
+import {
+  classifyCustomFindings,
+  classifyDelta,
+  classifyDeltaEvolution,
+  deltaFindings,
+  deltaVerdictDeltas,
+  edgeEvolutionIdentity,
+} from "./delta-classify.mjs";
 import {
   buildEvidenceSnapshot,
   providerMismatch,
   readEvidenceSnapshot,
   serializeEvidenceSnapshot,
 } from "./delta-snapshot.mjs";
-import { computePolicyFingerprint } from "./graph.mjs";
+import { computeDiff } from "./diff.mjs";
+import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
 
@@ -275,6 +304,37 @@ export function sourceProjectAttributor(headGraph, baselineProjects) {
   };
 }
 
+/**
+ * The delta event's disposition, mapped from the delta's OWN verb contract —
+ * the status `deltaCommand` already folds — so the event's evaluative stance
+ * is a function of the run consumers already know, never a second opinion:
+ *
+ * - `no-verdict` status (any unclassifiable item — violation, unresolvable
+ *   record, or custom finding) ⇒ `no-verdict`, never a fabricated
+ *   accepted/rejected;
+ * - `VIOLATION` among the classifications ⇒ `rejected` (a non-waived
+ *   introduced violation, which is exactly what made the status `findings`);
+ * - everything else — a clean comparable capture (`ok`, `[]` classifications)
+ *   or an `ok` capture with a fact class (REPAIR, CHANGE, DRIFT,
+ *   DECISION_CHANGE — each accepted by the vocabulary `classification` earns)
+ *   ⇒ `accepted`.
+ *
+ * The two refusals that can never reach this mapping — an unjudgeable head
+ * and a provider mismatch — THROW before any event exists, so a delta that
+ * could not be computed has no record at all, never a record with a guessed
+ * disposition.
+ *
+ * @param {{status: "ok"|"findings"|"no-verdict", classifications: string[]}} input
+ * @returns {"accepted"|"rejected"|"no-verdict"}
+ */
+export function deltaDisposition({ status, classifications }) {
+  if (status === "no-verdict") return "no-verdict";
+  if (Array.isArray(classifications) && classifications.includes("VIOLATION")) {
+    return "rejected";
+  }
+  return "accepted";
+}
+
 /** First eight hex characters of a fingerprint, for prose that names one. */
 const short = (fingerprint) =>
   typeof fingerprint === "string" ? fingerprint.slice(0, 8) : String(fingerprint);
@@ -305,25 +365,38 @@ const short = (fingerprint) =>
  * (suppressions key on a `messageId` custom findings do not have); an
  * unclassifiable one is a no-verdict. This is also why the function is async:
  * the wasm host is.
- *
  * @param {string} baselinePath Absolute path to the evidence snapshot.
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config: object|null, readBaseline?: (path: string) => object,
- *   now?: string, readArtifact?: (artifact: string) => Uint8Array|null,
+ *   now?: string, eventOut?: string|null,
+ *   readArtifact?: (artifact: string) => Uint8Array|null,
  *   timeoutMs?: number}} io The resolved boundary config (required
  *   — both sides are re-judged under it), an injectable baseline reader, the
  *   one shared reference instant (defaults to the shared governance clock),
- *   and the custom-rule host's two injectable seams, passed through to
+ *   `eventOut` — the directory an evolution event is appended to when given
+ *   (absent or `null` ⇒ no event file, byte-identical behavior), and the
+ *   custom-rule host's two injectable seams, passed through to
  *   `customRulesForDelta`.
  * @returns {Promise<{status: "ok"|"findings"|"no-verdict", delta: object,
- *   coverage: object, report: {text: string, json: string, sarif: string}}>}
+ *   coverage: object,
+ *   eventWrite: {id: string, duplicate: boolean}|null,
+ *   report: {text: string, json: string, sarif: string}}>} `delta` carries
+ *   the additive `classifications`/`affected` fields (design §1); `eventWrite`
+ *   is `null` unless `eventOut` was given, then the store's answer for the
+ *   event that was (or already was) recorded.
  * @throws {Error} on every refusal the module header lists, and on a
  *   custom-rule LOAD failure (`./custom-rules.mjs` argues the split).
  */
 export async function deltaCommand(
   baselinePath,
   commandContext,
-  { config, readBaseline = readEvidenceSnapshot, now = referenceTime(), ...customRuleIo },
+  {
+    config,
+    readBaseline = readEvidenceSnapshot,
+    now = referenceTime(),
+    eventOut = null,
+    ...customRuleIo
+  },
 ) {
   const { root, provider, marker, graph, analysis } = commandContext;
 
@@ -415,6 +488,53 @@ export async function deltaCommand(
     );
   }
 
+  // The event's structural signal: what moved between the two graphs the
+  // delta already holds, computed through `computeDiff` — the ONE shared
+  // structural vocabulary (`./diff.mjs`, shared with `trajectory`) — so a
+  // project or edge added/removed/changed is a fact about the evidence, never
+  // a second spelling of "changed". The head side is rebuilt by the same
+  // `buildProjects`/`buildDependencies` the snapshot stores
+  // (`./delta-snapshot.mjs`), which is what makes the two sides comparable.
+  const structuralDiff = computeDiff(baseline.graph, {
+    projects: buildProjects(graph.nodes),
+    dependencies: buildDependencies(graph.dependencies),
+  });
+  const structural = {
+    projects: {
+      added: structuralDiff.addedProjects.map((project) => project.name),
+      removed: structuralDiff.removedProjects.map((project) => project.name),
+      changed: structuralDiff.changedProjects.map((project) => project.name),
+    },
+    edges: {
+      added: structuralDiff.addedEdges.map(edgeEvolutionIdentity),
+      removed: structuralDiff.removedEdges.map(edgeEvolutionIdentity),
+    },
+  };
+  const structureChanged =
+    structural.projects.added.length +
+      structural.projects.removed.length +
+      structural.projects.changed.length +
+      structural.edges.added.length +
+      structural.edges.removed.length >
+    0;
+  // The delta's `codeDrift` signal (design §2): provenance advanced — both
+  // sides carry commits, they differ, and neither side was captured dirty (a
+  // dirty tree is weaker evidence, not a claim about the commit it names) —
+  // the architecture did not move, and the policy was comparable AND
+  // unchanged. `policyChanged === null` (one-sided) never reads as "the
+  // same", and a policy change is disclosed, not folded into drift.
+  const baseCommit = baseline.provenance?.commit;
+  const headCommit = headProvenance?.commit;
+  const provenanceAdvanced =
+    typeof baseCommit === "string" &&
+    typeof headCommit === "string" &&
+    baseCommit !== headCommit &&
+    baseline.provenance?.dirty !== true &&
+    headProvenance?.dirty !== true &&
+    meta.crossRepo !== true &&
+    meta.provenanceOneSided !== true;
+  const codeDrift = provenanceAdvanced && !structureChanged && meta.policyChanged === false;
+
   // The custom-rule half, present exactly when a side declares rules: judged
   // two-sided where the law is identical, `unknown` with a mandatory reason
   // everywhere else (`./custom-rules.mjs`'s `customRulesForDelta` owns the
@@ -479,6 +599,23 @@ export async function deltaCommand(
       }
     }
   }
+
+  // The §1 mapping: the delta's own signals through `classifyEvolution` — one
+  // definition (`./delta-classify.mjs`'s `classifyDeltaEvolution` maps, never
+  // re-decides a class). The result's additive `classifications`/`affected`
+  // ride the envelope, and the same classification feeds the event when
+  // `eventOut` is given.
+  const deltaPayload = {
+    violations: classification.violations,
+    unresolvable: classification.unresolvable,
+    policyChanged: meta.policyChanged,
+    ...(custom === null ? {} : { customRules: custom }),
+  };
+  const evolution = classifyDeltaEvolution(deltaPayload, {
+    projects: structural.projects,
+    edges: structural.edges,
+    codeDrift,
+  });
 
   const { violations, unresolvable } = classification;
   const introducedWaived = violations.introduced.filter((entry) => entry.waived === true).length;
@@ -577,8 +714,66 @@ export async function deltaCommand(
     },
     violations,
     unresolvable,
+    classifications: evolution.classifications,
+    affected: evolution.affected,
     ...(custom === null ? {} : { customRules: custom }),
   };
+
+  // The evolution event (design §1), built by mapping — never re-deriving —
+  // the capture output the run already holds: `observed`/`affected`/
+  // `findings`/`fitness` come from the structural signal, the §1 mapping, and
+  // the classification above; `classifications` come from the same mapping;
+  // the disposition is a function of the delta's own verb through
+  // `deltaDisposition`. `recordedAt` carries the SAME injected reference
+  // instant the run judged waivers at — one clock, one transition. Written
+  // only when `eventOut` is given: absent ⇒ no file, byte-identical behavior.
+  /** @type {{id: string, duplicate: boolean}|null} */
+  let eventWrite = null;
+  if (eventOut !== null && eventOut !== undefined) {
+    const event = {
+      schemaVersion: EVOLUTION_EVENT_SCHEMA_VERSION,
+      kind: "transition",
+      source: "delta",
+      base: {
+        ...(typeof baseCommit === "string" ? { revision: baseCommit } : {}),
+        // The evidence ref is the baseline file this run actually compared
+        // against — a pointer into the evidence, never a graph.
+        evidence: baselinePath,
+      },
+      head: typeof headCommit === "string" ? { revision: headCommit } : {},
+      recordedAt: recordOrigin({
+        by: "cli",
+        tool: `archkeep:v${TOOL_VERSION}`,
+        clock: { now: () => now },
+      }),
+      observed: {
+        architectureChanged: structureChanged,
+        projects: structural.projects,
+        edges: structural.edges,
+        policyChanged: meta.policyChanged,
+        // A delta that completed is a delta whose provider matched — the
+        // mismatch refusal above throws before any event could exist.
+        providerChanged: false,
+      },
+      affected: evolution.affected,
+      findings: deltaFindings(deltaPayload),
+      fitness: { verdictDeltas: deltaVerdictDeltas(deltaPayload) },
+      debt: { introduced: [], resolved: [] },
+      classifications: evolution.classifications,
+      disposition: deltaDisposition({
+        status,
+        classifications: evolution.classifications,
+      }),
+      notes: [...notes, ...evolution.notes],
+      provenance: [
+        ...(typeof baseCommit === "string" ? [{ kind: "git-commit", ref: baseCommit }] : []),
+        ...(typeof headCommit === "string" ? [{ kind: "git-commit", ref: headCommit }] : []),
+      ],
+    };
+    event.dedupeKey = eventDedupeKey(event);
+    event.id = eventId(event);
+    eventWrite = writeEvent(eventOut, event, { root });
+  }
 
   const envelope = jsonEnvelope({
     command: "delta",
@@ -592,6 +787,7 @@ export async function deltaCommand(
 
   return {
     status,
+    eventWrite,
     delta: result,
     coverage,
     report: {
