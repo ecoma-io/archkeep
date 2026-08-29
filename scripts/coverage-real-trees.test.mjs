@@ -66,11 +66,15 @@ test("a table pinning no sources is refused rather than passed", () => {
   );
 });
 
-test("the shipped table covers the three languages the ESLint differential cannot", () => {
+test("the shipped table covers the languages the ESLint differential cannot", () => {
   // The lane's reason to exist, held to the table: if a language dropped out
   // of it, the gap would be silent — the remaining trees would still pass.
+  // Kotlin rides the okhttp tree's extensions rather than its own entry: the
+  // JVM package index reads both, so one tree exercises the pair.
   assert.deepEqual([...new Set(TREES.map((tree) => tree.language))].sort(), [
+    "csharp",
     "go",
+    "java",
     "python",
     "rust",
   ]);

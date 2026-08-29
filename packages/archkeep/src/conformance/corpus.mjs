@@ -7,8 +7,8 @@
  * `./cases.mjs` proves this engine against `@nx/enforce-module-boundaries` —
  * a real second opinion, and the only one available. It is available for
  * JavaScript, TypeScript and Vue and for nothing else: ESLint has no parser
- * for `.go`, `.rs` or `.py`, so on the three languages this tool exists FOR,
- * the differential's every row is structurally incomparable. Upstream's
+ * for `.go`, `.rs` or `.py`, so on every language this tool reads but upstream
+ * cannot, the differential's every row is structurally incomparable. Upstream's
  * silence there is inability, not agreement, and a false negative in that half
  * is invisible to every mechanism in this directory.
  *

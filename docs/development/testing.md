@@ -157,12 +157,14 @@ real pair.
 ### Analyzer coverage on real trees — where there is no oracle at all
 
 `scripts/coverage-real-trees.mjs` asks the question the ESLint differential
-structurally cannot. `.go`, `.rs` and `.py` never reach the upstream rule, so
-upstream's silence about them is inability rather than a verdict, and there is
-nothing to disagree with. This lane needs no oracle: it clones real public
-repositories at pinned shas — one Go, one Rust, one Python — runs the real
-analyzers over every tracked source file, and holds three counts EXACTLY in
-both directions: files read, import records produced, failures reported.
+structurally cannot. `.go`, `.rs`, `.py`, `.java`, `.kt` and `.cs` never reach
+the upstream rule, so upstream's silence about them is inability rather than a
+verdict, and there is nothing to disagree with. This lane needs no oracle: it
+clones real public repositories at pinned shas — two each of Go, Rust and
+Python, one JVM (`.java` and `.kt` together, one package index), one C# —
+runs the real analyzers over every tracked source file, and holds three
+counts EXACTLY in both directions: files read, import records produced,
+failures reported.
 
 Exactness is legitimate because the sha is pinned: the tree cannot move under
 the harness, so any movement is the harness changing. Fewer records is an
@@ -210,13 +212,14 @@ claim) are what `scripts/differential-real-trees.test.mjs` pins under
 ### Conformance — the labeled corpus, where ESLint has no parser
 
 The differential can only speak where ESLint can read the file, which is
-JavaScript, TypeScript and Vue. On `.go`, `.rs` and `.py` — the languages this
-tool exists for — upstream is silent by inability, so no comparison there can
+JavaScript, TypeScript and Vue. On `.go`, `.rs`, `.py`, `.java`, `.kt` and
+`.cs` — the languages upstream cannot read at all — upstream is silent by
+inability, so no comparison there can
 catch a rule that stopped firing: every spelling of the import would go quiet
 together and still agree.
 
 `corpus.mjs` and `corpus.integration.test.mjs` are that half. Architecture
-styles built in those three languages, each probe carrying the findings a
+styles built in Go, Rust and Python, each probe carrying the findings a
 person decided in advance, run end to end through `cli.mjs`'s `check` over a
 native (`archkeep.json`) workspace. The mechanism that keeps a near-miss from
 being an engine that never looked — a second, forbid-everything policy every
