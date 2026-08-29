@@ -7,6 +7,7 @@ workspace is carrying, each aged across the snapshot history.
 archkeep debt .archkeep/history
 archkeep debt .archkeep/history --format json
 archkeep debt .archkeep/history --format json --output debt.json
+archkeep debt .archkeep/history --events .archkeep/evolution
 ```
 
 `debt <dir>` reads every snapshot in the same history directory `history` uses
@@ -43,6 +44,42 @@ history of N snapshots gives a project seen in all of them age N; one seen only
 now has age 1. With fewer than two snapshots the report says
 `ages not yet established` and every age reads 0 — "observed, not yet aged",
 never "born yesterday".
+
+## Debt lifecycle
+
+Every ledger entry carries a **stable id** and a **status** (`active` today,
+or `resolved`), so a debt can be tracked as it is introduced and retired — not
+just counted.
+
+### Stable ids (no clock)
+
+Each entry's `id` is a SHA-256 over its semantic identity — `{kind, source}` —
+the same mechanism evolution events use for their ids, never the wall clock, a
+sequence or a random. The same fact always hashes to the same id, across runs
+and across a waiver's expiry (an `expired-waiver` keeps the id of the same
+waiver unexpired). Two runs over the same facts produce identical entry ids and
+counts — the ledger is idempotent; the `active`/`resolved` split
+is additive and never changes the existing fields.
+
+### Linking an event store
+
+`--events <dir>` points `debt` at the append-only evolution event store
+([`evolution`](./evolution.md)); the ledger then reads it so:
+
+- an active entry carries `introducedBy` — the event that first named its id in
+  `debt.introduced`;
+- a closed entry appears on the `resolved` list with `resolvedBy` — the REPAIR
+  event whose `debt.resolved` names the id and whose fact is gone at head.
+
+Absent `--events`, no ref is ever guessed: `introducedBy`/`resolvedBy` are
+omitted, `resolved` stays empty, and the report says
+`no event store linked — lifecycle refs unavailable`. The **`active` + `resolved`
+lists together are the whole lifecycle surface**; a closed entry is retained on
+`resolved`, never deleted from history. Introducing then repairing debt makes
+the active count decrease while the resolved record is kept (monotonicity).
+
+For the id rule, the entry kinds, age and severity, and the refusals, see
+[the reference](../reference/debt.md).
 
 ## Docker / sources of truth
 
