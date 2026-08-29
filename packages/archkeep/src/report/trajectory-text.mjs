@@ -96,7 +96,8 @@ function formatAxis(axis, withChanged) {
  *   transitions: {count: number, architecture: number, policy: number,
  *     provider: number, codeDrift: number, incomparable: number, unchanged: number},
  *   disclosures: {policyOneSided: number, provenanceOneSided: number, crossRepo: number},
- *   projects: object, edges: object}, coverage: object}} input
+ *   projects: object, edges: object,
+ *   trends: object|null}, coverage: object}} input
  * @returns {string}
  */
 export function formatTrajectoryReport({ trajectory, coverage }) {
@@ -134,6 +135,34 @@ export function formatTrajectoryReport({ trajectory, coverage }) {
       `${d.provenanceOneSided} · cross-repo ${d.crossRepo} · ` +
       `dirty captures ${observations.dirtyProvenance} · with provenance ${observations.withProvenance}`,
   );
+
+  // The trend facts, from the SAME comparable transitions the signals line
+  // counts. `null` prints as n/a — an insufficient or fully-incomparable
+  // history never reads as zero change — and the basis line names exactly
+  // what the counts are a claim about.
+  if (trajectory.trends === null) {
+    sections.push(
+      trajectory.available
+        ? "trends  n/a — no comparable transition classifications"
+        : "trends  n/a",
+    );
+  } else {
+    const byClass = trajectory.trends.byClass;
+    sections.push(
+      `trends  CHANGE ${byClass.CHANGE} · DRIFT ${byClass.DRIFT} · VIOLATION ${byClass.VIOLATION} · ` +
+        `REPAIR ${byClass.REPAIR} · DECISION_CHANGE ${byClass.DECISION_CHANGE} · ` +
+        `violations introduced ${trajectory.trends.violationsIntroduced} · resolved ` +
+        `${trajectory.trends.violationsResolved}`,
+    );
+    sections.push(
+      `trends basis  ${trajectory.trends.comparableTransitions} comparable transition${
+        trajectory.trends.comparableTransitions === 1 ? "" : "s"
+      } (${trajectory.trends.basis})`,
+    );
+    if (typeof trajectory.trends.note === "string" && trajectory.trends.note !== "") {
+      sections.push(sanitize(trajectory.trends.note));
+    }
+  }
 
   for (const note of coverage.notes) {
     sections.push(sanitize(note));
