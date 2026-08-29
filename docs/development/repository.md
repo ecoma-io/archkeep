@@ -72,10 +72,10 @@ gap. Those targets need the toolchains CONTRIBUTING.md lists.
   restructure once deleted two files and left twenty-five references — two
   inside shipped error messages — pointing at the old paths, and nothing
   caught it: Prettier formats markdown but does not resolve a link.
-- `coverage-real-trees.mjs` — clones real public Go, Rust and Python
-  repositories at pinned shas and holds three counts exactly: files read,
-  import records produced, failures reported. It answers the question the
-  ESLint differential structurally cannot, because those three languages never
+- `coverage-real-trees.mjs` — clones real public Go, Rust, Python, Java/Kotlin
+  and C# repositories at pinned shas and holds three counts exactly: files
+  read, import records produced, failures reported. It answers the question
+  the ESLint differential structurally cannot, because those languages never
   reach the upstream rule and so have no oracle to disagree with. Weekly, not
   required, and a red run is a regression — [testing.md](testing.md) owns why.
 - `check-readiness.mjs` — **a report, not a gate.** It prints the four

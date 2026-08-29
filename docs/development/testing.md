@@ -157,12 +157,14 @@ real pair.
 ### Analyzer coverage on real trees — where there is no oracle at all
 
 `scripts/coverage-real-trees.mjs` asks the question the ESLint differential
-structurally cannot. `.go`, `.rs` and `.py` never reach the upstream rule, so
-upstream's silence about them is inability rather than a verdict, and there is
-nothing to disagree with. This lane needs no oracle: it clones real public
-repositories at pinned shas — one Go, one Rust, one Python — runs the real
-analyzers over every tracked source file, and holds three counts EXACTLY in
-both directions: files read, import records produced, failures reported.
+structurally cannot. `.go`, `.rs`, `.py`, `.java`, `.kt` and `.cs` never reach
+the upstream rule, so upstream's silence about them is inability rather than a
+verdict, and there is nothing to disagree with. This lane needs no oracle: it
+clones real public repositories at pinned shas — two each of Go, Rust and
+Python, one JVM (`.java` and `.kt` together, one package index), one C# —
+runs the real analyzers over every tracked source file, and holds three
+counts EXACTLY in both directions: files read, import records produced,
+failures reported.
 
 Exactness is legitimate because the sha is pinned: the tree cannot move under
 the harness, so any movement is the harness changing. Fewer records is an

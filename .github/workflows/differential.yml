@@ -138,5 +138,5 @@ jobs:
 
       # Exit 3 (a tree could not be cloned or read — the run could not look) is
       # as red as exit 1 (a pinned count moved); the log's last lines say which.
-      - name: Measure the analyzers against real Go, Rust and Python trees
+      - name: Measure the analyzers against real Go, Rust, Python, JVM and .NET trees
         run: node scripts/coverage-real-trees.mjs

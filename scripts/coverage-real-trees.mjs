@@ -53,13 +53,13 @@ import { analyzeFile } from "../packages/archkeep/src/analysis/analyze.mjs";
 
 /**
  * The trees, pinned. Every entry is a public repository under a permissive
- * OSI license, at one commit, in one of the three languages the differential
+ * OSI license, at one commit, in one of the languages the differential
  * cannot reach.
  *
  * The counts are MEASURED facts about the pinned commit — taken by running
- * this script's own reader on 2026-08-22 — not targets anybody chose. Each
- * tree names why its `unreadable` count is what it is, because an unexplained
- * failure count is a number nobody can act on:
+ * this script's own reader on 2026-08-22 and 2026-08-29 — not targets anybody
+ * chose. Each tree names why its `unreadable` count is what it is, because
+ * an unexplained failure count is a number nobody can act on:
  *
  * - **gin** reads clean: 0 failures over 99 Go files. Every import in the tree
  *   is a plain quoted specifier, which is the shape the Go analyzer's declared
@@ -76,6 +76,27 @@ import { analyzeFile } from "../packages/archkeep/src/analysis/analyze.mjs";
  *   import whose argument is not a literal resolves to nothing and is reported
  *   unresolvable rather than dropped (`packages/archkeep/src/analysis/contract.md`).
  *   That is correct behaviour, and the count is pinned so it stays two.
+ * - **docker-cli** carries the Go reader's keyword-vs-identifier limit three
+ *   times: a line-head identifier whose name begins with `import`
+ *   (`importContentType`, the vendored `importPath`, `imports`) reads as the
+ *   keyword, which then states no path. Loud, not silent — valid code
+ *   reported unreadable — and pinned so it cannot move without a human
+ *   deciding.
+ * - **tokio** writes `use` statements inside macro bodies — `use
+ *   #crate_path::…` and `use $crate::…` — which name no crate any resolver
+ *   could check; all three are reported rather than guessed at, the refusal
+ *   family ripgrep's brace groups landed in.
+ * - **pytest** is the requests shape at scale: fifteen dynamic imports whose
+ *   argument is a variable, plus two import-shaped texts that do not parse
+ *   as imports once read in full. All seventeen are the reader refusing to
+ *   guess, which is what the contract pins.
+ * - **okhttp** reads clean: zero failures over 648 JVM sources, 71 `.java`
+ *   and 577 `.kt` — one package index over both extensions, which is the
+ *   reason the lane wants a mixed tree.
+ * - **spectre-console** hits the C# `using`-statement boundary three times: a
+ *   `using var` declaration whose `;` sits behind an object-initializer brace
+ *   group is read by the malformation scan as a directive that never
+ *   terminates. All three live in the bundled source generator's emitters.
  */
 export const TREES = Object.freeze([
   Object.freeze({
@@ -88,6 +109,15 @@ export const TREES = Object.freeze([
     expected: Object.freeze({ sources: 99, records: 518, unreadable: 0 }),
   }),
   Object.freeze({
+    name: "docker-cli",
+    url: "https://github.com/docker/cli.git",
+    sha: "cef1e669475f1a4eef6dc65824b5cbb4c74eb450",
+    license: "Apache-2.0",
+    language: "go",
+    extensions: Object.freeze([".go"]),
+    expected: Object.freeze({ sources: 2967, records: 12746, unreadable: 3 }),
+  }),
+  Object.freeze({
     name: "ripgrep",
     url: "https://github.com/BurntSushi/ripgrep.git",
     sha: "3fce3b5bb0236da2df6d99672afb8a719642eca7",
@@ -97,6 +127,15 @@ export const TREES = Object.freeze([
     expected: Object.freeze({ sources: 110, records: 482, unreadable: 0 }),
   }),
   Object.freeze({
+    name: "tokio",
+    url: "https://github.com/tokio-rs/tokio.git",
+    sha: "ea91b33ca57ff0581b38e735cc108f831bccbdaa",
+    license: "MIT",
+    language: "rust",
+    extensions: Object.freeze([".rs"]),
+    expected: Object.freeze({ sources: 793, records: 4786, unreadable: 3 }),
+  }),
+  Object.freeze({
     name: "requests",
     url: "https://github.com/psf/requests.git",
     sha: "8f8b212de8c2129d7954c6cd373762880375620a",
@@ -104,6 +143,33 @@ export const TREES = Object.freeze([
     language: "python",
     extensions: Object.freeze([".py"]),
     expected: Object.freeze({ sources: 37, records: 326, unreadable: 2 }),
+  }),
+  Object.freeze({
+    name: "pytest",
+    url: "https://github.com/pytest-dev/pytest.git",
+    sha: "fdba12e1708313f56e9cf713d260c029764ca2b7",
+    license: "MIT",
+    language: "python",
+    extensions: Object.freeze([".py"]),
+    expected: Object.freeze({ sources: 272, records: 4636, unreadable: 17 }),
+  }),
+  Object.freeze({
+    name: "okhttp",
+    url: "https://github.com/square/okhttp.git",
+    sha: "b830f03c8f161883e0213c22c170c3d1f5f5eaa6",
+    license: "Apache-2.0",
+    language: "java",
+    extensions: Object.freeze([".java", ".kt"]),
+    expected: Object.freeze({ sources: 648, records: 7329, unreadable: 0 }),
+  }),
+  Object.freeze({
+    name: "spectre-console",
+    url: "https://github.com/spectreconsole/spectre.console.git",
+    sha: "357b9ab967e2885dbb0371d86b13b1bfb1921a14",
+    license: "MIT",
+    language: "csharp",
+    extensions: Object.freeze([".cs"]),
+    expected: Object.freeze({ sources: 466, records: 165, unreadable: 3 }),
   }),
 ]);
 
