@@ -246,6 +246,10 @@ const PROJECT_TYPES = ["app", "lib", "e2e"];
  * An explicit `exclude` list REPLACES this default (the `tsc` convention for
  * the same field): a workspace that names its own list takes over the whole
  * decision, `exclude: []` included — that spelling is the documented opt-out.
+ * `excludeBeyondDefaults` extends the effective set — the defaults when
+ * `exclude` is absent, an explicit list when it is present — without restating
+ * it, so a workspace with `testdata/` or `golden/` directories does not copy
+ * these three patterns by hand (issue #389).
  *
  * @see DEFAULT_MANIFEST_NAMES
  */
@@ -375,7 +379,7 @@ function declaredProjectViolations(row, index) {
   return violations;
 }
 
-const INFER_KEYS = ["manifests", "include", "exclude"];
+const INFER_KEYS = ["manifests", "include", "exclude", "excludeBeyondDefaults"];
 
 /** `projects.infer`'s problems, or `[]` when the key is absent — absent means "use the defaults", not "malformed". */
 function inferViolations(value) {
@@ -385,6 +389,11 @@ function inferViolations(value) {
     ...stringListViolations(value.manifests, "projects.infer.manifests"),
     ...stringListViolations(value.include, "projects.infer.include", globComplexityError),
     ...stringListViolations(value.exclude, "projects.infer.exclude", globComplexityError),
+    ...stringListViolations(
+      value.excludeBeyondDefaults,
+      "projects.infer.excludeBeyondDefaults",
+      globComplexityError,
+    ),
   ];
   // `[]` and "omit the key" both validate against `stringListViolations` above
   // — a list is still a list at length zero — but they must not mean the same
@@ -758,9 +767,14 @@ export function normalizeNativeModel(raw) {
           : {
               manifests: rawInfer.manifests ?? DEFAULT_MANIFEST_NAMES,
               include: rawInfer.include ?? ["**"],
-              // Replaces, never merges: an explicit list takes over the whole
-              // decision — `DEFAULT_INFER_EXCLUDE`'s doc comment owns the why.
-              exclude: rawInfer.exclude ?? DEFAULT_INFER_EXCLUDE,
+              // `exclude` replaces the defaults (`DEFAULT_INFER_EXCLUDE`'s doc
+              // comment owns the why); `excludeBeyondDefaults` then extends the
+              // effective set — the defaults when `exclude` is absent, the
+              // explicit list when it is present — without restating it.
+              exclude: [
+                .../** @type {string[]|undefined} */ (rawInfer.exclude ?? DEFAULT_INFER_EXCLUDE),
+                .../** @type {string[]|undefined} */ (rawInfer.excludeBeyondDefaults ?? []),
+              ],
             },
     },
     projectRules: /** @type {unknown[]} */ (raw.projectRules ?? []).map((row) => {
