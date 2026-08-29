@@ -13,13 +13,26 @@
  *   filename's id. The filesystem is the source of truth, so a file whose
  *   frontmatter id disagrees with its name is a loud error, never a drift the
  *   registry guesses at.
- * - `status` — `proposed` (default), `accepted`, or `superseded`.
+ * - `status` — the lifecycle state: `proposed` (default), `accepted`,
+ *   `active`, `superseded`, or `retired`. Only `accepted` and `active` carry
+ *   authority (`hasAuthority`); `active` is the accepted decision currently in
+ *   force, `superseded` was replaced by a later decision, `retired` was
+ *   withdrawn without a replacement.
  * - `supersedes` — optional list of ADR ids this record replaces, giving the
- *   supersession chain.
+ *   supersession chain. The reverse link — `supersededBy` — is derived on
+ *   every record at load: the records whose `supersedes` names this one.
+ * - `created` / `updated` — optional STRING values from the committed bytes,
+ *   the decision's own timeline. Never generated from the wall clock.
  * - `bindings` — optional list of rule/fitness ids this ADR makes enforceable:
  *   the objects its decision binds. An ADR with no `bindings` is recorded but
  *   not yet enforceable; the moment a rule/fitness carries `decisionRef`
  *   naming it, the two sides of the binding exist.
+ *
+ * The record's markdown body may surface the decision's prose as optional
+ * fields when the `## ` heading is present — `context`, `decision`,
+ * `rationale`, `alternatives` (also spelled `## Refused alternatives`, the
+ * spelling this repository's own records use), `consequences`, `assumptions`.
+ * Body prose is free markdown and never throws; only frontmatter is strict.
  *
  * Frontmatter is a strict, minimal dialect — `key: value` lines, and list
  * fields as `- item` continuation lines. It is never full YAML and never JSON
@@ -34,10 +47,14 @@
  *   `docs/adr/` produce byte-identical output.
  * - **An unreadable registry is a loud failure, never an empty one.** A
  *   `docs/adr/` directory that exists but holds a file that will not parse, a
- *   duplicate id, a status outside the three, an unknown frontmatter key, or
+ *   duplicate id, a status outside the five, an unknown frontmatter key, or
  *   a `supersedes`/`bindings` entry that is not what the field requires —
  *   any of those throws, so a caller can never mistake "could not read the
- *   registry" for "no ADRs".
+ *   registry" for "no ADRs". So does a supersession graph that cannot be
+ *   true (`validateLineage`): a `supersedes` target that is not a record, a
+ *   record that supersedes itself, a cycle, a `superseded` record with no
+ *   successor, a successor without authority, or an authoritative record
+ *   (`active`/`accepted`) superseded by another.
  * - **A `decisionRef` that does not resolve is `unknown`, never `pass`.** The
  *   registry's `resolveDecisionRef` answers the two-name space — an ADR id
  *   (matching a file) or a rule/fitness id the workspace declares. Anything
@@ -78,8 +95,27 @@ import { containmentViolation } from "../containment.mjs";
 /** The directory, relative to a workspace root, where ADR files live. */
 export const ADR_DIR = "docs/adr";
 
-/** The three statuses a record may carry. Any other value is a load error. */
-export const ADR_STATUSES = Object.freeze(["proposed", "accepted", "superseded"]);
+/** The five lifecycle statuses a record may carry. Any other value is a load error. */
+export const ADR_STATUSES = Object.freeze([
+  "proposed",
+  "accepted",
+  "active",
+  "superseded",
+  "retired",
+]);
+
+/**
+ * Whether a status carries decision authority. Only `active` — the accepted
+ * decision currently in force — and `accepted` — a decision made and
+ * recorded — have it. `proposed` (a draft), `superseded` (replaced, authority
+ * transferred) and `retired` (withdrawn without a replacement) do not.
+ *
+ * @param {string} status
+ * @returns {boolean}
+ */
+export function hasAuthority(status) {
+  return status === "active" || status === "accepted";
+}
 
 /**
  * Matches a valid ADR filename. The number is at least three digits so the
@@ -92,7 +128,14 @@ export const ADR_FILE_PATTERN = /^(\d{3,})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$/u;
 export const ADR_ID_PATTERN = /^\d{3,}-[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
 /** The frontmatter keys a record file may carry. */
-const FRONTMATTER_KEYS = Object.freeze(["id", "status", "supersedes", "bindings"]);
+const FRONTMATTER_KEYS = Object.freeze([
+  "id",
+  "status",
+  "supersedes",
+  "bindings",
+  "created",
+  "updated",
+]);
 
 /** A value's type, for an error message that shows what was actually there. */
 function describe(value) {
@@ -115,6 +158,68 @@ function frontmatterBlock(text) {
 function stripInlineComment(value) {
   const hash = value.indexOf(" #");
   return hash === -1 ? value : value.slice(0, hash).trim();
+}
+/** The markdown body after the frontmatter block, or the whole text when the file has none. */
+function bodyBlock(text) {
+  if (!text.startsWith("---")) return text;
+  const end = text.indexOf("\n---", 3);
+  if (end === -1) return text; // frontmatterBlock throws this case first
+  return text.slice(end + 4).replace(/^\r?\n/, "");
+}
+
+/**
+ * The prose fields the body may surface, keyed by the exact `## ` heading
+ * that carries them. `## Refused alternatives` — the spelling this
+ * repository's own records use (`docs/adr/0003-…`, `docs/adr/0004-…`) — maps
+ * to the same field as the `## Alternatives` spelling the ADR template names.
+ * The body's `## Status` heading is deliberately absent: status is a
+ * frontmatter field, and the body's retelling is not the model's.
+ */
+const PROSE_FIELDS = Object.freeze({
+  Context: "context",
+  Decision: "decision",
+  Rationale: "rationale",
+  Alternatives: "alternatives",
+  "Refused alternatives": "alternatives",
+  Consequences: "consequences",
+  Assumptions: "assumptions",
+});
+
+/**
+ * The optional prose fields parsed out of a record's body. Each `## ` heading
+ * in `PROSE_FIELDS` opens its field; the field's content is everything from
+ * the line after the heading to the line before the next `## ` heading
+ * (sub-headings like `###` stay inside their field). An absent heading is an
+ * absent field, and a body that is only prose never throws — frontmatter is
+ * the one strict dialect. A `## ` heading outside the field list closes the
+ * open field without opening one; a heading repeated within one body keeps
+ * the last occurrence, the one deterministic choice a non-throwing parser
+ * can make.
+ *
+ * @param {string} body The markdown body after the frontmatter block.
+ * @returns {Record<string, string>} Only the fields whose headings were present.
+ */
+function parseProseFields(body) {
+  /** @type {Record<string, string>} */
+  const fields = {};
+  let current = null;
+  /** @type {string[]} */
+  let buffer = [];
+  const flush = () => {
+    if (current !== null) fields[current] = buffer.join("\n").trim();
+  };
+  for (const line of body.split("\n")) {
+    const heading = /^##\s+(.+?)\s*$/u.exec(line);
+    if (heading !== null) {
+      flush();
+      current = PROSE_FIELDS[heading[1]] ?? null;
+      buffer = [];
+    } else if (current !== null) {
+      buffer.push(line);
+    }
+  }
+  flush();
+  return fields;
 }
 
 /**
@@ -194,14 +299,19 @@ function toList(value) {
 /**
  * One parsed record, every field validated. A record an enforcer cannot trust
  * must never be read as an absent one (the invariant), so every malformed
- * field throws here rather than degrading the record.
+ * field throws here rather than degrading the record. The record's body is
+ * the exception by design: prose is free markdown and never throws — only
+ * frontmatter is strict.
  *
- * @param {{id: string, frontmatter: string|null}} parsed The filename-derived
- *   id and the frontmatter block (null when the file has none).
- * @returns {{id: string, status: string, supersedes: string[], bindings: string[]}}
+ * @param {{id: string, frontmatter: string|null, body?: string}} parsed The
+ *   filename-derived id and the frontmatter block (null when the file has
+ *   none); the markdown body defaults to the empty string.
+ * @returns {{id: string, status: string, created?: string, updated?: string,
+ *   supersedes: string[], bindings: string[], context?: string, decision?: string,
+ *   rationale?: string, alternatives?: string, consequences?: string, assumptions?: string}}
  * @throws {Error} naming every violation at once.
  */
-export function validateRecord({ id, frontmatter }) {
+export function validateRecord({ id, frontmatter, body = "" }) {
   const fields = frontmatter === null ? {} : parseFrontmatterFields(frontmatter, id);
   const violations = [];
 
@@ -227,6 +337,16 @@ export function validateRecord({ id, frontmatter }) {
     violations.push(`${id}: status "${fields.status}" is not one of ${ADR_STATUSES.join(", ")}`);
   }
 
+  for (const key of ["created", "updated"]) {
+    const value = fields[key];
+    if (value !== undefined && typeof value !== "string") {
+      violations.push(
+        `${id}: ${key} must be a single string value — the decision's own timeline from the ` +
+          `committed bytes, never generated — got ${describe(value)}`,
+      );
+    }
+  }
+
   for (const ref of toList(fields.supersedes)) {
     if (!ADR_ID_PATTERN.test(ref)) {
       violations.push(`${id}: supersedes entry ${describe(ref)} is not an ADR id`);
@@ -246,9 +366,119 @@ export function validateRecord({ id, frontmatter }) {
   return {
     id,
     status: typeof fields.status === "string" ? fields.status : "proposed",
+    ...(typeof fields.created === "string" ? { created: fields.created } : {}),
+    ...(typeof fields.updated === "string" ? { updated: fields.updated } : {}),
     supersedes: toList(fields.supersedes),
     bindings: toList(fields.bindings),
+    ...parseProseFields(body),
   };
+}
+
+/**
+ * Validates the supersession graph across every record and derives each
+ * record's `supersededBy` — the reverse of `supersedes`, the ids of the
+ * records whose `supersedes` names this one. A chain that cannot be true is
+ * itself an unreadable registry (the invariant), thrown as one message naming
+ * every violation, never returned as partial fact:
+ *
+ * 1. every `supersedes` target must be a record;
+ * 2. a record may not supersede itself;
+ * 3. the graph may not contain a cycle — no record may transitively replace
+ *    itself;
+ * 4. a `superseded` record must have at least one successor (`retired` is its
+ *    own reason and needs none) — a `superseded` status with no successor is
+ *    dangling;
+ * 5. a successor — the record declaring `supersedes` — must itself carry
+ *    authority, so `proposed` and `superseded` records may not replace
+ *    another;
+ * 6. the contradiction rule: an authoritative record (`active`/`accepted`)
+ *    may not be superseded by another — authority and supersession are
+ *    mutually exclusive states.
+ *
+ * Deterministic: checks run in the records' registry (byte-sorted filename)
+ * order, and every derived `supersededBy` list is in the order the
+ * superseding records loaded.
+ *
+ * @param {object[]} records The validated records, in registry order.
+ * @returns {object[]} The same records, each carrying its derived
+ *   `supersededBy` string array.
+ * @throws {Error} naming every lineage violation at once.
+ */
+export function validateLineage(records) {
+  const byId = new Map(records.map((record) => [record.id, record]));
+  /** @type {Map<string, string[]>} */
+  const supersededBy = new Map(records.map((record) => [record.id, []]));
+  const violations = [];
+
+  for (const record of records) {
+    for (const ref of record.supersedes) {
+      if (!byId.has(ref)) {
+        violations.push(`${record.id} supersedes ${ref}, which is not an ADR in ${ADR_DIR}`);
+        continue;
+      }
+      if (ref === record.id) {
+        violations.push(`${record.id} supersedes itself — a record cannot replace itself`);
+        continue;
+      }
+      if (record.status === "proposed" || record.status === "superseded") {
+        violations.push(
+          `${record.id} is ${record.status} and supersedes ${ref} — only a record with ` +
+            `authority (active or accepted) may be a successor`,
+        );
+      }
+      supersededBy.get(ref).push(record.id);
+    }
+  }
+
+  // Cycles: a stack-based DFS over the declared graph. A node seen again on
+  // the current stack is a cycle, named from the first repeated node so the
+  // reported chain is the cycle itself, not a prefix of it.
+  const visiting = new Set();
+  const visited = new Set();
+  const stack = [];
+  const visit = (id) => {
+    if (visited.has(id)) return;
+    if (visiting.has(id)) {
+      violations.push(`supersedes cycle: ${[...stack.slice(stack.indexOf(id)), id].join(" -> ")}`);
+      return;
+    }
+    visiting.add(id);
+    stack.push(id);
+    const record = byId.get(id);
+    if (record !== undefined) {
+      for (const ref of record.supersedes) visit(ref);
+    }
+    stack.pop();
+    visiting.delete(id);
+    visited.add(id);
+  };
+  for (const record of records) visit(record.id);
+
+  for (const record of records) {
+    const successors = supersededBy.get(record.id);
+    if (record.status === "superseded" && successors.length === 0) {
+      violations.push(
+        `${record.id} is superseded but nothing supersedes it — a superseded record needs at ` +
+          `least one successor (retire it instead if it was withdrawn without a replacement)`,
+      );
+    }
+    if ((record.status === "active" || record.status === "accepted") && successors.length > 0) {
+      violations.push(
+        `${record.id} is ${record.status} but superseded by [${successors.join(", ")}] — a ` +
+          `record with authority may not be superseded by another`,
+      );
+    }
+  }
+
+  for (const record of records) {
+    record.supersededBy = supersededBy.get(record.id);
+  }
+
+  if (violations.length > 0) {
+    throw new Error(`archkeep: malformed ADR registry:\n  ${violations.join("\n  ")}`);
+  }
+
+  return records;
 }
 
 /**
@@ -259,8 +489,9 @@ export function validateRecord({ id, frontmatter }) {
  *
  * An absent `docs/adr/` is an empty registry — a workspace that has not
  * adopted ADRs yet is not a failure, and has nothing to resolve. A directory
- * that exists but holds an unreadable file, a malformed record, or a duplicate
- * id throws; the caller maps that to exit 3, never to an empty list.
+ * that exists but holds an unreadable file, a malformed record, a duplicate
+ * id, or a supersession graph that cannot be true (see `validateLineage`)
+ * throws; the caller maps that to exit 3, never to an empty list.
  *
  * @param {string} root Absolute workspace root.
  * @param {{readdirSync?: (path: string) => string[], readFileSync?: (path: string, encoding: "utf8") => string,
@@ -363,10 +594,16 @@ export function loadAdrRegistry(root, io = {}) {
         cause,
       });
     }
-    const record = validateRecord({ id, frontmatter: frontmatterBlock(text) });
+    const record = validateRecord({
+      id,
+      frontmatter: frontmatterBlock(text),
+      body: bodyBlock(text),
+    });
     byId.set(id, record);
     records.push(record);
   }
+
+  validateLineage(records);
 
   return { records, byId };
 }
