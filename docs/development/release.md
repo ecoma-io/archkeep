@@ -77,12 +77,18 @@ Graduation to stable is one `Release-As: 1.0.0` commit. After that, the
 default strategy computes normally: `fix` → `1.0.1`, `feat` → `1.1.0`,
 `!` → `2.0.0`.
 
-**Prerelease flagging is automatic.** The `prerelease: true` configuration
-key flags the GitHub release as a prerelease only while the version itself
-carries a prerelease suffix or the major is still 0 — the same version gates
-it in release-please's release building — so the `1.0.0-rc.1` cut was
-flagged, every 0.x cut is flagged too, and the stable `1.0.0` that
-graduates will not be. The key stays with nothing to remove.
+**Prerelease flagging.** The `prerelease` key is not set on the 0.x line.
+release-please 17.6.0 (the version release-please-action v5.0.0 bundles)
+computes the GitHub release's prerelease flag as
+`config.prerelease && (!!version.preRelease || version.major === 0)` in
+`manifest.ts`'s release building — with the key set, every 0.x release is
+flagged as a prerelease on GitHub, which an ordinary 0.x cut is not. The key
+was added for the rc candidate era and removed when the line returned to 0.x;
+the historical rc releases (`1.0.0-rc.1`, `1.0.1-rc.1`) remain correctly
+flagged, and v0.16.0's metadata was corrected from prerelease to a normal
+release. When the candidate ladder resumes, re-add `prerelease: true` so rc
+cuts are flagged — at major 1, only versions carrying a prerelease suffix
+are affected.
 
 **npm dist-tag note.** npm refuses to publish a prerelease version without
 an explicit dist-tag — a bare `npm publish` of `1.0.0-rc.1` exits with
