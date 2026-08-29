@@ -134,3 +134,140 @@ describe("formatProvenanceReport", () => {
     expect(formatProvenanceReport(input)).toBe(formatProvenanceReport(input));
   });
 });
+
+describe("formatProvenanceReport — the decision lifecycle section (PR E)", () => {
+  const decision = (overrides = {}) => ({
+    id: "0001-bind-collaboration",
+    status: "active",
+    authority: true,
+    created: null,
+    updated: null,
+    supersedes: [],
+    supersededBy: [],
+    bindings: [],
+    attribution: {
+      createdBy: { by: "Tess <tess@example.com>", tool: "git", on: "2026-01-02T00:00:00.000Z" },
+      lastChangedBy: { by: "Rex <rex@example.com>", tool: "git", on: "2026-08-16T00:00:00.000Z" },
+    },
+    attested: true,
+    note: null,
+    ...overrides,
+  });
+  const base = {
+    establishment: true,
+    repo: { commit: "abc1234", remote: null, dirty: false },
+    rowsTotal: 1,
+    unattested: [],
+    decisionRefTotal: 0,
+    unresolvedDecisionRefs: [],
+  };
+
+  it("renders the attributed lifecycle with created/last-change and the positive claim", () => {
+    const text = formatProvenanceReport({
+      ...base,
+      decisionLifecycle: [
+        decision({
+          created: "2026-01-15",
+          updated: "2026-08-01",
+          bindings: ["type-package"],
+        }),
+      ],
+    });
+    expect(text).toContain("decisions  1 recorded — 1 attributed, 0 without attribution");
+    expect(text).toContain(
+      "  active      0001-bind-collaboration  created by Tess <tess@example.com> on 2026-01-02T00:00:00.000Z; changed by Rex <rex@example.com> on 2026-08-16T00:00:00.000Z; binds type-package; timeline 2026-01-15 → 2026-08-01",
+    );
+    expect(text).toContain(
+      "✔ every decision's lifecycle is attributed — each change names who recorded it and with what tool",
+    );
+  });
+
+  it("lists every unattributed decision and states the count — never a silent pass", () => {
+    const text = formatProvenanceReport({
+      ...base,
+      decisionLifecycle: [
+        decision({
+          id: "0001-bind-collaboration",
+          attribution: { createdBy: null, lastChangedBy: null },
+          attested: false,
+          note: "no origin recorded — cannot attest",
+        }),
+        decision({
+          id: "0002-scopes",
+          attribution: { createdBy: null, lastChangedBy: null },
+          attested: false,
+          note: "no origin recorded — cannot attest",
+        }),
+      ],
+    });
+    expect(text).toContain("decisions  2 recorded — 0 attributed, 2 without attribution");
+    expect(text).toContain("unattributed lifecycle (no origin recorded — cannot attest):");
+    expect(text).toContain("  0001-bind-collaboration");
+    expect(text).toContain("  0002-scopes");
+    expect(text).toContain("2 of them carry no recorded origin behind their lifecycle");
+    expect(text).not.toContain("✔ every decision's lifecycle is attributed");
+  });
+
+  it("renders supersession lineage in both directions — attributed via the superseder's recorder", () => {
+    const text = formatProvenanceReport({
+      ...base,
+      decisionLifecycle: [
+        decision({
+          id: "0002-scopes",
+          supersedes: ["0003-rename-lattice"],
+        }),
+        decision({
+          id: "0003-rename-lattice",
+          status: "superseded",
+          authority: false,
+          supersededBy: ["0002-scopes"],
+        }),
+      ],
+    });
+    expect(text).toContain("supersedes 0003-rename-lattice");
+    expect(text).toContain("superseded by 0002-scopes");
+  });
+
+  it("renders a per-fact cannot-attest when one fact lacks an origin but the record is otherwise attributed", () => {
+    const text = formatProvenanceReport({
+      ...base,
+      decisionLifecycle: [
+        decision({
+          attribution: {
+            createdBy: null,
+            lastChangedBy: {
+              by: "Rex <rex@example.com>",
+              tool: "git",
+              on: "2026-08-16T00:00:00.000Z",
+            },
+          },
+        }),
+      ],
+    });
+    expect(text).toContain("created — no origin recorded — cannot attest");
+    expect(text).toContain("changed by Rex <rex@example.com> on 2026-08-16T00:00:00.000Z");
+  });
+
+  it("renders no decision section at all when decisionLifecycle is empty or omitted", () => {
+    const empty = formatProvenanceReport({ ...base, decisionLifecycle: [] });
+    const omitted = formatProvenanceReport(base);
+    for (const text of [empty, omitted]) {
+      expect(text).not.toContain("decisions");
+      expect(text).not.toContain("cannot attest");
+    }
+  });
+
+  it("produces byte-identical output for the same decision facts across calls", () => {
+    const input = {
+      ...base,
+      decisionLifecycle: [
+        decision({
+          created: "2026-01-15",
+          supersedes: ["0003-rename-lattice"],
+          bindings: ["type-package"],
+        }),
+      ],
+    };
+    expect(formatProvenanceReport(input)).toBe(formatProvenanceReport(input));
+  });
+});

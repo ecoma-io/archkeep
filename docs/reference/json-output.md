@@ -784,6 +784,40 @@ History is deliberately out of scope for the planning context: it carries no
 before/after comparison. For architecture history between two graph
 snapshots, run `archkeep diff <baseline>` separately.
 
+## `result` (for `command: "provenance"`)
+
+`provenance` answers the workspace's provenance questions. It is descriptive:
+it never exits `1`, because an answer about who recorded what is never a
+finding. Its `result` carries four surfaces, all unconditional:
+
+| field                    | type     | meaning                                                                                                                                                                                                                                                         |
+| ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `repo`                   | object   | `{commit, remote, dirty}` — the git facts of the run, or `{commit: null, remote: null, dirty: null}` on a tree git cannot answer; `established` (below) is the statements' truth marker.                                                                        |
+| `established`            | boolean  | Whether `repo` carries real git facts (`true`) or the stated absence (`false`).                                                                                                                                                                                 |
+| `rows`                   | object[] | Every governed row in the declared intent and boundary config, in canonical order: `{kind, attested, origin}`. `origin` is `null` exactly when `attested` is `false`.                                                                                           |
+| `unattested`             | object[] | Every row without an `origin`, each `{kind, label, note}` — `note` is `"no origin recorded — cannot attest"`. **Unconditional**: an empty array is itself the claim "every governance row carries an origin".                                                   |
+| `unresolvedDecisionRefs` | object[] | Every row whose `decisionRef` resolved to nothing, each `{kind, label, decisionRef, note}`. The resolution documentation-only fact `check`'s `result.unresolvedDecisionRefs` states, per row and per cited value.                                               |
+| `decisionLifecycle`      | object[] | One entry per recorded decision. **Unconditional**: an empty array is itself the claim "the registry holds no decisions". Each entry: `{id, status, authority, created, updated, supersedes, supersededBy, bindings, attribution, attested, note}` — see below. |
+
+Each `decisionLifecycle` entry:
+
+| field          | type                                                         | meaning                                                                                                                                                                                                                                          |
+| -------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`           | string                                                       | The ADR id (`NNN-slug`), the registry's stable handle.                                                                                                                                                                                           |
+| `status`       | string                                                       | The decision's committed status, from the registry's single vocabulary (`ADR_STATUSES`).                                                                                                                                                         |
+| `authority`    | boolean                                                      | Whether that status is authoritative.                                                                                                                                                                                                            |
+| `created`      | `string \| null`                                             | The decision's committed `created` date, `null` when the record does not hold one.                                                                                                                                                               |
+| `updated`      | `string \| null`                                             | The decision's committed `updated` date, `null` when the record does not hold one.                                                                                                                                                               |
+| `supersedes`   | `string[]`                                                   | ADR ids this decision replaced, from its committed record. `[]` when none.                                                                                                                                                                       |
+| `supersededBy` | `string[]`                                                   | ADR ids that replaced this decision, from its committed record. `[]` when none.                                                                                                                                                                  |
+| `bindings`     | `string[]`                                                   | The boundary tags the decision binds, from its committed record. `[]` when none.                                                                                                                                                                 |
+| `attribution`  | `{createdBy: object \| null, lastChangedBy: object \| null}` | Who recorded the decision's file in git: the first and latest commit authors, each `{by, tool: "git", on}` with `on` the committed author date — read, never produced. `null` when the tree is not a repository or the file was never committed. |
+| `attested`     | boolean                                                      | `true` exactly when `attribution` carries both records.                                                                                                                                                                                          |
+| `note`         | `string \| null`                                             | `"no origin recorded — cannot attest"` when `attested` is `false`, else `null`. A decision with no attributable history is named, never silently passed.                                                                                         |
+
+The lifecycle is read-only evidence about committed records: it never judges a
+decision, so no verdict can change.
+
 ## A worked example
 
 An abridged clean run in the shape of `archkeep`'s own CI step (`AGENTS.md`'s
