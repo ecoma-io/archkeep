@@ -23,7 +23,7 @@
 # a package.
 [project]
 name = "archkeep-rule-sdk"
-version = "1.0.1-rc.1"
+version = "0.16.0"
 description = "Author Archkeep custom architecture rules in Python and compile them to core WebAssembly."
 readme = "README.md"
 license = "Apache-2.0"

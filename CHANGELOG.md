@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.16.0](https://github.com/ecoma-io/archkeep/compare/v1.0.1-rc.1...v0.16.0) (2026-08-29)
+
+
+### Bug Fixes
+
+* **archkeep:** print a runnable customRules row from rules add ([#472](https://github.com/ecoma-io/archkeep/issues/472)) ([88630b7](https://github.com/ecoma-io/archkeep/commit/88630b71cdde8d845b01357dd0440ed3b2db85eb))
+
+
+### Documentation
+
+* **workspace:** add C#/.NET language to the north-star table ([#467](https://github.com/ecoma-io/archkeep/issues/467)) ([b18e6be](https://github.com/ecoma-io/archkeep/commit/b18e6be8e0c6331cb8d06b8431e8fbf2314e18e1))
+* **workspace:** carry the Release-As footer in the landed commit ([#476](https://github.com/ecoma-io/archkeep/issues/476)) ([1b49251](https://github.com/ecoma-io/archkeep/commit/1b492513065c521235ee255127718827cd27f055))
+* **workspace:** describe one development line and one compatibility contract ([#455](https://github.com/ecoma-io/archkeep/issues/455)) ([ce69425](https://github.com/ecoma-io/archkeep/commit/ce694253abf1f00702e7cc6b4e0588be08d58a02))
+* **workspace:** document the built-ahead v2 release lane ([#442](https://github.com/ecoma-io/archkeep/issues/442)) ([5492349](https://github.com/ecoma-io/archkeep/commit/549234909d602141bd4174b03b6c3d2db918396a))
+* **workspace:** give agents the branch-first operational summary ([#441](https://github.com/ecoma-io/archkeep/issues/441)) ([dc4d265](https://github.com/ecoma-io/archkeep/commit/dc4d265774ecbda5b6c48a1181bd8310b0032a08))
+* **workspace:** lock the architecture end state on one development line ([#458](https://github.com/ecoma-io/archkeep/issues/458)) ([9ea17fb](https://github.com/ecoma-io/archkeep/commit/9ea17fbaca16ce3b6f27158b1892d5a5045deea9)), closes [#457](https://github.com/ecoma-io/archkeep/issues/457)
+* **workspace:** make the intelligence layer common doctrine instead of a v2 line ([#453](https://github.com/ecoma-io/archkeep/issues/453)) ([05bb34a](https://github.com/ecoma-io/archkeep/commit/05bb34a3c23b484d905d4f0b6bf26da31994eb39))
+* **workspace:** return the release line to 0.x until 1.0 readiness ([#474](https://github.com/ecoma-io/archkeep/issues/474)) ([ee5325e](https://github.com/ecoma-io/archkeep/commit/ee5325e4463f412780cda6961a7d2e0c78484e53))
+* **workspace:** tell the roadmap as one maturity ladder ([#454](https://github.com/ecoma-io/archkeep/issues/454)) ([6ad2943](https://github.com/ecoma-io/archkeep/commit/6ad29434586cdb6f1c75f239089830b75ad513ec))
+
 ## [1.0.1-rc.1](https://github.com/ecoma-io/archkeep/compare/v1.0.0-rc.1...v1.0.1-rc.1) (2026-08-28)
 
 
