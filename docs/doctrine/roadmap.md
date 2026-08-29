@@ -145,16 +145,76 @@ A new reader should find these capabilities described as present, not promised.
   ([skills/overview.md](../skills/overview.md),
   [architecture-authority.md](architecture-authority.md))
 
+## The maturity ladder
+
+One product, one development line, one ladder. The stages below are
+**maturity gates on `main`** — not versions, not generations: no gate is a
+1.x or 2.x line, a branch, a tag series, or a second contract, and passing a
+gate never splits the product. The order is the commitment; the dates are
+not. [architecture-authority.md](architecture-authority.md) owns the
+abstractions the gates are named for, and each gate says what ships today
+versus what the gate itself must add.
+
+1. **Harden the deterministic authority core.** The verdict, the exit-code
+   contract, the four-state vocabulary, coverage on every result, the
+   provider-independent graph, the cross-language analyzers, and the
+   conformance proof that holds them together. Most of this ships today; the
+   gate is its hardening — conformance evidence broadened to real trees,
+   parse limits held, determinism proven on workspaces nobody here designed.
+   Every later gate stands on this one, and none of them retires it.
+2. **Make architecture state first-class.** A workspace's architecture is
+   one state — intent, observed reality, constraints, decisions, exceptions,
+   evidence — changing through transitions, not a bag of adjacent commands.
+   The mechanisms ship today (`graph` snapshots, `diff`, `history`,
+   `trajectory`, `evolution`, `provenance`, `drift`); the gate is their
+   consistency as one state model — one vocabulary, one evidence contract,
+   one provenance story across all of them.
+3. **Deepen architecture reconciliation.** The gap between intent and
+   reality identified and classified element by element, so every difference
+   becomes a decision. `reconcile`, `change`, `discover`'s proposal-only
+   candidates and the waiver lifecycle ship today; the gate is depth —
+   finer classification of the gap, and a decision path (fix, waive,
+   re-declare) for every difference reconciliation can find.
+4. **Broaden architecture change context and impact.** Before and during a
+   change: which boundaries are affected, which constraints and recorded
+   decisions are in play, what the blast radius is. `context`, `impact`,
+   `delta` and `explain` ship today; the gate is breadth — the questions an
+   agent or a reviewer asks before touching a boundary, answered in
+   machine-readable form every time.
+5. **Add the intelligence and proposal capabilities.** The layer that reads
+   and predicts on top of the core. Optional and later by design — each
+   capability arrives through the door
+   [architecture-authority.md](architecture-authority.md) puts in front of
+   the layer, and none is required by the gates above.
+6. **Close the agentic feedback loop.** An agent draws its architectural
+   context from Archkeep, makes the change inside it, and Archkeep verifies
+   and reconciles the result deterministically — the loop closed by the
+   authority, never by the agent's own judgment. The `arch-*` skills, the
+   MCP tools and the read-only command set are the loop's shape today; the
+   gate is the loop running end to end without a human assembling the
+   pieces.
+
+Gates 1–4 are the foundation stable 1.0 stands on. Gates 5–6 are later
+maturity on the same line: they follow stable 1.0, they never fork it, and
+nothing in them holds the foundation hostage.
+
 ## The road to stable 1.0
 
-The goal: the system above, complete and stable — the deterministic
-authority, its evidence commands, the machine-readable intent it enforces, the
-evolution safety that keeps change honest, and the agent protocol that makes
-agents consumers rather than authorities.
+Stable 1.0 is not "enough features shipped". It is the point where the four
+foundation gates — the hardened authority core, first-class architecture
+state, deepened reconciliation, broadened change context — hold every
+property that makes them an official foundation: **deterministic**,
+**explainable**, **reproducible**, **provenance-complete**,
+**provider-independent**, **cross-language**, **conformance-hardened**, and
+quiet long enough to be trusted with a stability promise. The intelligence
+capabilities of gate 5 and the full agentic loop of gate 6 are deliberately
+absent from that list: they extend a finished foundation rather than block
+it, and no capability on those gates may hold the deterministic authority
+hostage by being made a prerequisite of it.
 
-Almost all of it is already implemented and listed above. What remains before
-a **stable 1.0** is hardening of the proof, not a new feature list — one item,
-and it is evidence rather than code:
+Almost everything the foundation needs is already implemented and listed
+above. What remains before a **stable 1.0** is hardening of the proof, not a
+new feature list — one item, and it is evidence rather than code:
 
 Stable 1.0 is approached through a release candidate: `1.0.0-rc.1` proposes
 this contract as it stands; the conditions below decide when the same contract
@@ -225,11 +285,14 @@ None of the four is a feature, and that is the point: what separates 0.x from
 1.0 here is evidence, and evidence is something the project accumulates rather
 than something it implements.
 
-## The intelligence capabilities ahead
+## Later maturity: the intelligence capabilities
 
-The goal of this stage: the layer that reads and predicts, sitting on top of —
-never in place of — the deterministic core above. It is not "more rules"; it is
-a different relationship to the architecture the core already governs.
+Gate 5 of the ladder, and "optional" is part of its name: these are later
+capabilities on the same development line — not a next product, not a second
+platform, and not a stage the foundation waits for. They extend the
+deterministic core with a different relationship to the architecture it
+already governs: reading and predicting, on top of — never in place of — the
+checking and judging.
 
 - **Deeper architecture intent** — richer, machine-readable intent beyond the
   dependency constraint table.
@@ -243,19 +306,25 @@ a different relationship to the architecture the core already governs.
   is _likely_ to break, not only what it _demonstrably_ breaks.
 - **Migration planning and architecture recommendations** — proposed paths,
   offered to a human to accept or refuse.
-- **Cross-repository architecture intelligence** — reasoning across more than
-  one repository at a time.
+- **Cross-repository architecture intelligence** — reasoning across more
+  than one repository at a time; an optional later reading, never a
+  cross-repository authority or a universal architecture graph.
 - **Agent-assisted architecture planning** — planning help that extends the
   facts already provided, while the agent remains the decision-maker.
 - **Potentially AI-assisted reasoning** — where intelligence is not a verdict.
 
-This stage is a **direction, not a commitment to implementation details**. The
-list above names the headroom; nothing in it is a dated promise, and a
-prediction is allowed to be wrong where a verdict is not. Nothing ahead
-weakens what ships today: every intelligence capability sits on top of the
-deterministic core, never in place of it — and each must answer the five
-questions [architecture-authority.md](architecture-authority.md) puts to the
-layer before it is built.
+None of these is a platform promise — not a knowledge-graph product, not a
+risk-prediction engine, not an autonomous migration planner, not an
+architecture-intelligence platform — and none changes the authority
+boundary: whatever they become, they remain predictions, proposals and
+judgments beside verdicts, never verdicts themselves. This stage is a
+**direction, not a commitment to implementation details**. The list above
+names the headroom; nothing in it is a dated promise, and a prediction is
+allowed to be wrong where a verdict is not. Nothing ahead weakens what ships
+today: every intelligence capability sits on top of the deterministic core,
+never in place of it — and each must answer the five questions
+[architecture-authority.md](architecture-authority.md) puts to the layer
+before it is built.
 
 ## What this roadmap refuses
 
@@ -265,6 +334,11 @@ layer before it is built.
   rejected and closed without this document lying in the meantime.
 - **A phase 3.** When the capabilities above are real, what comes after them
   will be visible from there, and not before.
+- **A second line, or a next generation.** The ladder is one development
+  line: gates, not versions. Nothing here produces a 1.x line beside a 2.x
+  line, a parallel `next` branch, or a second generation of the product — a
+  proposal framed as a generation change is refused the way a proposal to
+  move the authority is.
 - **Moving the authority.** Any capability that would let an agent, a provider,
   a skill or CI decide whether an architecture is valid — rather than report
   whether it holds — is refused by the boundary in

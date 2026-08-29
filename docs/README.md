@@ -10,8 +10,10 @@ live in [doctrine/](doctrine/):
 [why.md](doctrine/why.md) — the problem this exists for, with the measurement behind it —
 [north-star.md](doctrine/north-star.md) — where it is going and what it will refuse on
 the way — [architecture-authority.md](doctrine/architecture-authority.md) — what Archkeep
-is, what it is not, and the line its neighbours may not cross — and
-[roadmap.md](doctrine/roadmap.md) — the staged path there, as a maturity ladder.
+is, what it is not, the intent/reality/state vocabulary it locks, and the
+line its neighbours may not cross — and [roadmap.md](doctrine/roadmap.md) —
+the maturity ladder there: what ships today, the foundation gates before
+stable 1.0, and the later maturity beyond them.
 
 ---
 
@@ -186,14 +188,14 @@ decided rather than summarized into them.
 
 ## Doctrine
 
-| page                                                              | what it answers                                                                         |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| [why.md](doctrine/why.md)                                         | The gap this exists to close, and the measurement that proves it is real                |
-| [north-star.md](doctrine/north-star.md)                           | The direction, what "finished" means per language, and the refusals                     |
-| [architecture-authority.md](doctrine/architecture-authority.md)   | What Archkeep is, what it is not, and the line providers/skills/agents/CI may not cross |
-| [principles.md](doctrine/principles.md)                           | The seven binding principles                                                            |
-| [architecture-governance.md](doctrine/architecture-governance.md) | How Archkeep practices what it enforces                                                 |
-| [roadmap.md](doctrine/roadmap.md)                                 | The staged path: what ships today, and the maturity ladder for what comes next          |
+| page                                                              | what it answers                                                                                                                            |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| [why.md](doctrine/why.md)                                         | The gap this exists to close, and the measurement that proves it is real                                                                   |
+| [north-star.md](doctrine/north-star.md)                           | The direction, what "finished" means per language, and the refusals                                                                        |
+| [architecture-authority.md](doctrine/architecture-authority.md)   | What Archkeep is, what it is not, the intent/reality/state vocabulary, and the line providers/skills/agents/platform clients may not cross |
+| [principles.md](doctrine/principles.md)                           | The seven binding principles                                                                                                               |
+| [architecture-governance.md](doctrine/architecture-governance.md) | How Archkeep practices what it enforces                                                                                                    |
+| [roadmap.md](doctrine/roadmap.md)                                 | The maturity ladder: what ships today, the foundation gates before stable 1.0, and the later maturity beyond them                          |
 
 ## Development
 
@@ -221,9 +223,9 @@ allowed to say it". That table:
 | `README.md`                                                                     | The pitch: what Archkeep is in one breath, and the way in                                                                                                                                                                                        |
 | [`docs/doctrine/why.md`](doctrine/why.md)                                       | The gap, and the evidence that it is real                                                                                                                                                                                                        |
 | [`docs/doctrine/north-star.md`](doctrine/north-star.md)                         | The direction, what "finished" means per language, and the refusals                                                                                                                                                                              |
-| [`docs/doctrine/architecture-authority.md`](doctrine/architecture-authority.md) | What Archkeep is, what it is not, and the boundary its neighbours may not cross                                                                                                                                                                  |
+| [`docs/doctrine/architecture-authority.md`](doctrine/architecture-authority.md) | What Archkeep is, what it is not, the intent/reality/state vocabulary, and the boundary its neighbours may not cross                                                                                                                             |
 | [`docs/doctrine/principles.md`](doctrine/principles.md)                         | The seven binding principles                                                                                                                                                                                                                     |
-| [`docs/doctrine/roadmap.md`](doctrine/roadmap.md)                               | The staged path: what ships today, the maturity ladder for what comes next, and in what order                                                                                                                                                    |
+| [`docs/doctrine/roadmap.md`](doctrine/roadmap.md)                               | The maturity ladder: what ships today, the foundation gates before stable 1.0, and the later maturity beyond them, in that order                                                                                                                 |
 | `docs/getting-started/`                                                         | Installation, first project, first policy, and the upgrade off the Lattice name — which owns every consumer-facing consequence of the rename, so no other page restates one                                                                      |
 | `docs/concepts/`                                                                | The model: architecture, graph, boundaries, policies, profiles, projects, drift, discovery, evidence, provenance, adr, waivers, health, fitness functions, custom rules, reconciliation, governance lifecycle, agentic development, integrations |
 | `docs/concepts/discovery.md`                                                    | Discovery: the proposal-only line, what is observed, the four candidate classes, uncertainty markers                                                                                                                                             |
