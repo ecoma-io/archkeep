@@ -34,7 +34,7 @@ read from the tree being described, and needs no boundary law to frame it.
 ## Reading the answer
 
 - **The dump** — one block per record in byte-sorted filename order, each
-  naming its status (`proposed`, `accepted`, `superseded`), its `supersedes`
+  naming its status (`proposed`, `accepted`, `active`, `superseded`, `retired`), its `supersedes`
   chain, and the rule/fitness ids it binds.
 - **One record** — the same block, for that id alone.
 - **A rule/fitness id** — the reverse lookup: `rule:no-direct-dep is bound

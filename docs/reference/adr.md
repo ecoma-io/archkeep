@@ -46,16 +46,16 @@ The dump is one block per record, in byte-sorted filename order, each naming
 its status, its supersession chain, and the rule/fitness ids it binds:
 
 ```text
-0001-bind-collaboration  (accepted)
+0001-bind-collaboration  (superseded)
 ----------------------------
 bindings:   rule:no-direct-dep, fitness:hotspot
-status set: proposed, accepted, superseded
+status set: proposed, accepted, active, superseded, retired
 
-0002-bind-logs  (superseded)
+0002-bind-logs  (active)
 ----------------------------
 supersedes: 0001-bind-collaboration
 bindings:   rule:sticky-logs
-status set: proposed, accepted, superseded
+status set: proposed, accepted, active, superseded, retired
 ```
 
 A binding naming a rule/fitness id the registry's own records never mention is
@@ -82,6 +82,28 @@ no ADR 0999-ghost in docs/adr/ — nothing is recorded under that id, and a
 decisionRef naming it cannot resolve
 ```
 
+## The status vocabulary
+
+A record's `status` field carries one of five lifecycle states. `hasAuthority`
+decides which statuses a `decisionRef` citation or a `supersedes` successor may
+lean on:
+
+| status       | authority | meaning                                                         |
+| ------------ | --------- | --------------------------------------------------------------- |
+| `proposed`   | no        | a draft: recorded, but not yet a decision                       |
+| `accepted`   | yes       | a decision was made                                             |
+| `active`     | yes       | the accepted decision currently in force                        |
+| `superseded` | no        | replaced by a later decision — must have at least one successor |
+| `retired`    | no        | withdrawn without a replacement — no successor required         |
+
+The supersession chain is validated as a graph when the registry loads: every
+`supersedes` target must be a record, nothing may supersede itself, the graph
+may not cycle, a `superseded` record needs a successor, a successor must carry
+authority, and the contradiction rule refuses an authoritative record
+superseded by another. `supersededBy` — the reverse of `supersedes` — is
+derived on every record at load. A chain that cannot be true is exit 3, never
+a report.
+
 ## The JSON envelope
 
 `--format json` wraps the same answer in the versioned envelope
@@ -94,22 +116,25 @@ be resolved and why.
 
 ## Exit codes
 
-| code | meaning                                                                                                                                                                        |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0    | completed — the dump, a record, or a lookup answered. A reverse lookup naming a rule/fitness id no ADR binds is still 0: a sentence stating the fact, not a resolved reference |
-| 2    | usage error — more than one positional argument                                                                                                                                |
-| 3    | no verdict — an unknown ADR id, a `supersedes` target naming no record, or a registry that could not be read                                                                   |
+| code | meaning                                                                                                                                                                                                                                                                      |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | completed — the dump, a record, or a lookup answered. A reverse lookup naming a rule/fitness id no ADR binds is still 0: a sentence stating the fact, not a resolved reference                                                                                               |
+| 2    | usage error — more than one positional argument                                                                                                                                                                                                                              |
+| 3    | no verdict — an unknown ADR id, or a registry that could not be read: an unreadable or malformed record, a `supersedes` target naming a record the registry does not hold, or a supersession chain that cannot be true (see [The status vocabulary](#the-status-vocabulary)) |
 
 `adr` never exits 1: a description of what is recorded is never a finding; only
 `check` exits 1. The three exit-3 paths are the command's obligations to the
 invariant. An id read as an ADR reference — everything except a
 `rule:…`/`fitness:…` id — that the registry does not know is unresolved — an
 empty reverse lookup would read exactly like a clean workspace, which is the
-silent direction. A `supersedes` entry is resolved against the registry for the
-same reason: the field is shape-checked at load and nothing more, so a record
-superseding an id no file carries used to print its supersession chain as fact
-at exit 0 — a reader told the older decision was replaced by a decision this
-workspace never recorded. An unreadable registry throws the same loud
+A `supersedes` entry is resolved against the registry for the same reason: the field used to be shape-checked at load and nothing
+more, so a record superseding an id no file carries printed its supersession
+chain as fact at exit 0 — a reader told the older decision was replaced by a
+decision this workspace never recorded. Now the registry refuses that at load,
+exit 3, and with it every chain that cannot be true: a self-supersede, a
+cycle, a `superseded` record with no successor, a successor without authority,
+or an authoritative record superseded by another (the contradiction rule). An
+unreadable registry throws the same loud
 refusal `provenance` makes for a malformed intent file: a list built from a
 registry it could not read would be a claim about records that do not exist.
 
