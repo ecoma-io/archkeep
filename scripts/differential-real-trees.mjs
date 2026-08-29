@@ -13,8 +13,10 @@
 //      <url> <sha>`), and verifies `git rev-parse HEAD` answers that exact sha;
 //   2. installs its dependencies with the tree's own lockfile (per-tree command
 //      in the table below, with the measured reason where `npm ci` refuses);
-//   3. computes the project graph with the TREE'S OWN nx (`node_modules/.bin/nx
-//      graph --file=`), so the nodes and tags are what that workspace's Nx
+//   3. computes the project graph with the TREE'S OWN nx (resolved through the
+//      installed nx package's own `bin` manifest — `node_modules/.bin/nx` is a
+//      symlink under npm but a shell shim under pnpm, so it is not what runs;
+//      `nx graph --file=`), so the nodes and tags are what that workspace's Nx
 //      actually reports, not a reconstruction;
 //   4. spawns one child process per tree (`differential-real-trees-child.mjs` —
 //      its header says why a process boundary is required) which runs BOTH
@@ -90,7 +92,7 @@ export const DIRECTIONS = Object.freeze({
  * `depConstraints` table of its own — a tree whose only constraint row is
  * `*` → `*` would let both engines agree by having nothing to decide.
  *
- * How these two were found, and what was rejected, measured 2026-08-11 via
+ * How the first two were found, and what was rejected, measured 2026-08-11 via
  * GitHub code search (`gh search code`) for `depConstraints` and for the
  * plugins that would mark a polyglot tree (`@naxodev/gonx`, `@monodon/rust`,
  * `@nxlv/python`, `@nx/vue` in `nx.json`):
@@ -111,6 +113,17 @@ export const DIRECTIONS = Object.freeze({
  *   upstream can read — `.go`, `.rs` and `.py` files never reach the upstream
  *   rule, so a polyglot tree would widen this comparison by nothing until one
  *   with a real constraint table exists.
+ *
+ * The 2026-08-29 pass that added the other three ran the same search over
+ * every flat-config spelling (`eslint.config.{js,cjs,mjs,ts,mts}`). Rejected:
+ * cowprotocol/cowswap and WordPress/wordpress-playground (GPL-3.0),
+ * migrationsverket/midas (CC0), ever-co, undp, chaotic-cx and FIRSTIsrael
+ * (AGPL/GPL-3.0), trungvose/angular-spotify — a real, non-trivial table, but
+ * in a legacy `.eslintrc.json`, which the flat-config reader cannot see by
+ * design — nrwl/nx and nx-examples again (absent or trivial tables), and
+ * roughly seventy further repositories whose only row is `*` → `*`. Still no
+ * public Go, Rust, Python or Vue Nx tree with a non-trivial constraint table
+ * under a permissive license.
  *
  * `expectViolations` records a MEASURED fact about the pinned commit, not a
  * hope: linting every tracked file surfaces violations both trees' own
@@ -180,6 +193,67 @@ export const TREES = Object.freeze([
     expectedNativeProjects: 8,
     // Measured 2026-08-20 against the pinned commit: every file upstream
     // lints here parses.
+    expectedUpstreamUnreadable: 0,
+  },
+  {
+    name: "telesarch",
+    url: "https://github.com/jessecaple/telesarch.git",
+    sha: "25b1edc312d96dd92f526f40e585e4a0cc657ad0",
+    license: "MIT",
+    configFile: "eslint.config.mjs",
+    // pnpm workspace — its lockfile is pnpm's, so `pnpm install` is what the
+    // tree's own toolchain runs; the first pnpm tree in this table.
+    install: ["pnpm", "install", "--ignore-scripts"],
+    // Conforming tree, measured 2026-08-29: upstream and this engine both
+    // report zero verdicts at the pinned commit — a real claim, not a shrug:
+    // the pinned config carries a seven-row hexagonal table (`type:app`,
+    // `type:domain`, `type:contract`, `type:adapter`, `type:host`, and
+    // `type:tool`/`type:test` targeting `type:*`).
+    expectViolations: false,
+    // Measured 2026-08-29: 14 nodes at this sha — 13 `packages/*` plus
+    // `apps/cli`, every one a `package.json`-only project (the tree has no
+    // `project.json` at all).
+    expectedNativeProjects: 14,
+    // Measured 2026-08-29: every file upstream lints here parses.
+    expectedUpstreamUnreadable: 0,
+  },
+  {
+    name: "commitstory",
+    url: "https://github.com/santoshyadavdev/commitstory.git",
+    sha: "3c735b2e1c0601eeb6ad7def0cbc90a497b26ce2",
+    license: "MIT",
+    configFile: "eslint.config.mjs",
+    install: ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+    // Conforming tree, measured 2026-08-29: upstream and this engine both
+    // report zero verdicts at the pinned commit, over a four-row
+    // `scope:shared`/`scope:shop`/`scope:api`/`type:data` table.
+    expectViolations: false,
+    // Measured 2026-08-29: 2 nodes at this sha (`yourstory`,
+    // `yourstory-e2e`) — the smallest graph this table pins, and still a
+    // floor that catches a derivation that stopped looking.
+    expectedNativeProjects: 2,
+    // Measured 2026-08-29: every file upstream lints here parses.
+    expectedUpstreamUnreadable: 0,
+  },
+  {
+    name: "cdwr",
+    url: "https://github.com/codeware-sthlm/cdwr.git",
+    sha: "82e16b3c8372a7084e630bbfbffe945557d2778f",
+    license: "MIT",
+    configFile: "eslint.config.mjs",
+    // pnpm workspace — its lockfile is pnpm's, so `pnpm install` is what the
+    // tree's own toolchain runs.
+    install: ["pnpm", "install", "--ignore-scripts"],
+    // Violating tree, measured 2026-08-29: upstream reports 36 verdicts and
+    // this engine 49 at the pinned commit — both nonzero, so the
+    // empty-verdict claim binds on a third violating tree too.
+    expectViolations: true,
+    // Measured 2026-08-29: 82 nodes at this sha.
+    expectedNativeProjects: 82,
+    // Measured 2026-08-29: every file upstream lints here parses. (The six
+    // tool-side analysis failures at this sha are generated `.next`/`build`
+    // outputs and a CSS-module import — printed as analysisFailures, not
+    // gated.)
     expectedUpstreamUnreadable: 0,
   },
 ]);
@@ -273,6 +347,63 @@ export const LEDGER = Object.freeze([
       "(packages/archkeep/src/conformance/README.md: 'the exemptions do not live in comments'). The " +
       "8 crossing imports are reported only here, making each a declared stricter divergence " +
       "rather than an unexplained one.",
+  },
+  // The same directive decision on a second tree, found by the 2026-08-29
+  // corpus: all 13 `noRelativeOrAbsoluteImportsAcrossLibraries` this engine
+  // reports on `tools/cdwr-cli.ts` are `stricter` because the file's second
+  // line carries `/* eslint-disable @nx/enforce-module-boundaries */` —
+  // upstream honours the directive and says nothing; this engine deliberately
+  // does not read ESLint comment syntax (the code-pushup row below names the
+  // pinned decision and its fixture-suite source).
+  {
+    tree: "cdwr",
+    direction: "stricter",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+    sitePattern: "^tools/cdwr-cli\\.ts:",
+    reason:
+      "tools/cdwr-cli.ts opens with '/* eslint-disable @nx/enforce-module-boundaries */', a " +
+      "directive upstream honours and this engine deliberately does not read " +
+      "(packages/archkeep/src/conformance/README.md: 'the exemptions do not live in comments'). " +
+      "The 13 crossing imports are reported only here, making each a declared stricter " +
+      "divergence rather than an unexplained one — the code-pushup.preset.ts mechanism on a " +
+      "second tree.",
+  },
+  // cdwr's root `project.json` (root '.') declares no `projectType` at all —
+  // verified by reading it at this pinned sha — the exact shape of the
+  // code-pushup `workspace#type` row below, under a different node name.
+  {
+    tree: "cdwr",
+    direction: "native-extra",
+    messageId: "node",
+    sitePattern: "^codeware#type$",
+    reason:
+      "cdwr's root project.json declares no projectType; the real Nx graph resolves this node's " +
+      "type to 'app' through getProjectType's filesystem fallback, which nodeTypeOf " +
+      "(../packages/archkeep/src/providers/native/discover.mjs) documents it deliberately does " +
+      "not reproduce — an absent projectType lands on 'lib' there on purpose, the safe direction " +
+      "since lib carries no blanket import ban. The same pre-existing, argued design limit as " +
+      "the code-pushup row, not a defect this leg discovered; no issue filed.",
+  },
+  // telesarch wires every cross-package import through pnpm workspace links:
+  // the `@telesarch/x` specifier resolves to a file under the importing
+  // project's own `node_modules/` (99 such sites at this sha), and the
+  // TypeScript analysis resolves a link to its LINK PATH — reporting the
+  // package external instead of naming the project behind it. The native
+  // face therefore draws none of the 27 project edges nx's own graph
+  // reports, and every one of the 27 is this shape.
+  {
+    tree: "telesarch",
+    direction: "native-missing",
+    messageId: "edge",
+    sitePattern: "^@telesarch/[^>]*->@telesarch/",
+    reason:
+      "telesarch imports its siblings through pnpm workspace links, so each specifier resolves " +
+      "to a file under the importer's own node_modules/ and the TypeScript analysis reports it " +
+      "external instead of naming the project behind the link " +
+      "(../packages/archkeep/src/analysis/typescript.mjs's header, 'No realpath' — argued there " +
+      "as the safe direction: an unattributed external, never a wrong project). All 27 of nx's " +
+      "project edges are missing for this one reason; a pre-existing, documented scope limit " +
+      "showing up as a real divergence, not a defect this leg discovered — no issue filed.",
   },
 ]);
 
@@ -776,10 +907,28 @@ function measureTree(tree, workdir) {
 
   console.log(`installing: ${tree.install.join(" ")}`);
   run(tree.install[0], tree.install.slice(1), treeRoot);
-
-  const nxBin = join(treeRoot, "node_modules", ".bin", "nx");
+  // The CLI is resolved through the installed `nx` package's own `bin`
+  // manifest rather than `node_modules/.bin/nx`: npm materializes that shim
+  // as a symlink to the real entry, pnpm as a POSIX shell wrapper `node`
+  // cannot execute, so the shim's shape is an artifact of the installer —
+  // the manifest field is not. `bin` is either a path string or a
+  // `{ name: path }` map whose `nx` key is the entry.
+  const nxManifestPath = join(treeRoot, "node_modules", "nx", "package.json");
+  if (!existsSync(nxManifestPath)) {
+    throw new InfrastructureError(`${tree.name}: install produced no node_modules/nx/package.json`);
+  }
+  const nxManifest = JSON.parse(readFileSync(nxManifestPath, "utf8"));
+  const nxBinPath = typeof nxManifest.bin === "string" ? nxManifest.bin : nxManifest.bin?.nx;
+  if (typeof nxBinPath !== "string") {
+    throw new InfrastructureError(
+      `${tree.name}: the installed nx package declares no "nx" bin entry`,
+    );
+  }
+  const nxBin = join(treeRoot, "node_modules", "nx", nxBinPath);
   if (!existsSync(nxBin)) {
-    throw new InfrastructureError(`${tree.name}: install produced no node_modules/.bin/nx`);
+    throw new InfrastructureError(
+      `${tree.name}: nx's bin manifest names ${nxBinPath}, which the install did not produce`,
+    );
   }
   // The tree's own nx computes the graph. `--file=` writes OUTSIDE the clone so
   // the graph JSON can never appear in the tree's own file listing.
