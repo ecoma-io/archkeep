@@ -36,6 +36,23 @@ The command is also silent about cause. A signal count says how often
 something moved between observations; it never says why, and it never implies
 a commit caused anything.
 
+## Transition classifications
+
+Every transition in the JSON envelope also carries the canonical evolution
+classes — `classifications`, the same vocabulary and predicates the
+[`evolution` command's events](../concepts/evolution.md#classification) use:
+`CHANGE`, `DRIFT`, `VIOLATION`, `REPAIR`, and `DECISION_CHANGE`. The classes
+are computed by the one classification function (`classifyEvolution`) from the
+signals a transition's own record carries — never a second opinion, and never
+a class the evidence does not support.
+
+For trajectories, only `CHANGE` and `DRIFT` can appear: the tenet that stored
+snapshots hold no findings means no violation, repair, or decision-change
+evidence ever exists in a transition's record, and
+[the one-sided rule](../concepts/evolution.md#the-one-sided-rule) means a
+pair whose metadata could not be compared carries `[]` with a disclosure
+note, never a fabricated class.
+
 ## The observation basis: snapshots are not commits
 
 One observation is **one stored `graph --format json` snapshot** — a capture
@@ -102,6 +119,35 @@ resolved 0` while the events read `added 3, removed 3` — the series churned
 and returned, and both halves of that sentence are reported rather than one
 hiding the other.
 
+## The trends block
+
+`result.trends` is the per-class answer over the SAME comparable transitions
+the axes count: how often each evolution class fired, and the
+violations-introduced vs resolved totals. It is a block of counts with a
+stated `basis` — never a score, never a weighted aggregate, never a
+judgment ([the invariant above](#what-a-trend-means-here) applies to it).
+
+| field                   | meaning                                                                                                                                                                                                                                                                                               |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `byClass`               | `{CHANGE, DRIFT, VIOLATION, REPAIR, DECISION_CHANGE}` — one count per class, over comparable transitions whose `classifications` carry it. A transition may carry several classes and counts in each; a comparable transition carrying none (`[]`) counts in `comparableTransitions` but in no bucket |
+| `violationsIntroduced`  | How many transitions added violations. For snapshot-sourced transitions this is always `0` — see the `note`                                                                                                                                                                                           |
+| `violationsResolved`    | How many transitions resolved violations. Same evidence limit as `violationsIntroduced`                                                                                                                                                                                                               |
+| `comparableTransitions` | `transitions.count − transitions.incomparable` — the exact subset the counts are a claim about                                                                                                                                                                                                        |
+| `basis`                 | `"comparable transition classifications"` — what the counts are, as a value                                                                                                                                                                                                                           |
+| `note?`                 | A disclosure present on every block: stored snapshots carry no findings, so `VIOLATION`/`REPAIR` and the `violations-*` totals are `0` because no finding could be classified, never because none occurred                                                                                            |
+
+The counts share the axes' comparability rule exactly: a pair whose
+`policyOneSided` or `provenanceOneSided` disclosed it cannot be compared is
+counted under `transitions.incomparable` and nowhere else — it is neither a
+class bucket nor part of `comparableTransitions`. That is why the block can
+be `null` while the trajectory itself is available: a history whose every
+transition was incomparable has no comparable classification basis, and
+`trends` says so instead of printing zeros.
+
+No numeric health score exists anywhere on this surface — `byClass` counts
+`CHANGE` as often as `DRIFT`, arithmetic the reader is free to do, and no
+field does it for you.
+
 ## Unknown evidence, sparse history, and what is refused
 
 - **Empty directory** — exit 3, no envelope. Zero snapshots is no record at
@@ -111,12 +157,16 @@ hiding the other.
 - **One snapshot** — exit 0 with `available: false` and
   `unavailableReason: "insufficient_history"`. There is no consecutive pair
   to classify, so every derived field (`delta`, the event counts,
-  `introduced`, `resolved`, `persistent`) is `null` — explicitly unavailable,
-  never zero. A zero would claim stability over a history that cannot show
-  movement.
+  `introduced`, `resolved`, `persistent`) and `trends` is `null` —
+  explicitly unavailable, never zero. A zero would claim stability over a
+  history that cannot show movement.
 - **Two snapshots** — deltas and event counts become available; they describe
   exactly one transition. Persistence across two observations means only
   "present in both", which is all the evidence supports.
+- **Every transition incomparable** — `available: true` but `trends: null`:
+  no comparable transition exists to derive a classification basis from, and
+  a zero-filled block would claim "no change" over evidence the run could not
+  compare. The `transitions.incomparable` count says why.
 - **Dirty captures and missing provenance** are counted, not hidden:
   `observations.dirtyProvenance` and `observations.withProvenance` tell you
   how much of the series the code-drift signal could actually speak about.
@@ -161,11 +211,22 @@ hiding the other.
       "delta": 3,
       "addedEvents": 9,
       "removedEvents": 6,
-      "changedEvents": null,
-      "introduced": 7,
       "resolved": 4,
       "persistent": 5
-    }
+    },
+    "trends": {
+      "byClass": {
+        "CHANGE": 2,
+        "DRIFT": 1,
+        "VIOLATION": 0,
+        "REPAIR": 0,
+        "DECISION_CHANGE": 0
+      },
+      "violationsIntroduced": 0,
+      "violationsResolved": 0,
+      "comparableTransitions": 4,
+      "basis": "comparable transition classifications",
+      "note": "transition classifications carry no violation or repair evidence — stored snapshots hold the graph and the policy fingerprint, not findings"
   }
 }
 ```
@@ -175,8 +236,11 @@ them moved the graph, one changed the declared law, one advanced code without
 moving either. Three projects arrived since the start and one left; four
 project-additions and two removals happened in total. Seven edges exist now
 that did not at the start; nine additions and six removals happened in total;
-five edges and two projects were present at every single observation. It does
-NOT say whether any of that is good.
+five edges and two projects were present at every single observation. The
+trends block adds the classification reading: two transitions were `CHANGE`,
+one was `DRIFT`, all four were comparable, and the violation/repair counts
+are `0` because snapshots carry no findings — that last half is stated, never
+left to read. It does NOT say whether any of that is good.
 
 ## What trajectory deliberately does not do
 
@@ -185,13 +249,15 @@ NOT say whether any of that is good.
   identity across them, and none is invented. `delta` classifies real
   violations between two live points; [`debt`](debt.md) ages today's ledger
   facts across snapshots. Run `check` at any commit for a point-in-time
-  verdict.
+  verdict. The `trends` block inherits the limit: its `VIOLATION`/`REPAIR`
+  and `violations-*` fields are `0` with a note, never a silent claim.
 - **No Git.** The command reads stored snapshots only. It reconstructs no
   historical commits, spawns no git log, and works on a directory copied to a
   machine with no repository at all.
 - **No prediction, no AI, no scoring.** No model projects the trajectory
-  forward; nothing aggregates into a health score; no natural language is
-  generated beyond the fixed sentences above.
+  forward; nothing aggregates into a health score — the `trends` block is
+  raw per-class counts with no weighting, threshold, or direction adjective;
+  no natural language is generated beyond the fixed sentences above.
 - **No second definition of time.** Age-in-snapshots remains
   [`debt`'s semantics](debt.md); this command adds no clock, no calendar, and
   no conversion from observations to any unit of time.
