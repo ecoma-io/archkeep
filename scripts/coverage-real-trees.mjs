@@ -2,8 +2,9 @@
 // What the Go, Rust and Python analyzers actually read, on real repositories.
 //
 // `differential-real-trees.mjs` puts this engine's verdict beside real ESLint's
-// on real public workspaces. It structurally cannot cover the three languages
-// this tool exists for: `.go`, `.rs` and `.py` never reach the upstream rule,
+// on real public workspaces. It structurally cannot cover the languages this
+// tool exists for: `.go`, `.rs`, `.py`, `.java`, `.kt` and `.cs` never reach
+// the upstream rule,
 // so upstream's silence is inability rather than a verdict, and there is no
 // oracle to disagree with. Its own tree table records the second half of the
 // problem — as of the day it was written, no public Nx workspace with a
