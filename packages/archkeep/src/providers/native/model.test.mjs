@@ -217,6 +217,40 @@ describe("findNativeModelViolations", () => {
         }),
       ).toEqual([]);
     });
+
+    // `excludeBeyondDefaults` is accepted as a valid `projects.infer` field,
+    // alongside the three original keys — the unknown-field gate must not
+    // fire for it (issue #389).
+    it("accepts excludeBeyondDefaults as a valid projects.infer field", () => {
+      expect(
+        findNativeModelViolations({
+          projects: {
+            infer: {
+              manifests: ["package.json"],
+              include: ["**"],
+              excludeBeyondDefaults: ["**/testdata/**"],
+            },
+          },
+        }),
+      ).toEqual([]);
+    });
+
+    it("rejects a non-array excludeBeyondDefaults value", () => {
+      expect(
+        findNativeModelViolations({
+          projects: { infer: { excludeBeyondDefaults: "**/testdata/**" } },
+        })[0],
+      ).toMatch(/projects\.infer\.excludeBeyondDefaults: must be an array of strings/);
+    });
+
+    it("rejects an excludeBeyondDefaults entry whose brace groups would expand past the cap", () => {
+      const violations = findNativeModelViolations({
+        projects: { infer: { excludeBeyondDefaults: [bracePattern()] } },
+      });
+      expect(violations.some((v) => v.startsWith("projects.infer.excludeBeyondDefaults[0]"))).toBe(
+        true,
+      );
+    });
   });
 
   describe("projectRules rows", () => {
@@ -704,6 +738,40 @@ describe("normalizeNativeModel", () => {
       projects: { declared: [], infer: { manifests: ["go.mod"], include: ["**"], exclude: [] } },
     });
     expect(model.projects.infer).toEqual({ manifests: ["go.mod"], include: ["**"], exclude: [] });
+  });
+
+  it("extends the defaults with excludeBeyondDefaults when exclude is absent", () => {
+    const model = normalizeNativeModel({
+      ...wellFormed(),
+      projects: {
+        declared: [],
+        infer: { excludeBeyondDefaults: ["**/testdata/**", "**/golden/**"] },
+      },
+    });
+    expect(model.projects.infer.exclude).toEqual([
+      ...DEFAULT_INFER_EXCLUDE,
+      "**/testdata/**",
+      "**/golden/**",
+    ]);
+  });
+
+  it("extends an explicit exclude list with excludeBeyondDefaults when both are present", () => {
+    const model = normalizeNativeModel({
+      ...wellFormed(),
+      projects: {
+        declared: [],
+        infer: { exclude: ["custom/**"], excludeBeyondDefaults: ["**/testdata/**"] },
+      },
+    });
+    expect(model.projects.infer.exclude).toEqual(["custom/**", "**/testdata/**"]);
+  });
+
+  it("treats excludeBeyondDefaults: [] as a no-op — the effective exclude is the defaults", () => {
+    const model = normalizeNativeModel({
+      ...wellFormed(),
+      projects: { declared: [], infer: { excludeBeyondDefaults: [] } },
+    });
+    expect(model.projects.infer.exclude).toEqual(DEFAULT_INFER_EXCLUDE);
   });
 
   it("keeps a declared workspaceLayout exactly as written", () => {

@@ -35,11 +35,12 @@ Omitting this key entirely means the declared list is exhaustive -- no
 inference runs at all. Presence-with-defaults differs from absence; this is
 intentional.
 
-| field       | default (when the key is present but this field is not)                                                                                   | meaning                                                                                                     |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `manifests` | `project.json`, `package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `pom.xml`, `settings.gradle`, `settings.gradle.kts`, `*.csproj` | One tracked manifest per directory contributes a project, unless that directory is already a declared root. |
-| `include`   | `["**"]`                                                                                                                                  | Glob, matched with `path.posix.matchesGlob`.                                                                |
-| `exclude`   | `["**/docs/**", "**/fixtures/**", "**/__fixtures__/**"]`                                                                                  | Same matcher.                                                                                               |
+| field                   | default (when the key is present but this field is not)                                                                                   | meaning                                                                                                                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `manifests`             | `project.json`, `package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `pom.xml`, `settings.gradle`, `settings.gradle.kts`, `*.csproj` | One tracked manifest per directory contributes a project, unless that directory is already a declared root.                                                                |
+| `include`               | `["**"]`                                                                                                                                  | Glob, matched with `path.posix.matchesGlob`.                                                                                                                               |
+| `exclude`               | `["**/docs/**", "**/fixtures/**", "**/__fixtures__/**"]`                                                                                  | Same matcher.                                                                                                                                                              |
+| `excludeBeyondDefaults` | `[]`                                                                                                                                      | Extra patterns merged into the effective exclude set (the defaults or an explicit `exclude`), so a workspace extends rather than restates the default guard. Same matcher. |
 
 `manifests: []` or `include: []` is rejected outright rather than accepted as
 "match nothing" -- an empty list here reads as "infer zero projects," which is
@@ -61,6 +62,12 @@ the deliberate guard. It names three whole path segments -- `docs`, `fixtures`,
 - **An explicit list replaces the default** (the `tsconfig` convention for the
   same field). A workspace naming its own `exclude` takes over the whole
   decision -- `exclude: []` is the documented opt-out and means it.
+- **`excludeBeyondDefaults` extends the effective set** without restating the
+  defaults: a workspace with `testdata/` or `golden/` directories names them
+  here rather than copying the three default patterns by hand. The merge is
+  additive -- `excludeBeyondDefaults` patterns join whatever `exclude` resolves
+  to (the defaults when `exclude` is absent, the explicit list when it is
+  present) -- so the two fields never conflict.
 
 The exclusion is not a silent hole, by construction:
 

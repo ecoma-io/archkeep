@@ -298,6 +298,86 @@ describe("discoverNativeProjects", () => {
       });
       expect(projects.map((p) => p.root).sort()).toEqual(["my-docs/tool", "test-fixtures/go-lib"]);
     });
+
+    // `testdata/` is NOT in the default set — a manifest there anchors a
+    // project by default. This is the baseline the extension feature builds
+    // on: a workspace that calls its fixture directories `testdata/` sees a
+    // phantom until it extends the guard.
+    it("anchors a project on testdata/ by default — the name is not in the default set", () => {
+      const model = modelOf({ projects: { declared: [], infer: {} } });
+      const { projects } = discoverNativeProjects({
+        root: "/repo",
+        files: ["libs/a/testdata/fixture/package.json"],
+        readFile: filesOf({
+          "libs/a/testdata/fixture/package.json": JSON.stringify({ name: "test-phantom" }),
+        }),
+        model,
+      });
+      expect(projects.map((p) => p.root)).toEqual(["libs/a/testdata/fixture"]);
+    });
+
+    // The extension surface: `excludeBeyondDefaults` adds patterns to the
+    // default set without restating it, so a workspace with `testdata/`
+    // directories can guard them without copying the three defaults by hand.
+    it("does not anchor a project on testdata/ when excludeBeyondDefaults lists it", () => {
+      const model = modelOf({
+        projects: {
+          declared: [{ root: "apps/a" }],
+          infer: { excludeBeyondDefaults: ["**/testdata/**"] },
+        },
+      });
+      const { projects } = discoverNativeProjects({
+        root: "/repo",
+        files: [
+          "apps/a/x.go",
+          "libs/a/testdata/fixture/package.json",
+          // The defaults still apply alongside the extras.
+          "docs/fixtures/example/package.json",
+        ],
+        readFile: filesOf({
+          "libs/a/testdata/fixture/package.json": JSON.stringify({ name: "test-phantom" }),
+          "docs/fixtures/example/package.json": JSON.stringify({ name: "docs-phantom" }),
+        }),
+        model,
+      });
+      expect(projects.map((p) => p.root)).toEqual(["apps/a"]);
+    });
+
+    // Silent-direction guard: if the merge between `excludeBeyondDefaults`
+    // and the defaults stopped working, the testdata manifest would anchor a
+    // phantom project again — the same silent false-positive #371 closed.
+    // `projects.declared` is still exempt (the test above already pins that
+    // the default set does not eat declarations; the same applies here).
+    it("leaves a testdata fixture's analyzable files as loud unclaimed coverage, not silently owned", () => {
+      const model = modelOf({
+        projects: {
+          declared: [{ root: "apps/a" }],
+          infer: { excludeBeyondDefaults: ["**/testdata/**"] },
+        },
+      });
+      const { projects } = discoverNativeProjects({
+        root: "/repo",
+        files: [
+          "apps/a/x.go",
+          "libs/a/testdata/fixture/package.json",
+          "libs/a/testdata/fixture/main.go",
+        ],
+        readFile: filesOf({
+          "libs/a/testdata/fixture/package.json": JSON.stringify({ name: "test-phantom" }),
+        }),
+        model,
+      });
+      expect(projects.map((p) => p.root)).toEqual(["apps/a"]);
+      const rootByFile = (file) => projects.find((p) => file.startsWith(`${p.root}/`))?.root;
+      const coverage = judgeCoverage({
+        files: ["libs/a/testdata/fixture/main.go"],
+        projectOf: rootByFile,
+        exempt: [],
+      });
+      expect(coverage.unclaimed).toEqual(["libs/a/testdata/fixture/main.go"]);
+      expect(coverage.failures).toHaveLength(1);
+      expect(coverage.failures[0].sourceFile).toBe("libs/a/testdata/fixture/main.go");
+    });
   });
 
   describe("name collisions", () => {
