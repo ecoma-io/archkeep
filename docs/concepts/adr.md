@@ -158,6 +158,53 @@ from the enforceable layer to the decision it leans on; an ADR never creates a
 rule and never produces a boundary verdict itself, and needs no verdict to
 exist — a missing verdict is a reason to check the boundary law, not the ADR.
 
+## The boundary: a decision records, a constraint enforces
+
+The four questions a governance workspace has to answer keep the layers apart:
+
+- **WHY** — the decision, recorded in `docs/adr/`. Context, rationale,
+  alternatives, consequences.
+- **WHAT MUST REMAIN TRUE** — the enforceable layer: `depConstraints` rows,
+  `architecture-intent.json` rows, fitness rules. This is where a rule exists
+  and where a rule is enforced.
+- **HOW DO WE KNOW** — the evidence the engine computes from the tree: import
+  sites, findings, coverage. A verdict derives from constraint-row findings,
+  never from a record's `status`.
+- **IS IT STILL TRUE** — decision fitness: whether the constraints a decision
+  binds actually hold today. This is the descriptive half, never a rule
+  author.
+
+An ADR must never become a rule DSL. The decision says _why_; the constraint
+row says _what must remain true_; `decisionRef` is the pointer from the
+enforceable row back to the decision it leans on, and `bindings` is the
+decision's own list of what it makes enforceable. The two-way correspondence
+is a fact about the workspace, not a rule the token invents, and one side never
+substitutes for the other: a decision with no executable constraint is not a
+failing boundary — it is an `unverifiable` decision.
+
+Decision fitness is the vocabulary for the fourth question, computed from the
+bound constraints' verdicts (see
+[fitness-functions.md](fitness-functions.md) and
+[usage/fitness.md](../usage/fitness.md)):
+
+- `enforced` — at least one bound constraint resolved and passed.
+- `partially-enforced` — some resolved and passed, some not.
+- `violated` — a bound constraint resolved and failed: **red**.
+- `unverifiable` — no bound constraint could be resolved or evaluated: **red,
+  never healthy**.
+- `not_applicable` — no authority (`proposed`/`superseded`/`retired`), so not
+  measured.
+
+"No violation" is **not** the same as "healthy". A decision whose binding
+matches no enforceable row reads `unverifiable`, never `enforced` — a clean
+boundary and an unverifiable decision can hold in the same workspace, and the
+fitness level is where the second shows up rather than being mistaken for a
+verdict on the first. A `violated` decision fails only through the constraint
+rows it binds: fitness is descriptive, and in this wave it changes no exit
+code — the exit code still comes from the constraint rows' verdicts, never
+from a decision's `status`. `packages/archkeep/src/governance/decision-fitness.mjs`
+owns the computation.
+
 See [reference/adr.md](../reference/adr.md) for the `adr` command's report
 shapes, the JSON envelope, and the exit codes, and
 [usage/adr.md](../usage/adr.md) for running it.

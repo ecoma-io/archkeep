@@ -42,11 +42,15 @@ import { languageOf } from "../analysis/registry.mjs";
 import { MESSAGE_IDS } from "../rules/messages.mjs";
 import { ARCHITECTURE_CORPUS, OUT_OF_REACH } from "./corpus.mjs";
 import {
+  BOUNDARY_CONFIG_FILE,
+  DECISION_RECORD_CREATED,
   DENY_ALL_CONFIG_FILE,
   DENY_ALL_TAG,
   assertDenyAllTagIsUnclaimed,
+  decisionGovernanceViolations,
   materializeCase,
   removeCaseRoot,
+  renderAdrRecord,
 } from "./corpus-fixture.mjs";
 import {
   compareFindings,
@@ -109,6 +113,38 @@ describe("the corpus's own shape", () => {
       }
     }
     expect(wrong).toEqual([]);
+  });
+
+  it("carries only the decision governance it can render", () => {
+    // §3P fields: `decisions` on the case, `decisionRef` on a depConstraints
+    // row. Every one must be renderable — a decision the builder cannot
+    // translate into a loadable docs/adr/ record, a row citing a decision the
+    // case never declares, or a declared file shadowing a record the builder
+    // writes for `decisions`, would otherwise be dropped or overwritten in
+    // silence. The guard refuses them loudly; the loud-direction half below
+    // proves it still refuses the shapes it exists for.
+    const violations = ARCHITECTURE_CORPUS.flatMap((spec) => decisionGovernanceViolations(spec));
+    expect(violations, "cases with decision governance this fixture cannot render").toEqual([]);
+
+    expect(
+      decisionGovernanceViolations({
+        id: "a-row-citing-an-undeclared-decision",
+        projects: [],
+        depConstraints: [{ sourceTag: "tier:core", decisionRef: "9999-never-declared" }],
+        probes: [],
+        files: {},
+      }),
+    ).not.toEqual([]);
+    expect(
+      decisionGovernanceViolations({
+        id: "a-decision-with-a-bad-slug",
+        projects: [],
+        depConstraints: [],
+        decisions: [{ slug: "boundary-layering", status: "active", bindings: [] }],
+        probes: [],
+        files: {},
+      }),
+    ).not.toEqual([]);
   });
 
   it("never declares the tag the deny-all policy relies on being unclaimed", () => {
@@ -282,6 +318,80 @@ describe("the comparison this suite is built on", () => {
     expect(projectOwning(spec, "libs/outer/src/a.go")).toBe("outer");
     expect(projectOwning(spec, "libs/outer/nested/b.go")).toBe("inner");
     expect(projectOwning(spec, "elsewhere/c.go")).toBe(null);
+  });
+});
+
+describe("the fixture builder renders decision governance (§3P)", () => {
+  // The builder's own red directions, isolated from the per-case loop below —
+  // a builder that silently dropped a decision record or a row's decisionRef
+  // would leave every decision-governed case green on a tree the resolver
+  // never saw, which is exactly the silent direction this suite exists to make
+  // loud.
+  const governed = {
+    id: "governance-render-check",
+    projects: [{ name: "go-core", root: "libs/go-core", tags: ["tier:core"] }],
+    depConstraints: [
+      {
+        sourceTag: "tier:core",
+        onlyDependOnLibsWithTags: ["tier:core"],
+        decisionRef: "0007-boundary-layering",
+      },
+    ],
+    decisions: [{ slug: "0007-boundary-layering", status: "active", bindings: ["core-isolation"] }],
+    probes: [],
+    files: { "libs/go-core/core.go": "package core\n\nvar Core = 1\n" },
+  };
+
+  it("writes one docs/adr/ record per declared decision, tracked with the fixture", () => {
+    let root;
+    try {
+      const fixture = materializeCase(governed);
+      root = fixture.root;
+      const read = readFrom(root);
+      // The record must be byte-identical every run — committed, deterministic
+      // frontmatter the registry's strict dialect loads without complaint.
+      expect(read("docs/adr/0007-boundary-layering.md")).toBe(
+        "---\nid: 0007-boundary-layering\nstatus: active\n" +
+          `created: ${DECISION_RECORD_CREATED}\n` +
+          "bindings:\n  - core-isolation\n---\n\n# 0007-boundary-layering\n",
+      );
+      // And it must be in the written list, so the checker's registry reads it
+      // as tracked rather than as a directory entry it must ignore.
+      expect(fixture.files).toContain("docs/adr/0007-boundary-layering.md");
+    } finally {
+      if (root) removeCaseRoot(root);
+    }
+  });
+
+  it("carries a row's decisionRef through the rendered policy module", () => {
+    let root;
+    try {
+      const fixture = materializeCase(governed);
+      root = fixture.root;
+      const read = readFrom(root);
+      expect(read(BOUNDARY_CONFIG_FILE)).toContain('"decisionRef": "0007-boundary-layering"');
+    } finally {
+      if (root) removeCaseRoot(root);
+    }
+  });
+
+  it("refuses a case whose files shadow the records it declares", () => {
+    const shadowing = {
+      ...governed,
+      id: "governance-shadow-check",
+      files: { "docs/adr/0007-boundary-layering.md": "a case that writes its own record\n" },
+    };
+    // Refused before anything is created, exactly like the scaffolding shadow
+    // check — a case that supplied its own docs/adr/ bytes would overwrite the
+    // builder's record AFTER it was written.
+    expect(() => materializeCase(shadowing)).toThrow(/docs\/adr/u);
+  });
+
+  it("turns a valid record into the exact documented frontmatter bytes", () => {
+    expect(renderAdrRecord("0010-a-superseding-record", "active", [])).toBe(
+      `---\nid: 0010-a-superseding-record\nstatus: active\ncreated: ${DECISION_RECORD_CREATED}\n` +
+        "bindings:\n---\n\n# 0010-a-superseding-record\n",
+    );
   });
 });
 

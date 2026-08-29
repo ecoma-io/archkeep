@@ -40,6 +40,15 @@
  * }
  * ```
  *
+ * A case may also declare `decisions?: [{slug, status, bindings,
+ * supersedes?}]` — one record the fixture builder writes into `docs/adr/` per
+ * entry (§3P) — and a `depConstraints` row may carry `decisionRef: <slug>`
+ * naming one of them; the builder's verbatim policy serializer passes it
+ * through to the rendered module, where the checker's decision-resolution
+ * pass reads the declared records. A decision is documentation — it never
+ * creates a rule, and the boundary verdict still comes only from the
+ * `depConstraints` rows (see `docs/concepts/adr.md`).
+ *
  * ## What a probe states, and why it takes three numbers rather than one
  *
  * - **`reports`** — the exact findings this file must produce under the
@@ -2000,6 +2009,481 @@ export const ARCHITECTURE_CORPUS = [
         ],
         denyAll: 1,
         why: "A project no constraint row matches is an error, not a permission — C#'s content-derived namespace index attributes the file first, then the rule judges it like any other language's.",
+      },
+    ],
+  },
+
+  // --------------------------------------------------- decision-governed (Go)
+  {
+    id: "decision-bound-constraint-enforced",
+    style: "decision-governed — the bound constraint holds",
+    languages: ["go"],
+    intent:
+      "The decision-aware form of a bare boundary: row A is `decisionRef`-bound to a decision " +
+      "record, and the BOUND constraint is enforced. Because the corpus's shape guard requires a " +
+      "positive probe, a whole-tree `clean` verdict is inexpressible — so the 'enforced' claim is " +
+      "proven where enforcement lives: the bound row's own project (`go-core`) has no crossing " +
+      "(probe 1), a site a crossing would enter is denyAll-visible (probe 2), and the tree's one " +
+      "violation (probe 3, an outward sibling reach) is judged by the UNBOUND row B, not by the " +
+      "bound decision's row. The pair to `decision-bound-constraint-violated` shows the same row " +
+      "firing when its subject reaches outward. A regression that silently dropped the bound row " +
+      "or its record would read exactly like a regression in the analyzer: probes 1 and 2 go quiet " +
+      "the same way a near-miss probe does.",
+    projects: [
+      { name: "go-core", root: "libs/go-core", tags: ["tier:core"] },
+      { name: "go-service", root: "libs/go-service", tags: ["tier:service"] },
+      { name: "go-depot", root: "libs/go-depot", tags: ["tier:depot"] },
+    ],
+    depConstraints: [
+      {
+        sourceTag: "tier:core",
+        onlyDependOnLibsWithTags: ["tier:core"],
+        decisionRef: "0007-boundary-layering",
+      },
+      { sourceTag: "tier:service", onlyDependOnLibsWithTags: ["tier:core", "tier:service"] },
+    ],
+    decisions: [{ slug: "0007-boundary-layering", status: "active", bindings: ["core-isolation"] }],
+    files: {
+      "libs/go-core/go.mod": "module example.test/go-core\n\ngo 1.24\n",
+      "libs/go-core/core.go":
+        "// Package core is the bound constraint's own project.\npackage core\n\nvar Core = 1\n",
+      "libs/go-service/go.mod": "module example.test/go-service\n\ngo 1.24\n",
+      "libs/go-service/service.go":
+        'package service\n\nimport "example.test/go-core"\n\nvar Service = core.Core\n',
+      "libs/go-service/tooling.go":
+        'package service\n\nimport "example.test/go-depot"\n\nvar Tooling = depot.Depot\n',
+      "libs/go-depot/go.mod": "module example.test/go-depot\n\ngo 1.24\n",
+      "libs/go-depot/depot.go": "package depot\n\nvar Depot = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/go-core/core.go",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why: "The bound constraint's own subject imports nothing — under its decision's row `tier:core` may only reach `tier:core`, and nothing else claims that tag. Its compliance is the absence of a crossing, made visible as a measurement by the import count and the pair to the violated case.",
+      },
+      {
+        file: "libs/go-service/service.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "An inward import of the core project, judged by the UNBOUND row B — the site a crossing into the bound project would enter is denyAll-visible here, so the bound row's silence is a verdict about policy, not about an engine that stopped reading.",
+      },
+      {
+        file: "libs/go-service/tooling.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/go-depot",
+            target: "go-depot",
+          },
+        ],
+        denyAll: 1,
+        why: "An outward reach into `go-depot`, judged by the UNBOUND row B — `tier:service` may only reach core and service, so a `tier:depot` target is a violation. This is the tree's one positive: it keeps the corpus's positive-probe budget while every BOUND row stays silent (enforced).",
+      },
+    ],
+  },
+  {
+    id: "decision-bound-constraint-violated",
+    style: "decision-governed — the bound constraint is violated",
+    languages: ["go"],
+    intent:
+      "The pair to `decision-bound-constraint-enforced`, and the half that makes its 'enforced' " +
+      "claim an assertion rather than a trust: the SAME bound row, with its own subject reaching " +
+      "outward through a newly added `go-core` import of `go-depot`. Now the bound decision's " +
+      "what-must-remain-true is false — the finding is present (probe 4), and the decision's " +
+      "fitness is `violated` (asserted at the fitness level in `decision-fitness.test.mjs`, not " +
+      "restated here). The first three probes are unchanged: enforcement is per-row, so the same " +
+      "tree that proves row A fires on violation also still proves row B's allowance holds.",
+    projects: [
+      { name: "go-core", root: "libs/go-core", tags: ["tier:core"] },
+      { name: "go-service", root: "libs/go-service", tags: ["tier:service"] },
+      { name: "go-depot", root: "libs/go-depot", tags: ["tier:depot"] },
+    ],
+    depConstraints: [
+      {
+        sourceTag: "tier:core",
+        onlyDependOnLibsWithTags: ["tier:core"],
+        decisionRef: "0007-boundary-layering",
+      },
+      { sourceTag: "tier:service", onlyDependOnLibsWithTags: ["tier:core", "tier:service"] },
+    ],
+    decisions: [{ slug: "0007-boundary-layering", status: "active", bindings: ["core-isolation"] }],
+    files: {
+      "libs/go-core/go.mod": "module example.test/go-core\n\ngo 1.24\n",
+      "libs/go-core/core.go":
+        "// Package core is the bound constraint's own project.\npackage core\n\nvar Core = 1\n",
+      "libs/go-core/leak.go":
+        'package core\n\nimport "example.test/go-depot"\n\nvar Leak = depot.Depot\n',
+      "libs/go-service/go.mod": "module example.test/go-service\n\ngo 1.24\n",
+      "libs/go-service/service.go":
+        'package service\n\nimport "example.test/go-core"\n\nvar Service = core.Core\n',
+      "libs/go-service/tooling.go":
+        'package service\n\nimport "example.test/go-depot"\n\nvar Tooling = depot.Depot\n',
+      "libs/go-depot/go.mod": "module example.test/go-depot\n\ngo 1.24\n",
+      "libs/go-depot/depot.go": "package depot\n\nvar Depot = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/go-core/core.go",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why: "The bound constraint's own subject imports nothing — this probe is unchanged from the enforced pair, isolating the violation to the new crossing below.",
+      },
+      {
+        file: "libs/go-service/service.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "An inward import of the core project, still judged by the UNBOUND row B — the allowance holds even while the bound row fires elsewhere.",
+      },
+      {
+        file: "libs/go-service/tooling.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/go-depot",
+            target: "go-depot",
+          },
+        ],
+        denyAll: 1,
+        why: "The outward reach under the UNBOUND row, unchanged — `tier:service` may not reach `tier:depot`, so the corpus's pairing keeps the violated case's positive-probe budget honest alongside the new violation.",
+      },
+      {
+        file: "libs/go-core/leak.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/go-depot",
+            target: "go-depot",
+          },
+        ],
+        denyAll: 1,
+        why: "The BOUND row's own subject reaches outward into `go-depot` — the decision's what-must-remain-true is false, and the finding is the evidence the fitness level (`violated`) reads.",
+      },
+    ],
+  },
+  {
+    id: "decision-superseded-constraint-enforced",
+    style: "decision-governed — a superseded decision still enforces",
+    languages: ["go"],
+    intent:
+      "A record the registry has put out of authority — `0007-boundary-layering` is `superseded`, " +
+      "with `0009-current-boundary` succeeding it (`supersedes`) — while row A still cites the " +
+      "SUPERSEDED record by `decisionRef`. The boundary verdict must not differ from the enforced " +
+      "case: a superseded DECISION is a registry fact (`superseded` is a status, and resolution " +
+      "still answers the citation), not a change to the constraint table it once bound. This is " +
+      "the fixture the registry's lineage rules exist to keep loadable — a superseded record " +
+      "needs an authoritative successor, and that successor's `supersedes` is exactly what makes " +
+      "the case renderable. A regression that let a superseded record's citation go unresolved — " +
+      "or that refused the whole tree because one row points at an out-of-authority decision — " +
+      "goes red here in the silent direction.",
+    projects: [
+      { name: "go-core", root: "libs/go-core", tags: ["tier:core"] },
+      { name: "go-service", root: "libs/go-service", tags: ["tier:service"] },
+      { name: "go-depot", root: "libs/go-depot", tags: ["tier:depot"] },
+    ],
+    depConstraints: [
+      {
+        sourceTag: "tier:core",
+        onlyDependOnLibsWithTags: ["tier:core"],
+        decisionRef: "0007-boundary-layering",
+      },
+      { sourceTag: "tier:service", onlyDependOnLibsWithTags: ["tier:core", "tier:service"] },
+    ],
+    decisions: [
+      {
+        slug: "0007-boundary-layering",
+        status: "superseded",
+        bindings: ["core-isolation"],
+      },
+      {
+        slug: "0009-current-boundary",
+        status: "active",
+        bindings: [],
+        supersedes: ["0007-boundary-layering"],
+      },
+    ],
+    files: {
+      "libs/go-core/go.mod": "module example.test/go-core\n\ngo 1.24\n",
+      "libs/go-core/core.go":
+        "// Package core is the bound constraint's own project.\npackage core\n\nvar Core = 1\n",
+      "libs/go-service/go.mod": "module example.test/go-service\n\ngo 1.24\n",
+      "libs/go-service/service.go":
+        'package service\n\nimport "example.test/go-core"\n\nvar Service = core.Core\n',
+      "libs/go-service/tooling.go":
+        'package service\n\nimport "example.test/go-depot"\n\nvar Tooling = depot.Depot\n',
+      "libs/go-depot/go.mod": "module example.test/go-depot\n\ngo 1.24\n",
+      "libs/go-depot/depot.go": "package depot\n\nvar Depot = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/go-core/core.go",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why: "The superseded record's row is enforced exactly as the active one's is — a decision's status never changes what its constraint row enforces.",
+      },
+      {
+        file: "libs/go-service/service.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The inward import under the UNBOUND row, denyAll-visible so the bound row's silence stays a measured verdict.",
+      },
+      {
+        file: "libs/go-service/tooling.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/go-depot",
+            target: "go-depot",
+          },
+        ],
+        denyAll: 1,
+        why: "The corpus's positive under the UNBOUND row — the supersession is documentation, and the verdicts that derive from probes do not move because a record's authority did.",
+      },
+    ],
+  },
+  {
+    id: "decision-without-executable-constraint",
+    style: "decision-governed — a decision with nothing to bind",
+    languages: ["go"],
+    intent:
+      "A record that claims to make a constraint enforceable that no `depConstraints` row exists " +
+      "to carry: `0008-recorded-not-bound` binds `missing-constraint-id`, and the only row leaning " +
+      "on it (A) enforces `tier:core` regardless. The boundary verdict is unchanged from the " +
+      "enforced case — a decision is documentation, and it never creates a rule — so the probes " +
+      "are byte-identical. What is different is at the FITNESS layer, not the boundary one: a " +
+      "decision whose binding resolves to no executable constraint reads `unverifiable`, and " +
+      "`unverifiable` is red and never healthy (`decision-fitness.test.mjs` asserts it). This case " +
+      "is the fixture that lets that claim have a boundary half: the same workspace that keeps its " +
+      "boundary verdict must not pretend the dangling decision is enforced.",
+    projects: [
+      { name: "go-core", root: "libs/go-core", tags: ["tier:core"] },
+      { name: "go-service", root: "libs/go-service", tags: ["tier:service"] },
+      { name: "go-depot", root: "libs/go-depot", tags: ["tier:depot"] },
+    ],
+    depConstraints: [
+      {
+        sourceTag: "tier:core",
+        onlyDependOnLibsWithTags: ["tier:core"],
+        decisionRef: "0008-recorded-not-bound",
+      },
+      { sourceTag: "tier:service", onlyDependOnLibsWithTags: ["tier:core", "tier:service"] },
+    ],
+    decisions: [
+      { slug: "0008-recorded-not-bound", status: "active", bindings: ["missing-constraint-id"] },
+    ],
+    files: {
+      "libs/go-core/go.mod": "module example.test/go-core\n\ngo 1.24\n",
+      "libs/go-core/core.go":
+        "// Package core is the bound constraint's own project.\npackage core\n\nvar Core = 1\n",
+      "libs/go-service/go.mod": "module example.test/go-service\n\ngo 1.24\n",
+      "libs/go-service/service.go":
+        'package service\n\nimport "example.test/go-core"\n\nvar Service = core.Core\n',
+      "libs/go-service/tooling.go":
+        'package service\n\nimport "example.test/go-depot"\n\nvar Tooling = depot.Depot\n',
+      "libs/go-depot/go.mod": "module example.test/go-depot\n\ngo 1.24\n",
+      "libs/go-depot/depot.go": "package depot\n\nvar Depot = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/go-core/core.go",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why: "The constraint rows still enforce — the decision's dangling binding changes nothing at the boundary, which is exactly the point the case makes.",
+      },
+      {
+        file: "libs/go-service/service.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The inward import under the UNBOUND row, denyAll-visible — enforcement is still measured.",
+      },
+      {
+        file: "libs/go-service/tooling.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/go-depot",
+            target: "go-depot",
+          },
+        ],
+        denyAll: 1,
+        why: "The corpus's positive under the UNBOUND row — the boundary verdict is unchanged even though the decision's own binding is unverifiable.",
+      },
+    ],
+  },
+  {
+    id: "decision-multiple-constraints",
+    style: "decision-governed — one decision, several constraints",
+    languages: ["go"],
+    intent:
+      "One decision record binding TWO constraint ids — `0007-two-constraints` binds " +
+      "`core-isolation` and `service-tether` — with both bound rows (`tier:core` and " +
+      "`tier:service`) citing the same decision by `decisionRef`. The one-to-many direction of " +
+      "`bindings`: the case asserts both of the decision's constraints are enforced (probes 1 and " +
+      "2, the two bound projects), that a reach allowed under a bound row stays silent (probe 3, " +
+      "a `tier:service` sibling), and that an unbound row's violation is the corpus's positive " +
+      "(probe 4, `tier:edge` reaching into `tier:service`). The two-way correspondence is the " +
+      "fixture's evidence that a single decision can lean on more than one row and still have " +
+      "each of them run.",
+    projects: [
+      { name: "go-core", root: "libs/go-core", tags: ["tier:core"] },
+      { name: "go-service", root: "libs/go-service", tags: ["tier:service"] },
+      { name: "go-tool", root: "libs/go-tool", tags: ["tier:service"] },
+      { name: "go-ui", root: "libs/go-ui", tags: ["tier:edge"] },
+    ],
+    depConstraints: [
+      {
+        sourceTag: "tier:core",
+        onlyDependOnLibsWithTags: ["tier:core"],
+        decisionRef: "0007-two-constraints",
+      },
+      {
+        sourceTag: "tier:service",
+        onlyDependOnLibsWithTags: ["tier:core", "tier:service"],
+        decisionRef: "0007-two-constraints",
+      },
+      { sourceTag: "tier:edge", onlyDependOnLibsWithTags: ["tier:edge"] },
+    ],
+    decisions: [
+      {
+        slug: "0007-two-constraints",
+        status: "active",
+        bindings: ["core-isolation", "service-tether"],
+      },
+    ],
+    files: {
+      "libs/go-core/go.mod": "module example.test/go-core\n\ngo 1.24\n",
+      "libs/go-core/core.go":
+        "// Package core is the bound constraint's own project.\npackage core\n\nvar Core = 1\n",
+      "libs/go-service/go.mod": "module example.test/go-service\n\ngo 1.24\n",
+      "libs/go-service/service.go":
+        'package service\n\nimport "example.test/go-core"\n\nvar Service = core.Core\n',
+      "libs/go-service/tooling.go":
+        'package service\n\nimport "example.test/go-tool"\n\nvar Tooling = tool.Wire\n',
+      "libs/go-tool/go.mod": "module example.test/go-tool\n\ngo 1.24\n",
+      "libs/go-tool/tool.go": "package tool\n\nvar Wire = 1\n",
+      "libs/go-ui/go.mod": "module example.test/go-ui\n\ngo 1.24\n",
+      "libs/go-ui/ui.go":
+        'package ui\n\nimport "example.test/go-service"\n\nvar UI = service.Service\n',
+    },
+    probes: [
+      {
+        file: "libs/go-core/core.go",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why: "The first of the decision's two bound rows — `tier:core` may only reach `tier:core`, and its subject imports nothing.",
+      },
+      {
+        file: "libs/go-service/service.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The decision's SECOND bound row enforcing its inward import — both of `0007-two-constraints`'s bindings run, and the site is denyAll-visible so the silence is measured.",
+      },
+      {
+        file: "libs/go-service/tooling.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "A reach between two `tier:service` projects, allowed by the decision's second binding — a bound row's allowance stays silent.",
+      },
+      {
+        file: "libs/go-ui/ui.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/go-service",
+            target: "go-service",
+          },
+        ],
+        denyAll: 1,
+        why: "An unbound row's violation — `tier:edge` reaches into `tier:service`, outside the decision's two bindings; the corpus's positive probe comes from the row the decision does not own.",
+      },
+    ],
+  },
+  {
+    id: "decision-one-constraint-multiple-decisions",
+    style: "decision-governed — several decisions, one constraint",
+    languages: ["go"],
+    intent:
+      "The many-to-one direction, the pair to `decision-multiple-constraints`: TWO active decisions — " +
+      "`0007-first-decision` and `0008-second-decision` — bind the SAME constraint id " +
+      "(`core-isolation`), and row A cites `0007-first-decision` by `decisionRef`. The case " +
+      "documents that both records name the same executable row — the correspondence is " +
+      "two-way, binding id to row — and asserts the check is unchanged: an extra record leaning " +
+      "on the same constraint must not move any verdict (probes identical to the enforced case). " +
+      "This is the fixture that keeps the registry honest about duplicates tightening nothing " +
+      "and about a resolution answering to the row the case actually cites.",
+    projects: [
+      { name: "go-core", root: "libs/go-core", tags: ["tier:core"] },
+      { name: "go-service", root: "libs/go-service", tags: ["tier:service"] },
+      { name: "go-depot", root: "libs/go-depot", tags: ["tier:depot"] },
+    ],
+    depConstraints: [
+      {
+        sourceTag: "tier:core",
+        onlyDependOnLibsWithTags: ["tier:core"],
+        decisionRef: "0007-first-decision",
+      },
+      { sourceTag: "tier:service", onlyDependOnLibsWithTags: ["tier:core", "tier:service"] },
+    ],
+    decisions: [
+      { slug: "0007-first-decision", status: "active", bindings: ["core-isolation"] },
+      { slug: "0008-second-decision", status: "active", bindings: ["core-isolation"] },
+    ],
+    files: {
+      "libs/go-core/go.mod": "module example.test/go-core\n\ngo 1.24\n",
+      "libs/go-core/core.go":
+        "// Package core is the bound constraint's own project.\npackage core\n\nvar Core = 1\n",
+      "libs/go-service/go.mod": "module example.test/go-service\n\ngo 1.24\n",
+      "libs/go-service/service.go":
+        'package service\n\nimport "example.test/go-core"\n\nvar Service = core.Core\n',
+      "libs/go-service/tooling.go":
+        'package service\n\nimport "example.test/go-depot"\n\nvar Tooling = depot.Depot\n',
+      "libs/go-depot/go.mod": "module example.test/go-depot\n\ngo 1.24\n",
+      "libs/go-depot/depot.go": "package depot\n\nvar Depot = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/go-core/core.go",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why: "The shared bound constraint's subject imports nothing — the second decision leaning on the same id changes no verdict.",
+      },
+      {
+        file: "libs/go-service/service.go",
+        imports: 1,
+        reports: [],
+        denyAll: 1,
+        why: "The inward import under the UNBOUND row, denyAll-visible — enforcement is still measured with two records naming one constraint.",
+      },
+      {
+        file: "libs/go-service/tooling.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/go-depot",
+            target: "go-depot",
+          },
+        ],
+        denyAll: 1,
+        why: "The corpus's positive under the UNBOUND row — duplicates bind documentation, never the boundary's verdicts.",
       },
     ],
   },
