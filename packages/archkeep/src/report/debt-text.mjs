@@ -41,8 +41,12 @@ function sanitize(text) {
  *
  * @param {{ledger: {dir: string, snapshots: number, agings: boolean,
  *   sampleTime: string, entries: {source: string, kind: string,
+ *   severity: string, age: number, count: number, remediationHint: string,
+ *   id: string, status: string, introducedBy?: string}[],
+ *   resolved?: {id: string, status: string, resolvedBy: string, kind: string,
  *   severity: string, age: number, count: number, remediationHint: string}[],
- *   total: number, byKind: object, bySeverity: object},
+ *   total: number, byKind: object, bySeverity: object,
+ *   lifecycle?: {linked: boolean, note: string|null}},
  *   coverage: object}} input
  * @returns {string}
  */
@@ -76,6 +80,12 @@ export function formatDebtReport({ ledger, coverage }) {
         `  [${entry.kind}] ${entry.severity}  ${sanitize(entry.source)}  (${age}, count ${entry.count})`,
       );
       sections.push(`    ${sanitize(entry.remediationHint)}`);
+      // The lifecycle fields (design §6) ride the entry as appended lines only;
+      // every existing line above keeps its exact bytes. When no event store is
+      // linked, the id/status are still printed (they are facts about the entry,
+      // always determinable); refs are printed only when actually present.
+      sections.push(`    id ${entry.id} · status ${entry.status}`);
+      if (entry.introducedBy) sections.push(`    introducedBy ${entry.introducedBy}`);
     }
   }
 
@@ -83,6 +93,24 @@ export function formatDebtReport({ ledger, coverage }) {
     sections.push(
       "✔ no architecture debt — no waivers, aspirational gaps, drift or unresolved intent",
     );
+  }
+
+  // The resolved surface (design §6): debt whose candidate fact is gone at
+  // head AND closed by evidence (a REPAIR event). Entries are retained — the
+  // history is never deleted — but they are no longer current findings. This
+  // list is empty (and no line is printed) when no event store is linked or
+  // nothing has been resolved.
+  const resolved = ledger.resolved ?? [];
+  if (resolved.length > 0) {
+    sections.push(`${resolved.length} resolved (no longer current findings):`);
+    for (const entry of resolved) {
+      sections.push(`  [${entry.kind}] ${entry.severity}  id ${entry.id}`);
+      sections.push(`    ${sanitize(entry.remediationHint)}`);
+      if (entry.resolvedBy) sections.push(`    resolvedBy ${entry.resolvedBy}`);
+    }
+  }
+  if (ledger.lifecycle?.note) {
+    sections.push(ledger.lifecycle.note);
   }
 
   sections.push(

@@ -77,6 +77,10 @@
  * never as an empty ledger.
  */
 
+import { createHash } from "node:crypto";
+
+import { canonicalizeJson } from "../canonical.mjs";
+
 import { referenceTime as clockReferenceTime } from "./clock.mjs";
 import { EXPIRED_WAIVER_EVIDENCE, suppressionFate } from "./waiver.mjs";
 
@@ -118,7 +122,50 @@ function owningProjectForPath(path, byName) {
       bestRoot = root;
     }
   }
+
   return best;
+}
+
+/**
+ * The stable identity of a debt entry: `sha256` of its canonical `{kind,
+ * source}` — the same mechanism `eventId` uses for evolution events (one
+ * pattern, one canonicalizer), never the wall clock, a sequence or a random.
+ * The same fact must always hash to the same id; any caller that emits these
+ * ids into an evolution event's `debt.introduced`/`debt.resolved` MUST use
+ * this exact identity, or the event-linked lifecycle will never match the
+ * ledger.
+ *
+ * `expired-waiver` maps back to `waiver`: it is the SAME accepted violation,
+ * and its id must not change when its `expiresAt` passes — a fact's identity
+ * cannot depend on a transient state.
+ *
+ * @param {string} kind The entry's `kind`.
+ * @param {string} source The entry's `source` (its keying field).
+ * @returns {string} The stable hex id.
+ */
+function entryId(kind, source) {
+  const semanticKind = kind === "expired-waiver" ? "waiver" : kind;
+  return createHash("sha256")
+    .update(canonicalizeJson({ kind: semanticKind, source }))
+    .digest("hex");
+}
+
+/**
+ * Reduces an `opts.events` value to a loaded event array, or `null` when no
+ * event store is linked. Accepts an already-loaded array or a
+ * `{ getEvents(dir) }`-shaped reader (design §4). `null` means "not linked":
+ * no `introducedBy`/`resolvedBy` is ever guessed.
+ *
+ * @param {{events?: object[]|{getEvents?: (dir?: string) => object[]},
+ *   eventsDir?: string}} opts
+ * @returns {object[]|null}
+ */
+function loadEvents(opts) {
+  if (!opts.events) return null;
+  if (Array.isArray(opts.events)) return opts.events;
+  if (typeof opts.events.getEvents === "function")
+    return opts.events.getEvents(opts.eventsDir) ?? [];
+  return null;
 }
 
 /**
@@ -137,11 +184,20 @@ function owningProjectForPath(path, byName) {
  *   gaps), `findings` (drift), and `unresolved`.
  * @param {{files: {name: string, envelope: object, id: string}[]}} snapshots
  *   From `readSnapshots(dir)`, in history order.
- * @param {{referenceTime?: number|string}} [opts]
+ * @param {{referenceTime?: number|string, events?: object[]|{getEvents?: (dir?: string) => object[]},
+ *   eventsDir?: string}} [opts] `events` links an event store (design §4): an
+ *   already-loaded array of evolution events, or a `{ getEvents(dir) }`-shaped
+ *   reader. Absent ⇒ no `introducedBy`/`resolvedBy` is ever set and a
+ *   `lifecycle.note` states the refs are unavailable — refs are never guessed.
  * @returns {{entries: {source: string, kind: string, severity: string,
- *   age: number, count: number, remediationHint: string}[],
+ *   age: number, count: number, remediationHint: string, id: string,
+ *   status: "active", introducedBy?: string}[],
+ *   resolved: {id: string, status: "resolved", resolvedBy: string,
+ *   kind: string, severity: string, age: number, count: number,
+ *   remediationHint: string}[],
  *   total: number, byKind: object, bySeverity: object, agings: boolean,
- *   sampleTime: string}}
+ *   sampleTime: string,
+ *   lifecycle: {linked: boolean, note: string|null}}}
  */
 export function computeDebtLedger(current, snapshots, opts = {}) {
   const referenceTime = opts.referenceTime ?? clockReferenceTime();
@@ -167,7 +223,7 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
 
   const byName = headProjects(files);
 
-  /** @type {{source: string, kind: string, severity: string, age: number, count: number, remediationHint: string}[]} */
+  /** @type {{source: string, kind: string, severity: string, age: number, count: number, remediationHint: string, id: string, status: "active", introducedBy?: string}[]} */
   const entries = [];
 
   for (const suppression of current.suppressions ?? []) {
@@ -179,12 +235,15 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
     // suppression (no `expiresAt`) is `suppress`: still low and permanent.
     const fate = suppressionFate(suppression, sampleTime);
     const expired = fate === "reassert";
+    const kind = expired ? "expired-waiver" : "waiver";
     entries.push({
       source: suppression.path,
-      kind: expired ? "expired-waiver" : "waiver",
+      kind,
       severity: expired ? "medium" : "low",
       age: project ? ageOf(project) : 0,
       count: 1,
+      id: entryId(kind, suppression.path),
+      status: "active",
       remediationHint: expired
         ? `the waiver at '${suppression.path}' expired — the boundary it accepted is live again (${EXPIRED_WAIVER_EVIDENCE}); renew it or retire it`
         : `the accepted violation at '${suppression.path}' is still suppressed — ` +
@@ -198,6 +257,8 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
       severity: "low",
       age: 0,
       count: 1,
+      id: entryId("aspirational-gap", note),
+      status: "active",
       remediationHint:
         "an optional allowed row is not yet built — either build it or remove the row",
     });
@@ -217,12 +278,15 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
   for (const finding of current.findings ?? []) {
     const project = typeof finding.source === "string" ? finding.source : null;
     const waiverFailed = project !== null && waiverProjects.has(project);
+    const driftSource = finding.source ?? finding.message;
     entries.push({
-      source: finding.source ?? finding.message,
+      source: driftSource,
       kind: "drift",
       severity: waiverFailed ? "high" : "medium",
       age: project ? ageOf(project) : 0,
       count: 1,
+      id: entryId("drift", driftSource),
+      status: "active",
       remediationHint: waiverFailed
         ? `this drift finding is in a project with an accepted waiver — the accepted violation is failing again, resolve it or remove the waiver`
         : "a dependency the intent forbids (or allows but is not built) — resolve the contradiction",
@@ -235,6 +299,8 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
       severity: "unknown",
       age: 0,
       count: 1,
+      id: entryId("unresolved", unresolved.boundary),
+      status: "active",
       remediationHint:
         "an intent boundary matched no observed project — the intent cannot be verified",
     });
@@ -270,5 +336,73 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
     if (entry.severity !== "unknown") bySeverity[entry.severity] += 1;
   }
 
-  return { entries, total: entries.length, byKind, bySeverity, agings, sampleTime };
+  // The lifecycle surface (design §6): every active entry carries a stable id
+  // and `status: "active"`. When an event store is linked, REPAIR events name
+  // the debt they closed (`debt.resolved`) and introduction events name what
+  // they opened (`debt.introduced`); the closure is only accepted when the
+  // candidate fact is NOT still active at head (an id that came back is not
+  // resolved). Without a linked store, `resolved` stays empty and no ref is
+  // ever fabricated — the note states the refs are unavailable instead.
+  const events = loadEvents(opts);
+  const activeIds = new Set(entries.map((entry) => entry.id));
+  /** @type {{id: string, status: "resolved", resolvedBy: string, kind: string, severity: string, age: number, count: number, remediationHint: string}[]} */
+  const resolved = [];
+  const lifecycle = { linked: events !== null, note: null };
+
+  if (events === null) {
+    lifecycle.note = "no event store linked — lifecycle refs unavailable";
+  } else {
+    /** @type {Map<string, string>} id → the first event that introduced it. */
+    const introducedByForId = new Map();
+    /** @type {Set<string>} debt ids already placed on the resolved list. */
+    const resolvedSeen = new Set();
+    for (const event of events) {
+      // The store validates that every event carries a string id, but the
+      // reader shape is loosely typed — coerce so the ref string is always a
+      // real string, never a fabricated one.
+      const eventId = typeof event?.id === "string" ? event.id : "";
+      for (const debtId of event?.debt?.introduced ?? []) {
+        if (typeof debtId === "string" && !introducedByForId.has(debtId)) {
+          introducedByForId.set(debtId, eventId);
+        }
+      }
+      const repairs = Array.isArray(event?.classifications)
+        ? event.classifications.includes("REPAIR")
+        : false;
+      if (!repairs) continue;
+      for (const debtId of event?.debt?.resolved ?? []) {
+        // Closure is only real when the candidate fact is gone at head; a
+        // debt id still active is not resolved (closed then re-opened).
+        if (typeof debtId !== "string" || activeIds.has(debtId) || resolvedSeen.has(debtId))
+          continue;
+        resolvedSeen.add(debtId);
+        resolved.push({
+          id: debtId,
+          status: "resolved",
+          resolvedBy: eventId,
+          kind: "debt",
+          severity: "unknown",
+          age: 0,
+          count: 1,
+          remediationHint: `closed by evolution event '${eventId}' — the underlying violation is no longer a current finding`,
+        });
+      }
+    }
+    for (const entry of entries) {
+      const introducedBy = introducedByForId.get(entry.id);
+      if (introducedBy !== undefined) entry.introducedBy = introducedBy;
+    }
+  }
+  resolved.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  return {
+    entries,
+    resolved,
+    total: entries.length,
+    byKind,
+    bySeverity,
+    agings,
+    sampleTime,
+    lifecycle,
+  };
 }

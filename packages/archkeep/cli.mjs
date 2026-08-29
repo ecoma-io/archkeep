@@ -2098,7 +2098,7 @@ async function runEvolution(options, { cwd, env }) {
  * consumer-managed directory `history` reads, so a ledger ages across the
  * same snapshots the evolution record is built from.
  *
- * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{format: string, output: string|null, config: string|null, events: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -2126,7 +2126,10 @@ async function runDebt(options, { cwd, env }) {
     // profile-selected workspace resolves the same way `check` does.
     const { config } = await resolvePolicy(options, commandContext, cwd);
 
-    result = await debtCommand(dir, commandContext, { config });
+    result = await debtCommand(dir, commandContext, {
+      config,
+      events: options.events,
+    });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -2981,6 +2984,15 @@ const DEBT_FLAG_HELP = Object.freeze([
           : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
+  Object.freeze({
+    flag: "--events",
+    key: "events",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Link the evolution event store in <dir> so debt entries carry",
+      "introducedBy/resolvedBy refs and a resolved list",
+    ]),
+  }),
 ]);
 
 /**
@@ -3367,7 +3379,6 @@ const COMMANDS = Object.freeze({
     flagHelp: REPORT_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(REPORT_FLAG_HELP.map((f) => [f.flag, f.key]))),
     defaults: Object.freeze({ format: "text", output: null, config: null }),
-    formats: DESCRIBABLE_FORMATS,
     run: runReport,
   }),
   debt: Object.freeze({
@@ -3376,7 +3387,7 @@ const COMMANDS = Object.freeze({
     summary: "Print the architecture-debt ledger across snapshots",
     flagHelp: DEBT_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(DEBT_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    defaults: Object.freeze({ format: "text", output: null, config: null, events: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runDebt,
   }),
