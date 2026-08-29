@@ -18,7 +18,10 @@
  * `../commands/delta.mjs` pushes there — fold into the report as their own
  * lines, so a note that rides the JSON envelope also reaches the terminal.
  *
- * This module decides nothing. A formatter that filtered would be a rule
+ * The wave-3 additive block — `classifications` and `affected` — is appended
+ * after every existing line (and only when the payload carries the fields), so
+ * a payload that predates them renders exactly what it always did. This module
+ * decides nothing. A formatter that filtered would be a rule
  * wearing a formatter's name (`./README.md`).
  */
 
@@ -257,6 +260,38 @@ export function formatDeltaReport({ delta, coverage }) {
     sections.push(
       `⚠ ${count} introduced custom finding${count === 1 ? "" : "s"} — custom findings have ` +
         `no waiver lane, every one gates`,
+    );
+  }
+  // The wave-3 additive block: the evolution classification and its affected
+  // identities, appended after every existing line so an older report's lines
+  // stay byte-identical. Rendered only when the payload carries the fields —
+  // a payload that predates them renders exactly what it always did. An empty
+  // classification list is not silence here: the closing claims above already
+  // state what was compared, and `classifications  none` says plainly that no
+  // class applies.
+  if (delta.classifications !== undefined) {
+    sections.push(
+      `classifications  ${
+        delta.classifications.length === 0 ? "none" : delta.classifications.join(", ")
+      }`,
+    );
+  }
+  if (delta.affected !== undefined) {
+    const affectedParts = [];
+    if (delta.affected.projects.length > 0) {
+      affectedParts.push(`projects: ${delta.affected.projects.join(", ")}`);
+    }
+    if (delta.affected.boundaries.length > 0) {
+      affectedParts.push(`boundaries: ${delta.affected.boundaries.join(", ")}`);
+    }
+    if (delta.affected.constraints.length > 0) {
+      affectedParts.push(`constraints: ${delta.affected.constraints.join(", ")}`);
+    }
+    if (delta.affected.decisions.length > 0) {
+      affectedParts.push(`decisions: ${delta.affected.decisions.join(", ")}`);
+    }
+    sections.push(
+      `affected         ${affectedParts.length === 0 ? "none" : affectedParts.join(" · ")}`,
     );
   }
 

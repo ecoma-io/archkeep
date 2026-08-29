@@ -931,12 +931,8 @@ async function runDiff(options, { cwd, env }) {
  *
  * `--capture` writes the evidence snapshot a later run compares against;
  * `delta <baseline>` loads one, re-judges both sides under the current law,
- * and folds the classification into the exit code — the one descriptive-family
- * verb beside `check` and `fitness` whose verdict carries exit 1
- * (`./src/commands/delta.mjs` owns the fold).
- *
  * @param {{format: string, output: string|null, config: string|null, capture: boolean,
- *   paths: string[]}} options
+ *   eventOut: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -945,6 +941,13 @@ async function runDelta(options, { cwd, env }) {
     if (options.paths.length !== 0) {
       env.err(
         `archkeep: delta --capture takes no positional arguments; got ${options.paths.join(", ")}`,
+      );
+      return EXIT.usage;
+    }
+    if (options.eventOut !== null) {
+      env.err(
+        `archkeep: delta --capture does not take --event-out — an event records a transition, ` +
+          `and a capture is one side of it`,
       );
       return EXIT.usage;
     }
@@ -972,7 +975,6 @@ async function runDelta(options, { cwd, env }) {
       const { text } = captureDelta(commandContext, { config });
       if (options.output) {
         // Atomic, symlink-safe write — `writeOutputReport`'s own docstring
-        // owns the mechanism and the threat it closes.
         if (!writeOutputReport(options.output, text, env, cwd, options.config)) return EXIT.error;
         env.err(`archkeep: delta baseline captured → ${options.output}`);
       } else {
@@ -985,7 +987,10 @@ async function runDelta(options, { cwd, env }) {
     const baselinePath = isAbsolute(options.paths[0])
       ? resolve(options.paths[0])
       : resolve(cwd, options.paths[0]);
-    result = await deltaCommand(baselinePath, commandContext, { config });
+    result = await deltaCommand(baselinePath, commandContext, {
+      config,
+      eventOut: options.eventOut,
+    });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -1007,6 +1012,18 @@ async function runDelta(options, { cwd, env }) {
     env.err(`archkeep: delta complete → ${options.output}`);
   } else {
     env.out(report);
+  }
+
+  // The event the run recorded, when `--event-out` was given — the store's
+  // own `duplicate` answer, so a rerun over the same transition says so
+  // instead of implying a second event was appended. Capture mode refuses the
+  // flag upstream; this line runs only for a compare.
+  if (result.eventWrite !== null) {
+    env.err(
+      `archkeep: evolution event ${
+        result.eventWrite.duplicate ? "duplicate, already recorded" : "recorded"
+      } → ${options.eventOut}`,
+    );
   }
 
   // The exit fold `deltaCommand` computed: a non-waived introduced violation
@@ -2545,6 +2562,17 @@ const DELTA_FLAG_HELP = Object.freeze([
           : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
+  Object.freeze({
+    flag: "--event-out",
+    key: "eventOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Append the delta's evolution event to this directory",
+      "(one canonical record per transition; idempotent — a",
+      "rerun over the same transition writes nothing new).",
+      "Absent: no event file is written",
+    ]),
+  }),
 ]);
 
 /**
@@ -3286,7 +3314,13 @@ const COMMANDS = Object.freeze({
     summary: "Classify how boundary violations moved between a captured baseline and head",
     flagHelp: DELTA_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(DELTA_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, config: null, capture: false }),
+    defaults: Object.freeze({
+      format: "text",
+      output: null,
+      config: null,
+      capture: false,
+      eventOut: null,
+    }),
     formats: DELTA_FORMATS,
     booleans: Object.freeze(["capture"]),
     run: runDelta,
