@@ -75,27 +75,27 @@ stable 1.0, and the later maturity beyond them.
 
 ## Concepts
 
-| page                                                        | what it answers                                                                        |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| [architecture.md](concepts/architecture.md)                 | The engine, three faces, layer split — technology-neutral                              |
-| [graph.md](concepts/graph.md)                               | Project graph, edge identity, deterministic snapshots                                  |
-| [boundaries.md](concepts/boundaries.md)                     | Layer/scope/license axes, constraint model, tag semantics, what "violation" is         |
-| [policies.md](concepts/policies.md)                         | Three dialects, one table, stability contract                                          |
-| [profiles.md](concepts/profiles.md)                         | Named law profiles: why they exist, precedence, and what is loud                       |
-| [projects.md](concepts/projects.md)                         | What a project is, discovery, naming                                                   |
-| [drift.md](concepts/drift.md)                               | The four drift signals Archkeep detects, and which command surfaces each               |
-| [governance-lifecycle.md](concepts/governance-lifecycle.md) | Why the commands exist as a system: intent → check → evidence → evolution → agent      |
-| [discovery.md](concepts/discovery.md)                       | The proposal-only line, the observed side, the four candidate classes                  |
-| [health.md](concepts/health.md)                             | What "architecture health" means, and the invariant behind every metric                |
-| [evidence.md](concepts/evidence.md)                         | The one verdict vocabulary every judgment speaks, and the evidence each state requires |
-| [provenance.md](concepts/provenance.md)                     | The origin record, why `on` is optional, and why provenance never rules                |
-| [adr.md](concepts/adr.md)                                   | Architecture decision records: the filename identity, the strict dialect, the refusals |
-| [waivers.md](concepts/waivers.md)                           | Temporary acceptance of a boundary breach, the lifecycle, and the deadline             |
-| [fitness-functions.md](concepts/fitness-functions.md)       | Named quality gates — the verdict contract and what each condition judges              |
-| [custom-rules.md](concepts/custom-rules.md)                 | A workspace's own wasm rules: one seam, evidence in, verdict out, and the refusals     |
-| [reconciliation.md](concepts/reconciliation.md)             | The inverse of drift: the model scored element by element, and proposed repairs        |
-| [agentic-development.md](concepts/agentic-development.md)   | The three questions an agent asks, and the commands that answer them                   |
-| [integrations.md](concepts/integrations.md)                 | How integrations extend the core                                                       |
+| page                                                        | what it answers                                                                                 |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [architecture.md](concepts/architecture.md)                 | The engine, three faces, layer split — technology-neutral                                       |
+| [graph.md](concepts/graph.md)                               | Project graph, edge identity, deterministic snapshots                                           |
+| [boundaries.md](concepts/boundaries.md)                     | Layer/scope/license axes, constraint model, tag semantics, what "violation" is                  |
+| [policies.md](concepts/policies.md)                         | Three dialects, one table, stability contract                                                   |
+| [profiles.md](concepts/profiles.md)                         | Named law profiles: why they exist, precedence, and what is loud                                |
+| [projects.md](concepts/projects.md)                         | What a project is, discovery, naming                                                            |
+| [drift.md](concepts/drift.md)                               | The four drift signals Archkeep detects, and which command surfaces each                        |
+| [governance-lifecycle.md](concepts/governance-lifecycle.md) | Why the commands exist as a system: intent → check → evidence → evolution → agent               |
+| [discovery.md](concepts/discovery.md)                       | The proposal-only line, the observed side, the four candidate classes                           |
+| [health.md](concepts/health.md)                             | What "architecture health" means, and the invariant behind every metric                         |
+| [evidence.md](concepts/evidence.md)                         | The one verdict vocabulary every judgment speaks, and the evidence each state requires          |
+| [provenance.md](concepts/provenance.md)                     | The origin record, the decision lifecycle, why `on` is optional, and why provenance never rules |
+| [adr.md](concepts/adr.md)                                   | Architecture decision records: the filename identity, the strict dialect, the refusals          |
+| [waivers.md](concepts/waivers.md)                           | Temporary acceptance of a boundary breach, the lifecycle, and the deadline                      |
+| [fitness-functions.md](concepts/fitness-functions.md)       | Named quality gates — the verdict contract and what each condition judges                       |
+| [custom-rules.md](concepts/custom-rules.md)                 | A workspace's own wasm rules: one seam, evidence in, verdict out, and the refusals              |
+| [reconciliation.md](concepts/reconciliation.md)             | The inverse of drift: the model scored element by element, and proposed repairs                 |
+| [agentic-development.md](concepts/agentic-development.md)   | The three questions an agent asks, and the commands that answer them                            |
+| [integrations.md](concepts/integrations.md)                 | How integrations extend the core                                                                |
 
 ## Usage
 
@@ -105,7 +105,7 @@ stable 1.0, and the later maturity beyond them.
 | [checking.md](usage/checking.md)               | Running the check, scoped runs, formats, exit codes                                        |
 | [profiles.md](usage/profiles.md)               | Enforcing a named profile: the option, `--config`, loud failures                           |
 | [presets.md](usage/presets.md)                 | The six shipped policy packs, the tags each expects, and how to adopt one                  |
-| [provenance.md](usage/provenance.md)           | The `provenance` command: governance row schema and run origin                             |
+| [provenance.md](usage/provenance.md)           | The `provenance` command: governance row schema, the decision lifecycle, and run origin    |
 | [graph.md](usage/graph.md)                     | The `graph` command: deterministic snapshot of the project graph                           |
 | [diff.md](usage/diff.md)                       | The `diff` command: two graph snapshots compared, with rule-impact analysis                |
 | [delta.md](usage/delta.md)                     | The `delta` command: violations classified between a captured baseline and head            |

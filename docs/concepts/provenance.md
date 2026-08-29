@@ -5,9 +5,9 @@ on packages, a boundary that `packages` must never reach `extensions`, a
 project that is required to exist. Provenance is the answer to "who decided
 that, with what tool, and when?" — and its absence is a finding, never a shrug.
 
-## The two halves
+## The three questions
 
-`archkeep provenance` answers two questions, descriptively:
+`archkeep provenance` answers three questions, descriptively:
 
 1. **Repository provenance** — the git commit, remote, and dirty state of the
    tree this run judged. A verdict about code is only as trustworthy as the
@@ -18,6 +18,11 @@ that, with what tool, and when?" — and its absence is a finding, never a shrug
    and with what tool. A row without an origin is indistinguishable from a rule
    that appeared by editing the file directly, so the command flags it
    `no origin recorded — cannot attest` rather than reading it as attested.
+3. **Decision-lifecycle provenance** — for every recorded decision in the
+   workspace's ADR registry, who recorded its current state: the creator and
+   latest author of its ADR file, the decisions it supersedes or is superseded
+   by, and the boundary tags it binds. A decision with no attributable history
+   is flagged `no origin recorded — cannot attest`, never silently passed.
 
 Provenance is **descriptive**, like `graph` and `diff`: it never changes a
 verdict, and it never exits 1. Its finding is about documentation, not about the
@@ -79,6 +84,58 @@ committed bytes: reading it needs no clock, never touches the wall clock, and
 is byte-identical across every read. `archkeep provenance` reads origins; it
 does not write them. If a workspace wants fresh rows to carry `on`, the tool
 that writes those rows does so through the clock, not this command.
+
+## The decision lifecycle
+
+`archkeep provenance` also answers who recorded a decision's **lifecycle** —
+the third and fourth questions of the surface: not just "who decided this
+rule, with what tool, when?" but "who recorded that this decision changed, and
+which decisions replaced which?" The lifecycle is the current state of every
+recorded decision in the workspace's ADR registry, attributed and descriptive:
+
+- **created** — the author of the first commit that touched the decision's
+  ADR file.
+- **updated** — the author of the latest commit that touched it.
+- **supersedes / superseded by** — the replacement links between decisions,
+  read from the committed records themselves.
+- **bindings** — the boundary tags the decision commits to, its committed list.
+
+Attribution is a **committed static fact**, the same discipline as reading a
+committed `origin`: `created` and `updated` come from `git log` over the
+decision's ADR file — first commit names `created`, last commit names
+`updated`, the `tool` is `git`, and `on` is the committed author date, read,
+never produced. No wall clock enters, so the read is byte-identical across
+every run.
+
+A decision whose ADR file was never committed, or a workspace that is not a
+repository at all, has no attributable history. That decision renders under a
+cannot-attest heading — `no origin recorded — cannot attest` — exactly like a
+governance row without an origin. A missing author is never silently read as
+an attested one.
+
+The lifecycle is read-only evidence: it reports committed facts about
+decisions, and it never judges them. No verdict is computed, so no verdict can
+change. A supersession is attributed to the recorder of the **superseding**
+decision — the `supersedes` link lives in the superseder's committed bytes —
+while the superseded decision's own last change names the person who set its
+status.
+
+Wave 2 attributes the **current state** of each decision. The full event
+history — every transition a decision passed through, each with its own
+recorder — is a later wave; this surface reads the ADR files as they are
+committed today, not an event log.
+
+## The lifecycle write surface
+
+The read surface's counterpart is the module-level write surface,
+`recordDecisionLifecycle` in
+`packages/archkeep/src/governance/provenance-record.mjs`. It records one
+lifecycle event — a `status-transition` (`from`/`to`), a `supersession` (the
+decisions it replaces), or a `bindings-change` (`added`/`removed`) — into an
+origin-carrying record built through the same injected clock and the same loud
+refusals as a row's `origin`. The engine commands never call it; it exists for
+the tooling that writes decision records, and it is what a later wave's event
+log will append from.
 
 ## Validation is loud
 

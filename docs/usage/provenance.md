@@ -7,7 +7,7 @@ archkeep provenance
 archkeep provenance --format json
 ```
 
-`provenance` answers two questions, descriptively:
+`provenance` answers the workspace's provenance questions, descriptively:
 
 1. **Repository provenance** — the git commit, remote, and dirty state of the
    tree this run judged. A verdict about code is only as trustworthy as the
@@ -17,10 +17,11 @@ archkeep provenance --format json
    whether the row carries an `origin` block naming who decided it and with
    what tool. A row without an origin is flagged `no origin recorded — cannot
 attest` rather than read as attested.
-
-Provenance is descriptive: it never changes a verdict, and it never exits 1.
-Its finding is about documentation, not about the architecture — a row that
-changes the architecture still changes it, attested or not.
+3. **Decision lifecycle** — for every recorded ADR decision, who recorded its
+   current state: the creator and latest author of the decision's file, the
+   decisions it supersedes and is superseded by, and the boundary tags it
+   binds. A decision without an attributable history is named
+   `no origin recorded — cannot attest`, never silently passed.
 
 ## What the report contains
 
@@ -48,6 +49,25 @@ cannot attest` if it does not
 
 Rows are walked in the same order the judge counts them, so the output is
 deterministic across runs.
+
+### Decision lifecycle
+
+For every decision recorded in the workspace's ADR registry (`docs/adr/`):
+
+- **Status and authority** — the decision's committed state (`active`,
+  `superseded`, …) and whether that state is authoritative
+- **Created / updated** — the author of the first and latest commits that
+  touched the decision's ADR file, with the committed author date (`tool:
+git`; the date is read from the commit, never produced by the run)
+- **Supersedes / superseded by** — which decisions this one replaced and which
+  replaced it, read from the committed records
+- **Bindings** — the boundary tags the decision commits to
+- **Attribution** — `attested` when the file's git history names its creators,
+  `no origin recorded — cannot attest` when it does not (not a repository, or
+  the file was never committed)
+
+The lifecycle is read-only evidence about committed records: it never judges a
+decision, so no verdict can change.
 
 ## Exit codes
 
