@@ -428,19 +428,25 @@ will see in CI:
 
 ### Which branch a change lands on
 
-There is one development line, `main`, and from the 1.0.0-rc.1 candidate
-onward it holds one contract. A pull request keeps it: bug fixes, security
-fixes, documentation and test improvements, performance work, and additive
-features — additive meaning the contract's surface only grows. What "keeps
-the contract" covers — APIs, CLI, configuration, output shapes, exit codes,
-and the _meaning_ of all of them — is defined in
-[AGENTS.md](AGENTS.md#the-compatibility-contract), and an agent classifies
-its change against that gate before implementing.
+There is one development line, `main`. The release line is 0.x until the
+[readiness conditions](docs/doctrine/roadmap.md#what-10-waits-for-and-how-each-condition-is-read)
+hold and the maintainer names the next release candidate — a `feat:` moves
+the minor, a `fix:` the patch, and a minor may carry a behavior change,
+named in the changelog; that is the ordinary 0.x contract. The 2026-08-28
+candidates are parked behind that line (maintainer decision, 2026-08-29,
+recorded in #473). From that candidate onward `main` holds one contract: a
+pull request keeps it — bug fixes, security fixes, documentation and test
+improvements, performance work, and additive features — additive meaning
+the contract's surface only grows. What "keeps the contract" covers — APIs,
+CLI, configuration, output shapes, exit codes, and the _meaning_ of all of
+them — is defined in [AGENTS.md](AGENTS.md#the-compatibility-contract), and
+an agent classifies its change against that gate before implementing.
 
-A maintainer can explicitly authorize a change that breaks the contract —
-that is an exception, made in the open on the pull request, never inferred
-from a missing test or a missing sentence. It is how a future major would
-ever arrive; it is not a queue, and it is not the ordinary path.
+On the candidate line, a maintainer can still explicitly authorize a change
+that breaks the contract — that is an exception, made in the open on the
+pull request, never inferred from a missing test or a missing sentence. It
+is how a future major would ever arrive; it is not a queue, and it is not
+the ordinary path.
 
 ## How a release happens
 
@@ -470,9 +476,9 @@ Two details that are easy to trip over:
   footer on any commit between the current tag and the next release forces
   exactly that version once — the strategy reads the newest such note and
   returns it verbatim, so the run after it computes normally again. This is
-  how the 1.0.0-rc.1 candidate and the stable 1.0.0 that graduates from it
-  are named.
-  [docs/development/release.md](docs/development/release.md#release-stages-the-100-rc1-candidate)
+  how the 0.16.0 return to the 0.x line, each release candidate, and the
+  stable 1.0.0 that graduates from one are named.
+  [docs/development/release.md](docs/development/release.md#release-stages-the-0x-line-and-the-parked-candidate)
   owns the stages; the `prerelease: true` configuration key flags the GitHub
   release accordingly with nothing to remove after graduation.
 

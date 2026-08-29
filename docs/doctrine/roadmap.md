@@ -216,10 +216,12 @@ Almost everything the foundation needs is already implemented and listed
 above. What remains before a **stable 1.0** is hardening of the proof, not a
 new feature list — one item, and it is evidence rather than code:
 
-Stable 1.0 is approached through a release candidate: `1.0.0-rc.1` proposes
-this contract as it stands; the conditions below decide when the same contract
-stops being a candidate and becomes the version that holds.
-[docs/development/release.md](../development/release.md#release-stages-the-100-rc1-candidate)
+Stable 1.0 is approached through a release candidate, named by one
+`Release-As:` commit when the conditions below read met — the 2026-08-28
+candidates are parked and the release line returned to 0.x in the interim
+(maintainer decision, 2026-08-29). The conditions below decide when the
+contract stops being a candidate and becomes the version that holds.
+[docs/development/release.md](../development/release.md#release-stages-the-0x-line-and-the-parked-candidate)
 owns the mechanics.
 
 - **Breadth of conformance evidence.** The differential against
