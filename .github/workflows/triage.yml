@@ -1,0 +1,40 @@
+name: Triage
+
+# Automated issue triage: classify newly opened issues and apply semantic
+# labels drawn from the label sheet declared in the default branch.
+# The action reads the issue through the API, never from the working tree.
+#
+# `dry-run` defaults to true in the action, so the first run on this
+# repository only logs its decisions. Flip it to false after verifying the
+# labels and classification are as expected.
+
+on:
+  issues:
+    types: [opened]
+
+permissions: read-all
+
+concurrency:
+  group: triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - uses: ecoma-io/action-agents/triage@9206c30557e450e11016f8600cea9639a6205c1a # v0.4.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
+          api-key: ${{ secrets.ECOMA_LLM_API_KEY }}
+          model: triage
+          dry-run: "true"
