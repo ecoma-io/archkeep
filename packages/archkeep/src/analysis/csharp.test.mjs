@@ -144,6 +144,20 @@ describe("parseCSharpDirectiveSites", () => {
     expect(parseCSharpDirectiveSites(source)).toEqual([]);
   });
 
+  it("never reads a using DECLARATION with an initializer as a directive (#469)", () => {
+    const source = [
+      "class C",
+      "{",
+      "    void M()",
+      "    {",
+      '        using var writer = new StringWriter() { NewLine = "\\n" };',
+      '        using Dictionary<string, int> map = new Dictionary<string, int> { ["a"] = 1 };',
+      "    }",
+      "}",
+    ].join("\n");
+    expect(parseCSharpDirectiveSites(source)).toEqual([]);
+  });
+
   it("does not read directives inside comments or string literals", () => {
     const source = [
       "// using Fake.Commented;",
@@ -388,6 +402,61 @@ describe("csharpDirectiveMalformations", () => {
     expect(csharpDirectiveMalformations("using (var s = f())\n{\n    s.Read();\n}")).toEqual([]);
   });
 
+  it("does not flag a using declaration whose initializer `{` follows its `=` (#469)", () => {
+    const repro = [
+      "namespace Emit",
+      "{",
+      "    public class E",
+      "    {",
+      "        public void M()",
+      "        {",
+      '            using var writer = new StringWriter() { NewLine = "\\n" };',
+      '            using Dictionary<string, int> map = new Dictionary<string, int> { ["a"] = 1 };',
+      "        }",
+      "    }",
+      "}",
+      "",
+    ].join("\n");
+    expect(csharpDirectiveMalformations(repro)).toEqual([]);
+  });
+
+  it("does not flag an Allman-formatted declaration whose initializer brace lands on the next line", () => {
+    const source = [
+      "void M()",
+      "{",
+      "    using var writer = new StringWriter()",
+      "    {",
+      '        NewLine = "\\n"',
+      "    };",
+      "}",
+      "",
+    ].join("\n");
+    expect(csharpDirectiveMalformations(source)).toEqual([]);
+  });
+
+  it("still flags the truncation when statement forms share the file — the `=` marker is not a silence switch", () => {
+    const truncated = ["using var s = Open();", "using Shop.Domain", "class C { }", ""].join("\n");
+    const reasons = csharpDirectiveMalformations(truncated);
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/line 2\)$/);
+  });
+
+  it("still flags an alias whose `=` arrives but whose `;` never does", () => {
+    // Both truncations: EOF, and a later construct's `{` — the alias's own
+    // `=` must not read as that brace's initializer and go silent (the first
+    // #469 cut did exactly that).
+    const reasons = csharpDirectiveMalformations("using Pair = (int, string)");
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/never reaches its `;`/);
+    const beforeBrace = csharpDirectiveMalformations("using Pair = (int, string)\nclass C { }");
+    expect(beforeBrace).toHaveLength(1);
+    expect(beforeBrace[0]).toMatch(/line 1\)$/);
+  });
+
+  it("holds no opinion on a statement whose initializer opens but never closes — the documented silence", () => {
+    expect(csharpDirectiveMalformations("using var w = new StringWriter() {")).toEqual([]);
+  });
+
   it("does not flag directive-shaped text inside strings, raw strings, or comments", () => {
     const template = [
       "// using Shop.Domain",
@@ -422,6 +491,33 @@ describe("analyzeCSharp — #419 whole-file failure", () => {
     expect(failures[0].line).toBe(null);
     expect(failures[0].column).toBe(null);
     expect(failures[0].reason).toMatch(/never reaches its `;`/);
+  });
+
+  it("analyzes the #469 repro clean while its real directive still resolves", () => {
+    const text = [
+      "using System.IO;",
+      "",
+      "namespace Emit",
+      "{",
+      "    public class E",
+      "    {",
+      "        public void M()",
+      "        {",
+      '            using var writer = new StringWriter() { NewLine = "\\n" };',
+      "        }",
+      "    }",
+      "}",
+      "",
+    ].join("\n");
+    const { imports, failures } = analyzeCSharp({
+      sourceFile: "libs/shop/app/Service.cs",
+      text,
+      workspace: WORKSPACE,
+    });
+    expect(failures).toEqual([]);
+    expect(imports).toHaveLength(1);
+    expect(imports[0].specifier).toBe("System.IO");
+    expect(imports[0].resolved?.external).toBe(true);
   });
 
   it("records no malformation failure for a file whose directives read fully", () => {
