@@ -7,7 +7,7 @@
  * shape `./text.mjs` uses for violations. Everything after it is indented,
  * so the position line stands alone.
  *
- * Seven things are printed, each with a reader in mind:
+ * Eight things are printed, each with a reader in mind:
  *
  * - the import specifier and its kind (what was written)
  * - the source project and its tags (who wrote it)
@@ -19,6 +19,11 @@
  *   and a remediation line that is the author's declared guidance verbatim —
  *   or, when none is declared, an explicit pointer at the constraint row and
  *   its `decisionRef`, never a fix this renderer composed
+ * - for a matched row carrying a `decisionRef`: the governing decision's
+ *   status and authority, its context/rationale prose, and its supersession
+ *   lineage — or, when the ref or the registry cannot be resolved, a loud
+ *   UNRESOLVED line naming the reason (an empty result here would read as
+ *   "no decision behind this row", which is a different claim)
  * - coverage information (whether this explanation is complete)
  *
  * This module decides nothing. A formatter that filtered would be a rule
@@ -84,6 +89,69 @@ function formatMatchedConstraint(constraint) {
   return formatConstraint(constraint);
 }
 
+/**
+ * The status line for one governing decision: `id  (status — authority)`.
+ *
+ * @param {object} entry A resolved `"adr"` chain entry.
+ * @returns {string}
+ */
+function decisionStatusLine(entry) {
+  const authority = entry.authority ? " — has authority" : " — no authority";
+  return `${DETAIL}decision     ${entry.record.id}  (${entry.record.status}${authority})`;
+}
+
+/**
+ * The first non-empty line of a prose field, trimmed to a display width.
+ * The excerpt is a pointer, never a paraphrase — a reader who needs the whole
+ * context opens the ADR.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function proseExcerpt(text) {
+  const first = text.split("\n").find((line) => line.trim() !== "") ?? "";
+  const trimmed = first.trim();
+  return trimmed.length > 120 ? `${trimmed.slice(0, 117)}…` : trimmed;
+}
+
+/**
+ * One decision-chain entry as report lines. The chain never renders blank:
+ * a ref the registry cannot resolve, and a ref that cannot be read at all,
+ * both render as UNRESOLVED naming the reason (AGENTS.md: "an empty result
+ * is a claim, not a shrug").
+ *
+ * @param {object} entry One `explanation.decisions` entry.
+ * @returns {string[]}
+ */
+function formatDecisionEntry(entry) {
+  if (entry.resolution === "unknown") {
+    return [`${DETAIL}decisionRef  ${entry.ref} (UNRESOLVED — ${entry.reason})`];
+  }
+  if (entry.resolution === "fitness") {
+    return [`${DETAIL}decisionRef  ${entry.ref} — a fitness rule this law declares`];
+  }
+  const lines = [decisionStatusLine(entry)];
+  if (typeof entry.record.context === "string") {
+    lines.push(`${DETAIL}context      ${proseExcerpt(entry.record.context)}`);
+  }
+  if (typeof entry.record.rationale === "string") {
+    lines.push(`${DETAIL}rationale    ${proseExcerpt(entry.record.rationale)}`);
+  }
+  const supersedes = Array.isArray(entry.record.supersedes) ? entry.record.supersedes : [];
+  const supersededBy = Array.isArray(entry.record.supersededBy) ? entry.record.supersededBy : [];
+  if (supersedes.length > 0 || supersededBy.length > 0) {
+    const parts = [];
+    if (supersedes.length > 0) parts.push(`supersedes: ${supersedes.join(", ")}`);
+    if (supersededBy.length > 0) parts.push(`superseded by: ${supersededBy.join(", ")}`);
+    lines.push(`${DETAIL}lineage      ${parts.join(" · ")}`);
+  } else {
+    lines.push(`${DETAIL}lineage      none — no supersession chain is recorded for this decision`);
+  }
+  for (const gap of entry.lineage?.unresolved ?? []) {
+    lines.push(`${DETAIL}lineage      UNRESOLVED — ${gap.reason}`);
+  }
+  return lines;
+}
 /**
  * The whole explain report.
  *
@@ -164,6 +232,14 @@ export function formatExplainReport({ explanation, coverage }) {
       }
     } else {
       sections.push(`${DETAIL}verdict      allowed — no constraint was violated`);
+    }
+
+    // The "why does this constraint exist" chain — one block per governing
+    // decision the matched rows name. Additive: an explanation whose rows
+    // carry no `decisionRef` has no `decisions` list, and renders exactly as
+    // it did before this section existed.
+    for (const entry of explanation.decisions ?? []) {
+      sections.push(...formatDecisionEntry(entry));
     }
   }
 

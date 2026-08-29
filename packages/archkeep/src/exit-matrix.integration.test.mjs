@@ -103,6 +103,22 @@ const INTENT = `${JSON.stringify(
   2,
 )}\n`;
 
+/** The committed decision the `decisions` ok row walks: it binds the
+ * `cycle-free` gate `PERMISSIVE_LAW` declares, so every hop of the chain
+ * resolves and the walk exits 0. */
+const LAYERS_ADR = `---
+id: 0001-layers
+status: accepted
+bindings:
+  - fitness:cycle-free
+---
+
+# The layers stay cycle-free
+
+The workspace's dependency graph must stay acyclic; the \`cycle-free\` fitness
+gate is the recorded, enforceable form of that decision.
+`;
+
 const NX_JSON = `${JSON.stringify({
   plugins: [
     {
@@ -129,6 +145,7 @@ const WORLD_FILES = [
   "nx.json",
   "module-boundaries.config.mjs",
   "architecture-intent.json",
+  "docs/adr/0001-layers.md",
   "libs/domain/go.mod",
   "libs/domain/doc.go",
   "libs/adapter/go.mod",
@@ -176,6 +193,7 @@ writeTree(world, {
   "libs/domain/doc.go": DOC_GO,
   "libs/adapter/go.mod": "module example.com/adapter\n\ngo 1.24\n",
   "libs/adapter/adapter.go": 'package adapter\n\nconst Name = "adapter"\n',
+  "docs/adr/0001-layers.md": LAYERS_ADR,
 });
 
 // The broken world: a boundary law that cannot LOAD. Every command that
@@ -519,6 +537,20 @@ const MATRIX = {
   adr: {
     ok: { world: "world", argv: ["adr"], exit: EXIT.ok },
     refused: { world: "world", argv: ["adr", "one", "two"], exit: EXIT.usage },
+  },
+  decisions: {
+    // World's committed ADR binds the declared `cycle-free` gate: decision →
+    // bound fitness row → governed projects → their (empty) findings, every
+    // hop resolves, chain exits 0.
+    ok: { world: "world", argv: ["decisions", "0001-layers"], exit: EXIT.ok },
+    refused: {
+      // An id the registry does not know is a named gap in the walk — the
+      // silent direction the invariant forbids: 3, never a clean chain.
+      world: "world",
+      argv: ["decisions", "0000-nope"],
+      exit: EXIT.error,
+      stderrContains: "does not resolve",
+    },
   },
   rules: {
     ok: { world: "world", argv: ["rules", "list", "--format", "json"], exit: EXIT.error },

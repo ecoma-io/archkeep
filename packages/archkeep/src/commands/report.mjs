@@ -126,6 +126,8 @@ import {
   resolveDecisionRef,
   stripAdrPrefix,
 } from "../governance/adr-registry.mjs";
+import { computeDecisionFitness } from "../governance/decision-fitness.mjs";
+import { hasAuthority, stripRuleFitnessPrefix } from "../governance/adr-registry.mjs";
 
 /**
  * The message a thrown refusal carries, as the report's reason for a surface
@@ -442,6 +444,24 @@ export async function reportCommand(commandContext, io = {}) {
   // Those two must never read alike (`../report/report-text.mjs` renders both
   // and says the same).
   const unresolvedCitation = citations.some((citation) => citation.resolution === "unknown");
+  // The per-record fitness derivation. It is the same function `adr` runs
+  // over the same registry, folded here with THIS run's declared gates: the
+  // verdicts of the `fitness` surface above (same `{name, verdict}` shape
+  // `fitnessCommand` emits) are the ONLY door — a citation resolves against
+  // declared ids (F04), and a record's own bound id must match one to be
+  // verified. `computeDecisionFitness`'s second argument exists to carry
+  // verdicts but is unused by design: the lookup is the single door, so it is
+  // `null`, exactly as `adr` passes it. An empty verdict set is legitimate:
+  // every authority record then derives `unverifiable` — the registry alone
+  // asserts nothing, never a clean pass (the invariant).
+  const fitnessById = new Map(
+    computeDecisionFitness(registry === null ? [] : registry.records, null, (bindingId) => {
+      const stripped = stripRuleFitnessPrefix(bindingId);
+      const gate = fitness.functions.find((fn) => fn.name === stripped);
+      return gate === undefined ? undefined : { name: gate.name, verdict: gate.verdict };
+    }).map((entry) => [entry.id, entry]),
+  );
+
   const decisions = {
     verdict:
       registry === null
@@ -463,11 +483,38 @@ export async function reportCommand(commandContext, io = {}) {
         : registry.records.map((record) => ({
             id: record.id,
             status: record.status,
+            authority: hasAuthority(record.status),
             bindings: [...record.bindings],
+            // The per-decision fitness level from the derivation above. A
+            // record binding nothing this run's gates declared derives
+            // `unverifiable` — the registry alone asserts nothing.
+            fitness: fitnessById.get(record.id),
+            // The governed rows (intent + constraint) that CITATION this
+            // record as their authority — the "who stands on this decision"
+            // answer, filtered from the same citation walk above.
+            constraints: citations
+              .filter(
+                (citation) =>
+                  citation.resolution === "adr" &&
+                  citation.adr !== null &&
+                  citation.adr.id === record.id,
+              )
+              .map((citation) => ({ kind: citation.kind, label: citation.label })),
           })),
     citations,
+    // The citations that could not be resolved — every one is already a
+    // governed row that holds the document back (they feed `unresolvedCitation`
+    // and `uninspectable` above); this materializes them for the text face so
+    // a reader sees which rows, not only that one was missing.
+    unresolvedDecisionRefs: citations
+      .filter((citation) => citation.resolution === "unknown")
+      .map((citation) => ({
+        kind: citation.kind,
+        label: citation.label,
+        decisionRef: citation.decisionRef,
+        reason: unresolvedDecisionRefNote(citation.decisionRef),
+      })),
   };
-
   // ── Provenance ────────────────────────────────────────────────────────
   // Where this run's facts came from. `null` is git's honest "no origin
   // claim", printed as such and never folded into a commit this run cannot

@@ -155,7 +155,13 @@ function fitnessLines(fitness) {
  */
 function decisionLines(decisions) {
   const lines = [surfaceLine("decisions", decisions)];
-  if (decisions.registry.count !== null) {
+  // "does not resolve" is a claim about the REF — that nothing in the
+  // workspace answers to it. When the registry itself could not be read, that
+  // claim is not one this run established: it could not look. The two get
+  // different sentences, for the same reason `unknown` and `not_applicable`
+  // do (`count: null` is how the command says the registry was unreadable).
+  const registryUnread = decisions.registry.count === null;
+  if (!registryUnread) {
     lines.push(
       `    ${decisions.registry.count} record${decisions.registry.count === 1 ? "" : "s"} in ` +
         `${decisions.registry.dir}/`,
@@ -165,29 +171,58 @@ function decisionLines(decisions) {
         record.bindings.length > 0
           ? `binds ${record.bindings.join(", ")}`
           : "binds nothing — not yet enforceable";
+      // The record row is byte-identical to the pre-wave-2 line; the fitness
+      // and "stands on" lines below it are additive surface (contract items
+      // 3 + F/B), never a rewrite of what a longer-maintained reader expects.
       lines.push(`      ${record.id}  (${record.status})  ${binds}`);
+      if (record.fitness !== undefined) {
+        const fit = record.fitness;
+        const reasonString =
+          typeof fit.reason === "string"
+            ? ` — ${fit.reason}`
+            : fit.verified
+              ? " — verified true: bound constraints resolve and pass"
+              : "";
+        lines.push(`          fitness: ${fit.level}${reasonString}`);
+      }
+      if (record.authority) {
+        if (record.constraints.length > 0) {
+          const refs = record.constraints.map((c) => `${c.kind} ${c.label}`).join(", ");
+          lines.push(`          stands on: ${refs}`);
+        } else {
+          lines.push("          stands on: no governed row cites this decision");
+        }
+      }
     }
   }
+  // The citations render even when the registry could not be read: that is
+  // exactly the case where "does not resolve" must NOT be claimed and the
+  // registry-unreadable sentence must. Skipping them here would print the
+  // "unknown" verdict with no citation lines to back it — the silent direction.
   if (decisions.citations.length === 0) {
     lines.push("    no governed row cites a decisionRef");
-    return lines;
+  } else {
+    for (const citation of decisions.citations) {
+      const target =
+        citation.resolution === "adr" && citation.adr !== null
+          ? `${citation.adr.id} (${citation.adr.status})`
+          : citation.resolution === "fitness"
+            ? `${citation.decisionRef} — a fitness rule this law declares`
+            : registryUnread
+              ? `${citation.decisionRef} — unresolved: the decision registry could not be read`
+              : `${citation.decisionRef} — does not resolve`;
+      lines.push(`    ${citation.resolution.padEnd(10)}${citation.label} → ${target}`);
+    }
   }
-  // "does not resolve" is a claim about the REF — that nothing in the
-  // workspace answers to it. When the registry itself could not be read, that
-  // claim is not one this run established: it could not look. The two get
-  // different sentences, for the same reason `unknown` and `not_applicable`
-  // do (`count: null` is how the command says the registry was unreadable).
-  const registryUnread = decisions.registry.count === null;
-  for (const citation of decisions.citations) {
-    const target =
-      citation.resolution === "adr" && citation.adr !== null
-        ? `${citation.adr.id} (${citation.adr.status})`
-        : citation.resolution === "fitness"
-          ? `${citation.decisionRef} — a fitness rule this law declares`
-          : registryUnread
-            ? `${citation.decisionRef} — unresolved: the decision registry could not be read`
-            : `${citation.decisionRef} — does not resolve`;
-    lines.push(`    ${citation.resolution.padEnd(10)}${citation.label} → ${target}`);
+  if (
+    !registryUnread &&
+    Array.isArray(decisions.unresolvedDecisionRefs) &&
+    decisions.unresolvedDecisionRefs.length > 0
+  ) {
+    lines.push("    unresolved decisionRefs:");
+    for (const ref of decisions.unresolvedDecisionRefs) {
+      lines.push(`      ${ref.kind} ${ref.label} → ${ref.reason}`);
+    }
   }
   return lines;
 }

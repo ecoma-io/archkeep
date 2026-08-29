@@ -107,6 +107,7 @@ import {
 import { contextCommand } from "./src/commands/context-command.mjs";
 import { planContextCommand } from "./src/commands/plan-context-command.mjs";
 import { adrCommand } from "./src/commands/adr.mjs";
+import { decisionsCommand } from "./src/commands/decisions.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { captureDelta, deltaCommand } from "./src/commands/delta.mjs";
 import { discoverCommand } from "./src/commands/discover.mjs";
@@ -1712,6 +1713,73 @@ async function runAdr(options, { cwd, env }) {
   // Descriptive: 0 for answered, 3 for incomplete coverage.
   return result.status === "ok" ? EXIT.ok : EXIT.error;
 }
+/**
+ * `decisions`'s run: the deterministic chain behind one recorded decision —
+ * decision → governed rows → projects → current findings, with the
+ * per-decision verification level. Exactly one positional: the ADR id.
+ *
+ * The law is resolved the way `report` resolves it (`resolvePolicy`) because
+ * the chain's Fitness leg reads the workspace's declared gates, and `--config`
+ * wins the same way. Fitness verdicts are derived inside the command from the
+ * declared list; a declared gate that fails to evaluate THROWS (exit 3), it
+ * never silently walks clean. `0` when every hop of the chain resolved, `3`
+ * when any did not — never `1`.
+ *
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runDecisions(options, { cwd, env }) {
+  if (options.paths.length !== 1) {
+    env.err(
+      `archkeep: decisions takes exactly one positional argument (an ADR id); ` +
+        `got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    // ONE law for the chain, resolved exactly like `report` — the Fitness leg
+    // reads this law's declared gates, so a `--config` override must reach it.
+    const { config } = await resolvePolicy(options, commandContext, cwd);
+
+    const intent = commandContext.tracked.includes(INTENT_FILE)
+      ? await loadIntent(commandContext.root, { tracked: commandContext.tracked })
+      : null;
+
+    result = decisionsCommand(options.paths[0], commandContext, config, { intent });
+  } catch (error) {
+    const usageError = error instanceof UsageError;
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
+    // the mechanism and the threat it closes.
+    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
+    // The confirmation names the no-verdict case, so a reader who only
+    // glances at stderr cannot mistake a written chain for a resolved one.
+    env.err(
+      `archkeep: decision chain for ${options.paths[0]} ` +
+        `${result.status === "ok" ? "resolved" : "did NOT fully resolve"} → ${options.output}`,
+    );
+  } else {
+    env.out(report);
+  }
+
+  // Descriptive: 0 when every hop resolved, 3 when any could not. Never 1.
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
+}
 
 /**
  * `rules`'s `run`: dispatches to the appropriate subcommand (list/info/verify/add),
@@ -2986,6 +3054,42 @@ const EXPLAIN_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `decisions`'s flags: text or JSON envelope, optional file output, and the
+ * same `--config` override `report` takes — the chain's Fitness leg reads the
+ * declared gates of one boundary law, and a caller must be able to say which.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const DECISIONS_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: ({ boundaryConfig, inline }) =>
+      Object.freeze([
+        "Read the boundary law from here instead of",
+        inline
+          ? "the inline boundaryConfig in archkeep.json"
+          : `<workspace root>/${boundaryConfig}`,
+      ]),
+  }),
+]);
+/**
  * `context`'s flags: text or JSON envelope, optional file output.
  * The project name is a positional argument. `--config` overrides the boundary
  * law, same as `check` and `explain`, because the answer depends on which
@@ -3316,6 +3420,17 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runProvenance,
+  }),
+  decisions: Object.freeze({
+    name: "decisions",
+    args: "<id>",
+    summary:
+      "Walk the full chain behind one recorded decision — decision to bound rows, projects, findings, and its verification level",
+    flagHelp: DECISIONS_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(DECISIONS_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runDecisions,
   }),
   adr: Object.freeze({
     name: "adr",
