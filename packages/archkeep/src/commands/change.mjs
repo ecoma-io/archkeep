@@ -53,6 +53,24 @@
  * passing is ok (exit 0). The workspace-law axis rides the envelope as
  * evidence only.
  *
+ * ## Wave 3: classification and events (additive)
+ *
+ * Every result carries the evolution classification (`classifications`,
+ * `affected`, `debt` — added fields; nothing existing moved) computed by the
+ * one home the predicates live in, `../governance/evolution-event.mjs`'s
+ * `classifyEvolution`, from the reconciliation output this command already
+ * produced. With `--event-out <dir>` (owned by `../../cli.mjs`), the same
+ * facts are persisted as the canonical reconcile EvolutionEvent
+ * (`kind: "reconcile"`, `source: "change"`, declaration digest over the
+ * intent's declarative rows, disposition by §5's mapping: matched with every
+ * constraint passing ⇒ accepted, undeclared/unfulfilled or a failed
+ * constraint ⇒ rejected, unproven or an undeterminable constraint ⇒
+ * no-verdict). A write failure throws → exit 3; the flag absent means no
+ * file is written and the run is byte-identical to a pre-wave-3 one. The
+ * breadth guard that refuses an empty-rows intent whose summary asserts a
+ * change lives in `./change-intent.mjs`'s validation (`parseChangeIntent`),
+ * the same loud lane as every other malformed declaration.
+ *
  * Refusals (each a throw → exit 3 upstream): a manifest that fails shape or
  * reference validation, an unreadable/malformed/foreign-schema baseline,
  * incomplete baseline coverage, a provider mismatch, incomplete head
@@ -85,6 +103,15 @@ import { formatChangeReport } from "../report/change-text.mjs";
 import { evaluateRun } from "../rules/index.mjs";
 import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { referenceTime } from "../governance/clock.mjs";
+import {
+  classifyEvolution,
+  declarationDigest,
+  eventDedupeKey,
+  eventId,
+  EVOLUTION_EVENT_SCHEMA_VERSION,
+} from "../governance/evolution-event.mjs";
+import { writeEvent } from "../governance/evolution-store.mjs";
 
 /**
  * One expected-fact row as the report and JSON carry it. Kept in one builder
@@ -109,6 +136,89 @@ function cmpFacts(a, b) {
     cmp(a.to ?? "", b.to ?? "") ||
     cmp(a.type ?? "", b.type ?? "")
   );
+}
+
+/**
+ * The identity string a reconciliation fact row carries into the event's
+ * `debt` — `kind` plus the row's subject, the same fields `factRow` names.
+ * Built from the fields the row already carries, never a second opinion.
+ *
+ * @param {object} row A `factRow` entry (`kind`, `project`/`from`+`to`/`changes`).
+ * @returns {string}
+ */
+function factIdentity(row) {
+  if (row.project !== undefined) return `${row.kind}:${row.project}`;
+  if (row.from !== undefined && row.to !== undefined) return `${row.kind}:${row.from}->${row.to}`;
+  return row.kind;
+}
+
+/**
+ * The identity string a delta-classified violation entry carries into the
+ * event's `findings` — the same identity fields the delta classification
+ * emits (`messageId`, `sourceProject`, `target`), serialized deterministically
+ * so the ref is stable across runs over the same transition.
+ *
+ * @param {{messageId: string, sourceProject: string|null, target: string}} entry
+ * @returns {string}
+ */
+function violationFindingId(entry) {
+  return `${entry.messageId}:${entry.sourceProject ?? "-"}:${entry.target}`;
+}
+
+/**
+ * The identity string an observed edge carries into the event's `observed`
+ * and `affected` — `(source, target, type)`, the triple `./diff.mjs`'s
+ * `edgeIdentityKey` owns, spelled for a human reader (`>` separator, optional
+ * type suffix). Two spellings of one triple never diverge because the triple
+ * itself is the input.
+ *
+ * @param {{source: string, target: string, type?: string}} edge
+ * @returns {string}
+ */
+function edgeIdentityString(edge) {
+  return `${edge.source}>${edge.target}${edge.type === undefined || edge.type === "" ? "" : `:${edge.type}`}`;
+}
+
+/**
+ * The structural-diff facts in the event's `observed` shape (design §1),
+ * mapped from `computeDiff`'s output and the metadata comparison — the same
+ * lists the reconciliation already consumed, never recomputed.
+ *
+ * @param {{addedProjects: object[], removedProjects: object[],
+ *   changedProjects: object[], addedEdges: object[], removedEdges: object[]}} structural
+ * @param {{policyChanged: boolean|null}} meta From `compareSnapshotMetadata`.
+ * @returns {{architectureChanged: boolean, projects: {added: string[],
+ *   removed: string[], changed: string[]}, edges: {added: string[],
+ *   removed: string[]}, policyChanged: boolean|null, providerChanged: boolean}}
+ */
+function observedFrom(structural, meta) {
+  const projects = {
+    added: structural.addedProjects.map((project) => project.name),
+    removed: structural.removedProjects.map((project) => project.name),
+    changed: structural.changedProjects.map((project) => project.name),
+  };
+  const edges = {
+    added: structural.addedEdges.map(edgeIdentityString),
+    removed: structural.removedEdges.map(edgeIdentityString),
+  };
+  return {
+    architectureChanged:
+      projects.added.length +
+        projects.removed.length +
+        projects.changed.length +
+        edges.added.length +
+        edges.removed.length >
+      0,
+    projects,
+    edges,
+    // `null` is the one-sided case — only one side records the law — and is
+    // passed through so classifyEvolution discloses it rather than reading
+    // it as "the same" (`../governance/evolution-event.mjs`).
+    policyChanged: meta.policyChanged,
+    // The provider mismatch refuses before reconciliation ever runs, so a
+    // reconciliable pair is by construction same-provider.
+    providerChanged: false,
+  };
 }
 
 /**
@@ -245,6 +355,37 @@ export function reconciliationVerdict(lists, unprovenReasons) {
 }
 
 /**
+ * The reconcile DISPOSITION mapping (wave 3, design §5) — the verdict axis
+ * first, then the declared constraints' verdicts. Pure and exported so the
+ * mapping is a fact a test can pin:
+ *
+ * | verdict | disposition |
+ * |---|---|
+ * | `matched`, every declared constraint passing | `accepted` |
+ * | `matched`, a declared constraint failing | `rejected` — the change's own
+ *   promise was broken, the same lane design §2 gives a constraint `fail` |
+ * | `undeclared` / `unfulfilled` | `rejected` |
+ * | `unproven`, or any declared constraint `unknown` | `no-verdict` — an
+ *   undetermined axis never reads as an acceptance |
+ *
+ * `no-verdict` is never a degraded `accepted`: the mapping refuses to
+ * fabricate either direction when the run could not determine it.
+ *
+ * @param {"matched"|"undeclared"|"unfulfilled"|"unproven"} verdict
+ * @param {{verdict: string}[]} [constraints] The judged constraint rows from
+ *   this run — empty when none were declared or when the base identity was
+ *   unproven (constraints are left unevaluated then).
+ * @returns {"accepted"|"rejected"|"no-verdict"}
+ */
+export function reconcileDisposition(verdict, constraints = []) {
+  if (verdict === "unproven") return "no-verdict";
+  if (verdict === "undeclared" || verdict === "unfulfilled") return "rejected";
+  if (constraints.some((row) => row.verdict === "unknown")) return "no-verdict";
+  if (constraints.some((row) => row.verdict === "fail")) return "rejected";
+  return "accepted";
+}
+
+/**
  * Judges the constraints the contract declares, through the shared engine —
  * both sides re-judged under the CURRENT law and one shared instant, exactly
  * the `delta` arrangement, so a policy edit between capture and verify cannot
@@ -335,14 +476,20 @@ function judgeDeclaredConstraints(intent, io) {
  * @param {string} intentPath Absolute path to the change-intent manifest.
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config?: object|null, readBaseline?: (path: string) => object,
- *   readIntent?: (path: string) => Promise<object>, now?: string}} [io]
+ *   readIntent?: (path: string) => Promise<object>, now?: string,
+ *   eventOut?: string, writeEvent?: (dir: string, event: object,
+ *   io?: object) => {id: string, duplicate: boolean}}} [io]
  *   The resolved boundary config (required — constraints are judged under it
  *   and the fingerprint identifies the law), injectable readers so tests drive
- *   the command without disk, and the shared reference instant. Both readers
- *   return VALIDATED domain objects — `readEvidenceSnapshot`'s parse and
- *   `parseChangeIntent`'s normalized contract respectively — the same seam
- *   contract `deltaCommand`'s `readBaseline` states; an injector handing back
- *   raw file contents skips the grammar this command trusts.
+ *   the command without disk, the shared reference instant, and the wave-3
+ *   event surface: `eventOut` names the directory the reconcile EvolutionEvent
+ *   is written to (absent ⇒ no event file, byte-identical run), and
+ *   `writeEvent` is the store seam defaulting to the canonical append-only
+ *   store. Both readers return VALIDATED domain objects —
+ *   `readEvidenceSnapshot`'s parse and `parseChangeIntent`'s normalized
+ *   contract respectively — the same seam contract `deltaCommand`'s
+ *   `readBaseline` states; an injector handing back raw file contents skips
+ *   the grammar this command trusts.
  * @returns {Promise<{status: "ok"|"findings"|"no-verdict",
  *   changeIntent: object, coverage: object, report: {text: string, json: string}}>}
  * @throws {Error} on every refusal the module header lists.
@@ -351,7 +498,20 @@ export async function changeCommand(
   baselinePath,
   intentPath,
   commandContext,
-  { config, readBaseline = readEvidenceSnapshot, readIntent, now } = {},
+  {
+    config,
+    readBaseline = readEvidenceSnapshot,
+    readIntent,
+    now,
+    // Wave 3 (design §4): the directory the reconcile EvolutionEvent is
+    // written to. Absent ⇒ no event file is written and the run is
+    // byte-identical to a pre-wave-3 run; the classification still rides the
+    // envelope result either way.
+    eventOut,
+    // The store seam, injectable so tests drive the write without disk and
+    // embedders can route it; defaults to the canonical append-only store.
+    writeEvent: writeEventSeam = writeEvent,
+  } = {},
 ) {
   const { root, provider, marker, graph, analysis } = commandContext;
 
@@ -452,12 +612,17 @@ export async function changeCommand(
   /** @type {object[]} */
   let constraints = [];
   let liveViolations = null;
+  // The classification is a wave-3 event signal too, so it is held at
+  // function scope: `null` when the base identity is unproven (nothing was
+  // evaluated, and the event must not fabricate violation facts).
+  /** @type {ReturnType<typeof classifyDelta>|null} */
+  let classification = null;
   if (unprovenReasons.length === 0) {
     const configWithNow = now === undefined ? config : { ...config, now };
     const baseEngineGraph = evidenceGraphToProjectGraph(baseline.graph);
     const baseRaw = evaluateRun(baseline.records, baseEngineGraph, configWithNow).rawViolations;
     const headEval = evaluateRun(analysis.imports, graph, configWithNow);
-    const classification = classifyDelta({
+    classification = classifyDelta({
       baseViolations: baseRaw,
       headViolations: headEval.rawViolations,
       baseRecords: baseline.records,
@@ -547,6 +712,113 @@ export async function changeCommand(
     notes,
   };
 
+  // Wave 3 (design §1, §2, §5): the evolution classification and the reconcile
+  // event. The classification is ALWAYS computed — it rides the envelope
+  // result in memory even when no event is written (design §4) — and the
+  // event is persisted only when `eventOut` names a directory. The signals
+  // are mapped from the reconciliation output already computed above; nothing
+  // here re-derives what `diff`, `classifyDelta` or `classifyEvolution`
+  // answered (`../governance/evolution-event.mjs` is the predicates' one
+  // home). When the base identity is unproven the constraints were left
+  // unevaluated, so no violation signal exists — the classification then
+  // answers `no-verdict` from the declared-intent row alone, never a
+  // fabricated acceptance.
+  const observed = observedFrom(structural, meta);
+  /** @type {{id: string, waived: boolean}[]} */
+  const introducedViolations = (classification?.violations.introduced ?? []).map((entry) => ({
+    id: violationFindingId(entry),
+    waived: entry.waived === true,
+  }));
+  const resolvedViolations = (classification?.violations.resolved ?? []).map(violationFindingId);
+  const unknownViolations = (classification?.violations.unknown ?? []).map((entry) => ({
+    id: `unidentified:${entry.reason}`,
+    reason: entry.reason,
+  }));
+  const evolution = classifyEvolution({
+    observed,
+    ...(classification === null
+      ? {}
+      : {
+          violations: {
+            introduced: introducedViolations,
+            resolved: resolvedViolations,
+            unknown: unknownViolations,
+          },
+        }),
+    declaredConstraints: constraints.map((row) => ({ id: row.name, verdict: row.verdict })),
+    declaredIntentRows: [{ id: "intent", verdict }],
+  });
+
+  // Debt impact: the change's own consequences, mapped from the reconciliation
+  // lists and the constraint verdicts the run already produced. Nothing is
+  // ever claimed as resolved — a change run carries no repair evidence — and
+  // `findings` above carries the violation delta while this carries the
+  // declared-and-observed divergence (the stable ids W5's ledger will link
+  // against).
+  const debt = {
+    introduced: [
+      ...reconciliation.unexpected.map(factIdentity),
+      ...reconciliation.missingExpected.map(factIdentity),
+      ...constraints.filter((row) => row.verdict === "fail").map((row) => row.name),
+    ].sort(),
+    resolved: [],
+  };
+
+  const baseCommit = baseline.provenance?.commit;
+  const headCommit = headProvenance?.commit;
+  /** @type {object} */
+  const event = {
+    schemaVersion: EVOLUTION_EVENT_SCHEMA_VERSION,
+    kind: "reconcile",
+    source: "change",
+    base: {
+      ...(typeof baseCommit === "string" ? { revision: baseCommit } : {}),
+      // The caller's own evidence ref — the baseline file this run consumed,
+      // spelled as the run received it (the same convention `declaration.file`
+      // uses for the intent path).
+      evidence: baselinePath,
+    },
+    head: {
+      ...(typeof headCommit === "string" ? { revision: headCommit } : {}),
+    },
+    declaration: { file: intentPath, digest: declarationDigest(intent) },
+    observed,
+    affected: evolution.affected,
+    findings: {
+      introduced: introducedViolations.map((entry) => entry.id),
+      resolved: resolvedViolations,
+      unknown: unknownViolations.map((entry) => entry.id),
+    },
+    // The verdictDeltas are the DECLARED constraints judged over the delta —
+    // a change run has no separate base-verdict pass, so each row states the
+    // delta verdict itself rather than a pair that does not exist.
+    fitness: {
+      verdictDeltas: constraints.map((row) => ({ id: row.name, verdict: row.verdict })),
+    },
+    debt,
+    classifications: evolution.classifications,
+    disposition: evolution.disposition,
+    notes: evolution.notes,
+    provenance: typeof headCommit === "string" ? [{ kind: "git-commit", ref: headCommit }] : [],
+    // The governance clock — the same injected `now` seam the rest of the run
+    // uses, the wall clock only when nothing was injected. It is EXCLUDED
+    // from the identity by `evolution-event.mjs` by construction.
+    recordedAt: { by: "change", tool: "archkeep:v1", on: now ?? referenceTime() },
+  };
+  event.dedupeKey = eventDedupeKey(event);
+  event.id = eventId(event);
+
+  /** @type {{dir: string, id: string, duplicate: boolean}|null} */
+  let eventWritten = null;
+  if (eventOut !== undefined && eventOut !== null && eventOut !== "") {
+    // The store's io.root is the workspace root: the write must be provable
+    // to stay inside the workspace (the same containment `--output` obeys).
+    // A write failure throws — exit 3 upstream, the could-not-look lane —
+    // never a silent "event recorded" that wrote nothing.
+    const write = writeEventSeam(eventOut, event, { root });
+    eventWritten = { dir: eventOut, ...write };
+  }
+
   const result = {
     intent: {
       file: intentPath,
@@ -588,6 +860,12 @@ export async function changeCommand(
       changedSinceBase: meta.policyChanged === true,
       liveViolations,
     },
+    // Wave 3 additive result fields (design §5): the evolution classification
+    // and the debt impact. Present on every run, `--event-out` or not — the
+    // event's classification rides the envelope in memory (design §4).
+    classifications: evolution.classifications,
+    affected: evolution.affected,
+    debt,
   };
 
   const envelope = jsonEnvelope({
@@ -605,7 +883,13 @@ export async function changeCommand(
     changeIntent: result,
     coverage,
     report: {
-      text: formatChangeReport({ change: result, coverage }),
+      text: formatChangeReport({
+        change: result,
+        coverage,
+        // Present only when an event was written — the text report stays
+        // byte-identical when `--event-out` is absent.
+        ...(eventWritten === null ? {} : { eventWritten }),
+      }),
       json: renderJson(envelope),
     },
   };

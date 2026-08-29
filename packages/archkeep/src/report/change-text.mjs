@@ -13,6 +13,11 @@
  * outcome, so an empty reconciliation is a verifiable claim rather than
  * silence (`../../../../AGENTS.md`).
  *
+ * With `--event-out`, the report's first section names the reconcile event
+ * that was recorded (id, directory, duplicate-or-written) — the one section
+ * that renders only when the flag was passed, so the default report is
+ * byte-identical to a pre-wave-3 run.
+ *
  * This module decides nothing. A formatter that filtered would be a rule
  * wearing a formatter's name (`./README.md`).
  */
@@ -62,13 +67,26 @@ function describeOrigin(provenance) {
 /**
  * The whole change report.
  *
- * @param {{change: object, coverage: object}} input `change` is
- *   `../commands/change.mjs`'s result payload; `coverage` its coverage block.
+ * @param {{change: object, coverage: object, eventWritten?: object}} input
+ *   `change` is `../commands/change.mjs`'s result payload; `coverage` its
+ *   coverage block; `eventWritten` the reconcile event write result (`{dir,
+ *   id, duplicate}`) — present ONLY when `--event-out` was passed, so the
+ *   default report is byte-identical to a pre-wave-3 run.
  * @returns {string}
  */
-export function formatChangeReport({ change, coverage }) {
+export function formatChangeReport({ change, coverage, eventWritten }) {
   const { intent, baseline, head, reconciliation, constraints, policy } = change;
   const sections = [];
+
+  // The reconcile event line renders ONLY when `--event-out` was passed and
+  // the run wrote one (`../commands/change.mjs`): the write is opt-in output
+  // the report makes observable rather than a file appearing silently.
+  if (eventWritten !== undefined) {
+    sections.push(
+      `event      reconcile/change ${eventWritten.id.slice(0, 8)} → ${eventWritten.dir}` +
+        (eventWritten.duplicate ? " (duplicate — nothing written)" : ""),
+    );
+  }
 
   sections.push(
     `intent     ${intent.file} — base ${intent.base.commit.slice(0, 8)}` +
