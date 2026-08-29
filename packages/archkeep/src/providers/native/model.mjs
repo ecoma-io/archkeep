@@ -772,8 +772,8 @@ export function normalizeNativeModel(raw) {
               // effective set — the defaults when `exclude` is absent, the
               // explicit list when it is present — without restating it.
               exclude: [
-                ...(rawInfer.exclude ?? DEFAULT_INFER_EXCLUDE),
-                ...(rawInfer.excludeBeyondDefaults ?? []),
+                .../** @type {string[]|undefined} */ (rawInfer.exclude ?? DEFAULT_INFER_EXCLUDE),
+                .../** @type {string[]|undefined} */ (rawInfer.excludeBeyondDefaults ?? []),
               ],
             },
     },
