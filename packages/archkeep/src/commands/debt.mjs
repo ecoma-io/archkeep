@@ -49,6 +49,7 @@ import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { judgeIntent } from "../architecture-intent/judge.mjs";
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
 import { computeDebtLedger } from "../governance/debt-ledger.mjs";
+import { readEvents } from "../governance/evolution-store.mjs";
 import { formatDebtReport } from "../report/debt-text.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { resolveProvenance } from "./provenance.mjs";
@@ -68,9 +69,12 @@ import { readSnapshots } from "./history.mjs";
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config?: {depConstraints: object[], options: object,
  *   suppressions: object[]}|null, referenceTime?: number|string,
- *   io?: {readSnapshots?: Function, loadIntentOverride?: Function,
- *   resolveProvenance?: Function}}} [options] Injectable seams for tests,
- *   mirroring the `history`/`drift` pattern.
+ *   events?: string|null, io?: {readSnapshots?: Function,
+ *   loadIntentOverride?: Function, resolveProvenance?: Function,
+ *   readEvents?: Function}}} [options] Injectable seams for tests, mirroring
+ *   the `history`/`drift` pattern. `events` is the event-store directory the
+ *   `--events <dir>` CLI flag resolves; absent ⇒ no lifecycle refs (the
+ *   ledger says so in `lifecycle.note`), never guessed.
  * @returns {Promise<{status: "ok", ledger: object, coverage: object,
  *   report: {text: string, json: string}}>}
  * @throws {Error} on every condition the header lists, all exit-3 class.
@@ -140,6 +144,14 @@ export async function debtCommand(dir, commandContext, options = {}) {
     );
   }
 
+  // The optional event linkage (design §4): `--events <dir>` reads the
+  // evolution store so active debt can carry `introducedBy` and closed debt
+  // can appear on the `resolved` list. Absent ⇒ nothing is loaded and the
+  // ledger records no refs ("no event store linked" note); refs are never
+  // guessed.
+  const loadStoreEvents = io.readEvents ?? readEvents;
+  const events = options.events ? loadStoreEvents(options.events) : null;
+
   const ledger = computeDebtLedger(
     {
       suppressions: config.suppressions,
@@ -147,7 +159,10 @@ export async function debtCommand(dir, commandContext, options = {}) {
       findings: verdict.findings,
     },
     read,
-    { referenceTime: options.referenceTime },
+    {
+      referenceTime: options.referenceTime,
+      events,
+    },
   );
 
   const observed = buildObserved(commandContext);
@@ -168,7 +183,9 @@ export async function debtCommand(dir, commandContext, options = {}) {
     // so a consumer diffing or hashing two envelopes to detect real drift
     // knows to exclude it rather than read clock drift as architectural
     // change; every other field is deterministic given the same law, history
-    // directory and tree.
+    // directory and tree. The lifecycle note (when the store is not linked)
+    // states the same posture for refs: they are absent, disclosed, never
+    // fabricated.
     notes: [
       `ledger ages are snapshot-relative; ${ledger.entries.length} entr` +
         `${ledger.entries.length === 1 ? "y" : "ies"} derived across ${read.files.length} snapshot` +
@@ -177,6 +194,7 @@ export async function debtCommand(dir, commandContext, options = {}) {
         "workspace — it is expected to differ between two runs of an unchanged tree and " +
         "should be excluded from any diff or hash meant to detect real change. Every other " +
         "field here is deterministic given the same law, history directory and tree.",
+      ...(ledger.lifecycle.note ? [ledger.lifecycle.note] : []),
     ],
   };
 
@@ -192,9 +210,11 @@ export async function debtCommand(dir, commandContext, options = {}) {
     agings: ledger.agings,
     sampleTime: ledger.sampleTime,
     entries: ledger.entries,
+    resolved: ledger.resolved,
     total: ledger.total,
     byKind: ledger.byKind,
     bySeverity: ledger.bySeverity,
+    lifecycle: ledger.lifecycle,
   };
 
   const envelope = jsonEnvelope({
