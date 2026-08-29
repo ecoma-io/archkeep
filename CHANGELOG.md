@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.16.1](https://github.com/ecoma-io/archkeep/compare/v0.16.0...v0.16.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* **archkeep:** read C# using declarations' initializer braces as statements ([#481](https://github.com/ecoma-io/archkeep/issues/481)) ([cb1486d](https://github.com/ecoma-io/archkeep/commit/cb1486db6ab66a4685ad3b5b699e403c077438ae))
+* **archkeep:** read the Go import keyword only at statement position ([#480](https://github.com/ecoma-io/archkeep/issues/480)) ([ce5d931](https://github.com/ecoma-io/archkeep/commit/ce5d9312419ba85d9f09f8966aa17d4ee4f20503)), closes [#468](https://github.com/ecoma-io/archkeep/issues/468)
+* **workspace:** mark 0.x releases as normal, not prerelease ([#483](https://github.com/ecoma-io/archkeep/issues/483)) ([ce21533](https://github.com/ecoma-io/archkeep/commit/ce215334ab0a83e56aee9e77db796399ac3cba98))
+
 ## [0.16.0](https://github.com/ecoma-io/archkeep/compare/v0.15.0...v0.16.0) (2026-08-29)
 
 
