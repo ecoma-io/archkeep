@@ -44,6 +44,13 @@
  * quote closed on a later line, a `)` supplied from a function body below —
  * produce a record today and stay the documented parse limits above.
  *
+ * One misread answers neither record nor failure, named as a limit rather
+ * than fixed (#468's neighbourhood): a bare `import` whose line ends with
+ * no path and whose `(` arrives from the statement BELOW it — `import`
+ * alone, then `const (` opening the next — is read as that block, and the
+ * doubly-broken file stays silent. Rejecting it needs a same-line rule
+ * that would flag the legal `import` newline `"path"` continuation.
+ *
  * ## An unreadable go.mod refuses, it does not skip (#405)
  *
  * `parseGoModulePath` parses content; it never sees a failed read. Reading a
@@ -310,7 +317,14 @@ export function goImportMalformations(goText) {
   // close just found rather than rescanning the text before it.
   let lastClose = 0;
   let unclosedSince = -1;
-  for (const m of source.matchAll(/(?:^|;)[ \t]*import/gm)) {
+  // `import` must be the keyword, never a prefix of an identifier (#468): a
+  // const member named `importPath` sits at line head exactly where the
+  // keyword would, and reading it as the keyword flagged a compiling file
+  // "an import states no path". Go lexes by maximal munch — letters, digits,
+  // and `_` continuing the word make it one identifier — so the lookahead
+  // excludes exactly those, and every legal follower (`(`, a quote, an
+  // alias, whitespace) still opens.
+  for (const m of source.matchAll(/(?:^|;)[ \t]*import(?![\p{L}\p{Nd}_])/gmu)) {
     let at = m.index + m[0].length;
     while (at < source.length && /\s/u.test(source[at])) at += 1;
     if (at >= source.length) {
