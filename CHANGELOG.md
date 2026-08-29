@@ -1,5 +1,90 @@
 # Changelog
 
+## [0.16.0](https://github.com/ecoma-io/archkeep/compare/v0.15.0...v0.16.0) (2026-08-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* **archkeep:** a workspace whose Rust, Java or C# source carries a truncated import now fails `archkeep check` (exit 3) where it previously passed as clean.
+* **archkeep:** a workspace with an unreadable go.mod/Cargo.toml, or a Go file truncated inside an import, now fails the run where it previously reported clean over the hole.
+* **archkeep:** declared manifest edges now appear on the native, moon, and LSP graph faces, where before only the Nx CLI face drew them. On an unchanged workspace this can add edges and, where a declared edge closes a cycle, new noCircularDependencies findings — a consumer's CI can turn red on code they did not touch. Duplicate whole-file failure rows also collapse to one.
+* **archkeep:** on a workspace whose manifests or name indexes could not be fully read, `nx graph` and `nx affected` now fail loudly instead of silently under-selecting; `archkeep check` on an Nx workspace fails at the spawned `nx graph` step (still exit 3, the message now names the nx failure) instead of reporting over partial edges, and a scoped `archkeep check <path>` additionally refuses on unreadable JVM sources outside the scope (`jvmIndexFailures` is workspace-wide, mirroring `dotnetIndexFailures`). Green trees see no change.
+* **archkeep:** what is reported on an unchanged workspace changes. A native workspace with tracked manifests under docs/, fixtures/ or __fixtures__/ loses the phantom projects inference used to anchor there, and those directories' analyzable files become unclaimed-coverage findings until declared in projects.declared or waived in coverage.exempt with a reason. A .csproj project rooted under a directory named bin/ or obj/ appears in the model for the first time.
+* **archkeep:** a Moon workspace whose `moon.yml` declares a `dependsOn` naming a project that does not exist — accepted by Moon itself with exit 0 — now refuses (exit 3, or an index-gap diagnostic in the language server) naming the project and the missing id, instead of judging clean with the declared edge silently missing. Correct or remove the typo'd id in `moon.yml`. A root-level project whose source is spelled `""` also joins the graph instead of vanishing.
+
+### Features
+
+* **archkeep:** gradle manifest reader - the unbuilt half of ADR 0005 ([#355](https://github.com/ecoma-io/archkeep/issues/355)) ([e8262c8](https://github.com/ecoma-io/archkeep/commit/e8262c8fc1febe8c18e141b5e63c6ef351c80cf4)), closes [#346](https://github.com/ecoma-io/archkeep/issues/346)
+* **archkeep:** integrate C#/.NET through the shared dotnet core ([#360](https://github.com/ecoma-io/archkeep/issues/360)) ([4acd021](https://github.com/ecoma-io/archkeep/commit/4acd021335adc6483ef158815cf57e0d33dbc459))
+* **archkeep:** java complete set - analyzer, maven, discovery, editor, conformance, e2e, docs ([#342](https://github.com/ecoma-io/archkeep/issues/342)) ([4065a64](https://github.com/ecoma-io/archkeep/commit/4065a6483b9c4c792593bf15b3660e05470d8eb8))
+* **archkeep:** jvm dotted-name package index and specifier resolution ([#341](https://github.com/ecoma-io/archkeep/issues/341)) ([aef447d](https://github.com/ecoma-io/archkeep/commit/aef447d7550ad03d4efa9bbba9ab7c3b6ba26458))
+* **archkeep:** kotlin complete set - analyzer, joint-namespace corpus, docs ([#343](https://github.com/ecoma-io/archkeep/issues/343)) ([fbd37d3](https://github.com/ecoma-io/archkeep/commit/fbd37d394c278b330fffa17ace24a24b7236789a))
+* **archkeep:** kotlin conformance parity with loud-direction corpus evidence ([#352](https://github.com/ecoma-io/archkeep/issues/352)) ([ca0c9c3](https://github.com/ecoma-io/archkeep/commit/ca0c9c3be5781cca947ddace3f6c89a7930efe65)), closes [#348](https://github.com/ecoma-io/archkeep/issues/348)
+* **archkeep:** prove official rules compose with shipped presets ([#362](https://github.com/ecoma-io/archkeep/issues/362)) ([4e8564e](https://github.com/ecoma-io/archkeep/commit/4e8564e6da9a8fc258bfb0433fee987bdcae2094))
+* **archkeep:** ship official rules — catalog CLI and publication lane ([#379](https://github.com/ecoma-io/archkeep/issues/379)) ([8b6d336](https://github.com/ecoma-io/archkeep/commit/8b6d336b9fe71b1e6cfb0281a74ff9c4df1b6d5c))
+* **rules:** add max fan-in architecture rule ([#358](https://github.com/ecoma-io/archkeep/issues/358)) ([c9e26af](https://github.com/ecoma-io/archkeep/commit/c9e26af680e4bd594682041ccc2d2b0fd57e2cf6))
+* **rules:** add max fan-out architecture rule ([#356](https://github.com/ecoma-io/archkeep/issues/356)) ([d0fdafc](https://github.com/ecoma-io/archkeep/commit/d0fdafc0cd146fe86f7b44513d4dbb3a09cb86e0))
+* **rules:** add official rule catalog foundation ([#345](https://github.com/ecoma-io/archkeep/issues/345)) ([30cec99](https://github.com/ecoma-io/archkeep/commit/30cec9945deb3973c34bd5108fcfd6b7bad6064a))
+* **rules:** add tag cardinality and combination rules ([#353](https://github.com/ecoma-io/archkeep/issues/353)) ([6b8874a](https://github.com/ecoma-io/archkeep/commit/6b8874af185faeb591dc6411fb0ac8a472f528ea))
+* **rules:** prove official generic rules compose with shipped presets (PR5) ([4e8564e](https://github.com/ecoma-io/archkeep/commit/4e8564e6da9a8fc258bfb0433fee987bdcae2094))
+
+
+### Bug Fixes
+
+* **archkeep:** accept CRLF, same-line, BOM and root-csproj spellings in JVM and C# parsing ([#415](https://github.com/ecoma-io/archkeep/issues/415)) ([b0e5345](https://github.com/ecoma-io/archkeep/commit/b0e53453ac8d664dca029c2ff3644e50c5f3c993)), closes [#406](https://github.com/ecoma-io/archkeep/issues/406) [#407](https://github.com/ecoma-io/archkeep/issues/407) [#408](https://github.com/ecoma-io/archkeep/issues/408)
+* **archkeep:** canonical iteration for cross-provider message text ([#385](https://github.com/ecoma-io/archkeep/issues/385)) ([f3ada45](https://github.com/ecoma-io/archkeep/commit/f3ada456962631597ba5aef9492f9fd649f16d84))
+* **archkeep:** detect duplicate project names loudly in LSP index ([#387](https://github.com/ecoma-io/archkeep/issues/387)) ([888b2af](https://github.com/ecoma-io/archkeep/commit/888b2af092000b0e95e0814ff7220f72d654fcf3))
+* **archkeep:** draw declared manifest edges on every provider face ([#404](https://github.com/ecoma-io/archkeep/issues/404)) ([b304aab](https://github.com/ecoma-io/archkeep/commit/b304aab65a605c15fb746d3c55d13a9ab0d4a87c))
+* **archkeep:** fail loudly on unreadable Go/Rust manifests and malformed Go imports ([#418](https://github.com/ecoma-io/archkeep/issues/418)) ([dc76cc6](https://github.com/ecoma-io/archkeep/commit/dc76cc68610c8d71ca1ca6eebe3020c49312d660))
+* **archkeep:** fail loudly when a Rust, Java or C# import is truncated before its `;` ([#420](https://github.com/ecoma-io/archkeep/issues/420)) ([a7e3fe6](https://github.com/ecoma-io/archkeep/commit/a7e3fe6bcc757a271c3d7e24f80dbea3e6c722e8)), closes [#419](https://github.com/ecoma-io/archkeep/issues/419)
+* **archkeep:** gate the absolute-import check on spelling.namesOnly ([#386](https://github.com/ecoma-io/archkeep/issues/386)) ([4453b51](https://github.com/ecoma-io/archkeep/commit/4453b51818dc7de3eb31591a04d80e2526821295)), closes [#376](https://github.com/ecoma-io/archkeep/issues/376)
+* **archkeep:** give Moon node.source the root-spelling discipline ([#367](https://github.com/ecoma-io/archkeep/issues/367)) ([3b9f108](https://github.com/ecoma-io/archkeep/commit/3b9f108abcf58fe57315086e51e1c659f3f0e024))
+* **archkeep:** give Moon node.source the root-spelling discipline ([#393](https://github.com/ecoma-io/archkeep/issues/393)) ([3b9f108](https://github.com/ecoma-io/archkeep/commit/3b9f108abcf58fe57315086e51e1c659f3f0e024))
+* **archkeep:** give rules verify its finding exit and contain catalog artifact paths ([#416](https://github.com/ecoma-io/archkeep/issues/416)) ([d94f7a3](https://github.com/ecoma-io/archkeep/commit/d94f7a3cb68ce84c10309027bd4ba0745d95948a)), closes [#411](https://github.com/ecoma-io/archkeep/issues/411) [#412](https://github.com/ecoma-io/archkeep/issues/412)
+* **archkeep:** judge discovery exclusions by role, and default-deny phantom anchors ([#394](https://github.com/ecoma-io/archkeep/issues/394)) ([c09cfcb](https://github.com/ecoma-io/archkeep/commit/c09cfcb2c322f1934ea77bdd68676b5c34028587)), closes [#371](https://github.com/ecoma-io/archkeep/issues/371)
+* **archkeep:** manifest readers fail loudly at the Nx hook on unreadable reactors ([#400](https://github.com/ecoma-io/archkeep/issues/400)) ([0025a00](https://github.com/ecoma-io/archkeep/commit/0025a001f277ca20c63ded0d6f690fdc34f4a4a5))
+* **archkeep:** prevent namesThisPlugin from claiming third-party plugins ending with /archkeep/nx ([#384](https://github.com/ecoma-io/archkeep/issues/384)) ([0d630ec](https://github.com/ecoma-io/archkeep/commit/0d630ec5d4258bc272e9482b9f9412afc805d43c))
+* **archkeep:** print a runnable customRules row from rules add ([#472](https://github.com/ecoma-io/archkeep/issues/472)) ([88630b7](https://github.com/ecoma-io/archkeep/commit/88630b71cdde8d845b01357dd0440ed3b2db85eb))
+* **archkeep:** read gradle root-project refs and document kts settings coverage ([#357](https://github.com/ecoma-io/archkeep/issues/357)) ([af82bb2](https://github.com/ecoma-io/archkeep/commit/af82bb2a9d98e36b11db619bc6cbe0834893c10c))
+* **archkeep:** read parenless Gradle includes and project() dependency records ([#414](https://github.com/ecoma-io/archkeep/issues/414)) ([8d0604f](https://github.com/ecoma-io/archkeep/commit/8d0604fd71fa3d5234280b88d1a16c9fa9179dde)), closes [#409](https://github.com/ecoma-io/archkeep/issues/409)
+* **archkeep:** refuse anomalous moon project-graph output loudly ([#391](https://github.com/ecoma-io/archkeep/issues/391)) ([05d8963](https://github.com/ecoma-io/archkeep/commit/05d8963584c5ec84ee89104f8621fd109881ca2c))
+* **archkeep:** refuse Moon id-less dep records and self-edges loudly ([#392](https://github.com/ecoma-io/archkeep/issues/392)) ([#401](https://github.com/ecoma-io/archkeep/issues/401)) ([606218c](https://github.com/ecoma-io/archkeep/commit/606218c4ab91e9b1d36733b5264fd5c5c40bc1b5))
+* **archkeep:** refuse the run when a JVM source drops out of the package index ([#397](https://github.com/ecoma-io/archkeep/issues/397)) ([179db63](https://github.com/ecoma-io/archkeep/commit/179db63da16a3530a3dc97d5448691936080139b))
+* **archkeep:** replace projectOwning's per-file project scan with a sorted-roots walk ([#396](https://github.com/ecoma-io/archkeep/issues/396)) ([2219394](https://github.com/ecoma-io/archkeep/commit/221939466af09382ffb1cd1a93c9d14762731831))
+* **archkeep:** replace wall-clock timing with operation counting in Rust analyzer test ([#382](https://github.com/ecoma-io/archkeep/issues/382)) ([4a34790](https://github.com/ecoma-io/archkeep/commit/4a3479012cb21709238685ad82732d05373efc0f)), closes [#359](https://github.com/ecoma-io/archkeep/issues/359)
+* **archkeep:** resolve Maven parents by coordinates when the relative path misses ([#398](https://github.com/ecoma-io/archkeep/issues/398)) ([e83870c](https://github.com/ecoma-io/archkeep/commit/e83870c04703132bee9d7b545a0668a8b1111ba2)), closes [#372](https://github.com/ecoma-io/archkeep/issues/372)
+* **archkeep:** route provenance.mjs git spawns through runProcess seam ([#383](https://github.com/ecoma-io/archkeep/issues/383)) ([41530d6](https://github.com/ecoma-io/archkeep/commit/41530d6b123bfb13c814de8757ca697c2463c851))
+* **archkeep:** stop the root walk at the git top level and shape the Moon marker ([#395](https://github.com/ecoma-io/archkeep/issues/395)) ([4727623](https://github.com/ecoma-io/archkeep/commit/47276233693a559783311f4a8e8aad72c0e83f49)), closes [#339](https://github.com/ecoma-io/archkeep/issues/339)
+* **archkeep:** watch graph-shaping manifests in the language server ([#417](https://github.com/ecoma-io/archkeep/issues/417)) ([67e63be](https://github.com/ecoma-io/archkeep/commit/67e63bebff4a64dd3ecd749cc935acab9ade92c8)), closes [#410](https://github.com/ecoma-io/archkeep/issues/410)
+* **ci:** publish a prerelease version to npm under its own dist-tag ([#430](https://github.com/ecoma-io/archkeep/issues/430)) ([2f2258a](https://github.com/ecoma-io/archkeep/commit/2f2258aebe3dbbde82af27c7dd6bda3a32ed2340))
+* **ci:** sync archkeep-rules Cargo.lock on SDK version bump ([#402](https://github.com/ecoma-io/archkeep/issues/402)) ([9eb1a46](https://github.com/ecoma-io/archkeep/commit/9eb1a46cec18911483a1e65a0aac1911a2ccd817))
+* **rules:** audit follow-ups — scratch file, digest sourcing, coverage docs, boundary fixtures ([#378](https://github.com/ecoma-io/archkeep/issues/378)) ([8434e8e](https://github.com/ecoma-io/archkeep/commit/8434e8e93cba54b7dfc9b6732540d78a08525f86))
+* **rules:** hold catalog artifact containment across platforms ([#377](https://github.com/ecoma-io/archkeep/issues/377)) ([c995832](https://github.com/ecoma-io/archkeep/commit/c9958322ede762717339e8eaa1e54b5babdf4b92))
+
+
+### Documentation
+
+* **archkeep:** align docs with shipped java and kotlin support ([#351](https://github.com/ecoma-io/archkeep/issues/351)) ([14904ce](https://github.com/ecoma-io/archkeep/commit/14904ce7a5ab6e2dd49392cf031f683b11df77fe))
+* offer Vue and C# in the issue forms' language dropdowns ([#421](https://github.com/ecoma-io/archkeep/issues/421)) ([3b496d3](https://github.com/ecoma-io/archkeep/commit/3b496d36d52b78aaaff58e4994ab180d5dd6db29))
+* offer Vue and C# in the issue forms' language dropdowns ([#422](https://github.com/ecoma-io/archkeep/issues/422)) ([3b496d3](https://github.com/ecoma-io/archkeep/commit/3b496d36d52b78aaaff58e4994ab180d5dd6db29))
+* record JVM integration decisions ([#340](https://github.com/ecoma-io/archkeep/issues/340)) ([2063880](https://github.com/ecoma-io/archkeep/commit/2063880b88bf293df9d6c585f776e9508f25cb92))
+* **workspace:** add C#/.NET language to the north-star table ([#467](https://github.com/ecoma-io/archkeep/issues/467)) ([b18e6be](https://github.com/ecoma-io/archkeep/commit/b18e6be8e0c6331cb8d06b8431e8fbf2314e18e1))
+* **workspace:** carry the Release-As footer in the landed commit ([#476](https://github.com/ecoma-io/archkeep/issues/476)) ([1b49251](https://github.com/ecoma-io/archkeep/commit/1b492513065c521235ee255127718827cd27f055))
+* **workspace:** describe one development line and one compatibility contract ([#455](https://github.com/ecoma-io/archkeep/issues/455)) ([ce69425](https://github.com/ecoma-io/archkeep/commit/ce694253abf1f00702e7cc6b4e0588be08d58a02))
+* **workspace:** document the built-ahead v2 release lane ([#442](https://github.com/ecoma-io/archkeep/issues/442)) ([5492349](https://github.com/ecoma-io/archkeep/commit/549234909d602141bd4174b03b6c3d2db918396a))
+* **workspace:** give agents the branch-first operational summary ([#441](https://github.com/ecoma-io/archkeep/issues/441)) ([dc4d265](https://github.com/ecoma-io/archkeep/commit/dc4d265774ecbda5b6c48a1181bd8310b0032a08))
+* **workspace:** lock the architecture end state on one development line ([#458](https://github.com/ecoma-io/archkeep/issues/458)) ([9ea17fb](https://github.com/ecoma-io/archkeep/commit/9ea17fbaca16ce3b6f27158b1892d5a5045deea9)), closes [#457](https://github.com/ecoma-io/archkeep/issues/457)
+* **workspace:** make the intelligence layer common doctrine instead of a v2 line ([#453](https://github.com/ecoma-io/archkeep/issues/453)) ([05bb34a](https://github.com/ecoma-io/archkeep/commit/05bb34a3c23b484d905d4f0b6bf26da31994eb39))
+* **workspace:** name the v2 line where 1.0 is announced ([#436](https://github.com/ecoma-io/archkeep/issues/436)) ([7c939eb](https://github.com/ecoma-io/archkeep/commit/7c939eb77f52c4978ea0580f1dad764d903f71df))
+* **workspace:** return the release line to 0.x until 1.0 readiness ([#474](https://github.com/ecoma-io/archkeep/issues/474)) ([ee5325e](https://github.com/ecoma-io/archkeep/commit/ee5325e4463f412780cda6961a7d2e0c78484e53))
+* **workspace:** tell the roadmap as one maturity ladder ([#454](https://github.com/ecoma-io/archkeep/issues/454)) ([6ad2943](https://github.com/ecoma-io/archkeep/commit/6ad29434586cdb6f1c75f239089830b75ad513ec))
+* **workspace:** write down how the two development lines move ([#431](https://github.com/ecoma-io/archkeep/issues/431)) ([df55748](https://github.com/ecoma-io/archkeep/commit/df55748b60a82fa6d3b9b3fe0936f8e5c9a49761))
+
+
+### Internal
+
+* **workspace:** prepare 1.0.0-rc.1 and define the v1/v2 development policy ([#427](https://github.com/ecoma-io/archkeep/issues/427)) ([8d8ba41](https://github.com/ecoma-io/archkeep/commit/8d8ba41c154b5c3e3cdca5141cdade2ba5ff4201))
+
 ## [0.15.0](https://github.com/ecoma-io/archkeep/compare/v0.14.0...v0.15.0) (2026-08-26)
 
 
