@@ -16,6 +16,8 @@ function transition(overrides = {}) {
     architectureChanged: false,
     changes: null,
     policyChanged: null,
+    policyOneSided: false,
+    provenanceChanged: false,
     providerChanged: false,
     codeDrift: false,
     notes: [],
@@ -184,6 +186,34 @@ describe("formatHistoryReport", () => {
     });
     expect(text).toContain("(unchanged)");
     expect(text).toContain("✔ no architectural change recorded across the snapshots");
+  });
+
+  it("labels a one-sided policy pair not comparable, never unchanged", () => {
+    const text = formatHistoryReport({
+      evolution: {
+        dir: "/ws/hist",
+        captured: null,
+        snapshots,
+        transitions: [transition({ policyChanged: null, policyOneSided: true })],
+      },
+      coverage,
+    });
+    expect(text).toContain("(not comparable)");
+    expect(text).not.toContain("(unchanged)");
+  });
+
+  it("labels a provenance-advancing pair with no policy on either side not comparable", () => {
+    const text = formatHistoryReport({
+      evolution: {
+        dir: "/ws/hist",
+        captured: null,
+        snapshots,
+        transitions: [transition({ policyChanged: null, provenanceChanged: true })],
+      },
+      coverage,
+    });
+    expect(text).toContain("(not comparable)");
+    expect(text).not.toContain("(unchanged)");
   });
 
   it("says so when the history has a single snapshot and no transitions", () => {

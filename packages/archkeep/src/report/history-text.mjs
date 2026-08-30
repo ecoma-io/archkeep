@@ -20,7 +20,8 @@ import { formatChanges, formatClassifications, transitionKind } from "./snapshot
  * @param {{evolution: {dir: string, captured: object|null,
  *   snapshots: {name: string, id: string}[],
  *   transitions: {from: string, to: string, architectureChanged: boolean,
- *     changes: object|null, policyChanged: boolean|null, providerChanged: boolean,
+ *     changes: object|null, policyChanged: boolean|null, policyOneSided: boolean,
+ *     provenanceChanged: boolean|null, providerChanged: boolean,
  *     codeDrift: boolean, notes: string[], classifications?: string[]}[]}, coverage: object}} input
  * @returns {string}
  */

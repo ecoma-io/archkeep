@@ -111,13 +111,19 @@ export function declarationDigest(intent) {
  * @typedef {object} EvolutionEvidence
  * @property {{projects?: {added: string[], removed: string[], changed: string[]},
  *   edges?: {added: string[], removed: string[]},
- *   policyChanged?: boolean|null}} [observed]
+ *   policyChanged?: boolean|null, policyOneSided?: boolean,
+ *   provenanceChanged?: boolean|null}} [observed]
  *   The structural diff between base and head: project names and edge identity
  *   strings (source,target,type) that were added, removed, or changed. Empty
  *   by default. `policyChanged` — whether the policy fingerprint changed
- *   between base and head; `null` is the one-sided case: only one side
- *   records the policy, so it cannot be compared and is disclosed, never read
- *   as "the same" (the policyOneSided mirror from `commands/history.mjs`).
+ *   between base and head; `null` is "could not be compared": exactly one side
+ *   records the policy (`policyOneSided: true`) or neither does
+ *   (both-absent). `true` is a disclosure, never a refusal. `policyOneSided`
+ *   is the one-sided mirror from `commands/history.mjs` — an input fact, never
+ *   derived from `policyChanged === null`, because both-sides-absent also
+ *   yields `null` while remaining comparable. `provenanceChanged` — whether
+ *   the commit record advanced between base and head; it is `true` only when
+ *   both sides record provenance and the commits differ.
  * @property {boolean} [codeDrift]
  *   Whether provenance advanced with no architectural or policy change. The
  *   caller computes it under `commands/history.mjs`'s discipline — only when
@@ -217,7 +223,16 @@ export function classifyEvolution(input = {}) {
 
   const codeDrift = input.codeDrift === true;
   const policyChanged = observed.policyChanged ?? false;
-  const policyOneSided = observed.policyChanged === null;
+  // One-sided is an input fact (`snapshot-meta`'s `policyOneSided`), never
+  // derived from `policyChanged === null`: both-absent also yields `null` but
+  // is comparable, and deriving one-sided from it would disclose a refusal
+  // that is not real.
+  const policyOneSided = observed.policyOneSided === true;
+  // Provenance actually advanced (both sides record a commit and they
+  // differ). Pair an unverifiable policy with advancing provenance and the
+  // transition carried real code motion that cannot be classified — never a
+  // "fully comparable, unchanged pair".
+  const provenanceAdvanced = observed.provenanceChanged === true;
 
   const violations = input.violations ?? {};
   const introduced = violations.introduced ?? [];
@@ -261,6 +276,13 @@ export function classifyEvolution(input = {}) {
     notes.push(
       "policy (the declared architectural intent) could not be compared — one side of " +
         "the transition records the boundary law and the other does not",
+    );
+  }
+  if (observed.policyChanged === null && provenanceAdvanced) {
+    notes.push(
+      "policy (the declared architectural intent) could not be compared — neither side " +
+        "records the boundary law while the provenance advanced, so the pair cannot be " +
+        "classified (code motion may be hidden)",
     );
   }
   if (decisionOneSided) {
@@ -425,7 +447,8 @@ export function classifyEvolution(input = {}) {
       !verdictRelevantUnknown &&
       !signaledButUnclassified &&
       !policyOneSided &&
-      !decisionOneSided
+      !decisionOneSided &&
+      !(observed.policyChanged === null && provenanceAdvanced)
     ) {
       notes.push("a fully comparable, unchanged pair — no classification applies");
     }

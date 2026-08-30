@@ -111,14 +111,25 @@ export function formatChanges(changes) {
  * Classifies one transition into the short "kind" a reader skims for.
  *
  * @param {{architectureChanged: boolean, codeDrift: boolean, policyChanged: boolean|null,
+ *   policyOneSided: boolean, provenanceChanged: boolean|null,
  *   providerChanged: boolean}} transition
- * @returns {string}
  */
 export function transitionKind(transition) {
   if (transition.architectureChanged) return "architecture";
   if (transition.providerChanged) return "provider";
   if (transition.policyChanged === true) return "policy";
   if (transition.codeDrift) return "code drift";
+  // A pair whose policy could not be compared — one side records the law
+  // (`policyOneSided`) or neither does while the commit advanced
+  // (F-HIST-1) — is never rendered "unchanged": that label claims every
+  // comparable signal was compared and equal. The record carries these as
+  // fields, never parsed out of its notes.
+  if (
+    transition.policyChanged === null &&
+    (transition.policyOneSided || transition.provenanceChanged === true)
+  ) {
+    return "not comparable";
+  }
   return "unchanged";
 }
 

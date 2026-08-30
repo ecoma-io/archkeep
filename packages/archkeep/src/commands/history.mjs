@@ -280,8 +280,10 @@ export function nextSequence(read) {
  * @param {{name: string, path: string, envelope: object, id: string}} from
  * @param {{name: string, path: string, envelope: object, id: string}} to
  * @returns {{record: {from: string, to: string, architectureChanged: boolean,
- *     changes: object|null, policyChanged: boolean|null, providerChanged: boolean,
- *     codeDrift: boolean, notes: string[], classifications: string[]},
+ *     changes: object|null, policyChanged: boolean|null,
+ *     policyOneSided: boolean, provenanceChanged: boolean|null,
+ *     providerChanged: boolean, codeDrift: boolean, notes: string[],
+ *     classifications: string[]},
  *   meta: object}} `meta` is `compareSnapshotMetadata`'s result.
  */
 export function classifyTransition(from, to) {
@@ -320,6 +322,15 @@ export function classifyTransition(from, to) {
     notes.push(
       "policy (the declared architectural intent) could not be compared — one snapshot " +
         "records the boundary law and the other does not",
+    );
+  }
+  // Mirror of the one-sided rule: neither side records the law while the
+  // commit advanced. The pair carried real code motion the tool cannot
+  // classify, so it is disclosed — never asserted unchanged (F-HIST-1).
+  if (meta.policyChanged === null && meta.provenanceChanged === true) {
+    notes.push(
+      "policy (the declared architectural intent) could not be compared — neither snapshot " +
+        "records the boundary law while the provenance advanced, so code drift cannot be asserted",
     );
   }
   if (meta.provenanceOneSided) {
@@ -390,6 +401,8 @@ export function classifyTransition(from, to) {
         removed: diff.removedEdges.map(edgeIdentityKey),
       },
       policyChanged: meta.policyChanged,
+      policyOneSided: meta.policyOneSided,
+      provenanceChanged: meta.provenanceChanged,
     },
     codeDrift,
   });
@@ -400,13 +413,16 @@ export function classifyTransition(from, to) {
   // statement. The statement is appended only where it is true: a pair this
   // record disclosed as policy-only, one-sided (policy or provenance), or
   // provider-only is never read as "unchanged" — the same exclusions
-  // `./trajectory.mjs`'s `unchanged` bucket applies.
+  // `./trajectory.mjs`'s `unchanged` bucket applies. `null` policy with
+  // advancing provenance is the same exclusion: a pair that moved and cannot
+  // be classified is never read as unchanged.
   if (
     classification.classifications.length === 0 &&
     meta.policyChanged !== true &&
     !meta.policyOneSided &&
     !meta.provenanceOneSided &&
-    !meta.providerChanged
+    !meta.providerChanged &&
+    !(meta.policyChanged === null && meta.provenanceChanged === true)
   ) {
     const statement = classification.notes.find((note) =>
       note.endsWith("no classification applies"),
@@ -426,6 +442,8 @@ export function classifyTransition(from, to) {
     // interpretation changed".
     changes: architectureChanged || meta.providerChanged ? diff : null,
     policyChanged: meta.policyChanged,
+    policyOneSided: meta.policyOneSided,
+    provenanceChanged: meta.provenanceChanged,
     providerChanged: meta.providerChanged,
     codeDrift,
     notes,
@@ -451,8 +469,10 @@ export function classifyTransition(from, to) {
  * @param {{name: string, path: string, envelope: object, id: string}[]} files
  * @returns {{snapshots: {name: string, id: string}[],
  *   transitions: {from: string, to: string, architectureChanged: boolean,
- *     changes: object|null, policyChanged: boolean|null, providerChanged: boolean,
- *     codeDrift: boolean, notes: string[], classifications: string[]}[]}}
+ *     changes: object|null, policyChanged: boolean|null,
+ *     policyOneSided: boolean, provenanceChanged: boolean|null,
+ *     providerChanged: boolean, codeDrift: boolean, notes: string[],
+ *     classifications: string[]}[]}}
  */
 export function computeEvolution(files) {
   const snapshots = files.map((file) => ({ name: file.name, id: file.id }));

@@ -264,10 +264,32 @@ describe("classifyEvolution — DRIFT", () => {
     // The silent direction: policyChanged null is "could not be compared",
     // never "the same" — asserting code drift on an unverifiable policy would
     // report a fact the input does not establish.
-    const result = classifyEvolution({ codeDrift: true, observed: { policyChanged: null } });
+    const result = classifyEvolution({
+      codeDrift: true,
+      observed: { policyChanged: null, policyOneSided: true },
+    });
     expect(result.classifications).toEqual([]);
     expect(result.notes.some((note) => note.includes("policy"))).toBe(true);
     expect(result.notes.some((note) => note.includes("code drift cannot be asserted"))).toBe(true);
+  });
+
+  it("discloses a provenance-advancing pair with no policy on either side, never reading it unchanged", () => {
+    // F-HIST-1: both-absent is comparable only while provenance never moved
+    // (see `commands/trajectory.mjs`). Advancing commits with no boundary law
+    // on either side is real code motion the tool cannot classify — the
+    // event must say so, and must NOT claim one-sidedness, which would be a
+    // false fact about the pair.
+    const result = classifyEvolution({
+      observed: { policyChanged: null, provenanceChanged: true },
+    });
+    expect(result.classifications).toEqual([]);
+    expect(
+      result.notes.some((note) =>
+        note.includes("records the boundary law while the provenance advanced"),
+      ),
+    ).toBe(true);
+    expect(result.notes.some((note) => note.includes("fully comparable"))).toBe(false);
+    expect(result.notes.some((note) => note.includes("one side of"))).toBe(false);
   });
 });
 

@@ -270,7 +270,16 @@ export function computeTrajectory(files) {
       if (meta.policyOneSided) disclosures.policyOneSided += 1;
       if (meta.provenanceOneSided) disclosures.provenanceOneSided += 1;
       if (meta.crossRepo) disclosures.crossRepo += 1;
-      const incomparable = meta.policyOneSided || meta.provenanceOneSided;
+      // The advanced-both-absent pair is the same incomparable case as
+      // one-sided: neither side records the boundary law while the commit
+      // advanced, so the transition carried real code motion the tool cannot
+      // classify (F-HIST-1). `provenanceChanged === true` requires both sides
+      // to record provenance AND the commits to differ, so neither-side-
+      // absent histories (both commits `null`) stay comparable-unchanged.
+      const incomparable =
+        meta.policyOneSided ||
+        meta.provenanceOneSided ||
+        (meta.policyChanged === null && meta.provenanceChanged === true);
       if (incomparable) transitions.incomparable += 1;
 
       // The trend classes are counted over the SAME comparable subset the

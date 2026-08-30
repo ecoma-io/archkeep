@@ -697,8 +697,12 @@ export function classifyDeltaEvolution(delta, signals = {}) {
       projects,
       edges,
       // `null` survives: it is the one-sided policy case, and `classifyEvolution`
-      // reads it as "could not be compared" — never as "the same".
+      // reads it as "could not be compared" — never as "the same". The
+      // one-sided/advanced facts are input facts the payload carries (F-HIST-1):
+      // both-sides-absent is also `null` but stays comparable.
       policyChanged: delta.policyChanged,
+      policyOneSided: delta.policyOneSided,
+      provenanceChanged: delta.provenanceChanged,
     },
     codeDrift: signals.codeDrift === true,
     violations: {

@@ -175,10 +175,12 @@ function edgeIdentityString(edge) {
  *
  * @param {{addedProjects: object[], removedProjects: object[],
  *   changedProjects: object[], addedEdges: object[], removedEdges: object[]}} structural
- * @param {{policyChanged: boolean|null}} meta From `compareSnapshotMetadata`.
+ * @param {{policyChanged: boolean|null, policyOneSided: boolean,
+ *   provenanceChanged: boolean|null}} meta From `compareSnapshotMetadata`.
  * @returns {{architectureChanged: boolean, projects: {added: string[],
  *   removed: string[], changed: string[]}, edges: {added: string[],
- *   removed: string[]}, policyChanged: boolean|null, providerChanged: boolean}}
+ *   removed: string[]}, policyChanged: boolean|null, policyOneSided: boolean,
+ *   provenanceChanged: boolean|null, providerChanged: boolean}}
  */
 function observedFrom(structural, meta) {
   const projects = {
@@ -200,10 +202,14 @@ function observedFrom(structural, meta) {
       0,
     projects,
     edges,
-    // `null` is the one-sided case — only one side records the law — and is
-    // passed through so classifyEvolution discloses it rather than reading
-    // it as "the same" (`../governance/evolution-event.mjs`).
+    // `null` is "could not be compared": exactly one side records the law
+    // (`policyOneSided`) or neither does — passed through so classifyEvolution
+    // discloses rather than reading it as "the same", and the advanced
+    // both-absent pair never classifies as unchanged
+    // (`../governance/evolution-event.mjs`).
     policyChanged: meta.policyChanged,
+    policyOneSided: meta.policyOneSided,
+    provenanceChanged: meta.provenanceChanged,
     // The provider mismatch refuses before reconciliation ever runs, so a
     // reconciliable pair is by construction same-provider.
     providerChanged: false,
