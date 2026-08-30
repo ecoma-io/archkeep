@@ -63,11 +63,10 @@ A new reader should find these capabilities described as present, not promised.
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer. ([reference/exit-codes.md](../reference/exit-codes.md))
-- **22 commands — `check`, `change`, `graph`, `diff`, `delta`, `discover`,
+- **23 commands — `check`, `change`, `graph`, `diff`, `delta`, `discover`,
   `drift`, `reconcile`, `waivers`, `fitness`, `history`, `trajectory`,
-  `evolution`,
-  `health`, `report`, `debt`, `impact`, `explain`, `context`, `provenance`,
-  `adr`** — each with
+  `evolution`, `health`, `report`, `debt`, `impact`, `explain`, `context`,
+  `provenance`, `decisions`, `adr`, `rules`** — each with
   output a script or an agent can consume without parsing prose. `history` records the
   architecture's evolution across captured snapshots — the deterministic half
   of "how it got here" — `trajectory` aggregates that same record into
@@ -144,6 +143,13 @@ A new reader should find these capabilities described as present, not promised.
   the same editor gates; the repository dogfoods its own enforcer in CI.
   ([skills/overview.md](../skills/overview.md),
   [architecture-authority.md](architecture-authority.md))
+- **A semantic model that deliberately stops at the deterministic core.** The
+  structural core and the wave-3 evolution model were re-audited adversarially
+  (Phase 4, 2026-08-30) for ownership, data-flow, API, event and runtime
+  semantic candidates; none met the authoritative-evidence gate, so none was
+  built — the canonical data-flow (declared intent → observed evidence →
+  deterministic verdict → event → report) holds with no shortcut.
+  ([adr/0007-no-semantic-model-expansion.md](../adr/0007-no-semantic-model-expansion.md))
 
 ## The maturity ladder
 
