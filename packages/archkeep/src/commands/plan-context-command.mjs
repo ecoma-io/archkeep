@@ -33,6 +33,17 @@
  * - **Intent** — the canonical Architecture Intent verdict (`driftForCheck`,
  *   the object `drift` and `check` share), absent when the workspace declares
  *   no `architecture-intent.json`, no-verdict when one cannot be established.
+ * - **Fitness** — the declared fitness functions that govern this workspace,
+ *   with per-function verdicts (pass/fail/no-verdict) or a note that no
+ *   fitness gates are declared.
+ * - **Waivers** — active boundary waivers, each with its remaining term and
+ *   how many violations it currently covers, plus permanent suppressions.
+ * - **Decisions / ADRs in scope** — the decision lineage: which ADR, rule, or
+ *   fitness record authorises each matched constraint row, resolved where
+ *   possible and listed with their context.
+ * - **Debt** — the architecture-debt snapshot for the target project (when a
+ *   history directory is available): current violations, exemptions, and gaps,
+ *   aged across the snapshot history.
  * - **Coverage / limitations** — complete vs no-verdict, with the exact files
  *   that could not be analyzed.
  * - **Verification commands** — the deterministic commands an agent runs after
@@ -66,6 +77,8 @@ import { collectProjectContext } from "./context-command.mjs";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { readAdrContext } from "./adr.mjs";
+import { declaresFitness, fitnessForCheck } from "./fitness.mjs";
+import { computeWaivers } from "./waivers.mjs";
 import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 import { formatPlanContextReport } from "../report/plan-context-text.mjs";
 
@@ -269,9 +282,10 @@ export async function planContextCommand(projectName, paths, commandContext, con
   const planDecisionRefRows = projectContext.constraints
     .map((row, index) => ({ kind: `constraints[${index}]`, row }))
     .filter(({ row }) => typeof row?.decisionRef === "string" && row.decisionRef.trim() !== "");
+  let adrContext = null;
   let unresolvedDecisionRefs = new Set();
   if (planDecisionRefRows.length > 0) {
-    const adrContext = readAdrContext(root, { tracked });
+    adrContext = readAdrContext(root, { tracked });
     unresolvedDecisionRefs = new Set(
       // F04: the fitness half resolves against the ids THIS policy declares
       // (`declaredFitnessNames(config)`), never the ADRs' own `bindings`.
@@ -333,6 +347,89 @@ export async function planContextCommand(projectName, paths, commandContext, con
       };
     }
   }
+
+  // Fitness: the declared fitness functions that govern this workspace.
+  // Composed from `fitnessForCheck` (not re-implemented) — the same verdict
+  // `fitness` and `check` share. When the policy declares no fitness
+  // functions, state so honestly rather than omitting the section.
+  let fitness = null;
+  if (declaresFitness(config)) {
+    try {
+      const fitnessResult = fitnessForCheck(commandContext, {
+        rows: config.fitness,
+        intent: intent ?? null,
+        suppressions: config.suppressions ?? [],
+        scoped: false,
+      });
+      fitness = {
+        verified: true,
+        decisions: fitnessResult.decisions,
+        overall: fitnessResult.overall,
+      };
+    } catch (cause) {
+      fitness = {
+        verified: false,
+        decisions: [],
+        overall: { verdict: "no-verdict" },
+        error: `${cause?.message ?? cause}`,
+      };
+    }
+  }
+
+  // Waivers: active boundary waivers from the policy's suppressions table.
+  // Composed from `computeWaivers` — the same function `waivers` and `check`
+  // use. When no suppressions are declared, the section states "none" rather
+  // than omitting the key (the plan contract: every dimension present).
+  const suppressions = config.suppressions ?? [];
+  const waiversResult = suppressions.length > 0 ? computeWaivers(suppressions, wholeVerdict) : null;
+  const waivers =
+    waiversResult === null
+      ? {
+          declared: false,
+          waivers: [],
+          covered: 0,
+          expired: 0,
+          stale: 0,
+          permanentSuppressions: [],
+        }
+      : {
+          declared: true,
+          waivers: waiversResult.waivers,
+          covered: waiversResult.covered,
+          expired: waiversResult.expired,
+          stale: waiversResult.stale,
+          permanentSuppressions: waiversResult.permanentSuppressions,
+        };
+
+  // Decisions / ADRs in scope: the positive lineage — which ADRs, rules, or
+  // fitness IDs each matched constraint row cites and successfully resolves
+  // against. The negative case (unresolved refs) already exists above as
+  // `unresolvedDecisionRefs`; this is the resolved half.
+  const decisions = [];
+  if (planDecisionRefRows.length > 0 && adrContext !== null) {
+    for (const { kind, row } of planDecisionRefRows) {
+      const ref = row.decisionRef.trim();
+      if (!unresolvedDecisionRefs.has(ref)) {
+        const record = adrContext.byId.get(ref);
+        decisions.push({
+          decisionRef: ref,
+          kind,
+          resolved: true,
+          record: record
+            ? {
+                id: record.id,
+                title: record.title,
+                status: record.status,
+                ...(record.context ? { context: record.context } : {}),
+              }
+            : null,
+        });
+      }
+    }
+  }
+  decisions.sort((a, b) =>
+    a.decisionRef < b.decisionRef ? -1 : a.decisionRef > b.decisionRef ? 1 : 0,
+  );
   const failures = [...wholeTree.failures, ...drift.failures];
   const notAnalyzed = failures
     .filter(isWholeFileFailure)
@@ -436,6 +533,19 @@ export async function planContextCommand(projectName, paths, commandContext, con
         goWork: goWorkResult(drift.goWork),
         tsconfigPaths: tsconfigPathsResult(drift.tsconfigPaths),
       },
+      // Fitness: the declared fitness functions that govern this workspace.
+      // Present only when the policy declares fitness functions (matching
+      // the pattern: absent when the workspace chose not to declare any).
+      ...(fitness === null ? {} : { fitness }),
+      // Waivers: active boundary waivers and permanent suppressions.
+      // Always present — when no suppressions are declared, `declared: false`
+      // distinguishes "no waivers to show" from "waivers exist but none match".
+      waivers,
+      // Decisions / ADRs in scope: the resolved decision lineage — which
+      // ADRs, rules, or fitness IDs authorise each matched constraint row.
+      // Present only when at least one decision ref resolves; absent when
+      // no constraint row carries a decisionRef or none resolve.
+      ...(decisions.length > 0 ? { decisions } : {}),
       // The canonical Architecture Intent verdict — the same fold `check` and
       // `drift` report. Absent (key omitted) when no intent file is tracked,
       // matching `check`: intent absence is a workspace decision about

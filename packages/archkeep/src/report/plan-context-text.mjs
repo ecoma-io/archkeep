@@ -76,6 +76,68 @@ export function formatPlanContextReport({ project, coverage, unresolvedDecisionR
     );
   }
 
+  // Decisions / ADRs in scope (resolved decision lineage).
+  if (plan.decisions && plan.decisions.length > 0) {
+    sections.push(
+      `Decisions (${plan.decisions.length} resolved reference${plan.decisions.length === 1 ? "" : "s"})`,
+    );
+    for (const d of plan.decisions) {
+      const title = d.record ? `${d.record.id}: ${d.record.title}` : d.decisionRef;
+      const status = d.record ? d.record.status : "unresolved";
+      sections.push(`${DETAIL}${title}  (${status})`);
+      if (d.record?.context) {
+        sections.push(`${DETAIL}  context: ${d.record.context}`);
+      }
+    }
+  }
+
+  // Fitness.
+  if (plan.fitness) {
+    sections.push("Fitness");
+    if (!plan.fitness.verified) {
+      sections.push(`${DETAIL}no-verdict — ${plan.fitness.error ?? "could not be evaluated"}`);
+    } else {
+      sections.push(`${DETAIL}overall verdict: ${plan.fitness.overall.verdict}`);
+      if (plan.fitness.decisions.length > 0) {
+        for (const d of plan.fitness.decisions) {
+          sections.push(
+            `${DETAIL}${d.name ?? d.id}: ${d.verdict}${d.reason ? ` — ${d.reason}` : ""}`,
+          );
+        }
+      }
+    }
+  } else {
+    sections.push("Fitness  (no fitness functions declared in the boundary policy)");
+  }
+
+  // Waivers.
+  sections.push("Waivers");
+  if (!plan.waivers.declared) {
+    sections.push(`${DETAIL}no suppressions declared — every boundary is enforced`);
+  } else {
+    const waiverCount = plan.waivers.waivers.length;
+    const permCount = plan.waivers.permanentSuppressions.length;
+    sections.push(
+      `${DETAIL}${waiverCount} waiver${waiverCount === 1 ? "" : "s"}, ` +
+        `${permCount} permanent suppression${permCount === 1 ? "" : "s"}, ` +
+        `${plan.waivers.covered} covering violations, ` +
+        `${plan.waivers.expired} expired, ` +
+        `${plan.waivers.stale} stale`,
+    );
+    if (waiverCount > 0) {
+      for (const w of plan.waivers.waivers) {
+        const term = w.expiresAt
+          ? `expires ${w.expiresAt} (${w.status}, ${w.remainingMs}ms remaining)`
+          : "permanent";
+        sections.push(
+          `${DETAIL}${w.path}  ${term}  covers ${w.covered} violation${w.covered === 1 ? "" : "s"}`,
+        );
+        if (w.reason) sections.push(`${DETAIL}  reason: ${w.reason}`);
+        if (w.origin) sections.push(`${DETAIL}  origin: ${w.origin}`);
+      }
+    }
+  }
+
   // Affected projects.
   sections.push("Architecture");
   sections.push(
