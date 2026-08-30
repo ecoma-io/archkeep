@@ -2055,7 +2055,7 @@ async function runTrajectory(options, { cwd, env }) {
  * production both are undefined and every revision is read for real.
  *
  * @param {{format: string, output: string|null, base: string|null, head: string|null,
- *   paths: string[]}} options
+ *   eventOut: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -2086,9 +2086,18 @@ async function runEvolution(options, { cwd, env }) {
 
   let result;
   try {
+    // `--event-out` names the transition event store directory, resolved from
+    // cwd like the other path flags; `null` when absent, so a run without the
+    // flag writes no event and stays byte-identical.
+    const eventOut =
+      typeof options.eventOut === "string" && options.eventOut !== ""
+        ? isAbsolute(options.eventOut)
+          ? options.eventOut
+          : resolve(cwd, options.eventOut)
+        : null;
     result = await evolutionCommand(
       root,
-      { base: options.base, head: options.head },
+      { base: options.base, head: options.head, eventOut },
       {
         readGraph: env.readGraph,
         listFiles: env.listFiles,
@@ -2892,6 +2901,16 @@ const EVOLUTION_FLAG_HELP = Object.freeze([
       "linear descendant of --base with no merges between",
     ]),
   }),
+  Object.freeze({
+    flag: "--event-out",
+    key: "eventOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Append one EvolutionEvent per revision pair to this directory",
+      "(idempotent — a re-run over the same pair records a duplicate, never",
+      "a second event). docs/concepts/evolution.md owns the event model.",
+    ]),
+  }),
 ]);
 
 /**
@@ -3420,7 +3439,13 @@ const COMMANDS = Object.freeze({
     summary: "Describe how the architecture evolved across a Git revision range",
     flagHelp: EVOLUTION_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(EVOLUTION_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, base: null, head: null }),
+    defaults: Object.freeze({
+      format: "text",
+      output: null,
+      base: null,
+      head: null,
+      eventOut: null,
+    }),
     formats: DESCRIBABLE_FORMATS,
     run: runEvolution,
   }),

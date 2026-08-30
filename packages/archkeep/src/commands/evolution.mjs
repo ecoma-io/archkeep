@@ -69,8 +69,24 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import { loadIntent, INTENT_FILE } from "../architecture-intent/model.mjs";
+import { judgeIntent } from "../architecture-intent/judge.mjs";
+import { readAdrContext } from "./adr.mjs";
+import { referenceTime } from "../governance/clock.mjs";
+import { debtChangeDiff, debtFactId, driftFactOf } from "../governance/debt-ledger.mjs";
+import { computeAffectedDecisions } from "../governance/decision-lineage.mjs";
+import {
+  classifyEvolution,
+  eventDedupeKey,
+  eventId,
+  EVOLUTION_EVENT_SCHEMA_VERSION,
+} from "../governance/evolution-event.mjs";
+import { writeEvent } from "../governance/evolution-store.mjs";
+import { recordOrigin } from "../governance/provenance-record.mjs";
+import { fitnessForCheck } from "./fitness.mjs";
 import { runProcess } from "../process.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatEvolutionReport } from "../report/evolution-text.mjs";
@@ -79,6 +95,11 @@ import { computeEvolution, snapshotIdentity } from "./history.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { resolveDescribedPolicy } from "./policy.mjs";
 import { resolveCommandContext, describeWorkspaceRoot } from "./context.mjs";
+
+const require = createRequire(import.meta.url);
+
+/** The tool identity stamped into every emitted event's provenance (delta.mjs's pattern). */
+const { version: TOOL_VERSION } = require("../../package.json");
 
 /** A full SHA-1 object name, as `git rev-parse` answers it. */
 const FULL_SHA = /^[0-9a-f]{40}$/;
@@ -227,7 +248,8 @@ export function selectLinearRange(root, { base, head }, { run = runProcess } = {
  * @param {{resolveContext?: Function, resolveProvenance?: Function}} [io]
  * @returns {Promise<{sha: string, id: string, provider: string, provenance: object|null,
  *   projects: object[], dependencies: object[], fingerprint: string|null,
- *   coverage: {projects: number, analyzedFiles: number, imports: number}}>}
+ *   coverage: {projects: number, analyzedFiles: number, imports: number},
+ *   evidence?: object|null}>}
  * @throws {Error} when the revision is not a readable workspace, when whole-file
  *   analysis failures leave the record under-represented, or when the law the
  *   revision names will not load.
@@ -272,6 +294,16 @@ async function analyzeRevision(input, io = {}) {
   const projects = buildProjects(context.graph.nodes);
   const dependencies = buildDependencies(context.graph.dependencies);
 
+  // Wave 3 W7 (design §7): the per-revision comparable evidence for the
+  // fitness, debt and decision axes — the only comparable evidence those axes
+  // have, because each analyzed revision carries its own graph, law and
+  // decision registry. Computed ADDITIVELY and FAIL-SOFT: an axis that cannot
+  // be judged (an absent intent, an undeclared fitness block, an unjudgeable
+  // law) produces `null` with an in-band reason rather than a fabricated
+  // verdict, and never changes the existing `evolution` behavior (a revision
+  // that lacks an intent today still analyzes; it must keep doing so).
+  const evidence = await revisionEvidence(context, config, dir);
+
   return {
     sha,
     id: snapshotIdentity({
@@ -289,6 +321,625 @@ async function analyzeRevision(input, io = {}) {
       analyzedFiles: context.analysis.analyzed,
       imports: context.analysis.imports.length,
     },
+    ...(evidence === null ? {} : { evidence }),
+  };
+}
+
+/**
+ * The per-revision comparable evidence for the fitness, debt and decision
+ * axes (design §7): the observed architecture facts each revision's FULL
+ * analysis carries — the intent verdict over its own graph, the fitness
+ * verdicts its own law declares, and the ADR registry its own tree records.
+ * The `evolution` command judges every transition against exactly this
+ * evidence, never a second opinion: an axis that cannot be compared is `n/a`
+ * with a reason, never zero and never folded into a clean "none" (the wave's
+ * invariant, `../governance/evolution-event.mjs`).
+ *
+ * Fail-soft by contract: every destination here is evidence worth disclosing,
+ * not a gate. An absent intent, an undeclared fitness block, or an
+ * unjudgeable law returns `null` (with the caller's sense of "could not be
+ * compared") instead of throwing, so a revision that lacks the evidence still
+ * analyses exactly as it always did.
+ *
+ * @param {object} context The `resolveCommandContext` record for one revision.
+ * @param {object|null} config The revision's resolved boundary law.
+ * @param {string} dir The revision's materialized worktree.
+ * @returns {Promise<object|null>} The evidence record, or `null` when the
+ *   revision supplies nothing to compare (no intent, no fitness, no decision
+ *   registry) — the axes then read as incomparable with a reason.
+ */
+async function revisionEvidence(context, config, dir) {
+  /** The intent judgement over this revision's own graph, or null. */
+  let intentVerdict = null;
+  let intentNote = null;
+  try {
+    if (context.tracked?.includes(INTENT_FILE)) {
+      const intent = await loadIntent(dir, { tracked: context.tracked });
+      if (intent !== undefined && intent !== null) {
+        intentVerdict = judgeIntent(intent, {
+          nodes: context.graph.nodes,
+          dependencies: context.graph.dependencies,
+        });
+      }
+    }
+  } catch (cause) {
+    intentVerdict = null;
+    intentNote = `architecture intent could not be judged — ${cause?.message ?? cause}`;
+  }
+
+  /** The per-constraint fitness verdicts this revision's law declares, or null. */
+  let fitness = null;
+  let fitnessNote = null;
+  if (config?.fitness !== undefined) {
+    try {
+      const judged = fitnessForCheck(context, {
+        rows: config.fitness,
+        intent:
+          intentVerdict === null
+            ? null
+            : {
+                verdict:
+                  intentVerdict.findings.length > 0
+                    ? "findings"
+                    : intentVerdict.unresolved.length > 0
+                      ? "no-verdict"
+                      : "ok",
+                boundaries: intentVerdict.boundaries,
+                findings: intentVerdict.findings,
+                unresolved: intentVerdict.unresolved,
+                notes: intentVerdict.notes,
+              },
+        suppressions: config.suppressions ?? [],
+        scoped: false,
+      });
+      fitness = {
+        decisions: judged.decisions,
+        overall: judged.overall,
+      };
+    } catch (cause) {
+      fitness = null;
+      fitnessNote = `fitness could not be judged — ${cause?.message ?? cause}`;
+    }
+  }
+  /** The ADR registry this revision's own tree records, or null when unreadable. */
+  let adrContext;
+  let adrNote = null;
+  try {
+    adrContext = readAdrContext(dir, { tracked: context.tracked });
+  } catch (cause) {
+    // A malformed registry is a disclosure, not a gate: the decision axis
+    // reads as "could not be compared" with the reason, and the revision
+    // still analyzes exactly as it always did (the existing `evolution`
+    // never read ADR, so this catch is strictly additive).
+    adrContext = null;
+    adrNote = `ADR registry could not be read — ${cause?.message ?? cause}`;
+  }
+
+  const hasAny =
+    intentVerdict !== null ||
+    fitness !== null ||
+    (adrContext !== null && adrContext.records.length > 0);
+  if (!hasAny) {
+    return null;
+  }
+  return {
+    ...(intentVerdict === null
+      ? { intent: { verdict: "no-verdict", note: intentNote ?? "no intent compared" } }
+      : { intent: intentVerdict }),
+    fitness:
+      fitness === null
+        ? config?.fitness !== undefined
+          ? { verdict: "unknown", note: fitnessNote ?? "fitness could not be judged" }
+          : { verdict: "not_applicable", note: "no fitness block declared" }
+        : {
+            verdict: fitness.overall.verdict,
+            decisions: fitness.decisions,
+            overall: fitness.overall,
+          },
+    adr:
+      adrContext === null
+        ? {
+            records: [],
+            byId: new Map(),
+            knownFitness: new Set(),
+            note: adrNote ?? "ADR registry could not be read",
+          }
+        : adrContext,
+  };
+}
+
+/**
+ * The per-revision comparable evidence two adjacent snapshots both carry, as
+ * the facts `classifyEvolution` and the 8-question report read.
+ *
+ * @typedef {object} TransitionEvidence
+ * @property {object} from
+ * @property {object} to
+ */
+
+/**
+ * Whether a per-revision `evidence.intent` is a REAL `judgeIntent` result (and
+ * so comparable) rather than the `{verdict: "no-verdict", note}` shape used to
+ * disclose an intent that could not be judged. `debtChangeDiff` reads
+ * `findings`/`gaps` from it, and the refusal shape carries neither — diffing
+ * one would fabricate a clean empty-diff, so it is never treated as verdict
+ * evidence.
+ *
+ * @param {object|undefined} intent The `evidence.intent` value.
+ * @returns {boolean}
+ */
+function isRealIntentVerdict(intent) {
+  return (
+    intent !== undefined &&
+    intent !== null &&
+    typeof intent === "object" &&
+    Array.isArray(intent.findings)
+  );
+}
+
+/**
+ * The observed architecture-change struct `classifyEvolution` and the report
+ * read: the graph diff between two snapshots, plus the carrier-change flags the
+ * transition already classified. A transition whose graph did not change
+ * (`changes === null`) carries an empty structure — a pure policy or provider
+ * carrier change is still disclosed by the flags, never by fabricated diff
+ * rows.
+ *
+ * @param {object} transition A `computeEvolution` transition record.
+ * @returns {{architectureChanged: boolean, projects: {added: object[], removed: object[], changed: object[]},
+ *   edges: {added: object[], removed: object[]}, policyChanged: boolean|null,
+ *   policyOneSided: boolean, providerChanged: boolean, provenanceChanged: boolean|null}}
+ */
+function transitionObserved(transition) {
+  const diff = transition.changes ?? {
+    addedProjects: [],
+    removedProjects: [],
+    changedProjects: [],
+    addedEdges: [],
+    removedEdges: [],
+  };
+  return {
+    architectureChanged: transition.architectureChanged,
+    projects: {
+      added: diff.addedProjects ?? [],
+      removed: diff.removedProjects ?? [],
+      changed: diff.changedProjects ?? [],
+    },
+    edges: { added: diff.addedEdges ?? [], removed: diff.removedEdges ?? [] },
+    policyChanged: transition.policyChanged,
+    policyOneSided: transition.policyOneSided,
+    providerChanged: transition.providerChanged,
+    provenanceChanged: transition.provenanceChanged,
+  };
+}
+
+/**
+ * The stable drift-finding id one intent finding owns — the SAME id the debt
+ * ledger derives for the same fact (`debtFactId` over `driftFactOf`), so an
+ * event's `findings.introduced`/`findings.resolved` link the W5 ledger.
+ *
+ * @param {object} finding A `judgeIntent` finding (`{source, target, rule, …}`).
+ * @returns {string}
+ */
+function driftFindingId(finding) {
+  return debtFactId("drift", driftFactOf(finding));
+}
+
+/**
+ * The comparable axis answer when a side's intent could not be judged.
+ *
+ * @param {object|undefined} baseIntent
+ * @param {object|undefined} headIntent
+ * @returns {string}
+ */
+function intentIncomparableReason(baseIntent, headIntent) {
+  const sideReason = (side, intent) =>
+    side === "base"
+      ? `base intent unjudgeable${typeof intent?.note === "string" ? ` — ${intent.note}` : ""}`
+      : `head intent unjudgeable${typeof intent?.note === "string" ? ` — ${intent.note}` : ""}`;
+  if (!isRealIntentVerdict(baseIntent)) return sideReason("base", baseIntent);
+  if (!isRealIntentVerdict(headIntent)) return sideReason("head", headIntent);
+  return "intent could not be compared";
+}
+
+/**
+ * Builds the per-transition 8-question comparison — the comparable evidence
+ * for one base→head revision pair (design §7/§8). Every question field EXISTS
+ * with either real facts or the `{available: false, reason}` marker; an
+ * incomparable axis is NEVER folded into a clean empty result (the invariant:
+ * "an empty result is a claim, not a shrug").
+ *
+ * @param {object} from The base snapshot (`snapshots[i]`, with its `evidence`).
+ * @param {object} to The head snapshot (`snapshots[i+1]`, with its `evidence`).
+ * @param {object} transition The `evolution.transitions[i]` record.
+ * @returns {object} The comparison object for the envelope and report.
+ */
+function buildTransitionComparison(from, to, transition) {
+  const observed = transitionObserved(transition);
+
+  const fromEvidence = from.evidence ?? {};
+  const toEvidence = to.evidence ?? {};
+  const baseIntent = fromEvidence.intent;
+  const headIntent = toEvidence.intent;
+  const intentComparable = isRealIntentVerdict(baseIntent) && isRealIntentVerdict(headIntent);
+
+  /** @type {{introduced: string[], resolved: string[], unknown: string[], note?: string}|{available: false, reason: string}} */
+  let findings;
+  if (intentComparable) {
+    const baseDrift = new Set((baseIntent.findings ?? []).map(driftFindingId));
+    const headDrift = new Set((headIntent.findings ?? []).map(driftFindingId));
+    findings = {
+      introduced: [...headDrift].filter((id) => !baseDrift.has(id)).sort(),
+      resolved: [...baseDrift].filter((id) => !headDrift.has(id)).sort(),
+      unknown: [],
+    };
+  } else {
+    findings = { available: false, reason: intentIncomparableReason(baseIntent, headIntent) };
+  }
+
+  /** @type {{introduced: string[], resolved: string[]}|{available: false, reason: string}} */
+  let debt;
+  if (intentComparable) {
+    debt = debtChangeDiff(baseIntent, headIntent);
+  } else {
+    debt = { available: false, reason: intentIncomparableReason(baseIntent, headIntent) };
+  }
+
+  // The drift-finding feed for `classifyEvolution` — supplied ONLY when both
+  // intents were actually judged, so a could-not-look is never absorbed into a
+  // clean class set. `violations.resolved`/`debtResolved` stay out: the debt
+  // answer carries the closed-debt fact, and resolved drift findings feed
+  // REPAIR through `driftFindingsResolved`.
+  const driftComparable = intentComparable;
+  const headDriftIds = new Set((headIntent?.findings ?? []).map(driftFindingId));
+  const baseDriftIds = new Set((baseIntent?.findings ?? []).map(driftFindingId));
+  const violationsIntroduced = driftComparable
+    ? [...headDriftIds]
+        .filter((id) => !baseDriftIds.has(id))
+        .sort()
+        .map((id) => ({ id, waived: false }))
+    : [];
+  const driftFindingsResolved = driftComparable
+    ? [...baseDriftIds].filter((id) => !headDriftIds.has(id)).sort()
+    : [];
+
+  // Declared constraints: the HEAD-side fitness decisions that carry a
+  // verdict classifyEvolution can act on (`pass`/`fail` classify; `unknown`
+  // discloses a could-not-determine → no-verdict). `not_applicable` rows are
+  // skipped here — a declared-but-matching-nothing function is a report row,
+  // not a violation and not an unknown, so it must not force a fabricated
+  // no-verdict; it rides only the fitness verdictDeltas.
+  const headDecisions = Array.isArray(toEvidence.fitness?.decisions)
+    ? toEvidence.fitness.decisions
+    : [];
+  const declaredConstraints = headDecisions
+    .filter((d) => d.verdict === "pass" || d.verdict === "fail" || d.verdict === "unknown")
+    .map((d) => ({ id: d.name, verdict: d.verdict }));
+
+  // The ADR registry each side records: `{records}` when the side's registry
+  // is readable AND non-empty; `null` when the side records no registry or its
+  // registry is unreadable (the note is surfaced into the comparison's notes).
+  const adrSide = (side) => {
+    const evidence = side === "base" ? fromEvidence : toEvidence;
+    const adr = evidence.adr;
+    if (
+      adr === undefined ||
+      adr === null ||
+      typeof adr.note === "string" ||
+      !Array.isArray(adr.records) ||
+      adr.records.length === 0
+    ) {
+      return null;
+    }
+    return { records: adr.records };
+  };
+  const adrBase = adrSide("base");
+  const adrHead = adrSide("head");
+
+  const directionNotes = [];
+  const adrNote = (side) => {
+    const adr = (side === "base" ? fromEvidence : toEvidence).adr;
+    return typeof adr?.note === "string" ? adr.note : null;
+  };
+  const baseAdrNote = adrNote("base");
+  const headAdrNote = adrNote("head");
+  if (baseAdrNote !== null) {
+    directionNotes.push(`base decision registry unreadable — ${baseAdrNote}`);
+  }
+  if (headAdrNote !== null) {
+    directionNotes.push(`head decision registry unreadable — ${headAdrNote}`);
+  }
+
+  const fitnessComparable =
+    Array.isArray(fromEvidence.fitness?.decisions) && Array.isArray(toEvidence.fitness?.decisions);
+
+  /** @type {{verdictDeltas: object[]}|{available: false, reason: string}} */
+  let fitness;
+  if (fitnessComparable) {
+    const names = new Set([
+      ...fromEvidence.fitness.decisions.map((d) => d.name),
+      ...toEvidence.fitness.decisions.map((d) => d.name),
+    ]);
+    const verdictDelta = (side, name) => {
+      const decisions = (side === "base" ? fromEvidence : toEvidence).fitness.decisions;
+      const found = decisions.find((d) => d.name === name);
+      if (found !== undefined) return found.verdict;
+      return {
+        available: false,
+        reason: `not declared/judged at ${side}`,
+      };
+    };
+    fitness = {
+      verdictDeltas: [...names].sort().map((name) => ({
+        id: name,
+        base: verdictDelta("base", name),
+        head: verdictDelta("head", name),
+      })),
+    };
+  } else {
+    const baseFitness = fromEvidence.fitness;
+    const headFitness = toEvidence.fitness;
+    let reason;
+    if (baseFitness?.verdict === "not_applicable") {
+      reason = "no fitness block declared at base";
+    } else if (headFitness?.verdict === "not_applicable") {
+      reason = "no fitness block declared at head";
+    } else if (!Array.isArray(baseFitness?.decisions)) {
+      reason = `base fitness unjudgeable${typeof baseFitness?.note === "string" ? ` — ${baseFitness.note}` : ""}`;
+    } else {
+      reason = `head fitness unjudgeable${typeof headFitness?.note === "string" ? ` — ${headFitness.note}` : ""}`;
+    }
+    fitness = { available: false, reason };
+  }
+
+  const coverageAnswer = {
+    base: {
+      projects: from.coverage?.projects ?? 0,
+      analyzedFiles: from.coverage?.analyzedFiles ?? 0,
+      imports: from.coverage?.imports ?? 0,
+    },
+    head: {
+      projects: to.coverage?.projects ?? 0,
+      analyzedFiles: to.coverage?.analyzedFiles ?? 0,
+      imports: to.coverage?.imports ?? 0,
+    },
+  };
+
+  const classification = classifyEvolution({
+    observed,
+    codeDrift: transition.codeDrift === true,
+    ...(driftComparable
+      ? {
+          violations: { introduced: violationsIntroduced },
+          driftFindingsResolved,
+        }
+      : {}),
+    ...(declaredConstraints.length > 0 ? { declaredConstraints } : {}),
+    adrBase,
+    adrHead,
+  });
+
+  // The richer affected-decisions lineage: which ADR each head-side fitness
+  // id binds to, resolved against the head registry. `classifyEvolution`
+  // owns the DECISION_CHANGE predicate (`classification.affected.decisions`);
+  // this reuses the shared resolver for the per-id binding detail.
+  let affectedLineage;
+  const headAdr = toEvidence.adr;
+  const headRegistry =
+    headAdr !== undefined &&
+    headAdr !== null &&
+    typeof headAdr.note !== "string" &&
+    headAdr.byId instanceof Map
+      ? { records: headAdr.records, byId: headAdr.byId }
+      : null;
+  if (headRegistry !== null) {
+    affectedLineage = computeAffectedDecisions(
+      headRegistry,
+      headDecisions.map((d) => ({ id: d.name, verdict: d.verdict })),
+      [],
+    );
+  }
+
+  const notes = [...classification.notes, ...transition.notes, ...directionNotes];
+  const affected = {
+    ...classification.affected,
+    ...(affectedLineage !== undefined ? { lineage: affectedLineage.lineage } : {}),
+  };
+
+  return {
+    observed,
+    findings,
+    debt,
+    fitness,
+    coverage: coverageAnswer,
+    ...(classification.classifications.length > 0
+      ? { classifications: classification.classifications }
+      : { classifications: [] }),
+    disposition: classification.disposition,
+    affected,
+    notes: [...new Set(notes)],
+  };
+}
+
+/**
+ * Assembles the transition EvolutionEvent for one revision pair (design §3/§4)
+ * — the record `writeEvent` persists when `--event-out` is set. The event's
+ * identity (`id`/`dedupeKey`) derives from `{base, head}` alone, so only the
+ * full SHA + snapshot id ride in those two fields: a re-run over the same
+ * pair is byte-identical and the store proves idempotency. Wall-clock-bound
+ * fields (`recordedAt`) are carried but never key the event, mirroring
+ * delta.mjs's assembly.
+ *
+ * @param {object} from The base snapshot.
+ * @param {object} to The head snapshot.
+ * @param {object} transition The `evolution.transitions[i]` record.
+ * @param {object} comparison The comparison object for this pair.
+ * @returns {object} The event, minus `dedupeKey`/`id` (the caller sets those
+ *   before `writeEvent`).
+ */
+function buildTransitionEvent(from, to, transition, comparison) {
+  const provenance = [];
+  if (typeof from.provenance?.commit === "string") {
+    provenance.push({ kind: "git-commit", ref: from.provenance.commit });
+  }
+  if (typeof to.provenance?.commit === "string") {
+    provenance.push({ kind: "git-commit", ref: to.provenance.commit });
+  }
+  return {
+    schemaVersion: EVOLUTION_EVENT_SCHEMA_VERSION,
+    kind: "transition",
+    source: "evolution",
+    base: { revision: from.sha, snapshot: from.id },
+    head: { revision: to.sha, snapshot: to.id },
+    recordedAt: recordOrigin({
+      by: "evolution",
+      tool: `archkeep:v${TOOL_VERSION}`,
+      clock: { now: referenceTime },
+    }),
+    observed: comparison.observed,
+    affected: comparison.affected,
+    findings: comparison.findings,
+    fitness: comparison.fitness,
+    debt: comparison.debt,
+    classifications: comparison.classifications,
+    disposition: comparison.disposition,
+    notes: comparison.notes,
+    provenance,
+  };
+}
+
+/**
+ * Aggregates every transition comparison into one `result.summary` (design
+ * §8). The disposition is the worst across transitions; classifications and
+ * affected identities are unique sorted unions. An axis is unioned across
+ * transitions ONLY when every transition is comparable — an incomparable
+ * axis at any transition is surfaced as `{available: false, reason}` naming
+ * the transition index, never folded into a fabricated clean aggregate.
+ *
+ * @param {object[]} comparisons The per-transition comparison objects.
+ * @returns {object} The summary.
+ */
+function buildEvolutionSummary(comparisons) {
+  const dispositionRank = { accepted: 1, rejected: 2, "no-verdict": 3 };
+  let disposition = "accepted";
+  for (const comparison of comparisons) {
+    if ((dispositionRank[comparison.disposition] ?? 1) > dispositionRank[disposition]) {
+      disposition = comparison.disposition;
+    }
+  }
+
+  const unique = (items) => [...new Set(items)].sort();
+  const unionAxis = (axis) => {
+    // `{available: false}` markers propagate: the summary of an incomparable
+    // axis is itself incomparable, never a union that hides the gap.
+    const markerIndex = comparisons.findIndex(
+      (c) => c[axis] !== undefined && c[axis].available === false,
+    );
+    if (markerIndex !== -1) {
+      return {
+        available: false,
+        reason: `transition ${markerIndex} not comparable: ${comparisons[markerIndex][axis].reason}`,
+      };
+    }
+    const collect = (field) =>
+      unique(comparisons.flatMap((c) => (c[axis] !== undefined ? (c[axis][field] ?? []) : [])));
+    if (axis === "fitness") {
+      // Fitness aggregates on verdictDeltas: one delta per fitness id across
+      // the whole range, where the id's base/head verdicts are the range's
+      // first base and last head when unbroken, else an incomparable marker.
+      const ids = unique(
+        comparisons.flatMap((c) => (c.fitness.verdictDeltas ?? []).map((d) => d.id)),
+      );
+      const verdictDeltas = ids.map((id) => {
+        const first = comparisons
+          .flatMap((c) =>
+            (c.fitness.verdictDeltas ?? []).map((d) => ({
+              delta: d,
+              index: comparisons.indexOf(c),
+            })),
+          )
+          .find(({ delta }) => delta.id === id);
+        const last = [...comparisons]
+          .reverse()
+          .flatMap((c) =>
+            (c.fitness.verdictDeltas ?? []).map((d) => ({
+              delta: d,
+              index: comparisons.indexOf(c),
+            })),
+          )
+          .find(({ delta }) => delta.id === id);
+        return {
+          id,
+          base: first?.delta.base ?? { available: false, reason: `never comparable at base` },
+          head: last?.delta.head ?? { available: false, reason: `never comparable at head` },
+        };
+      });
+      return { verdictDeltas };
+    }
+    return {
+      introduced: collect("introduced"),
+      resolved: collect("resolved"),
+      ...(axis === "findings" ? { unknown: collect("unknown") } : {}),
+    };
+  };
+
+  const findings = unionAxis("findings");
+  const debt = unionAxis("debt");
+  const fitness = unionAxis("fitness");
+
+  const observed = {
+    architectureChanged: comparisons.filter((c) => c.observed.architectureChanged === true).length,
+    projects: {
+      added: unique(comparisons.flatMap((c) => c.observed.projects.added.map((p) => p.name ?? p))),
+      removed: unique(
+        comparisons.flatMap((c) => c.observed.projects.removed.map((p) => p.name ?? p)),
+      ),
+      changed: unique(
+        comparisons.flatMap((c) => c.observed.projects.changed.map((p) => p.name ?? p)),
+      ),
+    },
+    edges: {
+      added: unique(
+        comparisons.flatMap((c) =>
+          c.observed.edges.added.map((e) =>
+            e.source && e.target && e.type
+              ? `${e.source}→${e.target}:${e.type}`
+              : JSON.stringify(e),
+          ),
+        ),
+      ),
+      removed: unique(
+        comparisons.flatMap((c) =>
+          c.observed.edges.removed.map((e) =>
+            e.source && e.target && e.type
+              ? `${e.source}→${e.target}:${e.type}`
+              : JSON.stringify(e),
+          ),
+        ),
+      ),
+    },
+    policyChanged: comparisons.filter((c) => c.observed.policyChanged === true).length,
+    providerChanged: comparisons.filter((c) => c.observed.providerChanged === true).length,
+  };
+
+  const affected = {
+    projects: unique(comparisons.flatMap((c) => c.affected?.projects ?? [])),
+    boundaries: unique(comparisons.flatMap((c) => c.affected?.boundaries ?? [])),
+    constraints: unique(comparisons.flatMap((c) => c.affected?.constraints ?? [])),
+    decisions: unique(comparisons.flatMap((c) => c.affected?.decisions ?? [])),
+  };
+
+  const notes = unique(comparisons.flatMap((c) => c.notes ?? []));
+  return {
+    transitions: comparisons.length,
+    disposition,
+    classifications: unique(comparisons.flatMap((c) => c.classifications ?? [])),
+    observed,
+    affected,
+    findings,
+    debt,
+    fitness,
+    notes,
   };
 }
 
@@ -326,19 +977,22 @@ function releaseWorktree(root, dir, { run = runProcess } = {}) {
  *   invoked from — the envelope header describes THIS tree, and every git
  *   question is answered in it; the analyzed revisions are materialized
  *   elsewhere.
- * @param {{base: string, head?: string|null}} range The raw revisions.
+ * @param {{base: string, head?: string|null, eventOut?: string|null}} range The raw
+ *   revisions. `eventOut` an optional directory; when set, one EvolutionEvent is
+ *   written per revision pair (idempotent, design §3/§4).
  * @param {{run?: Function, makeTempRoot?: Function, resolveContext?: Function,
  *   resolveProvenance?: Function, readGraph?: Function, listFiles?: Function}} [io]
  *   Injectable seams. `makeTempRoot` defaults to a fresh `mkdtemp` directory
  *   under the OS temp dir; `readGraph`/`listFiles` thread into every analyzed
  *   revision's context the way `../../cli.mjs` threads them into one.
- * @returns {Promise<{status: "ok", result: object, coverage: object,
+ * @returns {Promise<{status: "ok", result: {base: string, head: string,
+ *   revisions: object[], transitions: object[], summary: object}, coverage: object,
  *   report: {text: string, json: string}}>}
  * @throws {Error} on every condition listed in this module's header — an
  *   unusable selection, an unanalyzable revision, a failed worktree, a git
  *   failure — never a shorter record for any of them.
  */
-export async function evolutionCommand(root, { base, head = null }, io = {}) {
+export async function evolutionCommand(root, { base, head = null, eventOut = null }, io = {}) {
   const run = io.run ?? runProcess;
   const identity = describeWorkspaceRoot(root);
   const provenanceResolver = io.resolveProvenance ?? resolveProvenance;
@@ -415,6 +1069,41 @@ export async function evolutionCommand(root, { base, head = null }, io = {}) {
     })),
   );
 
+  // Wave 3 W7 (design §7/§8): per-transition comparable evidence (the
+  // 8-question comparison) plus, when `--event-out` is set, one transition
+  // EvolutionEvent per revision pair — idempotent, keyed on byte-stable
+  // base/head revisions.
+  const comparisons = [];
+  for (let index = 0; index < evolution.transitions.length; index++) {
+    const transition = /** @type {object} */ (evolution.transitions[index]);
+    const comparison = buildTransitionComparison(
+      snapshots[index],
+      snapshots[index + 1],
+      transition,
+    );
+    transition.comparison = comparison;
+    comparisons.push(comparison);
+
+    if (eventOut) {
+      const event = buildTransitionEvent(
+        snapshots[index],
+        snapshots[index + 1],
+        transition,
+        comparison,
+      );
+      event.dedupeKey = eventDedupeKey(event);
+      event.id = eventId(event);
+      const write = writeEvent(eventOut, event, { root });
+      transition.eventWrite = {
+        dir: eventOut,
+        id: write.id,
+        duplicate: write.duplicate,
+      };
+    }
+  }
+
+  const summary = buildEvolutionSummary(comparisons);
+
   const headSnapshot = snapshots[snapshots.length - 1];
   const userProvenance = provenanceResolver(root);
   const notes = [
@@ -443,8 +1132,19 @@ export async function evolutionCommand(root, { base, head = null }, io = {}) {
   const result = {
     base: selection.base,
     head: selection.head,
-    revisions: snapshots.map(({ sha, id }) => ({ commit: sha, id })),
+    // Wave 3 W7 (design §7): each revision also carries its comparable
+    // evidence — the intent verdict over its own graph, the fitness verdicts
+    // its own law judges, and the ADR registry its own tree records — so a
+    // trend report can name its basis per revision. Additive: `{commit, id}`
+    // are unchanged, and a revision that supplied nothing to compare omits
+    // the key entirely (an absent `evidence` reads as incomparable).
+    revisions: snapshots.map(({ sha, id, evidence }) => ({
+      commit: sha,
+      id,
+      ...(evidence == null ? {} : { evidence }),
+    })),
     transitions: evolution.transitions,
+    summary,
   };
 
   const envelope = jsonEnvelope({
