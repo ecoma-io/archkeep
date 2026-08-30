@@ -94,6 +94,66 @@ describe("computeDebtLedger — stable ids", () => {
     expect(expired.entries[0].kind).toBe("expired-waiver");
     expect(expired.entries[0].id).toBe(active.entries[0].id);
   });
+
+  it("gives distinct drift findings in the same source project distinct ids (F-DEB-5)", () => {
+    // Two findings `{source:"A",target:"B"}` and `{source:"A",target:"C"}` — a
+    // change whose drift spans two targets — must NOT collide onto one id. Keying
+    // on `source` alone (or the prose message) would over-resolve A's whole drift
+    // when one REPAIR closes one edge. The identity is the full `{source, target,
+    // rule}` tuple (F-DEB-5).
+    const current = {
+      suppressions: [],
+      intentNotes: [],
+      findings: [
+        { source: "A", target: "B", rule: "intentForbiddenEdge", message: "m1" },
+        { source: "A", target: "C", rule: "intentForbiddenEdge", message: "m2" },
+      ],
+      unresolved: [],
+    };
+    const ledger = computeDebtLedger(current, aged);
+    expect(ledger.entries).toHaveLength(2);
+    expect(ledger.entries[0].id).not.toBe(ledger.entries[1].id);
+  });
+
+  it("keys an aspirational gap by its {from,to} fact, not its prose note (F-DEB-8)", () => {
+    // The same optional allowed row, however its note is worded, must hash to the
+    // SAME id — a reworded note must not orphan event-linked refs.
+    const a = computeDebtLedger(
+      {
+        suppressions: [],
+        intentNotes: [],
+        gaps: [
+          {
+            from: "payments",
+            to: "api",
+            note: 'optional allowed intent "payments" → "api" is not yet observed — aspirational, not drift',
+          },
+        ],
+        findings: [],
+        unresolved: [],
+      },
+      aged,
+    );
+    const b = computeDebtLedger(
+      {
+        suppressions: [],
+        intentNotes: [],
+        gaps: [
+          {
+            from: "payments",
+            to: "api",
+            note: "completely reworded - build payments reaching api eventually",
+          },
+        ],
+        findings: [],
+        unresolved: [],
+      },
+      aged,
+    );
+    expect(a.entries).toHaveLength(1);
+    expect(a.entries[0].kind).toBe("aspirational-gap");
+    expect(a.entries[0].id).toBe(b.entries[0].id);
+  });
 });
 
 describe("computeDebtLedger — event linkage (introducedBy)", () => {

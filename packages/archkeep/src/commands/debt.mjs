@@ -156,6 +156,7 @@ export async function debtCommand(dir, commandContext, options = {}) {
     {
       suppressions: config.suppressions,
       intentNotes: verdict.notes,
+      gaps: verdict.gaps,
       findings: verdict.findings,
     },
     read,
