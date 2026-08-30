@@ -65,6 +65,19 @@
  * exit code. The registry is read lazily, only when a matched row actually
  * carries a `decisionRef` — the common case (no `docs/adr/` adopted yet)
  * pays no extra read.
+ *
+ * ## The lineage comparison (optional, additive)
+ *
+ * `explainCommand` accepts an optional `options.baseRegistry` — a base
+ * ADR registry state to compare the workspace's current one against. When it
+ * is supplied, the resolved-site explanation gains a `decisionChange` field:
+ * whether the decision lineage moved between the two states
+ * (`detectDecisionChange`, `../governance/decision-lineage.mjs` —
+ * DECISION_CHANGE, never DRIFT, and never asserted without both registry
+ * states: a one-sided base renders as a "not comparable" note). Without the
+ * option — every current caller — the explanation is byte-for-byte what it
+ * was: the field, and its rendered lines, exist only when the comparison was
+ * requested.
  */
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { UsageError } from "../errors.mjs";
@@ -77,6 +90,7 @@ import { resolveProvenance } from "./provenance.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { lineage } from "../governance/decision-graph.mjs";
 import { unresolvedDecisionRefNote } from "./provenance-command.mjs";
+import { detectDecisionChange } from "../governance/decision-lineage.mjs";
 import {
   declaredFitnessNames,
   hasAuthority,
@@ -266,18 +280,59 @@ function resolveDecisionChains(matchedConstraints, root, tracked, config) {
 }
 
 /**
+ * The lineage-comparison seam: `detectDecisionChange` fed the caller-supplied
+ * base registry and the workspace's current registry — the same
+ * `readAdrContext` read the decision-chain walk makes, made only when the
+ * caller asked for the comparison. A registry that cannot be read resolves
+ * nothing and says so (the same fail-closed posture the chain walk takes for
+ * the same condition), so a supersession is never asserted from a registry
+ * that was never read.
+ *
+ * @param {{records: object[], byId: Map<string, object>}|null|undefined} baseRegistry
+ *   The base state's registry (a `loadAdrRegistry` result), or `null` for a
+ *   one-sided base — the comparison then discloses "not comparable" instead
+ *   of asserting anything.
+ * @param {string} root The workspace root, for the head registry read.
+ * @param {string[]} tracked Tracked files, for the head registry read.
+ * @returns {{superseded: boolean, comparable: boolean, notes: string[]}}
+ */
+function computeDecisionChange(baseRegistry, root, tracked) {
+  let headRegistry;
+  try {
+    headRegistry = readAdrContext(root, { tracked });
+  } catch (error) {
+    return {
+      superseded: false,
+      comparable: false,
+      notes: [`the decision registry could not be read: ${String(error?.message ?? error)}`],
+    };
+  }
+  return detectDecisionChange(baseRegistry, headRegistry);
+}
+
+/**
  * Runs the `explain` command: resolves the command context, finds the import
  * site, evaluates the rules, and returns the explanation.
  *
  * @param {string} site A `file:line:column` string.
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {object} config The loaded boundary config (from `loadBoundaryConfig`).
+ * @param {object} [options]
+ * @param {{records: object[], byId: Map<string, object>}|null|undefined} [options.baseRegistry]
+ *   The ADR registry at the comparison base (a `loadAdrRegistry` result), or
+ *   `null` for a one-sided base. Supplied, the resolved-site explanation
+ *   also carries a `decisionChange` field — whether the decision lineage
+ *   moved between base and head (the workspace's current registry):
+ *   DECISION_CHANGE, never DRIFT, and never asserted without both registry
+ *   states (one-sided ⇒ a "not comparable" note, `detectDecisionChange`'s
+ *   own contract). Absent — every current caller — the explanation changes
+ *   no byte.
  * @returns {{status: "ok"|"no-verdict", explanation: object, coverage: object,
  *   report: {text: string, json: string}}}
  * @throws {Error} when the plugin is unregistered on a polyglot Nx workspace,
  *   when the site string is malformed, or when the site cannot be found.
  */
-export function explainCommand(site, commandContext, config) {
+export function explainCommand(site, commandContext, config, options = {}) {
   const { root, provider, marker, graph } = commandContext;
 
   // Descriptive commands refuse when the graph is known to be incomplete.
@@ -489,6 +544,20 @@ export function explainCommand(site, commandContext, config) {
     explanation.decisions = decisions;
   }
 
+  // The lineage-comparison seam (Wave 3 §9): when the caller supplies a base
+  // registry, the resolved-site explanation also states whether the decision
+  // lineage moved between base and head — DECISION_CHANGE, never DRIFT, and
+  // never asserted without both registry states (a one-sided base ⇒ a
+  // "not comparable" note, `detectDecisionChange`'s own contract). Absent
+  // the option — every current caller — the explanation changes no byte:
+  // the field and its rendered lines exist only when the comparison was
+  // requested, and an unresolvable site (above) stays what it was.
+  let decisionChange = null;
+  if (options.baseRegistry !== undefined) {
+    decisionChange = computeDecisionChange(options.baseRegistry, root, commandContext.tracked);
+    explanation.decisionChange = decisionChange;
+  }
+
   const context = { root, provider, marker, provenance: resolveProvenance(root) };
   const coverage = {
     complete,
@@ -511,6 +580,7 @@ export function explainCommand(site, commandContext, config) {
     violations,
     verdict,
     ...(decisions.length > 0 ? { decisions } : {}),
+    ...(decisionChange !== null ? { decisionChange } : {}),
   };
 
   const envelope = jsonEnvelope({

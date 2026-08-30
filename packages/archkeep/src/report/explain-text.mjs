@@ -152,6 +152,45 @@ function formatDecisionEntry(entry) {
   }
   return lines;
 }
+
+/**
+ * The lineage-comparison disclosure — `explain`'s optional base-registry
+ * seam, rendered only when the caller supplied a base registry and the
+ * resolved-site explanation carries a `decisionChange` field. The fact is
+ * stated either way — superseded or not — because "the lineage was compared
+ * and did not move" must read differently from "no comparison happened"
+ * (`../../../../AGENTS.md`: an empty result is a claim, never a shrug);
+ * every disclosure note rides appended lines. Appended only: an explanation
+ * that has no `decisionChange` field renders exactly as it did before.
+ *
+ * @param {{superseded: boolean, comparable: boolean, notes: string[]}} change
+ *   A `detectDecisionChange` result. `superseded` is meaningful only when
+ *   `comparable` is `true`; a non-comparable comparison (one-sided or
+ *   unreadable) renders "could not compare", never "did not move", because
+ *   the latter would assert a fact the comparison could not hold.
+ * @returns {string[]}
+ */
+function formatDecisionChange(change) {
+  const lines = [];
+  if (change.comparable === false) {
+    lines.push(
+      `${DETAIL}decisionChange  could not compare — the decision lineage was not established between the compared registry states`,
+    );
+  } else if (change.superseded) {
+    lines.push(
+      `${DETAIL}decisionChange  superseded — the decision lineage moved between the compared registry states`,
+    );
+  } else {
+    lines.push(
+      `${DETAIL}decisionChange  none — the decision lineage did not move between the compared registry states`,
+    );
+  }
+  for (const note of change.notes) {
+    lines.push(`${DETAIL}decisionChange  ${note}`);
+  }
+  return lines;
+}
+
 /**
  * The whole explain report.
  *
@@ -232,6 +271,12 @@ export function formatExplainReport({ explanation, coverage }) {
       }
     } else {
       sections.push(`${DETAIL}verdict      allowed — no constraint was violated`);
+    }
+    // The lineage-comparison disclosure — present only when the explanation
+    // carries it (the caller supplied a base registry); otherwise nothing
+    // here renders, and the report is byte-for-byte what it was.
+    if (explanation.decisionChange !== undefined) {
+      sections.push(...formatDecisionChange(explanation.decisionChange));
     }
 
     // The "why does this constraint exist" chain — one block per governing

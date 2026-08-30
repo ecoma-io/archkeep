@@ -168,12 +168,15 @@ function codeDependencies(graph) {
  * @param {object} intent The normalized model from `./model.mjs`.
  * @param {{nodes: object, dependencies?: object}} graph
  * @returns {{verdict: "ok"|"findings"|"no-verdict",
- *   findings: object[], unresolved: object[], boundaries: object[], notes: string[]}}
+ *   findings: object[], unresolved: object[], boundaries: object[], notes: string[],
+ *   gaps: {from: string, to: string, note: string}[]}}
  *   `findings` are `{source, target, rule, boundaryFrom, boundaryTo, message}`;
  *   `unresolved` are `{boundary, issue}` for every empty side or empty
  *   boundary; `boundaries` are `{name, projects[]}` (sorted members); `notes`
  *   are coverage notes that change no verdict — today only an
- *   `"optional": true` `allowed` row whose statement is not yet built.
+ *   `"optional": true` `allowed` row whose statement is not yet built; `gaps`
+ *   carry the same rows' structured `{from, to}` identities (F-DEB-8), the
+ *   stable key the debt ledger hashes an aspirational-gap entry by.
  */
 export function judgeIntent(intent, graph) {
   const nodes = graph.nodes ?? {};
@@ -191,6 +194,7 @@ export function judgeIntent(intent, graph) {
   const findings = [];
   const unresolved = [];
   const notes = [];
+  const gaps = [];
 
   for (const boundary of boundaries) {
     if (boundary.projects.length === 0) {
@@ -291,9 +295,18 @@ export function judgeIntent(intent, graph) {
       // Absence tolerated — aspirational, not drift — but it is still a
       // coverage note and the caller threads it into the report's coverage
       // notes, so a reader can tell "optional and absent" from "never checked".
-      notes.push(
-        `optional allowed intent "${row.from}" → "${row.to}" is not yet observed — aspirational, not drift`,
-      );
+      const note = `optional allowed intent "${row.from}" → "${row.to}" is not yet observed — aspirational, not drift`;
+      notes.push(note);
+      // The structured `{from, to}` is the STABLE identity of the gap — the
+      // debt ledger keys an aspirational-gap entry by it (F-DEB-8), never by
+      // the prose note, so a reworded note does not re-key the fact.
+      gaps.push({
+        from: row.from,
+        to: row.to,
+        note,
+        boundaryFrom: from.boundaryName ?? row.from,
+        boundaryTo: to.boundaryName ?? row.to,
+      });
       return;
     }
     const pairs = [];
@@ -535,5 +548,5 @@ export function judgeIntent(intent, graph) {
 
   const verdict = findings.length > 0 ? "findings" : unresolved.length > 0 ? "no-verdict" : "ok";
 
-  return { verdict, findings, unresolved, boundaries, notes };
+  return { verdict, findings, unresolved, boundaries, notes, gaps };
 }

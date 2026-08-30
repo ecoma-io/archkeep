@@ -141,6 +141,35 @@ export const INSUFFICIENT_HISTORY = "insufficient_history";
  */
 
 /**
+ * The trend-facts block: per-class counts and boundary-movement totals over
+ * the SAME comparable transitions the axes count — a pair whose fingerprint
+ * or provenance could not be compared is excluded exactly as it is excluded
+ * from `transitions.unchanged`, so the basis is one consistent subset. Each
+ * class counts once per transition carrying it (a transition may carry
+ * several). `violationsIntroduced`/`violationsResolved` count classes, never
+ * violation rows — and for snapshot-sourced transitions no finding evidence
+ * exists at all, so those totals are `0` with the `note` saying why: the
+ * absence of evidence, never a claim that none occurred (the silent
+ * direction).
+ *
+ * `null` when no trend can be derived: fewer than two observations, or a
+ * history where every transition was incomparable. Never a zero-filled block.
+ *
+ * @typedef {object} TrajectoryTrends
+ * @property {{CHANGE: number, DRIFT: number, VIOLATION: number, REPAIR: number,
+ *   DECISION_CHANGE: number}} byClass One count per evolution class, over
+ *   comparable transitions whose `classifications` carry it.
+ * @property {number} violationsIntroduced
+ * @property {number} violationsResolved
+ * @property {number} comparableTransitions The number of transitions the
+ *   counts were derived over — `transitions.count − transitions.incomparable`.
+ * @property {"comparable transition classifications"} basis What the counts
+ *   are a claim about, stated as a value.
+ * @property {string} [note] A disclosure when the counts cannot speak about
+ *   evidence the input never carried (violation/repair rows).
+ */
+
+/**
  * Aggregates the deterministic trajectory over an ordered snapshot set.
  * Pure: same bytes in, same object out. All keys are always present — shape
  * never depends on history content (E-F05); unavailable values are `null`
@@ -154,7 +183,8 @@ export const INSUFFICIENT_HISTORY = "insufficient_history";
  *   transitions: {count: number, architecture: number, policy: number,
  *     provider: number, codeDrift: number, incomparable: number, unchanged: number},
  *   disclosures: {policyOneSided: number, provenanceOneSided: number, crossRepo: number},
- *   projects: TrajectoryAxis, edges: TrajectoryAxis}}
+ *   projects: TrajectoryAxis, edges: TrajectoryAxis,
+ *   trends: TrajectoryTrends|null}}
  */
 export function computeTrajectory(files) {
   const n = files.length;
@@ -181,6 +211,10 @@ export function computeTrajectory(files) {
     unchanged: 0,
   };
   const disclosures = { policyOneSided: 0, provenanceOneSided: 0, crossRepo: 0 };
+
+  /** @type {{CHANGE: number, DRIFT: number, VIOLATION: number, REPAIR: number,
+        DECISION_CHANGE: number}} */
+  const classCounts = { CHANGE: 0, DRIFT: 0, VIOLATION: 0, REPAIR: 0, DECISION_CHANGE: 0 };
 
   // Cumulative transition events, accumulated while classifying. Kept as
   // scalars rather than deferred to a second pass — one walk over the pairs.
@@ -231,14 +265,33 @@ export function computeTrajectory(files) {
       if (record.policyChanged === true) transitions.policy += 1;
       if (record.providerChanged) transitions.provider += 1;
       if (record.codeDrift) transitions.codeDrift += 1;
-
       // The asymmetric-evidence cases, counted from `meta` itself — never
       // parsed back out of the record's prose notes.
       if (meta.policyOneSided) disclosures.policyOneSided += 1;
       if (meta.provenanceOneSided) disclosures.provenanceOneSided += 1;
       if (meta.crossRepo) disclosures.crossRepo += 1;
-      const incomparable = meta.policyOneSided || meta.provenanceOneSided;
+      // The advanced-both-absent pair is the same incomparable case as
+      // one-sided: neither side records the boundary law while the commit
+      // advanced, so the transition carried real code motion the tool cannot
+      // classify (F-HIST-1). `provenanceChanged === true` requires both sides
+      // to record provenance AND the commits to differ, so neither-side-
+      // absent histories (both commits `null`) stay comparable-unchanged.
+      const incomparable =
+        meta.policyOneSided ||
+        meta.provenanceOneSided ||
+        (meta.policyChanged === null && meta.provenanceChanged === true);
       if (incomparable) transitions.incomparable += 1;
+
+      // The trend classes are counted over the SAME comparable subset the
+      // axes already disclose: a pair excluded from `unchanged` because its
+      // fingerprint or provenance could not be compared is excluded from the
+      // trend facts the same way — never silently folded in. Each class is a
+      // fact per transition; a transition carrying several counts in each.
+      if (!incomparable) {
+        for (const cls of record.classifications) {
+          classCounts[cls] += 1;
+        }
+      }
 
       // `unchanged` is deliberately STRICTER than the label `history`'s text
       // renderer prints for the same transition: an aggregate has no
@@ -328,6 +381,38 @@ export function computeTrajectory(files) {
     resolved: available ? edgeMovement.resolved : null,
     persistent: available ? persistentCount(edgePresence) : null,
   };
+  // The trend-facts block. It exists only when comparable evidence exists:
+  // fewer than two observations, or a history whose every transition was
+  // incomparable, yields `null` — never a zero-filled block (a zero would
+  // claim "no change" over evidence this run could not compare). The counts
+  // ride the same classification the axes classify with; both come from
+  // `classifyTransition`'s one walk, so the trends are idempotent: same
+  // snapshots, same object, every run.
+  //
+  // The violation/repair totals are computed from the classification inputs,
+  // and snapshot-sourced transitions carry none: stored snapshots hold the
+  // graph and the policy fingerprint, not findings. Zero there is the absence
+  // of evidence, never a claim that none occurred — the note says so, on
+  // every non-null trends block.
+  /** @type {TrajectoryTrends|null} */
+  let trends = null;
+  if (available) {
+    const comparableTransitions = transitions.count - transitions.incomparable;
+    if (comparableTransitions > 0) {
+      trends = {
+        byClass: classCounts,
+        violationsIntroduced: 0,
+        violationsResolved: 0,
+        comparableTransitions,
+        basis: "comparable transition classifications",
+        note:
+          "transition classifications carry no violation or repair evidence — stored " +
+          "snapshots hold the graph and the policy fingerprint, not findings, so " +
+          "VIOLATION/REPAIR and the violations-* totals are 0 because no finding could " +
+          "be classified, never because none occurred",
+      };
+    }
+  }
 
   return {
     observations: {
@@ -344,6 +429,7 @@ export function computeTrajectory(files) {
     disclosures,
     projects,
     edges,
+    trends,
   };
 }
 

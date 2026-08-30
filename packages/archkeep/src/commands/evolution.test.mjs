@@ -241,7 +241,9 @@ describe("the selected range", () => {
   it("discloses an unverifiable policy instead of reading it as unchanged", async () => {
     // Neither revision declares a law: policyChanged must be null — never
     // folded into false, which would let the drift classification fire on a
-    // policy nobody compared.
+    // policy nobody compared. The two revisions' provenance differs, so the
+    // pair is provenance-advancing: the disclosure note names it rather than
+    // reading the unverifiable policy as an unchanged one (F-HIST-1).
     const { run } = fakeRun({
       revs: { main: BASE, HEAD: MID },
       revList: [`${MID} ${BASE}`],
@@ -258,7 +260,13 @@ describe("the selected range", () => {
     const [transition] = result.transitions;
     expect(transition.policyChanged).toBeNull();
     expect(transition.codeDrift).toBe(false);
-    expect(transition.notes).toEqual([]);
+    // The transition must disclose the PROVENANCE-ADVANCING both-absent case
+    // specifically — never the one-sided note, which asserts a false fact about
+    // which side lacks a law (F-HIST-1).
+    expect(transition.notes.join("\n")).toContain(
+      "neither snapshot records the boundary law while the provenance advanced, so code drift cannot be asserted",
+    );
+    expect(transition.notes.join("\n")).not.toContain("one snapshot records the boundary law");
   });
 });
 

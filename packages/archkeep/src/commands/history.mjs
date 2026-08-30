@@ -76,9 +76,10 @@ import { basename, join, resolve } from "node:path";
 
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { containmentViolation } from "../containment.mjs";
+import { classifyEvolution } from "../governance/evolution-event.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatHistoryReport } from "../report/history-text.mjs";
-import { computeDiff, parseBaseline } from "./diff.mjs";
+import { computeDiff, edgeIdentityKey, parseBaseline } from "./diff.mjs";
 import { buildDependencies, buildProjects } from "./graph.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
@@ -268,11 +269,21 @@ export function nextSequence(read) {
  * `meta`; parsing `notes` strings would be a second copy of the decision
  * wearing a parser's name.
  *
+ * The record's `classifications` are the canonical evolution classes
+ * (`../governance/evolution-event.mjs`'s `classifyEvolution`) computed from
+ * the signals this transition's own record carries — the graph diff rows,
+ * the policy comparison, and the code-drift fact. Stored snapshots carry no
+ * findings, intent rows, debt ledger, or decision registries, so no class is
+ * ever asserted where the input holds no evidence for it (design §2): a
+ * violation, repair, or decision-change class would be a fabricated fact.
+ *
  * @param {{name: string, path: string, envelope: object, id: string}} from
  * @param {{name: string, path: string, envelope: object, id: string}} to
  * @returns {{record: {from: string, to: string, architectureChanged: boolean,
- *     changes: object|null, policyChanged: boolean|null, providerChanged: boolean,
- *     codeDrift: boolean, notes: string[]},
+ *     changes: object|null, policyChanged: boolean|null,
+ *     policyOneSided: boolean, provenanceChanged: boolean|null,
+ *     providerChanged: boolean, codeDrift: boolean, notes: string[],
+ *     classifications: string[]},
  *   meta: object}} `meta` is `compareSnapshotMetadata`'s result.
  */
 export function classifyTransition(from, to) {
@@ -311,6 +322,15 @@ export function classifyTransition(from, to) {
     notes.push(
       "policy (the declared architectural intent) could not be compared — one snapshot " +
         "records the boundary law and the other does not",
+    );
+  }
+  // Mirror of the one-sided rule: neither side records the law while the
+  // commit advanced. The pair carried real code motion the tool cannot
+  // classify, so it is disclosed — never asserted unchanged (F-HIST-1).
+  if (meta.policyChanged === null && meta.provenanceChanged === true) {
+    notes.push(
+      "policy (the declared architectural intent) could not be compared — neither snapshot " +
+        "records the boundary law while the provenance advanced, so code drift cannot be asserted",
     );
   }
   if (meta.provenanceOneSided) {
@@ -363,6 +383,55 @@ export function classifyTransition(from, to) {
   const codeDrift =
     !architectureChanged && meta.policyChanged === false && meta.provenanceChanged === true;
 
+  // The canonical classification: one definition (`classifyEvolution`), fed
+  // from the signals this transition's own record carries — the graph diff
+  // rows, the policy comparison, and the code-drift fact. Stored snapshots
+  // carry no findings, intent rows, debt ledger, or decision registries, so
+  // those evidence classes stay absent — a class is never asserted where the
+  // input holds no evidence for it (design §2).
+  const classification = classifyEvolution({
+    observed: {
+      projects: {
+        added: diff.addedProjects.map((project) => project.name),
+        removed: diff.removedProjects.map((project) => project.name),
+        changed: diff.changedProjects.map((project) => project.name),
+      },
+      edges: {
+        added: diff.addedEdges.map(edgeIdentityKey),
+        removed: diff.removedEdges.map(edgeIdentityKey),
+      },
+      policyChanged: meta.policyChanged,
+      policyOneSided: meta.policyOneSided,
+      provenanceChanged: meta.provenanceChanged,
+    },
+    codeDrift,
+  });
+
+  // `classifyEvolution`'s disclosures for snapshot-sourced evidence are the
+  // policy facts the notes above already state (its wording mirrors ours, per
+  // `../governance/evolution-event.mjs`) plus the empty-classification
+  // statement. The statement is appended only where it is true: a pair this
+  // record disclosed as policy-only, one-sided (policy or provenance), or
+  // provider-only is never read as "unchanged" — the same exclusions
+  // `./trajectory.mjs`'s `unchanged` bucket applies. `null` policy with
+  // advancing provenance is the same exclusion: a pair that moved and cannot
+  // be classified is never read as unchanged.
+  if (
+    classification.classifications.length === 0 &&
+    meta.policyChanged !== true &&
+    !meta.policyOneSided &&
+    !meta.provenanceOneSided &&
+    !meta.providerChanged &&
+    !(meta.policyChanged === null && meta.provenanceChanged === true)
+  ) {
+    const statement = classification.notes.find((note) =>
+      note.endsWith("no classification applies"),
+    );
+    if (statement !== undefined) {
+      notes.push(statement);
+    }
+  }
+
   const record = {
     from: from.name,
     to: to.name,
@@ -373,9 +442,14 @@ export function classifyTransition(from, to) {
     // interpretation changed".
     changes: architectureChanged || meta.providerChanged ? diff : null,
     policyChanged: meta.policyChanged,
+    policyOneSided: meta.policyOneSided,
+    provenanceChanged: meta.provenanceChanged,
     providerChanged: meta.providerChanged,
     codeDrift,
     notes,
+    // Appended after every existing key: the classifications are a fact
+    // about the transition, never a change to one of the facts above.
+    classifications: classification.classifications,
   };
   return { record, meta };
 }
@@ -395,8 +469,10 @@ export function classifyTransition(from, to) {
  * @param {{name: string, path: string, envelope: object, id: string}[]} files
  * @returns {{snapshots: {name: string, id: string}[],
  *   transitions: {from: string, to: string, architectureChanged: boolean,
- *     changes: object|null, policyChanged: boolean|null, providerChanged: boolean,
- *     codeDrift: boolean, notes: string[]}[]}}
+ *     changes: object|null, policyChanged: boolean|null,
+ *     policyOneSided: boolean, provenanceChanged: boolean|null,
+ *     providerChanged: boolean, codeDrift: boolean, notes: string[],
+ *     classifications: string[]}[]}}
  */
 export function computeEvolution(files) {
   const snapshots = files.map((file) => ({ name: file.name, id: file.id }));

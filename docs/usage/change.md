@@ -59,8 +59,18 @@ there is no auto-discovery — the `--intent` flag names it):
   table does not already accept) and `noNewCycles` (no project sits on a
   dependency cycle that was acyclic at the base). A constraint not declared
   is not judged; `true` is the only meaningful value.
-- **`summary`** is informational only. It is never parsed, never matched on,
-  and has no effect on any verdict.
+- **`summary`** is informational. It is never parsed, never matched on, and
+  has no effect on any verdict — except through the breadth guard below,
+  which reads its PRESENCE: a summary on an intent that declares no rows is
+  refused loudly, because prose cannot assert what rows must state.
+- **The breadth guard.** An intent that declares NO rows — no `projects`, no
+  `edges`, and no `constraints` — while carrying a `summary` is refused
+  outright (exit 3, before any reconciliation): its prose asserts a change
+  the empty declaration states nothing about, and that pair is the one way
+  around the grammar's reject-by-name discipline. Prose cannot assert what
+  rows must state. Declare the material consequences in the rows, or drop
+  the summary; an intent that declares a constraint (or any project/edge
+  row) is not a catch-all, whatever its summary says.
 
 ## What it is not
 
@@ -88,7 +98,37 @@ archkeep delta --capture --output .archkeep/change-base.json
 
 # 4. Verify: reconcile the declaration against what actually changed.
 archkeep change .archkeep/change-base.json --intent change-intent.json
+
+#    Optionally record the run as a canonical evolution event (audit trail;
+#    idempotent — a rerun over the same transition writes nothing new).
+archkeep change .archkeep/change-base.json --intent change-intent.json \
+  --event-out .archkeep/events
 ```
+
+## Events and classification
+
+Every `change` result carries the evolution classification in its JSON
+envelope: `result.classifications` (which evolution classes the transition
+earned — `CHANGE`, `DRIFT`, `VIOLATION`, `REPAIR`, `DECISION_CHANGE`, each a
+fact about the delta, never an inference), `result.affected` (the projects,
+boundaries, constraints and decisions the transition touched, as identity
+strings), and `result.debt` (the change's divergence from its declaration —
+the findings it introduced, claimed as resolved only when the run observed a
+repair, which a change run never does). The classification is computed from
+the reconciliation output itself, never re-derived: [../concepts/evolution.md](../concepts/evolution.md)
+owns the predicates' one home.
+
+With `--event-out <dir>`, the same run additionally writes the canonical
+reconcile EvolutionEvent (`kind: "reconcile"`, `source: "change"`) to the
+append-only, idempotent store at `<dir>` — one file per run,
+`<NNNN>-<id8>.json`, `recordedAt` excluded from the identity so a rerun over
+the same `{base, head, declarationDigest}` produces the same event id and
+writes nothing (`duplicate: true` in the report). The disposition maps the
+verdict: matched with every declared constraint passing ⇒ `accepted`;
+undeclared or unfulfilled, or a failed declared constraint ⇒ `rejected`;
+unproven, or a constraint that could not be determined ⇒ `no-verdict`.
+Absent the flag, no file is written and the run is byte-identical to a
+pre-wave-3 one.
 
 Exit codes follow the repository-wide contract: `0` when the reconciliation
 is matched and every declared constraint passed, `1` when it found undeclared

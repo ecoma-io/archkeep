@@ -313,6 +313,43 @@ export function findChangeIntentViolations(raw) {
 
   return violations;
 }
+/**
+ * The breadth guard (wave 3, design §5): everything wrong with a NORMALIZED
+ * intent whose declaration is empty while its own prose asserts a change.
+ *
+ * An intent with zero declared rows — no project rows, no edge rows, no
+ * declared constraints — declares that NOTHING material will change. Its
+ * `summary`, if present, is the author's own statement of what the change
+ * does; when the rows are empty that statement is a claim nothing in the
+ * declaration can be verified against, and the reconciliation would read
+ * `matched` over an unchanged tree while the author's prose says the tree
+ * moved. Prose cannot assert what rows must state: this is the one bypass
+ * around the grammar's reject-by-name discipline, and it is refused loudly
+ * (`parseChangeIntent` throws, exit 3 upstream) instead of reconciling.
+ *
+ * The rule is deliberately stricter than "empty projects/edges": it also
+ * requires the constraints section empty. A declared constraint IS a row —
+ * `noNewViolations: true` states a verifiable promise, and an intent that
+ * declares one is not a catch-all no matter what its summary says.
+ *
+ * @param {object} intent A `parseChangeIntent` result — the normalized shape,
+ *   with absent raw sections already normalized to empty arrays.
+ * @returns {string[]} Messages; empty when the intent is not a catch-all.
+ */
+export function findChangeIntentBreadthViolations(intent) {
+  const declaredRows =
+    intent.projects.add.length +
+    intent.projects.remove.length +
+    intent.edges.add.length +
+    intent.edges.remove.length +
+    Object.keys(intent.constraints).length;
+  if (declaredRows > 0 || intent.summary === undefined) return [];
+  return [
+    "summary: the intent declares no rows (no projects, no edges, no constraints) while its " +
+      "summary asserts a material change — prose cannot assert what rows must state; declare " +
+      "the material consequences in the rows, or drop the summary",
+  ];
+}
 
 /**
  * Parses and validates change-intent text into the normalized shape the
@@ -346,16 +383,18 @@ export function parseChangeIntent(text, path) {
       { cause },
     );
   }
+  // Shape validation first, then the breadth guard over the NORMALIZED
+  // intent — the guard's subject is the intent as the command will consume
+  // it, with absent sections already normalized to empty expectations. Both
+  // name every violation at once in the one throw below, so a malformed
+  // catch-all is reported whole rather than piecemeal.
   const violations = findChangeIntentViolations(parsed);
-  if (violations.length > 0) {
-    throw new Error(
-      `archkeep: the change intent '${path}' is not a usable contract:\n  ` +
-        violations.join("\n  "),
-    );
-  }
-  return {
+  const intent = {
     version: parsed.version,
-    base: { commit: parsed.base.commit },
+    // Defensive access: an invalid `base` is caught by the shape violations
+    // below and thrown before this object is ever returned, so a missing
+    // section must not crash the normalization itself.
+    base: { commit: parsed.base?.commit },
     ...(parsed.summary === undefined ? {} : { summary: parsed.summary }),
     projects: {
       add: parsed.projects?.add ?? [],
@@ -367,6 +406,14 @@ export function parseChangeIntent(text, path) {
     },
     constraints: { ...(parsed.constraints ?? {}) },
   };
+  violations.push(...findChangeIntentBreadthViolations(intent));
+  if (violations.length > 0) {
+    throw new Error(
+      `archkeep: the change intent '${path}' is not a usable contract:\n  ` +
+        violations.join("\n  "),
+    );
+  }
+  return intent;
 }
 
 /**

@@ -380,6 +380,22 @@ describe("computeTrajectory — unknown evidence", () => {
     expect(t.disclosures).toEqual({ policyOneSided: 0, provenanceOneSided: 0, crossRepo: 0 });
   });
 
+  it("never reads a provenance-advancing pair without a policy fingerprint on either side as unchanged", () => {
+    // F-HIST-1: both-absent is comparable only while nothing moved. Two
+    // committed snapshots with no boundary law on either side carried real
+    // code motion the tool cannot classify — incomparable, not unchanged,
+    // and not disclosed as one-sided (that would be a false fact).
+    const read = snapshots([
+      envelope({ projects: [p("a")], dependencies: [], commit: "aaa" }),
+      envelope({ projects: [p("a")], dependencies: [], commit: "bbb" }),
+    ]);
+    const t = computeTrajectory(read.files);
+    expect(t.transitions.incomparable).toBe(1);
+    expect(t.transitions.unchanged).toBe(0);
+    expect(t.transitions.codeDrift).toBe(0);
+    expect(t.disclosures.policyOneSided).toBe(0);
+  });
+
   it("counts cross-repo pairs and dirty captures as disclosed facts", () => {
     const read = snapshots([
       envelope({

@@ -59,10 +59,11 @@ record.
 
 ## Revision selection
 
-| flag     | argument | default |                                                                                  |
-| -------- | -------- | ------- | -------------------------------------------------------------------------------- |
-| `--base` | `<rev>`  | (none)  | Required. A commit SHA, branch, tag, or `HEAD~n`; resolved with `git rev-parse`. |
-| `--head` | `<rev>`  | `HEAD`  | The tip; must be a linear descendant of `--base`.                                |
+| flag          | argument | default |                                                                                  |
+| ------------- | -------- | ------- | -------------------------------------------------------------------------------- |
+| `--base`      | `<rev>`  | (none)  | Required. A commit SHA, branch, tag, or `HEAD~n`; resolved with `git rev-parse`. |
+| `--head`      | `<rev>`  | `HEAD`  | The tip; must be a linear descendant of `--base`.                                |
+| `--event-out` | `<dir>`  | (none)  | Append one EvolutionEvent per revision pair to `<dir>` (idempotent).             |
 
 The selected set is `[base, …every commit in base..head]`, oldest first —
 always bounded by what you named, never a whole-repository traversal. Both
@@ -76,6 +77,45 @@ refuses the run loudly, naming its SHA — flattening a merge would pin a whole
 branch's architectural changes onto one commit and hide the branch entirely.
 There is no `--first-parent` mode; until there is one, select ranges that end
 before a merge or start after it.
+
+## Per-pair comparison evidence
+
+Beyond the transition classification above, each transition carries a
+comparison attention report — eight questions answered on that one revision
+pair — from the envelope fields the command already computed
+([`result.transitions[i].comparison`](../reference/json-output.md)) and from
+the whole range
+([`result.summary`](../reference/json-output.md)):
+
+1. **Observed** — architecture changed, projects and edges added/removed/changed,
+   policy/provider/provenance changed.
+2. **Drift findings** — drift introduced and resolved between the pair.
+3. **Intent debt** — the intent verdict's closed debt and newly opened debt.
+4. **Fitness** — per fitness-function verdict deltas across the pair, with
+   coverage.
+5. **Classifications** — the same `CHANGE`/`DRIFT`/`VIOLATION`/`REPAIR`/
+   `DECISION_CHANGE` vocabulary as the transition row.
+6. **Disposition** — `accepted` / `rejected` / `no-verdict`.
+7. **Affected** — the projects, module boundaries, constraints, and decisions
+   the pair touches.
+8. **Notes** — every disclosure the pair made.
+
+An axis the pair could not answer is **`n/a` with a reason**, never folded into
+silence and never into a fabricated clean answer: an unreadable ADR registry,
+an intent that could not be judged, or a fitness block declared on only one
+side all read as `n/a — <reason>`. There is no numeric health score anywhere in
+the record; a verdict is a word, not a number.
+
+## EvolutionEvent output (`--event-out`)
+
+`--event-out <dir>` appends one EvolutionEvent per revision pair to `<dir>`
+([`docs/concepts/evolution.md`](../concepts/evolution.md) owns the event
+model). The write is **idempotent**: an event's identity is derived from the
+pair's full SHAs (and snapshot ids) alone, so re-running the same range records
+a duplicate (`duplicate: true` in the store's answer) and writes nothing new —
+the store never guesses idempotency, it proves it. A missing directory is
+created on first use. When the flag is absent no event is written and the
+output is byte-identical to a run before the flag existed.
 
 ## Safety
 

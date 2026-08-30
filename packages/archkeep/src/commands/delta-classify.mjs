@@ -65,6 +65,7 @@
 import { canonicalizeJson } from "../canonical.mjs";
 import { suppressionCovers } from "../config.mjs";
 import { referenceTime } from "../governance/clock.mjs";
+import { classifyEvolution } from "../governance/evolution-event.mjs";
 import { suppressionFate } from "../governance/waiver.mjs";
 import { namespacedId } from "./custom-rules.mjs";
 
@@ -488,6 +489,262 @@ export function classifyDelta(input) {
       head: headRecords,
       ...(sourceProjectOf === undefined ? {} : { sourceProjectOf }),
     }),
+  };
+}
+
+/**
+ * The stable identity string of one classified delta violation entry, for an
+ * evolution event's `findings` (`../governance/evolution-event.mjs`) — the
+ * delta's own identity facts, never a second spelling: `messageId`,
+ * `sourceProject`, the target (project or specifier, with the marker saying
+ * which), and the canonical constraint row that fired. `baseCount`/`headCount`
+ * and the sites are attached evidence, exactly as they are outside identity in
+ * `violationIdentity` — a growth or shrink changes counts, not what the
+ * violation IS.
+ *
+ * @param {object} entry One classified entry from `classifyViolations` or
+ *   `classifyDelta`'s `violations` buckets.
+ * @returns {string} The canonical identity string.
+ */
+function deltaEntryIdentity(entry) {
+  return canonicalizeJson({
+    messageId: entry.messageId,
+    sourceProject: entry.sourceProject ?? null,
+    target: entry.target ?? null,
+    targetIsSpecifier: entry.targetIsSpecifier === true,
+    constraint: entry.constraint ?? null,
+  });
+}
+
+/**
+ * The best name an UNCLASSIFIABLE delta entry can honestly carry into an
+ * event's `unknown` list — the identity it has, or an honest absence. The
+ * reason is the load-bearing half (`classifyEvolution` discloses each with
+ * it); the id exists so the note can name the entry.
+ *
+ * @param {{violation?: object}} entry A violation-classification unknown.
+ * @returns {string}
+ */
+function unknownViolationIdentity(entry) {
+  const violation = entry?.violation;
+  if (violation !== null && typeof violation === "object") {
+    const messageId = typeof violation.messageId === "string" ? violation.messageId : null;
+    const target =
+      typeof violation.targetProject === "string" && violation.targetProject !== ""
+        ? violation.targetProject
+        : typeof violation.specifier === "string" && violation.specifier !== ""
+          ? violation.specifier
+          : null;
+    if (messageId !== null || target !== null) {
+      return `violation ${messageId ?? "?"}${target === null ? "" : ` → ${target}`}`;
+    }
+  }
+  return "unidentifiable violation";
+}
+
+/** The same best-name discipline for an unresolvable-record unknown. */
+function unknownRecordIdentity(entry) {
+  const record = entry?.record;
+  if (
+    record !== null &&
+    typeof record === "object" &&
+    typeof record.specifier === "string" &&
+    record.specifier !== ""
+  ) {
+    return `unresolvable import '${record.specifier}'`;
+  }
+  return "unidentifiable unresolvable import";
+}
+
+/**
+ * The delta event's `findings` (design §1) mapped from a delta capture: the
+ * identity strings of the classified violations, plus every verdict-relevant
+ * unknown the run disclosed — violation unknowns, unresolvable-record
+ * unknowns, and custom-rule unknowns, each with its reason. Unresolvable
+ * introduced/resolved records are NOT findings: the delta carries them but
+ * never counts them as violations (no rule reached a verdict about them), and
+ * the event's findings mirror the delta's gating vocabulary.
+ *
+ * @param {object} delta The `deltaCommand` result payload (`violations`,
+ *   `unresolvable`, optional `customRules`).
+ * @returns {{introduced: string[], resolved: string[], unknown: {id: string,
+ *   reason: string}[]}}
+ */
+export function deltaFindings(delta) {
+  return {
+    introduced: delta.violations.introduced.map(deltaEntryIdentity),
+    resolved: delta.violations.resolved.map(deltaEntryIdentity),
+    unknown: [
+      ...delta.violations.unknown.map((entry) => ({
+        id: unknownViolationIdentity(entry),
+        reason: entry.reason,
+      })),
+      ...delta.unresolvable.unknown.map((entry) => ({
+        id: unknownRecordIdentity(entry),
+        reason: entry.reason,
+      })),
+      ...(delta.customRules === undefined
+        ? []
+        : delta.customRules.findings.unknown.map((entry) => ({
+            id: `custom rule '${entry.rule}'`,
+            reason: entry.reason,
+          }))),
+    ],
+  };
+}
+
+/**
+ * The identity string of one graph edge, in the design's canonical spelling
+ * `source>target:type` (the `(source, target, type)` identity the design
+ * §1 names, printed the way `docs/concepts/evolution.md`'s example shows).
+ * The ONE spelling the delta's event `observed.edges`/`affected.boundaries`
+ * use — a second spelling somewhere would be a second definition of "same
+ * edge", and two definitions drift.
+ *
+ * @param {{source: string, target: string, type: string}} edge
+ * @returns {string}
+ */
+export function edgeEvolutionIdentity({ source, target, type }) {
+  return `${source}>${target}:${type}`;
+}
+
+/**
+ * The delta event's per-constraint verdict deltas (design §1 `fitness`),
+ * derived from the classified entries the capture already carries — never a
+ * re-judgment. A constraint's base/head verdict is judged from the entries
+ * that name it: `fail` when an entry attributes any live site to that side
+ * (`baseCount`/`headCount`), `pass` otherwise. Only rows whose verdict MOVED
+ * are deltas — a constraint failing on both sides moved nothing, and a
+ * half-fixed one is the delta's report of the half it moved. Rows are sorted
+ * by constraint identity, so two runs over the same capture are
+ * byte-identical.
+ *
+ * @param {object} delta The `deltaCommand` result payload.
+ * @returns {{constraint: string, base: "pass"|"fail", head: "pass"|"fail"}[]}
+ */
+export function deltaVerdictDeltas(delta) {
+  const entries = [
+    ...delta.violations.introduced,
+    ...delta.violations.resolved,
+    ...delta.violations.unchanged,
+  ];
+  /** @type {Map<string, {base: number, head: number}>} */
+  const byConstraint = new Map();
+  for (const entry of entries) {
+    if (entry.constraint === undefined || entry.constraint === null) continue;
+    const id = canonicalizeJson(entry.constraint);
+    const row = byConstraint.get(id) ?? { base: 0, head: 0 };
+    if (entry.baseCount > 0) row.base += 1;
+    if (entry.headCount > 0) row.head += 1;
+    byConstraint.set(id, row);
+  }
+  /** @type {{constraint: string, base: "pass"|"fail", head: "pass"|"fail"}[]} */
+  const deltas = [];
+  for (const [constraint, counts] of byConstraint) {
+    /** @type {"pass"|"fail"} */
+    const base = counts.base > 0 ? "fail" : "pass";
+    /** @type {"pass"|"fail"} */
+    const head = counts.head > 0 ? "fail" : "pass";
+    if (base === head) continue;
+    deltas.push({ constraint, base, head });
+  }
+  return deltas;
+}
+
+/**
+ * The §1 mapping for a delta capture: feeds the delta's OWN signals — the
+ * classified violations with their waiver state, the policy-change fact, and
+ * the structural-change/code-drift signals the caller supplies when it
+ * computed them — to `classifyEvolution` (`../governance/evolution-event.mjs`),
+ * the one home of the classification predicates, and returns its verdict.
+ * This module adds no second opinion about what a class means; it maps.
+ *
+ * The delta's verdict-relevant unknowns — violation unknowns, unresolvable-
+ * record unknowns, custom-rule unknowns — are passed through as
+ * `violations.unknown`, so `classifyEvolution`'s fail-closed discipline holds
+ * for every item the delta itself could not place: each raises a `notes[]`
+ * disclosure and forces disposition `no-verdict`; none is ever folded into a
+ * clean class.
+ *
+ * `affected.constraints` is the one delta-specific derivation: the delta's
+ * governed constraints are the `depConstraints` rows its classified
+ * introduced/resolved entries name (the capture output carries each row), and
+ * no reconcile-vocabulary verdict exists for them — so they are mapped from
+ * the entries, never invented. `affected.projects`/`boundaries`/`decisions`
+ * come from `classifyEvolution`'s own mapping of the supplied signals.
+ *
+ * @param {object} delta The `deltaCommand` result payload.
+ * @param {{projects?: {added: string[], removed: string[], changed: string[]},
+ *   edges?: {added: string[], removed: string[]}, codeDrift?: boolean}} [signals]
+ *   The structural-change and drift signals a delta run derives from the two
+ *   graphs it holds (the graph diff is `diff`'s vocabulary, shared here, never
+ *   re-derived) — `projects`/`edges` carry identity strings (`edgeEvolutionIdentity`
+ *   for edges), and `codeDrift` is the delta's computed "provenance advanced,
+ *   no arch/policy change" fact. Absent signals are empty, so a delta that
+ *   computed none reads as a violation-only mapping.
+ * @returns {{classifications: string[], disposition: "accepted"|"rejected"|"no-verdict",
+ *   notes: string[], affected: {projects: string[], boundaries: string[],
+ *   constraints: string[], decisions: string[]}}} The full
+ *   `EvolutionClassification` — `classifications`/`notes` per the wave
+ *   contract, with `disposition`/`affected` riding from the one definition so
+ *   no caller re-derives either.
+ */
+export function classifyDeltaEvolution(delta, signals = {}) {
+  const projects = signals.projects ?? { added: [], removed: [], changed: [] };
+  const edges = signals.edges ?? { added: [], removed: [] };
+  const evolution = classifyEvolution({
+    observed: {
+      projects,
+      edges,
+      // `null` survives: it is the one-sided policy case, and `classifyEvolution`
+      // reads it as "could not be compared" — never as "the same". The
+      // one-sided/advanced facts are input facts the payload carries (F-HIST-1):
+      // both-sides-absent is also `null` but stays comparable.
+      policyChanged: delta.policyChanged,
+      policyOneSided: delta.policyOneSided,
+      provenanceChanged: delta.provenanceChanged,
+    },
+    codeDrift: signals.codeDrift === true,
+    violations: {
+      introduced: delta.violations.introduced.map((entry) => ({
+        id: deltaEntryIdentity(entry),
+        waived: entry.waived === true,
+      })),
+      resolved: delta.violations.resolved.map(deltaEntryIdentity),
+      unknown: [
+        ...delta.violations.unknown.map((entry) => ({
+          id: unknownViolationIdentity(entry),
+          reason: entry.reason,
+        })),
+        ...delta.unresolvable.unknown.map((entry) => ({
+          id: unknownRecordIdentity(entry),
+          reason: entry.reason,
+        })),
+        ...(delta.customRules === undefined
+          ? []
+          : delta.customRules.findings.unknown.map((entry) => ({
+              id: `custom rule '${entry.rule}'`,
+              reason: entry.reason,
+            }))),
+      ],
+    },
+  });
+
+  /** @type {Set<string>} */
+  const constraintIds = new Set();
+  for (const entry of [...delta.violations.introduced, ...delta.violations.resolved]) {
+    if (entry.constraint === undefined || entry.constraint === null) continue;
+    constraintIds.add(canonicalizeJson(entry.constraint));
+  }
+
+  return {
+    classifications: evolution.classifications,
+    disposition: evolution.disposition,
+    notes: evolution.notes,
+    affected: {
+      ...evolution.affected,
+      constraints: [...constraintIds].sort(cmpString),
+    },
   };
 }
 

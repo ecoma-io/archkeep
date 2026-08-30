@@ -931,12 +931,8 @@ async function runDiff(options, { cwd, env }) {
  *
  * `--capture` writes the evidence snapshot a later run compares against;
  * `delta <baseline>` loads one, re-judges both sides under the current law,
- * and folds the classification into the exit code — the one descriptive-family
- * verb beside `check` and `fitness` whose verdict carries exit 1
- * (`./src/commands/delta.mjs` owns the fold).
- *
  * @param {{format: string, output: string|null, config: string|null, capture: boolean,
- *   paths: string[]}} options
+ *   eventOut: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -945,6 +941,13 @@ async function runDelta(options, { cwd, env }) {
     if (options.paths.length !== 0) {
       env.err(
         `archkeep: delta --capture takes no positional arguments; got ${options.paths.join(", ")}`,
+      );
+      return EXIT.usage;
+    }
+    if (options.eventOut !== null) {
+      env.err(
+        `archkeep: delta --capture does not take --event-out — an event records a transition, ` +
+          `and a capture is one side of it`,
       );
       return EXIT.usage;
     }
@@ -972,7 +975,6 @@ async function runDelta(options, { cwd, env }) {
       const { text } = captureDelta(commandContext, { config });
       if (options.output) {
         // Atomic, symlink-safe write — `writeOutputReport`'s own docstring
-        // owns the mechanism and the threat it closes.
         if (!writeOutputReport(options.output, text, env, cwd, options.config)) return EXIT.error;
         env.err(`archkeep: delta baseline captured → ${options.output}`);
       } else {
@@ -985,7 +987,10 @@ async function runDelta(options, { cwd, env }) {
     const baselinePath = isAbsolute(options.paths[0])
       ? resolve(options.paths[0])
       : resolve(cwd, options.paths[0]);
-    result = await deltaCommand(baselinePath, commandContext, { config });
+    result = await deltaCommand(baselinePath, commandContext, {
+      config,
+      eventOut: options.eventOut,
+    });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -1007,6 +1012,18 @@ async function runDelta(options, { cwd, env }) {
     env.err(`archkeep: delta complete → ${options.output}`);
   } else {
     env.out(report);
+  }
+
+  // The event the run recorded, when `--event-out` was given — the store's
+  // own `duplicate` answer, so a rerun over the same transition says so
+  // instead of implying a second event was appended. Capture mode refuses the
+  // flag upstream; this line runs only for a compare.
+  if (result.eventWrite !== null) {
+    env.err(
+      `archkeep: evolution event ${
+        result.eventWrite.duplicate ? "duplicate, already recorded" : "recorded"
+      } → ${options.eventOut}`,
+    );
   }
 
   // The exit fold `deltaCommand` computed: a non-waived introduced violation
@@ -1214,7 +1231,7 @@ async function runReconcile(options, { cwd, env }) {
  * `check` remains the authority on the law.
  *
  * @param {{format: string, output: string|null, config: string|null,
- *   intent: string|null, paths: string[]}} options
+ *   intent: string|null, eventOut?: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function,
  *   listFiles?: Function}}} runContext
  * @returns {Promise<number>}
@@ -1271,7 +1288,19 @@ async function runChange(options, { cwd, env }) {
     // profile-aware the same way `check` is.
     const { config } = await resolvePolicy(options, commandContext, cwd);
 
-    result = await changeCommand(baselinePath, intentPath, commandContext, { config });
+    // `--event-out` names the reconcile event store directory, resolved from
+    // cwd like the other path flags; `undefined` when absent, so a run
+    // without the flag writes no event and stays byte-identical.
+    const eventOut =
+      typeof options.eventOut === "string" && options.eventOut !== ""
+        ? isAbsolute(options.eventOut)
+          ? options.eventOut
+          : resolve(cwd, options.eventOut)
+        : undefined;
+    result = await changeCommand(baselinePath, intentPath, commandContext, {
+      config,
+      ...(eventOut === undefined ? {} : { eventOut }),
+    });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -2026,7 +2055,7 @@ async function runTrajectory(options, { cwd, env }) {
  * production both are undefined and every revision is read for real.
  *
  * @param {{format: string, output: string|null, base: string|null, head: string|null,
- *   paths: string[]}} options
+ *   eventOut: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -2057,9 +2086,18 @@ async function runEvolution(options, { cwd, env }) {
 
   let result;
   try {
+    // `--event-out` names the transition event store directory, resolved from
+    // cwd like the other path flags; `null` when absent, so a run without the
+    // flag writes no event and stays byte-identical.
+    const eventOut =
+      typeof options.eventOut === "string" && options.eventOut !== ""
+        ? isAbsolute(options.eventOut)
+          ? options.eventOut
+          : resolve(cwd, options.eventOut)
+        : null;
     result = await evolutionCommand(
       root,
-      { base: options.base, head: options.head },
+      { base: options.base, head: options.head, eventOut },
       {
         readGraph: env.readGraph,
         listFiles: env.listFiles,
@@ -2098,7 +2136,7 @@ async function runEvolution(options, { cwd, env }) {
  * consumer-managed directory `history` reads, so a ledger ages across the
  * same snapshots the evolution record is built from.
  *
- * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ * @param {{format: string, output: string|null, config: string|null, events: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -2126,7 +2164,10 @@ async function runDebt(options, { cwd, env }) {
     // profile-selected workspace resolves the same way `check` does.
     const { config } = await resolvePolicy(options, commandContext, cwd);
 
-    result = await debtCommand(dir, commandContext, { config });
+    result = await debtCommand(dir, commandContext, {
+      config,
+      events: options.events,
+    });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -2530,6 +2571,17 @@ const DELTA_FLAG_HELP = Object.freeze([
           : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
+  Object.freeze({
+    flag: "--event-out",
+    key: "eventOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Append the delta's evolution event to this directory",
+      "(one canonical record per transition; idempotent — a",
+      "rerun over the same transition writes nothing new).",
+      "Absent: no event file is written",
+    ]),
+  }),
 ]);
 
 /**
@@ -2565,6 +2617,16 @@ const CHANGE_FLAG_HELP = Object.freeze([
     key: "output",
     arg: "<file>",
     describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--event-out",
+    key: "eventOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Also write the reconcile EvolutionEvent to this directory",
+      "(one file per run, idempotent; the classification always",
+      "rides the envelope result — see docs/concepts/evolution.md)",
+    ]),
   }),
   Object.freeze({
     flag: "--config",
@@ -2839,6 +2901,16 @@ const EVOLUTION_FLAG_HELP = Object.freeze([
       "linear descendant of --base with no merges between",
     ]),
   }),
+  Object.freeze({
+    flag: "--event-out",
+    key: "eventOut",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Append one EvolutionEvent per revision pair to this directory",
+      "(idempotent — a re-run over the same pair records a duplicate, never",
+      "a second event). docs/concepts/evolution.md owns the event model.",
+    ]),
+  }),
 ]);
 
 /**
@@ -2980,6 +3052,15 @@ const DEBT_FLAG_HELP = Object.freeze([
           ? "the inline boundaryConfig in archkeep.json"
           : `<workspace root>/${boundaryConfig}`,
       ]),
+  }),
+  Object.freeze({
+    flag: "--events",
+    key: "events",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Link the evolution event store in <dir> so debt entries carry",
+      "introducedBy/resolvedBy refs and a resolved list",
+    ]),
   }),
 ]);
 
@@ -3252,7 +3333,13 @@ const COMMANDS = Object.freeze({
     summary: "Classify how boundary violations moved between a captured baseline and head",
     flagHelp: DELTA_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(DELTA_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, config: null, capture: false }),
+    defaults: Object.freeze({
+      format: "text",
+      output: null,
+      config: null,
+      capture: false,
+      eventOut: null,
+    }),
     formats: DELTA_FORMATS,
     booleans: Object.freeze(["capture"]),
     run: runDelta,
@@ -3263,7 +3350,13 @@ const COMMANDS = Object.freeze({
     summary: "Reconcile a declared change intent against the architectural delta",
     flagHelp: CHANGE_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(CHANGE_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, config: null, intent: null }),
+    defaults: Object.freeze({
+      format: "text",
+      output: null,
+      config: null,
+      intent: null,
+      eventOut: null,
+    }),
     formats: DESCRIBABLE_FORMATS,
     run: runChange,
   }),
@@ -3346,7 +3439,13 @@ const COMMANDS = Object.freeze({
     summary: "Describe how the architecture evolved across a Git revision range",
     flagHelp: EVOLUTION_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(EVOLUTION_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, base: null, head: null }),
+    defaults: Object.freeze({
+      format: "text",
+      output: null,
+      base: null,
+      head: null,
+      eventOut: null,
+    }),
     formats: DESCRIBABLE_FORMATS,
     run: runEvolution,
   }),
@@ -3367,7 +3466,6 @@ const COMMANDS = Object.freeze({
     flagHelp: REPORT_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(REPORT_FLAG_HELP.map((f) => [f.flag, f.key]))),
     defaults: Object.freeze({ format: "text", output: null, config: null }),
-    formats: DESCRIBABLE_FORMATS,
     run: runReport,
   }),
   debt: Object.freeze({
@@ -3376,7 +3474,7 @@ const COMMANDS = Object.freeze({
     summary: "Print the architecture-debt ledger across snapshots",
     flagHelp: DEBT_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(DEBT_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, config: null }),
+    defaults: Object.freeze({ format: "text", output: null, config: null, events: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runDebt,
   }),

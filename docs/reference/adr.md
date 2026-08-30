@@ -104,6 +104,32 @@ superseded by another. `supersededBy` — the reverse of `supersedes` — is
 derived on every record at load. A chain that cannot be true is exit 3, never
 a report.
 
+## The decisive move: `DECISION_CHANGE` and the one-sided rule
+
+The status vocabulary above is not a static label: a record's status and its
+`supersedes` chain move as the workspace's decisions evolve, and the evolution
+commands compare the registry across two states. When the same ADR id carries
+a different status between the two states, or a new `supersedes` relation
+appears, the decision lineage moved — evolution classifies that movement
+`DECISION_CHANGE`, never `DRIFT`, and names the moved ADR ids in the event's
+`affected.decisions`.
+
+The predicate requires **both** states' registries. Exactly one side recording
+its registry is "could not be compared", never "no decision changed":
+asserting the lineage did not move from one registry would fabricate a fact
+about the state the input does not have. Either side absent ⇒
+`DECISION_CHANGE` is NOT asserted and a note is added ([the one-sided rule](../concepts/evolution.md#the-one-sided-rule), the mirror of the
+`policyOneSided` disclosure history already makes). The classification table,
+the one-sided rule's full statement, and where the signal rides the evolution
+event are owned by [concepts/evolution.md](../concepts/evolution.md); the
+classification itself lives in one place,
+`packages/archkeep/src/governance/evolution-event.mjs`. The two-registry
+comparison helper (`detectDecisionChange`) and the affected-decisions lineage
+resolver (`computeAffectedDecisions`) live in
+`packages/archkeep/src/governance/decision-lineage.mjs`; `explain` surfaces a
+supersession between a caller-supplied base registry and the workspace's
+current one as a `decisionChange` field, rendered as appended lines.
+
 ## The JSON envelope
 
 `--format json` wraps the same answer in the versioned envelope
