@@ -64,6 +64,26 @@ So: every code path that cannot reach a verdict must say so instead of returning
 empty, and every test must have a case that goes red in the silent direction. A
 test that only pins the message text is half a test.
 
+## Architecture intelligence: doc-only direction
+
+The roadmap's later-maturity capabilities — architectural impact analysis,
+scenario evaluation, an evidence-grounded advisor — are documented direction,
+not implementation contracts. Their full contracts live in
+`docs/doctrine/impact-analysis.md`, `docs/doctrine/scenario-evaluation.md`,
+and `docs/doctrine/evidence-grounded-advisor.md`. Do not write code for them
+until the maintainer authorizes implementation — the docs describe a staged
+direction, not a current mandate.
+
+**Non-goals that hold:** the intelligence layer does not include ML learning,
+vector or semantic memory, runtime simulation, autonomous migration, a
+generic architecture generator, or an autonomous architect. Archkeep is an
+architecture governance and truth system; AI is an evidence-grounded
+reasoning layer that explains and composes, never decides.
+
+The five `skills/` teach deterministic-first behavior — they must never
+be edited to reference unimplemented capabilities, which would be an
+overclaim.
+
 ## Layout
 
 ```

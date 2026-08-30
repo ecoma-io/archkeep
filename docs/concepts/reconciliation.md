@@ -80,6 +80,8 @@ Reconciliation is the deterministic, descriptive half of the governance wave: a
 pure function of `(intent, observed)` that names the gap and proposes the
 repair options. The proposal list is deliberately not an automated fixer —
 auto-applying model edits is where authority would leak out of the intentional
-loop. What the intelligence layer adds on top — recommendation beyond ranked
-candidates — is later maturity on the same roadmap, not a promise; the
-read-only, scored contract is what ships today.
+loop. The roadmap's later architecture-intelligence capabilities — impact
+analysis, scenario evaluation, an evidence-grounded advisor — may one day
+reason over these ranked candidates and explain them, but that is later
+maturity on the same roadmap, gated and never a promise; the read-only,
+scored contract is what ships today.

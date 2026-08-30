@@ -63,12 +63,12 @@ A new reader should find these capabilities described as present, not promised.
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer. ([reference/exit-codes.md](../reference/exit-codes.md))
-- **22 commands — `check`, `change`, `graph`, `diff`, `delta`, `discover`,
+- **23 commands — `check`, `change`, `graph`, `diff`, `delta`, `discover`,
   `drift`, `reconcile`, `waivers`, `fitness`, `history`, `trajectory`,
-  `evolution`,
-  `health`, `report`, `debt`, `impact`, `explain`, `context`, `provenance`,
-  `adr`** — each with
-  output a script or an agent can consume without parsing prose. `history` records the
+  `evolution`, `health`, `report`, `debt`, `impact`, `explain`, `context`,
+  `provenance`, `decisions`, `adr`, `rules`** — each with
+  output a script or an agent can consume without parsing prose.
+  `history` records the
   architecture's evolution across captured snapshots — the deterministic half
   of "how it got here" — `trajectory` aggregates that same record into
   signal counts, churn and persistence (facts that moved, never a score), and
@@ -181,8 +181,11 @@ versus what the gate itself must add.
    `delta` and `explain` ship today; the gate is breadth — the questions an
    agent or a reviewer asks before touching a boundary, answered in
    machine-readable form every time.
-5. **Add the intelligence and proposal capabilities.** The layer that reads
-   and predicts on top of the core. Optional and later by design — each
+5. **Add the three architecture-intelligence capabilities, in order.** The
+   layer that reads, evaluates and explains on top of the core — first
+   **Architectural Impact Analysis**, then **Scenario Evaluation**, then the
+   **Evidence-Grounded Architectural Advisor**, each gated by the one before
+   it (see the section below). Optional and later by design, and each
    capability arrives through the door
    [architecture-authority.md](architecture-authority.md) puts in front of
    the layer, and none is required by the gates above.
@@ -287,46 +290,117 @@ None of the four is a feature, and that is the point: what separates 0.x from
 1.0 here is evidence, and evidence is something the project accumulates rather
 than something it implements.
 
-## Later maturity: the intelligence capabilities
+## Later maturity: architecture intelligence, in three capabilities
 
-Gate 5 of the ladder, and "optional" is part of its name: these are later
-capabilities on the same development line — not a next product, not a second
-platform, and not a stage the foundation waits for. They extend the
+Gate 5 of the ladder, and "optional" is part of its name: this is later
+maturity on the same development line — not a next product, not a second
+platform, and not a stage the foundation waits for. It extends the
 deterministic core with a different relationship to the architecture it
-already governs: reading and predicting, on top of — never in place of — the
-checking and judging.
+already governs: **reading, evaluating and explaining**, on top of — never in
+place of — the checking and judging.
 
-- **Deeper architecture intent** — richer, machine-readable intent beyond the
-  dependency constraint table.
-- **Semantic architecture understanding** — the architecture as a meaning to be
-  read, not only a graph to be checked.
-- **Advanced drift detection** — drift that is anticipated or explained, on top
-  of the deterministic drift already reported.
-- **Architecture evolution intelligence** — how the architecture changed and
-  why, on top of the deterministic snapshot-and-diff history already kept.
-- **Change risk analysis and architectural impact prediction** — what a change
-  is _likely_ to break, not only what it _demonstrably_ breaks.
-- **Migration planning and architecture recommendations** — proposed paths,
-  offered to a human to accept or refuse.
-- **Cross-repository architecture intelligence** — reasoning across more
-  than one repository at a time; an optional later reading, never a
-  cross-repository authority or a universal architecture graph.
-- **Agent-assisted architecture planning** — planning help that extends the
-  facts already provided, while the agent remains the decision-maker.
-- **Potentially AI-assisted reasoning** — where intelligence is not a verdict.
+This section names the direction as exactly three capabilities, in a fixed
+order, each gated by the one before it. The gating is the whole design:
+nothing here is a dated promise, and each phase has an explicit exit
+criterion that must already hold before the next one starts. The three are,
+by user value rather than by an "AI generation" label:
 
-None of these is a platform promise — not a knowledge-graph product, not a
-risk-prediction engine, not an autonomous migration planner, not an
-architecture-intelligence platform — and none changes the authority
-boundary: whatever they become, they remain predictions, proposals and
-judgments beside verdicts, never verdicts themselves. This stage is a
-**direction, not a commitment to implementation details**. The list above
-names the headroom; nothing in it is a dated promise, and a prediction is
-allowed to be wrong where a verdict is not. Nothing ahead weakens what ships
-today: every intelligence capability sits on top of the deterministic core,
-never in place of it — and each must answer the five questions
-[architecture-authority.md](architecture-authority.md) puts to the layer
-before it is built.
+1. **Architectural Impact Analysis** — given an architectural or code
+   change, state which architecture entities, boundaries, dependencies,
+   Decisions, constraints, findings and debt are affected, each with the
+   provenance and evidence the claim rests on.
+2. **Scenario Evaluation** — evaluate a hypothetical architectural change
+   against a base revision without mutating the repository or recording a
+   real evolution event, reusing the deterministic impact and governance
+   evaluation to report which consequences would be observable. Explicitly
+   not a runtime or system simulation: no latency, throughput, CPU, memory,
+   availability or business-risk prediction.
+3. **Evidence-Grounded Architectural Advisor** — a reasoning and advisory
+   layer that explains architecture and governance findings and lays out
+   options and trade-offs, grounded in canonical Archkeep facts, Intent,
+   Decisions, Constraints, Evidence, Evolution history and Scenario results.
+   It never becomes an authority, never decides architecture, never turns a
+   proposal into a Decision by itself, and marks every factual claim as
+   evidence-traced or as inference/uncertainty.
+
+Each of the three is a separate contract document that owns its
+implementation shape:
+
+- [Impact analysis](impact-analysis.md) — input/output, diff semantics, the
+  direct/indirect/governance impact split, provenance, coverage and
+  unsupported cases, and why impact is never risk.
+- [Scenario evaluation](scenario-evaluation.md) — base revision, hypothetical
+  changes, virtual isolation from canonical history, deterministic
+  re-evaluation, current-versus-scenario comparison, and why a Scenario is
+  never a Decision.
+- [Evidence-grounded advisor](evidence-grounded-advisor.md) — the evidence
+  context a reasoning layer reads, FACT versus INFERENCE, uncertainty,
+  provider abstraction, prompt/context boundaries, failure behavior, and why
+  the AI has no authority.
+
+### Gate 5, narrowed
+
+The maturity-ladder's gate 5 — "add the intelligence and proposal
+capabilities" — resolves into these three, in this order. The order is a
+dependency, not a preference:
+
+- **Impact Analysis first.** It is the substrate the other two read, and it
+  is mostly deterministic hardening of what already ships: `impact`
+  (reverse reachability with constraint context), the `EvolutionEvent`'s
+  `affected` shape (projects, boundaries, constraints, decisions), `delta`,
+  `diff`, `debt` and the decision chain (`decisions`, `adr`, provenance).
+  The gate is that a change to any architecture entity reliably enumerates
+  every affected entity, decision and governance artifact with evidence — on
+  real trees, not only on fixtures.
+- **Scenario Evaluation only when impact is stable and a real use case
+  exists.** A hypothetical change is evaluated by re-running the deterministic
+  impact and governance path in a virtual, non-mutating mode over a base
+  revision — so it needs the impact primitive to be trustworthy first. No
+  Scenario is ever written to canonical history, and none is a Decision.
+- **Evidence-Grounded Advisor only when the two deterministic layers are
+  trustworthy.** It reads canonical facts and Scenario results and produces
+  explanations, options and inferences — expendable by construction, never
+  load-bearing for a verdict.
+
+Nothing ahead weakens what ships today: every capability sits on top of the
+deterministic core, never in place of it, and each must answer the five
+questions [architecture-authority.md](architecture-authority.md) puts to the
+layer before it is built. That file also owns the vocabulary this section
+uses — **verdict**, **evidence**, **prediction**, **proposal**, **judgment** —
+and the boundary none of the three crosses.
+
+### The workflow the three capabilities serve
+
+The three capabilities exist for one loop, and the loop keeps the boundary
+visible. A developer proposes a change; impact names what it touches;
+scenarios evaluate one or more paths against the current architecture; the
+advisor explains the evidence and the options; a human makes a Decision; the
+change is implemented; Archkeep validates the evolution. What is marked
+**shipped** already exists as the deterministic substrate; what is marked
+**future** is the summit of a gated capability:
+
+1. **Propose the change** (human or agent) — the working tree or a
+   hypothetical description. _Shipped:_ the tree.
+2. **Identify impact** — `impact`, `delta`, `diff`, `debt`, the decision
+   chain. _Shipped:_ reverse reachability, `context --plan`, `EvolutionEvent
+affected`. _Future:_ full Architectural Impact Analysis enumerating every
+   governed entity with evidence.
+3. **Evaluate the scenario** — a hypothetical path re-evaluated against a
+   base revision. _Future:_ Scenario Evaluation. Never a simulation, never a
+   Decision, never written to history.
+4. **Explain the evidence and options** — the advisor reads canonical facts
+   and scenario results, marks FACT from INFERENCE, and lays out options.
+   _Future:_ Evidence-Grounded Advisor. Never authoritative, never edits the
+   law.
+5. **Decide** — a human accepts or refuses. A Decision becomes an ADR with a
+   `decisionRef`. _Shipped:_ the Decision model and `decisions` chain.
+6. **Implement** — the accepted change lands.
+7. **Validate the evolution** — `check`, `fitness`, `drift`, `evolution`,
+   `history`, `trajectory`; a real `EvolutionEvent` records it. _Shipped:_ a
+   working deterministic audience.
+
+The loop is the story of where the three capabilities sit and why a Scenario
+and a Decision are never the same event.
 
 ## What this roadmap refuses
 
@@ -346,3 +420,42 @@ before it is built.
   whether it holds — is refused by the boundary in
   [architecture-authority.md](architecture-authority.md). The
   roadmap stages breadth and reading; it never stages that line.
+
+### What the intelligence capabilities are not
+
+The three capabilities above are bounded in what they will and will not
+become. The following are explicit non-goals — not merely absent today, but
+refused on boundary and architectural grounds:
+
+- **ML-based architectural learning.** No statistical model, embedding
+  space, or learned pattern library will drive any verdict, proposal or
+  evaluation. The deterministic authority stays source-driven, not
+  data-driven.
+- **Autonomous architect.** No capability decides or executes
+  architectural changes on its own. Every path toward mutation — whether
+  migration, boundary edit, or constraint change — leads through a human
+  accepting a proposal.
+- **Optimizer.** No "find the best architecture" facility, no scoring
+  function, no multi-objective ranking over hypothetical topologies.
+  Archkeep evaluates and reports; it does not rank.
+- **Full runtime simulation.** No model of what the architecture does at
+  runtime — no load test, no latency prediction, no capacity model.
+  The view is structural; runtime belongs to observability.
+- **Generic architecture generation.** No facility that produces
+  architecture from a description, a conversation, or a document. Archkeep
+  governs an existing architecture; it does not author one.
+- **Runtime prediction.** No forecasting of what will break at runtime,
+  under what load, or at what scale. The structural view says what is
+  connected and what is governed; runtime belongs elsewhere.
+- **Autonomous migration planning or execution.** Scenarios are
+  read-only evaluations. If the advisor recommends a migration path, a
+  human still evaluates and applies it — Archkeep never executes a
+  migration itself.
+- **Vector or semantic memory for AI reasoning.** The advisor reads
+  canonical Archkeep sources — graph, diff, delta, evolution, decisions,
+  intent, evidence — not an embedding index. Uncertainty is labeled,
+  never smoothed by similarity.
+- **God-object architectural state.** Each capability reads from its
+  own deterministic substrate. There is no unified mutable "architectural
+  state" object that accumulates and conflates sources of truth — that
+  shape is how the boundary becomes invisible.

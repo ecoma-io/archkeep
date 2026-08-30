@@ -145,11 +145,11 @@ The three questions and the read-only boundary above are the shipped agent
 story — **architecture planning facts for agents**, the deterministic half of
 agent-facing governance. [roadmap.md](../doctrine/roadmap.md) owns the staged
 path and lists it among the capabilities that ship today alongside the
-`arch-*` skills and the host integrations. What the intelligence layer may add
-later — agent-assisted planning help, richer context, approval gates,
-post-change verification that does more than re-run `check`, and anything with
-a reasoning component — is later maturity on the same roadmap, not a promise;
-its contract is the one
+`arch-*` skills and the host integrations. The roadmap's later
+architecture-intelligence capabilities — impact analysis, scenario
+evaluation, an evidence-grounded advisor — may one day give an agent richer
+context and post-change explanation, but that is later maturity on the same
+roadmap, gated and never a promise; their contract is the one
 [architecture-authority.md](../doctrine/architecture-authority.md) states for
 the layer. The commands and the consumer-not-authority line above are what
 ships today.
