@@ -22,7 +22,8 @@ import { formatChanges, sanitize, transitionKind } from "./snapshot-text.mjs";
  * @param {{result: {base: string, head: string,
  *   revisions: {commit: string, id: string}[],
  *   transitions: {from: string, to: string, architectureChanged: boolean,
- *     changes: object|null, policyChanged: boolean|null, providerChanged: boolean,
+ *     changes: object|null, policyChanged: boolean|null, policyOneSided: boolean,
+ *     provenanceChanged: boolean|null, providerChanged: boolean,
  *     codeDrift: boolean, notes: string[]}[]}, coverage: object}} input
  * @returns {string}
  */

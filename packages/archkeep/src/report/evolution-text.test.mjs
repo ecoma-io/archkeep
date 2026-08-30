@@ -18,6 +18,8 @@ const transition = (over = {}) => ({
   architectureChanged: false,
   changes: null,
   policyChanged: false,
+  policyOneSided: false,
+  provenanceChanged: false,
   providerChanged: false,
   codeDrift: true,
   notes: [],

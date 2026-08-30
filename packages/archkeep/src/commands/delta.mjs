@@ -77,6 +77,9 @@ import { buildDecision } from "../report/evidence.mjs";
 import { formatDeltaReport } from "../report/delta-text.mjs";
 import { formatDeltaSarif } from "../report/sarif.mjs";
 import { evaluateRun } from "../rules/index.mjs";
+import { judgeIntent } from "../architecture-intent/judge.mjs";
+import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
+import { debtChangeDiff } from "../governance/debt-ledger.mjs";
 import { customRulesForDelta, declaresCustomRules } from "./custom-rules.mjs";
 import {
   classifyCustomFindings,
@@ -312,26 +315,29 @@ export function sourceProjectAttributor(headGraph, baselineProjects) {
  * - `no-verdict` status (any unclassifiable item — violation, unresolvable
  *   record, or custom finding) ⇒ `no-verdict`, never a fabricated
  *   accepted/rejected;
- * - `VIOLATION` among the classifications ⇒ `rejected` (a non-waived
- *   introduced violation, which is exactly what made the status `findings`);
- * - everything else — a clean comparable capture (`ok`, `[]` classifications)
- *   or an `ok` capture with a fact class (REPAIR, CHANGE, DRIFT,
- *   DECISION_CHANGE — each accepted by the vocabulary `classification` earns)
- *   ⇒ `accepted`.
+ * - `findings` status ⇒ `rejected`, unconditionally — `findings` means some
+ *   introduced gating finding survived the current waiver table, WHATEVER
+ *   class it carries. The classifications are deliberately NOT consulted:
+ *   a custom-rule-only introduced finding never reaches the VIOLATION
+ *   predicate, so a classifications scan would read "accepted" on an exit-1
+ *   run — the silent direction;
+ * - everything else — a clean comparable capture (`ok`, `[]` classifications),
+ *   an `ok` capture with a fact class (REPAIR, CHANGE, DRIFT,
+ *   DECISION_CHANGE — each accepted by the vocabulary `classification` earns),
+ *   or an `ok` capture holding a WAIVED violation (a waiver is a tracked
+ *   acceptance — which is exactly what kept the gate `ok`) ⇒ `accepted`.
  *
  * The two refusals that can never reach this mapping — an unjudgeable head
  * and a provider mismatch — THROW before any event exists, so a delta that
  * could not be computed has no record at all, never a record with a guessed
  * disposition.
  *
- * @param {{status: "ok"|"findings"|"no-verdict", classifications: string[]}} input
+ * @param {{status: "ok"|"findings"|"no-verdict"}} input
  * @returns {"accepted"|"rejected"|"no-verdict"}
  */
-export function deltaDisposition({ status, classifications }) {
+export function deltaDisposition({ status }) {
   if (status === "no-verdict") return "no-verdict";
-  if (Array.isArray(classifications) && classifications.includes("VIOLATION")) {
-    return "rejected";
-  }
+  if (status === "findings") return "rejected";
   return "accepted";
 }
 
@@ -369,12 +375,16 @@ const short = (fingerprint) =>
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config: object|null, readBaseline?: (path: string) => object,
  *   now?: string, eventOut?: string|null,
+ *   loadIntentOverride?: (root: string, opts?: object) => Promise<object|undefined>,
  *   readArtifact?: (artifact: string) => Uint8Array|null,
  *   timeoutMs?: number}} io The resolved boundary config (required
  *   — both sides are re-judged under it), an injectable baseline reader, the
  *   one shared reference instant (defaults to the shared governance clock),
  *   `eventOut` — the directory an evolution event is appended to when given
- *   (absent or `null` ⇒ no event file, byte-identical behavior), and the
+ *   (absent or `null` ⇒ no event file, byte-identical behavior),
+ *   `loadIntentOverride` — the architecture-intent reader the event's `debt`
+ *   sub-ledger judges over this run's base and head graphs (defaults to
+ *   `loadIntent`; absent intent ⇒ no ids, an in-band note says so), and the
  *   custom-rule host's two injectable seams, passed through to
  *   `customRulesForDelta`.
  * @returns {Promise<{status: "ok"|"findings"|"no-verdict", delta: object,
@@ -395,10 +405,11 @@ export async function deltaCommand(
     readBaseline = readEvidenceSnapshot,
     now = referenceTime(),
     eventOut = null,
+    loadIntentOverride,
     ...customRuleIo
   },
 ) {
-  const { root, provider, marker, graph, analysis } = commandContext;
+  const { root, provider, marker, graph, analysis, tracked } = commandContext;
 
   refuseUnjudgeableHead(commandContext, "compute a delta");
   if (!config) {
@@ -609,6 +620,12 @@ export async function deltaCommand(
     violations: classification.violations,
     unresolvable: classification.unresolvable,
     policyChanged: meta.policyChanged,
+    // The one-sided/advanced facts ride the payload (never the event's
+    // `observed`, which is the stored record): classifyEvolution needs them
+    // as input facts — `policyOneSided` is never derived from `policyChanged
+    // === null`, because both-sides-absent is also `null` (F-HIST-1).
+    policyOneSided: meta.policyOneSided,
+    provenanceChanged: meta.provenanceChanged,
     ...(custom === null ? {} : { customRules: custom }),
   };
   const evolution = classifyDeltaEvolution(deltaPayload, {
@@ -730,6 +747,57 @@ export async function deltaCommand(
   /** @type {{id: string, duplicate: boolean}|null} */
   let eventWrite = null;
   if (eventOut !== null && eventOut !== undefined) {
+    // F-delta-event-id: an evolution event is only written from a reproducible
+    // identity — a committed, clean head and a clean base. A commitless head
+    // has no revision to name, and a dirty tree names a commit its evidence
+    // does not back; either way TWO distinct evidence states collapse onto ONE
+    // event id, so a later transition is silently lost or aliased (the silent
+    // direction). Refuse loudly instead. The same run without `--event-out`
+    // stays a byte-identical in-memory delta.
+    if (typeof headCommit !== "string") {
+      throw new Error(
+        "archkeep: refusing to write a delta event without a committed head — a commitless " +
+          "head has no reproducible event identity, and every distinct head state would " +
+          "collide on one event id. Commit the head, or capture without --event-out.",
+      );
+    }
+    if (baseline.provenance?.dirty === true || headProvenance?.dirty === true) {
+      throw new Error(
+        "archkeep: refusing to write a delta event from a dirty working tree — the event " +
+          "would name a commit whose evidence is uncommitted, and distinct uncommitted " +
+          "states would collide on one event id. Commit both sides first.",
+      );
+    }
+    // The architecture-debt sub-ledger (design §8): judged by re-running the
+    // current intent over this run's base and head graphs — a drift finding
+    // present at head but not base is introduced; one gone is resolved. Both
+    // ENGINE graphs exist here (the base from the captured snapshot, the head
+    // from the live capture), so unlike `change` there is no unproven-base
+    // gate; the fail-closed branches are an absent intent and an unjudgeable
+    // one, each emitting no ids and an in-band note rather than a fabricated
+    // clean ledger.
+    /** @type {{introduced: string[], resolved: string[], note?: string}} */
+    let debt;
+    try {
+      const archIntent = await (loadIntentOverride ?? loadIntent)(root, { tracked });
+      if (archIntent === undefined || archIntent === null) {
+        debt = {
+          introduced: [],
+          resolved: [],
+          note: `no '${INTENT_FILE}' tracked — the delta event carries no architecture debt ids`,
+        };
+      } else {
+        const baseVerdict = judgeIntent(archIntent, baseGraph);
+        const headVerdict = judgeIntent(archIntent, graph);
+        debt = debtChangeDiff(baseVerdict, headVerdict);
+      }
+    } catch (error) {
+      debt = {
+        introduced: [],
+        resolved: [],
+        note: `architecture intent could not be judged — no debt ids emitted (${error.message})`,
+      };
+    }
     const event = {
       schemaVersion: EVOLUTION_EVENT_SCHEMA_VERSION,
       kind: "transition",
@@ -758,12 +826,9 @@ export async function deltaCommand(
       affected: evolution.affected,
       findings: deltaFindings(deltaPayload),
       fitness: { verdictDeltas: deltaVerdictDeltas(deltaPayload) },
-      debt: { introduced: [], resolved: [] },
+      debt,
       classifications: evolution.classifications,
-      disposition: deltaDisposition({
-        status,
-        classifications: evolution.classifications,
-      }),
+      disposition: deltaDisposition({ status }),
       notes: [...notes, ...evolution.notes],
       provenance: [
         ...(typeof baseCommit === "string" ? [{ kind: "git-commit", ref: baseCommit }] : []),

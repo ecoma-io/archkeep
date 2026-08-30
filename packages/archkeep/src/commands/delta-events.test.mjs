@@ -13,14 +13,27 @@
 // through the real engine) against a tmpdir, the way `./delta.test.mjs`
 // does, and read the written event back through the real store
 // (`../governance/evolution-store.mjs`'s `readEvents`).
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
 
 import { canonicalizeJson } from "../canonical.mjs";
 import { readEvents } from "../governance/evolution-store.mjs";
+import { debtFactId } from "../governance/debt-ledger.mjs";
 import {
   classifyDeltaEvolution,
   deltaFindings,
@@ -290,27 +303,75 @@ describe("classifyDeltaEvolution", () => {
 
 describe("deltaDisposition", () => {
   it("accepts a clean comparable capture with no classifications", () => {
-    expect(deltaDisposition({ status: "ok", classifications: [] })).toBe("accepted");
+    expect(deltaDisposition({ status: "ok" })).toBe("accepted");
   });
 
   it("accepts an ok capture that carries a fact class (REPAIR, CHANGE, DRIFT)", () => {
-    expect(deltaDisposition({ status: "ok", classifications: ["REPAIR"] })).toBe("accepted");
-    expect(deltaDisposition({ status: "ok", classifications: ["CHANGE"] })).toBe("accepted");
+    // The status is the verb's own fold — the class riding along is not
+    // consulted; `ok` means nothing gated, so the event is accepted.
+    expect(deltaDisposition({ status: "ok" })).toBe("accepted");
   });
 
-  it("rejects a findings capture — the VIOLATION the delta verb already folded", () => {
-    expect(deltaDisposition({ status: "findings", classifications: ["VIOLATION"] })).toBe(
-      "rejected",
-    );
+  it("rejects a findings capture — whatever class made the gate fail", () => {
+    // `findings` IS the reject verdict: an introduced gating finding survived
+    // the waiver table. The class does not matter — a custom-rule-only
+    // introduced finding never reaches the VIOLATION predicate, and a
+    // classifications scan would read it "accepted" (F-delta-disposition).
+    expect(deltaDisposition({ status: "findings" })).toBe("rejected");
+  });
+
+  it("accepts an ok capture holding a WAIVED violation — the waiver is the acceptance", () => {
+    // A waived introduced violation keeps the gate `ok` (a waiver is a
+    // tracked acceptance, not a fix). Status is authoritative, the
+    // classifications are not consulted, so the event reads "accepted"
+    // exactly like the verb did — where a classifications scan would have
+    // read the waiver as a rejection.
+    expect(deltaDisposition({ status: "ok" })).toBe("accepted");
   });
 
   it("is no-verdict on any unknown — the delta verb wins over every class", () => {
-    expect(deltaDisposition({ status: "no-verdict", classifications: [] })).toBe("no-verdict");
-    expect(deltaDisposition({ status: "no-verdict", classifications: ["REPAIR"] })).toBe(
-      "no-verdict",
-    );
+    expect(deltaDisposition({ status: "no-verdict" })).toBe("no-verdict");
   });
 });
+
+// ---------------------------------------------------------------------------
+// The custom-rule half of the F-delta-disposition verification: the Go SDK's
+// committed reference artifact, read the same way the cross-SDK conformance
+// gate reads it (`../conformance/rule-sdks.mjs`) — a rule whose findings come
+// from the evidence, so the two SIDES of a delta can genuinely disagree.
+// ---------------------------------------------------------------------------
+
+const REFERENCE_WASM = fileURLToPath(
+  new URL("../../../archkeep-rule-sdk-go/examples/forbidden_tag_dependency.wasm", import.meta.url),
+);
+const referenceBytes = new Uint8Array(readFileSync(REFERENCE_WASM));
+const referenceSha256 = readFileSync(`${REFERENCE_WASM}.sha256`, "utf8").trim();
+const RULE_ARTIFACT = "tools/rules/forbidden-tag-dependency.wasm";
+const readReferenceArtifact = (artifact) => (artifact === RULE_ARTIFACT ? referenceBytes : null);
+const CUSTOM_OWNED = [{ file: "libs/alpha/src/service.go", project: "acme-alpha" }];
+
+/** The head-permissive boundary law plus the declared custom rule. */
+function customLaw() {
+  return config({
+    depConstraints: [{ sourceTag: "scope-invented", onlyDependOnLibsWithTags: ["*"] }],
+    customRules: [
+      {
+        name: "forbidden-tag-dependency",
+        artifact: RULE_ARTIFACT,
+        sha256: referenceSha256,
+        reason: "the shared scope stays unreachable",
+        params: { exemptTags: [], forbiddenTag: "scope-shared" },
+      },
+    ],
+  });
+}
+
+/** An engine graph WITHOUT the alpha → beta edge the reference rule condemns. */
+function edgelessGraph() {
+  const graph = engineGraph();
+  graph.dependencies["acme-alpha"] = [];
+  return graph;
+}
 
 // ---------------------------------------------------------------------------
 // deltaFindings / deltaVerdictDeltas / edgeEvolutionIdentity.
@@ -393,14 +454,47 @@ describe("edgeEvolutionIdentity", () => {
 
 const root = mkdtempSync(join(tmpdir(), "archkeep-delta-events-"));
 const eventsDir = join(root, "events");
+// The event-writing tests stand on a REAL committed root: the F-delta-event-id
+// contract refuses to write an evolution event unless the head is a committed,
+// clean revision, so a head identity cannot be faked with a bare directory.
+// The shared `root` above stays non-git for the runs that never write an event.
+const gitRoot = join(root, "git");
+const git = (...args) =>
+  spawnSync("git", args, {
+    cwd: gitRoot,
+    encoding: "utf8",
+    timeout: SPAWN_BUDGET_MS,
+    killSignal: "SIGKILL",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "t",
+      GIT_AUTHOR_EMAIL: "t@t",
+      GIT_COMMITTER_NAME: "t",
+      GIT_COMMITTER_EMAIL: "t@t",
+      HOME: process.env.HOME,
+    },
+  }).status;
+beforeAll(() => {
+  mkdirSync(gitRoot, { recursive: true });
+  writeFileSync(join(gitRoot, "README.md"), "fixture\n");
+  expect(git("init", "-q", "-b", "main")).toBe(0);
+  expect(git("add", "-A")).toBe(0);
+  expect(git("commit", "-q", "-m", "base")).toBe(0);
+}, SPAWN_TEST_BUDGET_MS);
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 /**
  * A resolved CommandContext with everything `delta` reads.
  */
-function contextOf({ graph = engineGraph(), records = [], failures = [], owned = [] } = {}) {
+function contextOf({
+  graph = engineGraph(),
+  records = [],
+  failures = [],
+  owned = [],
+  root: contextRoot = root,
+} = {}) {
   return {
-    root,
+    root: contextRoot,
     provider: "nx",
     marker: "nx.json",
     graph,
@@ -421,8 +515,16 @@ function contextOf({ graph = engineGraph(), records = [], failures = [], owned =
  * serializer AND parser so the compare side consumes exactly what a file on
  * disk would have held.
  */
-function baselineOf({ records = [], graph = engineGraph(), law = config() } = {}) {
-  const { snapshot, text } = captureDelta(contextOf({ graph, records }), { config: law });
+function baselineOf({
+  records = [],
+  graph = engineGraph(),
+  law = config(),
+  owned = [],
+  root: contextRoot = root,
+} = {}) {
+  const { snapshot, text } = captureDelta(contextOf({ graph, records, owned, root: contextRoot }), {
+    config: law,
+  });
   return { snapshot, readBaseline: (path) => parseEvidenceSnapshot(text, path) };
 }
 
@@ -448,11 +550,11 @@ describe("deltaCommand event output", () => {
 
   it("writes a transition-kind delta event with the correct source and disposition", async () => {
     const law = config();
-    const baseline = baselineOf({ law });
+    const baseline = baselineOf({ law, root: gitRoot });
     const dir = join(eventsDir, "one");
     const result = await deltaCommand(
       "/invented/base.json",
-      contextOf({ records: [crossingRecord()] }),
+      contextOf({ records: [crossingRecord()], root: gitRoot }),
       {
         config: law,
         readBaseline: baseline.readBaseline,
@@ -481,26 +583,168 @@ describe("deltaCommand event output", () => {
     expect(event.fitness.verdictDeltas).toEqual([
       { constraint: CONSTRAINT_ID, base: "pass", head: "fail" },
     ]);
-    expect(event.debt).toEqual({ introduced: [], resolved: [] });
+    expect(event.debt).toEqual({ introduced: [], resolved: [], note: expect.any(String) });
     expect(event.base.evidence).toBe("/invented/base.json");
+  });
+
+  it("re-judges the intent over base and head and emits the real debt id debt actually introduced", async () => {
+    // The lifecycle closure for the delta producer (F-DEB-1 delta): with an
+    // intent present, the event's debt ids are the SAME ids the ledger would
+    // derive from the judged fact — not a fabricated clean ledger. Base has
+    // both boundary sides populated but no forbidden path (clean); head adds
+    // the forbidden edge (one drift finding introduced).
+    const intentDoc = {
+      version: "1",
+      boundaries: [
+        { name: "packages", match: ["tag:alpha"] },
+        { name: "extensions", match: ["tag:beta"] },
+      ],
+      forbidden: [{ from: "packages", to: "extensions", reason: "engine must not reach out" }],
+      allowed: [],
+    };
+    /** @param {string[]} tags */
+    const alpha = (tags) => ({
+      name: "acme-alpha",
+      type: "lib",
+      data: { root: "libs/alpha", tags },
+    });
+    /** @param {string[]} tags */
+    const beta = (tags) => ({
+      name: "acme-beta",
+      type: "lib",
+      data: { root: "libs/beta", tags },
+    });
+    // Both sides populated, no edge — nothing judged forbidden.
+    const baseGraph = {
+      nodes: { "acme-alpha": alpha(["alpha"]), "acme-beta": beta(["beta"]) },
+      dependencies: { "acme-alpha": [], "acme-beta": [] },
+    };
+    // Head reaches extensions — the forbidden direct edge appears.
+    const headGraph = {
+      nodes: { "acme-alpha": alpha(["alpha"]), "acme-beta": beta(["beta"]) },
+      dependencies: {
+        "acme-alpha": [{ source: "acme-alpha", target: "acme-beta", type: "static" }],
+        "acme-beta": [],
+      },
+    };
+    const dir = join(eventsDir, "debt");
+    const result = await deltaCommand(
+      "/invented/base.json",
+      contextOf({ graph: headGraph, root: gitRoot }),
+      {
+        config: config(),
+        readBaseline: () => baselineOf({ graph: baseGraph, law: config(), root: gitRoot }).snapshot,
+        now: NOW,
+        eventOut: dir,
+        loadIntentOverride: async () => intentDoc,
+      },
+    );
+    expect(result.eventWrite).toEqual({ id: expect.any(String), duplicate: false });
+    const [event] = readEvents(dir);
+    expect(event.debt.introduced).toEqual([
+      debtFactId("drift", {
+        source: "acme-alpha",
+        target: "acme-beta",
+        rule: "intentForbiddenEdge",
+      }),
+    ]);
+    expect(event.debt.resolved).toEqual([]);
+    expect(event.debt.note).toBeUndefined();
   });
 
   it("is idempotent — a rerun over the same transition writes nothing new", async () => {
     const law = config();
-    const baseline = baselineOf({ law });
+    const baseline = baselineOf({ law, root: gitRoot });
     const dir = join(eventsDir, "two");
     const run = () =>
-      deltaCommand("/invented/base.json", contextOf({ records: [crossingRecord()] }), {
-        config: law,
-        readBaseline: baseline.readBaseline,
-        now: NOW,
-        eventOut: dir,
-      });
+      deltaCommand(
+        "/invented/base.json",
+        contextOf({ records: [crossingRecord()], root: gitRoot }),
+        {
+          config: law,
+          readBaseline: baseline.readBaseline,
+          now: NOW,
+          eventOut: dir,
+        },
+      );
 
     await run();
     const second = await run();
     expect(second.eventWrite.duplicate).toBe(true);
     expect(readdirSync(dir).filter((name) => name.endsWith(".json"))).toHaveLength(1);
+  });
+
+  it("refuses to write an event from a commitless head (F-delta-event-id)", async () => {
+    const law = config();
+    const baseline = baselineOf({ law });
+    // The shared `root` is NOT a git repository — the head carries no commit,
+    // so an event written here would claim an identity nothing can reproduce
+    // (every distinct head state collapses onto one id). Loud refusal, never
+    // a silently aliased event.
+    await expect(
+      deltaCommand("/invented/base.json", contextOf({ records: [crossingRecord()] }), {
+        config: law,
+        readBaseline: baseline.readBaseline,
+        now: NOW,
+        eventOut: join(eventsDir, "commitless"),
+      }),
+    ).rejects.toThrow(/without a committed head/u);
+  });
+
+  it("refuses to write an event from a dirty working tree (F-delta-event-id)", async () => {
+    const law = config();
+    // Captured clean, before the tree is dirtied.
+    const baseline = baselineOf({ law, root: gitRoot });
+    writeFileSync(join(gitRoot, "DIRTY.md"), "uncommitted\n");
+    try {
+      // A dirty head names the commit its evidence does not back — two
+      // distinct uncommitted states would collide on one event id.
+      await expect(
+        deltaCommand(
+          "/invented/base.json",
+          contextOf({ records: [crossingRecord()], root: gitRoot }),
+          {
+            config: law,
+            readBaseline: baseline.readBaseline,
+            now: NOW,
+            eventOut: join(eventsDir, "dirty"),
+          },
+        ),
+      ).rejects.toThrow(/dirty working tree/u);
+    } finally {
+      rmSync(join(gitRoot, "DIRTY.md"), { force: true });
+    }
+  });
+
+  it("rejects an event whose only gating finding is an introduced custom rule (F-delta-disposition)", async () => {
+    const law = customLaw();
+    // Base: no alpha → beta edge, so the reference rule passes. Head: the
+    // edge exists, so the rule fails. The introduced custom finding is the
+    // delta's ONLY gating finding — it never becomes a VIOLATION
+    // classification, and before the fix a classifications scan read the
+    // event "accepted" on an exit-1 run.
+    const { readBaseline } = baselineOf({
+      graph: edgelessGraph(),
+      law,
+      owned: CUSTOM_OWNED,
+      root: gitRoot,
+    });
+    const dir = join(eventsDir, "custom-only");
+    const result = await deltaCommand(
+      "/invented/base.json",
+      contextOf({ graph: engineGraph(), owned: CUSTOM_OWNED, root: gitRoot }),
+      {
+        config: law,
+        readBaseline,
+        now: NOW,
+        eventOut: dir,
+        readArtifact: readReferenceArtifact,
+      },
+    );
+    expect(result.status).toBe("findings");
+    expect(result.delta.classifications).not.toContain("VIOLATION");
+    const [event] = readEvents(dir);
+    expect(event.disposition).toBe("rejected");
   });
 
   it("writes no file and keeps every existing report line when --event-out is absent", async () => {

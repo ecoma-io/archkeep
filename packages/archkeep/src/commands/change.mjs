@@ -112,6 +112,9 @@ import {
   EVOLUTION_EVENT_SCHEMA_VERSION,
 } from "../governance/evolution-event.mjs";
 import { writeEvent } from "../governance/evolution-store.mjs";
+import { judgeIntent } from "../architecture-intent/judge.mjs";
+import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
+import { debtChangeDiff } from "../governance/debt-ledger.mjs";
 
 /**
  * One expected-fact row as the report and JSON carry it. Kept in one builder
@@ -136,20 +139,6 @@ function cmpFacts(a, b) {
     cmp(a.to ?? "", b.to ?? "") ||
     cmp(a.type ?? "", b.type ?? "")
   );
-}
-
-/**
- * The identity string a reconciliation fact row carries into the event's
- * `debt` — `kind` plus the row's subject, the same fields `factRow` names.
- * Built from the fields the row already carries, never a second opinion.
- *
- * @param {object} row A `factRow` entry (`kind`, `project`/`from`+`to`/`changes`).
- * @returns {string}
- */
-function factIdentity(row) {
-  if (row.project !== undefined) return `${row.kind}:${row.project}`;
-  if (row.from !== undefined && row.to !== undefined) return `${row.kind}:${row.from}->${row.to}`;
-  return row.kind;
 }
 
 /**
@@ -186,10 +175,12 @@ function edgeIdentityString(edge) {
  *
  * @param {{addedProjects: object[], removedProjects: object[],
  *   changedProjects: object[], addedEdges: object[], removedEdges: object[]}} structural
- * @param {{policyChanged: boolean|null}} meta From `compareSnapshotMetadata`.
+ * @param {{policyChanged: boolean|null, policyOneSided: boolean,
+ *   provenanceChanged: boolean|null}} meta From `compareSnapshotMetadata`.
  * @returns {{architectureChanged: boolean, projects: {added: string[],
  *   removed: string[], changed: string[]}, edges: {added: string[],
- *   removed: string[]}, policyChanged: boolean|null, providerChanged: boolean}}
+ *   removed: string[]}, policyChanged: boolean|null, policyOneSided: boolean,
+ *   provenanceChanged: boolean|null, providerChanged: boolean}}
  */
 function observedFrom(structural, meta) {
   const projects = {
@@ -211,10 +202,14 @@ function observedFrom(structural, meta) {
       0,
     projects,
     edges,
-    // `null` is the one-sided case — only one side records the law — and is
-    // passed through so classifyEvolution discloses it rather than reading
-    // it as "the same" (`../governance/evolution-event.mjs`).
+    // `null` is "could not be compared": exactly one side records the law
+    // (`policyOneSided`) or neither does — passed through so classifyEvolution
+    // discloses rather than reading it as "the same", and the advanced
+    // both-absent pair never classifies as unchanged
+    // (`../governance/evolution-event.mjs`).
     policyChanged: meta.policyChanged,
+    policyOneSided: meta.policyOneSided,
+    provenanceChanged: meta.provenanceChanged,
     // The provider mismatch refuses before reconciliation ever runs, so a
     // reconciliable pair is by construction same-provider.
     providerChanged: false,
@@ -477,6 +472,7 @@ function judgeDeclaredConstraints(intent, io) {
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config?: object|null, readBaseline?: (path: string) => object,
  *   readIntent?: (path: string) => Promise<object>, now?: string,
+ *   loadIntentOverride?: (root: string, opts?: object) => Promise<object|undefined>,
  *   eventOut?: string, writeEvent?: (dir: string, event: object,
  *   io?: object) => {id: string, duplicate: boolean}}} [io]
  *   The resolved boundary config (required — constraints are judged under it
@@ -489,7 +485,10 @@ function judgeDeclaredConstraints(intent, io) {
  *   `readEvidenceSnapshot`'s parse and `parseChangeIntent`'s normalized
  *   contract respectively — the same seam contract `deltaCommand`'s
  *   `readBaseline` states; an injector handing back raw file contents skips
- *   the grammar this command trusts.
+ *   the grammar this command trusts. `loadIntentOverride` is the same
+ *   architecture-intent seam `drift` uses (defaults to `loadIntent`); the
+ *   change event's `debt` diff judges the intent over this run's base and
+ *   head graphs and would be untestable without it.
  * @returns {Promise<{status: "ok"|"findings"|"no-verdict",
  *   changeIntent: object, coverage: object, report: {text: string, json: string}}>}
  * @throws {Error} on every refusal the module header lists.
@@ -508,12 +507,17 @@ export async function changeCommand(
     // byte-identical to a pre-wave-3 run; the classification still rides the
     // envelope result either way.
     eventOut,
+    // The architecture-intent reader seam (design §8): the change event's
+    // `debt` diff judges the SAME intent file `drift`/`debt` judge over this
+    // run's base and head graphs. Injectable so tests drive it without disk;
+    // defaults to the canonical loader. Absent intent ⇒ no ids are emitted.
+    loadIntentOverride,
     // The store seam, injectable so tests drive the write without disk and
     // embedders can route it; defaults to the canonical append-only store.
     writeEvent: writeEventSeam = writeEvent,
   } = {},
 ) {
-  const { root, provider, marker, graph, analysis } = commandContext;
+  const { root, provider, marker, graph, analysis, tracked } = commandContext;
 
   // The one required member of `io`: constraints are judged under the current
   // law and the envelope records which law that was, so an undefined config
@@ -617,9 +621,15 @@ export async function changeCommand(
   // evaluated, and the event must not fabricate violation facts).
   /** @type {ReturnType<typeof classifyDelta>|null} */
   let classification = null;
+  // The base engine graph is hoisted (not block-scoped) because the change
+  // event's `debt` diff below re-judges the architecture intent over BOTH
+  // sides. It exists only when the base identity is provable; `null` here is
+  // the F-CHG-1 signal that no debt diff is trustworthy and none will be
+  // emitted (an unproven base must never fabricate ledger ids).
+  const baseEngineGraph =
+    unprovenReasons.length === 0 ? evidenceGraphToProjectGraph(baseline.graph) : null;
   if (unprovenReasons.length === 0) {
     const configWithNow = now === undefined ? config : { ...config, now };
-    const baseEngineGraph = evidenceGraphToProjectGraph(baseline.graph);
     const baseRaw = evaluateRun(baseline.records, baseEngineGraph, configWithNow).rawViolations;
     const headEval = evaluateRun(analysis.imports, graph, configWithNow);
     classification = classifyDelta({
@@ -749,20 +759,47 @@ export async function changeCommand(
     declaredIntentRows: [{ id: "intent", verdict }],
   });
 
-  // Debt impact: the change's own consequences, mapped from the reconciliation
-  // lists and the constraint verdicts the run already produced. Nothing is
-  // ever claimed as resolved — a change run carries no repair evidence — and
-  // `findings` above carries the violation delta while this carries the
-  // declared-and-observed divergence (the stable ids W5's ledger will link
-  // against).
-  const debt = {
-    introduced: [
-      ...reconciliation.unexpected.map(factIdentity),
-      ...reconciliation.missingExpected.map(factIdentity),
-      ...constraints.filter((row) => row.verdict === "fail").map((row) => row.name),
-    ].sort(),
-    resolved: [],
-  };
+  // Debt impact: the architecture-lifecycle debt THIS change opened or closed,
+  // as stable ids the W5 ledger derives for the same intent facts (design §8)
+  // — the SAME fact → the SAME id, so an event's `debt.introduced` links the
+  // ledger's `introducedBy`. The ids come from a `judgeIntent` diff over the
+  // run's base and head graphs under ONE current intent: a drift finding (or
+  // unbuilt aspirational gap) present at head but not base is introduced; one
+  // gone at head is resolved. Constraint-fail rows carry no source/target/rule
+  // — because they are not drift, they stay in `affected.constraints` and
+  // `findings`, never in `debt`. An unproven base (F-CHG-1) or an unjudgeable
+  // intent is a no-verdict: no ids are emitted, an in-band note says so, and a
+  // change run never fabricates ledger ids over evidence it cannot vouch for.
+  /** @type {{introduced: string[], resolved: string[], note?: string}} */
+  let debt;
+  if (baseEngineGraph === null) {
+    debt = {
+      introduced: [],
+      resolved: [],
+      note: "base identity unproven — no architecture debt diff can be trusted",
+    };
+  } else {
+    try {
+      const archIntent = await (loadIntentOverride ?? loadIntent)(root, { tracked });
+      if (archIntent === undefined || archIntent === null) {
+        debt = {
+          introduced: [],
+          resolved: [],
+          note: `no '${INTENT_FILE}' tracked — the change event carries no architecture debt ids`,
+        };
+      } else {
+        const baseVerdict = judgeIntent(archIntent, baseEngineGraph);
+        const headVerdict = judgeIntent(archIntent, graph);
+        debt = debtChangeDiff(baseVerdict, headVerdict);
+      }
+    } catch (error) {
+      debt = {
+        introduced: [],
+        resolved: [],
+        note: `architecture intent could not be judged — no debt ids emitted (${error.message})`,
+      };
+    }
+  }
 
   const baseCommit = baseline.provenance?.commit;
   const headCommit = headProvenance?.commit;

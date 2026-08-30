@@ -163,15 +163,28 @@ function formatDecisionEntry(entry) {
  * every disclosure note rides appended lines. Appended only: an explanation
  * that has no `decisionChange` field renders exactly as it did before.
  *
- * @param {{superseded: boolean, notes: string[]}} change
+ * @param {{superseded: boolean, comparable: boolean, notes: string[]}} change
+ *   A `detectDecisionChange` result. `superseded` is meaningful only when
+ *   `comparable` is `true`; a non-comparable comparison (one-sided or
+ *   unreadable) renders "could not compare", never "did not move", because
+ *   the latter would assert a fact the comparison could not hold.
  * @returns {string[]}
  */
 function formatDecisionChange(change) {
-  const lines = [
-    change.superseded
-      ? `${DETAIL}decisionChange  superseded — the decision lineage moved between the compared registry states`
-      : `${DETAIL}decisionChange  none — the decision lineage did not move between the compared registry states`,
-  ];
+  const lines = [];
+  if (change.comparable === false) {
+    lines.push(
+      `${DETAIL}decisionChange  could not compare — the decision lineage was not established between the compared registry states`,
+    );
+  } else if (change.superseded) {
+    lines.push(
+      `${DETAIL}decisionChange  superseded — the decision lineage moved between the compared registry states`,
+    );
+  } else {
+    lines.push(
+      `${DETAIL}decisionChange  none — the decision lineage did not move between the compared registry states`,
+    );
+  }
   for (const note of change.notes) {
     lines.push(`${DETAIL}decisionChange  ${note}`);
   }

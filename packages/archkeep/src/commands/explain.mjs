@@ -294,7 +294,7 @@ function resolveDecisionChains(matchedConstraints, root, tracked, config) {
  *   of asserting anything.
  * @param {string} root The workspace root, for the head registry read.
  * @param {string[]} tracked Tracked files, for the head registry read.
- * @returns {{superseded: boolean, notes: string[]}}
+ * @returns {{superseded: boolean, comparable: boolean, notes: string[]}}
  */
 function computeDecisionChange(baseRegistry, root, tracked) {
   let headRegistry;
@@ -303,6 +303,7 @@ function computeDecisionChange(baseRegistry, root, tracked) {
   } catch (error) {
     return {
       superseded: false,
+      comparable: false,
       notes: [`the decision registry could not be read: ${String(error?.message ?? error)}`],
     };
   }

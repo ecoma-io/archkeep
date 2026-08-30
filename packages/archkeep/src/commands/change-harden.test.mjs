@@ -12,6 +12,7 @@ import {
   eventId,
   EVOLUTION_EVENT_SCHEMA_VERSION,
 } from "../governance/evolution-event.mjs";
+import { debtFactId } from "../governance/debt-ledger.mjs";
 import { parseChangeIntent } from "./change-intent.mjs";
 import { changeCommand, reconcileDisposition } from "./change.mjs";
 import { parseEvidenceSnapshot, serializeEvidenceSnapshot } from "./delta-snapshot.mjs";
@@ -221,9 +222,18 @@ function emptyRowsManifest(overrides = {}) {
  *
  * @param {{ctx?: object, baseline: {readBaseline: (path: string) => object},
  *   intent?: object|undefined, config?: object|undefined, eventOut?: string,
- *   writeEvent?: (dir: string, event: object) => {id: string, duplicate: boolean}}} input
+ *   writeEvent?: (dir: string, event: object) => {id: string, duplicate: boolean},
+ *   loadIntentOverride?: (root: string, opts?: object) => Promise<object|undefined>}} input
  */
-async function run({ ctx, baseline, intent, config: law, eventOut, writeEvent }) {
+async function run({
+  ctx,
+  baseline,
+  intent,
+  config: law,
+  eventOut,
+  writeEvent,
+  loadIntentOverride,
+}) {
   return changeCommand("baseline.json", "intent.json", ctx ?? contextOf(), {
     config: law ?? config(),
     readBaseline: baseline.readBaseline,
@@ -233,6 +243,7 @@ async function run({ ctx, baseline, intent, config: law, eventOut, writeEvent })
     now: FUTURE,
     ...(eventOut === undefined ? {} : { eventOut }),
     ...(writeEvent === undefined ? {} : { writeEvent }),
+    ...(loadIntentOverride === undefined ? {} : { loadIntentOverride }),
   });
 }
 
@@ -331,7 +342,13 @@ describe("the additive result fields", () => {
       constraints: ["no-new-violations"],
       decisions: [],
     });
-    expect(result.changeIntent.debt).toEqual({ introduced: [], resolved: [] });
+    // No architecture-intent in the fixture — no debt ids, and the in-band
+    // note says the ledger is empty because the intent file is absent.
+    expect(result.changeIntent.debt).toEqual({
+      introduced: [],
+      resolved: [],
+      note: expect.stringContaining("'architecture-intent.json' tracked"),
+    });
   });
 
   it("classifies an unfulfilled declaration as DRIFT and names its debt", async () => {
@@ -345,8 +362,9 @@ describe("the additive result fields", () => {
     expect(result.changeIntent.classifications).toEqual(["DRIFT"]);
     expect(result.changeIntent.affected.constraints).toEqual(["intent"]);
     expect(result.changeIntent.debt).toEqual({
-      introduced: ["edge-added:acme-api->acme-payments", "project-added:acme-payments"],
+      introduced: [],
       resolved: [],
+      note: expect.stringContaining("'architecture-intent.json' tracked"),
     });
   });
 
@@ -359,10 +377,11 @@ describe("the additive result fields", () => {
     });
     expect(result.changeIntent.reconciliation.verdict).toBe("undeclared");
     expect(result.changeIntent.classifications).toEqual(["CHANGE", "DRIFT"]);
-    expect(result.changeIntent.debt.introduced).toEqual([
-      "edge-added:acme-api->acme-payments",
-      "project-added:acme-payments",
-    ]);
+    // No intent file → no ledger ids; the note says why the debt is empty.
+    expect(result.changeIntent.debt.introduced).toEqual([]);
+    expect(result.changeIntent.debt.note).toEqual(
+      expect.stringContaining("'architecture-intent.json' tracked"),
+    );
   });
 
   it("still carries the fields on an unproven run — the classification answers no-verdict, never a shrug", async () => {
@@ -376,10 +395,46 @@ describe("the additive result fields", () => {
     expect(result.changeIntent.reconciliation.verdict).toBe("unproven");
     expect(result.changeIntent.classifications).toEqual([]);
     expect(result.changeIntent.affected.constraints).toEqual(["intent"]);
+    // F-CHG-1: an unproven base never fabricates ledger ids — `debt` is the
+    // fail-closed in-band note, not a partial reconstruction.
+    expect(result.changeIntent.debt).toEqual({
+      introduced: [],
+      resolved: [],
+      note: expect.stringContaining("base identity unproven"),
+    });
+  });
+
+  it("judges the intent over base and head and emits the real debt id the change introduced (F-DEB-1 change)", async () => {
+    // The lifecycle closure for the change producer: with an architecture
+    // intent present and a proven base, `debt.introduced` names the SAME id
+    // the ledger derives from the judged fact. Base populates both boundary
+    // sides with no forbidden edge (clean); the declared head adds the
+    // api→payments edge the intent forbids — one drift finding introduced.
+    const intentDoc = {
+      version: "1",
+      boundaries: [
+        { name: "packages", match: ["tag:scope-invented"] },
+        { name: "shared", match: ["tag:scope-shared"] },
+      ],
+      forbidden: [{ from: "packages", to: "shared", reason: "engine must not reach shared" }],
+      allowed: [],
+    };
+    const result = await run({
+      ctx: contextOf({ graph: declaredHeadGraph() }),
+      baseline: baselineOf(),
+      intent: emptyRowsManifest(),
+      config: config(),
+      loadIntentOverride: async () => intentDoc,
+    });
     expect(result.changeIntent.debt.introduced).toEqual([
-      "edge-added:acme-api->acme-payments",
-      "project-added:acme-payments",
+      debtFactId("drift", {
+        source: "acme-api",
+        target: "acme-payments",
+        rule: "intentForbiddenEdge",
+      }),
     ]);
+    expect(result.changeIntent.debt.resolved).toEqual([]);
+    expect(result.changeIntent.debt.note).toBeUndefined();
   });
 });
 
@@ -431,7 +486,7 @@ describe("the reconcile event (--event-out)", () => {
     expect(event.observed.providerChanged).toBe(false);
     expect(event.findings).toEqual({ introduced: [], resolved: [], unknown: [] });
     expect(event.fitness.verdictDeltas).toEqual([{ id: "no-new-violations", verdict: "pass" }]);
-    expect(event.debt).toEqual({ introduced: [], resolved: [] });
+    expect(event.debt).toEqual({ introduced: [], resolved: [], note: expect.any(String) });
     expect(event.classifications).toEqual(["CHANGE"]);
     expect(event.disposition).toBe("accepted");
     expect(event.affected.projects).toEqual(["acme-payments"]);
@@ -497,7 +552,9 @@ describe("the reconcile event (--event-out)", () => {
     expect(events[0].findings.introduced[0]).toMatch(/^[^:]+:[^:]+:[^:]+$/);
     expect(events[0].classifications).toContain("VIOLATION");
     expect(events[0].disposition).toBe("rejected");
-    expect(events[0].debt.introduced).toEqual(["no-new-violations"]);
+    // The VIOLATION lives in the event `findings`; with no intent file the
+    // `debt` sub-ledger stays empty and says so — the two never merge.
+    expect(events[0].debt).toEqual({ introduced: [], resolved: [], note: expect.any(String) });
   });
 
   it("maps resolved violations into the event findings as REPAIR", async () => {

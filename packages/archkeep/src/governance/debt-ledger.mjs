@@ -143,13 +143,83 @@ function owningProjectForPath(path, byName) {
  * @param {string} source The entry's `source` (its keying field).
  * @returns {string} The stable hex id.
  */
-function entryId(kind, source) {
+export function entryId(kind, source) {
   const semanticKind = kind === "expired-waiver" ? "waiver" : kind;
   return createHash("sha256")
     .update(canonicalizeJson({ kind: semanticKind, source }))
     .digest("hex");
 }
 
+/**
+ * The stable identity of a structured debt fact: `entryId` over the fact's
+ * canonical JSON. Where `entryId(kind, source)` keys on a single string (a
+ * waiver path, an unresolved boundary), `debtFactId` keys on the full semantic
+ * fact so two distinct facts can never collide on one id.
+ *
+ * This is the ONE identity the event-linked lifecycle links against: a
+ * producer (`change`, `delta`) that emits `debt.introduced`/`debt.resolved`
+ * MUST call this exact function with the same structured fact the ledger
+ * derives its entry from, or the ids will never match (the broken lifecycle
+ * F-DEB-1 exists to close). The fact excludes prose — a reworded message must
+ * not re-key a fact (F-DEB-5 drift, F-DEB-8 aspirational gap).
+ *
+ * @param {string} kind The entry's `kind`.
+ * @param {object} fact The structured semantic fact, e.g. a drift finding
+ *   `{source, target, rule}` or an aspirational gap `{from, to}`.
+ * @returns {string} The stable hex id.
+ */
+export function debtFactId(kind, fact) {
+  return entryId(kind, canonicalizeJson(fact));
+}
+
+/**
+ * The structured drift fact a judge finding keys on: `{source, target, rule}`
+ * over exactly the fields that were judged. Presence findings (projectMissing,
+ * projectPresent, projectTagMissing) carry no `target`; the fact spans only
+ * the present fields — shared by the ledger's drift entry and every producer
+ * that emits `debt.introduced`/`debt.resolved`, so they can never disagree
+ * about which id a finding owns.
+ *
+ * @param {{source?: string, target?: string, rule?: string}} finding A judge
+ *   finding (`judgeIntent`'s `{source, target, rule, …}`).
+ * @returns {{source: string, target?: string, rule?: string}} The drift fact.
+ */
+export function driftFactOf(finding) {
+  return {
+    source: finding.source,
+    ...(finding.target === undefined ? {} : { target: finding.target }),
+    ...(finding.rule === undefined ? {} : { rule: finding.rule }),
+  };
+}
+
+/**
+ * The debt a base→head transition opened and closed, expressed as ledger ids
+ * (design §8: `debt.introduced` names debt created, `debt.resolved` names debt
+ * resolved). Two `judgeIntent` verdicts — one over the base graph, one over
+ * the head graph, both judged under ONE current intent — diff on the STABLE
+ * ids: a finding present at base but gone at head is resolved; present at head
+ * but not base is introduced; a fact that never moved is neither. Identity
+ * never depends on prose (F-DEB-5 drift, F-DEB-8 aspirational gap), so the
+ * ids emitted here are byte-identical to what `computeDebtLedger` derives for
+ * the same fact — the ONE home that makes the event-linked lifecycle fire.
+ *
+ * Aspirational gaps count as debt too: an optional row not built at base but
+ * built at head is resolved debt; one that stops being built is introduced.
+ *
+ * @param {object} baseVerdict A `judgeIntent` result over the base graph.
+ * @param {object} headVerdict A `judgeIntent` result over the head graph.
+ * @returns {{introduced: string[], resolved: string[]}} Stable debt ids.
+ */
+export function debtChangeDiff(baseVerdict, headVerdict) {
+  const driftOf = (v) => (v.findings ?? []).map((f) => debtFactId("drift", driftFactOf(f)));
+  const gapOf = (v) =>
+    (v.gaps ?? []).map((g) => debtFactId("aspirational-gap", { from: g.from, to: g.to }));
+  const baseIds = new Set([...driftOf(baseVerdict), ...gapOf(baseVerdict)]);
+  const headIds = new Set([...driftOf(headVerdict), ...gapOf(headVerdict)]);
+  const introduced = [...headIds].filter((id) => !baseIds.has(id)).sort();
+  const resolved = [...baseIds].filter((id) => !headIds.has(id)).sort();
+  return { introduced, resolved };
+}
 /**
  * Reduces an `opts.events` value to a loaded event array, or `null` when no
  * event store is linked. Accepts an already-loaded array or a
@@ -178,10 +248,13 @@ function loadEvents(opts) {
  * test runs could share. (The ledger's own determinism is about a fixed
  * clock.)
  *
- * @param {{suppressions?: object[], intentNotes?: string[], findings?: object[],
+ * @param {{suppressions?: object[], intentNotes?: string[], gaps?: {from: string,
+ *   to: string, note?: string}[], findings?: object[],
  *   unresolved?: object[]}} current The current run's candid facts: the loaded
- *   boundary config's `suppressions`, `judgeIntent`'s `notes` (aspirational
- *   gaps), `findings` (drift), and `unresolved`.
+ *   boundary config's `suppressions`, `judgeIntent`'s aspirational-gap facts
+ *   (`gaps`, structured `{from, to}` — the identity source) with `intentNotes`
+ *   as their prose display (deprecated dance when `gaps` is absent),
+ *   `findings` (drift), and `unresolved`.
  * @param {{files: {name: string, envelope: object, id: string}[]}} snapshots
  *   From `readSnapshots(dir)`, in history order.
  * @param {{referenceTime?: number|string, events?: object[]|{getEvents?: (dir?: string) => object[]},
@@ -192,9 +265,7 @@ function loadEvents(opts) {
  * @returns {{entries: {source: string, kind: string, severity: string,
  *   age: number, count: number, remediationHint: string, id: string,
  *   status: "active", introducedBy?: string}[],
- *   resolved: {id: string, status: "resolved", resolvedBy: string,
- *   kind: string, severity: string, age: number, count: number,
- *   remediationHint: string}[],
+ *   resolved: {id: string, status: "resolved", resolvedBy: string}[],
  *   total: number, byKind: object, bySeverity: object, agings: boolean,
  *   sampleTime: string,
  *   lifecycle: {linked: boolean, note: string|null}}}
@@ -250,18 +321,43 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
           (project ? `owning project '${project}'` : "retire it or confirm the reason"),
     });
   }
-  for (const note of current.intentNotes ?? []) {
-    entries.push({
-      source: note,
-      kind: "aspirational-gap",
-      severity: "low",
-      age: 0,
-      count: 1,
-      id: entryId("aspirational-gap", note),
-      status: "active",
-      remediationHint:
-        "an optional allowed row is not yet built — either build it or remove the row",
-    });
+  // Aspirational-gap entries: an `optional: true` `allowed` row not yet built.
+  // Identity comes from the STRUCTURED `{from, to}` (F-DEB-8) — never from the
+  // prose note, which re-keys every gap when the wording changes. `gaps` is
+  // the structured source when a caller threads it (the producer emits the
+  // same `{from, to}` ids the ledger derives here); the prose `intentNotes`
+  // fallback keys on the note itself only for callers that pass notes with no
+  // structured gaps — a deprecated shape, retained so the identity home stays
+  // single (the `debtFactId` here is the one the producers must match).
+  const gaps = current.gaps ?? [];
+  if (gaps.length > 0) {
+    for (const gap of gaps) {
+      entries.push({
+        source: gap.note ?? `${gap.from} → ${gap.to}`,
+        kind: "aspirational-gap",
+        severity: "low",
+        age: 0,
+        count: 1,
+        id: debtFactId("aspirational-gap", { from: gap.from, to: gap.to }),
+        status: "active",
+        remediationHint:
+          "an optional allowed row is not yet built — either build it or remove the row",
+      });
+    }
+  } else {
+    for (const note of current.intentNotes ?? []) {
+      entries.push({
+        source: note,
+        kind: "aspirational-gap",
+        severity: "low",
+        age: 0,
+        count: 1,
+        id: entryId("aspirational-gap", note),
+        status: "active",
+        remediationHint:
+          "an optional allowed row is not yet built — either build it or remove the row",
+      });
+    }
   }
 
   // Which projects hold an accepted waiver — so a drift finding in the same
@@ -278,14 +374,19 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
   for (const finding of current.findings ?? []) {
     const project = typeof finding.source === "string" ? finding.source : null;
     const waiverFailed = project !== null && waiverProjects.has(project);
-    const driftSource = finding.source ?? finding.message;
+    // The stable fact keys on the full semantic tuple (source, target, rule)
+    // — never on `finding.source` alone, which collides every distinct
+    // same-source finding onto one id (F-DEB-5), and never on the prose
+    // `finding.message`, which re-keys a fact when the wording changes.
+    // `driftFactOf` is the ONE builder both the ledger and the producers use,
+    // so an introduced id can never disagree with the ledger's active id.
     entries.push({
-      source: driftSource,
+      source: finding.source ?? finding.message,
       kind: "drift",
       severity: waiverFailed ? "high" : "medium",
       age: project ? ageOf(project) : 0,
       count: 1,
-      id: entryId("drift", driftSource),
+      id: debtFactId("drift", driftFactOf(finding)),
       status: "active",
       remediationHint: waiverFailed
         ? `this drift finding is in a project with an accepted waiver — the accepted violation is failing again, resolve it or remove the waiver`
@@ -345,7 +446,7 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
   // ever fabricated — the note states the refs are unavailable instead.
   const events = loadEvents(opts);
   const activeIds = new Set(entries.map((entry) => entry.id));
-  /** @type {{id: string, status: "resolved", resolvedBy: string, kind: string, severity: string, age: number, count: number, remediationHint: string}[]} */
+  /** @type {{id: string, status: "resolved", resolvedBy: string}[]} */
   const resolved = [];
   const lifecycle = { linked: events !== null, note: null };
 
@@ -372,21 +473,28 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
       if (!repairs) continue;
       for (const debtId of event?.debt?.resolved ?? []) {
         // Closure is only real when the candidate fact is gone at head; a
-        // debt id still active is not resolved (closed then re-opened).
-        if (typeof debtId !== "string" || activeIds.has(debtId) || resolvedSeen.has(debtId))
+        // debt id still active is not resolved (closed then re-opened), and
+        // an id NO event ever introduced was never debt — resolving it would
+        // invent a foreign fact out of nothing (inv. 2/7, F-DEB-2).
+        if (
+          typeof debtId !== "string" ||
+          activeIds.has(debtId) ||
+          resolvedSeen.has(debtId) ||
+          !introducedByForId.has(debtId)
+        )
           continue;
         resolvedSeen.add(debtId);
-        resolved.push({
-          id: debtId,
-          status: "resolved",
-          resolvedBy: eventId,
-          kind: "debt",
-          severity: "unknown",
-          age: 0,
-          count: 1,
-          remediationHint: `closed by evolution event '${eventId}' — the underlying violation is no longer a current finding`,
-        });
+        // The resolved surface carries ONLY evidence-backed refs. The full
+        // original entry (kind, severity, age, count) is not reconstructed
+        // here — that record lives on in the history snapshots behind the
+        // ledger; `kind:"debt"`, `age:0`, `count:1` would be fabricated
+        // numerics (design §6 retains the record, never a stand-in).
+        resolved.push({ id: debtId, status: "resolved", resolvedBy: eventId });
       }
+    }
+    if (resolved.length > 0 && lifecycle.note === null) {
+      lifecycle.note =
+        "resolved rows retain only evidence-backed refs — each closed debt's full entry lives in the history snapshots";
     }
     for (const entry of entries) {
       const introducedBy = introducedByForId.get(entry.id);
