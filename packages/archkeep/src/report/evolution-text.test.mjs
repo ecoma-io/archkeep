@@ -120,4 +120,35 @@ describe("the evolution terminal report", () => {
     expect(text).toContain("evil\\x1b[31m");
     expect(text).not.toContain("\u001B");
   });
+  it("renders an unjudgeable summary policy as n/a, never a fabricated count", () => {
+    const text = formatEvolutionReport({
+      result: {
+        base: "1".repeat(40),
+        head: "2".repeat(40),
+        revisions: [
+          { commit: "1".repeat(40), id: "x".repeat(64) },
+          { commit: "2".repeat(40), id: "y".repeat(64) },
+        ],
+        transitions: [transition()],
+        summary: {
+          transitions: 1,
+          disposition: "accepted",
+          classifications: [],
+          observed: {
+            architectureChanged: 0,
+            policyChanged: {
+              available: false,
+              reason: "policy could not be compared at transition 0",
+            },
+            providerChanged: 0,
+          },
+          affected: {},
+        },
+      },
+      coverage,
+    });
+    // The marker must print its reason, never a silent "policy changed: 0".
+    expect(text).toContain("policy: n/a — policy could not be compared at transition 0");
+    expect(text).not.toContain("policy changed:");
+  });
 });

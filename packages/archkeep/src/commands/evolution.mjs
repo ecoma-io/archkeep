@@ -587,9 +587,12 @@ function buildTransitionComparison(from, to, transition) {
 
   // The drift-finding feed for `classifyEvolution` — supplied ONLY when both
   // intents were actually judged, so a could-not-look is never absorbed into a
-  // clean class set. `violations.resolved`/`debtResolved` stay out: the debt
-  // answer carries the closed-debt fact, and resolved drift findings feed
-  // REPAIR through `driftFindingsResolved`.
+  // clean class set. Resolved drift findings feed REPAIR through
+  // `driftFindingsResolved`; `debtResolved` carries the same closed-debt fact
+  // in the aggregate (drift ids plus gap ids), so a gap closure the per-finding
+  // diff cannot see still classifies as REPAIR rather than folding into a clean
+  // class set. `violations.resolved` stays out: the debt answer already carries
+  // the closed-debt fact.
   const driftComparable = intentComparable;
   const headDriftIds = new Set((headIntent?.findings ?? []).map(driftFindingId));
   const baseDriftIds = new Set((baseIntent?.findings ?? []).map(driftFindingId));
@@ -705,6 +708,14 @@ function buildTransitionComparison(from, to, transition) {
     },
   };
 
+  /* F-EVO-4: when intent exists on only one side (or a side is a refusal
+   * object rather than a real verdict), the pair is NOT fully comparable and
+   * its disposition must never read `accepted`. `classifyEvolution` only
+   * reaches that conclusion through `verdictRelevantUnknown`, so we feed it
+   * an unknown entry — unless BOTH sides carry no intent evidence at all
+   * (base and head both `no-verdict` refusals), which is the status-quo
+   * baseline W8 pins as `DRIFT`/`accepted`. */
+  const bothAbsent = !isRealIntentVerdict(baseIntent) && !isRealIntentVerdict(headIntent);
   const classification = classifyEvolution({
     observed,
     codeDrift: transition.codeDrift === true,
@@ -712,6 +723,14 @@ function buildTransitionComparison(from, to, transition) {
       ? {
           violations: { introduced: violationsIntroduced },
           driftFindingsResolved,
+          debtResolved: "resolved" in debt ? debt.resolved : [],
+        }
+      : {}),
+    ...(!driftComparable && !bothAbsent
+      ? {
+          violations: {
+            unknown: [{ id: "intent", reason: intentIncomparableReason(baseIntent, headIntent) }],
+          },
         }
       : {}),
     ...(declaredConstraints.length > 0 ? { declaredConstraints } : {}),
@@ -845,33 +864,55 @@ function buildEvolutionSummary(comparisons) {
       unique(comparisons.flatMap((c) => (c[axis] !== undefined ? (c[axis][field] ?? []) : [])));
     if (axis === "fitness") {
       // Fitness aggregates on verdictDeltas: one delta per fitness id across
-      // the whole range, where the id's base/head verdicts are the range's
-      // first base and last head when unbroken, else an incomparable marker.
+      // the whole range. The id's summary base/head are the range's first base
+      // and last head ONLY when the id carries a real verdict on both sides of
+      // EVERY transition that declares it — a transition that never judges the
+      // id (or carries an incomparable marker) must surface as a marker naming
+      // the first broken transition, never as a fabricated pass→pass.
       const ids = unique(
         comparisons.flatMap((c) => (c.fitness.verdictDeltas ?? []).map((d) => d.id)),
       );
       const verdictDeltas = ids.map((id) => {
-        const first = comparisons
-          .flatMap((c) =>
-            (c.fitness.verdictDeltas ?? []).map((d) => ({
-              delta: d,
-              index: comparisons.indexOf(c),
-            })),
-          )
-          .find(({ delta }) => delta.id === id);
-        const last = [...comparisons]
-          .reverse()
-          .flatMap((c) =>
-            (c.fitness.verdictDeltas ?? []).map((d) => ({
-              delta: d,
-              index: comparisons.indexOf(c),
-            })),
-          )
-          .find(({ delta }) => delta.id === id);
+        const deltas = comparisons.flatMap((c) =>
+          (c.fitness.verdictDeltas ?? [])
+            .filter((d) => d.id === id)
+            .map((d) => ({ delta: d, index: comparisons.indexOf(c) })),
+        );
+        // The first transition that declares the id without a real verdict on
+        // both sides names the break; an id never declared is its own marker.
+        const broken = deltas.find(
+          ({ delta }) =>
+            delta.base === undefined ||
+            delta.base === null ||
+            typeof delta.base !== "string" ||
+            delta.head === undefined ||
+            delta.head === null ||
+            typeof delta.head !== "string",
+        );
+        if (broken !== undefined) {
+          return {
+            id,
+            base: {
+              available: false,
+              reason: `not declared/judged at transition ${broken.index}`,
+            },
+            head: {
+              available: false,
+              reason: `not declared/judged at transition ${broken.index}`,
+            },
+          };
+        }
+        if (deltas.length === 0) {
+          return {
+            id,
+            base: { available: false, reason: "never comparable at base" },
+            head: { available: false, reason: "never comparable at head" },
+          };
+        }
         return {
           id,
-          base: first?.delta.base ?? { available: false, reason: `never comparable at base` },
-          head: last?.delta.head ?? { available: false, reason: `never comparable at head` },
+          base: deltas[0].delta.base,
+          head: deltas[deltas.length - 1].delta.head,
         };
       });
       return { verdictDeltas };
@@ -918,7 +959,19 @@ function buildEvolutionSummary(comparisons) {
         ),
       ),
     },
-    policyChanged: comparisons.filter((c) => c.observed.policyChanged === true).length,
+    // F-EVO-3: a transition whose policy change could not be compared reads
+    // as a count of how many changed, never a number that hides the axis was
+    // unjudgeable at one point — surface it as a marker naming the transition.
+    policyChanged: (() => {
+      const unjudgeable = comparisons.findIndex((c) => c.observed.policyChanged === null);
+      if (unjudgeable !== -1) {
+        return {
+          available: false,
+          reason: `policy could not be compared at transition ${unjudgeable}`,
+        };
+      }
+      return comparisons.filter((c) => c.observed.policyChanged === true).length;
+    })(),
     providerChanged: comparisons.filter((c) => c.observed.providerChanged === true).length,
   };
 
