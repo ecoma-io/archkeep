@@ -191,15 +191,20 @@ describe("computeDebtLedger — resolved list", () => {
     const ledger = computeDebtLedger(noDebt(), aged, { events });
     expect(ledger.entries).toHaveLength(0);
     expect(ledger.resolved).toHaveLength(1);
-    expect(ledger.resolved[0].id).toBe(id);
-    expect(ledger.resolved[0].status).toBe("resolved");
-    expect(ledger.resolved[0].resolvedBy).toBe("evt-repair");
-    expect(ledger.resolved[0].remediationHint).toContain("evt-repair");
+    // The resolved surface is evidence-backed ONLY — no fabricated
+    // kind/severity/age/count (the original entry lives in the history
+    // snapshots, never a stand-in row) (F-DEB-2).
+    expect(ledger.resolved[0]).toEqual({
+      id,
+      status: "resolved",
+      resolvedBy: "evt-repair",
+    });
   });
 
   it("does NOT resolve a debt that is still active at head — an id that came back is not resolved", () => {
     const id = waiverId();
     const events = [
+      { id: "evt-intro", classifications: ["VIOLATION"], debt: { introduced: [id], resolved: [] } },
       { id: "evt-repair", classifications: ["REPAIR"], debt: { introduced: [], resolved: [id] } },
     ];
     // The waiver is still present at head → still an active finding.
@@ -211,12 +216,25 @@ describe("computeDebtLedger — resolved list", () => {
   it("deduplicates a debt id resolved by several REPAIR events", () => {
     const id = waiverId();
     const events = [
+      { id: "evt-intro", classifications: ["VIOLATION"], debt: { introduced: [id], resolved: [] } },
       { id: "evt-repair-1", classifications: ["REPAIR"], debt: { introduced: [], resolved: [id] } },
       { id: "evt-repair-2", classifications: ["REPAIR"], debt: { introduced: [], resolved: [id] } },
     ];
     const ledger = computeDebtLedger(noDebt(), aged, { events });
     expect(ledger.resolved).toHaveLength(1);
     expect(ledger.resolved[0].resolvedBy).toBe("evt-repair-1");
+  });
+
+  it("never resolves an id NO event introduced — a foreign id is not debt (F-DEB-2)", () => {
+    const id = waiverId();
+    // The REPAIR names `id`, but no event ever put it on `debt.introduced`:
+    // it was never debt, so resolving it would invent a foreign fact. The
+    // list must come back empty — never a fabricated "resolved" row.
+    const events = [
+      { id: "evt-repair", classifications: ["REPAIR"], debt: { introduced: [], resolved: [id] } },
+    ];
+    const ledger = computeDebtLedger(noDebt(), aged, { events });
+    expect(ledger.resolved).toEqual([]);
   });
 });
 
@@ -250,7 +268,10 @@ describe("computeDebtLedger — monotonicity", () => {
     expect(before.resolved).toHaveLength(0);
 
     // Run B: repaired — the fact is gone at head, a REPAIR event closes it.
+    // The intro event precedes the repair in lineage, so the id is real debt
+    // the repair closes — never a foreign id resolved from nothing.
     const repairedEvents = [
+      { id: "evt-intro", classifications: ["VIOLATION"], debt: { introduced: [id], resolved: [] } },
       { id: "evt-repair", classifications: ["REPAIR"], debt: { introduced: [], resolved: [id] } },
     ];
     const after = computeDebtLedger(noDebt(), aged, { events: repairedEvents });
@@ -273,11 +294,11 @@ describe("computeDebtLedger — SILENT direction", () => {
     expect(ledger.entries).toHaveLength(0);
   });
 
-  it("does not move an id to resolved unless a REPAIR actually names it", () => {
-    // The store has a REPAIR, but it resolves a DIFFERENT debt id, not ours.
-    // Our vanished waiver is NOT resolved — resolution only ever names an id
-    // that a REPAIR explicitly closed, never an un-evidenced fact.
-    const id = waiverId();
+  it("does not move an id to resolved unless a REPAIR names an id that was ever debt (F-DEB-2)", () => {
+    // The store has a REPAIR, but it resolves a DIFFERENT debt id, not ours —
+    // and that foreign id was never introduced by any event. Neither our
+    // vanished waiver nor the foreign id counts as resolved: resolution only
+    // ever names an id a REPAIR explicitly closed AND an event introduced.
     const events = [
       {
         id: "evt-repair-other",
@@ -286,7 +307,6 @@ describe("computeDebtLedger — SILENT direction", () => {
       },
     ];
     const ledger = computeDebtLedger(noDebt(), aged, { events });
-    expect(ledger.resolved.some((r) => r.id === id)).toBe(false);
-    expect(ledger.resolved.map((r) => r.id)).toEqual(["debt-for-something-else"]);
+    expect(ledger.resolved).toEqual([]);
   });
 });

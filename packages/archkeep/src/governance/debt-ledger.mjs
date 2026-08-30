@@ -265,9 +265,7 @@ function loadEvents(opts) {
  * @returns {{entries: {source: string, kind: string, severity: string,
  *   age: number, count: number, remediationHint: string, id: string,
  *   status: "active", introducedBy?: string}[],
- *   resolved: {id: string, status: "resolved", resolvedBy: string,
- *   kind: string, severity: string, age: number, count: number,
- *   remediationHint: string}[],
+ *   resolved: {id: string, status: "resolved", resolvedBy: string}[],
  *   total: number, byKind: object, bySeverity: object, agings: boolean,
  *   sampleTime: string,
  *   lifecycle: {linked: boolean, note: string|null}}}
@@ -448,7 +446,7 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
   // ever fabricated — the note states the refs are unavailable instead.
   const events = loadEvents(opts);
   const activeIds = new Set(entries.map((entry) => entry.id));
-  /** @type {{id: string, status: "resolved", resolvedBy: string, kind: string, severity: string, age: number, count: number, remediationHint: string}[]} */
+  /** @type {{id: string, status: "resolved", resolvedBy: string}[]} */
   const resolved = [];
   const lifecycle = { linked: events !== null, note: null };
 
@@ -475,21 +473,28 @@ export function computeDebtLedger(current, snapshots, opts = {}) {
       if (!repairs) continue;
       for (const debtId of event?.debt?.resolved ?? []) {
         // Closure is only real when the candidate fact is gone at head; a
-        // debt id still active is not resolved (closed then re-opened).
-        if (typeof debtId !== "string" || activeIds.has(debtId) || resolvedSeen.has(debtId))
+        // debt id still active is not resolved (closed then re-opened), and
+        // an id NO event ever introduced was never debt — resolving it would
+        // invent a foreign fact out of nothing (inv. 2/7, F-DEB-2).
+        if (
+          typeof debtId !== "string" ||
+          activeIds.has(debtId) ||
+          resolvedSeen.has(debtId) ||
+          !introducedByForId.has(debtId)
+        )
           continue;
         resolvedSeen.add(debtId);
-        resolved.push({
-          id: debtId,
-          status: "resolved",
-          resolvedBy: eventId,
-          kind: "debt",
-          severity: "unknown",
-          age: 0,
-          count: 1,
-          remediationHint: `closed by evolution event '${eventId}' — the underlying violation is no longer a current finding`,
-        });
+        // The resolved surface carries ONLY evidence-backed refs. The full
+        // original entry (kind, severity, age, count) is not reconstructed
+        // here — that record lives on in the history snapshots behind the
+        // ledger; `kind:"debt"`, `age:0`, `count:1` would be fabricated
+        // numerics (design §6 retains the record, never a stand-in).
+        resolved.push({ id: debtId, status: "resolved", resolvedBy: eventId });
       }
+    }
+    if (resolved.length > 0 && lifecycle.note === null) {
+      lifecycle.note =
+        "resolved rows retain only evidence-backed refs — each closed debt's full entry lives in the history snapshots";
     }
     for (const entry of entries) {
       const introducedBy = introducedByForId.get(entry.id);

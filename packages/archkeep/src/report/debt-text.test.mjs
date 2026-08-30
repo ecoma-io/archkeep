@@ -17,7 +17,7 @@ function ledger(overrides = {}) {
     sampleTime: "2026-08-16T00:00:00.000Z",
     entries: [],
     total: 0,
-    byKind: { waiver: 0, "aspirational-gap": 0, drift: 0, unresolved: 0 },
+    byKind: { waiver: 0, "expired-waiver": 0, "aspirational-gap": 0, drift: 0, unresolved: 0 },
     bySeverity: { high: 0, medium: 0, low: 0 },
     ...overrides,
   };
@@ -79,9 +79,42 @@ describe("formatDebtReport", () => {
     );
   });
 
+  it("renders an expired-waiver entry in its own section and counts it in the totals (F-DEB-3)", () => {
+    const text = formatDebtReport({
+      ledger: ledger({
+        entries: [waiverEntry({ kind: "expired-waiver", severity: "high" })],
+        total: 1,
+        byKind: { waiver: 0, "expired-waiver": 1, "aspirational-gap": 0, drift: 0, unresolved: 0 },
+      }),
+      coverage,
+    });
+    expect(text).toContain("1 expired waivers (accepted violations that lapsed back into force):");
+    expect(text).toContain("[expired-waiver] high  libs/app/violation.go");
+    // The totals line counts the same kind the JSON byKind does, so text and
+    // JSON can never disagree about `expired-waiver`.
+    expect(text).toContain("expired-waiver 1");
+  });
+
+  it("does not claim 'no architecture debt' when only resolution history remains (F-DEB-4)", () => {
+    // Empty entries but a retained resolved row: there is no CURRENT debt,
+    // but there IS history that was closed and is retained below. The ✔ line
+    // would be a false verified-zero.
+    const text = formatDebtReport({
+      ledger: ledger({
+        resolved: [{ id: "res-1", status: "resolved", resolvedBy: "evt-repair" }],
+      }),
+      coverage,
+    });
+    expect(text).not.toContain("✔ no architecture debt");
+    expect(text).toContain("no current architecture debt; 1 resolved entry retained below");
+    expect(text).toContain("1 resolved (no longer current findings):");
+  });
+
   it("prints the aggregates even when empty, so a missing section is visible", () => {
     const text = formatDebtReport({ ledger: ledger(), coverage });
-    expect(text).toContain("byKind: waiver 0, aspirational-gap 0, drift 0, unresolved 0");
+    expect(text).toContain(
+      "byKind: waiver 0, expired-waiver 0, aspirational-gap 0, drift 0, unresolved 0",
+    );
     expect(text).toContain("bySeverity: high 0, medium 0, low 0");
     expect(text).toContain("sampled 2026-08-16T00:00:00.000Z");
   });

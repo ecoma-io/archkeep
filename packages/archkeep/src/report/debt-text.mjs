@@ -43,8 +43,7 @@ function sanitize(text) {
  *   sampleTime: string, entries: {source: string, kind: string,
  *   severity: string, age: number, count: number, remediationHint: string,
  *   id: string, status: string, introducedBy?: string}[],
- *   resolved?: {id: string, status: string, resolvedBy: string, kind: string,
- *   severity: string, age: number, count: number, remediationHint: string}[],
+ *   resolved?: {id: string, status: string, resolvedBy: string}[],
  *   total: number, byKind: object, bySeverity: object,
  *   lifecycle?: {linked: boolean, note: string|null}},
  *   coverage: object}} input
@@ -64,15 +63,14 @@ export function formatDebtReport({ ledger, coverage }) {
 
   const orderedKinds = [
     ["waiver", "waivers (accepted boundary violations)"],
+    ["expired-waiver", "expired waivers (accepted violations that lapsed back into force)"],
     ["aspirational-gap", "aspirational gaps (optional allowed rows not built)"],
     ["drift", "drift findings"],
     ["unresolved", "unresolved intent"],
   ];
-  let sawAny = false;
   for (const [kind, label] of orderedKinds) {
     const items = ledger.entries.filter((e) => e.kind === kind);
     if (items.length === 0) continue;
-    sawAny = true;
     sections.push(`${items.length} ${label}:`);
     for (const entry of items) {
       const age = ledger.agings ? `age ${entry.age}` : "age not yet established";
@@ -88,10 +86,18 @@ export function formatDebtReport({ ledger, coverage }) {
       if (entry.introducedBy) sections.push(`    introducedBy ${entry.introducedBy}`);
     }
   }
-
-  if (!sawAny) {
+  // The positive claim must be byte-truthful: no CURRENT findings AND no
+  // retained resolution history. A ledger with an empty entry list but a
+  // non-empty resolved list is not "no architecture debt" — it has history
+  // that was resolved and is retained below (F-DEB-4).
+  const resolved = ledger.resolved ?? [];
+  if (ledger.entries.length === 0 && resolved.length === 0) {
     sections.push(
       "✔ no architecture debt — no waivers, aspirational gaps, drift or unresolved intent",
+    );
+  } else if (ledger.entries.length === 0 && resolved.length > 0) {
+    sections.push(
+      `no current architecture debt; ${resolved.length} resolved entry${resolved.length === 1 ? "" : "s"} retained below`,
     );
   }
 
@@ -100,12 +106,13 @@ export function formatDebtReport({ ledger, coverage }) {
   // history is never deleted — but they are no longer current findings. This
   // list is empty (and no line is printed) when no event store is linked or
   // nothing has been resolved.
-  const resolved = ledger.resolved ?? [];
   if (resolved.length > 0) {
     sections.push(`${resolved.length} resolved (no longer current findings):`);
     for (const entry of resolved) {
-      sections.push(`  [${entry.kind}] ${entry.severity}  id ${entry.id}`);
-      sections.push(`    ${sanitize(entry.remediationHint)}`);
+      // The resolved surface is evidence-backed only — id/status/resolvedBy
+      // (F-DEB-2). The kind/severity/hint of the original entry live in the
+      // history snapshots the ledger read, never in this row.
+      sections.push(`  id ${entry.id} · status ${entry.status}`);
       if (entry.resolvedBy) sections.push(`    resolvedBy ${entry.resolvedBy}`);
     }
   }
@@ -115,6 +122,7 @@ export function formatDebtReport({ ledger, coverage }) {
 
   sections.push(
     `total ${ledger.total} ${word} · byKind: waiver ${ledger.byKind.waiver}, ` +
+      `expired-waiver ${ledger.byKind["expired-waiver"]}, ` +
       `aspirational-gap ${ledger.byKind["aspirational-gap"]}, drift ${ledger.byKind.drift}, ` +
       `unresolved ${ledger.byKind.unresolved} · bySeverity: high ${ledger.bySeverity.high}, ` +
       `medium ${ledger.bySeverity.medium}, low ${ledger.bySeverity.low}`,
