@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.17.0](https://github.com/ecoma-io/archkeep/compare/v0.16.1...v0.17.0) (2026-08-29)
+
+
+### Features
+
+* **archkeep:** add projects.infer.excludeBeyondDefaults to extend default exclusions ([#487](https://github.com/ecoma-io/archkeep/issues/487)) ([cd58731](https://github.com/ecoma-io/archkeep/commit/cd5873106ceab9ee062eb77d285c3e1331302aa9))
+* **archkeep:** assert no-verdict verdicts in the labeled conformance corpus ([#490](https://github.com/ecoma-io/archkeep/issues/490)) ([32e99de](https://github.com/ecoma-io/archkeep/commit/32e99de86967d0d4d0cc50945a5eb727b0794785))
+* **archkeep:** decision fitness verification levels ([#493](https://github.com/ecoma-io/archkeep/issues/493)) ([eef6d43](https://github.com/ecoma-io/archkeep/commit/eef6d43c061c9325d5b79395f5ac4a4eb56d11ee))
+* **archkeep:** decision governance conformance fixtures ([#498](https://github.com/ecoma-io/archkeep/issues/498)) ([010454c](https://github.com/ecoma-io/archkeep/commit/010454cdf3705ff436ea11016297f6e77d58a3c7))
+* **archkeep:** decision governance graph walk ([#495](https://github.com/ecoma-io/archkeep/issues/495)) ([9572c3b](https://github.com/ecoma-io/archkeep/commit/9572c3bddf90a53d17908b2697c457667cdc321a))
+* **archkeep:** decision governance graph walk ([#496](https://github.com/ecoma-io/archkeep/issues/496)) ([13f24ec](https://github.com/ecoma-io/archkeep/commit/13f24ecd5eb8516663950454f4464e13cd8e1f3b))
+* **archkeep:** decision lifecycle provenance ([#494](https://github.com/ecoma-io/archkeep/issues/494)) ([312873e](https://github.com/ecoma-io/archkeep/commit/312873e7ab64193a2be9b4a0df54a9a760c84e58))
+* **archkeep:** decision lifecycle provenance ([#497](https://github.com/ecoma-io/archkeep/issues/497)) ([bacf092](https://github.com/ecoma-io/archkeep/commit/bacf092d1a5cd4bbbc6289deb455a3553eb2b974))
+* **archkeep:** decision registry lifecycle and lineage ([#492](https://github.com/ecoma-io/archkeep/issues/492)) ([175c5a3](https://github.com/ecoma-io/archkeep/commit/175c5a3f7ba4946e5fb23cb83b4d2c968717059c))
+* **archkeep:** explain the why - decision chain in CLI ([#499](https://github.com/ecoma-io/archkeep/issues/499)) ([6dbec2d](https://github.com/ecoma-io/archkeep/commit/6dbec2d33473ef76e30c817732a9f3ef284a6780))
+
 ## [0.16.1](https://github.com/ecoma-io/archkeep/compare/v0.16.0...v0.16.1) (2026-08-29)
 
 

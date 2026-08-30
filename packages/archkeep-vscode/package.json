@@ -2,7 +2,7 @@
   "name": "archkeep",
   "displayName": "Archkeep — polyglot module boundaries",
   "description": "Module-boundary diagnostics in the buffer for Go, Rust, Python and Vue, read from your Nx workspace's own boundary config",
-  "version": "0.16.1",
+  "version": "0.17.0",
   "private": true,
   "publisher": "ecoma-io",
   "license": "Apache-2.0",
