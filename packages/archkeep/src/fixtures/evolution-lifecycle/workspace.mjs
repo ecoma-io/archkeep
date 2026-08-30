@@ -121,7 +121,9 @@ func Name() string { return "alpha" }
 
 export const ALPHA_REACHING = `package alpha
 
-import "example.com/beta"
+import (
+	"example.com/beta"
+)
 
 func Name() string { return "alpha" + beta.Suffix() }
 `;
