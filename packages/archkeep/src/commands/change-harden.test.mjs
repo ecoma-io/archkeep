@@ -12,6 +12,7 @@ import {
   eventId,
   EVOLUTION_EVENT_SCHEMA_VERSION,
 } from "../governance/evolution-event.mjs";
+import { debtFactId } from "../governance/debt-ledger.mjs";
 import { parseChangeIntent } from "./change-intent.mjs";
 import { changeCommand, reconcileDisposition } from "./change.mjs";
 import { parseEvidenceSnapshot, serializeEvidenceSnapshot } from "./delta-snapshot.mjs";
@@ -221,7 +222,8 @@ function emptyRowsManifest(overrides = {}) {
  *
  * @param {{ctx?: object, baseline: {readBaseline: (path: string) => object},
  *   intent?: object|undefined, config?: object|undefined, eventOut?: string,
- *   writeEvent?: (dir: string, event: object) => {id: string, duplicate: boolean}}} input
+ *   writeEvent?: (dir: string, event: object) => {id: string, duplicate: boolean},
+ *   loadIntentOverride?: (root: string, opts?: object) => Promise<object|undefined>}} input
  */
 async function run({
   ctx,
@@ -400,6 +402,39 @@ describe("the additive result fields", () => {
       resolved: [],
       note: expect.stringContaining("base identity unproven"),
     });
+  });
+
+  it("judges the intent over base and head and emits the real debt id the change introduced (F-DEB-1 change)", async () => {
+    // The lifecycle closure for the change producer: with an architecture
+    // intent present and a proven base, `debt.introduced` names the SAME id
+    // the ledger derives from the judged fact. Base populates both boundary
+    // sides with no forbidden edge (clean); the declared head adds the
+    // api→payments edge the intent forbids — one drift finding introduced.
+    const intentDoc = {
+      version: "1",
+      boundaries: [
+        { name: "packages", match: ["tag:scope-invented"] },
+        { name: "shared", match: ["tag:scope-shared"] },
+      ],
+      forbidden: [{ from: "packages", to: "shared", reason: "engine must not reach shared" }],
+      allowed: [],
+    };
+    const result = await run({
+      ctx: contextOf({ graph: declaredHeadGraph() }),
+      baseline: baselineOf(),
+      intent: emptyRowsManifest(),
+      config: config(),
+      loadIntentOverride: async () => intentDoc,
+    });
+    expect(result.changeIntent.debt.introduced).toEqual([
+      debtFactId("drift", {
+        source: "acme-api",
+        target: "acme-payments",
+        rule: "intentForbiddenEdge",
+      }),
+    ]);
+    expect(result.changeIntent.debt.resolved).toEqual([]);
+    expect(result.changeIntent.debt.note).toBeUndefined();
   });
 });
 

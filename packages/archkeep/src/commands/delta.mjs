@@ -77,6 +77,9 @@ import { buildDecision } from "../report/evidence.mjs";
 import { formatDeltaReport } from "../report/delta-text.mjs";
 import { formatDeltaSarif } from "../report/sarif.mjs";
 import { evaluateRun } from "../rules/index.mjs";
+import { judgeIntent } from "../architecture-intent/judge.mjs";
+import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
+import { debtChangeDiff } from "../governance/debt-ledger.mjs";
 import { customRulesForDelta, declaresCustomRules } from "./custom-rules.mjs";
 import {
   classifyCustomFindings,
@@ -369,12 +372,16 @@ const short = (fingerprint) =>
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config: object|null, readBaseline?: (path: string) => object,
  *   now?: string, eventOut?: string|null,
+ *   loadIntentOverride?: (root: string, opts?: object) => Promise<object|undefined>,
  *   readArtifact?: (artifact: string) => Uint8Array|null,
  *   timeoutMs?: number}} io The resolved boundary config (required
  *   — both sides are re-judged under it), an injectable baseline reader, the
  *   one shared reference instant (defaults to the shared governance clock),
  *   `eventOut` — the directory an evolution event is appended to when given
- *   (absent or `null` ⇒ no event file, byte-identical behavior), and the
+ *   (absent or `null` ⇒ no event file, byte-identical behavior),
+ *   `loadIntentOverride` — the architecture-intent reader the event's `debt`
+ *   sub-ledger judges over this run's base and head graphs (defaults to
+ *   `loadIntent`; absent intent ⇒ no ids, an in-band note says so), and the
  *   custom-rule host's two injectable seams, passed through to
  *   `customRulesForDelta`.
  * @returns {Promise<{status: "ok"|"findings"|"no-verdict", delta: object,
@@ -395,10 +402,11 @@ export async function deltaCommand(
     readBaseline = readEvidenceSnapshot,
     now = referenceTime(),
     eventOut = null,
+    loadIntentOverride,
     ...customRuleIo
   },
 ) {
-  const { root, provider, marker, graph, analysis } = commandContext;
+  const { root, provider, marker, graph, analysis, tracked } = commandContext;
 
   refuseUnjudgeableHead(commandContext, "compute a delta");
   if (!config) {
@@ -730,6 +738,36 @@ export async function deltaCommand(
   /** @type {{id: string, duplicate: boolean}|null} */
   let eventWrite = null;
   if (eventOut !== null && eventOut !== undefined) {
+    // The architecture-debt sub-ledger (design §8): judged by re-running the
+    // current intent over this run's base and head graphs — a drift finding
+    // present at head but not base is introduced; one gone is resolved. Both
+    // ENGINE graphs exist here (the base from the captured snapshot, the head
+    // from the live capture), so unlike `change` there is no unproven-base
+    // gate; the fail-closed branches are an absent intent and an unjudgeable
+    // one, each emitting no ids and an in-band note rather than a fabricated
+    // clean ledger.
+    /** @type {{introduced: string[], resolved: string[], note?: string}} */
+    let debt;
+    try {
+      const archIntent = await (loadIntentOverride ?? loadIntent)(root, { tracked });
+      if (archIntent === undefined || archIntent === null) {
+        debt = {
+          introduced: [],
+          resolved: [],
+          note: `no '${INTENT_FILE}' tracked — the delta event carries no architecture debt ids`,
+        };
+      } else {
+        const baseVerdict = judgeIntent(archIntent, baseGraph);
+        const headVerdict = judgeIntent(archIntent, graph);
+        debt = debtChangeDiff(baseVerdict, headVerdict);
+      }
+    } catch (error) {
+      debt = {
+        introduced: [],
+        resolved: [],
+        note: `architecture intent could not be judged — no debt ids emitted (${error.message})`,
+      };
+    }
     const event = {
       schemaVersion: EVOLUTION_EVENT_SCHEMA_VERSION,
       kind: "transition",
@@ -758,7 +796,7 @@ export async function deltaCommand(
       affected: evolution.affected,
       findings: deltaFindings(deltaPayload),
       fitness: { verdictDeltas: deltaVerdictDeltas(deltaPayload) },
-      debt: { introduced: [], resolved: [] },
+      debt,
       classifications: evolution.classifications,
       disposition: deltaDisposition({
         status,

@@ -21,6 +21,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { canonicalizeJson } from "../canonical.mjs";
 import { readEvents } from "../governance/evolution-store.mjs";
+import { debtFactId } from "../governance/debt-ledger.mjs";
 import {
   classifyDeltaEvolution,
   deltaFindings,
@@ -481,8 +482,69 @@ describe("deltaCommand event output", () => {
     expect(event.fitness.verdictDeltas).toEqual([
       { constraint: CONSTRAINT_ID, base: "pass", head: "fail" },
     ]);
-    expect(event.debt).toEqual({ introduced: [], resolved: [] });
+    expect(event.debt).toEqual({ introduced: [], resolved: [], note: expect.any(String) });
     expect(event.base.evidence).toBe("/invented/base.json");
+  });
+
+  it("re-judges the intent over base and head and emits the real debt id debt actually introduced", async () => {
+    // The lifecycle closure for the delta producer (F-DEB-1 delta): with an
+    // intent present, the event's debt ids are the SAME ids the ledger would
+    // derive from the judged fact — not a fabricated clean ledger. Base has
+    // both boundary sides populated but no forbidden path (clean); head adds
+    // the forbidden edge (one drift finding introduced).
+    const intentDoc = {
+      version: "1",
+      boundaries: [
+        { name: "packages", match: ["tag:alpha"] },
+        { name: "extensions", match: ["tag:beta"] },
+      ],
+      forbidden: [{ from: "packages", to: "extensions", reason: "engine must not reach out" }],
+      allowed: [],
+    };
+    /** @param {string[]} tags */
+    const alpha = (tags) => ({
+      name: "acme-alpha",
+      type: "lib",
+      data: { root: "libs/alpha", tags },
+    });
+    /** @param {string[]} tags */
+    const beta = (tags) => ({
+      name: "acme-beta",
+      type: "lib",
+      data: { root: "libs/beta", tags },
+    });
+    // Both sides populated, no edge — nothing judged forbidden.
+    const baseGraph = {
+      nodes: { "acme-alpha": alpha(["alpha"]), "acme-beta": beta(["beta"]) },
+      dependencies: { "acme-alpha": [], "acme-beta": [] },
+    };
+    // Head reaches extensions — the forbidden direct edge appears.
+    const headGraph = {
+      nodes: { "acme-alpha": alpha(["alpha"]), "acme-beta": beta(["beta"]) },
+      dependencies: {
+        "acme-alpha": [{ source: "acme-alpha", target: "acme-beta", type: "static" }],
+        "acme-beta": [],
+      },
+    };
+    const dir = join(eventsDir, "debt");
+    const result = await deltaCommand("/invented/base.json", contextOf({ graph: headGraph }), {
+      config: config(),
+      readBaseline: () => baselineOf({ graph: baseGraph, law: config() }).snapshot,
+      now: NOW,
+      eventOut: dir,
+      loadIntentOverride: async () => intentDoc,
+    });
+    expect(result.eventWrite).toEqual({ id: expect.any(String), duplicate: false });
+    const [event] = readEvents(dir);
+    expect(event.debt.introduced).toEqual([
+      debtFactId("drift", {
+        source: "acme-alpha",
+        target: "acme-beta",
+        rule: "intentForbiddenEdge",
+      }),
+    ]);
+    expect(event.debt.resolved).toEqual([]);
+    expect(event.debt.note).toBeUndefined();
   });
 
   it("is idempotent — a rerun over the same transition writes nothing new", async () => {
