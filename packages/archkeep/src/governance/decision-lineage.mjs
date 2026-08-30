@@ -201,7 +201,13 @@ export function computeAffectedDecisions(registry, fitnessRows, constraintRows) 
  *   same ADR id with a different status, or a new `supersedes` relation,
  *   between base and head — `classifyEvolution`'s own predicate, never a
  *   second opinion.
- * @property {string[]} notes Disclosure notes. The one-sided case —
+ * @property {boolean} comparable Whether the two registry states were both
+ *   present and could be compared. `false` for a one-sided comparison (or,
+ *   at the caller, an unreadable head registry) — the state never read as a
+ *   "did not move" claim, because that would fabricate a fact about evidence
+ *   the comparison could not hold. `superseded` is meaningful only when
+ *   `comparable` is `true`.
+ * @property {string[]} notes Disclosure notes. The non-comparable case —
  *   exactly one registry state supplied — carries the
  *   "decision lineage not comparable" note; both states absent carries
  *   nothing to disclose (no decision evidence was supplied, so nothing was
@@ -214,8 +220,9 @@ export function computeAffectedDecisions(registry, fitnessRows, constraintRows) 
  * judgment to `classifyEvolution` so one definition stays the only one.
  *
  * Both registry states are REQUIRED. Exactly one side absent (one-sided) ⇒
- * `superseded: false` and a note; asserting the lineage did not move from
- * one registry would fabricate a fact about the side the input does not
+ * `comparable: false` (with `superseded: false` and a note) — the state
+ * never reads as "did not move", because asserting the lineage did not move
+ * from one registry would fabricate a fact about the side the input does not
  * have. Both sides absent is "no decision evidence supplied" — comparable,
  * nothing asserted, nothing to disclose.
  *
@@ -237,6 +244,7 @@ export function detectDecisionChange(baseRegistry, headRegistry) {
   }
   return {
     superseded: classification.classifications.includes("DECISION_CHANGE"),
+    comparable: !oneSided,
     notes,
   };
 }

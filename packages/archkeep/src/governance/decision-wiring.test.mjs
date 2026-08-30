@@ -362,12 +362,20 @@ describe("explainCommand decision lineage seam", () => {
     const result = explainCommand("libs/alpha/main.go:10:5", commandContext(root), config(), {
       baseRegistry: BASE_REGISTRY(),
     });
-    expect(result.explanation.decisionChange).toEqual({ superseded: true, notes: [] });
+    expect(result.explanation.decisionChange).toEqual({
+      superseded: true,
+      comparable: true,
+      notes: [],
+    });
     expect(result.report.text).toContain(
       "decisionChange  superseded — the decision lineage moved between the compared registry states",
     );
     const envelope = JSON.parse(result.report.json);
-    expect(envelope.result.decisionChange).toEqual({ superseded: true, notes: [] });
+    expect(envelope.result.decisionChange).toEqual({
+      superseded: true,
+      comparable: true,
+      notes: [],
+    });
   });
 
   it("states 'did not move' when the compared states are identical — never silence", () => {
@@ -375,25 +383,32 @@ describe("explainCommand decision lineage seam", () => {
     const result = explainCommand("libs/alpha/main.go:10:5", commandContext(root), config(), {
       baseRegistry: HEAD_REGISTRY(),
     });
-    expect(result.explanation.decisionChange).toEqual({ superseded: false, notes: [] });
+    expect(result.explanation.decisionChange).toEqual({
+      superseded: false,
+      comparable: true,
+      notes: [],
+    });
     expect(result.report.text).toContain(
       "decisionChange  none — the decision lineage did not move between the compared registry states",
     );
   });
 
-  it("SILENT DIRECTION — a one-sided base renders 'not comparable', never a supersession", () => {
+  it("SILENT DIRECTION — a one-sided base renders 'could not compare', never a move or a no-move", () => {
     const root = treeWithAdrs(headAdrFiles());
     const result = explainCommand("libs/alpha/main.go:10:5", commandContext(root), config(), {
       baseRegistry: null,
     });
     expect(result.explanation.decisionChange).toEqual({
       superseded: false,
+      comparable: false,
       notes: ["decision lineage not comparable — both registry states required"],
     });
-    expect(result.report.text).toContain("decision lineage not comparable");
-    // The rendered text must not claim a move: a reader of the plain report
-    // sees the disclosure, not a fabricated supersession.
+    expect(result.report.text).toContain("decisionChange  could not compare");
+    // The rendered text must claim neither a move nor a no-move: a reader of
+    // the plain report sees the disclosure, not a fabricated fact about a side
+    // the comparison never held (F-DEC-1).
     expect(result.report.text).not.toContain("superseded —");
+    expect(result.report.text).not.toContain("did not move");
   });
 
   it("an unreadable head registry resolves nothing and says so", () => {
@@ -406,8 +421,13 @@ describe("explainCommand decision lineage seam", () => {
       baseRegistry: BASE_REGISTRY(),
     });
     expect(result.explanation.decisionChange.superseded).toBe(false);
+    expect(result.explanation.decisionChange.comparable).toBe(false);
     expect(result.explanation.decisionChange.notes[0]).toContain(
       "the decision registry could not be read",
     );
+    // The plain report says the comparison could not happen, never that the
+    // lineage did not move (F-DEC-1).
+    expect(result.report.text).toContain("decisionChange  could not compare");
+    expect(result.report.text).not.toContain("did not move");
   });
 });
