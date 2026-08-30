@@ -266,7 +266,14 @@ function formatSummarySection(summary) {
   out.push(...listLine("projects changed", projects.changed ?? []));
   out.push(...listLine("edges added", (edges.added ?? []).map(edgeName)));
   out.push(...listLine("edges removed", (edges.removed ?? []).map(edgeName)));
-
+  const policyChanged = observed.policyChanged;
+  if (policyChanged !== undefined && policyChanged !== null) {
+    out.push(
+      typeof policyChanged === "object" && policyChanged.available === false
+        ? `  policy: ${naWithReason(policyChanged)}`
+        : `  policy changed: ${policyChanged}`,
+    );
+  }
   const findings = summary.findings;
   if (findings?.available === false) out.push(`  drift findings: ${naWithReason(findings)}`);
   else if (findings) {

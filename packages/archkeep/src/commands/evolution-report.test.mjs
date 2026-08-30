@@ -204,13 +204,16 @@ const injectedProvenance = vi.fn((dir) => {
  * returning the result. The runner deletes its temp root on exit, so each
  * call owns a fresh one.
  */
-async function runEvolution({ perSha, ordered, eventOut = null }) {
+async function runEvolution({ perSha, ordered, eventOut = null, intentBySha = {} }) {
   const tempRoot = mkdtempSync(join(tmpdir(), "archkeep-evolution-report-"));
   // Worktree directories follow evolution.mjs's own naming: `${parent}/${index}-${sha12}`.
   for (const [index, sha] of ordered.entries()) {
     const dir = join(tempRoot, `${index}-${sha.slice(0, 12)}`);
     mkdirSync(join(dir, "docs/adr"), { recursive: true });
-    writeFileSync(join(dir, INTENT_FILE), `${JSON.stringify(INTENT, null, 2)}\n`);
+    writeFileSync(
+      join(dir, INTENT_FILE),
+      `${JSON.stringify(intentBySha[sha.slice(0, 12)] ?? INTENT, null, 2)}\n`,
+    );
     writeFileSync(join(dir, ADR_FILE), ADR_TEXT);
   }
   const { run } = fakeRun({
@@ -523,5 +526,106 @@ describe("the transition EvolutionEvent store (--event-out)", () => {
     expect(rerun.result.transitions.map((t) => t.eventWrite.duplicate)).toEqual([true, true]);
     expect(rerun.result.transitions.map((t) => t.eventWrite.id)).toEqual(ids);
     expect(eventFiles()).toHaveLength(2);
+  });
+});
+
+describe("F-EVO silent-direction regressions (issue #519)", () => {
+  /** A fitness law declaring one id, for constructing per-revision gaps. */
+  const fitnessLawId = (name) => ({
+    ...law(["build"]),
+    fitness: [
+      { name, match: ["*"], condition: { type: "cycle-free" }, reason: `no cycles (${name})` },
+    ],
+  });
+
+  it("F-EVO-4: one-sided unjudgeable intent reads no-verdict, never accepted", async () => {
+    const { result } = await runEvolution({
+      perSha: {
+        // Base tracks no intent file (refusal), head carries a real intent — a
+        // one-sided pair whose disposition must not read `accepted`.
+        [BASE.slice(0, 12)]: { edge: false, law: fitnessLaw(["build"]), tracked: [ADR_FILE] },
+        [MID.slice(0, 12)]: { edge: true, law: fitnessLaw(["build"]), tracked: TRACKED },
+      },
+      ordered: [BASE, MID],
+    });
+    const [transition] = result.transitions;
+    // The axis is disclosed as unjudgeable, and the pair admits it cannot
+    // reach a verdict — no fabricated accepted, no "fully comparable" note.
+    expect(transition.comparison.findings.available).toBe(false);
+    expect(transition.comparison.disposition).toBe("no-verdict");
+    expect(transition.comparison.notes).not.toContain(
+      "a fully comparable, unchanged pair — no classification applies",
+    );
+  });
+
+  it("F-EVO-4: both sides absent intent keeps the status-quo accepted", async () => {
+    // The W8-pinned baseline: neither side carries intent evidence, so nothing
+    // is asserted on the intent axes and the pair stays accepted (DRIFT).
+    const { result } = await runEvolution({
+      perSha: {
+        [BASE.slice(0, 12)]: { edge: false, law: fitnessLaw(["build"]), tracked: [ADR_FILE] },
+        [MID.slice(0, 12)]: { edge: false, law: fitnessLaw(["build"]), tracked: [ADR_FILE] },
+      },
+      ordered: [BASE, MID],
+    });
+    const [transition] = result.transitions;
+    expect(transition.comparison.findings.available).toBe(false);
+    expect(transition.comparison.disposition).toBe("accepted");
+  });
+
+  it("F-EVO-1: a fitness id absent from one transition is marked, never pass→pass", async () => {
+    const { result } = await runEvolution({
+      perSha: {
+        // no-cycles declared at base and tip, a different id at mid — so the
+        // id is real at both ends but a marker in the middle transition.
+        [BASE.slice(0, 12)]: { edge: false, law: fitnessLawId("no-cycles") },
+        [MID.slice(0, 12)]: { edge: false, law: fitnessLawId("other-rules") },
+        [TIP.slice(0, 12)]: { edge: false, law: fitnessLawId("no-cycles") },
+      },
+      ordered: [BASE, MID, TIP],
+    });
+    const summary = result.summary;
+    const noCycles = summary.fitness.verdictDeltas.find((d) => d.id === "no-cycles");
+    // The summary must surface the gap, not stitch first-base/last-head into a
+    // fabricated pass→pass.
+    expect(noCycles.base.available).toBe(false);
+    expect(noCycles.head.available).toBe(false);
+    expect(noCycles.base.reason).toContain("transition 0");
+  });
+
+  it("F-EVO-2: a gap closure classifies as REPAIR via debtResolved", async () => {
+    // Base declares an optional allowed alpha→beta row with no edge built — an
+    // aspirational gap. Head drops the row entirely, so the gap closes, which
+    // only the aggregate debt answer (`debtResolved`) can see as a repair.
+    const baseWithGap = {
+      version: "1",
+      boundaries: INTENT.boundaries,
+      allowed: [
+        {
+          from: "alpha",
+          to: "beta",
+          optional: true,
+          reason: "alpha may one day reach beta",
+        },
+      ],
+    };
+    const headNoGap = {
+      version: "1",
+      boundaries: INTENT.boundaries,
+    };
+    const { result } = await runEvolution({
+      perSha: {
+        [BASE.slice(0, 12)]: { edge: false, law: fitnessLaw(["build"]) },
+        [MID.slice(0, 12)]: { edge: false, law: fitnessLaw(["build"]) },
+      },
+      ordered: [BASE, MID],
+      intentBySha: {
+        [BASE.slice(0, 12)]: baseWithGap,
+        [MID.slice(0, 12)]: headNoGap,
+      },
+    });
+    const [transition] = result.transitions;
+    expect(transition.comparison.debt.resolved.length).toBeGreaterThan(0);
+    expect(transition.comparison.classifications).toContain("REPAIR");
   });
 });
