@@ -457,3 +457,65 @@ keep in sync by hand, indefinitely, against no check: a translation that silentl
 falls behind the English is worse than an absent one, because it reads as
 current. Adding a language back is a decision that first names what keeps it
 honest.
+
+## Execution order for coding agents
+
+When implementing a change in this repository, follow this sequence. Skipping
+a step produces a diff that passes CI and is still wrong — the invariant test
+for each step is named beside it.
+
+1. **Inspect first.** Read the code section you intend to change, its
+   callers, its test fixtures, and the docs that describe it. The invariant:
+   "what you are about to change is what you think it is, and its contract
+   matches what the docs and tests assert." A code section whose actual
+   behaviour differs from its documented contract is a docs fix first, then
+   code.
+2. **Establish current truth.** Run the tests relevant to the code section.
+   The invariant: "a test exists that exercises the path you will change, and
+   it passes today." If no such test exists, you must add one before making
+   the change — the change's effect is unverifiable without it.
+3. **Reuse canonical primitives.** Before writing new analysis code, check
+   whether the engine already builds the information you need. The invariant:
+   "no duplicated graph traversal, import walk, or boundary judgment." The
+   engine's graph, providers, and check pipeline are the one path data flows
+   through — a second path is a drift risk.
+4. **Implement the smallest necessary change.** Add or change only what the
+   acceptance criteria require. The invariant: "removing every changed line
+   that is not required by the acceptance criteria leaves the acceptance
+   criteria unmet." A line that can be removed without changing the result is
+   a line that should not be in the diff.
+5. **Validate deterministically.** Run the changed code against the existing
+   test suite, then against the repository's own boundaries
+   (`node packages/archkeep/cli.mjs check`). The invariant: "the same input
+   produces the same output across three runs, and the repository's own
+   boundary law still holds."
+6. **Cover the silent direction.** Every change that adds or modifies a
+   verdict path must have a test case that goes red in the silent direction
+   — reporting nothing when a violation exists is byte-for-byte identical to
+   a clean workspace. The invariant from
+   ["The invariant everything is judged against"](#the-invariant-everything-is-judged-against)
+   applies: a test that only pins the message text is half a test.
+7. **Docs follow the code.** Update the docs after the code compiles and the
+   tests pass. The invariant: "a reader who trusts the docs can write correct
+   code that uses the changed surface." If the docs are stale before the
+   change, fix them first (step 1 already caught that); if they need updating
+   after the change, do it now.
+8. **Adversarial review.** Before pushing, re-read the diff as if you were a
+   reviewer who does not trust it. The invariant: "every claim the diff makes
+   — an import is read, a verdict is correct, a contract is unchanged, a
+   boundary is enforced — can be verified from the diff and the test output
+   alone." An unverifiable claim is a review defect.
+
+### Scope-expansion guard
+
+**An agent must never expand "Architectural Intelligence", "agentic
+governance" or "later maturity" into an AI architect, a runtime simulator,
+an autonomous migration planner, a cost estimator, a risk predictor, or a
+second authority.** The roadmap names the three later gates — impact
+hardening (descriptive), scenario evaluation (deterministic what-if),
+evidence-grounded advisor (read-only explanation) — and
+[architecture-authority.md](docs/doctrine/architecture-authority.md) names the
+boundary every capability stays inside. A proposal that crosses that boundary
+is rejected at review regardless of code quality. If you are uncertain whether
+a change crosses the boundary, stop and ask rather than implementing and
+letting review decide.
