@@ -75,6 +75,15 @@ describe("parseBaseline", () => {
     expect(() => parseBaseline(envelope, "/not-graph.json")).toThrow(/not a 'graph' envelope/);
   });
 
+  it("throws when the envelope has no 'command' field", () => {
+    const envelope = JSON.stringify({
+      schemaVersion: 2,
+      coverage: { complete: true },
+      result: { projects: [], dependencies: [] },
+    });
+    expect(() => parseBaseline(envelope, "/no-command.json")).toThrow(/has no 'command' field/);
+  });
+
   it("throws when the baseline has incomplete coverage", () => {
     const envelope = validEnvelope({
       coverage: {

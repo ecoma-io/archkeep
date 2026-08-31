@@ -114,6 +114,14 @@ export function parseBaseline(text, path) {
     );
   }
 
+  if (!envelope.command) {
+    throw new Error(
+      `archkeep: the baseline snapshot at '${path}' has no 'command' field — it is not a ` +
+        `'graph' envelope. diff requires a graph snapshot (from 'graph --format json'). ` +
+        `For delta evidence snapshots use 'delta <snapshot>'.`,
+    );
+  }
+
   if (envelope.command !== "graph") {
     throw new Error(
       `archkeep: the baseline snapshot at '${path}' is a '${envelope.command}' envelope, not a ` +
