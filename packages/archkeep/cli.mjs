@@ -93,6 +93,11 @@
  */
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+/*** @type {{name: string, version: string}} */
+const { name: TOOL_NAME, version: TOOL_VERSION } = require("./package.json");
 
 import { containmentViolation } from "./src/containment.mjs";
 import { UsageError } from "./src/errors.mjs";
@@ -2541,9 +2546,10 @@ const DELTA_FLAG_HELP = Object.freeze([
     key: "capture",
     arg: "",
     describe: Object.freeze([
-      "Write an evidence snapshot of the current tree",
+      "Print an evidence snapshot of the current tree",
       "(raw import records, graph, coverage, policy",
-      "fingerprint) for a later delta run to compare against",
+      "fingerprint) for a later delta run to compare against.",
+      "Without --output, the snapshot goes to stdout.",
     ]),
   }),
   Object.freeze({
@@ -3621,8 +3627,13 @@ export async function runCli(argv, env) {
   // one root-marker read and a clean run pays none.
   const help = () => usage(optionsForUsage(cwd));
 
+  // --help and --version are universal flags, handled before command dispatch.
   if (argv[0] === "--help" || argv[0] === "-h") {
     env.out(help());
+    return EXIT.ok;
+  }
+  if (argv[0] === "--version" || argv[0] === "-v") {
+    env.out(`${TOOL_NAME} ${TOOL_VERSION}`);
     return EXIT.ok;
   }
 
@@ -3635,6 +3646,11 @@ export async function runCli(argv, env) {
   } else if (Object.hasOwn(COMMANDS, maybeCommand)) {
     commandName = maybeCommand;
     rest = maybeRest;
+    // Subcommand --help: show the main help without "unknown option" error.
+    if (rest.includes("--help") || rest.includes("-h")) {
+      env.out(help());
+      return EXIT.ok;
+    }
   } else if (
     maybeCommand !== "" &&
     existsSync(isAbsolute(maybeCommand) ? maybeCommand : join(cwd, maybeCommand))
