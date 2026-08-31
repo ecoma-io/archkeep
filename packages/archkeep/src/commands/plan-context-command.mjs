@@ -242,10 +242,20 @@ export function collectDrift(commandContext) {
  * @param {string[]} paths Optional workspace-relative paths the change touches.
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {object} config The loaded boundary config.
+ * @param {string|null} [historyDir=null] Optional absolute path to the workspace's
+ *   history directory. When provided, the plan includes the architecture-debt
+ *   snapshot for the target project — current violations, exemptions, and gaps,
+ *   aged across the snapshot history. When absent, the debt section is omitted.
  * @returns {Promise<{status: "ok"|"no-verdict", exitCode: number, coverage: object,
  *   result: object, report: {text: string, json: string}}>}
  */
-export async function planContextCommand(projectName, paths, commandContext, config) {
+export async function planContextCommand(
+  projectName,
+  paths,
+  commandContext,
+  config,
+  historyDir = null,
+) {
   const { root, provider, marker, graph, workspace, pluginGap, tracked } = commandContext;
 
   // The same refusal every descriptive command carries: on an Nx workspace
@@ -430,6 +440,42 @@ export async function planContextCommand(projectName, paths, commandContext, con
   decisions.sort((a, b) =>
     a.decisionRef < b.decisionRef ? -1 : a.decisionRef > b.decisionRef ? 1 : 0,
   );
+
+  // Architecture debt: the current debt snapshot for the target project, aged
+  // across the snapshot history. Composed from `debtCommand` (not re-implemented)
+  // — the same ledger the `debt` command builds. Present only when a history
+  // directory is available (matching the `intent` pattern: absent when the
+  // workspace has no history, never a claim of zero debt).
+  let debt = null;
+  if (historyDir !== null) {
+    try {
+      const { debtCommand } = await import("./debt.mjs");
+      const debtResult = await debtCommand(historyDir, commandContext, { config });
+      const ledger = debtResult.ledger;
+      debt = {
+        available: true,
+        dir: ledger.dir,
+        snapshots: ledger.snapshots,
+        entries: ledger.entries,
+        resolved: ledger.resolved,
+        total: ledger.total,
+        byKind: ledger.byKind,
+        bySeverity: ledger.bySeverity,
+        agings: ledger.agings,
+        lifecycle: ledger.lifecycle,
+      };
+    } catch (cause) {
+      debt = {
+        available: false,
+        reason: `${cause?.message ?? cause}`,
+        entries: [],
+        total: { open: 0, resolved: 0, total: 0 },
+        byKind: {},
+        bySeverity: {},
+        agings: { meanDays: null, maxDays: null },
+      };
+    }
+  }
   const failures = [...wholeTree.failures, ...drift.failures];
   const notAnalyzed = failures
     .filter(isWholeFileFailure)
@@ -546,6 +592,11 @@ export async function planContextCommand(projectName, paths, commandContext, con
       // Present only when at least one decision ref resolves; absent when
       // no constraint row carries a decisionRef or none resolve.
       ...(decisions.length > 0 ? { decisions } : {}),
+      // Architecture debt: the current debt snapshot for the target project,
+      // aged across the snapshot history. Present only when a history directory
+      // is available (matching the `intent` pattern: absent when the workspace
+      // has no history, never a claim of zero debt).
+      ...(debt === null ? {} : { debt }),
       // The canonical Architecture Intent verdict — the same fold `check` and
       // `drift` report. Absent (key omitted) when no intent file is tracked,
       // matching `check`: intent absence is a workspace decision about

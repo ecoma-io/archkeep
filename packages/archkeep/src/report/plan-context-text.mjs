@@ -197,6 +197,38 @@ export function formatPlanContextReport({ project, coverage, unresolvedDecisionR
     sections.push(`${DETAIL}${plan.intent.verdict}: ${verdict} (${plan.intent.rows} rows)`);
   }
 
+  // Architecture debt.
+  if (plan.debt) {
+    sections.push("Architecture debt");
+    if (!plan.debt.available) {
+      sections.push(
+        `${DETAIL}not available — ${plan.debt.reason ?? "history directory unavailable"}`,
+      );
+    } else {
+      const entries = plan.debt.entries;
+      const open = plan.debt.total.open;
+      const resolved = plan.debt.total.resolved;
+      sections.push(
+        `${DETAIL}${entries.length} entry${entries.length === 1 ? "" : "s"} ` +
+          `(${open} open, ${resolved} resolved, ${plan.debt.total.total} total) ` +
+          `across ${plan.debt.snapshots} snapshot` +
+          `${plan.debt.snapshots === 1 ? "" : "s"}`,
+      );
+      if (plan.debt.byKind && Object.keys(plan.debt.byKind).length > 0) {
+        const kinds = Object.entries(plan.debt.byKind)
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([kind, count]) => `${kind}: ${count}`);
+        sections.push(`${DETAIL}by kind: ${kinds.join(", ")}`);
+      }
+      if (plan.debt.agings && plan.debt.agings.meanDays !== null) {
+        sections.push(
+          `${DETAIL}mean age: ${plan.debt.agings.meanDays.toFixed(1)} days` +
+            `${plan.debt.agings.maxDays !== null ? `, max ${plan.debt.agings.maxDays.toFixed(1)} days` : ""}`,
+        );
+      }
+    }
+  }
+
   // Verification commands.
   sections.push("Verify after the change");
   for (const command of plan.verify) {
