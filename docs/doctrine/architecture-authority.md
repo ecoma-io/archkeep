@@ -235,10 +235,18 @@ stated as three mechanical rules:
   stories — and a proposal that blurs them is a change of direction,
   recognised and argued as such, not a feature.
 
-"Potentially AI-assisted reasoning" in the roadmap's intelligence
-capabilities means exactly this: judgment may enter the system, and where it
-does it is labelled, bounded, and expendable — never load-bearing for what a
-workspace is told its architecture is.
+The roadmap's intelligence capabilities ([roadmap.md](roadmap.md) § "Later
+maturity") are three, in a fixed gate order, and they exercise these words in
+an increasing order of judgment: **Architectural Impact Analysis** leans on
+evidence and prediction (what a change touches, with the evidence for each
+claim); **Scenario Evaluation** leans on proposal and prediction (what a
+hypothetical change would do, re-evaluated deterministically, never recorded
+as a real Decision); the **Evidence-Grounded Architectural Advisor** leans on
+judgment and explanation (a reasoning layer that reads canonical facts and
+scenario results, marks FACT from INFERENCE, and lays out options — expendable
+by construction). Where any of them uses a model, the judgment is labelled,
+bounded, and expendable — never load-bearing for what a workspace is told its
+architecture is.
 
 The layer's proposals use five words, and they are not interchangeable:
 

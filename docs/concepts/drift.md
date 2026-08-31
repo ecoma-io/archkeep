@@ -121,7 +121,9 @@ file exists and is tracked, `check` already counts it.
 The four signals above are basic drift detection, and they ship today:
 deterministic, computed from graph, policy, snapshot, diff and intent, with no
 predictive component. [roadmap.md](../doctrine/roadmap.md) owns the staged
-path and lists this alongside the other capabilities that ship today. What the
-intelligence layer adds on top — advanced and predictive drift, historical
-evolution intelligence, a recommendation component — is later maturity on the
-same roadmap, not a promise; the deterministic signals are the capability.
+path and lists this alongside the other capabilities that ship today. The
+architecture-intelligence capabilities of the roadmap's gate 5 — impact
+analysis, scenario evaluation, an evidence-grounded advisor — may one day
+reason over these deterministic drift signals and explain them, but that is
+later maturity on the same roadmap, gated and never a promise; the
+deterministic signals are the capability.

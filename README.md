@@ -389,8 +389,12 @@ maintainer-authorized exception
 ([which branch a change lands on](CONTRIBUTING.md#which-branch-a-change-lands-on)).
 The VS Code extension ships as a `.vsix` today; its marketplace listing
 starts at the stable cut, because the marketplace carries no prerelease
-versions. Capabilities beyond the deterministic core — semantic
-understanding, predictive drift — are labeled direction, not promises.
+versions. Capabilities beyond the deterministic core — architectural impact
+analysis, scenario evaluation, and an evidence-grounded advisor — are
+documented as a gated direction, not promises, and none of them is an
+autonomous architect
+([roadmap](docs/doctrine/roadmap.md),
+[architecture authority](docs/doctrine/architecture-authority.md)).
 
 ## Contributing
 

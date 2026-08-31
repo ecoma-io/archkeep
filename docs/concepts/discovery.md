@@ -152,9 +152,11 @@ candidate set.
 
 Discovery ships today as part of the governance wave: deterministic, computed
 from the observed graph with no predictive component and no LLM anywhere in
-the core path. What the intelligence layer could add on top — natural-language
-summarisation of a proposal, or learned vocabulary from many workspaces — is
-later maturity on the same roadmap, not a promise. The deterministic
-candidates are what ships today.
+the core path. What the roadmap's later architecture-intelligence
+capabilities — impact analysis, scenario evaluation, an evidence-grounded
+advisor — may one day add on top is explanation of these candidates and
+reasoning over their consequences, which is later maturity on the same
+roadmap, gated and never a promise; the deterministic candidates are what
+ships today.
 
 The command reference is [../reference/discovery.md](../reference/discovery.md).
