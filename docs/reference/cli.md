@@ -28,11 +28,12 @@ All commands, all flags, all exit codes in one page. Source: `packages/archkeep/
 | `provenance` | (none)                           | Describe where this run's facts came from and which rows carry an origin                                                  | no               |
 | `decisions`  | `<id>`                           | Walk the full chain behind one recorded decision — decision to bound rows, projects, findings, and its verification level | no               |
 | `adr`        | `[<id>]`                         | List recorded architecture decisions and what each binds                                                                  | no               |
-| `rules`      | `<list                           | info                                                                                                                      | verify           | add> [<rule-name>]` | List official rules, show details, verify catalog integrity, or add a rule | no  |
+| `rules`      | `<list                           | info                                                                                                                      | verify           | add> [<rule-name>]` | List official rules, show details, verify catalog integrity, or add a rule | no* |
 
 \* `fitness` reports no boundary violation, but it is a verdict command, not a
 descriptive one: a declared function that `fail`s makes it exit 1 (and an
-undetermined one, 3) — see the prose below.
+undetermined one, 3) — see the prose below. `rules verify` also exits 1 when
+catalog integrity finds violations.
 
 `archkeep --help` prints the help text and exits 0. An omitted command name is a
 usage error (exit 2). If the first positional argument names a path that exists
@@ -93,12 +94,13 @@ diff.
 
 ### `delta`
 
-| flag        | argument                | default                  | meaning                                                                                                                                            |
-| ----------- | ----------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--capture` | (none)                  | off                      | Write an evidence snapshot of the current tree (raw import records, graph, coverage, policy fingerprint) for a later delta run to compare against. |
-| `--format`  | `text`\|`sarif`\|`json` | `text`                   | Terminal report (default), SARIF 2.1.0 of the introduced findings for GitHub code scanning, or the versioned JSON envelope.                        |
-| `--output`  | `<file>`                | stdout                   | Write the report — or, with `--capture`, the snapshot — to a file instead of stdout.                                                               |
-| `--config`  | `<file>`                | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Both sides are re-judged under whichever law this run resolves.        |
+| flag          | argument                | default                  | meaning                                                                                                                                                       |
+| ------------- | ----------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--capture`   | (none)                  | off                      | Write an evidence snapshot of the current tree (raw import records, graph, coverage, policy fingerprint) for a later delta run to compare against.            |
+| `--format`    | `text`\|`sarif`\|`json` | `text`                   | Terminal report (default), SARIF 2.1.0 of the introduced findings for GitHub code scanning, or the versioned JSON envelope.                                   |
+| `--output`    | `<file>`                | stdout                   | Write the report — or, with `--capture`, the snapshot — to a file instead of stdout.                                                                          |
+| `--config`    | `<file>`                | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Both sides are re-judged under whichever law this run resolves.                   |
+| `--event-out` | `<dir>`                 | (nothing written)        | Append the delta's evolution event to this directory (one canonical record per transition; idempotent — a rerun over the same transition writes nothing new). |
 
 Without `--capture`, the baseline evidence snapshot is the single positional
 argument (a file, not a git ref); with `--capture` there are no positionals.
@@ -108,12 +110,13 @@ a non-waived introduced violation exits 1 — see the prose below and
 
 ### `change`
 
-| flag       | argument       | default                  | meaning                                                                                                                                               |
-| ---------- | -------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--intent` | `<file>`       | (required)               | The change-intent manifest declaring the material architectural consequences this change expects ([../usage/change.md](../usage/change.md)).          |
-| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                                                                                                       |
-| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout. Refused when it resolves to the manifest itself.                                                        |
-| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Declared constraints are re-judged under whichever law this run resolves. |
+| flag          | argument       | default                  | meaning                                                                                                                                                                         |
+| ------------- | -------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--intent`    | `<file>`       | (required)               | The change-intent manifest declaring the material architectural consequences this change expects ([../usage/change.md](../usage/change.md)).                                    |
+| `--format`    | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                                                                                                                                 |
+| `--output`    | `<file>`       | stdout                   | Write the report to a file instead of stdout. Refused when it resolves to the manifest itself.                                                                                  |
+| `--config`    | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Declared constraints are re-judged under whichever law this run resolves.                           |
+| `--event-out` | `<dir>`        | (nothing written)        | Also write the reconcile EvolutionEvent to this directory (one file per run, idempotent; the classification always rides the envelope result — see docs/concepts/evolution.md). |
 
 The baseline evidence snapshot (`delta --capture` output) is the single
 positional argument. A verdict, not a description: an undeclared material
@@ -242,12 +245,13 @@ non-literal argument) gets an `UNRESOLVABLE` verdict with the reason.
 
 ### `context`
 
-| flag       | argument       | default                  | meaning                                                                                                                             |
-| ---------- | -------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                                                                                     |
-| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                                                                                       |
-| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file.                                                         |
-| `--plan`   | `[<path>...]`  | off                      | Planning mode: the positionals after the project name are intended file paths, judged before any edit exists — see the prose below. |
+| flag            | argument       | default                  | meaning                                                                                                                                                                                                                                                                       |
+| --------------- | -------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format`      | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                                                                                                                                                                                                                               |
+| `--output`      | `<file>`       | stdout                   | Write the report to a file instead of stdout.                                                                                                                                                                                                                                 |
+| `--config`      | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file.                                                                                                                                                                                                   |
+| `--plan`        | `[<path>...]`  | off                      | Planning mode: the positionals after the project name are intended file paths, judged before any edit exists — see the prose below.                                                                                                                                           |
+| `--history-dir` | `<dir>`        | (nothing)                | Path to the workspace's history directory. When given and the directory holds archived snapshots, the planning context includes the architecture-debt snapshot: current violations, exemptions, and gaps aged across the history. Used only with `--plan`; ignored otherwise. |
 
 The project name is a single positional argument. `--config` is accepted because
 the answer depends on which boundary law is in effect — a different constraint
@@ -311,12 +315,13 @@ unavailable, never zero (see `docs/usage/trajectory.md`).
 
 ### `evolution`
 
-| flag       | argument       | default | meaning                                                                                                |
-| ---------- | -------------- | ------- | ------------------------------------------------------------------------------------------------------ |
-| `--format` | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope.                                                        |
-| `--output` | `<file>`       | stdout  | Write the report to a file instead of stdout.                                                          |
-| `--base`   | `<rev>`        | (none)  | Required. The baseline revision — a commit SHA, branch, tag, or `HEAD~n`; the first revision analyzed. |
-| `--head`   | `<rev>`        | `HEAD`  | The tip revision; must be a linear descendant of `--base`, with no merge commits between the two.      |
+| flag          | argument       | default           | meaning                                                                                                                                                                                              |
+| ------------- | -------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format`    | `text`\|`json` | `text`            | Terminal report or the versioned JSON envelope.                                                                                                                                                      |
+| `--output`    | `<file>`       | stdout            | Write the report to a file instead of stdout.                                                                                                                                                        |
+| `--base`      | `<rev>`        | (none)            | Required. The baseline revision — a commit SHA, branch, tag, or `HEAD~n`; the first revision analyzed.                                                                                               |
+| `--head`      | `<rev>`        | `HEAD`            | The tip revision; must be a linear descendant of `--base`, with no merge commits between the two.                                                                                                    |
+| `--event-out` | `<dir>`        | (nothing written) | Append one EvolutionEvent per revision pair to this directory (idempotent — a re-run over the same pair records a duplicate, never a second event). docs/concepts/evolution.md owns the event model. |
 
 No positional arguments and no `--config` — each analyzed revision is judged
 under the boundary law its own tree declares, so a policy change can be
@@ -333,11 +338,12 @@ shorter history.
 
 ### `debt`
 
-| flag       | argument       | default                  | meaning                                                                     |
-| ---------- | -------------- | ------------------------ | --------------------------------------------------------------------------- |
-| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                             |
-| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                               |
-| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. |
+| flag       | argument       | default                  | meaning                                                                                                         |
+| ---------- | -------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                                                                 |
+| `--output` | `<file>`       | stdout                   | Write the report to a file instead of stdout.                                                                   |
+| `--config` | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file.                                     |
+| `--events` | `<dir>`        | (nothing linked)         | Link the evolution event store in <dir> so debt entries carry introducedBy/resolvedBy refs and a resolved list. |
 
 The directory is a single positional argument — the same consumer-managed
 history directory `history` reads, so the ledger ages across the same snapshots
