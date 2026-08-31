@@ -1610,7 +1610,7 @@ async function runExplain(options, { cwd, env }) {
  * same as `check` and `explain`, because the answer depends on which boundary
  * law is in effect.
  *
- * @param {{format: string, output: string|null, config: string|null, plan: boolean, paths: string[]}} options
+ * @param {{format: string, output: string|null, config: string|null, plan: boolean, paths: string[], historyDir: string|null}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -1651,8 +1651,14 @@ async function runContextCommand(options, { cwd, env }) {
     // profile-aware the same way `check` is.
     const { config } = await resolvePolicy(options, commandContext, cwd);
 
+    const historyDir = options.historyDir
+      ? isAbsolute(options.historyDir)
+        ? options.historyDir
+        : resolve(cwd, options.historyDir)
+      : null;
+
     result = options.plan
-      ? await planContextCommand(projectName, scopePaths, commandContext, config)
+      ? await planContextCommand(projectName, scopePaths, commandContext, config, historyDir)
       : contextCommand(projectName, commandContext, config);
   } catch (error) {
     const usageError = error instanceof UsageError;
@@ -3220,6 +3226,18 @@ const CONTEXT_FLAG_HELP = Object.freeze([
           : `<workspace root>/${boundaryConfig}`,
       ]),
   }),
+  Object.freeze({
+    flag: "--history-dir",
+    key: "historyDir",
+    arg: "<dir>",
+    describe: Object.freeze([
+      "Path to the workspace's history directory. When given and",
+      "the directory holds archived snapshots, the planning context",
+      "includes the architecture-debt snapshot: current violations,",
+      "exemptions, and gaps aged across the history. Used only with",
+      "`--plan`; ignored otherwise.",
+    ]),
+  }),
 ]);
 
 /**
@@ -3504,7 +3522,13 @@ const COMMANDS = Object.freeze({
     summary: "Show the architecture constraints that apply to a project",
     flagHelp: CONTEXT_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(CONTEXT_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, config: null, plan: false }),
+    defaults: Object.freeze({
+      format: "text",
+      output: null,
+      config: null,
+      plan: false,
+      historyDir: null,
+    }),
     formats: DESCRIBABLE_FORMATS,
     booleans: Object.freeze(["plan"]),
     run: runContextCommand,

@@ -549,6 +549,7 @@ describe("backward compatibility — the repository's own registry (wave 2)", ()
       "0004-correct-old-name-deprecation-mechanics",
       "0005-jvm-language-integration",
       "0006-dotnet-language-integration",
+      "0007-no-semantic-model-expansion",
     ]);
     for (const record of records) {
       expect(record.status).toBe("accepted");

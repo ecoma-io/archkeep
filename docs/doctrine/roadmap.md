@@ -144,6 +144,13 @@ A new reader should find these capabilities described as present, not promised.
   the same editor gates; the repository dogfoods its own enforcer in CI.
   ([skills/overview.md](../skills/overview.md),
   [architecture-authority.md](architecture-authority.md))
+- **A semantic model that deliberately stops at the deterministic core.** The
+  structural core and the wave-3 evolution model were re-audited adversarially
+  (Phase 4, 2026-08-30) for ownership, data-flow, API, event and runtime
+  semantic candidates; none met the authoritative-evidence gate, so none was
+  built — the canonical data-flow (declared intent → observed evidence →
+  deterministic verdict → event → report) holds with no shortcut.
+  ([adr/0007-no-semantic-model-expansion.md](../adr/0007-no-semantic-model-expansion.md))
 
 ## The maturity ladder
 
@@ -197,7 +204,7 @@ versus what the gate itself must add.
    gate is the loop running end to end without a human assembling the
    pieces.
 
-Gates 1–4 are the foundation stable 1.0 stands on. Gates 5–6 are later
+Gates 1–4 are the foundation stable 1.0 stands on. Gates 5–7 are later
 maturity on the same line: they follow stable 1.0, they never fork it, and
 nothing in them holds the foundation hostage.
 
@@ -209,8 +216,8 @@ state, deepened reconciliation, broadened change context — hold every
 property that makes them an official foundation: **deterministic**,
 **explainable**, **reproducible**, **provenance-complete**,
 **provider-independent**, **cross-language**, **conformance-hardened**, and
-quiet long enough to be trusted with a stability promise. The intelligence
-capabilities of gate 5 and the full agentic loop of gate 6 are deliberately
+quiet long enough to be trusted with a stability promise. The impact-hardening,
+scenario-evaluation and advisory capabilities of gates 5–7 are deliberately
 absent from that list: they extend a finished foundation rather than block
 it, and no capability on those gates may hold the deterministic authority
 hostage by being made a prerequisite of it.

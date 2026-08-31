@@ -193,6 +193,7 @@ decided rather than summarized into them.
 | [0004-correct-old-name-deprecation-mechanics.md](adr/0004-correct-old-name-deprecation-mechanics.md) | Corrects ADR 0003's crates.io and Go deprecation mechanics, and records what ran |
 | [0005-jvm-language-integration.md](adr/0005-jvm-language-integration.md)                             | Java and Kotlin enter through the existing seams, behind one shared JVM core     |
 | [0006-dotnet-language-integration.md](adr/0006-dotnet-language-integration.md)                       | C#/.NET enters through the existing seams, behind one shared dotnet core         |
+| [0007-no-semantic-model-expansion.md](adr/0007-no-semantic-model-expansion.md)                       | The semantic model is not expanded after the Phase 4 adversarial audit           |
 
 ## Doctrine
 
