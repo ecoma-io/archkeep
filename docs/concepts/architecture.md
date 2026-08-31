@@ -190,7 +190,7 @@ term lapses. The rest only inform the reader.
 still violate npm-ban, circular-dependency, lazy-load, or other rules that
 require import-site details. Run `check` for the complete verdict.
 
-## The three faces
+## The four faces
 
 | face             | when it runs                       | what it reads the graph from                   |
 | ---------------- | ---------------------------------- | ---------------------------------------------- |
