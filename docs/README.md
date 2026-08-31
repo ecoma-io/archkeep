@@ -126,6 +126,7 @@ stable 1.0, and the later maturity beyond them.
 | [health.md](usage/health.md)                   | The `health` command: per-metric verdicts, trends, and the status contract                 |
 | [report.md](usage/report.md)                   | The `report` command: one governance document — how healthy the architecture is, and why   |
 | [debt.md](usage/debt.md)                       | The `debt` command: the architecture-debt ledger across snapshots                          |
+| [decisions.md](usage/decisions.md)             | The `decisions` command: the full governance chain behind one recorded decision            |
 | [discover.md](usage/discover.md)               | The `discover` command: observed architecture and candidate proposals                      |
 | [reconcile.md](usage/reconcile.md)             | The `reconcile` command: the model scored element by element, with proposed edits          |
 | [impact.md](usage/impact.md)                   | The `impact` command: dependents and their constraint context                              |
@@ -173,6 +174,7 @@ stable 1.0, and the later maturity beyond them.
 | [gate-attestation.md](reference/gate-attestation.md)       | The external blocking-gate attestation: the schema, what the verifier refuses, and what only a reviewer can decide                            |
 | [evidence.md](reference/evidence.md)                       | The four-state verdict vocabulary, the five invariants, and the `decision` shape                                                              |
 | [architecture-intent.md](reference/architecture-intent.md) | The `architecture-intent.json` schema, the five sections, and the four verdict states                                                         |
+| [decisions.md](reference/decisions.md)                     | The `decisions` command: flags, exit codes, JSON envelope, and the governance chain walk                                                      |
 | [debt.md](reference/debt.md)                               | The architecture-debt ledger: entry kinds, age model, severity, and the refusals                                                              |
 | [provenance.md](reference/provenance.md)                   | The `provenance` command: report shapes, the JSON envelope, exit codes                                                                        |
 | [adr.md](reference/adr.md)                                 | The `adr` command: report shapes, the JSON envelope, exit codes, the id name space                                                            |
